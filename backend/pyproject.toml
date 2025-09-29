@@ -1,0 +1,22 @@
+[project]
+name = "VideoForgeBackend"
+version = "0.1.0"
+description = "FastAPI backend for Video-Forge scaffold"
+license = "MIT"
+# readme = "README.md"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "fastapi>=0.118.0",
+    "uvicorn[standard]>=0.37.0",
+    "websockets>=15.0.1",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.9.6"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.basedpyright]
+include = ["backend"]
+typeCheckingMode = "standard" 

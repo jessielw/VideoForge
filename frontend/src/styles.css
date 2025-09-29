@@ -1,0 +1,4 @@
+body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; padding: 20px; }
+.app { max-width: 800px; margin: 0 auto }
+.form { display: flex; gap: 8px; margin-bottom: 16px }
+.form input { flex: 1; padding: 8px }
