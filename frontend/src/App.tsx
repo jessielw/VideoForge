@@ -1,9 +1,16 @@
 import React, { useState } from "react";
 import "./styles.css";
+import Sidebar from "./Sidebar";
+import InputSection from "./Input";
+import TargetSection from "./Target";
+import FileBrowserModal from "./FileBrowserModal";
 
 const API = "http://127.0.0.1:8000";
 
 export default function App(): JSX.Element {
+  // Tab state
+  const [activeTab, setActiveTab] = useState<string>("main");
+
   // Input box state
   const [inputPath, setInputPath] = useState<string>("");
   const [fileModalOpen, setFileModalOpen] = useState<boolean>(false);
@@ -80,150 +87,83 @@ export default function App(): JSX.Element {
     drill(up);
   }
 
+  function handleStart() {
+    alert("Start encode - not wired");
+  }
+  function handleReset() {
+    setOutputPath("");
+    setInputPath("");
+  }
+
   return (
-    <div className="app">
-      <h1>Video Forge — Minimal Editor</h1>
-
-      <section className="box" style={{ marginBottom: 12 }}>
-        <h2 style={{ margin: "6px 0" }}>Input</h2>
-        <div className="form">
-          <input
-            placeholder="Path to source file or script"
-            value={inputPath}
-            onChange={(e) => setInputPath(e.target.value)}
-            readOnly
-          />
-          <button onClick={openFileModal}>Browse</button>
-          <button onClick={() => alert("Probe not implemented in minimal UI")}>
-            Probe
-          </button>
-        </div>
-      </section>
-
-      <section className="box">
-        <h2 style={{ margin: "6px 0" }}>Target</h2>
-        <div className="form">
-          <input
-            placeholder="Output path (e.g. output.mkv)"
-            value={outputPath}
-            onChange={(e) => setOutputPath(e.target.value)}
-          />
-          <select
-            value={container}
-            onChange={(e) => setContainer(e.target.value)}
-          >
-            <option value="mkv">MKV</option>
-            <option value="mp4">MP4</option>
-            <option value="mov">MOV</option>
-          </select>
-          <select
-            value={videoCodec}
-            onChange={(e) => setVideoCodec(e.target.value)}
-          >
-            <option value="x264">x264</option>
-            <option value="x265">x265</option>
-            <option value="nvenc_h264">NVENC H.264</option>
-          </select>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => alert("Start encode - not wired")}>
-            Start
-          </button>
-          <button
-            onClick={() => {
-              setOutputPath("");
-              setInputPath("");
-            }}
-          >
-            Reset
-          </button>
-        </div>
-      </section>
-
-      {/* Minimal modal file selector */}
-      {fileModalOpen && (
-        <div
-          style={{
-            position: "fixed",
-            left: 0,
-            top: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.15)",
-            zIndex: 1000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <div
-            style={{
-              background: "white",
-              // minWidth: 340,
-              width: "80%",
-              padding: 18,
-              borderRadius: 8,
-              boxShadow: "0 2px 12px #0002",
-              height: "80%",
-              overflowY: "auto",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <strong>File Browser</strong>
-              <button onClick={() => setFileModalOpen(false)}>Close</button>
+    <div
+      className="app"
+      style={{
+        display: "flex",
+        height: "100vh",
+        width: "100vw",
+        overflow: "hidden",
+      }}
+    >
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <div
+        style={{
+          flex: 1,
+          background: "#fff",
+          margin: 0,
+          padding: 0,
+          boxSizing: "border-box",
+          height: "100vh",
+          overflow: "auto",
+        }}
+      >
+        <div style={{ padding: 32, minHeight: "100vh" }}>
+          {activeTab === "main" && (
+            <>
+              <InputSection
+                inputPath={inputPath}
+                setInputPath={setInputPath}
+                openFileModal={openFileModal}
+              />
+              <TargetSection
+                outputPath={outputPath}
+                setOutputPath={setOutputPath}
+                container={container}
+                setContainer={setContainer}
+                videoCodec={videoCodec}
+                setVideoCodec={setVideoCodec}
+                onStart={handleStart}
+                onReset={handleReset}
+              />
+            </>
+          )}
+          {activeTab === "settings" && (
+            <div>
+              <h2>Settings</h2>
+              <p>Settings UI goes here.</p>
             </div>
-            <div style={{ margin: "10px 0", fontSize: 13, color: "#666" }}>
-              {fileCurrent ? (
-                <span>Current: {fileCurrent}</span>
-              ) : (
-                <span>Roots</span>
-              )}
-              {fileCurrent && (
-                <button style={{ marginLeft: 12 }} onClick={goUp}>
-                  Up
-                </button>
-              )}
+          )}
+          {activeTab === "jobs" && (
+            <div>
+              <h2>Jobs</h2>
+              <p>Jobs UI goes here.</p>
             </div>
-            {fileLoading ? (
-              <div>Loading...</div>
-            ) : fileError ? (
-              <div style={{ color: "red" }}>{fileError}</div>
-            ) : (
-              <ul style={{ listStyle: "none", padding: 0 }}>
-                {fileEntries &&
-                  fileEntries.map((e: any) => (
-                    <li
-                      key={e.normalized || e.name}
-                      style={{ margin: "4px 0" }}
-                    >
-                      {e.is_dir ? "📁" : "📄"}{" "}
-                      <a
-                        href="#"
-                        style={{
-                          color: e.is_dir ? "#0077cc" : "#222",
-                          textDecoration: "none",
-                        }}
-                        onClick={(ev) => {
-                          ev.preventDefault();
-                          if (e.is_dir) drill(e.normalized);
-                          else selectFile(e.normalized);
-                        }}
-                      >
-                        {e.name}
-                      </a>
-                    </li>
-                  ))}
-              </ul>
-            )}
-          </div>
+          )}
         </div>
-      )}
+        {/* Minimal modal file selector */}
+        {fileModalOpen && (
+          <FileBrowserModal
+            fileCurrent={fileCurrent}
+            goUp={goUp}
+            fileLoading={fileLoading}
+            fileError={fileError}
+            fileEntries={fileEntries}
+            drill={drill}
+            selectFile={selectFile}
+            onClose={() => setFileModalOpen(false)}
+          />
+        )}
+      </div>
     </div>
   );
 }
