@@ -18,6 +18,7 @@ export default function App(): JSX.Element {
   const [fileCurrent, setFileCurrent] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState<boolean>(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [fileDetails, setFileDetails] = useState<any>(null);
 
   // Target box state
   const [outputPath, setOutputPath] = useState<string>("");
@@ -73,9 +74,19 @@ export default function App(): JSX.Element {
   }
 
   // Select a file
-  function selectFile(path: string) {
+  async function selectFile(path: string) {
     setInputPath(path);
     setFileModalOpen(false);
+    // Fetch details from backend
+    try {
+      const res = await fetch(
+        `${API}/api/details?path=${encodeURIComponent(path)}`
+      );
+      const details = await res.json();
+      setFileDetails(details);
+    } catch (e) {
+      setFileDetails({ error: "Failed to load details" });
+    }
   }
 
   // Go up one directory
@@ -124,6 +135,7 @@ export default function App(): JSX.Element {
                 inputPath={inputPath}
                 setInputPath={setInputPath}
                 openFileModal={openFileModal}
+                fileDetails={fileDetails}
               />
               <TargetSection
                 outputPath={outputPath}
