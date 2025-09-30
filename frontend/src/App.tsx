@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import "./styles.css";
-import Sidebar from "./Sidebar";
-import InputSection from "./Input";
-import TargetSection from "./Target";
-import FileBrowserModal from "./FileBrowserModal";
+import Sidebar from "./components/Sidebar";
+import InputSection from "./components/Input";
+import TargetSection from "./components/Target";
+import FileBrowserModal from "./components/FileBrowserModal";
+
+import "./styles/styles.css";
 
 const API = "http://127.0.0.1:8000";
 

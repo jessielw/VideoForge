@@ -1,5 +1,5 @@
 import React from "react";
-import "./styles/sidebar.css";
+import "../styles/sidebar.css";
 
 export default function Sidebar({
   activeTab,
