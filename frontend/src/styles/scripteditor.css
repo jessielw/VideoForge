@@ -29,6 +29,7 @@
 .editor-actions {
   display: flex;
   gap: 8px;
+  padding: 8px;
   align-items: center;
   float: right;
 }

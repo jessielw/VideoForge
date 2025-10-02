@@ -473,12 +473,12 @@ body {
   font-size: 1.2rem;
 } */
 
-.editor-actions {
+/* .editor-actions {
   display: flex;
   gap: 8px;
-}
+} */
 
-.editor-actions button {
+/* .editor-actions button {
   background: #6c757d;
   color: white;
   border: none;
@@ -487,7 +487,7 @@ body {
   cursor: pointer;
   font-size: 12px;
   transition: background 0.2s ease;
-}
+} */
 
 .template-button {
   background: #17a2b8;
