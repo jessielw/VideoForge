@@ -1,0 +1,117 @@
+/* Auto Crop Detection Modal */
+.auto-crop-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.auto-crop-modal {
+  background: white;
+  border-radius: 8px;
+  padding: 32px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  max-width: 500px;
+  width: 90%;
+  text-align: center;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from { 
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auto-crop-modal h3 {
+  margin: 16px 0 12px 0;
+  color: #2c3e50;
+  font-size: 1.3rem;
+}
+
+.auto-crop-modal p {
+  margin: 0 0 16px 0;
+  color: #495057;
+  line-height: 1.5;
+}
+
+.auto-crop-spinner {
+  font-size: 2rem;
+  margin-bottom: 16px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.auto-crop-success {
+  font-size: 2.5rem;
+  margin-bottom: 16px;
+  color: #28a745;
+}
+
+.auto-crop-info {
+  font-size: 2.5rem;
+  margin-bottom: 16px;
+  color: #17a2b8;
+}
+
+.auto-crop-error {
+  font-size: 2.5rem;
+  margin-bottom: 16px;
+  color: #dc3545;
+}
+
+.crop-command-display {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 12px;
+  margin: 16px 0;
+  font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+  text-align: left;
+  overflow-x: auto;
+  white-space: pre;
+  line-height: 1.4;
+}
+
+.crop-command-display code {
+  font-size: 0.9rem;
+  color: #495057;
+}
+
+.crop-values {
+  background: #e9ecef;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 12px 0;
+  font-size: 0.9rem;
+  color: #495057;
+  font-family: monospace;
+}
+
+.progress-text {
+  font-size: 0.9rem;
+  color: #6c757d;
+  font-style: italic;
+  margin-top: 8px;
+}

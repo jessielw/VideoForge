@@ -1,0 +1,82 @@
+/* Frame Controls */
+.frame-controls-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+}
+
+.frame-controls-header .nav-button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  background: #007bff;
+  color: white;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.frame-controls-header .nav-button:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.frame-controls-header .nav-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+.frame-controls-header .frame-input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  flex-shrink: 0;
+}
+
+.frame-controls-header .frame-input {
+  width: 60px;
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  text-align: center;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.frame-controls-header .frame-total {
+  font-size: 0.85rem;
+  color: #666;
+  white-space: nowrap;
+}
+
+.frame-controls-header .frame-slider {
+  flex: 1;
+  min-width: 100px;
+  max-width: 300px;
+  margin: 0 8px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .frame-controls-header {
+    gap: 8px;
+    padding: 0 8px;
+  }
+  
+  .frame-controls-header .frame-slider {
+    min-width: 80px;
+    margin: 0 4px;
+  }
+  
+  .frame-controls-header .nav-button {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+  }
+}

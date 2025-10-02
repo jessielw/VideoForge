@@ -2,13 +2,12 @@ import React, { useState } from "react";
 import MainLayout from "./components/Layout/MainLayout";
 import FileSelector from "./components/Source/FileSelector";
 import MediaInfoPanel from "./components/Source/MediaInfoPanel";
-import ScriptEditor from "./components/Processing/ScriptEditor";
+import ScriptEditorRefactored from "./components/Processing/ScriptEditorRefactored";
 import FilterPanel from "./components/Processing/FilterPanel";
-import FramePreview from "./components/Processing/FramePreview";
+import FramePreviewRefactored from "./components/Processing/FramePreviewRefactored";
 import TargetSection from "./components/Target";
 import FileBrowserModal from "./components/FileBrowserModal";
-
-import "./styles/styles.css";
+import "./styles/index.css";
 
 const API = "http://127.0.0.1:8000";
 
@@ -135,12 +134,12 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
 
   // Handle script validation
   const handleScriptValidate = () => {
-    // Validation logic is handled inside ScriptEditor
+    // Validation logic is handled inside ScriptEditorRefactored
   };
 
   // Handle script application (refresh preview)
   const handleScriptApply = () => {
-    // This will trigger the FramePreview to refresh with the new script
+    // This will trigger the FramePreviewRefactored to refresh with the new script
   };
 
   // Render tab content
@@ -171,7 +170,7 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
           <div className="processing-tab">
             <div className="processing-layout">
               <div className="processing-left">
-                <ScriptEditor
+                <ScriptEditorRefactored
                   script={script}
                   onScriptChange={setScript}
                   onValidate={handleScriptValidate}
@@ -180,7 +179,7 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
                 <FilterPanel onFilterAdd={handleFilterAdd} />
               </div>
               <div className="processing-right">
-                <FramePreview
+                <FramePreviewRefactored
                   inputPath={inputPath}
                   script={script}
                   indexInfo={indexInfo}

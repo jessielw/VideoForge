@@ -1,0 +1,70 @@
+/* Filter Panel */
+.filter-panel {
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.filter-panel h3 {
+  margin: 0 0 16px 0;
+  color: #2c3e50;
+  font-size: 1.2rem;
+}
+
+.filter-help {
+  margin: 0 0 16px 0;
+  color: #6c757d;
+  font-size: 14px;
+  font-style: italic;
+}
+
+.filter-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.filter-preset {
+  padding: 12px;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  background: #f8f9fa;
+  transition: all 0.2s ease;
+}
+
+.filter-preset.clickable {
+  cursor: pointer;
+}
+
+.filter-preset.clickable:hover {
+  background: #e9ecef;
+  border-color: #3498db;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.15);
+}
+
+.filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.filter-name {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.copy-icon {
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
+
+.filter-description {
+  margin: 0;
+  font-size: 14px;
+  color: #6c757d;
+}

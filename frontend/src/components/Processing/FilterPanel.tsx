@@ -20,30 +20,30 @@ const FILTER_PRESETS: FilterPreset[] = [
     description: 'Resize video to 1920x1080',
     code: 'clip = core.resize.Lanczos(clip, width=1920, height=1080)'
   },
-  {
-    id: 'deinterlace',
-    name: 'Deinterlace',
-    description: 'Remove interlacing artifacts',
-    code: 'clip = core.vivtc.VFM(clip, order=1)\nclip = core.vivtc.VDecimate(clip)'
-  },
-  {
-    id: 'denoise_basic',
-    name: 'Basic Denoise',
-    description: 'Light denoising with BM3D',
-    code: 'clip = core.bm3d.BM3D(clip, sigma=3.0)'
-  },
-  {
-    id: 'sharpen',
-    name: 'Sharpen',
-    description: 'Apply unsharp mask sharpening',
-    code: 'clip = core.std.UnsharpMask(clip, strength=0.5, radius=1)'
-  },
-  {
-    id: 'colormatrix_bt709',
-    name: 'Color Matrix BT.709',
-    description: 'Convert to BT.709 color matrix',
-    code: 'clip = core.resize.Lanczos(clip, matrix_s="709")'
-  },
+  // {
+  //   id: 'deinterlace',
+  //   name: 'Deinterlace',
+  //   description: 'Remove interlacing artifacts',
+  //   code: 'clip = core.vivtc.VFM(clip, order=1)\nclip = core.vivtc.VDecimate(clip)'
+  // },
+  // {
+  //   id: 'denoise_basic',
+  //   name: 'Basic Denoise',
+  //   description: 'Light denoising with BM3D',
+  //   code: 'clip = core.bm3d.BM3D(clip, sigma=3.0)'
+  // },
+  // {
+  //   id: 'sharpen',
+  //   name: 'Sharpen',
+  //   description: 'Apply unsharp mask sharpening',
+  //   code: 'clip = core.std.UnsharpMask(clip, strength=0.5, radius=1)'
+  // },
+  // {
+  //   id: 'colormatrix_bt709',
+  //   name: 'Color Matrix BT.709',
+  //   description: 'Convert to BT.709 color matrix',
+  //   code: 'clip = core.resize.Lanczos(clip, matrix_s="709")'
+  // },
   {
     id: 'crop_basic',
     name: 'Basic Crop',

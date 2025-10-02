@@ -1,0 +1,37 @@
+/* Tab Bar */
+.tab-bar {
+  display: flex;
+  background: #34495e;
+}
+
+.tab-button {
+  background: none;
+  border: none;
+  color: #bdc3c7;
+  padding: 12px 24px;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab-button:hover {
+  background: #4a5f7a;
+  color: white;
+}
+
+.tab-button.active {
+  background: #3498db;
+  color: white;
+  border-bottom-color: #2980b9;
+}
+
+.tab-icon {
+  font-size: 1rem;
+}
+
+.tab-label {
+  font-weight: 500;
+}

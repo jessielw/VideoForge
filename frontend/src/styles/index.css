@@ -1,0 +1,14 @@
+/* Import all component styles */
+@import './global.css';
+@import './layout.css';
+@import './tabs.css';
+@import './source.css';
+@import './mediainfo.css';
+@import './processing.css';
+@import './scripteditor.css';
+@import './filterpanel.css';
+@import './framepreview.css';
+@import './framecontrols.css';
+@import './zoomcontrols.css';
+@import './displayeffects.css';
+@import './autocropmodal.css';

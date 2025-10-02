@@ -1,0 +1,76 @@
+/* Display Effects Controls */
+.display-effects {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.effects-label {
+  font-size: 0.9rem;
+  color: #6c757d;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.effect-button {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.effect-button:hover:not(:disabled) {
+  background: #f0f0f0;
+  border-color: #ccc;
+}
+
+.effect-button.active {
+  background: #28a745;
+  color: white;
+  border-color: #28a745;
+}
+
+.effect-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auto-crop-button {
+  background: #ffc107;
+  color: #212529;
+  border-color: #ffc107;
+}
+
+.auto-crop-button:hover:not(:disabled) {
+  background: #e0a800;
+  border-color: #d39e00;
+}
+
+.auto-crop-button:disabled {
+  background: #f8f9fa;
+  color: #6c757d;
+  border-color: #dee2e6;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .display-effects {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  
+  .effect-button {
+    padding: 5px 8px;
+    font-size: 0.75rem;
+  }
+  
+  .effects-label {
+    font-size: 0.8rem;
+  }
+}

@@ -1,0 +1,153 @@
+/* Script Editor */
+.script-editor {
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #dee2e6;
+  background: #f8f9fa;
+  border-radius: 8px 8px 0 0;
+}
+
+.editor-header h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.2rem;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.editor-actions .validate-button {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor-actions .validate-button:hover:not(:disabled) {
+  background: #218838;
+}
+
+.editor-actions .validate-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.editor-actions .apply-button {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor-actions .apply-button:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.editor-actions .apply-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.editor-actions .reset-button {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.editor-actions .reset-button:hover:not(:disabled) {
+  background: #545b62;
+}
+
+.editor-content {
+  flex: 1;
+  min-height: 300px;
+  position: relative;
+}
+
+.editor-status {
+  padding: 8px 20px;
+  border-top: 1px solid #dee2e6;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8f9fa;
+}
+
+.editor-status.idle {
+  color: #6c757d;
+}
+
+.editor-status.validating {
+  color: #007bff;
+}
+
+.editor-status.valid {
+  color: #28a745;
+}
+
+.editor-status.error {
+  color: #dc3545;
+}
+
+.editor-status .status-icon {
+  font-size: 0.9rem;
+}
+
+.unsaved-changes {
+  color: #ffc107;
+  font-weight: 500;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .editor-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .editor-actions {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
+  .editor-actions button {
+    font-size: 0.8rem;
+    padding: 6px 12px;
+  }
+}
