@@ -581,6 +581,13 @@ body {
   font-size: 1.2rem;
 }
 
+.filter-help {
+  margin: 0 0 16px 0;
+  color: #6c757d;
+  font-size: 14px;
+  font-style: italic;
+}
+
 .filter-presets {
   display: flex;
   flex-direction: column;
@@ -596,20 +603,22 @@ body {
   transition: all 0.2s ease;
 }
 
-.filter-preset:hover {
-  background: #e9ecef;
-  border-color: #3498db;
-}
-
-.filter-checkbox {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+.filter-preset.clickable {
   cursor: pointer;
 }
 
-.filter-checkbox input[type="checkbox"] {
-  margin-top: 2px;
+.filter-preset.clickable:hover {
+  background: #e9ecef;
+  border-color: #3498db;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.15);
+}
+
+.filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
 }
 
 .filter-name {
@@ -617,26 +626,15 @@ body {
   color: #2c3e50;
 }
 
+.copy-icon {
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
+
 .filter-description {
-  margin: 4px 0 0 24px;
+  margin: 0;
   font-size: 14px;
   color: #6c757d;
-}
-
-.add-custom-button {
-  background: #17a2b8;
-  color: white;
-  border: none;
-  padding: 12px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background 0.2s ease;
-  width: 100%;
-}
-
-.add-custom-button:hover {
-  background: #138496;
 }
 
 /* Frame Preview */

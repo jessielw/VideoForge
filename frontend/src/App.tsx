@@ -108,12 +108,7 @@ core = vs.core
 clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
 
 # Add your filters here
-
-# Convert to RGB for preview (remove this line for final output)
-clip = core.resize.Bicubic(clip, format=vs.RGB24, matrix_in_s="709")
-
-# Set output
-clip.set_output()`;
+`;
         setScript(template);
       }
     } catch (error) {

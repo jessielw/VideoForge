@@ -92,9 +92,6 @@ core = vs.core
 # Load video
 clip = core.lsmas.LWLibavSource(r'INPUT_PATH')
 
-# Convert to RGB for preview
-clip = core.resize.Bicubic(clip, format=vs.RGB24, matrix_in_s="709")
-
 # Add your filters here
 # clip = core.std.Crop(clip, left=0, right=0, top=0, bottom=0)
 `;

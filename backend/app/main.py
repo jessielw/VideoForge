@@ -417,8 +417,7 @@ async def validate_script(request: ScriptValidationRequest):
         if "import vapoursynth" not in script and "import vs" not in script:
             return ScriptValidationResponse(valid=False, error="Script must import vapoursynth")
         
-        if "set_output" not in script:
-            return ScriptValidationResponse(valid=False, error="Script must call set_output()")
+        # Note: set_output() is no longer required since it gets auto-appended for preview
         
         # TODO: More thorough validation by actually running the script in a sandbox
         return ScriptValidationResponse(valid=True)
@@ -444,15 +443,16 @@ async def get_frame_with_script(
         if not p.exists():
             return Response(content="File not found", status_code=404)
         
+        # Load VapourSynth script in-process for default frame extraction
+        core = vs.core
+        try:
+            core.std.LoadPlugin(r"C:\VapourSynth\vs-plugins\LSMASHSource.dll")
+        except Exception:
+            # Plugin already loaded
+            pass
+        
         # If no script provided, use default loading
         if not script or script.strip() == "":
-            # Load VapourSynth script in-process for default frame extraction
-            core = vs.core
-            try:
-                core.std.LoadPlugin(r"C:\VapourSynth\vs-plugins\LSMASHSource.dll")
-            except Exception:
-                # Plugin already loaded
-                pass
             clip = core.lsmas.LWLibavSource(str(p.absolute()))
             # Convert to RGB24 with proper matrix
             clip = core.resize.Bicubic(clip, format=vs.RGB24, matrix_in_s="709")
@@ -474,15 +474,26 @@ async def get_frame_with_script(
         core = vs.core
         
         # The script should already have the file loaded with lsmas.LWLibavSource
-        # No need to replace INPUT_PATH - the frontend should provide a complete script
+        # Auto-append required lines for preview
+        preview_script = script
+        
+        # Check if the script already has RGB conversion and set_output
+        if "format=vs.RGB24" not in script:
+            preview_script += "\n\n# Convert to RGB for preview (remove this line for final output)"
+            preview_script += "\nclip = core.resize.Bicubic(clip, format=vs.RGB24, matrix_in_s=\"709\")"
+        
+        if "set_output()" not in script:
+            preview_script += "\n\n# Set output"
+            preview_script += "\nclip.set_output()"
         
         print("🎬 EXECUTING VAPOURSYNTH SCRIPT:")
         print(f"📁 File path: {p.absolute()}")
-        print(f"📜 Script: {script}")
+        print(f"📜 Original Script: {script}")
+        print(f"📜 Preview Script: {preview_script}")
         
-        # Execute the script and extract the clip variable
+        # Execute the preview script and extract the clip variable
         vs_globals = {"vs": vs, "core": core}
-        exec(script, vs_globals)
+        exec(preview_script, vs_globals)
         
         # Get the clip from the namespace
         if 'clip' not in vs_globals:

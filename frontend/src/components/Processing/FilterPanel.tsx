@@ -9,12 +9,6 @@ interface FilterPreset {
 
 const FILTER_PRESETS: FilterPreset[] = [
   {
-    id: 'crop',
-    name: 'Crop',
-    description: 'Remove unwanted borders (use preview crop tool)',
-    code: '# Use the crop tool in preview'
-  },
-  {
     id: 'resize_720p',
     name: 'Resize to 720p',
     description: 'Resize video to 1280x720',
@@ -49,6 +43,12 @@ const FILTER_PRESETS: FilterPreset[] = [
     name: 'Color Matrix BT.709',
     description: 'Convert to BT.709 color matrix',
     code: 'clip = core.resize.Lanczos(clip, matrix_s="709")'
+  },
+  {
+    id: 'crop_basic',
+    name: 'Basic Crop',
+    description: 'Crop borders (adjust values as needed)',
+    code: 'clip = core.std.Crop(clip, left=0, right=0, top=0, bottom=0)'
   }
 ];
 
@@ -57,53 +57,51 @@ interface FilterPanelProps {
 }
 
 export default function FilterPanel({ onFilterAdd }: FilterPanelProps): JSX.Element {
-  const [selectedPresets, setSelectedPresets] = useState<Set<string>>(new Set());
+  const [copiedFilter, setCopiedFilter] = useState<string | null>(null);
 
-  const handlePresetToggle = (preset: FilterPreset) => {
-    const newSelected = new Set(selectedPresets);
-    
-    if (newSelected.has(preset.id)) {
-      newSelected.delete(preset.id);
-    } else {
-      newSelected.add(preset.id);
-      if (preset.code !== '# Use the crop tool in preview') {
-        onFilterAdd(preset.code);
-      }
-    }
-    
-    setSelectedPresets(newSelected);
-  };
-
-  const addCustomFilter = () => {
-    const code = prompt('Enter custom VapourSynth code:');
-    if (code) {
-      onFilterAdd(code);
+  const copyToClipboard = async (code: string, filterName: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedFilter(filterName);
+      // Clear the "copied" state after 2 seconds
+      setTimeout(() => setCopiedFilter(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = code;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopiedFilter(filterName);
+      setTimeout(() => setCopiedFilter(null), 2000);
     }
   };
 
   return (
     <div className="filter-panel">
       <h3>Common Filters</h3>
+      <p className="filter-help">Click any filter to copy its code to clipboard, then paste into the script editor:</p>
       <div className="filter-presets">
         {FILTER_PRESETS.map(preset => (
-          <div key={preset.id} className="filter-preset">
-            <label className="filter-checkbox">
-              <input
-                type="checkbox"
-                checked={selectedPresets.has(preset.id)}
-                onChange={() => handlePresetToggle(preset)}
-              />
+          <div 
+            key={preset.id} 
+            className="filter-preset clickable" 
+            onClick={() => copyToClipboard(preset.code, preset.name)}
+          >
+            <div className="filter-header">
               <span className="filter-name">{preset.name}</span>
-            </label>
-            <p className="filter-description">{preset.description}</p>
+              <span className="copy-icon">
+                {copiedFilter === preset.name ? '✅' : '📋'}
+              </span>
+            </div>
+            <p className="filter-description">
+              {preset.description}
+              {copiedFilter === preset.name && ' - Copied!'}
+            </p>
           </div>
         ))}
-      </div>
-      
-      <div className="custom-filter">
-        <button onClick={addCustomFilter} className="add-custom-button">
-          ➕ Add Custom Filter
-        </button>
       </div>
     </div>
   );
