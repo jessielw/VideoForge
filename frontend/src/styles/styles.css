@@ -712,6 +712,115 @@ body {
   color: white;
   border-color: #28a745;
 }
+
+.auto-crop-button {
+  background: #17a2b8 !important;
+  color: white !important;
+  border-color: #17a2b8 !important;
+}
+
+.auto-crop-button:hover:not(:disabled) {
+  background: #138496 !important;
+  border-color: #117a8b !important;
+}
+
+.auto-crop-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Auto Crop Detection Modal */
+.auto-crop-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.auto-crop-modal {
+  background: white;
+  border-radius: 8px;
+  padding: 32px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.auto-crop-spinner {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  animation: spin 2s linear infinite;
+}
+
+.auto-crop-success {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  color: #28a745;
+}
+
+.auto-crop-info {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  color: #17a2b8;
+}
+
+.auto-crop-error {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  color: #dc3545;
+}
+
+.crop-command-display {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 12px;
+  margin: 16px 0;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  word-break: break-all;
+  color: #495057;
+}
+
+.crop-values {
+  background: #e9ecef;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 12px 0;
+  font-size: 0.85rem;
+  color: #6c757d;
+  font-family: monospace;
+}
+
+.auto-crop-modal h3 {
+  margin: 0 0 12px 0;
+  color: #2c3e50;
+  font-size: 1.4rem;
+}
+
+.auto-crop-modal p {
+  margin: 0 0 16px 0;
+  color: #6c757d;
+  line-height: 1.5;
+}
+
+.progress-text {
+  color: #17a2b8;
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 .zoom-controls {
   display: flex;
   align-items: center;
