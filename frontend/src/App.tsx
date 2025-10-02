@@ -2,9 +2,9 @@ import React, { useState } from "react";
 import MainLayout from "./components/Layout/MainLayout";
 import FileSelector from "./components/Source/FileSelector";
 import MediaInfoPanel from "./components/Source/MediaInfoPanel";
-import ScriptEditorRefactored from "./components/Processing/ScriptEditorRefactored";
+import ScriptEditor from "./components/Processing/ScriptEditor";
 import FilterPanel from "./components/Processing/FilterPanel";
-import FramePreviewRefactored from "./components/Processing/FramePreviewRefactored";
+import FramePreview from "./components/Processing/FramePreview";
 import TargetSection from "./components/Target";
 import FileBrowserModal from "./components/FileBrowserModal";
 import "./styles/index.css";
@@ -170,7 +170,7 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
           <div className="processing-tab">
             <div className="processing-layout">
               <div className="processing-left">
-                <ScriptEditorRefactored
+                <ScriptEditor
                   script={script}
                   onScriptChange={setScript}
                   onValidate={handleScriptValidate}
@@ -179,7 +179,7 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
                 <FilterPanel onFilterAdd={handleFilterAdd} />
               </div>
               <div className="processing-right">
-                <FramePreviewRefactored
+                <FramePreview
                   inputPath={inputPath}
                   script={script}
                   indexInfo={indexInfo}

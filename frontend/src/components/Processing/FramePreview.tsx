@@ -1,4 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import FrameControls from './FrameControls';
+import ZoomControls from './ZoomControls';
+import DisplayEffects from './DisplayEffects';
+import AutoCropModal from './AutoCropModal';
+import { useAutoCropDetection } from '../../hooks/useAutoCropDetection';
 
 interface FramePreviewProps {
   inputPath: string;
@@ -9,13 +14,10 @@ interface FramePreviewProps {
 
 export default function FramePreview({ inputPath, script, indexInfo, onScriptChange }: FramePreviewProps): JSX.Element {
   const [currentFrame, setCurrentFrame] = useState(0);
-  const [sliderFrame, setSliderFrame] = useState(0); // For tracking slider position during drag
-  const [inputValue, setInputValue] = useState("0"); // For tracking text input value
   const [frameImage, setFrameImage] = useState<string | null>(null);
   const [originalFrameImage, setOriginalFrameImage] = useState<string | null>(null); // Store original image
   const [loading, setLoading] = useState(false);
   const [currentCrop, setCurrentCrop] = useState({ left: 0, top: 0, right: 0, bottom: 0 });
-  const [isDragging, setIsDragging] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(100); // Zoom percentage
   const [isPanning, setIsPanning] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -23,14 +25,10 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
   const [viewportPos, setViewportPos] = useState({ left: 0, top: 0 }); // For minimap
   const [isScrolling, setIsScrolling] = useState(false); // For wheel scroll minimap
   const [displayEffect, setDisplayEffect] = useState<'none' | 'edge_detect'>('none'); // Display effects
-  const [autoCropDetecting, setAutoCropDetecting] = useState(false); // Auto crop detection state
-  const [autoCropResult, setAutoCropResult] = useState<{success: boolean, command: string | null, crop: any} | null>(null); // Auto crop result
   
   const imageRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const debounceTimeoutRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewportRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<number | null>(null);
   
   // Get frame count from new data structure
@@ -48,70 +46,17 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
   
   const API = "http://127.0.0.1:8000";
 
-  // Debounced frame change function
-  const debouncedFrameChange = useCallback((frame: number) => {
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current);
-    }
-    
-    debounceTimeoutRef.current = window.setTimeout(() => {
-      setCurrentFrame(frame);
-      setIsDragging(false);
-    }, 300);
-  }, []);
-
-  // Handle slider changes (immediate visual feedback, debounced API call)
-  const handleSliderChange = (newFrame: number) => {
-    setSliderFrame(newFrame);
-    setIsDragging(true);
-    debouncedFrameChange(newFrame);
-  };
-
-  // Handle prev/next button clicks (immediate, no debounce needed)
-  const handlePrevNext = (newFrame: number) => {
-    const clampedFrame = Math.max(0, Math.min(maxFrames - 1, newFrame));
-    setSliderFrame(clampedFrame);
-    setCurrentFrame(clampedFrame);
-    setIsDragging(false);
-    // Cancel any pending debounced changes
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current);
-    }
-  };
-
-  // Handle text input changes (only visual update, no API call)
-  const handleTextInputChange = (value: string) => {
-    setInputValue(value);
-  };
-
-  // Handle text input blur or Enter key (immediate update)
-  const handleTextInputBlur = () => {
-    const newFrame = parseInt(inputValue) || 0;
-    const clampedFrame = Math.max(0, Math.min(maxFrames - 1, newFrame));
-    setInputValue(clampedFrame.toString());
-    setSliderFrame(clampedFrame);
-    setCurrentFrame(clampedFrame);
-    setIsDragging(false);
-    // Cancel any pending debounced changes
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current);
-    }
-  };
-
-  // Handle Enter key press in text input
-  const handleTextInputKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleTextInputBlur();
-    }
-  };
+  // Use the auto crop detection hook
+  const { autoCropDetecting, autoCropResult, detectAutoCrop } = useAutoCropDetection({
+    inputPath,
+    maxFrames,
+    script,
+    onScriptChange
+  });
 
   // Zoom control functions
   const setZoom = (zoom: number) => {
     setZoomLevel(zoom);
-  };
-
-  const zoomToFit = () => {
-    setZoomLevel(100); // Fit to container (default responsive behavior)
   };
 
   const handleMouseWheel = (e: React.WheelEvent) => {
@@ -164,20 +109,6 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
       const topPercent = maxScrollTop > 0 ? 
         (viewport.scrollTop / maxScrollTop) * 100 : 0;
       
-      console.log('Minimap calc:', {
-        zoomLevel,
-        scrollLeft: viewport.scrollLeft,
-        scrollTop: viewport.scrollTop,
-        maxScrollLeft,
-        maxScrollTop,
-        leftPercent: leftPercent.toFixed(2),
-        topPercent: topPercent.toFixed(2),
-        scrollWidth: viewport.scrollWidth,
-        clientWidth: viewport.clientWidth,
-        scrollHeight: viewport.scrollHeight,
-        clientHeight: viewport.clientHeight
-      });
-      
       setViewportPos({ left: leftPercent, top: topPercent });
     } else {
       setViewportPos({ left: 0, top: 0 });
@@ -217,14 +148,6 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
   const handleMouseLeave = () => {
     setIsPanning(false);
   };
-
-  // Sync input value and slider with current frame when not dragging
-  useEffect(() => {
-    if (!isDragging) {
-      setSliderFrame(currentFrame);
-      setInputValue(currentFrame.toString());
-    }
-  }, [currentFrame, isDragging]);
 
   // Fetch frame image (processed with script when available)
   const fetchFrame = async (frame: number) => {
@@ -295,77 +218,6 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
       viewport.removeEventListener('scroll', updateViewportPosition);
     };
   }, [zoomLevel, frameImage]);
-
-  // Cleanup debounce timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Handle crop changes from the crop modal
-  const handleCropChange = (crop: { left: number; top: number; right: number; bottom: number }) => {
-    console.log('FramePreview: handleCropChange called with:', crop);
-    setCurrentCrop(crop);
-    updateScriptWithCrop(crop);
-  };
-
-  const updateScriptWithCrop = (crop: { left: number; top: number; right: number; bottom: number }) => {
-    if (!onScriptChange || !script) return;
-    
-    console.log('Updating script with crop:', crop);
-    console.log('Current script before update:', script);
-    
-    // More careful removal of existing crop section
-    let cleanScript = script;
-    
-    // Remove existing crop filter lines (but preserve structure)
-    const lines = cleanScript.split('\n');
-    const filteredLines = lines.filter(line => 
-      !line.includes('core.std.Crop') && 
-      !line.trim().startsWith('# Crop filter')
-    );
-    
-    // Remove excessive empty lines (more than 2 consecutive)
-    const cleanedLines = [];
-    let emptyLineCount = 0;
-    
-    for (const line of filteredLines) {
-      if (line.trim() === '') {
-        emptyLineCount++;
-        if (emptyLineCount <= 2) { // Allow up to 2 empty lines
-          cleanedLines.push(line);
-        }
-      } else {
-        emptyLineCount = 0;
-        cleanedLines.push(line);
-      }
-    }
-    
-    cleanScript = cleanedLines.join('\n');
-    
-    // Generate crop filter if needed
-    if (crop.left > 0 || crop.top > 0 || crop.right > 0 || crop.bottom > 0) {
-      const cropFilter = `\n# Crop filter\nclip = core.std.Crop(clip, left=${crop.left}, top=${crop.top}, right=${crop.right}, bottom=${crop.bottom})`;
-      
-      // Find where to insert the crop filter (before "# Set output")
-      const setOutputMatch = cleanScript.match(/(\n# Set output|\nclip\.set_output)/);
-      
-      if (setOutputMatch) {
-        const insertIndex = cleanScript.indexOf(setOutputMatch[0]);
-        cleanScript = cleanScript.slice(0, insertIndex) + cropFilter + cleanScript.slice(insertIndex);
-      } else {
-        // If no set_output found, add at the end
-        cleanScript += cropFilter;
-      }
-    }
-    
-    const newScript = cleanScript.trim();
-    console.log('New script after update:', newScript);
-    onScriptChange(newScript);
-  };
 
   // Apply display effects to the image
   const applyDisplayEffect = (effect: 'none' | 'edge_detect') => {
@@ -454,433 +306,32 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
     img.src = originalFrameImage;
   };
 
-  // Auto crop detection function
-  const detectAutoCrop = async () => {
-    if (!inputPath || autoCropDetecting) return;
-    
-    setAutoCropDetecting(true);
-    console.log('🔍 Starting auto crop detection...');
-    
-    try {
-      // Sample 10 frames spread throughout the video
-      const sampleFrames = [];
-      const frameStep = Math.max(1, Math.floor(maxFrames / 10));
-      
-      for (let i = 0; i < 10; i++) {
-        const frameNum = Math.min(i * frameStep, maxFrames - 1);
-        sampleFrames.push(frameNum);
-      }
-      
-      console.log(`📊 Sampling frames: ${sampleFrames.join(', ')}`);
-      
-      const cropDetections = [];
-      
-      // Analyze each sample frame
-      for (const frameNum of sampleFrames) {
-        try {
-          const url = `${API}/api/frame?path=${encodeURIComponent(inputPath)}&frame=${frameNum}`;
-          const resp = await fetch(url);
-          
-          if (resp.ok) {
-            const blob = await resp.blob();
-            const imageUrl = URL.createObjectURL(blob);
-            
-            // Analyze the frame for crop detection
-            const cropData = await analyzeFrameForCrop(imageUrl);
-            if (cropData) {
-              cropDetections.push({
-                frame: frameNum,
-                crop: cropData
-              });
-            }
-            
-            // Clean up blob URL
-            URL.revokeObjectURL(imageUrl);
-          }
-        } catch (error) {
-          console.warn(`⚠️ Failed to analyze frame ${frameNum}:`, error);
-        }
-      }
-      
-      // Calculate recommended crop from all detections
-      const recommendedCrop = calculateRecommendedCrop(cropDetections);
-      console.log('✅ Auto crop detection complete!');
-      console.log('📏 Recommended crop:', recommendedCrop);
-      console.log('📊 All detections:', cropDetections);
-      
-      // Append crop command to script if detected
-      if (recommendedCrop.left > 0 || recommendedCrop.top > 0 || recommendedCrop.right > 0 || recommendedCrop.bottom > 0) {
-        const cropCommand = `# Auto-detected crop (remove comment to apply):\n# clip = core.std.Crop(clip, left=${recommendedCrop.left}, top=${recommendedCrop.top}, right=${recommendedCrop.right}, bottom=${recommendedCrop.bottom})`;
-        
-        if (onScriptChange && script) {
-          const updatedScript = script + '\n\n' + cropCommand;
-          onScriptChange(updatedScript);
-          console.log('� Crop command appended to script');
-          
-          // Show success feedback
-          setAutoCropResult({
-            success: true,
-            command: cropCommand,
-            crop: recommendedCrop
-          });
-        } else {
-          console.log('📋 Crop command generated:', cropCommand);
-          setAutoCropResult({
-            success: false,
-            command: cropCommand,
-            crop: recommendedCrop
-          });
-        }
-      } else {
-        console.log('ℹ️ No significant crop detected');
-        setAutoCropResult({
-          success: true,
-          command: null,
-          crop: recommendedCrop
-        });
-      }
-      
-      // Clear result after a few seconds
-      setTimeout(() => {
-        setAutoCropResult(null);
-      }, 4000);
-      
-    } catch (error) {
-      console.error('❌ Auto crop detection failed:', error);
-      setAutoCropResult({
-        success: false,
-        command: null,
-        crop: null
-      });
-      
-      // Clear error after a few seconds
-      setTimeout(() => {
-        setAutoCropResult(null);
-      }, 4000);
-    } finally {
-      setAutoCropDetecting(false);
-    }
-  };
-
-  // Analyze a single frame for crop detection
-  const analyzeFrameForCrop = (imageUrl: string): Promise<{left: number, top: number, right: number, bottom: number} | null> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(null);
-          return;
-        }
-        
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
-        
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        
-        // Detect black bars by analyzing edge rows/columns
-        const threshold = 35; // Slightly higher brightness threshold for "black" pixels
-        const tolerance = 0.92; // 92% of pixels must be below threshold (slightly more lenient)
-        const minCropSize = 8; // Minimum crop size to avoid detecting noise as crop
-        
-        // Detect top crop
-        let topCrop = 0;
-        for (let y = 0; y < canvas.height; y++) {
-          let darkPixels = 0;
-          for (let x = 0; x < canvas.width; x++) {
-            const idx = (y * canvas.width + x) * 4;
-            const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-            if (brightness < threshold) darkPixels++;
-          }
-          const darkRatio = darkPixels / canvas.width;
-          if (darkRatio < tolerance) break;
-          topCrop = y + 1;
-        }
-        // Only consider significant crops
-        if (topCrop < minCropSize) topCrop = 0;
-        
-        // Detect bottom crop
-        let bottomCrop = 0;
-        for (let y = canvas.height - 1; y >= 0; y--) {
-          let darkPixels = 0;
-          for (let x = 0; x < canvas.width; x++) {
-            const idx = (y * canvas.width + x) * 4;
-            const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-            if (brightness < threshold) darkPixels++;
-          }
-          const darkRatio = darkPixels / canvas.width;
-          if (darkRatio < tolerance) break;
-          bottomCrop = canvas.height - y;
-        }
-        // Only consider significant crops
-        if (bottomCrop < minCropSize) bottomCrop = 0;
-        
-        // Detect left crop
-        let leftCrop = 0;
-        for (let x = 0; x < canvas.width; x++) {
-          let darkPixels = 0;
-          for (let y = 0; y < canvas.height; y++) {
-            const idx = (y * canvas.width + x) * 4;
-            const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-            if (brightness < threshold) darkPixels++;
-          }
-          const darkRatio = darkPixels / canvas.height;
-          if (darkRatio < tolerance) break;
-          leftCrop = x + 1;
-        }
-        // Only consider significant crops
-        if (leftCrop < minCropSize) leftCrop = 0;
-        
-        // Detect right crop
-        let rightCrop = 0;
-        for (let x = canvas.width - 1; x >= 0; x--) {
-          let darkPixels = 0;
-          for (let y = 0; y < canvas.height; y++) {
-            const idx = (y * canvas.width + x) * 4;
-            const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-            if (brightness < threshold) darkPixels++;
-          }
-          const darkRatio = darkPixels / canvas.height;
-          if (darkRatio < tolerance) break;
-          rightCrop = canvas.width - x;
-        }
-        // Only consider significant crops
-        if (rightCrop < minCropSize) rightCrop = 0;
-        
-        resolve({
-          left: leftCrop,
-          top: topCrop,
-          right: rightCrop,
-          bottom: bottomCrop
-        });
-      };
-      
-      img.onerror = () => resolve(null);
-      img.src = imageUrl;
-    });
-  };
-
-  // Calculate recommended crop from multiple detections
-  const calculateRecommendedCrop = (detections: Array<{frame: number, crop: {left: number, top: number, right: number, bottom: number}}>) => {
-    if (detections.length === 0) {
-      return { left: 0, top: 0, right: 0, bottom: 0 };
-    }
-    
-    console.log('🔍 Individual frame detections:', detections);
-    
-    // Round down to nearest even number (important for video encoding)
-    const roundDownToEven = (num: number) => {
-      const rounded = Math.floor(num);
-      return rounded % 2 === 0 ? rounded : rounded - 1;
-    };
-    
-    // Find consistent values across frames (must appear in at least 70% of frames)
-    const findConsistentValue = (values: number[], tolerance = 10) => {
-      const roundedValues = values.map(v => roundDownToEven(v));
-      const consistencyThreshold = Math.ceil(values.length * 0.7); // 70% of frames
-      
-      // Group similar values (within tolerance)
-      const groups: {[key: number]: number[]} = {};
-      
-      for (const value of roundedValues) {
-        let foundGroup = false;
-        
-        // Check if this value fits in an existing group
-        for (const [groupKey, groupValues] of Object.entries(groups)) {
-          const groupKeyNum = parseInt(groupKey);
-          if (Math.abs(value - groupKeyNum) <= tolerance) {
-            groupValues.push(value);
-            foundGroup = true;
-            break;
-          }
-        }
-        
-        // Create new group if no existing group found
-        if (!foundGroup) {
-          groups[value] = [value];
-        }
-      }
-      
-      // Find the group with most consistent values
-      let bestGroup: number[] = [];
-      let bestGroupKey = 0;
-      
-      for (const [groupKey, groupValues] of Object.entries(groups)) {
-        if (groupValues.length >= consistencyThreshold && groupValues.length > bestGroup.length) {
-          bestGroup = groupValues;
-          bestGroupKey = parseInt(groupKey);
-        }
-      }
-      
-      console.log(`📊 Value groups:`, groups);
-      console.log(`✅ Best group (${bestGroup.length}/${values.length} frames):`, bestGroup);
-      
-      // If no group meets consistency threshold, return 0 (no crop)
-      if (bestGroup.length < consistencyThreshold) {
-        console.log(`⚠️ No consistent value found (need ${consistencyThreshold}/${values.length} frames)`);
-        return 0;
-      }
-      
-      // Return the most common value in the best group
-      return bestGroupKey;
-    };
-    
-    const leftValues = detections.map(d => d.crop.left);
-    const topValues = detections.map(d => d.crop.top);
-    const rightValues = detections.map(d => d.crop.right);
-    const bottomValues = detections.map(d => d.crop.bottom);
-    
-    const result = {
-      left: findConsistentValue(leftValues),
-      top: findConsistentValue(topValues),
-      right: findConsistentValue(rightValues),
-      bottom: findConsistentValue(bottomValues)
-    };
-    
-    console.log('🎯 Final consistent crop values:', result);
-    return result;
-  };
-
-  const handlePreviewUpdate = () => {
-    updateScriptWithCrop(currentCrop);
-    // Force immediate refresh
-    setTimeout(() => fetchFrame(currentFrame), 100);
-  };
-
   return (
     <div className="frame-preview">
       <div className="preview-header">
         <div className="preview-title-row">
           <h3>Frame Preview</h3>
           
-          <div className="display-effects">
-            <span className="effects-label">Display:</span>
-            <button 
-              onClick={() => applyDisplayEffect('none')}
-              className={`effect-button ${displayEffect === 'none' ? 'active' : ''}`}
-            >
-              Normal
-            </button>
-            <button 
-              onClick={() => applyDisplayEffect('edge_detect')}
-              className={`effect-button ${displayEffect === 'edge_detect' ? 'active' : ''}`}
-            >
-              🔍 Edges
-            </button>
-            <button 
-              onClick={detectAutoCrop}
-              className="effect-button auto-crop-button"
-              disabled={autoCropDetecting || !inputPath}
-            >
-              {autoCropDetecting ? '⏳ Detecting...' : '✂️ Auto Crop'}
-            </button>
-          </div>
-        </div>
-        
-        <div className="zoom-controls">
-          <button 
-            onClick={() => setZoom(100)}
-            className={`zoom-button ${zoomLevel === 100 ? 'active' : ''}`}
-          >
-            Fit
-          </button>
-          <button 
-            onClick={() => setZoom(150)}
-            className={`zoom-button ${zoomLevel === 150 ? 'active' : ''}`}
-          >
-            150%
-          </button>
-          <button 
-            onClick={() => setZoom(200)}
-            className={`zoom-button ${zoomLevel === 200 ? 'active' : ''}`}
-          >
-            200%
-          </button>
-          <button 
-            onClick={() => setZoom(300)}
-            className={`zoom-button ${zoomLevel === 300 ? 'active' : ''}`}
-          >
-            300%
-          </button>
-          <button 
-            onClick={() => setZoom(400)}
-            className={`zoom-button ${zoomLevel === 400 ? 'active' : ''}`}
-          >
-            400%
-          </button>
-          <button 
-            onClick={() => setZoom(500)}
-            className={`zoom-button ${zoomLevel === 500 ? 'active' : ''}`}
-          >
-            500%
-          </button>
-          <button 
-            onClick={() => setZoom(600)}
-            className={`zoom-button ${zoomLevel === 600 ? 'active' : ''}`}
-          >
-            600%
-          </button>
-          <button 
-            onClick={() => setZoom(700)}
-            className={`zoom-button ${zoomLevel === 700 ? 'active' : ''}`}
-          >
-            700%
-          </button>
-          <button 
-            onClick={() => setZoom(800)}
-            className={`zoom-button ${zoomLevel === 800 ? 'active' : ''}`}
-          >
-            800%
-          </button>
-          <span className="zoom-info">{zoomLevel}%</span>
-        </div>
-        
-        <div className="frame-controls-header">
-          <button 
-            onClick={() => handlePrevNext(currentFrame - 1)}
-            disabled={currentFrame <= 0 || loading}
-            className="nav-button"
-          >
-            ⏮️ Prev
-          </button>
-          
-          <div className="frame-input-group">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => handleTextInputChange(e.target.value)}
-              onBlur={handleTextInputBlur}
-              onKeyPress={handleTextInputKeyPress}
-              className="frame-input"
-              disabled={loading}
-              placeholder="Frame"
-            />
-            <span className="frame-total">of {maxFrames}</span>
-          </div>
-          
-          <input
-            type="range"
-            min="0"
-            max={maxFrames - 1}
-            value={isDragging ? sliderFrame : currentFrame}
-            onChange={(e) => handleSliderChange(parseInt(e.target.value))}
-            className="frame-slider"
-            disabled={loading}
+          <DisplayEffects
+            displayEffect={displayEffect}
+            onEffectChange={applyDisplayEffect}
+            onAutoCropDetect={detectAutoCrop}
+            autoCropDetecting={autoCropDetecting}
+            disabled={!inputPath}
           />
-          
-          <button 
-            onClick={() => handlePrevNext(currentFrame + 1)}
-            disabled={currentFrame >= maxFrames - 1 || loading}
-            className="nav-button"
-          >
-            Next ⏭️
-          </button>
         </div>
+        
+        <ZoomControls
+          zoomLevel={zoomLevel}
+          onZoomChange={setZoom}
+        />
+        
+        <FrameControls
+          currentFrame={currentFrame}
+          maxFrames={maxFrames}
+          loading={loading}
+          onFrameChange={setCurrentFrame}
+        />
       </div>
       
       <div className="preview-container" style={{ padding: '20px' }}>
@@ -929,6 +380,7 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
                   ref={canvasRef}
                   style={{ display: 'none' }}
                 />
+              
               {/* Show simple crop overlay if crop is active */}
               {(currentCrop.left > 0 || currentCrop.top > 0 || currentCrop.right > 0 || currentCrop.bottom > 0) && (
                 <div className="crop-overlay">
@@ -997,58 +449,10 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
         )}
       </div>
       
-      {/* Auto Crop Detection Modal */}
-      {autoCropDetecting && (
-        <div className="auto-crop-modal-overlay">
-          <div className="auto-crop-modal">
-            <div className="auto-crop-spinner">⏳</div>
-            <h3>Detecting Auto Crop</h3>
-            <p>Analyzing frames to detect letterboxing and black bars...</p>
-            <div className="progress-text">This may take a few seconds</div>
-          </div>
-        </div>
-      )}
-      
-      {/* Auto Crop Result Modal */}
-      {autoCropResult && (
-        <div className="auto-crop-modal-overlay">
-          <div className="auto-crop-modal">
-            {autoCropResult.success ? (
-              <>
-                {autoCropResult.command ? (
-                  <>
-                    <div className="auto-crop-success">✅</div>
-                    <h3>Crop Detected & Added!</h3>
-                    <p>Auto crop command has been appended to your script:</p>
-                    <div className="crop-command-display">
-                      <code>{autoCropResult.command}</code>
-                    </div>
-                    <div className="crop-values">
-                      Left: {autoCropResult.crop.left}, Top: {autoCropResult.crop.top}, 
-                      Right: {autoCropResult.crop.right}, Bottom: {autoCropResult.crop.bottom}
-                    </div>
-                    <div className="progress-text">Remove the # comment to apply the crop!</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="auto-crop-info">ℹ️</div>
-                    <h3>No Crop Needed</h3>
-                    <p>No significant letterboxing or black bars detected.</p>
-                    <div className="progress-text">Your video appears to be full frame!</div>
-                  </>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="auto-crop-error">❌</div>
-                <h3>Detection Failed</h3>
-                <p>Unable to detect crop or update script.</p>
-                <div className="progress-text">Please try again or crop manually</div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      <AutoCropModal
+        autoCropDetecting={autoCropDetecting}
+        autoCropResult={autoCropResult}
+      />
     </div>
   );
 }
