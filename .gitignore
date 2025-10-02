@@ -3,6 +3,7 @@ scripts/
 reference/
 node_modules/
 apps/
+frontend/dist/
 
 *.pyc
 .env
