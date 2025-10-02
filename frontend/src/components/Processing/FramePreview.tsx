@@ -470,6 +470,9 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
           onDoubleClick={handleDoubleClick}
+          style={{
+            maxHeight: zoomLevel > 100 ? '50vh' : 'none', // Only constrain height when zoomed
+          }}
         >
           {frameImage && (
             <div className={`image-container ${zoomLevel !== 100 ? 'zoomed' : ''}`}>
