@@ -1,0 +1,569 @@
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+
+interface FramePreviewProps {
+  inputPath: string;
+  script?: string;
+  indexInfo: any;
+  onScriptChange?: (script: string) => void;
+}
+
+export default function FramePreview({ inputPath, script, indexInfo, onScriptChange }: FramePreviewProps): JSX.Element {
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const [sliderFrame, setSliderFrame] = useState(0); // For tracking slider position during drag
+  const [inputValue, setInputValue] = useState("0"); // For tracking text input value
+  const [frameImage, setFrameImage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [currentCrop, setCurrentCrop] = useState({ left: 0, top: 0, right: 0, bottom: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(100); // Zoom percentage
+  const [isPanning, setIsPanning] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
+  const [viewportPos, setViewportPos] = useState({ left: 0, top: 0 }); // For minimap
+  const [isScrolling, setIsScrolling] = useState(false); // For wheel scroll minimap
+  
+  const imageRef = useRef<HTMLImageElement>(null);
+  const debounceTimeoutRef = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const scrollTimeoutRef = useRef<number | null>(null);
+  
+  // Get frame count from new data structure
+  const maxFrames = indexInfo?.vapoursynth?.frames || 
+                   indexInfo?.video_tracks?.[0]?.frame_count || 
+                   1000;
+  
+  // Get resolution from new data structure
+  const videoWidth = indexInfo?.vapoursynth?.width || 
+                    indexInfo?.video_tracks?.[0]?.width || 
+                    1920;
+  const videoHeight = indexInfo?.vapoursynth?.height || 
+                     indexInfo?.video_tracks?.[0]?.height || 
+                     1080;
+  
+  const API = "http://127.0.0.1:8000";
+
+  // Debounced frame change function
+  const debouncedFrameChange = useCallback((frame: number) => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+    
+    debounceTimeoutRef.current = window.setTimeout(() => {
+      setCurrentFrame(frame);
+      setIsDragging(false);
+    }, 300);
+  }, []);
+
+  // Handle slider changes (immediate visual feedback, debounced API call)
+  const handleSliderChange = (newFrame: number) => {
+    setSliderFrame(newFrame);
+    setIsDragging(true);
+    debouncedFrameChange(newFrame);
+  };
+
+  // Handle prev/next button clicks (immediate, no debounce needed)
+  const handlePrevNext = (newFrame: number) => {
+    const clampedFrame = Math.max(0, Math.min(maxFrames - 1, newFrame));
+    setSliderFrame(clampedFrame);
+    setCurrentFrame(clampedFrame);
+    setIsDragging(false);
+    // Cancel any pending debounced changes
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+  };
+
+  // Handle text input changes (only visual update, no API call)
+  const handleTextInputChange = (value: string) => {
+    setInputValue(value);
+  };
+
+  // Handle text input blur or Enter key (immediate update)
+  const handleTextInputBlur = () => {
+    const newFrame = parseInt(inputValue) || 0;
+    const clampedFrame = Math.max(0, Math.min(maxFrames - 1, newFrame));
+    setInputValue(clampedFrame.toString());
+    setSliderFrame(clampedFrame);
+    setCurrentFrame(clampedFrame);
+    setIsDragging(false);
+    // Cancel any pending debounced changes
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+  };
+
+  // Handle Enter key press in text input
+  const handleTextInputKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleTextInputBlur();
+    }
+  };
+
+  // Zoom control functions
+  const setZoom = (zoom: number) => {
+    setZoomLevel(zoom);
+  };
+
+  const zoomToFit = () => {
+    setZoomLevel(100); // Fit to container (default responsive behavior)
+  };
+
+  const handleMouseWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -50 : 50;
+      const newZoom = Math.max(100, Math.min(800, zoomLevel + delta));
+      setZoomLevel(newZoom);
+    } else if (zoomLevel > 100) {
+      // Show minimap during regular scrolling when zoomed
+      setIsScrolling(true);
+      updateViewportPosition();
+      
+      // Clear existing timeout
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
+      // Hide minimap after scrolling stops
+      scrollTimeoutRef.current = window.setTimeout(() => {
+        setIsScrolling(false);
+      }, 1000); // Hide after 1 second of no scrolling
+    }
+  };
+
+  const handleDoubleClick = () => {
+    const zoomLevels = [100, 150, 200, 300, 400, 500, 600, 700, 800];
+    const currentIndex = zoomLevels.indexOf(zoomLevel);
+    
+    if (currentIndex === -1 || currentIndex === zoomLevels.length - 1) {
+      setZoomLevel(100); // Return to fit if at max or custom zoom
+    } else {
+      setZoomLevel(zoomLevels[currentIndex + 1]); // Go to next zoom level
+    }
+  };
+
+  // Update viewport position for minimap
+  const updateViewportPosition = () => {
+    const viewport = containerRef.current;
+    if (!viewport) return;
+
+    // Calculate the maximum scroll distances
+    const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+
+    if (maxScrollLeft > 0 || maxScrollTop > 0) {
+      // Calculate percentage position (0-100%)
+      const leftPercent = maxScrollLeft > 0 ? 
+        (viewport.scrollLeft / maxScrollLeft) * 100 : 0;
+      const topPercent = maxScrollTop > 0 ? 
+        (viewport.scrollTop / maxScrollTop) * 100 : 0;
+      
+      console.log('Minimap calc:', {
+        zoomLevel,
+        scrollLeft: viewport.scrollLeft,
+        scrollTop: viewport.scrollTop,
+        maxScrollLeft,
+        maxScrollTop,
+        leftPercent: leftPercent.toFixed(2),
+        topPercent: topPercent.toFixed(2),
+        scrollWidth: viewport.scrollWidth,
+        clientWidth: viewport.clientWidth,
+        scrollHeight: viewport.scrollHeight,
+        clientHeight: viewport.clientHeight
+      });
+      
+      setViewportPos({ left: leftPercent, top: topPercent });
+    } else {
+      setViewportPos({ left: 0, top: 0 });
+    }
+  };
+
+  // Drag/Pan functionality
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomLevel > 100 && containerRef.current) {
+      setIsPanning(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+      setScrollStart({ 
+        x: containerRef.current.scrollLeft, 
+        y: containerRef.current.scrollTop 
+      });
+      e.preventDefault();
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isPanning && containerRef.current) {
+      const deltaX = dragStart.x - e.clientX;
+      const deltaY = dragStart.y - e.clientY;
+      
+      containerRef.current.scrollLeft = scrollStart.x + deltaX;
+      containerRef.current.scrollTop = scrollStart.y + deltaY;
+      
+      // Update viewport position for minimap
+      updateViewportPosition();
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsPanning(false);
+  };
+
+  const handleMouseLeave = () => {
+    setIsPanning(false);
+  };
+
+  // Sync input value and slider with current frame when not dragging
+  useEffect(() => {
+    if (!isDragging) {
+      setSliderFrame(currentFrame);
+      setInputValue(currentFrame.toString());
+    }
+  }, [currentFrame, isDragging]);
+
+  // Fetch frame image (processed with script when available)
+  const fetchFrame = async (frame: number) => {
+    if (!inputPath) return;
+    
+    setLoading(true);
+    try {
+      let url = `${API}/api/frame?path=${encodeURIComponent(inputPath)}&frame=${frame}`;
+      
+      if (script && script.trim()) {
+        // Add script as query parameter for processed frame
+        url += `&script=${encodeURIComponent(script)}`;
+        console.log('🎬 Fetching processed frame with script');
+      } else {
+        console.log('🎬 Fetching original frame (no script)');
+      }
+      
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const blob = await resp.blob();
+        setFrameImage(URL.createObjectURL(blob));
+        console.log('✅ Frame fetched successfully');
+      } else {
+        const errorText = await resp.text();
+        console.error('❌ Failed to fetch frame:', resp.status, errorText);
+        setFrameImage(null);
+      }
+    } catch (error) {
+      console.error('💥 Error fetching frame:', error);
+      setFrameImage(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (inputPath) {
+      fetchFrame(currentFrame);
+    }
+  }, [inputPath, currentFrame, script]);
+
+  // Track scroll position for minimap
+  useEffect(() => {
+    const viewport = containerRef.current;
+    if (!viewport) return;
+
+    // Update on scroll
+    viewport.addEventListener('scroll', updateViewportPosition);
+    
+    // Initial update
+    updateViewportPosition();
+
+    return () => {
+      viewport.removeEventListener('scroll', updateViewportPosition);
+    };
+  }, [zoomLevel, frameImage]);
+
+  // Cleanup debounce timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Handle crop changes from the crop modal
+  const handleCropChange = (crop: { left: number; top: number; right: number; bottom: number }) => {
+    console.log('FramePreview: handleCropChange called with:', crop);
+    setCurrentCrop(crop);
+    updateScriptWithCrop(crop);
+  };
+
+  const updateScriptWithCrop = (crop: { left: number; top: number; right: number; bottom: number }) => {
+    if (!onScriptChange || !script) return;
+    
+    console.log('Updating script with crop:', crop);
+    console.log('Current script before update:', script);
+    
+    // More careful removal of existing crop section
+    let cleanScript = script;
+    
+    // Remove existing crop filter lines (but preserve structure)
+    const lines = cleanScript.split('\n');
+    const filteredLines = lines.filter(line => 
+      !line.includes('core.std.Crop') && 
+      !line.trim().startsWith('# Crop filter')
+    );
+    
+    // Remove excessive empty lines (more than 2 consecutive)
+    const cleanedLines = [];
+    let emptyLineCount = 0;
+    
+    for (const line of filteredLines) {
+      if (line.trim() === '') {
+        emptyLineCount++;
+        if (emptyLineCount <= 2) { // Allow up to 2 empty lines
+          cleanedLines.push(line);
+        }
+      } else {
+        emptyLineCount = 0;
+        cleanedLines.push(line);
+      }
+    }
+    
+    cleanScript = cleanedLines.join('\n');
+    
+    // Generate crop filter if needed
+    if (crop.left > 0 || crop.top > 0 || crop.right > 0 || crop.bottom > 0) {
+      const cropFilter = `\n# Crop filter\nclip = core.std.Crop(clip, left=${crop.left}, top=${crop.top}, right=${crop.right}, bottom=${crop.bottom})`;
+      
+      // Find where to insert the crop filter (before "# Set output")
+      const setOutputMatch = cleanScript.match(/(\n# Set output|\nclip\.set_output)/);
+      
+      if (setOutputMatch) {
+        const insertIndex = cleanScript.indexOf(setOutputMatch[0]);
+        cleanScript = cleanScript.slice(0, insertIndex) + cropFilter + cleanScript.slice(insertIndex);
+      } else {
+        // If no set_output found, add at the end
+        cleanScript += cropFilter;
+      }
+    }
+    
+    const newScript = cleanScript.trim();
+    console.log('New script after update:', newScript);
+    onScriptChange(newScript);
+  };
+
+  const handlePreviewUpdate = () => {
+    updateScriptWithCrop(currentCrop);
+    // Force immediate refresh
+    setTimeout(() => fetchFrame(currentFrame), 100);
+  };
+
+  return (
+    <div className="frame-preview">
+      <div className="preview-header">
+        <h3>Frame Preview</h3>
+        
+        <div className="zoom-controls">
+          <button 
+            onClick={() => setZoom(100)}
+            className={`zoom-button ${zoomLevel === 100 ? 'active' : ''}`}
+          >
+            Fit
+          </button>
+          <button 
+            onClick={() => setZoom(150)}
+            className={`zoom-button ${zoomLevel === 150 ? 'active' : ''}`}
+          >
+            150%
+          </button>
+          <button 
+            onClick={() => setZoom(200)}
+            className={`zoom-button ${zoomLevel === 200 ? 'active' : ''}`}
+          >
+            200%
+          </button>
+          <button 
+            onClick={() => setZoom(300)}
+            className={`zoom-button ${zoomLevel === 300 ? 'active' : ''}`}
+          >
+            300%
+          </button>
+          <button 
+            onClick={() => setZoom(400)}
+            className={`zoom-button ${zoomLevel === 400 ? 'active' : ''}`}
+          >
+            400%
+          </button>
+          <button 
+            onClick={() => setZoom(500)}
+            className={`zoom-button ${zoomLevel === 500 ? 'active' : ''}`}
+          >
+            500%
+          </button>
+          <button 
+            onClick={() => setZoom(600)}
+            className={`zoom-button ${zoomLevel === 600 ? 'active' : ''}`}
+          >
+            600%
+          </button>
+          <button 
+            onClick={() => setZoom(700)}
+            className={`zoom-button ${zoomLevel === 700 ? 'active' : ''}`}
+          >
+            700%
+          </button>
+          <button 
+            onClick={() => setZoom(800)}
+            className={`zoom-button ${zoomLevel === 800 ? 'active' : ''}`}
+          >
+            800%
+          </button>
+          <span className="zoom-info">{zoomLevel}%</span>
+        </div>
+        
+        <div className="frame-controls-header">
+          <button 
+            onClick={() => handlePrevNext(currentFrame - 1)}
+            disabled={currentFrame <= 0 || loading}
+            className="nav-button"
+          >
+            ⏮️ Prev
+          </button>
+          
+          <div className="frame-input-group">
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => handleTextInputChange(e.target.value)}
+              onBlur={handleTextInputBlur}
+              onKeyPress={handleTextInputKeyPress}
+              className="frame-input"
+              disabled={loading}
+              placeholder="Frame"
+            />
+            <span className="frame-total">of {maxFrames}</span>
+          </div>
+          
+          <input
+            type="range"
+            min="0"
+            max={maxFrames - 1}
+            value={isDragging ? sliderFrame : currentFrame}
+            onChange={(e) => handleSliderChange(parseInt(e.target.value))}
+            className="frame-slider"
+            disabled={loading}
+          />
+          
+          <button 
+            onClick={() => handlePrevNext(currentFrame + 1)}
+            disabled={currentFrame >= maxFrames - 1 || loading}
+            className="nav-button"
+          >
+            Next ⏭️
+          </button>
+        </div>
+      </div>
+      
+      <div className="preview-container" style={{ padding: '20px' }}>
+        <div 
+          className={`image-viewport ${zoomLevel > 100 ? 'draggable' : ''}`}
+          ref={containerRef}
+          onWheel={handleMouseWheel}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
+          onDoubleClick={handleDoubleClick}
+        >
+          {frameImage && (
+            <div className={`image-container ${zoomLevel !== 100 ? 'zoomed' : ''}`}>
+              <div 
+                className="image-wrapper"
+                style={{
+                  display: 'inline-block',
+                  width: 'auto',
+                  height: 'auto',
+                }}
+              >
+                <img 
+                  ref={imageRef}
+                  src={frameImage} 
+                  alt="Frame preview"
+                  className="frame-image"
+                  style={{ 
+                    opacity: loading ? 0.7 : 1,
+                    width: zoomLevel === 100 ? '100%' : `calc(100% * ${zoomLevel / 100})`,
+                    height: 'auto',
+                    display: 'block',
+                    cursor: zoomLevel > 100 ? (isPanning ? 'grabbing' : 'grab') : 'default',
+                  }}
+                  onClick={(e) => e.preventDefault()}
+                  onContextMenu={(e) => e.preventDefault()}
+                  draggable={false}
+                />
+              {/* Show simple crop overlay if crop is active */}
+              {(currentCrop.left > 0 || currentCrop.top > 0 || currentCrop.right > 0 || currentCrop.bottom > 0) && (
+                <div className="crop-overlay">
+                  {currentCrop.top > 0 && (
+                    <div 
+                      className="crop-border crop-top"
+                      style={{ height: `${(currentCrop.top / videoHeight) * 100}%` }}
+                    />
+                  )}
+                  {currentCrop.bottom > 0 && (
+                    <div 
+                      className="crop-border crop-bottom"
+                      style={{ height: `${(currentCrop.bottom / videoHeight) * 100}%` }}
+                    />
+                  )}
+                  {currentCrop.left > 0 && (
+                    <div 
+                      className="crop-border crop-left"
+                      style={{ 
+                        width: `${(currentCrop.left / videoWidth) * 100}%`,
+                        top: `${(currentCrop.top / videoHeight) * 100}%`,
+                        height: `${((videoHeight - currentCrop.top - currentCrop.bottom) / videoHeight) * 100}%`
+                      }}
+                    />
+                  )}
+                  {currentCrop.right > 0 && (
+                    <div 
+                      className="crop-border crop-right"
+                      style={{ 
+                        width: `${(currentCrop.right / videoWidth) * 100}%`,
+                        top: `${(currentCrop.top / videoHeight) * 100}%`,
+                        height: `${((videoHeight - currentCrop.top - currentCrop.bottom) / videoHeight) * 100}%`
+                      }}
+                    />
+                  )}
+                  <div className="crop-info-overlay">
+                    <div className="crop-dimensions">
+                      Output: {videoWidth - currentCrop.left - currentCrop.right} × {videoHeight - currentCrop.top - currentCrop.bottom}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        </div>
+        
+        {/* Simple minimap overlay during panning or scrolling - positioned outside viewport */}
+        {(isPanning || isScrolling) && zoomLevel > 100 && frameImage && (
+          <div className="minimap-overlay">
+            <div className="minimap">
+              <div className="minimap-image">
+                <img src={frameImage} alt="Overview" />
+                <div 
+                  className="minimap-viewport"
+                  style={{
+                    width: `${100 / (zoomLevel / 100)}%`,
+                    height: `${100 / (zoomLevel / 100)}%`,
+                    left: `${viewportPos.left * (1 - 1 / (zoomLevel / 100))}%`,
+                    top: `${viewportPos.top * (1 - 1 / (zoomLevel / 100))}%`
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

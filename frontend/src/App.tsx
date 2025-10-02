@@ -1,6 +1,10 @@
 import React, { useState } from "react";
-import Sidebar from "./components/Sidebar";
-import InputSection from "./components/Input";
+import MainLayout from "./components/Layout/MainLayout";
+import FileSelector from "./components/Source/FileSelector";
+import MediaInfoPanel from "./components/Source/MediaInfoPanel";
+import ScriptEditor from "./components/Processing/ScriptEditor";
+import FilterPanel from "./components/Processing/FilterPanel";
+import FramePreview from "./components/Processing/FramePreview";
 import TargetSection from "./components/Target";
 import FileBrowserModal from "./components/FileBrowserModal";
 
@@ -10,18 +14,20 @@ const API = "http://127.0.0.1:8000";
 
 export default function App(): JSX.Element {
   // Tab state
-  const [activeTab, setActiveTab] = useState<string>("main");
+  const [activeTab, setActiveTab] = useState<string>("source");
 
-  // Input box state
+  // Input state
   const [inputPath, setInputPath] = useState<string>("");
   const [fileModalOpen, setFileModalOpen] = useState<boolean>(false);
   const [fileEntries, setFileEntries] = useState<any[] | null>(null);
   const [fileCurrent, setFileCurrent] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState<boolean>(false);
   const [fileError, setFileError] = useState<string | null>(null);
-  const [fileDetails, setFileDetails] = useState<any>(null);
 
-  // Target box state
+  // Script state
+  const [script, setScript] = useState<string>("");
+
+  // Target state
   const [outputPath, setOutputPath] = useState<string>("");
   const [container, setContainer] = useState<string>("mkv");
   const [videoCodec, setVideoCodec] = useState<string>("x264");
@@ -29,10 +35,6 @@ export default function App(): JSX.Element {
   // Indexing state
   const [indexing, setIndexing] = useState(false);
   const [indexInfo, setIndexInfo] = useState<any>(null);
-  const [showCrop, setShowCrop] = useState(false);
-  const [selectedFrame, setSelectedFrame] = useState<number>(0);
-  const [frameImage, setFrameImage] = useState<string | null>(null);
-  const [frameLoading, setFrameLoading] = useState<boolean>(false);
 
   // Open file browser modal and load roots
   async function openFileModal() {
@@ -48,67 +50,77 @@ export default function App(): JSX.Element {
         setFileCurrent(j.path || null);
       } else {
         setFileError(j.reason || "Failed to list roots");
-        setFileEntries([]);
       }
-    } catch (e) {
-      setFileError(String(e));
-      setFileEntries([]);
+    } catch (err) {
+      setFileError("Network error");
     } finally {
       setFileLoading(false);
     }
   }
 
-  // Drill into a folder
+  // Navigate file browser
   async function drill(path: string) {
     setFileLoading(true);
     setFileError(null);
     try {
-      const res = await fetch(
-        `${API}/api/list?path=${encodeURIComponent(path)}`
-      );
+      const res = await fetch(`${API}/api/list?path=${encodeURIComponent(path)}`);
       const j = await res.json();
       if (j.ok) {
         setFileEntries(j.entries);
-        setFileCurrent(j.path || null);
+        setFileCurrent(j.path || path);
       } else {
         setFileError(j.reason || "Failed to list directory");
-        setFileEntries([]);
       }
-    } catch (e) {
-      setFileError(String(e));
-      setFileEntries([]);
+    } catch (err) {
+      setFileError("Network error");
     } finally {
       setFileLoading(false);
     }
   }
 
-  // Select a file
+  // Select file from browser
   async function selectFile(path: string) {
     setInputPath(path);
     setFileModalOpen(false);
-    // Fetch details from backend
-    try {
-      const res = await fetch(
-        `${API}/api/details?path=${encodeURIComponent(path)}`
-      );
-      const details = await res.json();
-      setFileDetails(details);
-    } catch (e) {
-      setFileDetails({ error: "Failed to load details" });
-    }
+    await indexFile(path);
+  }
 
-    // Now index the file
-    setIndexing(true);  
+  // Index the selected file
+  async function indexFile(path: string) {
+    setIndexing(true);
     console.log("Indexing file:", path);
-    const indexResp = await fetch(`${API}/api/index`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path }),
-    });
-    const indexData = await indexResp.json();
-    console.log("Index data:", indexData);
-    setIndexInfo(indexData);
-    setIndexing(false);
+    try {
+      const indexResp = await fetch(`${API}/api/index`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      const indexData = await indexResp.json();
+      console.log("Index data:", indexData);
+      setIndexInfo(indexData);
+      
+      // Generate basic script template
+      if (indexData.ok) {
+        const template = `import vapoursynth as vs
+core = vs.core
+
+# Load source
+clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
+
+# Add your filters here
+
+# Convert to RGB for preview (remove this line for final output)
+clip = core.resize.Bicubic(clip, format=vs.RGB24, matrix_in_s="709")
+
+# Set output
+clip.set_output()`;
+        setScript(template);
+      }
+    } catch (error) {
+      console.error("Failed to index file:", error);
+    } finally {
+      setIndexing(false);
+    }
   }
 
   // Go up one directory
@@ -120,191 +132,119 @@ export default function App(): JSX.Element {
     drill(up);
   }
 
-  function handleStart() {
-    alert("Start encode - not wired");
-  }
-  function handleReset() {
-    setOutputPath("");
-    setInputPath("");
-  }
+  // Handle filter addition from preset panel
+  const handleFilterAdd = (code: string) => {
+    const newScript = script ? `${script}\n${code}` : code;
+    setScript(newScript);
+  };
 
-  // Fetch frame image from backend
-  async function fetchFrameImage(frame: number) {
-    if (!inputPath) return;
-    setFrameLoading(true);
-    try {
-      const resp = await fetch(`${API}/api/frame?path=${encodeURIComponent(inputPath)}&frame=${frame}`);
-      if (resp.ok) {
-        const blob = await resp.blob();
-        setFrameImage(URL.createObjectURL(blob));
-      } else {
-        setFrameImage(null);
-      }
-    } catch {
-      setFrameImage(null);
-    } finally {
-      setFrameLoading(false);
-    }
-  }
+  // Handle script validation
+  const handleScriptValidate = () => {
+    // Validation logic is handled inside ScriptEditor
+  };
 
-  // Add effect to fetch frame image when selectedFrame changes and crop dialog is open
-  React.useEffect(() => {
-    if (showCrop && indexInfo?.ok) {
-      const handle = setTimeout(() => {
-        fetchFrameImage(selectedFrame);
-      }, 300); // 300ms debounce
-      return () => clearTimeout(handle);
+  // Handle script application (refresh preview)
+  const handleScriptApply = () => {
+    // This will trigger the FramePreview to refresh with the new script
+  };
+
+  // Render tab content
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'source':
+        return (
+          <div className="source-tab">
+            <div className="source-layout">
+              <div className="source-left">
+                <FileSelector
+                  inputPath={inputPath}
+                  onFileSelect={setInputPath}
+                  onBrowseClick={openFileModal}
+                  indexing={indexing}
+                />
+                <MediaInfoPanel
+                  filePath={inputPath}
+                  indexInfo={indexInfo}
+                />
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'processing':
+        return (
+          <div className="processing-tab">
+            <div className="processing-layout">
+              <div className="processing-left">
+                <ScriptEditor
+                  script={script}
+                  onScriptChange={setScript}
+                  onValidate={handleScriptValidate}
+                  onApply={handleScriptApply}
+                />
+                <FilterPanel onFilterAdd={handleFilterAdd} />
+              </div>
+              <div className="processing-right">
+                <FramePreview
+                  inputPath={inputPath}
+                  script={script}
+                  indexInfo={indexInfo}
+                  onScriptChange={setScript}
+                />
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'output':
+        return (
+          <div className="output-tab">
+            <TargetSection
+              outputPath={outputPath}
+              setOutputPath={setOutputPath}
+              container={container}
+              setContainer={setContainer}
+              videoCodec={videoCodec}
+              setVideoCodec={setVideoCodec}
+              onStart={() => alert("Start encode - not wired yet")}
+              onReset={() => {
+                setOutputPath("");
+                setInputPath("");
+                setScript("");
+              }}
+            />
+          </div>
+        );
+
+      case 'jobs':
+        return (
+          <div className="jobs-tab">
+            <h2>Jobs</h2>
+            <p>Job management coming in Phase 3...</p>
+          </div>
+        );
+
+      default:
+        return <div>Unknown tab</div>;
     }
-  }, [showCrop, selectedFrame, indexInfo?.ok]);
+  };
 
   return (
-    <div
-      className="app"
-      style={{
-        display: "flex",
-        height: "100vh",
-        width: "100vw",
-        overflow: "hidden",
-      }}
-    >
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-      <div
-        style={{
-          flex: 1,
-          background: "#fff",
-          margin: 0,
-          padding: 0,
-          boxSizing: "border-box",
-          height: "100vh",
-          overflow: "auto",
-        }}
-      >
-        <div style={{ padding: 32, minHeight: "100vh" }}>
-          {activeTab === "main" && (
-            <>
-              <InputSection
-                inputPath={inputPath}
-                setInputPath={setInputPath}
-                openFileModal={openFileModal}
-                fileDetails={fileDetails}
-              />
-              <TargetSection
-                outputPath={outputPath}
-                setOutputPath={setOutputPath}
-                container={container}
-                setContainer={setContainer}
-                videoCodec={videoCodec}
-                setVideoCodec={setVideoCodec}
-                onStart={handleStart}
-                onReset={handleReset}
-              />
-              {/* Set Crop button under target file section */}
-              {indexInfo?.ok && (
-                <button style={{ marginTop: 16 }} onClick={() => setShowCrop(true)}>
-                  Set Crop
-                </button>
-              )}
-            </>
-          )}
-          {activeTab === "settings" && (
-            <div>
-              <h2>Settings</h2>
-              <p>Settings UI goes here.</p>
-            </div>
-          )}
-          {activeTab === "jobs" && (
-            <div>
-              <h2>Jobs</h2>
-              <p>Jobs UI goes here.</p>
-            </div>
-          )}
-        </div>
-        {/* Minimal modal file selector */}
-        {fileModalOpen && (
-          <FileBrowserModal
-            fileCurrent={fileCurrent}
-            goUp={goUp}
-            fileLoading={fileLoading}
-            fileError={fileError}
-            fileEntries={fileEntries}
-            drill={drill}
-            selectFile={selectFile}
-            onClose={() => setFileModalOpen(false)}
-          />
-        )}
-        {/* Indexing modal overlay */}
-        {indexing && (
-          <div
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              width: "100vw",
-              height: "100vh",
-              background: "rgba(0,0,0,0.5)",
-              zIndex: 9999,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <div
-              style={{
-                background: "#fff",
-                padding: "32px 48px",
-                borderRadius: 8,
-                boxShadow: "0 2px 16px rgba(0,0,0,0.2)",
-                textAlign: "center",
-              }}
-            >
-              <h2>Indexing file...</h2>
-              <p>Please wait, this may take a moment.</p>
-            </div>
-          </div>
-        )}
-        {/* Show index info after indexing is complete */}
-        {!indexing && indexInfo?.ok && (
-          <button onClick={() => setShowCrop(true)}>
-            Open Cropping Dialog
-          </button>
-        )}
-        {/* Crop dialog for setting video crop */}
-        {showCrop && (
-          <div className="crop-dialog">
-            <h3>Crop Dialog</h3>
-            <p>Frame count: {indexInfo.frame_count}</p>
-            <p>
-              Resolution: {indexInfo.width}x{indexInfo.height}
-            </p>
-            {/* Frame slider */}
-            <input
-              type="range"
-              min={0}
-              max={indexInfo.frame_count - 1}
-              value={selectedFrame}
-              onChange={e => setSelectedFrame(Number(e.target.value))}
-              style={{ width: 400 }}
-            />
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div>Frame: {selectedFrame}</div>
-              {frameLoading && (
-                <span className="spinner" style={{ display: "inline-block", width: 24, height: 24, border: "4px solid #ccc", borderTop: "4px solid #333", borderRadius: "50%", animation: "spin 1s linear infinite" }}></span>
-              )}
-            </div>
-            {/* Display frame image (always show last loaded image) */}
-            {frameImage ? (
-              <img src={frameImage} alt={`Frame ${selectedFrame}`} style={{ maxWidth: "100%", maxHeight: 400, margin: "16px 0" }} />
-            ) : (
-              <div style={{ margin: "16px 0" }}>No image available</div>
-            )}
-            <button onClick={() => setShowCrop(false)}>Close</button>
-          </div>
-        )}
-      </div>
-    </div>
+    <MainLayout activeTab={activeTab} onTabChange={setActiveTab}>
+      {renderTabContent()}
+      
+      {fileModalOpen && (
+        <FileBrowserModal
+          fileCurrent={fileCurrent}
+          goUp={goUp}
+          fileLoading={fileLoading}
+          fileError={fileError}
+          fileEntries={fileEntries}
+          drill={drill}
+          selectFile={selectFile}
+          onClose={() => setFileModalOpen(false)}
+        />
+      )}
+    </MainLayout>
   );
 }
-
-/* Add spinner animation to global styles */
-// In your CSS file (styles.css), add:
-// @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
