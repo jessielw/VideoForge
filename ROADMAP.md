@@ -35,9 +35,40 @@ Job config shape (example):
 }
 ```
 
-## MVP Roadmap (prioritized)
-1. Backend (FastAPI): Job submission, in-memory job store, async worker that runs Vapoursynth script and pipes frames to ffmpeg. WebSocket for progress/logs.
-2. Frontend (React + Vite): Job submit form, job list, log viewer, WebSocket-based live updates.
+## MVP Roadmap (updated prioritized phases)
+
+### Phase 1: Core Processing UI (Current Focus)
+- **Tabbed Layout System**: Main layout with Source, Processing, Output, Jobs tabs
+- **Script Editor Integration**: Monaco/CodeMirror with Vapoursynth syntax highlighting
+- **Interactive Frame Preview**: Live preview with frame scrubbing and crop overlay tool
+- **Filter Preset System**: Common Vapoursynth filters (crop, resize, deinterlace, denoise) with UI controls
+- **Script Validation API**: Backend endpoint to validate and apply Vapoursynth scripts
+- **Enhanced Frame API**: Support for script application and crop detection
+
+### Phase 2: Enhanced Output Control
+- **Advanced Encoder Settings UI**: x264/x265 preset management and custom arguments
+- **Audio Track Management**: Multi-track selection, encoding options (AAC, copy, etc.)
+- **Container & Muxing Options**: MKV/MP4 selection with mkvmerge/mp4box integration
+- **Output Path Validation**: Smart path handling and conflict resolution
+- **Encoding Profiles**: Save/load common encoding configurations
+
+### Phase 3: Job Management & Queue System
+- **Priority Queue System**: Job ordering, pause, cancel, retry functionality
+- **Live Progress Updates**: WebSocket-based frame-level progress with encoder logs
+- **Job Templates**: Save processing pipelines for batch operations
+- **Job History**: Success/failure tracking with detailed logs
+- **Batch Processing**: Apply same settings to multiple input files
+
+### Phase 4: Advanced Features & Polish
+- **Plugin System**: Custom Vapoursynth filter integration
+- **Hardware Encoder Detection**: Automatic NVENC/QSV/VAAPI/AMF detection and UI
+- **Compare Modes**: Before/after preview, A/B testing with different settings
+- **Keyboard Shortcuts**: Power user navigation and quick actions
+- **Performance Optimization**: Caching, background processing, memory management
+
+### Legacy Roadmap (for reference)
+1. Backend (FastAPI): Job submission, in-memory job store, async worker that runs Vapoursynth script and pipes frames to ffmpeg. WebSocket for progress/logs. ✅
+2. Frontend (React + Vite): Job submit form, job list, log viewer, WebSocket-based live updates. ✅ (basic)
 3. Desktop (Electron): Simple launcher that spawns the Python backend and loads the UI. Bind to localhost only.
 4. Docker image for headless operation (Vapoursynth + ffmpeg preinstalled).
 5. Windows-specific Avisynth adapter, hardware encoder detection, job persistence (SQLite), concurrency limits, plugin/preset UI.
