@@ -667,7 +667,51 @@ body {
   flex-shrink: 0;
 }
 
-/* Zoom Controls */
+/* Preview Title Row */
+.preview-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+/* Display Effects Controls - Updated for inline positioning */
+.display-effects {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.effects-label {
+  font-size: 0.9rem;
+  color: #6c757d;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.effect-button {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+  min-width: 70px;
+}
+
+.effect-button:hover {
+  background: #f0f0f0;
+  border-color: #bbb;
+}
+
+.effect-button.active {
+  background: #28a745;
+  color: white;
+  border-color: #28a745;
+}
 .zoom-controls {
   display: flex;
   align-items: center;

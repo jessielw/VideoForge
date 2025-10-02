@@ -12,6 +12,7 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
   const [sliderFrame, setSliderFrame] = useState(0); // For tracking slider position during drag
   const [inputValue, setInputValue] = useState("0"); // For tracking text input value
   const [frameImage, setFrameImage] = useState<string | null>(null);
+  const [originalFrameImage, setOriginalFrameImage] = useState<string | null>(null); // Store original image
   const [loading, setLoading] = useState(false);
   const [currentCrop, setCurrentCrop] = useState({ left: 0, top: 0, right: 0, bottom: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -21,8 +22,10 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
   const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
   const [viewportPos, setViewportPos] = useState({ left: 0, top: 0 }); // For minimap
   const [isScrolling, setIsScrolling] = useState(false); // For wheel scroll minimap
+  const [displayEffect, setDisplayEffect] = useState<'none' | 'edge_detect'>('none'); // Display effects
   
   const imageRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const debounceTimeoutRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -240,16 +243,21 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
       const resp = await fetch(url);
       if (resp.ok) {
         const blob = await resp.blob();
-        setFrameImage(URL.createObjectURL(blob));
+        const imageUrl = URL.createObjectURL(blob);
+        setOriginalFrameImage(imageUrl); // Store original
+        setFrameImage(imageUrl); // Display original initially
+        setDisplayEffect('none'); // Reset display effects when new frame loads
         console.log('✅ Frame fetched successfully');
       } else {
         const errorText = await resp.text();
         console.error('❌ Failed to fetch frame:', resp.status, errorText);
         setFrameImage(null);
+        setOriginalFrameImage(null);
       }
     } catch (error) {
       console.error('💥 Error fetching frame:', error);
       setFrameImage(null);
+      setOriginalFrameImage(null);
     } finally {
       setLoading(false);
     }
@@ -348,6 +356,93 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
     onScriptChange(newScript);
   };
 
+  // Apply display effects to the image
+  const applyDisplayEffect = (effect: 'none' | 'edge_detect') => {
+    if (!originalFrameImage || !canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      
+      if (effect === 'none') {
+        // Just show original
+        setFrameImage(originalFrameImage);
+        setDisplayEffect('none');
+        return;
+      }
+      
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      
+      if (effect === 'edge_detect') {
+        // Simple edge detection
+        const width = canvas.width;
+        const height = canvas.height;
+        const newData = new Uint8ClampedArray(data);
+        
+        // Convert to grayscale and apply edge detection
+        for (let y = 1; y < height - 1; y++) {
+          for (let x = 1; x < width - 1; x++) {
+            const idx = (y * width + x) * 4;
+            
+            // Get surrounding pixels (grayscale)
+            const gray = (pixel: number) => {
+              const i = pixel * 4;
+              return data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+            };
+            
+            // Sobel operator
+            const gx = 
+              -gray((y - 1) * width + (x - 1)) + gray((y - 1) * width + (x + 1)) +
+              -2 * gray(y * width + (x - 1)) + 2 * gray(y * width + (x + 1)) +
+              -gray((y + 1) * width + (x - 1)) + gray((y + 1) * width + (x + 1));
+            
+            const gy = 
+              -gray((y - 1) * width + (x - 1)) - 2 * gray((y - 1) * width + x) - gray((y - 1) * width + (x + 1)) +
+              gray((y + 1) * width + (x - 1)) + 2 * gray((y + 1) * width + x) + gray((y + 1) * width + (x + 1));
+            
+            const magnitude = Math.sqrt(gx * gx + gy * gy);
+            const edge = Math.min(255, magnitude * 2);
+            
+            // Invert for better visibility (bright edges on dark background)
+            const inverted = 255 - edge;
+            
+            newData[idx] = inverted;     // R
+            newData[idx + 1] = inverted; // G
+            newData[idx + 2] = inverted; // B
+            // Alpha stays the same
+          }
+        }
+        
+        // Copy new data
+        for (let i = 0; i < data.length; i++) {
+          data[i] = newData[i];
+        }
+      }
+      
+      ctx.putImageData(imageData, 0, 0);
+      
+      // Convert canvas to blob and create new URL
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const processedUrl = URL.createObjectURL(blob);
+          setFrameImage(processedUrl);
+          setDisplayEffect(effect);
+        }
+      }, 'image/png');
+    };
+    
+    img.src = originalFrameImage;
+  };
+
   const handlePreviewUpdate = () => {
     updateScriptWithCrop(currentCrop);
     // Force immediate refresh
@@ -357,7 +452,25 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
   return (
     <div className="frame-preview">
       <div className="preview-header">
-        <h3>Frame Preview</h3>
+        <div className="preview-title-row">
+          <h3>Frame Preview</h3>
+          
+          <div className="display-effects">
+            <span className="effects-label">Display:</span>
+            <button 
+              onClick={() => applyDisplayEffect('none')}
+              className={`effect-button ${displayEffect === 'none' ? 'active' : ''}`}
+            >
+              Normal
+            </button>
+            <button 
+              onClick={() => applyDisplayEffect('edge_detect')}
+              className={`effect-button ${displayEffect === 'edge_detect' ? 'active' : ''}`}
+            >
+              🔍 Edges
+            </button>
+          </div>
+        </div>
         
         <div className="zoom-controls">
           <button 
@@ -499,6 +612,12 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
                   onClick={(e) => e.preventDefault()}
                   onContextMenu={(e) => e.preventDefault()}
                   draggable={false}
+                />
+                
+                {/* Hidden canvas for image processing */}
+                <canvas 
+                  ref={canvasRef}
+                  style={{ display: 'none' }}
                 />
               {/* Show simple crop overlay if crop is active */}
               {(currentCrop.left > 0 || currentCrop.top > 0 || currentCrop.right > 0 || currentCrop.bottom > 0) && (
