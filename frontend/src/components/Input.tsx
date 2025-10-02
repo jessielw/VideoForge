@@ -1,12 +1,12 @@
-import React from "react";
+import React from 'react';
 import {
   calcAvgBitrateFromMediaInfoKbps,
   bitRateKbpsToMbs,
   getHdrString,
   getTrack,
   getTrackArray,
-} from "./utils/mediainfo";
-import "../styles/input.css";
+} from './utils/mediainfo';
+import '../styles/input.css';
 
 export default function InputSection({
   inputPath,
@@ -20,8 +20,8 @@ export default function InputSection({
   fileDetails?: any;
 }): JSX.Element {
   const mediaInfo = fileDetails?.mediainfo;
-  const generalTrack = getTrack(mediaInfo, "General");
-  const videoTrack = getTrack(mediaInfo, "Video");
+  const generalTrack = getTrack(mediaInfo, 'General');
+  const videoTrack = getTrack(mediaInfo, 'Video');
 
   return (
     <section className="input-box" style={{ marginBottom: 12 }}>
@@ -30,7 +30,7 @@ export default function InputSection({
         <input
           placeholder="Path to source file or script"
           value={inputPath}
-          onChange={(e) => setInputPath(e.target.value)}
+          onChange={e => setInputPath(e.target.value)}
           readOnly
         />
         <button onClick={openFileModal}>Browse</button>
@@ -38,22 +38,20 @@ export default function InputSection({
       <div>
         {generalTrack ? (
           <div className="file-details">
-            {getTrackArray(generalTrack, "other_duration")[3] && (
+            {getTrackArray(generalTrack, 'other_duration')[3] && (
               <div>
-                <strong>Duration:</strong>{" "}
-                {getTrackArray(generalTrack, "other_duration")[3].split(".")[0]}
+                <strong>Duration:</strong>{' '}
+                {getTrackArray(generalTrack, 'other_duration')[3].split('.')[0]}
               </div>
             )}
-            {getTrackArray(generalTrack, "other_file_size")[0] && (
+            {getTrackArray(generalTrack, 'other_file_size')[0] && (
               <div>
-                <strong>Size:</strong>{" "}
-                {getTrackArray(generalTrack, "other_file_size")[0]}
+                <strong>Size:</strong> {getTrackArray(generalTrack, 'other_file_size')[0]}
               </div>
             )}
-            {getTrackArray(generalTrack, "other_frame_rate")[0] && (
+            {getTrackArray(generalTrack, 'other_frame_rate')[0] && (
               <div>
-                <strong>Frame Rate:</strong>{" "}
-                {getTrackArray(generalTrack, "other_frame_rate")[0]}
+                <strong>Frame Rate:</strong> {getTrackArray(generalTrack, 'other_frame_rate')[0]}
               </div>
             )}
             {videoTrack?.frame_rate_mode && (
@@ -63,14 +61,13 @@ export default function InputSection({
             )}
             {calcAvgBitrateFromMediaInfoKbps(mediaInfo) && (
               <div>
-                <strong>Avg Bitrate:</strong>{" "}
+                <strong>Avg Bitrate:</strong>{' '}
                 {bitRateKbpsToMbs(calcAvgBitrateFromMediaInfoKbps(mediaInfo))}
               </div>
             )}
             {videoTrack?.width && videoTrack?.height && (
               <div>
-                <strong>Resolution:</strong> {videoTrack.width}x
-                {videoTrack.height}
+                <strong>Resolution:</strong> {videoTrack.width}x{videoTrack.height}
               </div>
             )}
             {videoTrack?.color_space && (
@@ -83,33 +80,26 @@ export default function InputSection({
                 <strong>Chroma:</strong> {videoTrack.chroma_subsampling}
               </div>
             )}
-            {getTrackArray(videoTrack, "other_bit_depth")[0] && (
+            {getTrackArray(videoTrack, 'other_bit_depth')[0] && (
               <div>
-                <strong>Bit Depth:</strong>{" "}
-                {getTrackArray(videoTrack, "other_bit_depth")[0]}
+                <strong>Bit Depth:</strong> {getTrackArray(videoTrack, 'other_bit_depth')[0]}
               </div>
             )}
-            {getTrackArray(videoTrack, "other_hdr_format")[0] &&
-              getHdrString(
-                getTrackArray(videoTrack, "other_hdr_format")[0]
-              ) && (
+            {getTrackArray(videoTrack, 'other_hdr_format')[0] &&
+              getHdrString(getTrackArray(videoTrack, 'other_hdr_format')[0]) && (
                 <div>
-                  <strong>HDR:</strong>{" "}
-                  {getHdrString(
-                    getTrackArray(videoTrack, "other_hdr_format")[0]
-                  )}
+                  <strong>HDR:</strong>{' '}
+                  {getHdrString(getTrackArray(videoTrack, 'other_hdr_format')[0])}
                 </div>
               )}
             {videoTrack?.format && videoTrack?.format_profile && (
               <div>
-                <strong>Format:</strong> {videoTrack.format}{" "}
-                {videoTrack.format_profile}
+                <strong>Format:</strong> {videoTrack.format} {videoTrack.format_profile}
               </div>
             )}
-            {getTrackArray(videoTrack, "other_display_aspect_ratio")[0] && (
+            {getTrackArray(videoTrack, 'other_display_aspect_ratio')[0] && (
               <div>
-                <strong>DAR:</strong>{" "}
-                {getTrackArray(videoTrack, "other_display_aspect_ratio")[0]}
+                <strong>DAR:</strong> {getTrackArray(videoTrack, 'other_display_aspect_ratio')[0]}
               </div>
             )}
             {videoTrack?.pixel_aspect_ratio && (
@@ -119,15 +109,13 @@ export default function InputSection({
             )}
             {videoTrack?.width && videoTrack?.height && (
               <div>
-                <strong>SAR:</strong>{" "}
-                {(Number(videoTrack.width) / Number(videoTrack.height)).toFixed(
-                  2
-                )}
+                <strong>SAR:</strong>{' '}
+                {(Number(videoTrack.width) / Number(videoTrack.height)).toFixed(2)}
               </div>
             )}
           </div>
         ) : (
-          ""
+          ''
         )}
       </div>
     </section>

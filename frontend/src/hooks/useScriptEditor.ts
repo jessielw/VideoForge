@@ -7,21 +7,31 @@ interface UseScriptEditorProps {
   onApply?: () => void;
 }
 
-const API = "http://127.0.0.1:8000";
+const API = 'http://127.0.0.1:8000';
 
-export function useScriptEditor({ script, onScriptChange, onValidate, onApply }: UseScriptEditorProps) {
+export function useScriptEditor({
+  script,
+  onScriptChange,
+  onValidate,
+  onApply,
+}: UseScriptEditorProps) {
   const [localScript, setLocalScript] = useState(script);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [validationStatus, setValidationStatus] = useState<'idle' | 'validating' | 'valid' | 'error'>('idle');
+  const [validationStatus, setValidationStatus] = useState<
+    'idle' | 'validating' | 'valid' | 'error'
+  >('idle');
   const [validationMessage, setValidationMessage] = useState<string>('');
   const editorRef = useRef<any>(null);
 
-  const handleEditorChange = useCallback((value: string | undefined) => {
-    const newValue = value || '';
-    setLocalScript(newValue);
-    setHasUnsavedChanges(newValue !== script);
-    setValidationStatus('idle'); // Reset validation when editing
-  }, [script]);
+  const handleEditorChange = useCallback(
+    (value: string | undefined) => {
+      const newValue = value || '';
+      setLocalScript(newValue);
+      setHasUnsavedChanges(newValue !== script);
+      setValidationStatus('idle'); // Reset validation when editing
+    },
+    [script]
+  );
 
   const applyChanges = useCallback(() => {
     onScriptChange(localScript);
@@ -75,18 +85,21 @@ export function useScriptEditor({ script, onScriptChange, onValidate, onApply }:
     }
   }, [localScript, onValidate]);
 
-  const handleEditorMount = useCallback((editor: any, monaco: any) => {
-    editorRef.current = editor;
-    
-    // Add keyboard shortcuts
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      validateScript();
-    });
-    
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
-      applyChanges();
-    });
-  }, [validateScript, applyChanges]);
+  const handleEditorMount = useCallback(
+    (editor: any, monaco: any) => {
+      editorRef.current = editor;
+
+      // Add keyboard shortcuts
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+        validateScript();
+      });
+
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+        applyChanges();
+      });
+    },
+    [validateScript, applyChanges]
+  );
 
   const resetScript = useCallback(() => {
     setLocalScript(script);
@@ -105,6 +118,6 @@ export function useScriptEditor({ script, onScriptChange, onValidate, onApply }:
     applyChanges,
     validateScript,
     handleEditorMount,
-    resetScript
+    resetScript,
   };
 }

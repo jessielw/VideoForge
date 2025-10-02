@@ -9,7 +9,12 @@ interface ScriptEditorProps {
   onApply?: () => void;
 }
 
-export default function ScriptEditor({ script, onScriptChange, onValidate, onApply }: ScriptEditorProps): JSX.Element {
+export default function ScriptEditor({
+  script,
+  onScriptChange,
+  onValidate,
+  onApply,
+}: ScriptEditorProps): JSX.Element {
   const {
     localScript,
     hasUnsavedChanges,
@@ -19,12 +24,12 @@ export default function ScriptEditor({ script, onScriptChange, onValidate, onApp
     applyChanges,
     validateScript,
     handleEditorMount,
-    resetScript
+    resetScript,
   } = useScriptEditor({
     script,
     onScriptChange,
     onValidate,
-    onApply
+    onApply,
   });
 
   // Sync external script changes to local state
@@ -68,30 +73,22 @@ export default function ScriptEditor({ script, onScriptChange, onValidate, onApp
           {hasUnsavedChanges && <span className="unsaved-changes"> (unsaved changes)</span>}
         </h3>
         <div className="editor-actions">
-          <button 
+          <button
             onClick={validateScript}
             disabled={validationStatus === 'validating' || !localScript.trim()}
             className="validate-button"
           >
             ✓ Validate (Ctrl+S)
           </button>
-          <button 
-            onClick={applyChanges}
-            disabled={!hasUnsavedChanges}
-            className="apply-button"
-          >
+          <button onClick={applyChanges} disabled={!hasUnsavedChanges} className="apply-button">
             ▶ Apply (Ctrl+Enter)
           </button>
-          <button 
-            onClick={resetScript}
-            disabled={!hasUnsavedChanges}
-            className="reset-button"
-          >
+          <button onClick={resetScript} disabled={!hasUnsavedChanges} className="reset-button">
             ↻ Reset
           </button>
         </div>
       </div>
-      
+
       <div className="editor-content">
         <Editor
           height="100%"
@@ -119,7 +116,7 @@ export default function ScriptEditor({ script, onScriptChange, onValidate, onApp
           }}
         />
       </div>
-      
+
       <div className={`editor-status ${validationStatus}`}>
         <span className="status-icon">{getStatusIcon()}</span>
         <span>{getStatusText()}</span>

@@ -8,29 +8,29 @@ interface DisplayEffectsProps {
   disabled: boolean;
 }
 
-export default function DisplayEffects({ 
-  displayEffect, 
-  onEffectChange, 
-  onAutoCropDetect, 
-  autoCropDetecting, 
-  disabled 
+export default function DisplayEffects({
+  displayEffect,
+  onEffectChange,
+  onAutoCropDetect,
+  autoCropDetecting,
+  disabled,
 }: DisplayEffectsProps): JSX.Element {
   return (
     <div className="display-effects">
       <span className="effects-label">Display:</span>
-      <button 
+      <button
         onClick={() => onEffectChange('none')}
         className={`effect-button ${displayEffect === 'none' ? 'active' : ''}`}
       >
         Normal
       </button>
-      <button 
+      <button
         onClick={() => onEffectChange('edge_detect')}
         className={`effect-button ${displayEffect === 'edge_detect' ? 'active' : ''}`}
       >
         🔍 Edges
       </button>
-      <button 
+      <button
         onClick={onAutoCropDetect}
         className="effect-button auto-crop-button"
         disabled={autoCropDetecting || disabled}

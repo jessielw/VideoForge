@@ -1,5 +1,5 @@
-import React from "react";
-import "../styles/sidebar.css";
+import React from 'react';
+import '../styles/sidebar.css';
 
 export default function Sidebar({
   activeTab,
@@ -9,20 +9,18 @@ export default function Sidebar({
   setActiveTab: (tab: string) => void;
 }) {
   const tabs = [
-    { key: "main", label: "Main" },
-    { key: "settings", label: "Settings" },
-    { key: "jobs", label: "Jobs" },
+    { key: 'main', label: 'Main' },
+    { key: 'settings', label: 'Settings' },
+    { key: 'jobs', label: 'Jobs' },
   ];
   return (
     <aside className="sidebar">
-      {tabs.map((tab) => (
+      {tabs.map(tab => (
         <div
           key={tab.key}
-          className={
-            "sidebar-section" + (activeTab === tab.key ? " active" : "")
-          }
+          className={'sidebar-section' + (activeTab === tab.key ? ' active' : '')}
           onClick={() => setActiveTab(tab.key)}
-          style={{ cursor: "pointer" }}
+          style={{ cursor: 'pointer' }}
         >
           {tab.label}
         </div>

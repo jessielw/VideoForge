@@ -16,7 +16,10 @@ interface AutoCropModalProps {
   autoCropResult: AutoCropResult | null;
 }
 
-export default function AutoCropModal({ autoCropDetecting, autoCropResult }: AutoCropModalProps): JSX.Element | null {
+export default function AutoCropModal({
+  autoCropDetecting,
+  autoCropResult,
+}: AutoCropModalProps): JSX.Element | null {
   if (!autoCropDetecting && !autoCropResult) {
     return null;
   }
@@ -44,8 +47,8 @@ export default function AutoCropModal({ autoCropDetecting, autoCropResult }: Aut
                       <code>{autoCropResult.command}</code>
                     </div>
                     <div className="crop-values">
-                      Left: {autoCropResult.crop?.left}, Top: {autoCropResult.crop?.top}, 
-                      Right: {autoCropResult.crop?.right}, Bottom: {autoCropResult.crop?.bottom}
+                      Left: {autoCropResult.crop?.left}, Top: {autoCropResult.crop?.top}, Right:{' '}
+                      {autoCropResult.crop?.right}, Bottom: {autoCropResult.crop?.bottom}
                     </div>
                     <div className="progress-text">Remove the # comment to apply the crop!</div>
                   </>

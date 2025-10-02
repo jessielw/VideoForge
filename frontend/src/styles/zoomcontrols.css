@@ -43,13 +43,13 @@
   .zoom-controls {
     gap: 4px;
   }
-  
+
   .zoom-button {
     padding: 3px 6px;
     font-size: 0.7rem;
     min-width: 30px;
   }
-  
+
   .zoom-info {
     font-size: 0.75rem;
     margin-left: 6px;

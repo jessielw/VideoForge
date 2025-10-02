@@ -90,12 +90,12 @@ function formatFileSize(bytes?: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let size = bytes;
   let unitIndex = 0;
-  
+
   while (size >= 1024 && unitIndex < units.length - 1) {
     size /= 1024;
     unitIndex++;
   }
-  
+
   return `${size.toFixed(1)} ${units[unitIndex]}`;
 }
 
@@ -105,7 +105,7 @@ function formatDuration(ms?: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
-  
+
   if (hours > 0) {
     return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   } else {
@@ -125,7 +125,9 @@ function formatBitrate(bps?: number): string {
 }
 
 export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelProps): JSX.Element {
-  const [activeTab, setActiveTab] = useState<'general' | 'video' | 'audio' | 'subtitles'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'video' | 'audio' | 'subtitles'>(
+    'general'
+  );
 
   if (!filePath || !indexInfo) {
     return (
@@ -169,9 +171,11 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
           <span>{formatBitrate(indexInfo.general?.overall_bitrate)}</span>
         </div>
       </div>
-      
+
       {/* Additional details section */}
-      {(indexInfo.general?.format_profile || indexInfo.general?.writing_application || indexInfo.general?.writing_library) && (
+      {(indexInfo.general?.format_profile ||
+        indexInfo.general?.writing_application ||
+        indexInfo.general?.writing_library) && (
         <div className="additional-info">
           <h4>Additional Details</h4>
           <div className="info-grid">
@@ -205,7 +209,7 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
         indexInfo.video_tracks.map((track, index) => (
           <div key={index} className="track-info">
             <h4>Video Track {track.track_id || index + 1}</h4>
-            
+
             {/* Basic Properties */}
             <div className="info-grid">
               <div className="info-item">
@@ -215,28 +219,26 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
               <div className="info-item">
                 <label>Resolution:</label>
                 <span>
-                  {track.width && track.height 
-                    ? `${track.width} × ${track.height}` 
-                    : indexInfo.vapoursynth?.width && indexInfo.vapoursynth?.height 
-                      ? `${indexInfo.vapoursynth.width} × ${indexInfo.vapoursynth.height}` 
+                  {track.width && track.height
+                    ? `${track.width} × ${track.height}`
+                    : indexInfo.vapoursynth?.width && indexInfo.vapoursynth?.height
+                      ? `${indexInfo.vapoursynth.width} × ${indexInfo.vapoursynth.height}`
                       : 'Unknown'}
                 </span>
               </div>
               <div className="info-item">
                 <label>Frame Rate:</label>
                 <span>
-                  {track.frame_rate 
-                    ? `${track.frame_rate} fps` 
-                    : indexInfo.vapoursynth?.fps 
-                      ? `${indexInfo.vapoursynth.fps.toFixed(3)} fps` 
+                  {track.frame_rate
+                    ? `${track.frame_rate} fps`
+                    : indexInfo.vapoursynth?.fps
+                      ? `${indexInfo.vapoursynth.fps.toFixed(3)} fps`
                       : 'Unknown'}
                 </span>
               </div>
               <div className="info-item">
                 <label>Total Frames:</label>
-                <span>
-                  {track.frame_count || indexInfo.vapoursynth?.frames || 'Unknown'}
-                </span>
+                <span>{track.frame_count || indexInfo.vapoursynth?.frames || 'Unknown'}</span>
               </div>
               <div className="info-item">
                 <label>Bitrate:</label>
@@ -255,7 +257,11 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
             </div>
 
             {/* Color Information */}
-            {(track.color_space || track.chroma_subsampling || track.color_primaries || track.transfer_characteristics || track.matrix_coefficients) && (
+            {(track.color_space ||
+              track.chroma_subsampling ||
+              track.color_primaries ||
+              track.transfer_characteristics ||
+              track.matrix_coefficients) && (
               <div className="color-info">
                 <h5>Color Information</h5>
                 <div className="info-grid">
@@ -337,7 +343,7 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
               {track.language && ` (${track.language})`}
               {track.title && ` - ${track.title}`}
             </h4>
-            
+
             {/* Basic Properties */}
             <div className="info-grid">
               <div className="info-item">
@@ -430,13 +436,13 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
   return (
     <div className="media-info-panel">
       <h3>Media Information</h3>
-      
+
       {indexInfo.vapoursynth?.error && (
         <div className="vs-warning">
           <span>⚠️ VapourSynth probe failed: {indexInfo.vapoursynth.error}</span>
         </div>
       )}
-      
+
       <div className="info-tabs">
         <button
           className={`info-tab ${activeTab === 'general' ? 'active' : ''}`}
@@ -463,7 +469,7 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
           Subtitles ({indexInfo.subtitle_tracks?.length || 0})
         </button>
       </div>
-      
+
       <div className="info-content">
         {activeTab === 'general' && renderGeneralInfo()}
         {activeTab === 'video' && renderVideoInfo()}

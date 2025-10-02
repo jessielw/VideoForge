@@ -7,7 +7,12 @@ interface FileSelectProps {
   indexing: boolean;
 }
 
-export default function FileSelector({ inputPath, onFileSelect, onBrowseClick, indexing }: FileSelectProps): JSX.Element {
+export default function FileSelector({
+  inputPath,
+  onFileSelect,
+  onBrowseClick,
+  indexing,
+}: FileSelectProps): JSX.Element {
   return (
     <div className="file-selector">
       <h3>Source File</h3>
@@ -15,16 +20,12 @@ export default function FileSelector({ inputPath, onFileSelect, onBrowseClick, i
         <input
           type="text"
           value={inputPath}
-          onChange={(e) => onFileSelect(e.target.value)}
+          onChange={e => onFileSelect(e.target.value)}
           placeholder="Select or enter file path..."
           className="file-input"
           disabled={indexing}
         />
-        <button 
-          onClick={onBrowseClick}
-          className="browse-button"
-          disabled={indexing}
-        >
+        <button onClick={onBrowseClick} className="browse-button" disabled={indexing}>
           📁 Browse
         </button>
       </div>

@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build outputs
+frontend/dist/
+backend/__pycache__/
+backend/.venv/
+
+# Python files (use black/ruff instead)
+*.py
+backend/
+
+# Generated files
+*.lock
+package-lock.json
+uv.lock
+
+# Apps and binaries
+apps/
+
+# Documentation that shouldn't be reformatted
+*.md
+
+# VS Code settings
+.vscode/

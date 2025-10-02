@@ -12,7 +12,12 @@ interface FramePreviewProps {
   onScriptChange?: (script: string) => void;
 }
 
-export default function FramePreview({ inputPath, script, indexInfo, onScriptChange }: FramePreviewProps): JSX.Element {
+export default function FramePreview({
+  inputPath,
+  script,
+  indexInfo,
+  onScriptChange,
+}: FramePreviewProps): JSX.Element {
   const [currentFrame, setCurrentFrame] = useState(0);
   const [frameImage, setFrameImage] = useState<string | null>(null);
   const [originalFrameImage, setOriginalFrameImage] = useState<string | null>(null); // Store original image
@@ -25,33 +30,29 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
   const [viewportPos, setViewportPos] = useState({ left: 0, top: 0 }); // For minimap
   const [isScrolling, setIsScrolling] = useState(false); // For wheel scroll minimap
   const [displayEffect, setDisplayEffect] = useState<'none' | 'edge_detect'>('none'); // Display effects
-  
+
   const imageRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<number | null>(null);
-  
+
   // Get frame count from new data structure
-  const maxFrames = indexInfo?.vapoursynth?.frames || 
-                   indexInfo?.video_tracks?.[0]?.frame_count || 
-                   1000;
-  
+  const maxFrames =
+    indexInfo?.vapoursynth?.frames || indexInfo?.video_tracks?.[0]?.frame_count || 1000;
+
   // Get resolution from new data structure
-  const videoWidth = indexInfo?.vapoursynth?.width || 
-                    indexInfo?.video_tracks?.[0]?.width || 
-                    1920;
-  const videoHeight = indexInfo?.vapoursynth?.height || 
-                     indexInfo?.video_tracks?.[0]?.height || 
-                     1080;
-  
-  const API = "http://127.0.0.1:8000";
+  const videoWidth = indexInfo?.vapoursynth?.width || indexInfo?.video_tracks?.[0]?.width || 1920;
+  const videoHeight =
+    indexInfo?.vapoursynth?.height || indexInfo?.video_tracks?.[0]?.height || 1080;
+
+  const API = 'http://127.0.0.1:8000';
 
   // Use the auto crop detection hook
   const { autoCropDetecting, autoCropResult, detectAutoCrop } = useAutoCropDetection({
     inputPath,
     maxFrames,
     script,
-    onScriptChange
+    onScriptChange,
   });
 
   // Zoom control functions
@@ -69,12 +70,12 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
       // Show minimap during regular scrolling when zoomed
       setIsScrolling(true);
       updateViewportPosition();
-      
+
       // Clear existing timeout
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
       }
-      
+
       // Hide minimap after scrolling stops
       scrollTimeoutRef.current = window.setTimeout(() => {
         setIsScrolling(false);
@@ -85,7 +86,7 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
   const handleDoubleClick = () => {
     const zoomLevels = [100, 150, 200, 300, 400, 500, 600, 700, 800];
     const currentIndex = zoomLevels.indexOf(zoomLevel);
-    
+
     if (currentIndex === -1 || currentIndex === zoomLevels.length - 1) {
       setZoomLevel(100); // Return to fit if at max or custom zoom
     } else {
@@ -104,11 +105,9 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
 
     if (maxScrollLeft > 0 || maxScrollTop > 0) {
       // Calculate percentage position (0-100%)
-      const leftPercent = maxScrollLeft > 0 ? 
-        (viewport.scrollLeft / maxScrollLeft) * 100 : 0;
-      const topPercent = maxScrollTop > 0 ? 
-        (viewport.scrollTop / maxScrollTop) * 100 : 0;
-      
+      const leftPercent = maxScrollLeft > 0 ? (viewport.scrollLeft / maxScrollLeft) * 100 : 0;
+      const topPercent = maxScrollTop > 0 ? (viewport.scrollTop / maxScrollTop) * 100 : 0;
+
       setViewportPos({ left: leftPercent, top: topPercent });
     } else {
       setViewportPos({ left: 0, top: 0 });
@@ -120,9 +119,9 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
     if (zoomLevel > 100 && containerRef.current) {
       setIsPanning(true);
       setDragStart({ x: e.clientX, y: e.clientY });
-      setScrollStart({ 
-        x: containerRef.current.scrollLeft, 
-        y: containerRef.current.scrollTop 
+      setScrollStart({
+        x: containerRef.current.scrollLeft,
+        y: containerRef.current.scrollTop,
       });
       e.preventDefault();
     }
@@ -132,10 +131,10 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
     if (isPanning && containerRef.current) {
       const deltaX = dragStart.x - e.clientX;
       const deltaY = dragStart.y - e.clientY;
-      
+
       containerRef.current.scrollLeft = scrollStart.x + deltaX;
       containerRef.current.scrollTop = scrollStart.y + deltaY;
-      
+
       // Update viewport position for minimap
       updateViewportPosition();
     }
@@ -152,11 +151,11 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
   // Fetch frame image (processed with script when available)
   const fetchFrame = async (frame: number) => {
     if (!inputPath) return;
-    
+
     setLoading(true);
     try {
       let url = `${API}/api/frame?path=${encodeURIComponent(inputPath)}&frame=${frame}`;
-      
+
       if (script && script.trim()) {
         // Add script as query parameter for processed frame
         url += `&script=${encodeURIComponent(script)}`;
@@ -164,13 +163,13 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
       } else {
         console.log('🎬 Fetching original frame (no script)');
       }
-      
+
       const resp = await fetch(url);
       if (resp.ok) {
         const blob = await resp.blob();
         const imageUrl = URL.createObjectURL(blob);
         setOriginalFrameImage(imageUrl); // Store original
-        
+
         // Apply current display effect to new frame, or show original if none
         if (displayEffect === 'none') {
           setFrameImage(imageUrl);
@@ -180,7 +179,7 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
             applyDisplayEffect(displayEffect);
           }, 50); // Small delay to ensure image is loaded
         }
-        
+
         console.log('✅ Frame fetched successfully');
       } else {
         const errorText = await resp.text();
@@ -210,7 +209,7 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
 
     // Update on scroll
     viewport.addEventListener('scroll', updateViewportPosition);
-    
+
     // Initial update
     updateViewportPosition();
 
@@ -222,79 +221,86 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
   // Apply display effects to the image
   const applyDisplayEffect = (effect: 'none' | 'edge_detect') => {
     if (!originalFrameImage || !canvasRef.current) return;
-    
+
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
+
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    
+
     img.onload = () => {
       canvas.width = img.width;
       canvas.height = img.height;
       ctx.drawImage(img, 0, 0);
-      
+
       if (effect === 'none') {
         // Just show original
         setFrameImage(originalFrameImage);
         setDisplayEffect('none');
         return;
       }
-      
+
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
-      
+
       if (effect === 'edge_detect') {
         // Simple edge detection
         const width = canvas.width;
         const height = canvas.height;
         const newData = new Uint8ClampedArray(data);
-        
+
         // Convert to grayscale and apply edge detection
         for (let y = 1; y < height - 1; y++) {
           for (let x = 1; x < width - 1; x++) {
             const idx = (y * width + x) * 4;
-            
+
             // Get surrounding pixels (grayscale)
             const gray = (pixel: number) => {
               const i = pixel * 4;
               return data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
             };
-            
+
             // Sobel operator
-            const gx = 
-              -gray((y - 1) * width + (x - 1)) + gray((y - 1) * width + (x + 1)) +
-              -2 * gray(y * width + (x - 1)) + 2 * gray(y * width + (x + 1)) +
-              -gray((y + 1) * width + (x - 1)) + gray((y + 1) * width + (x + 1));
-            
-            const gy = 
-              -gray((y - 1) * width + (x - 1)) - 2 * gray((y - 1) * width + x) - gray((y - 1) * width + (x + 1)) +
-              gray((y + 1) * width + (x - 1)) + 2 * gray((y + 1) * width + x) + gray((y + 1) * width + (x + 1));
-            
+            const gx =
+              -gray((y - 1) * width + (x - 1)) +
+              gray((y - 1) * width + (x + 1)) +
+              -2 * gray(y * width + (x - 1)) +
+              2 * gray(y * width + (x + 1)) +
+              -gray((y + 1) * width + (x - 1)) +
+              gray((y + 1) * width + (x + 1));
+
+            const gy =
+              -gray((y - 1) * width + (x - 1)) -
+              2 * gray((y - 1) * width + x) -
+              gray((y - 1) * width + (x + 1)) +
+              gray((y + 1) * width + (x - 1)) +
+              2 * gray((y + 1) * width + x) +
+              gray((y + 1) * width + (x + 1));
+
             const magnitude = Math.sqrt(gx * gx + gy * gy);
             const edge = Math.min(255, magnitude * 2);
-            
+
             // Invert for better visibility (bright edges on dark background)
             const inverted = 255 - edge;
-            
-            newData[idx] = inverted;     // R
+
+            newData[idx] = inverted; // R
             newData[idx + 1] = inverted; // G
             newData[idx + 2] = inverted; // B
             // Alpha stays the same
           }
         }
-        
+
         // Copy new data
         for (let i = 0; i < data.length; i++) {
           data[i] = newData[i];
         }
       }
-      
+
       ctx.putImageData(imageData, 0, 0);
-      
+
       // Convert canvas to blob and create new URL
-      canvas.toBlob((blob) => {
+      canvas.toBlob(blob => {
         if (blob) {
           const processedUrl = URL.createObjectURL(blob);
           setFrameImage(processedUrl);
@@ -302,7 +308,7 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
         }
       }, 'image/png');
     };
-    
+
     img.src = originalFrameImage;
   };
 
@@ -311,7 +317,7 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
       <div className="preview-header">
         <div className="preview-title-row">
           <h3>Frame Preview</h3>
-          
+
           <DisplayEffects
             displayEffect={displayEffect}
             onEffectChange={applyDisplayEffect}
@@ -320,12 +326,9 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
             disabled={!inputPath}
           />
         </div>
-        
-        <ZoomControls
-          zoomLevel={zoomLevel}
-          onZoomChange={setZoom}
-        />
-        
+
+        <ZoomControls zoomLevel={zoomLevel} onZoomChange={setZoom} />
+
         <FrameControls
           currentFrame={currentFrame}
           maxFrames={maxFrames}
@@ -333,9 +336,9 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
           onFrameChange={setCurrentFrame}
         />
       </div>
-      
+
       <div className="preview-container" style={{ padding: '20px' }}>
-        <div 
+        <div
           className={`image-viewport ${zoomLevel > 100 ? 'draggable' : ''}`}
           ref={containerRef}
           onWheel={handleMouseWheel}
@@ -350,7 +353,7 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
         >
           {frameImage && (
             <div className={`image-container ${zoomLevel !== 100 ? 'zoomed' : ''}`}>
-              <div 
+              <div
                 className="image-wrapper"
                 style={{
                   display: 'inline-block',
@@ -358,89 +361,90 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
                   height: 'auto',
                 }}
               >
-                <img 
+                <img
                   ref={imageRef}
-                  src={frameImage} 
+                  src={frameImage}
                   alt="Frame preview"
                   className="frame-image"
-                  style={{ 
+                  style={{
                     opacity: loading ? 0.7 : 1,
                     width: zoomLevel === 100 ? '100%' : `calc(100% * ${zoomLevel / 100})`,
                     height: 'auto',
                     display: 'block',
                     cursor: zoomLevel > 100 ? (isPanning ? 'grabbing' : 'grab') : 'default',
                   }}
-                  onClick={(e) => e.preventDefault()}
-                  onContextMenu={(e) => e.preventDefault()}
+                  onClick={e => e.preventDefault()}
+                  onContextMenu={e => e.preventDefault()}
                   draggable={false}
                 />
-                
+
                 {/* Hidden canvas for image processing */}
-                <canvas 
-                  ref={canvasRef}
-                  style={{ display: 'none' }}
-                />
-              
-              {/* Show simple crop overlay if crop is active */}
-              {(currentCrop.left > 0 || currentCrop.top > 0 || currentCrop.right > 0 || currentCrop.bottom > 0) && (
-                <div className="crop-overlay">
-                  {currentCrop.top > 0 && (
-                    <div 
-                      className="crop-border crop-top"
-                      style={{ height: `${(currentCrop.top / videoHeight) * 100}%` }}
-                    />
-                  )}
-                  {currentCrop.bottom > 0 && (
-                    <div 
-                      className="crop-border crop-bottom"
-                      style={{ height: `${(currentCrop.bottom / videoHeight) * 100}%` }}
-                    />
-                  )}
-                  {currentCrop.left > 0 && (
-                    <div 
-                      className="crop-border crop-left"
-                      style={{ 
-                        width: `${(currentCrop.left / videoWidth) * 100}%`,
-                        top: `${(currentCrop.top / videoHeight) * 100}%`,
-                        height: `${((videoHeight - currentCrop.top - currentCrop.bottom) / videoHeight) * 100}%`
-                      }}
-                    />
-                  )}
-                  {currentCrop.right > 0 && (
-                    <div 
-                      className="crop-border crop-right"
-                      style={{ 
-                        width: `${(currentCrop.right / videoWidth) * 100}%`,
-                        top: `${(currentCrop.top / videoHeight) * 100}%`,
-                        height: `${((videoHeight - currentCrop.top - currentCrop.bottom) / videoHeight) * 100}%`
-                      }}
-                    />
-                  )}
-                  <div className="crop-info-overlay">
-                    <div className="crop-dimensions">
-                      Output: {videoWidth - currentCrop.left - currentCrop.right} × {videoHeight - currentCrop.top - currentCrop.bottom}
+                <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+                {/* Show simple crop overlay if crop is active */}
+                {(currentCrop.left > 0 ||
+                  currentCrop.top > 0 ||
+                  currentCrop.right > 0 ||
+                  currentCrop.bottom > 0) && (
+                  <div className="crop-overlay">
+                    {currentCrop.top > 0 && (
+                      <div
+                        className="crop-border crop-top"
+                        style={{ height: `${(currentCrop.top / videoHeight) * 100}%` }}
+                      />
+                    )}
+                    {currentCrop.bottom > 0 && (
+                      <div
+                        className="crop-border crop-bottom"
+                        style={{ height: `${(currentCrop.bottom / videoHeight) * 100}%` }}
+                      />
+                    )}
+                    {currentCrop.left > 0 && (
+                      <div
+                        className="crop-border crop-left"
+                        style={{
+                          width: `${(currentCrop.left / videoWidth) * 100}%`,
+                          top: `${(currentCrop.top / videoHeight) * 100}%`,
+                          height: `${((videoHeight - currentCrop.top - currentCrop.bottom) / videoHeight) * 100}%`,
+                        }}
+                      />
+                    )}
+                    {currentCrop.right > 0 && (
+                      <div
+                        className="crop-border crop-right"
+                        style={{
+                          width: `${(currentCrop.right / videoWidth) * 100}%`,
+                          top: `${(currentCrop.top / videoHeight) * 100}%`,
+                          height: `${((videoHeight - currentCrop.top - currentCrop.bottom) / videoHeight) * 100}%`,
+                        }}
+                      />
+                    )}
+                    <div className="crop-info-overlay">
+                      <div className="crop-dimensions">
+                        Output: {videoWidth - currentCrop.left - currentCrop.right} ×{' '}
+                        {videoHeight - currentCrop.top - currentCrop.bottom}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
         </div>
-        
+
         {/* Simple minimap overlay during panning or scrolling - positioned outside viewport */}
         {(isPanning || isScrolling) && zoomLevel > 100 && frameImage && (
           <div className="minimap-overlay">
             <div className="minimap">
               <div className="minimap-image">
                 <img src={frameImage} alt="Overview" />
-                <div 
+                <div
                   className="minimap-viewport"
                   style={{
                     width: `${100 / (zoomLevel / 100)}%`,
                     height: `${100 / (zoomLevel / 100)}%`,
                     left: `${viewportPos.left * (1 - 1 / (zoomLevel / 100))}%`,
-                    top: `${viewportPos.top * (1 - 1 / (zoomLevel / 100))}%`
+                    top: `${viewportPos.top * (1 - 1 / (zoomLevel / 100))}%`,
                   }}
                 />
               </div>
@@ -448,11 +452,8 @@ export default function FramePreview({ inputPath, script, indexInfo, onScriptCha
           </div>
         )}
       </div>
-      
-      <AutoCropModal
-        autoCropDetecting={autoCropDetecting}
-        autoCropResult={autoCropResult}
-      />
+
+      <AutoCropModal autoCropDetecting={autoCropDetecting} autoCropResult={autoCropResult} />
     </div>
   );
 }

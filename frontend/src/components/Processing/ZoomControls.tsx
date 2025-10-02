@@ -10,14 +10,14 @@ export default function ZoomControls({ zoomLevel, onZoomChange }: ZoomControlsPr
 
   return (
     <div className="zoom-controls">
-      <button 
+      <button
         onClick={() => onZoomChange(100)}
         className={`zoom-button ${zoomLevel === 100 ? 'active' : ''}`}
       >
         Fit
       </button>
       {zoomLevels.slice(1).map(level => (
-        <button 
+        <button
           key={level}
           onClick={() => onZoomChange(level)}
           className={`zoom-button ${zoomLevel === level ? 'active' : ''}`}

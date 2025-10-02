@@ -25,12 +25,17 @@ export default function CropModal({
   onCropChange,
   frameImage,
   onFrameChange,
-  maxFrames
+  maxFrames,
 }: CropModalProps): JSX.Element | null {
   const [crop, setCrop] = useState(initialCrop);
   const [autoDetecting, setAutoDetecting] = useState(false);
   const [detectionProgress, setDetectionProgress] = useState({ current: 0, total: 0 });
-  const [suggestedCrop, setSuggestedCrop] = useState<{ left: number; top: number; right: number; bottom: number } | null>(null);
+  const [suggestedCrop, setSuggestedCrop] = useState<{
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+  } | null>(null);
   const [localFrame, setLocalFrame] = useState(currentFrame);
   const [fitToFrame, setFitToFrame] = useState(true);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -49,12 +54,12 @@ export default function CropModal({
   // Debounced frame change handler
   const handleFrameChange = (newFrame: number) => {
     setLocalFrame(newFrame);
-    
+
     // Clear existing timeout
     if (frameDebounceRef.current) {
       clearTimeout(frameDebounceRef.current);
     }
-    
+
     // Set new timeout for actual frame change
     frameDebounceRef.current = window.setTimeout(() => {
       onFrameChange(newFrame);
@@ -91,18 +96,18 @@ export default function CropModal({
   const handleCropChange = (side: 'left' | 'top' | 'right' | 'bottom', value: number) => {
     const snappedValue = snapToEven(Math.max(0, value));
     const newCrop = { ...crop, [side]: snappedValue };
-    
+
     // Boundary validation
     const maxLeft = videoWidth - newCrop.right - 4;
     const maxRight = videoWidth - newCrop.left - 4;
     const maxTop = videoHeight - newCrop.bottom - 4;
     const maxBottom = videoHeight - newCrop.top - 4;
-    
+
     if (side === 'left' && snappedValue > maxLeft) return;
     if (side === 'right' && snappedValue > maxRight) return;
     if (side === 'top' && snappedValue > maxTop) return;
     if (side === 'bottom' && snappedValue > maxBottom) return;
-    
+
     setCrop(newCrop);
     onCropChange(newCrop);
   };
@@ -128,7 +133,7 @@ export default function CropModal({
       // Calculate frame sampling strategy - test up to 15 frames distributed across the video
       const sampleCount = Math.min(15, maxFrames);
       const sampleFrames = [];
-      
+
       if (sampleCount === 1) {
         sampleFrames.push(0);
       } else {
@@ -140,52 +145,57 @@ export default function CropModal({
 
       setDetectionProgress({ current: 0, total: sampleCount });
       console.log(`🔍 Auto-detecting crop by analyzing ${sampleCount} frames:`, sampleFrames);
-      
+
       // Initialize detection results
-      let maxLeft = 0, maxTop = 0, maxRight = 0, maxBottom = 0;
-      
+      let maxLeft = 0,
+        maxTop = 0,
+        maxRight = 0,
+        maxBottom = 0;
+
       // Process frames one by one with visual feedback
       for (let i = 0; i < sampleFrames.length; i++) {
         const frameIndex = sampleFrames[i];
-        
+
         setDetectionProgress({ current: i + 1, total: sampleCount });
-        
+
         // Update current frame to show progress
         setLocalFrame(frameIndex);
         onFrameChange(frameIndex);
-        
+
         // Wait for frame to load and analyze
         await new Promise(resolve => setTimeout(resolve, 200));
-        
+
         // TODO: Replace with actual frame analysis API call
         // For now, simulate detection by analyzing video aspect ratio and common patterns
         const analysisResult = simulateFrameAnalysis(frameIndex, i, sampleCount);
-        
+
         // Accumulate maximum crop values (most conservative)
         maxLeft = Math.max(maxLeft, analysisResult.left);
         maxTop = Math.max(maxTop, analysisResult.top);
         maxRight = Math.max(maxRight, analysisResult.right);
         maxBottom = Math.max(maxBottom, analysisResult.bottom);
-        
+
         console.log(`📊 Frame ${frameIndex} analysis:`, analysisResult, `| Accumulated max:`, {
-          left: maxLeft, top: maxTop, right: maxRight, bottom: maxBottom
+          left: maxLeft,
+          top: maxTop,
+          right: maxRight,
+          bottom: maxBottom,
         });
       }
-      
+
       // Ensure even numbers for final crop suggestion
       const finalCrop = {
         left: Math.round(maxLeft / 2) * 2,
         top: Math.round(maxTop / 2) * 2,
         right: Math.round(maxRight / 2) * 2,
-        bottom: Math.round(maxBottom / 2) * 2
+        bottom: Math.round(maxBottom / 2) * 2,
       };
-      
+
       setSuggestedCrop(finalCrop);
       setAutoDetecting(false);
       setDetectionProgress({ current: 0, total: 0 });
-      
+
       console.log('✨ Final auto-crop suggestion:', finalCrop);
-      
     } catch (error) {
       console.error('❌ Auto-crop detection failed:', error);
       setAutoDetecting(false);
@@ -197,10 +207,10 @@ export default function CropModal({
   const simulateFrameAnalysis = (frameIndex: number, sampleIndex: number, totalSamples: number) => {
     const aspectRatio = videoWidth / videoHeight;
     const progress = sampleIndex / (totalSamples - 1);
-    
+
     // Simulate varying detection results across frames
     let detected = { left: 0, top: 0, right: 0, bottom: 0 };
-    
+
     // Base detection on aspect ratio
     if (aspectRatio > 2.3) {
       // Ultra-wide content, likely has pillarbox
@@ -212,17 +222,17 @@ export default function CropModal({
       detected.bottom = Math.floor(videoHeight * (0.06 + 0.06 * Math.random()));
     } else if (aspectRatio < 1.5) {
       // More square content, likely has letterbox
-      detected.top = Math.floor(videoHeight * (0.10 + 0.08 * Math.random()));
-      detected.bottom = Math.floor(videoHeight * (0.10 + 0.08 * Math.random()));
+      detected.top = Math.floor(videoHeight * (0.1 + 0.08 * Math.random()));
+      detected.bottom = Math.floor(videoHeight * (0.1 + 0.08 * Math.random()));
     }
-    
+
     // Add some frame-based variation to simulate realistic detection
     const frameVariation = Math.sin(frameIndex * 0.1) * 0.3;
     detected.left = Math.max(0, detected.left + Math.floor(frameVariation * 8));
     detected.top = Math.max(0, detected.top + Math.floor(frameVariation * 6));
     detected.right = Math.max(0, detected.right + Math.floor(frameVariation * 8));
     detected.bottom = Math.max(0, detected.bottom + Math.floor(frameVariation * 6));
-    
+
     return detected;
   };
 
@@ -243,19 +253,19 @@ export default function CropModal({
         <div className="crop-modal-header">
           <div className="crop-info">
             <div className="resolution-info">
-              <span className="source-res">Source: {videoWidth} × {videoHeight}</span>
-              <span className="output-res">Output: {outputRes.width} × {outputRes.height}</span>
+              <span className="source-res">
+                Source: {videoWidth} × {videoHeight}
+              </span>
+              <span className="output-res">
+                Output: {outputRes.width} × {outputRes.height}
+              </span>
               <span className="crop-info-text">
                 Crop: {crop.left},{crop.top},{crop.right},{crop.bottom}
               </span>
             </div>
           </div>
           <div className="crop-actions">
-            <button 
-              onClick={autoDetectCrop} 
-              disabled={autoDetecting}
-              className="auto-crop-btn"
-            >
+            <button onClick={autoDetectCrop} disabled={autoDetecting} className="auto-crop-btn">
               {autoDetecting ? '🔍 Detecting...' : '🎯 Auto-Crop'}
             </button>
             {suggestedCrop && (
@@ -269,8 +279,8 @@ export default function CropModal({
             <button onClick={onClose} className="close-btn" disabled={autoDetecting}>
               ✕ Close
             </button>
-            <button 
-              onClick={() => setFitToFrame(f => !f)} 
+            <button
+              onClick={() => setFitToFrame(f => !f)}
               className="fit-toggle-btn"
               disabled={autoDetecting}
             >
@@ -284,26 +294,28 @@ export default function CropModal({
           {autoDetecting && (
             <div className="auto-detection-overlay">
               <div className="detection-progress">
-                <div className="progress-text">
-                  🔍 Analyzing frames for crop detection...
-                </div>
+                <div className="progress-text">🔍 Analyzing frames for crop detection...</div>
                 <div className="progress-details">
                   Frame {detectionProgress.current} of {detectionProgress.total}
                 </div>
                 <div className="progress-bar">
-                  <div 
+                  <div
                     className="progress-fill"
-                    style={{ width: `${(detectionProgress.current / detectionProgress.total) * 100}%` }}
+                    style={{
+                      width: `${(detectionProgress.current / detectionProgress.total) * 100}%`,
+                    }}
                   />
                 </div>
               </div>
             </div>
           )}
           {frameImage && (
-            <div className={`fullscreen-image-container${fitToFrame ? ' fit-to-frame' : ' scroll-mode'}`}>
+            <div
+              className={`fullscreen-image-container${fitToFrame ? ' fit-to-frame' : ' scroll-mode'}`}
+            >
               <div className="image-wrapper">
-                <img 
-                  src={frameImage} 
+                <img
+                  src={frameImage}
                   alt="Crop preview"
                   className={`fullscreen-image${fitToFrame ? ' fit-to-frame' : ' scroll-mode'}`}
                 />
@@ -311,40 +323,40 @@ export default function CropModal({
                 <div className="crop-overlay">
                   {/* Top crop overlay */}
                   {crop.top > 0 && (
-                    <div 
+                    <div
                       className="crop-border crop-top"
                       style={{ height: `${(crop.top / videoHeight) * 100}%` }}
                     />
                   )}
-                  
+
                   {/* Bottom crop overlay */}
                   {crop.bottom > 0 && (
-                    <div 
+                    <div
                       className="crop-border crop-bottom"
                       style={{ height: `${(crop.bottom / videoHeight) * 100}%` }}
                     />
                   )}
-                  
+
                   {/* Left crop overlay */}
                   {crop.left > 0 && (
-                    <div 
+                    <div
                       className="crop-border crop-left"
-                      style={{ 
+                      style={{
                         width: `${(crop.left / videoWidth) * 100}%`,
                         top: `${(crop.top / videoHeight) * 100}%`,
-                        height: `${((videoHeight - crop.top - crop.bottom) / videoHeight) * 100}%`
+                        height: `${((videoHeight - crop.top - crop.bottom) / videoHeight) * 100}%`,
                       }}
                     />
                   )}
-                  
+
                   {/* Right crop overlay */}
                   {crop.right > 0 && (
-                    <div 
+                    <div
                       className="crop-border crop-right"
-                      style={{ 
+                      style={{
                         width: `${(crop.right / videoWidth) * 100}%`,
                         top: `${(crop.top / videoHeight) * 100}%`,
-                        height: `${((videoHeight - crop.top - crop.bottom) / videoHeight) * 100}%`
+                        height: `${((videoHeight - crop.top - crop.bottom) / videoHeight) * 100}%`,
                       }}
                     />
                   )}
@@ -353,13 +365,13 @@ export default function CropModal({
                   {suggestedCrop && (
                     <div className="suggested-crop-overlay">
                       {suggestedCrop.top > 0 && (
-                        <div 
+                        <div
                           className="suggested-border suggested-top"
                           style={{ height: `${(suggestedCrop.top / videoHeight) * 100}%` }}
                         />
                       )}
                       {suggestedCrop.bottom > 0 && (
-                        <div 
+                        <div
                           className="suggested-border suggested-bottom"
                           style={{ height: `${(suggestedCrop.bottom / videoHeight) * 100}%` }}
                         />
@@ -380,53 +392,53 @@ export default function CropModal({
               <input
                 type="number"
                 value={crop.left}
-                onChange={(e) => handleCropChange('left', parseInt(e.target.value) || 0)}
+                onChange={e => handleCropChange('left', parseInt(e.target.value) || 0)}
                 step="2"
                 min="0"
                 max={videoWidth - crop.right - 4}
               />
             </div>
-            
+
             <div className="crop-input-group">
               <label>Top:</label>
               <input
                 type="number"
                 value={crop.top}
-                onChange={(e) => handleCropChange('top', parseInt(e.target.value) || 0)}
+                onChange={e => handleCropChange('top', parseInt(e.target.value) || 0)}
                 step="2"
                 min="0"
                 max={videoHeight - crop.bottom - 4}
               />
             </div>
-            
+
             <div className="crop-input-group">
               <label>Right:</label>
               <input
                 type="number"
                 value={crop.right}
-                onChange={(e) => handleCropChange('right', parseInt(e.target.value) || 0)}
+                onChange={e => handleCropChange('right', parseInt(e.target.value) || 0)}
                 step="2"
                 min="0"
                 max={videoWidth - crop.left - 4}
               />
             </div>
-            
+
             <div className="crop-input-group">
               <label>Bottom:</label>
               <input
                 type="number"
                 value={crop.bottom}
-                onChange={(e) => handleCropChange('bottom', parseInt(e.target.value) || 0)}
+                onChange={e => handleCropChange('bottom', parseInt(e.target.value) || 0)}
                 step="2"
                 min="0"
                 max={videoHeight - crop.top - 4}
               />
             </div>
           </div>
-          
+
           {/* Frame Navigation */}
           <div className="frame-navigation">
-            <button 
+            <button
               onClick={() => handleFrameChange(Math.max(0, localFrame - 1))}
               disabled={localFrame <= 0}
             >
@@ -437,10 +449,10 @@ export default function CropModal({
               min="0"
               max={maxFrames - 1}
               value={localFrame}
-              onChange={(e) => handleFrameChange(parseInt(e.target.value))}
+              onChange={e => handleFrameChange(parseInt(e.target.value))}
               className="frame-slider"
             />
-            <button 
+            <button
               onClick={() => handleFrameChange(Math.min(maxFrames - 1, localFrame + 1))}
               disabled={localFrame >= maxFrames - 1}
             >

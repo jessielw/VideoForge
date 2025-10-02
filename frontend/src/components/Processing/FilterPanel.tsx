@@ -12,13 +12,13 @@ const FILTER_PRESETS: FilterPreset[] = [
     id: 'resize_720p',
     name: 'Resize to 720p',
     description: 'Resize video to 1280x720',
-    code: 'clip = core.resize.Lanczos(clip, width=1280, height=720)'
+    code: 'clip = core.resize.Lanczos(clip, width=1280, height=720)',
   },
   {
     id: 'resize_1080p',
-    name: 'Resize to 1080p', 
+    name: 'Resize to 1080p',
     description: 'Resize video to 1920x1080',
-    code: 'clip = core.resize.Lanczos(clip, width=1920, height=1080)'
+    code: 'clip = core.resize.Lanczos(clip, width=1920, height=1080)',
   },
   // {
   //   id: 'deinterlace',
@@ -48,8 +48,8 @@ const FILTER_PRESETS: FilterPreset[] = [
     id: 'crop_basic',
     name: 'Basic Crop',
     description: 'Crop borders (adjust values as needed)',
-    code: 'clip = core.std.Crop(clip, left=0, right=0, top=0, bottom=0)'
-  }
+    code: 'clip = core.std.Crop(clip, left=0, right=0, top=0, bottom=0)',
+  },
 ];
 
 interface FilterPanelProps {
@@ -82,19 +82,19 @@ export default function FilterPanel({ onFilterAdd }: FilterPanelProps): JSX.Elem
   return (
     <div className="filter-panel">
       <h3>Common Filters</h3>
-      <p className="filter-help">Click any filter to copy its code to clipboard, then paste into the script editor:</p>
+      <p className="filter-help">
+        Click any filter to copy its code to clipboard, then paste into the script editor:
+      </p>
       <div className="filter-presets">
         {FILTER_PRESETS.map(preset => (
-          <div 
-            key={preset.id} 
-            className="filter-preset clickable" 
+          <div
+            key={preset.id}
+            className="filter-preset clickable"
             onClick={() => copyToClipboard(preset.code, preset.name)}
           >
             <div className="filter-header">
               <span className="filter-name">{preset.name}</span>
-              <span className="copy-icon">
-                {copiedFilter === preset.name ? '✅' : '📋'}
-              </span>
+              <span className="copy-icon">{copiedFilter === preset.name ? '✅' : '📋'}</span>
             </div>
             <p className="filter-description">
               {preset.description}

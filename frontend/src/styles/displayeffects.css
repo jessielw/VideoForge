@@ -64,12 +64,12 @@
     gap: 6px;
     flex-wrap: wrap;
   }
-  
+
   .effect-button {
     padding: 5px 8px;
     font-size: 0.75rem;
   }
-  
+
   .effects-label {
     font-size: 0.8rem;
   }

@@ -1,22 +1,22 @@
-import React, { useState } from "react";
-import MainLayout from "./components/Layout/MainLayout";
-import FileSelector from "./components/Source/FileSelector";
-import MediaInfoPanel from "./components/Source/MediaInfoPanel";
-import ScriptEditor from "./components/Processing/ScriptEditor";
-import FilterPanel from "./components/Processing/FilterPanel";
-import FramePreview from "./components/Processing/FramePreview";
-import TargetSection from "./components/Target";
-import FileBrowserModal from "./components/FileBrowserModal";
-import "./styles/index.css";
+import React, { useState } from 'react';
+import MainLayout from './components/Layout/MainLayout';
+import FileSelector from './components/Source/FileSelector';
+import MediaInfoPanel from './components/Source/MediaInfoPanel';
+import ScriptEditor from './components/Processing/ScriptEditor';
+import FilterPanel from './components/Processing/FilterPanel';
+import FramePreview from './components/Processing/FramePreview';
+import TargetSection from './components/Target';
+import FileBrowserModal from './components/FileBrowserModal';
+import './styles/index.css';
 
-const API = "http://127.0.0.1:8000";
+const API = 'http://127.0.0.1:8000';
 
 export default function App(): JSX.Element {
   // Tab state
-  const [activeTab, setActiveTab] = useState<string>("source");
+  const [activeTab, setActiveTab] = useState<string>('source');
 
   // Input state
-  const [inputPath, setInputPath] = useState<string>("");
+  const [inputPath, setInputPath] = useState<string>('');
   const [fileModalOpen, setFileModalOpen] = useState<boolean>(false);
   const [fileEntries, setFileEntries] = useState<any[] | null>(null);
   const [fileCurrent, setFileCurrent] = useState<string | null>(null);
@@ -24,12 +24,12 @@ export default function App(): JSX.Element {
   const [fileError, setFileError] = useState<string | null>(null);
 
   // Script state
-  const [script, setScript] = useState<string>("");
+  const [script, setScript] = useState<string>('');
 
   // Target state
-  const [outputPath, setOutputPath] = useState<string>("");
-  const [container, setContainer] = useState<string>("mkv");
-  const [videoCodec, setVideoCodec] = useState<string>("x264");
+  const [outputPath, setOutputPath] = useState<string>('');
+  const [container, setContainer] = useState<string>('mkv');
+  const [videoCodec, setVideoCodec] = useState<string>('x264');
 
   // Indexing state
   const [indexing, setIndexing] = useState(false);
@@ -48,10 +48,10 @@ export default function App(): JSX.Element {
         setFileEntries(j.entries);
         setFileCurrent(j.path || null);
       } else {
-        setFileError(j.reason || "Failed to list roots");
+        setFileError(j.reason || 'Failed to list roots');
       }
     } catch (err) {
-      setFileError("Network error");
+      setFileError('Network error');
     } finally {
       setFileLoading(false);
     }
@@ -68,10 +68,10 @@ export default function App(): JSX.Element {
         setFileEntries(j.entries);
         setFileCurrent(j.path || path);
       } else {
-        setFileError(j.reason || "Failed to list directory");
+        setFileError(j.reason || 'Failed to list directory');
       }
     } catch (err) {
-      setFileError("Network error");
+      setFileError('Network error');
     } finally {
       setFileLoading(false);
     }
@@ -87,17 +87,17 @@ export default function App(): JSX.Element {
   // Index the selected file
   async function indexFile(path: string) {
     setIndexing(true);
-    console.log("Indexing file:", path);
+    console.log('Indexing file:', path);
     try {
       const indexResp = await fetch(`${API}/api/index`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path }),
       });
       const indexData = await indexResp.json();
-      console.log("Index data:", indexData);
+      console.log('Index data:', indexData);
       setIndexInfo(indexData);
-      
+
       // Generate basic script template
       if (indexData.ok) {
         const template = `import vapoursynth as vs
@@ -111,7 +111,7 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
         setScript(template);
       }
     } catch (error) {
-      console.error("Failed to index file:", error);
+      console.error('Failed to index file:', error);
     } finally {
       setIndexing(false);
     }
@@ -122,7 +122,7 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
     if (!fileCurrent) return;
     const parts = fileCurrent.split(/\\|\//);
     if (parts.length <= 1) return;
-    const up = parts.slice(0, -1).join("/");
+    const up = parts.slice(0, -1).join('/');
     drill(up);
   }
 
@@ -156,10 +156,7 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
                   onBrowseClick={openFileModal}
                   indexing={indexing}
                 />
-                <MediaInfoPanel
-                  filePath={inputPath}
-                  indexInfo={indexInfo}
-                />
+                <MediaInfoPanel filePath={inputPath} indexInfo={indexInfo} />
               </div>
             </div>
           </div>
@@ -200,11 +197,11 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
               setContainer={setContainer}
               videoCodec={videoCodec}
               setVideoCodec={setVideoCodec}
-              onStart={() => alert("Start encode - not wired yet")}
+              onStart={() => alert('Start encode - not wired yet')}
               onReset={() => {
-                setOutputPath("");
-                setInputPath("");
-                setScript("");
+                setOutputPath('');
+                setInputPath('');
+                setScript('');
               }}
             />
           </div>
@@ -226,7 +223,7 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
   return (
     <MainLayout activeTab={activeTab} onTabChange={setActiveTab}>
       {renderTabContent()}
-      
+
       {fileModalOpen && (
         <FileBrowserModal
           fileCurrent={fileCurrent}

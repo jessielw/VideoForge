@@ -15,7 +15,7 @@ interface TabBarProps {
 export default function TabBar({ tabs, activeTab, onTabChange }: TabBarProps): JSX.Element {
   return (
     <div className="tab-bar">
-      {tabs.map((tab) => (
+      {tabs.map(tab => (
         <button
           key={tab.id}
           className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
