@@ -75,6 +75,35 @@
     margin: 0 4px;
   }
 
+  .preview-controls {
+    display: flex;
+    gap: 8px;
+  }
+
+  .crop-button {
+    background: #fd7e14;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s ease;
+  }
+
+  .crop-button:hover {
+    background: #e8590c;
+  }
+
+  .crop-button.active {
+    background: #dc3545;
+  }
+
+  .preview-loading {
+    color: white;
+    font-size: 16px;
+  }
+
   .frame-controls-header .nav-button {
     padding: 4px 8px;
     font-size: 0.8rem;

@@ -38,6 +38,53 @@
   font-weight: 500;
 }
 
+.auto-apply-button {
+  background: #17a2b8;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s ease;
+}
+
+.auto-apply-button:hover {
+  background: #138496;
+}
+
+.auto-apply-button.active {
+  background: #28a745;
+}
+
+.preview-mode-button {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s ease;
+}
+
+.preview-mode-button.original {
+  background: #17a2b8;
+}
+
+.preview-mode-button.processed {
+  background: #28a745;
+}
+
+.preview-mode-button:hover:not(:disabled) {
+  opacity: 0.8;
+}
+
+.preview-mode-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .zoom-controls {

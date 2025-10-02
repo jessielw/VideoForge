@@ -153,3 +153,62 @@
 .crop-dimensions {
   font-weight: 500;
 }
+
+.frame-preview .minimap-overlay {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.frame-preview .minimap {
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid #007bff;
+  border-radius: 4px;
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.frame-preview .minimap-image {
+  position: relative;
+  width: 150px;
+  height: 84px;
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.frame-preview .minimap-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.7;
+}
+
+.frame-preview .minimap-viewport {
+  position: absolute;
+  border: 2px solid #ff6b35;
+  background: rgba(255, 107, 53, 0.2);
+  box-sizing: border-box;
+  min-width: 4px;
+  min-height: 4px;
+}
+
+.crop-border.applied {
+  background: rgba(0, 255, 0, 0.2);
+  border: 2px solid #28a745;
+}
+
+.crop-border.pending {
+  background: rgba(255, 0, 0, 0.4);
+  border: 2px solid #dc3545;
+  animation: crop-pulse 2s infinite;
+}
+
+.crop-dimensions.applied {
+  color: #28a745;
+}
+
+.crop-dimensions.pending {
+  color: #dc3545;
+}

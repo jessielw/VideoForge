@@ -136,6 +136,115 @@
   font-weight: 500;
 }
 
+.template-button {
+  background: #17a2b8;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.template-button:hover {
+  background: #138496;
+}
+
+.validate-button {
+  background: #28a745;
+  color: white;
+}
+
+.validate-button:hover {
+  background: #218838;
+}
+
+.apply-button {
+  background: #007bff;
+  color: white;
+}
+
+.apply-button:hover {
+  background: #0056b3;
+}
+
+.reset-button {
+  background: #dc3545;
+  color: white;
+}
+
+.reset-button:hover {
+  background: #c82333;
+}
+
+.apply-button-highlight {
+  background: #28a745 !important;
+  animation: pulse 2s infinite;
+}
+
+.unsaved-indicator {
+  color: #ffc107;
+  font-weight: bold;
+  margin-left: 12px;
+  animation: blink 2s infinite;
+}
+
+.validation-status {
+  padding: 12px 20px;
+  border-bottom: 1px solid #dee2e6;
+  font-size: 14px;
+}
+
+.validation-status.validating {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.validation-status.valid {
+  background: #d4edda;
+  color: #155724;
+}
+
+.validation-status.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.editor-container {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.script-textarea {
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 20px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  resize: none;
+  outline: none;
+  background: #fafafa;
+  color: #2c3e50;
+  min-height: 300px;
+}
+
+.editor-hints {
+  padding: 12px 20px;
+  background: #f8f9fa;
+  border-top: 1px solid #dee2e6;
+  border-radius: 0 0 8px 8px;
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.effect-button:hover {
+  background: #f0f0f0;
+  border-color: #bbb;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .editor-title {
