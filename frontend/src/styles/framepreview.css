@@ -48,12 +48,13 @@
   overflow: auto;
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* keep image at top when fit */
   justify-content: center;
 }
 
 .image-viewport.draggable {
   cursor: grab;
+  align-items: center; /* center when zoomed/draggable */
 }
 
 .image-viewport.draggable:active {
@@ -70,6 +71,12 @@
 .image-container.zoomed {
   max-width: none;
   max-height: none;
+}
+
+/* When zoomed, allow the image to grow beyond the container's 100% constraint */
+.image-container.zoomed .frame-image {
+  max-width: none;
+  width: auto;
 }
 
 .image-wrapper {

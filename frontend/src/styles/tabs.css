@@ -28,6 +28,20 @@
   border-bottom-color: #2980b9;
 }
 
+.tab-button.disabled,
+.tab-button[disabled] {
+  opacity: 0.45;
+  color: #95a5a6;
+  cursor: not-allowed;
+  background: none;
+}
+
+.tab-button.disabled:hover,
+.tab-button[disabled]:hover {
+  background: none;
+  color: #95a5a6;
+}
+
 .tab-icon {
   font-size: 1rem;
 }

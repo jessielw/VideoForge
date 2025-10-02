@@ -10,6 +10,8 @@ interface FramePreviewProps {
   script?: string;
   indexInfo: any;
   onScriptChange?: (script: string) => void;
+  // A numeric counter; increment to trigger a preview fetch (applies the script)
+  previewVersion?: number;
 }
 
 export default function FramePreview({
@@ -17,6 +19,7 @@ export default function FramePreview({
   script,
   indexInfo,
   onScriptChange,
+  previewVersion = 0,
 }: FramePreviewProps): JSX.Element {
   const [currentFrame, setCurrentFrame] = useState(0);
   const [frameImage, setFrameImage] = useState<string | null>(null);
@@ -27,6 +30,7 @@ export default function FramePreview({
   const [isPanning, setIsPanning] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
+  const pointerIdRef = useRef<number | null>(null);
   const [viewportPos, setViewportPos] = useState({ left: 0, top: 0 }); // For minimap
   const [isScrolling, setIsScrolling] = useState(false); // For wheel scroll minimap
   const [displayEffect, setDisplayEffect] = useState<'none' | 'edge_detect'>('none'); // Display effects
@@ -115,20 +119,25 @@ export default function FramePreview({
   };
 
   // Drag/Pan functionality
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (zoomLevel > 100 && containerRef.current) {
+  // Use pointer events for more reliable panning (including touch)
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (zoomLevel > 100) {
+      const elem = e.currentTarget;
+      pointerIdRef.current = e.pointerId;
+      try {
+        elem.setPointerCapture(pointerIdRef.current);
+      } catch (err) {
+        // ignore if capture fails
+      }
       setIsPanning(true);
       setDragStart({ x: e.clientX, y: e.clientY });
-      setScrollStart({
-        x: containerRef.current.scrollLeft,
-        y: containerRef.current.scrollTop,
-      });
+      setScrollStart({ x: elem.scrollLeft, y: elem.scrollTop });
       e.preventDefault();
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isPanning && containerRef.current) {
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (isPanning && containerRef.current && pointerIdRef.current === e.pointerId) {
       const deltaX = dragStart.x - e.clientX;
       const deltaY = dragStart.y - e.clientY;
 
@@ -140,11 +149,26 @@ export default function FramePreview({
     }
   };
 
-  const handleMouseUp = () => {
-    setIsPanning(false);
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const elem = e.currentTarget;
+    if (pointerIdRef.current === e.pointerId) {
+      try {
+        elem.releasePointerCapture(e.pointerId);
+      } catch (err) {
+        // ignore
+      }
+      pointerIdRef.current = null;
+      setIsPanning(false);
+    }
   };
 
-  const handleMouseLeave = () => {
+  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (err) {
+      // ignore
+    }
+    pointerIdRef.current = null;
     setIsPanning(false);
   };
 
@@ -196,11 +220,15 @@ export default function FramePreview({
     }
   };
 
+  // Only fetch frames when previewVersion changes (user pressed Apply/Preview).
+  // This prevents auto previewing on page open or on every script edit.
   useEffect(() => {
+    if (previewVersion <= 0) return;
     if (inputPath) {
       fetchFrame(currentFrame);
     }
-  }, [inputPath, currentFrame, script]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewVersion, currentFrame]);
 
   // Track scroll position for minimap
   useEffect(() => {
@@ -342,10 +370,10 @@ export default function FramePreview({
           className={`image-viewport ${zoomLevel > 100 ? 'draggable' : ''}`}
           ref={containerRef}
           onWheel={handleMouseWheel}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseLeave}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
           onDoubleClick={handleDoubleClick}
           style={{
             maxHeight: zoomLevel > 100 ? '50vh' : 'none', // Only constrain height when zoomed

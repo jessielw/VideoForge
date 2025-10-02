@@ -457,7 +457,7 @@ body {
   flex: 1;
 }
 
-.editor-header {
+/* .editor-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -471,7 +471,7 @@ body {
   margin: 0;
   color: #2c3e50;
   font-size: 1.2rem;
-}
+} */
 
 .editor-actions {
   display: flex;
@@ -781,6 +781,41 @@ body {
   z-index: 1000;
 }
 
+/* Indexing Modal (blocking) */
+.indexing-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999; /* on top of everything */
+}
+
+.indexing-modal {
+  background: white;
+  padding: 28px 32px;
+  border-radius: 8px;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.4);
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+}
+
+.indexing-spinner {
+  font-size: 28px;
+  margin-bottom: 12px;
+}
+
+.indexing-modal h3 {
+  margin: 0 0 8px 0;
+}
+
+.indexing-modal p {
+  margin: 0;
+  color: #636e72;
+}
+
 .auto-crop-modal {
   background: white;
   border-radius: 8px;
@@ -933,7 +968,7 @@ body {
   cursor: not-allowed;
 }
 
-.frame-controls-header .frame-input-group {
+/* .frame-controls-header .frame-input-group {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -953,7 +988,7 @@ body {
   text-align: center;
   background: transparent;
   font-size: 0.85rem;
-}
+} */
 
 .frame-controls-header .frame-total {
   color: #666;

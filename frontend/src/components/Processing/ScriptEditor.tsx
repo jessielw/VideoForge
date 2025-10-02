@@ -68,10 +68,10 @@ export default function ScriptEditor({
   return (
     <div className="script-editor">
       <div className="editor-header">
-        <h3>
-          VapourSynth Script
+        <div className="editor-title">
+          <h3>VapourSynth Script</h3>
           {hasUnsavedChanges && <span className="unsaved-changes"> (unsaved changes)</span>}
-        </h3>
+        </div>
         <div className="editor-actions">
           <button
             onClick={validateScript}

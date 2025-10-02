@@ -7,6 +7,7 @@ import FilterPanel from './components/Processing/FilterPanel';
 import FramePreview from './components/Processing/FramePreview';
 import TargetSection from './components/Target';
 import FileBrowserModal from './components/FileBrowserModal';
+import IndexingModal from './components/Processing/IndexingModal';
 import './styles/index.css';
 
 const API = 'http://127.0.0.1:8000';
@@ -34,6 +35,10 @@ export default function App(): JSX.Element {
   // Indexing state
   const [indexing, setIndexing] = useState(false);
   const [indexInfo, setIndexInfo] = useState<any>(null);
+  // Preview trigger (increment to tell FramePreview to fetch new frames)
+  const [previewVersion, setPreviewVersion] = useState(0);
+  // Track last path we've indexed via Apply/auto-index so we don't re-index repeatedly
+  const [lastIndexedPath, setLastIndexedPath] = useState<string | null>(null);
 
   // Open file browser modal and load roots
   async function openFileModal() {
@@ -81,7 +86,12 @@ export default function App(): JSX.Element {
   async function selectFile(path: string) {
     setInputPath(path);
     setFileModalOpen(false);
-    await indexFile(path);
+    // Provide a default VapourSynth + LWLibavSource template so the processing editor
+    // isn't empty and the user can press Apply immediately if desired.
+    if (!script) {
+      const template = `import vapoursynth as vs\ncore = vs.core\n\n# Load source\nclip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')\n\n# Add your filters here\n`;
+      setScript(template);
+    }
   }
 
   // Index the selected file
@@ -98,20 +108,23 @@ export default function App(): JSX.Element {
       console.log('Index data:', indexData);
       setIndexInfo(indexData);
 
-      // Generate basic script template
-      if (indexData.ok) {
-        const template = `import vapoursynth as vs
-core = vs.core
+      return indexData;
 
-# Load source
-clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
+      //       // Generate basic script template
+      //       if (indexData.ok) {
+      //         const template = `import vapoursynth as vs
+      // core = vs.core
 
-# Add your filters here
-`;
-        setScript(template);
-      }
+      // # Load source
+      // clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
+
+      // # Add your filters here
+      // `;
+      //         setScript(template);
+      //       }
     } catch (error) {
       console.error('Failed to index file:', error);
+      return { ok: false, reason: String(error) };
     } finally {
       setIndexing(false);
     }
@@ -138,8 +151,31 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
   };
 
   // Handle script application (refresh preview)
-  const handleScriptApply = () => {
-    // This will trigger the FramePreviewRefactored to refresh with the new script
+  const handleScriptApply = async () => {
+    // Run indexing if we have an inputPath, update index info, then bump previewVersion
+    if (!inputPath) return;
+    setIndexing(true);
+    try {
+      const idx = await indexFile(inputPath);
+      if (idx) {
+        setIndexInfo(idx);
+        // If we don't yet have a basic script template and index returned OK, create one
+        if (idx.ok && !script) {
+          const template = `import vapoursynth as vs\ncore = vs.core\n\n# Load source\nclip = core.lsmas.LWLibavSource(r'${inputPath.replace(/\\/g, '\\\\')}')\n\n# Add your filters here\n`;
+          setScript(template);
+        }
+
+        if (idx.ok) {
+          setLastIndexedPath(inputPath);
+        }
+      }
+    } catch (e) {
+      console.error('Indexing failed during apply:', e);
+    } finally {
+      setIndexing(false);
+      // Trigger preview refresh
+      setPreviewVersion(v => v + 1);
+    }
   };
 
   // Render tab content
@@ -181,6 +217,7 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
                   script={script}
                   indexInfo={indexInfo}
                   onScriptChange={setScript}
+                  previewVersion={previewVersion}
                 />
               </div>
             </div>
@@ -220,9 +257,32 @@ clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
     }
   };
 
+  // Disable Processing and Output tabs when there's no input path loaded
+  const disabledTabs = inputPath ? [] : ['processing', 'output'];
+  // If inputPath is cleared, ensure we return to Source tab
+  React.useEffect(() => {
+    if (!inputPath && activeTab !== 'source') {
+      setActiveTab('source');
+    }
+  }, [inputPath, activeTab]);
+
+  // When the user opens the Processing tab, auto-run the apply/index once for the current
+  // input path if it hasn't been indexed yet. This avoids re-indexing repeatedly.
+  React.useEffect(() => {
+    if (activeTab !== 'processing') return;
+    if (!inputPath) return;
+    if (lastIndexedPath === inputPath) return; // already indexed
+
+    // Fire-and-forget the apply (it manages indexing state and previewVersion)
+    void handleScriptApply();
+  }, [activeTab, inputPath, lastIndexedPath]);
+
   return (
-    <MainLayout activeTab={activeTab} onTabChange={setActiveTab}>
+    <MainLayout activeTab={activeTab} onTabChange={setActiveTab} disabledTabs={disabledTabs}>
       {renderTabContent()}
+
+      {/* Blocking indexing modal shown while indexing is running */}
+      <IndexingModal indexing={indexing} />
 
       {fileModalOpen && (
         <FileBrowserModal
