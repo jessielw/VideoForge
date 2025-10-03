@@ -34,6 +34,7 @@ export default function FramePreview({
   const [frameMeta, setFrameMeta] = useState<any | null>(null);
   const [currentCrop, setCurrentCrop] = useState({ left: 0, top: 0, right: 0, bottom: 0 });
   const [zoomLevel, setZoomLevel] = useState(100); // Zoom percentage
+  const [sampleCount, setSampleCount] = useState<number>(20);
   const [isPanning, setIsPanning] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
@@ -443,9 +444,11 @@ export default function FramePreview({
           <DisplayEffects
             displayEffect={displayEffect}
             onEffectChange={applyDisplayEffect}
-            onAutoCropDetect={detectAutoCrop}
+            // Bind current sampleCount so the click event isn't forwarded as the argument
+            onAutoCropDetect={() => detectAutoCrop(sampleCount)}
             autoCropDetecting={autoCropDetecting}
             disabled={!inputPath}
+            onSampleCountChange={setSampleCount}
           />
         </div>
 

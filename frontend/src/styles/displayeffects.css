@@ -58,6 +58,34 @@
   border-color: #dee2e6;
 }
 
+.auto-crop-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.auto-crop-controls label {
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border-radius: 5px;
+}
+
+.auto-crop-controls input[type='range'] {
+  width: 68px;
+  background: #f0f0f0;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  outline: none;
+  cursor: pointer;
+}
+
+.auto-crop-controls input[type='range']:disabled {
+  background: #f8f9fa;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .display-effects {
