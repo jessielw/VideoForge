@@ -18,46 +18,49 @@ export default function FrameControls({
   const [isDragging, setIsDragging] = useState(false);
   const debounceTimeoutRef = useRef<number | null>(null);
 
-  // Debounced frame change function
-  const debouncedFrameChange = useCallback(
-    (frame: number) => {
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
-      }
-
-      debounceTimeoutRef.current = window.setTimeout(() => {
-        onFrameChange(frame);
-        setIsDragging(false);
-      }, 300);
-    },
-    [onFrameChange]
-  );
-
-  // Handle slider changes (immediate visual feedback, debounced API call)
+  // Handle slider changes: update visual state and debounce finalization
   const handleSliderChange = (newFrame: number) => {
     setSliderFrame(newFrame);
     setIsDragging(true);
-    debouncedFrameChange(newFrame);
-  };
 
-  // Handle prev/next button clicks (immediate, no debounce needed)
-  const handlePrevNext = (newFrame: number) => {
-    const clampedFrame = Math.max(0, Math.min(maxFrames - 1, newFrame));
-    setSliderFrame(clampedFrame);
-    onFrameChange(clampedFrame);
-    setIsDragging(false);
-    // Cancel any pending debounced changes
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
     }
+
+    debounceTimeoutRef.current = window.setTimeout(() => {
+      const clamped = Math.max(0, Math.min(maxFrames - 1, newFrame));
+      setInputValue(clamped.toString());
+      onFrameChange(clamped);
+      setIsDragging(false);
+      debounceTimeoutRef.current = null;
+    }, 300);
   };
 
-  // Handle text input changes (only visual update, no API call)
-  const handleTextInputChange = (value: string) => {
-    setInputValue(value);
+  // Immediate finalize (used when needed)
+  const finalizeSliderChange = useCallback(() => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+      debounceTimeoutRef.current = null;
+    }
+    const clamped = Math.max(0, Math.min(maxFrames - 1, sliderFrame));
+    setInputValue(clamped.toString());
+    onFrameChange(clamped);
+    setIsDragging(false);
+  }, [onFrameChange, sliderFrame, maxFrames]);
+
+  // Handle prev/next button clicks (immediate)
+  const handlePrevNext = (newFrame: number) => {
+    const clampedFrame = Math.max(0, Math.min(maxFrames - 1, newFrame));
+    setSliderFrame(clampedFrame);
+    setInputValue(clampedFrame.toString());
+    onFrameChange(clampedFrame);
+    setIsDragging(false);
+    if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
   };
 
-  // Handle text input blur or Enter key (immediate update)
+  // Text input
+  const handleTextInputChange = (value: string) => setInputValue(value);
+
   const handleTextInputBlur = () => {
     const newFrame = parseInt(inputValue) || 0;
     const clampedFrame = Math.max(0, Math.min(maxFrames - 1, newFrame));
@@ -65,20 +68,13 @@ export default function FrameControls({
     setSliderFrame(clampedFrame);
     onFrameChange(clampedFrame);
     setIsDragging(false);
-    // Cancel any pending debounced changes
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current);
-    }
+    if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
   };
 
-  // Handle Enter key press in text input
   const handleTextInputKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleTextInputBlur();
-    }
+    if (e.key === 'Enter') handleTextInputBlur();
   };
 
-  // Sync input value and slider with current frame when not dragging
   useEffect(() => {
     if (!isDragging) {
       setSliderFrame(currentFrame);
@@ -86,12 +82,9 @@ export default function FrameControls({
     }
   }, [currentFrame, isDragging]);
 
-  // Cleanup debounce timeout on unmount
   useEffect(() => {
     return () => {
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
-      }
+      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
     };
   }, []);
 
