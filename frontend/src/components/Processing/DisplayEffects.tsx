@@ -50,7 +50,7 @@ export default function DisplayEffects({
         🔍 Edges
       </button>
       <div className="auto-crop-controls">
-        <label>
+        <label className="auto-crop-button">
           <input
             type="range"
             min={10}
