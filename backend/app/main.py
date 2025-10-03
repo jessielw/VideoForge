@@ -321,7 +321,9 @@ async def get_frame_with_script(
 
         # Load VapourSynth script in-process for default frame extraction
         core = vs.core
-        core.std.LoadAllPlugins(r"C:\VapourSynth\vs-plugins") # TODO: this shouldn't need to be called every time
+        core.std.LoadAllPlugins(
+            r"C:\VapourSynth\vs-plugins"
+        )  # TODO: this shouldn't need to be called every time
         # try:
         #     core.std.LoadPlugin(r"C:\VapourSynth\vs-plugins\LSMASHSource.dll")
         # except Exception:
@@ -352,7 +354,9 @@ async def get_frame_with_script(
                     fps_val = float(clip.fps)
                 except Exception:
                     try:
-                        fps_val = float(int(clip.fps.numerator) / int(clip.fps.denominator))
+                        fps_val = float(
+                            int(clip.fps.numerator) / int(clip.fps.denominator)
+                        )
                     except Exception:
                         fps_val = None
 
@@ -361,7 +365,7 @@ async def get_frame_with_script(
                     frame_type = vs_frame.props.get("_PictType")
                     # Convert bytes to string if necessary
                     if isinstance(frame_type, (bytes, bytearray)):
-                        frame_type = frame_type.decode('utf-8', errors='replace')
+                        frame_type = frame_type.decode("utf-8", errors="replace")
                     else:
                         frame_type = str(frame_type) if frame_type is not None else None
                 except Exception:
@@ -369,9 +373,11 @@ async def get_frame_with_script(
 
                 fmt_name = None
                 try:
-                    fmt_name = vs_frame.format.name if vs_frame and vs_frame.format else None
+                    fmt_name = (
+                        vs_frame.format.name if vs_frame and vs_frame.format else None
+                    )
                     if isinstance(fmt_name, (bytes, bytearray)):
-                        fmt_name = fmt_name.decode('utf-8', errors='replace')
+                        fmt_name = fmt_name.decode("utf-8", errors="replace")
                 except Exception:
                     fmt_name = None
 
@@ -383,11 +389,21 @@ async def get_frame_with_script(
                     "frame_type": frame_type,
                 }
             except Exception:
-                meta = {"format": None, "width": None, "height": None, "fps": None, "frame_type": None}
-                
+                meta = {
+                    "format": None,
+                    "width": None,
+                    "height": None,
+                    "fps": None,
+                    "frame_type": None,
+                }
+
             print("META", meta, flush=True)
 
-            return Response(content=buf.read(), media_type="image/png", headers={"X-Frame-Meta": json.dumps(meta)})
+            return Response(
+                content=buf.read(),
+                media_type="image/png",
+                headers={"X-Frame-Meta": json.dumps(meta)},
+            )
 
         # Apply the VapourSynth script
         core = vs.core
@@ -491,7 +507,7 @@ async def get_frame_with_script(
         try:
             frame_type = vs_frame.props.get("_PictType")
             if isinstance(frame_type, (bytes, bytearray)):
-                frame_type = frame_type.decode('utf-8', errors='replace')
+                frame_type = frame_type.decode("utf-8", errors="replace")
             else:
                 frame_type = str(frame_type) if frame_type is not None else None
         except Exception:
@@ -501,7 +517,7 @@ async def get_frame_with_script(
         try:
             fmt_name = format_name
             if isinstance(fmt_name, (bytes, bytearray)):
-                fmt_name = fmt_name.decode('utf-8', errors='replace')
+                fmt_name = fmt_name.decode("utf-8", errors="replace")
         except Exception:
             fmt_name = None
 
@@ -513,7 +529,11 @@ async def get_frame_with_script(
             "frame_type": frame_type,
         }
         print("META", meta, flush=True)
-        return Response(content=buf.read(), media_type="image/png", headers={"X-Frame-Meta": json.dumps(meta)})
+        return Response(
+            content=buf.read(),
+            media_type="image/png",
+            headers={"X-Frame-Meta": json.dumps(meta)},
+        )
 
     except Exception as e:
         print(f"Script frame extraction error: {str(e)}", flush=True)
@@ -558,7 +578,10 @@ async def auto_crop(request: Request):
             try:
                 clip = core.ffms2.Source(str(p))
             except Exception as e:
-                return {"ok": False, "error": f"No suitable source filter available: {e}"}
+                return {
+                    "ok": False,
+                    "error": f"No suitable source filter available: {e}",
+                }
 
         total_frames = int(clip.num_frames)
 
@@ -570,8 +593,8 @@ async def auto_crop(request: Request):
         sample_frames = [min(i * step, total_frames - 1) for i in range(n)]
 
         # Convert clip to RGB24 once for consistent frame extraction
-        rgb_clip = core.resize.Bicubic(clip, format=vs.RGB24, matrix_in_s='709')
-        
+        rgb_clip = core.resize.Bicubic(clip, format=vs.RGB24, matrix_in_s="709")
+
         # Extract frames as RGB numpy arrays (sequential for simplicity)
         frames_rgb = []
         for frame_no in sample_frames:
@@ -579,11 +602,14 @@ async def auto_crop(request: Request):
                 fn = min(frame_no, clip.num_frames - 1)
                 rgb_frame = rgb_clip.get_frame(fn)
                 # Stack RGB planes directly
-                rgb = np.stack([
-                    np.asarray(rgb_frame[0]),
-                    np.asarray(rgb_frame[1]),
-                    np.asarray(rgb_frame[2])
-                ], axis=-1)
+                rgb = np.stack(
+                    [
+                        np.asarray(rgb_frame[0]),
+                        np.asarray(rgb_frame[1]),
+                        np.asarray(rgb_frame[2]),
+                    ],
+                    axis=-1,
+                )
                 frames_rgb.append(rgb)
             except Exception as e:
                 print(f"Failed to extract frame {frame_no}: {e}", flush=True)
@@ -654,24 +680,28 @@ async def auto_crop(request: Request):
                 "left_samples": left_samples,
                 "top_samples": top_samples,
                 "right_samples": right_samples,
-                "bottom_samples": bottom_samples
+                "bottom_samples": bottom_samples,
             }
 
         # Analyze all frames in parallel
         all_samples = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 4)) as ex:
-            all_samples = list[dict[str, list[Any]]](ex.map(analyze_numpy_frame, frames_rgb))
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(8, os.cpu_count() or 4)
+        ) as ex:
+            all_samples = list[dict[str, list[Any]]](
+                ex.map(analyze_numpy_frame, frames_rgb)
+            )
 
         all_left = []
         all_top = []
         all_right = []
         all_bottom = []
-        
+
         for samples in all_samples:
-            all_left.extend(samples['left_samples'])
-            all_top.extend(samples['top_samples'])
-            all_right.extend(samples['right_samples'])
-            all_bottom.extend(samples['bottom_samples'])
+            all_left.extend(samples["left_samples"])
+            all_top.extend(samples["top_samples"])
+            all_right.extend(samples["right_samples"])
+            all_bottom.extend(samples["bottom_samples"])
 
         recommended = {
             "left": round_down_even(min(all_left) if all_left else 0),
@@ -685,7 +715,7 @@ async def auto_crop(request: Request):
     except Exception as e:
         print(f"Auto-crop failed: {e}", flush=True)
         return {"ok": False, "error": str(e)}
-    
+
 
 # @app.get("/api/frame/meta")
 # async def get_frame_meta(
