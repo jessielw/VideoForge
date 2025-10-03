@@ -122,6 +122,14 @@ export function useScriptEditor({
     setValidationMessage('');
   }, [script]);
 
+  // Force-set the local script from outside callers (used for hard reset)
+  const forceSetLocalScript = useCallback((newScript: string) => {
+    setLocalScript(newScript);
+    setHasUnsavedChanges(false);
+    setValidationStatus('idle');
+    setValidationMessage('');
+  }, []);
+
   return {
     localScript,
     hasUnsavedChanges,
@@ -133,5 +141,6 @@ export function useScriptEditor({
     validateScript,
     handleEditorMount,
     resetScript,
+    forceSetLocalScript,
   };
 }

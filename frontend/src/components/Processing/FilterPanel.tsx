@@ -54,10 +54,16 @@ const FILTER_PRESETS: FilterPreset[] = [
 
 interface FilterPanelProps {
   onFilterAdd: (code: string) => void;
+  resetSignal?: number;
 }
 
-export default function FilterPanel({ onFilterAdd }: FilterPanelProps): JSX.Element {
+export default function FilterPanel({ onFilterAdd, resetSignal }: FilterPanelProps): JSX.Element {
   const [copiedFilter, setCopiedFilter] = useState<string | null>(null);
+
+  // Clear temporary UI states when parent requests a reset
+  React.useEffect(() => {
+    setCopiedFilter(null);
+  }, [resetSignal]);
 
   const copyToClipboard = async (code: string, filterName: string) => {
     try {

@@ -8,6 +8,8 @@ interface ScriptEditorProps {
   onValidate?: () => void;
   onApply?: () => void;
   selectedPath: string;
+  // Incrementing signal from parent to force a hard reset of the editor
+  resetSignal?: number;
 }
 
 export default function ScriptEditor({
@@ -16,7 +18,8 @@ export default function ScriptEditor({
   onValidate,
   onApply,
   selectedPath,
-}: ScriptEditorProps): JSX.Element {
+  resetSignal,
+}: ScriptEditorProps & { resetSignal?: number }): JSX.Element {
   const {
     localScript,
     hasUnsavedChanges,
@@ -27,6 +30,7 @@ export default function ScriptEditor({
     validateScript,
     handleEditorMount,
     resetScript,
+    forceSetLocalScript,
   } = useScriptEditor({
     script,
     onScriptChange,
@@ -113,6 +117,17 @@ export default function ScriptEditor({
     }
     // only run when selectedPath or indexer changes
   }, [selectedPath, indexer, onScriptChange]);
+
+  // Reset when parent sends reset signal
+  React.useEffect(() => {
+    if (typeof resetSignal === 'number') {
+      // restore to default template for current indexer & selectedPath
+      const tmpl = makeTemplateForPath(indexer, selectedPath) || '';
+      forceSetLocalScript(tmpl);
+      onScriptChange(tmpl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetSignal]);
 
   return (
     <div className="script-editor">

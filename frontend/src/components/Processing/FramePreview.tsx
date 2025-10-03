@@ -13,6 +13,8 @@ interface FramePreviewProps {
   // A numeric counter; increment to trigger a preview fetch (applies the script)
   previewVersion?: number;
   onPreviewError?: (err: string | null) => void;
+  // Parent-driven reset signal to force widget reset
+  resetSignal?: number;
 }
 
 export default function FramePreview({
@@ -22,7 +24,8 @@ export default function FramePreview({
   onScriptChange,
   previewVersion = 0,
   onPreviewError,
-}: FramePreviewProps): JSX.Element {
+  resetSignal,
+}: FramePreviewProps & { resetSignal?: number }): JSX.Element {
   const [currentFrame, setCurrentFrame] = useState(0);
   const [frameImage, setFrameImage] = useState<string | null>(null);
   const [scriptError, setScriptError] = useState<string | null>(null);
@@ -61,6 +64,64 @@ export default function FramePreview({
     script,
     onScriptChange,
   });
+
+  // Reset processing state when a new source is opened. This ensures the
+  // Processing page returns to sane defaults (frame 0, no image, default zoom/crop)
+  // so the UI is in a predictable state when switching sources.
+  useEffect(() => {
+    // Revoke any created object URLs to avoid leaking memory
+    try {
+      if (frameImage) {
+        URL.revokeObjectURL(frameImage);
+      }
+    } catch (e) {
+      // ignore
+    }
+    try {
+      if (originalFrameImage) {
+        URL.revokeObjectURL(originalFrameImage);
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    setCurrentFrame(0);
+    setFrameImage(null);
+    setOriginalFrameImage(null);
+    setScriptError(null);
+    setFrameMeta(null);
+    setCurrentCrop({ left: 0, top: 0, right: 0, bottom: 0 });
+    setZoomLevel(100);
+    setIsPanning(false);
+    setViewportPos({ left: 0, top: 0 });
+    setIsScrolling(false);
+    setDisplayEffect('none');
+  }, [inputPath]);
+
+  // Also respond to an explicit reset signal from the parent
+  React.useEffect(() => {
+    if (typeof resetSignal === 'number') {
+      // mirror inputPath reset behavior
+      try {
+        if (frameImage) URL.revokeObjectURL(frameImage);
+      } catch (e) {}
+      try {
+        if (originalFrameImage) URL.revokeObjectURL(originalFrameImage);
+      } catch (e) {}
+
+      setCurrentFrame(0);
+      setFrameImage(null);
+      setOriginalFrameImage(null);
+      setScriptError(null);
+      setFrameMeta(null);
+      setCurrentCrop({ left: 0, top: 0, right: 0, bottom: 0 });
+      setZoomLevel(100);
+      setIsPanning(false);
+      setViewportPos({ left: 0, top: 0 });
+      setIsScrolling(false);
+      setDisplayEffect('none');
+    }
+  }, [resetSignal]);
 
   // Zoom control functions
   const setZoom = (zoom: number) => {

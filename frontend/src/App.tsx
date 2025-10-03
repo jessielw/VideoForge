@@ -41,6 +41,8 @@ export default function App(): JSX.Element {
   const [previewVersion, setPreviewVersion] = useState(0);
   // Track last path we've indexed via Apply/auto-index so we don't re-index repeatedly
   const [lastIndexedPath, setLastIndexedPath] = useState<string | null>(null);
+  // Processing reset signal (increment to force children to reset)
+  const [processingResetVersion, setProcessingResetVersion] = useState(0);
 
   // Open file browser modal and load roots
   async function openFileModal() {
@@ -86,6 +88,9 @@ export default function App(): JSX.Element {
 
   // Select file from browser
   async function selectFile(path: string) {
+    // When a new source is selected, fully reset processing widget state
+    // so that the preview/frame and script template return to defaults.
+    setProcessingResetVersion(v => v + 1);
     setInputPath(path);
     setFileModalOpen(false);
     // Fetch MediaInfo/index info for UI immediately on selection
@@ -178,86 +183,81 @@ export default function App(): JSX.Element {
     }
   };
 
-  // Render tab content
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'source':
-        return (
-          <div className="source-tab">
-            <div className="source-layout">
-              <div className="source-left">
-                <FileSelector
-                  inputPath={inputPath}
-                  onFileSelect={setInputPath}
-                  onBrowseClick={openFileModal}
-                  indexing={indexing}
-                />
-                <MediaInfoPanel filePath={inputPath} indexInfo={indexInfo} />
-              </div>
-            </div>
-          </div>
-        );
+  // Render all tab panes but keep them mounted. We toggle visibility via inline styles
+  // so that heavy components (Processing) don't remount when switching tabs.
+  const sourcePane = (
+    <div className="source-tab" style={{ display: activeTab === 'source' ? 'block' : 'none' }}>
+      <div className="source-layout">
+        <div className="source-left">
+          <FileSelector
+            inputPath={inputPath}
+            onFileSelect={setInputPath}
+            onBrowseClick={openFileModal}
+            indexing={indexing}
+          />
+          <MediaInfoPanel filePath={inputPath} indexInfo={indexInfo} />
+        </div>
+      </div>
+    </div>
+  );
 
-      case 'processing':
-        return (
-          <div className="processing-tab">
-            <div className="processing-layout">
-              <div className="processing-left">
-                <ScriptEditor
-                  script={script}
-                  onScriptChange={setScript}
-                  onValidate={handleScriptValidate}
-                  onApply={handleScriptApply}
-                  selectedPath={inputPath}
-                />
-                <FilterPanel onFilterAdd={handleFilterAdd} />
-              </div>
-              <div className="processing-right">
-                <FramePreview
-                  inputPath={inputPath}
-                  script={script}
-                  indexInfo={indexInfo}
-                  onScriptChange={setScript}
-                  previewVersion={previewVersion}
-                  onPreviewError={(err: string | null) => setPreviewError(err)}
-                />
-              </div>
-            </div>
-          </div>
-        );
+  const processingPane = (
+    <div
+      className="processing-tab"
+      style={{ display: activeTab === 'processing' ? 'block' : 'none' }}
+    >
+      <div className="processing-layout">
+        <div className="processing-left">
+          <ScriptEditor
+            script={script}
+            onScriptChange={setScript}
+            onValidate={handleScriptValidate}
+            onApply={handleScriptApply}
+            selectedPath={inputPath}
+            resetSignal={processingResetVersion}
+          />
+          <FilterPanel onFilterAdd={handleFilterAdd} resetSignal={processingResetVersion} />
+        </div>
+        <div className="processing-right">
+          <FramePreview
+            inputPath={inputPath}
+            script={script}
+            indexInfo={indexInfo}
+            onScriptChange={setScript}
+            previewVersion={previewVersion}
+            onPreviewError={(err: string | null) => setPreviewError(err)}
+            resetSignal={processingResetVersion}
+          />
+        </div>
+      </div>
+    </div>
+  );
 
-      case 'output':
-        return (
-          <div className="output-tab">
-            <TargetSection
-              outputPath={outputPath}
-              setOutputPath={setOutputPath}
-              container={container}
-              setContainer={setContainer}
-              videoCodec={videoCodec}
-              setVideoCodec={setVideoCodec}
-              onStart={() => alert('Start encode - not wired yet')}
-              onReset={() => {
-                setOutputPath('');
-                setInputPath('');
-                setScript('');
-              }}
-            />
-          </div>
-        );
+  const outputPane = (
+    <div className="output-tab" style={{ display: activeTab === 'output' ? 'block' : 'none' }}>
+      <TargetSection
+        outputPath={outputPath}
+        setOutputPath={setOutputPath}
+        container={container}
+        setContainer={setContainer}
+        videoCodec={videoCodec}
+        setVideoCodec={setVideoCodec}
+        onStart={() => alert('Start encode - not wired yet')}
+        onReset={() => {
+          setOutputPath('');
+          setInputPath('');
+          setScript('');
+        }}
+      />
+    </div>
+  );
 
-      case 'jobs':
-        return (
-          <div className="jobs-tab">
-            <h2>Jobs</h2>
-            <p>Job management coming in Phase 3...</p>
-          </div>
-        );
-
-      default:
-        return <div>Unknown tab</div>;
-    }
-  };
+  const jobsPane = (
+    <div className="jobs-tab" style={{ display: activeTab === 'jobs' ? 'block' : 'none' }}>
+      <h2>Jobs</h2>
+      <p>Job management coming in Phase 3...</p>
+    </div>
+  );
 
   // Disable Processing and Output tabs when there's no input path loaded,
   // or when the VapourSynth probe has failed (in which case we cannot proceed).
@@ -300,7 +300,10 @@ export default function App(): JSX.Element {
 
   return (
     <MainLayout activeTab={activeTab} onTabChange={setActiveTab} disabledTabs={disabledTabs}>
-      {renderTabContent()}
+      {sourcePane}
+      {processingPane}
+      {outputPane}
+      {jobsPane}
 
       {/* Blocking indexing modal shown while indexing is running */}
       <IndexingModal indexing={indexing} />
