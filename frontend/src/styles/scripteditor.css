@@ -28,10 +28,25 @@
 
 .editor-actions {
   display: flex;
+  width: 100%;
+  flex-direction: column;
   gap: 8px;
   padding: 8px;
+}
+
+.indexer-selection {
+  display: flex;
+  gap: 8px;
   align-items: center;
-  float: right;
+}
+
+.indexer-select {
+  padding: 8px;
+}
+
+.editor-actions-btn-group {
+  display: flex;
+  gap: 8px;
 }
 
 .editor-actions .validate-button {

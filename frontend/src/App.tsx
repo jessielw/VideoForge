@@ -86,12 +86,6 @@ export default function App(): JSX.Element {
   async function selectFile(path: string) {
     setInputPath(path);
     setFileModalOpen(false);
-    // Provide a default VapourSynth + LWLibavSource template so the processing editor
-    // isn't empty and the user can press Apply immediately if desired.
-    if (!script) {
-      const template = `import vapoursynth as vs\ncore = vs.core\n\n# Load source\nclip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')\n\n# Add your filters here\n`;
-      setScript(template);
-    }
   }
 
   // Index the selected file
@@ -159,12 +153,6 @@ export default function App(): JSX.Element {
       const idx = await indexFile(inputPath);
       if (idx) {
         setIndexInfo(idx);
-        // If we don't yet have a basic script template and index returned OK, create one
-        if (idx.ok && !script) {
-          const template = `import vapoursynth as vs\ncore = vs.core\n\n# Load source\nclip = core.lsmas.LWLibavSource(r'${inputPath.replace(/\\/g, '\\\\')}')\n\n# Add your filters here\n`;
-          setScript(template);
-        }
-
         if (idx.ok) {
           setLastIndexedPath(inputPath);
         }
@@ -208,6 +196,7 @@ export default function App(): JSX.Element {
                   onScriptChange={setScript}
                   onValidate={handleScriptValidate}
                   onApply={handleScriptApply}
+                  selectedPath={inputPath}
                 />
                 <FilterPanel onFilterAdd={handleFilterAdd} />
               </div>
