@@ -144,6 +144,8 @@ async def list(path: str = Query(None)):
         ):
             try:
                 st = child.stat()
+                if child.is_file() and child.suffix not in (".mkv", ".mp4"):
+                    continue
                 entries.append(
                     {
                         "name": child.name,
@@ -165,22 +167,6 @@ async def list(path: str = Query(None)):
         return {"ok": False, "reason": f"Could not list directory: {e}"}
 
     return {"ok": True, "entries": entries, "path": str(p)}
-
-
-@app.get("/api/details")
-async def details(path: str = Query(...)):
-    """Return media info for a file."""
-    roots = get_allowed_roots()
-    p = Path(path)
-    if not is_under_allowed_roots(p, roots):
-        return {"ok": False, "reason": "Path not under allowed roots"}
-    if not p.exists() or not p.is_file():
-        return {"ok": False, "reason": "File does not exist"}
-    try:
-        media_info = MediaInfo.parse(str(p), legacy_stream_display=True)
-        return {"ok": True, "mediainfo": media_info.to_data()}
-    except Exception as e:
-        return {"ok": False, "reason": f"Failed to parse: {e}"}
 
 
 @app.post("/api/mediainfo")
