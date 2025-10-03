@@ -1,18 +1,16 @@
+import io
 import os
-import subprocess
-import tempfile
 from pathlib import Path
 
+import numpy as np
+import vapoursynth as vs
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pymediainfo import MediaInfo
 from fastapi.responses import Response
-from pydantic import BaseModel
 from PIL import Image
-import io
-import vapoursynth as vs
-import numpy as np
+from pydantic import BaseModel
+from pymediainfo import MediaInfo
 
 # os.environ["VAPOURSYNTH_PLUGIN_PATH"] = r"C:\VapourSynth\vs-plugins"
 
@@ -57,6 +55,30 @@ def is_under_allowed_roots(p: Path, roots):
         except Exception:
             continue
     return False
+
+
+# VapourSynth initialization helper
+VS_INITIALIZED = False
+PLUGIN_PATH = os.environ.get("VAPOURSYNTH_PLUGIN_PATH")
+
+
+def init_vapoursynth():
+    """Initialize VapourSynth core and load plugins once."""
+    global VS_INITIALIZED
+    core = vs.core
+
+    if VS_INITIALIZED:
+        return core
+
+    # try to load plugins from configured path (if provided)
+    if PLUGIN_PATH:
+        try:
+            core.std.LoadAllPlugins(str(PLUGIN_PATH))
+        except Exception:
+            pass
+
+    VS_INITIALIZED = True
+    return core
 
 
 @app.get("/api/health")
@@ -161,31 +183,36 @@ async def details(path: str = Query(...)):
         return {"ok": False, "reason": f"Failed to parse: {e}"}
 
 
-@app.post("/api/index")
-async def index_file(request: Request):
-    print("IN REQUEST", flush=True)
+@app.post("/api/mediainfo")
+async def mediainfo_file(request: Request):
+    """Return MediaInfo for a file. This endpoint only runs MediaInfo parsing and returns track info.
+    VapourSynth probing (frame count/size/fps) is handled by /api/vs/probe which uses the VapourSynth API directly.
+    """
     data = await request.json()
-    print("DATA", data, flush=True)
     file_path = data.get("path")
-    print("Path:", file_path, flush=True)
-    if not file_path or not os.path.exists(file_path):
+    if not file_path:
+        return {"ok": False, "error": "No path provided"}
+
+    p = Path(file_path)
+    roots = get_allowed_roots()
+    if roots and not is_under_allowed_roots(p, roots):
+        return {"ok": False, "error": "Path not under allowed roots"}
+
+    if not p.exists():
         return {"ok": False, "error": "File not found"}
 
     try:
-        # Use MediaInfo to get comprehensive media information
-        media_info = MediaInfo.parse(file_path)
-        
+        media_info = MediaInfo.parse(str(p))
         result = {
             "ok": True,
-            "path": file_path,
+            "path": str(p),
             "general": {},
             "video_tracks": [],
             "audio_tracks": [],
             "subtitle_tracks": [],
-            "menu_tracks": []
+            "menu_tracks": [],
         }
-        
-        # Extract general information
+
         for track in media_info.tracks:
             if track.track_type == "General":
                 result["general"] = {
@@ -197,9 +224,8 @@ async def index_file(request: Request):
                     "format_profile": track.format_profile,
                     "encoded_date": track.encoded_date,
                     "writing_application": track.writing_application,
-                    "writing_library": track.writing_library
+                    "writing_library": track.writing_library,
                 }
-            
             elif track.track_type == "Video":
                 video_info = {
                     "track_id": track.track_id,
@@ -225,10 +251,9 @@ async def index_file(request: Request):
                     "codec_id": track.codec_id,
                     "encoded_library_name": track.encoded_library_name,
                     "encoded_library_version": track.encoded_library_version,
-                    "encoded_library_settings": track.encoded_library_settings
+                    "encoded_library_settings": track.encoded_library_settings,
                 }
                 result["video_tracks"].append(video_info)
-            
             elif track.track_type == "Audio":
                 audio_info = {
                     "track_id": track.track_id,
@@ -246,10 +271,9 @@ async def index_file(request: Request):
                     "forced": track.forced,
                     "compression_mode": track.compression_mode,
                     "encoded_library_name": track.encoded_library_name,
-                    "encoded_library_version": track.encoded_library_version
+                    "encoded_library_version": track.encoded_library_version,
                 }
                 result["audio_tracks"].append(audio_info)
-            
             elif track.track_type == "Text":
                 subtitle_info = {
                     "track_id": track.track_id,
@@ -258,140 +282,93 @@ async def index_file(request: Request):
                     "language": track.language,
                     "title": track.title,
                     "default": track.default,
-                    "forced": track.forced
+                    "forced": track.forced,
                 }
                 result["subtitle_tracks"].append(subtitle_info)
-            
             elif track.track_type == "Menu":
                 menu_info = {
                     "track_id": track.track_id,
                     "format": track.format,
-                    "duration": track.duration
+                    "duration": track.duration,
                 }
                 result["menu_tracks"].append(menu_info)
-        
-        # Also get VapourSynth frame information for accuracy
-        try:
-            vpy_script = f"""
-import vapoursynth as vs
-core = vs.core
-clip = core.lsmas.LWLibavSource(r'''{file_path}''')
-print('VS_FRAME_COUNT:', clip.num_frames)
-print('VS_WIDTH:', clip.width)
-print('VS_HEIGHT:', clip.height)
-print('VS_FPS_NUM:', clip.fps.numerator)
-print('VS_FPS_DEN:', clip.fps.denominator)
-"""
-            with tempfile.NamedTemporaryFile(
-                delete=False, suffix=".vpy", mode="w", encoding="utf-8"
-            ) as f:
-                f.write(vpy_script)
-                script_path = f.name
 
-            vs_result = subprocess.run(
-                ["vspipe", "--info", script_path, "-"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            
-            vs_info = {}
-            for line in vs_result.stdout.splitlines():
-                if "VS_FRAME_COUNT:" in line:
-                    vs_info["frames"] = int(line.split(":", 1)[1].strip())
-                elif "VS_WIDTH:" in line:
-                    vs_info["width"] = int(line.split(":", 1)[1].strip())
-                elif "VS_HEIGHT:" in line:
-                    vs_info["height"] = int(line.split(":", 1)[1].strip())
-                elif "VS_FPS_NUM:" in line:
-                    vs_info["fps_num"] = int(line.split(":", 1)[1].strip())
-                elif "VS_FPS_DEN:" in line:
-                    vs_info["fps_den"] = int(line.split(":", 1)[1].strip())
-            
-            if vs_info.get("fps_num") and vs_info.get("fps_den"):
-                vs_info["fps"] = vs_info["fps_num"] / vs_info["fps_den"]
-            
-            result["vapoursynth"] = vs_info
-            
-            os.remove(script_path)
-        except Exception as e:
-            print(f"VapourSynth probe failed: {e}", flush=True)
-            result["vapoursynth"] = {"error": str(e)}
-        
         return result
-        
     except Exception as e:
         print(f"MediaInfo parsing failed: {e}", flush=True)
         return {"ok": False, "error": f"Failed to parse media info: {str(e)}"}
 
 
-# Legacy endpoint for backward compatibility
-@app.post("/api/index_legacy")
-async def index_file_legacy(request: Request):
-    print("IN REQUEST", flush=True)
+@app.post("/api/vs/probe")
+async def vapoursynth_probe_file(request: Request):
+    """Probe a file using VapourSynth directly to get frame count, width, height, and fps.
+
+    Returns a combined result with MediaInfo + VapourSynth probing when possible.
+    """
     data = await request.json()
-    print("DATA", data, flush=True)
     file_path = data.get("path")
-    print("Path:", file_path, flush=True)
-    if not file_path or not os.path.exists(file_path):
+    if not file_path:
+        return {"ok": False, "error": "No path provided"}
+
+    p = Path(file_path)
+    roots = get_allowed_roots()
+    if roots and not is_under_allowed_roots(p, roots):
+        return {"ok": False, "error": "Path not under allowed roots"}
+
+    if not p.exists():
         return {"ok": False, "error": "File not found"}
 
-    # Create a temporary VapourSynth script to probe the file
-    vpy_script = f"""
-import vapoursynth as vs
-core = vs.core
-clip = core.lsmas.LWLibavSource(r'''{file_path}''')
-print('FRAME_COUNT:', clip.num_frames)
-print('WIDTH:', clip.width)
-print('HEIGHT:', clip.height)
-"""
-    with tempfile.NamedTemporaryFile(
-        delete=False, suffix=".vpy", mode="w", encoding="utf-8"
-    ) as f:
-        f.write(vpy_script)
-        script_path = f.name
-
+    # Start with MediaInfo
     try:
-        # Run vspipe to execute the script and capture output
-        result = subprocess.run(
-            ["vspipe", "--info", script_path, "-"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        output = result.stdout
-        print("Output:", output, flush=True)
-        # Parse output for frame count, width, height
-        frame_count = None
-        width = None
-        height = None
-        for line in output.splitlines():
-            if "FRAME_COUNT:" in line:
-                frame_count = int(line.split(":", 1)[1].strip())
-            elif "WIDTH:" in line:
-                width = int(line.split(":", 1)[1].strip())
-            elif "HEIGHT:" in line:
-                height = int(line.split(":", 1)[1].strip())
-        info = {
-            "ok": True if frame_count and width and height else False,
-            "frame_count": frame_count,
-            "width": width,
-            "height": height,
-            "output": output if not (frame_count and width and height) else None,
-        }
-        return info
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-    finally:
+        media_info = MediaInfo.parse(str(p))
+    except Exception:
+        media_info = None
+
+    vs_info = {}
+    try:
+        core = init_vapoursynth()
+
+        # Use LWLibavSource if available, otherwise try ffms2
+        clip = None
         try:
-            os.remove(script_path)
+            clip = core.lsmas.LWLibavSource(str(p))
         except Exception:
-            pass
+            try:
+                clip = core.ffms2.Source(str(p))
+            except Exception as e:
+                raise RuntimeError(f"No suitable source filter available: {e}")
+
+        # Collect frame info
+        vs_info["frames"] = int(clip.num_frames)
+        vs_info["width"] = int(clip.width)
+        vs_info["height"] = int(clip.height)
+        try:
+            vs_info["fps_num"] = int(clip.fps.numerator)
+            vs_info["fps_den"] = int(clip.fps.denominator)
+            vs_info["fps"] = vs_info["fps_num"] / vs_info["fps_den"]
+        except Exception:
+            # Some sources may not expose fps as a rational
+            try:
+                vs_info["fps"] = float(clip.fps)
+            except Exception:
+                pass
+
+    except Exception as e:
+        print(f"VapourSynth probe failed: {e}", flush=True)
+        vs_info = {"error": str(e)}
+
+    return {
+        "ok": True,
+        "path": str(p),
+        "mediainfo": media_info.to_data() if media_info else None,
+        "vapoursynth": vs_info,
+    }
 
 
 # Pydantic models for API requests
 class ScriptValidationRequest(BaseModel):
     script: str
+
 
 class ScriptValidationResponse(BaseModel):
     valid: bool
@@ -406,58 +383,63 @@ async def validate_script(request: ScriptValidationRequest):
         script = request.script.strip()
         if not script:
             return ScriptValidationResponse(valid=False, error="Script is empty")
-        
+
         # Try to compile the script to check for syntax errors
         try:
-            compile(script, '<string>', 'exec')
+            compile(script, "<string>", "exec")
         except SyntaxError as e:
             return ScriptValidationResponse(valid=False, error=f"Syntax error: {e}")
-        
+
         # Basic VapourSynth validation - check for required components
         if "import vapoursynth" not in script and "import vs" not in script:
-            return ScriptValidationResponse(valid=False, error="Script must import vapoursynth")
-        
+            return ScriptValidationResponse(
+                valid=False, error="Script must import vapoursynth"
+            )
+
         # Note: set_output() is no longer required since it gets auto-appended for preview
-        
+
         # TODO: More thorough validation by actually running the script in a sandbox
         return ScriptValidationResponse(valid=True)
-        
+
     except Exception as e:
-        return ScriptValidationResponse(valid=False, error=f"Validation error: {str(e)}")
+        return ScriptValidationResponse(
+            valid=False, error=f"Validation error: {str(e)}"
+        )
 
 
 @app.get("/api/frame")
 async def get_frame_with_script(
     path: str = Query(..., description="Path to the video file"),
     frame: int = Query(0, description="Frame number to extract"),
-    script: str = Query(None, description="Optional VapourSynth script to apply")
+    script: str = Query(None, description="Optional VapourSynth script to apply"),
 ):
     """Extract a frame with optional VapourSynth script applied."""
     try:
         p = Path(path)
         roots = get_allowed_roots()
-        
+
         if roots and not is_under_allowed_roots(p, roots):
             return Response(content="File path not allowed", status_code=403)
-        
+
         if not p.exists():
             return Response(content="File not found", status_code=404)
-        
+
         # Load VapourSynth script in-process for default frame extraction
         core = vs.core
-        try:
-            core.std.LoadPlugin(r"C:\VapourSynth\vs-plugins\LSMASHSource.dll")
-        except Exception:
-            # Plugin already loaded
-            pass
-        
+        core.std.LoadAllPlugins(r"C:\VapourSynth\vs-plugins")
+        # try:
+        #     core.std.LoadPlugin(r"C:\VapourSynth\vs-plugins\LSMASHSource.dll")
+        # except Exception:
+        #     # Plugin already loaded
+        #     pass
+
         # If no script provided, use default loading
         if not script or script.strip() == "":
             clip = core.lsmas.LWLibavSource(str(p.absolute()))
             # Convert to RGB24 with proper matrix
             clip = core.resize.Bicubic(clip, format=vs.RGB24, matrix_in_s="709")
             vs_frame = clip.get_frame(frame)
-            
+
             # Convert to RGB - RGB24 format has planes in order R, G, B
             r = np.asarray(vs_frame[0])
             g = np.asarray(vs_frame[1])
@@ -467,67 +449,75 @@ async def get_frame_with_script(
             buf = io.BytesIO()
             img.save(buf, format="PNG")
             buf.seek(0)
-            
+
             return Response(content=buf.read(), media_type="image/png")
-        
+
         # Apply the VapourSynth script
         core = vs.core
-        
+
         # The script should already have the file loaded with lsmas.LWLibavSource
         # Auto-append required lines for preview
         preview_script = script
-        
+
         # Check if the script already has RGB conversion and set_output
         if "format=vs.RGB24" not in script:
-            preview_script += "\n\n# Convert to RGB for preview (remove this line for final output)"
-            preview_script += "\nclip = core.resize.Bicubic(clip, format=vs.RGB24, matrix_in_s=\"709\")"
-        
+            preview_script += (
+                "\n\n# Convert to RGB for preview (remove this line for final output)"
+            )
+            preview_script += (
+                '\nclip = core.resize.Bicubic(clip, format=vs.RGB24, matrix_in_s="709")'
+            )
+
         if "set_output()" not in script:
             preview_script += "\n\n# Set output"
             preview_script += "\nclip.set_output()"
-        
+
         print("🎬 EXECUTING VAPOURSYNTH SCRIPT:")
         print(f"📁 File path: {p.absolute()}")
         print(f"📜 Original Script: {script}")
         print(f"📜 Preview Script: {preview_script}")
-        
+
         # Execute the preview script and extract the clip variable
         vs_globals = {"vs": vs, "core": core}
         exec(preview_script, vs_globals)
-        
+
         # Get the clip from the namespace
-        if 'clip' not in vs_globals:
-            return Response(content="Script did not define a 'clip' variable", status_code=400)
-        
-        clip = vs_globals['clip']
-        
+        if "clip" not in vs_globals:
+            return Response(
+                content="Script did not define a 'clip' variable", status_code=400
+            )
+
+        clip = vs_globals["clip"]
+
         if frame >= clip.num_frames:
             frame = clip.num_frames - 1
-        
+
         # Get the frame
         vs_frame = clip.get_frame(frame)
-        
+
         # Get frame format info
         format_name = vs_frame.format.name
-        print(f"🎨 Frame format: {format_name}, Size: {vs_frame.width}x{vs_frame.height}")
-        
+        print(
+            f"🎨 Frame format: {format_name}, Size: {vs_frame.width}x{vs_frame.height}"
+        )
+
         # Convert to RGB based on the format
-        if format_name == 'RGB24':
+        if format_name == "RGB24":
             # RGB24 format - planes are R, G, B
             r = np.asarray(vs_frame[0])
             g = np.asarray(vs_frame[1])
             b = np.asarray(vs_frame[2])
-        elif format_name.startswith('YUV'):
+        elif format_name.startswith("YUV"):
             # YUV format - convert to RGB
             y_array = np.array(vs_frame[0], copy=False)
             u_array = np.array(vs_frame[1], copy=False)
             v_array = np.array(vs_frame[2], copy=False)
-            
+
             # Basic YUV to RGB conversion (simplified)
             y = y_array.astype(np.float32)
             u = u_array.astype(np.float32) - 128
             v = v_array.astype(np.float32) - 128
-            
+
             r = np.clip(y + 1.402 * v, 0, 255).astype(np.uint8)
             g = np.clip(y - 0.344136 * u - 0.714136 * v, 0, 255).astype(np.uint8)
             b = np.clip(y + 1.772 * u, 0, 255).astype(np.uint8)
@@ -538,16 +528,16 @@ async def get_frame_with_script(
             r = np.asarray(rgb_frame[0])
             g = np.asarray(rgb_frame[1])
             b = np.asarray(rgb_frame[2])
-        
+
         # Stack planes into (H, W, 3) RGB image
         rgb = np.stack([r, g, b], axis=-1)
         img = Image.fromarray(rgb, "RGB")
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
-        
+
         return Response(content=buf.read(), media_type="image/png")
-        
+
     except Exception as e:
         print(f"Script frame extraction error: {str(e)}", flush=True)
         return Response(content=f"Script frame extraction error: {e}", status_code=500)

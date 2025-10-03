@@ -86,6 +86,12 @@ export default function App(): JSX.Element {
   async function selectFile(path: string) {
     setInputPath(path);
     setFileModalOpen(false);
+    // Fetch MediaInfo/index info for UI immediately on selection
+    try {
+      await indexFile(path);
+    } catch (e) {
+      console.error('Index on select failed:', e);
+    }
   }
 
   // Index the selected file
@@ -93,7 +99,7 @@ export default function App(): JSX.Element {
     setIndexing(true);
     console.log('Indexing file:', path);
     try {
-      const indexResp = await fetch(`${API}/api/index`, {
+      const indexResp = await fetch(`${API}/api/mediainfo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path }),
@@ -146,23 +152,27 @@ export default function App(): JSX.Element {
 
   // Handle script application (refresh preview)
   const handleScriptApply = async () => {
-    // Run indexing if we have an inputPath, update index info, then bump previewVersion
+    // Probe the selected file via VapourSynth (frame/fps/size). This is the Apply action.
     if (!inputPath) return;
     setIndexing(true);
     try {
-      const idx = await indexFile(inputPath);
-      if (idx) {
-        setIndexInfo(idx);
-        if (idx.ok) {
-          setLastIndexedPath(inputPath);
-        }
+      const resp = await fetch(`${API}/api/vs/probe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: inputPath }),
+      });
+      const data = await resp.json();
+      console.log('Probe data:', data);
+      setIndexInfo(data);
+      if (data && data.ok) {
+        setLastIndexedPath(inputPath);
       }
-    } catch (e) {
-      console.error('Indexing failed during apply:', e);
-    } finally {
-      setIndexing(false);
       // Trigger preview refresh
       setPreviewVersion(v => v + 1);
+    } catch (e) {
+      console.error('Probing failed during apply:', e);
+    } finally {
+      setIndexing(false);
     }
   };
 
@@ -256,7 +266,8 @@ export default function App(): JSX.Element {
   }, [inputPath, activeTab]);
 
   // When the user opens the Processing tab, auto-run the apply/index once for the current
-  // input path if it hasn't been indexed yet. This avoids re-indexing repeatedly.
+  // input path if it hasn't been indexed yet. This provides an initial preview without
+  // requiring the user to click Apply every time they open the tab.
   React.useEffect(() => {
     if (activeTab !== 'processing') return;
     if (!inputPath) return;
