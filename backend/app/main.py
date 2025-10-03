@@ -2,6 +2,7 @@ import io
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import vapoursynth as vs
@@ -320,7 +321,7 @@ async def get_frame_with_script(
 
         # Load VapourSynth script in-process for default frame extraction
         core = vs.core
-        core.std.LoadAllPlugins(r"C:\VapourSynth\vs-plugins")
+        core.std.LoadAllPlugins(r"C:\VapourSynth\vs-plugins") # TODO: this shouldn't need to be called every time
         # try:
         #     core.std.LoadPlugin(r"C:\VapourSynth\vs-plugins\LSMASHSource.dll")
         # except Exception:
@@ -518,6 +519,173 @@ async def get_frame_with_script(
         print(f"Script frame extraction error: {str(e)}", flush=True)
         return Response(content=f"Script frame extraction error: {e}", status_code=500)
 
+
+@app.post("/api/auto-crop")
+async def auto_crop(request: Request):
+    """Server-side auto-crop: sample frames and detect crop values server-side.
+
+    Request JSON: { path: string, sample_count?: number }
+    Response JSON: { ok: True, path, detections: [{frame, crop:{left,top,right,bottom}}], recommendedCrop }
+    """
+    data = await request.json()
+    path = data.get("path")
+    sample_count = int(data.get("sample_count", 20)) if data.get("sample_count") else 20
+
+    if not path:
+        return {"ok": False, "error": "No path provided"}
+
+    def round_down_even(n: int) -> int:
+        r = int(n or 0)
+        return r if r % 2 == 0 else max(0, r - 1)
+
+    try:
+        p = Path(path)
+        roots = get_allowed_roots()
+
+        if roots and not is_under_allowed_roots(p, roots):
+            return {"ok": False, "error": "File path not allowed"}
+
+        if not p.exists():
+            return {"ok": False, "error": "File not found"}
+
+        core = init_vapoursynth()
+
+        # Try to open source with L-Smash then FFMS2
+        clip = None
+        try:
+            clip = core.lsmas.LWLibavSource(str(p))
+        except Exception:
+            try:
+                clip = core.ffms2.Source(str(p))
+            except Exception as e:
+                return {"ok": False, "error": f"No suitable source filter available: {e}"}
+
+        total_frames = int(clip.num_frames)
+
+        # No fast-path plugin usage; use pure VapourSynth frame extraction and analysis below
+
+        # Determine sample frames evenly across the clip
+        n = max(5, min(50, sample_count))
+        step = max(1, total_frames // n)
+        sample_frames = [min(i * step, total_frames - 1) for i in range(n)]
+
+        # Convert clip to RGB24 once for consistent frame extraction
+        rgb_clip = core.resize.Bicubic(clip, format=vs.RGB24, matrix_in_s='709')
+        
+        # Extract frames as RGB numpy arrays (sequential for simplicity)
+        frames_rgb = []
+        for frame_no in sample_frames:
+            try:
+                fn = min(frame_no, clip.num_frames - 1)
+                rgb_frame = rgb_clip.get_frame(fn)
+                # Stack RGB planes directly
+                rgb = np.stack([
+                    np.asarray(rgb_frame[0]),
+                    np.asarray(rgb_frame[1]),
+                    np.asarray(rgb_frame[2])
+                ], axis=-1)
+                frames_rgb.append(rgb)
+            except Exception as e:
+                print(f"Failed to extract frame {frame_no}: {e}", flush=True)
+
+        # Analyze frames in parallel
+        import concurrent.futures
+
+        def analyze_numpy_frame(rgb_arr):
+            """StaxRip-like AutoCrop detection using HSL lightness."""
+            h, w = rgb_arr.shape[:2]
+
+            # Compute HSL lightness: L = (max(R,G,B) + min(R,G,B)) / 2 / 255
+            lum = (rgb_arr.max(axis=2) + rgb_arr.min(axis=2)) / 510.0
+            lum_threshold = 0.06
+
+            # Sample 21 positions along each axis (matches StaxRip)
+            xValues = [int(w * x / 21) for x in range(21)]
+            yValues = [int(h * y / 21) for y in range(21)]
+
+            quarter_h = max(1, h // 4)
+            quarter_w = max(1, w // 4)
+
+            # Scan columns for top/bottom
+            top_samples = []
+            bottom_samples = []
+            for xv in xValues:
+                # Scan from top
+                top_val = 0
+                for y in range(quarter_h):
+                    if lum[y, xv] < lum_threshold:
+                        top_val = y + 1
+                    else:
+                        break
+                top_samples.append(top_val)
+
+                # Scan from bottom
+                bottom_val = 0
+                for y in range(h - 1, h - 1 - quarter_h, -1):
+                    if lum[y, xv] < lum_threshold:
+                        bottom_val = h - y
+                    else:
+                        break
+                bottom_samples.append(bottom_val)
+
+            # Scan rows for left/right
+            left_samples = []
+            right_samples = []
+            for yv in yValues:
+                # Scan from left
+                left_val = 0
+                for x in range(quarter_w):
+                    if lum[yv, x] < lum_threshold:
+                        left_val = x + 1
+                    else:
+                        break
+                left_samples.append(left_val)
+
+                # Scan from right
+                right_val = 0
+                for x in range(w - 1, w - 1 - quarter_w, -1):
+                    if lum[yv, x] < lum_threshold:
+                        right_val = w - x
+                    else:
+                        break
+                right_samples.append(right_val)
+
+            return {
+                "left_samples": left_samples,
+                "top_samples": top_samples,
+                "right_samples": right_samples,
+                "bottom_samples": bottom_samples
+            }
+
+        # Analyze all frames in parallel
+        all_samples = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 4)) as ex:
+            all_samples = list[dict[str, list[Any]]](ex.map(analyze_numpy_frame, frames_rgb))
+
+        all_left = []
+        all_top = []
+        all_right = []
+        all_bottom = []
+        
+        for samples in all_samples:
+            all_left.extend(samples['left_samples'])
+            all_top.extend(samples['top_samples'])
+            all_right.extend(samples['right_samples'])
+            all_bottom.extend(samples['bottom_samples'])
+
+        recommended = {
+            "left": round_down_even(min(all_left) if all_left else 0),
+            "top": round_down_even(min(all_top) if all_top else 0),
+            "right": round_down_even(min(all_right) if all_right else 0),
+            "bottom": round_down_even(min(all_bottom) if all_bottom else 0),
+        }
+
+        return {"ok": True, "path": str(p), "recommendedCrop": recommended}
+
+    except Exception as e:
+        print(f"Auto-crop failed: {e}", flush=True)
+        return {"ok": False, "error": str(e)}
+    
 
 # @app.get("/api/frame/meta")
 # async def get_frame_meta(

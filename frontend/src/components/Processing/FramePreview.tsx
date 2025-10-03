@@ -60,7 +60,6 @@ export default function FramePreview({
   // Use the auto crop detection hook
   const { autoCropDetecting, autoCropResult, detectAutoCrop } = useAutoCropDetection({
     inputPath,
-    maxFrames,
     script,
     onScriptChange,
   });
@@ -537,7 +536,10 @@ export default function FramePreview({
                         style={{
                           width: `${(currentCrop.left / videoWidth) * 100}%`,
                           top: `${(currentCrop.top / videoHeight) * 100}%`,
-                          height: `${((videoHeight - currentCrop.top - currentCrop.bottom) / videoHeight) * 100}%`,
+                          height: `${
+                            ((videoHeight - currentCrop.top - currentCrop.bottom) / videoHeight) *
+                            100
+                          }%`,
                         }}
                       />
                     )}
@@ -547,7 +549,10 @@ export default function FramePreview({
                         style={{
                           width: `${(currentCrop.right / videoWidth) * 100}%`,
                           top: `${(currentCrop.top / videoHeight) * 100}%`,
-                          height: `${((videoHeight - currentCrop.top - currentCrop.bottom) / videoHeight) * 100}%`,
+                          height: `${
+                            ((videoHeight - currentCrop.top - currentCrop.bottom) / videoHeight) *
+                            100
+                          }%`,
                         }}
                       />
                     )}
