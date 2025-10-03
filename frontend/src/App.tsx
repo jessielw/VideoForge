@@ -8,6 +8,7 @@ import FramePreview from './components/Processing/FramePreview';
 import TargetSection from './components/Target';
 import FileBrowserModal from './components/FileBrowserModal';
 import IndexingModal from './components/Processing/IndexingModal';
+import ProbeFailureModal from './components/Source/ProbeFailureModal';
 import './styles/index.css';
 
 const API = 'http://127.0.0.1:8000';
@@ -256,14 +257,29 @@ export default function App(): JSX.Element {
     }
   };
 
-  // Disable Processing and Output tabs when there's no input path loaded
-  const disabledTabs = inputPath ? [] : ['processing', 'output'];
+  // Disable Processing and Output tabs when there's no input path loaded,
+  // or when the VapourSynth probe has failed (in which case we cannot proceed).
+  let disabledTabs: string[] = [];
+  if (!inputPath) {
+    disabledTabs = ['processing', 'output'];
+  } else if (indexInfo && indexInfo.vapoursynth && indexInfo.vapoursynth.error) {
+    // Probe failed; prevent user from using Processing/Output since previews/encodes won't work
+    disabledTabs = ['processing', 'output'];
+  }
+
   // If inputPath is cleared, ensure we return to Source tab
   React.useEffect(() => {
     if (!inputPath && activeTab !== 'source') {
       setActiveTab('source');
     }
   }, [inputPath, activeTab]);
+
+  // Redirect user to Source if the vapoursynth probe failed while they were on a blocked tab
+  React.useEffect(() => {
+    if (indexInfo && indexInfo.vapoursynth && indexInfo.vapoursynth.error) {
+      if (activeTab !== 'source') setActiveTab('source');
+    }
+  }, [indexInfo?.vapoursynth?.error, activeTab]);
 
   // When the user opens the Processing tab, auto-run the apply/index once for the current
   // input path if it hasn't been indexed yet. This provides an initial preview without
@@ -283,6 +299,20 @@ export default function App(): JSX.Element {
 
       {/* Blocking indexing modal shown while indexing is running */}
       <IndexingModal indexing={indexing} />
+
+      {/* Probe failure modal blocks processing/output when VapourSynth probe failed */}
+      <ProbeFailureModal
+        error={indexInfo?.vapoursynth?.error}
+        onClose={() => {
+          // Clear probe error locally so user can attempt to re-index/probe
+          setIndexInfo((prev: any) => {
+            if (!prev) return prev;
+            const copy = { ...prev };
+            if (copy.vapoursynth) copy.vapoursynth = { ...copy.vapoursynth, error: null };
+            return copy;
+          });
+        }}
+      />
 
       {fileModalOpen && (
         <FileBrowserModal

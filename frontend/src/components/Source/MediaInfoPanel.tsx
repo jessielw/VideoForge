@@ -147,54 +147,71 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
     );
   }
 
+  // mediainfo from backend
+  const mi = (indexInfo as any).mediainfo || indexInfo;
+
+  // Helper to safely parse numeric-like fields that sometimes come back as strings
+  const parseNum = (v: any): number | undefined => {
+    if (v === undefined || v === null) return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+
+  // Extract tracks from MediaInfo structure
+  const tracks: any[] = Array.isArray(mi?.tracks) ? mi.tracks : [];
+  const generalTrack = tracks.find(t => t.track_type === 'General') || {};
+  const videoTracks = tracks.filter(t => t.track_type === 'Video');
+  const audioTracks = tracks.filter(t => t.track_type === 'Audio');
+  const subtitleTracks = tracks.filter(t => t.track_type === 'Text' || t.track_type === 'Subtitle');
+
   const renderGeneralInfo = () => (
     <div className="info-section">
       <div className="info-grid">
         <div className="info-item">
           <label>Filename:</label>
-          <span>{indexInfo.general?.filename || 'Unknown'}</span>
+          <span>{generalTrack.file_name || 'Unknown'}</span>
         </div>
         <div className="info-item">
           <label>Format:</label>
-          <span>{indexInfo.general?.format || 'Unknown'}</span>
+          <span>{generalTrack.format || 'Unknown'}</span>
         </div>
         <div className="info-item">
           <label>File Size:</label>
-          <span>{formatFileSize(indexInfo.general?.file_size)}</span>
+          <span>{formatFileSize(parseNum(generalTrack.file_size))}</span>
         </div>
         <div className="info-item">
           <label>Duration:</label>
-          <span>{formatDuration(indexInfo.general?.duration)}</span>
+          <span>{formatDuration(parseNum(generalTrack.duration))}</span>
         </div>
         <div className="info-item">
           <label>Overall Bitrate:</label>
-          <span>{formatBitrate(indexInfo.general?.overall_bitrate)}</span>
+          <span>{formatBitrate(parseNum(generalTrack.overall_bit_rate))}</span>
         </div>
       </div>
 
       {/* Additional details section */}
-      {(indexInfo.general?.format_profile ||
-        indexInfo.general?.writing_application ||
-        indexInfo.general?.writing_library) && (
+      {(generalTrack.format_profile ||
+        generalTrack.writing_application ||
+        generalTrack.writing_library) && (
         <div className="additional-info">
           <h4>Additional Details</h4>
           <div className="info-grid">
-            {indexInfo.general?.format_profile && (
+            {generalTrack.format_profile && (
               <div className="info-item">
                 <label>Profile:</label>
-                <span>{indexInfo.general.format_profile}</span>
+                <span>{generalTrack.format_profile}</span>
               </div>
             )}
-            {indexInfo.general?.writing_application && (
+            {generalTrack.writing_application && (
               <div className="info-item">
                 <label>Encoded By:</label>
-                <span>{indexInfo.general.writing_application}</span>
+                <span>{generalTrack.writing_application}</span>
               </div>
             )}
-            {indexInfo.general?.writing_library && (
+            {generalTrack.writing_library && (
               <div className="info-item">
                 <label>Library:</label>
-                <span>{indexInfo.general.writing_library}</span>
+                <span>{generalTrack.writing_library}</span>
               </div>
             )}
           </div>
@@ -205,8 +222,8 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
 
   const renderVideoInfo = () => (
     <div className="info-section">
-      {indexInfo.video_tracks && indexInfo.video_tracks.length > 0 ? (
-        indexInfo.video_tracks.map((track, index) => (
+      {videoTracks && videoTracks.length > 0 ? (
+        videoTracks.map((track, index) => (
           <div key={index} className="track-info">
             <h4>Video Track {track.track_id || index + 1}</h4>
 
@@ -242,7 +259,7 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
               </div>
               <div className="info-item">
                 <label>Bitrate:</label>
-                <span>{formatBitrate(track.bit_rate)}</span>
+                <span>{formatBitrate(parseNum(track.bit_rate))}</span>
               </div>
               <div className="info-item">
                 <label>Bit Depth:</label>
@@ -335,8 +352,8 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
 
   const renderAudioInfo = () => (
     <div className="info-section">
-      {indexInfo.audio_tracks && indexInfo.audio_tracks.length > 0 ? (
-        indexInfo.audio_tracks.map((track, index) => (
+      {audioTracks && audioTracks.length > 0 ? (
+        audioTracks.map((track, index) => (
           <div key={index} className="track-info">
             <h4>
               Audio Track {track.track_id || index + 1}
@@ -403,8 +420,8 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
 
   const renderSubtitleInfo = () => (
     <div className="info-section">
-      {indexInfo.subtitle_tracks && indexInfo.subtitle_tracks.length > 0 ? (
-        indexInfo.subtitle_tracks.map((track, index) => (
+      {subtitleTracks && subtitleTracks.length > 0 ? (
+        subtitleTracks.map((track, index) => (
           <div key={index} className="track-info">
             <h4>
               Subtitle Track {track.track_id || index + 1}
@@ -454,19 +471,19 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
           className={`info-tab ${activeTab === 'video' ? 'active' : ''}`}
           onClick={() => setActiveTab('video')}
         >
-          Video ({indexInfo.video_tracks?.length || 0})
+          Video ({videoTracks.length || 0})
         </button>
         <button
           className={`info-tab ${activeTab === 'audio' ? 'active' : ''}`}
           onClick={() => setActiveTab('audio')}
         >
-          Audio ({indexInfo.audio_tracks?.length || 0})
+          Audio ({audioTracks.length || 0})
         </button>
         <button
           className={`info-tab ${activeTab === 'subtitles' ? 'active' : ''}`}
           onClick={() => setActiveTab('subtitles')}
         >
-          Subtitles ({indexInfo.subtitle_tracks?.length || 0})
+          Subtitles ({subtitleTracks.length || 0})
         </button>
       </div>
 

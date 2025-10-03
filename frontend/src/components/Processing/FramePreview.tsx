@@ -40,14 +40,13 @@ export default function FramePreview({
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<number | null>(null);
 
-  // Get frame count from new data structure
-  const maxFrames =
-    indexInfo?.vapoursynth?.frames || indexInfo?.video_tracks?.[0]?.frame_count || 1000;
+  // Use VapourSynth probe results for preview. If the probe isn't present,
+  // fall back to safe defaults.
+  const vsInfo = indexInfo?.vapoursynth || {};
 
-  // Get resolution from new data structure
-  const videoWidth = indexInfo?.vapoursynth?.width || indexInfo?.video_tracks?.[0]?.width || 1920;
-  const videoHeight =
-    indexInfo?.vapoursynth?.height || indexInfo?.video_tracks?.[0]?.height || 1080;
+  const maxFrames = (typeof vsInfo.frames === 'number' && vsInfo.frames) || 1000;
+  const videoWidth = (typeof vsInfo.width === 'number' && vsInfo.width) || 1920;
+  const videoHeight = (typeof vsInfo.height === 'number' && vsInfo.height) || 1080;
 
   const API = 'http://127.0.0.1:8000';
 
