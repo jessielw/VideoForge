@@ -17,6 +17,7 @@ export default function FrameControls({
   const [inputValue, setInputValue] = useState(currentFrame.toString());
   const [isDragging, setIsDragging] = useState(false);
   const debounceTimeoutRef = useRef<number | null>(null);
+  const sliderRef = useRef<HTMLInputElement | null>(null);
 
   // Handle slider changes: update visual state and debounce finalization
   const handleSliderChange = (newFrame: number) => {
@@ -104,23 +105,28 @@ export default function FrameControls({
           value={inputValue}
           onChange={e => handleTextInputChange(e.target.value)}
           onBlur={handleTextInputBlur}
-          onKeyPress={handleTextInputKeyPress}
+          onKeyDown={handleTextInputKeyPress}
           className="frame-input"
           disabled={loading}
           placeholder="Frame"
         />
         <span className="frame-total">of {maxFrames}</span>
+        {/* Static tooltip placed at the top-left of the input box while dragging */}
+        {isDragging && <div className="frame-static-tooltip">{sliderFrame}</div>}
       </div>
 
-      <input
-        type="range"
-        min="0"
-        max={maxFrames - 1}
-        value={isDragging ? sliderFrame : currentFrame}
-        onChange={e => handleSliderChange(parseInt(e.target.value))}
-        className="frame-slider"
-        disabled={loading}
-      />
+      <div className="frame-slider-wrapper">
+        <input
+          ref={el => (sliderRef.current = el)}
+          type="range"
+          min="0"
+          max={maxFrames - 1}
+          value={isDragging ? sliderFrame : currentFrame}
+          onChange={e => handleSliderChange(parseInt(e.target.value))}
+          className="frame-slider"
+          disabled={loading}
+        />
+      </div>
 
       <button
         onClick={() => handlePrevNext(currentFrame + 1)}
