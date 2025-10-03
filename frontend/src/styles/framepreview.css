@@ -40,6 +40,7 @@
   flex: 1;
   overflow: hidden;
   position: relative;
+  background-color: #34495e;
 }
 
 .image-viewport {
@@ -47,9 +48,9 @@
   height: 100%;
   overflow: auto;
   position: relative;
-  display: flex;
-  align-items: flex-start; /* keep image at top when fit */
-  justify-content: center;
+  /* display: flex;
+  align-items: flex-start;
+  justify-content: center; */
 }
 
 .image-viewport.draggable {
@@ -88,7 +89,6 @@
   display: block;
   max-width: 100%;
   height: auto;
-  border-radius: 4px;
 }
 
 /* Hide scrollbars but keep functionality */
@@ -165,7 +165,6 @@
 .frame-preview .minimap {
   background: rgba(0, 0, 0, 0.8);
   border: 2px solid #007bff;
-  border-radius: 4px;
   padding: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }

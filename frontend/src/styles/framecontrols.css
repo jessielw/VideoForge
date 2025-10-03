@@ -41,7 +41,7 @@
 }
 
 .frame-controls-header .frame-input {
-  /* width: 60px; */
+  width: 12ch;
   padding: 2px 4px;
   border: none;
   background: transparent;
