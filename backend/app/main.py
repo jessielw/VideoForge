@@ -1,4 +1,5 @@
 import io
+import json
 import os
 from pathlib import Path
 
@@ -29,6 +30,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Frame-Meta"],
 )
 
 
@@ -59,7 +61,9 @@ def is_under_allowed_roots(p: Path, roots):
 
 # VapourSynth initialization helper
 VS_INITIALIZED = False
-PLUGIN_PATH = os.environ.get("VAPOURSYNTH_PLUGIN_PATH")
+# TODO: we need to figure out where the plugins will be and how this will be implemented
+# PLUGIN_PATH = os.environ.get(r'C:\VapourSynth\vs-plugins')
+PLUGIN_PATH = r"C:\VapourSynth\vs-plugins"
 
 
 def init_vapoursynth():
@@ -87,7 +91,7 @@ async def health():
 
 
 @app.get("/api/list")
-async def list(path: str = Query(None)):
+async def file_list(path: str = Query(None)):
     """List files/folders under allowed roots. If no path, return roots."""
     roots = get_allowed_roots()
     if not roots:
@@ -215,12 +219,6 @@ async def vapoursynth_probe_file(request: Request):
     if not p.exists():
         return {"ok": False, "error": "File not found"}
 
-    # Start with MediaInfo
-    try:
-        media_info = MediaInfo.parse(str(p))
-    except Exception:
-        media_info = None
-
     vs_info = {}
     try:
         core = init_vapoursynth()
@@ -257,7 +255,6 @@ async def vapoursynth_probe_file(request: Request):
     return {
         "ok": True,
         "path": str(p),
-        "mediainfo": media_info.to_data() if media_info else None,
         "vapoursynth": vs_info,
     }
 
@@ -347,7 +344,49 @@ async def get_frame_with_script(
             img.save(buf, format="PNG")
             buf.seek(0)
 
-            return Response(content=buf.read(), media_type="image/png")
+            # Prepare metadata for this frame
+            try:
+                fps_val = None
+                try:
+                    fps_val = float(clip.fps)
+                except Exception:
+                    try:
+                        fps_val = float(int(clip.fps.numerator) / int(clip.fps.denominator))
+                    except Exception:
+                        fps_val = None
+
+                frame_type = None
+                try:
+                    frame_type = vs_frame.props.get("_PictType")
+                    # Convert bytes to string if necessary
+                    if isinstance(frame_type, (bytes, bytearray)):
+                        frame_type = frame_type.decode('utf-8', errors='replace')
+                    else:
+                        frame_type = str(frame_type) if frame_type is not None else None
+                except Exception:
+                    frame_type = None
+
+                fmt_name = None
+                try:
+                    fmt_name = vs_frame.format.name if vs_frame and vs_frame.format else None
+                    if isinstance(fmt_name, (bytes, bytearray)):
+                        fmt_name = fmt_name.decode('utf-8', errors='replace')
+                except Exception:
+                    fmt_name = None
+
+                meta = {
+                    "format": fmt_name,
+                    "width": int(vs_frame.width) if vs_frame else None,
+                    "height": int(vs_frame.height) if vs_frame else None,
+                    "fps": float(fps_val) if fps_val is not None else None,
+                    "frame_type": frame_type,
+                }
+            except Exception:
+                meta = {"format": None, "width": None, "height": None, "fps": None, "frame_type": None}
+                
+            print("META", meta, flush=True)
+
+            return Response(content=buf.read(), media_type="image/png", headers={"X-Frame-Meta": json.dumps(meta)})
 
         # Apply the VapourSynth script
         core = vs.core
@@ -433,8 +472,167 @@ async def get_frame_with_script(
         img.save(buf, format="PNG")
         buf.seek(0)
 
-        return Response(content=buf.read(), media_type="image/png")
+        # Prepare metadata
+        try:
+            fps_val = None
+            try:
+                fps_val = float(clip.fps)
+            except Exception:
+                try:
+                    fps_val = float(int(clip.fps.numerator) / int(clip.fps.denominator))
+                except Exception:
+                    fps_val = None
+
+        except Exception:
+            fps_val = None
+
+        frame_type = None
+        try:
+            frame_type = vs_frame.props.get("_PictType")
+            if isinstance(frame_type, (bytes, bytearray)):
+                frame_type = frame_type.decode('utf-8', errors='replace')
+            else:
+                frame_type = str(frame_type) if frame_type is not None else None
+        except Exception:
+            frame_type = None
+
+        fmt_name = None
+        try:
+            fmt_name = format_name
+            if isinstance(fmt_name, (bytes, bytearray)):
+                fmt_name = fmt_name.decode('utf-8', errors='replace')
+        except Exception:
+            fmt_name = None
+
+        meta = {
+            "format": fmt_name,
+            "width": int(vs_frame.width) if vs_frame else None,
+            "height": int(vs_frame.height) if vs_frame else None,
+            "fps": float(fps_val) if fps_val is not None else None,
+            "frame_type": frame_type,
+        }
+        print("META", meta, flush=True)
+        return Response(content=buf.read(), media_type="image/png", headers={"X-Frame-Meta": json.dumps(meta)})
 
     except Exception as e:
         print(f"Script frame extraction error: {str(e)}", flush=True)
         return Response(content=f"Script frame extraction error: {e}", status_code=500)
+
+
+# @app.get("/api/frame/meta")
+# async def get_frame_meta(
+#     path: str = Query(..., description="Path to the video file"),
+#     frame: int = Query(0, description="Frame number to inspect"),
+#     script: str = Query(None, description="Optional VapourSynth script to apply"),
+# ):
+#     """Return metadata for a frame produced by the script/clip: format name, width, height, fps, frame type."""
+#     try:
+#         p = Path(path)
+#         roots = get_allowed_roots()
+
+#         if roots and not is_under_allowed_roots(p, roots):
+#             return {"ok": False, "error": "File path not allowed"}
+
+#         if not p.exists():
+#             return {"ok": False, "error": "File not found"}
+
+#         core = init_vapoursynth()
+
+#         # If no script provided, create a default loader
+#         if not script or script.strip() == "":
+#             try:
+#                 clip = core.lsmas.LWLibavSource(str(p.absolute()))
+#             except Exception:
+#                 clip = core.ffms2.Source(str(p.absolute()))
+
+#             # Try to collect fps
+#             fps_val = None
+#             try:
+#                 fps_val = float(clip.fps)
+#             except Exception:
+#                 try:
+#                     fps_val = float(int(clip.fps.numerator) / int(clip.fps.denominator))
+#                 except Exception:
+#                     fps_val = None
+
+#             # bound frame
+#             if frame >= clip.num_frames:
+#                 frame = clip.num_frames - 1
+
+#             vs_frame = clip.get_frame(frame)
+
+#             pict = None
+#             try:
+#                 pict = vs_frame.props.get("_PictType")
+#             except Exception:
+#                 pict = None
+
+#             fmt = None
+#             try:
+#                 fmt = vs_frame.format.name
+#             except Exception:
+#                 fmt = None
+
+#             return {
+#                 "ok": True,
+#                 "format": fmt,
+#                 "width": int(vs_frame.width),
+#                 "height": int(vs_frame.height),
+#                 "fps": fps_val,
+#                 "frame_type": pict,
+#             }
+
+#         # If a script is provided, execute it like in get_frame_with_script but return metadata
+#         core = vs.core
+
+#         preview_script = script
+#         # ensure clip variable exists and convert to RGB only when needed for logic; metadata doesn't require RGB
+#         if "set_output()" not in script:
+#             preview_script += "\n\n# Set output\nclip.set_output()"
+
+#         vs_globals = {"vs": vs, "core": core}
+#         exec(preview_script, vs_globals)
+
+#         if "clip" not in vs_globals:
+#             return {"ok": False, "error": "Script did not define a 'clip' variable"}
+
+#         clip = vs_globals["clip"]
+
+#         if frame >= clip.num_frames:
+#             frame = clip.num_frames - 1
+
+#         vs_frame = clip.get_frame(frame)
+
+#         pict = None
+#         try:
+#             pict = vs_frame.props.get("_PictType")
+#         except Exception:
+#             pict = None
+
+#         fmt = None
+#         try:
+#             fmt = vs_frame.format.name
+#         except Exception:
+#             fmt = None
+
+#         fps_val = None
+#         try:
+#             fps_val = float(clip.fps)
+#         except Exception:
+#             try:
+#                 fps_val = float(int(clip.fps.numerator) / int(clip.fps.denominator))
+#             except Exception:
+#                 fps_val = None
+
+#         return {
+#             "ok": True,
+#             "format": fmt,
+#             "width": int(vs_frame.width),
+#             "height": int(vs_frame.height),
+#             "fps": fps_val,
+#             "frame_type": pict,
+#         }
+
+#     except Exception as e:
+#         print(f"Frame meta extraction error: {e}", flush=True)
+#         return {"ok": False, "error": str(e)}

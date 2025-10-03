@@ -99,7 +99,11 @@ export default function ScriptEditor({
     return `import vapoursynth as vs\ncore = vs.core\n\n# Load source\n${loader}\n\n# Add your filters here\n`;
   };
 
-  // When a new file is selected, if there are no unsaved changes, populate a default script
+  // When a new file is selected, if there are no unsaved changes, populate a default script.
+  // IMPORTANT: do not include `hasUnsavedChanges` in the dependency list — we only want
+  // to run this effect when the selected file or the chosen indexer change. If we
+  // included `hasUnsavedChanges`, toggling it (for example after Apply) would cause
+  // the template to be re-injected and overwrite the user's script.
   React.useEffect(() => {
     if (selectedPath && !hasUnsavedChanges) {
       const tmpl = makeTemplateForPath(indexer, selectedPath);
@@ -108,7 +112,7 @@ export default function ScriptEditor({
       }
     }
     // only run when selectedPath or indexer changes
-  }, [selectedPath, indexer, hasUnsavedChanges, onScriptChange]);
+  }, [selectedPath, indexer, onScriptChange]);
 
   return (
     <div className="script-editor">
@@ -165,15 +169,8 @@ export default function ScriptEditor({
           </div>
 
           <div className="editor-actions-btn-group">
-            <button
-              onClick={validateScript}
-              disabled={validationStatus === 'validating' || !localScript.trim()}
-              className="validate-button"
-            >
-              ✓ Validate (Ctrl+S)
-            </button>
             <button onClick={applyChanges} disabled={!hasUnsavedChanges} className="apply-button">
-              ▶ Apply (Ctrl+Enter)
+              ▶ Apply (Ctrl+S / Ctrl+Enter)
             </button>
             <button onClick={resetScript} disabled={!hasUnsavedChanges} className="reset-button">
               ↻ Reset

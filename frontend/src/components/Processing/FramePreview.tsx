@@ -12,6 +12,7 @@ interface FramePreviewProps {
   onScriptChange?: (script: string) => void;
   // A numeric counter; increment to trigger a preview fetch (applies the script)
   previewVersion?: number;
+  onPreviewError?: (err: string | null) => void;
 }
 
 export default function FramePreview({
@@ -20,11 +21,14 @@ export default function FramePreview({
   indexInfo,
   onScriptChange,
   previewVersion = 0,
+  onPreviewError,
 }: FramePreviewProps): JSX.Element {
   const [currentFrame, setCurrentFrame] = useState(0);
   const [frameImage, setFrameImage] = useState<string | null>(null);
+  const [scriptError, setScriptError] = useState<string | null>(null);
   const [originalFrameImage, setOriginalFrameImage] = useState<string | null>(null); // Store original image
   const [loading, setLoading] = useState(false);
+  const [frameMeta, setFrameMeta] = useState<any | null>(null);
   const [currentCrop, setCurrentCrop] = useState({ left: 0, top: 0, right: 0, bottom: 0 });
   const [zoomLevel, setZoomLevel] = useState(100); // Zoom percentage
   const [isPanning, setIsPanning] = useState(false);
@@ -192,6 +196,28 @@ export default function FramePreview({
         const blob = await resp.blob();
         const imageUrl = URL.createObjectURL(blob);
         setOriginalFrameImage(imageUrl); // Store original
+        // Clear any previous script error on successful fetch
+        setScriptError(null);
+        if (onPreviewError) onPreviewError(null);
+
+        // Read metadata header (if provided)
+        try {
+          const metaHeader = resp.headers.get('X-Frame-Meta');
+          if (metaHeader) {
+            try {
+              const parsed = JSON.parse(metaHeader);
+              setFrameMeta(parsed);
+            } catch (err) {
+              console.warn('Failed to parse X-Frame-Meta header:', err);
+              setFrameMeta(null);
+            }
+          } else {
+            setFrameMeta(null);
+          }
+        } catch (err) {
+          console.warn('Failed to read X-Frame-Meta header:', err);
+          setFrameMeta(null);
+        }
 
         // Apply current display effect to new frame, or show original if none
         if (displayEffect === 'none') {
@@ -207,13 +233,22 @@ export default function FramePreview({
       } else {
         const errorText = await resp.text();
         console.error('❌ Failed to fetch frame:', resp.status, errorText);
+        // Surface the error to the user in the preview area
+        const errMsg = errorText || `Frame request failed: ${resp.status}`;
+        setScriptError(errMsg);
+        if (onPreviewError) onPreviewError(errMsg);
         setFrameImage(null);
         setOriginalFrameImage(null);
+        setFrameMeta(null);
       }
     } catch (error) {
       console.error('💥 Error fetching frame:', error);
+      const errMsg = String(error);
+      setScriptError(errMsg);
+      if (onPreviewError) onPreviewError(errMsg);
       setFrameImage(null);
       setOriginalFrameImage(null);
+      setFrameMeta(null);
     } finally {
       setLoading(false);
     }
@@ -365,6 +400,15 @@ export default function FramePreview({
       </div>
 
       <div className="preview-container" style={{ padding: '20px' }}>
+        {/* Show script/runtime errors from preview processing */}
+        {scriptError && (
+          <div className="preview-error-panel">
+            <div className="preview-error-header">
+              <strong>Preview error</strong>
+            </div>
+            <pre className="preview-error-body">{scriptError}</pre>
+          </div>
+        )}
         <div
           className={`image-viewport ${zoomLevel > 100 ? 'draggable' : ''}`}
           ref={containerRef}
@@ -477,6 +521,34 @@ export default function FramePreview({
               </div>
             </div>
           </div>
+        )}
+      </div>
+
+      {/* Frame metadata display */}
+      <div className="frame-meta">
+        {frameMeta &&
+        (frameMeta.format ||
+          frameMeta.width ||
+          frameMeta.height ||
+          frameMeta.fps ||
+          frameMeta.frame_type) ? (
+          <div className="frame-meta-row">
+            <span>Format: {frameMeta.format ?? '—'}</span>
+            <span>
+              Size: {frameMeta.width ?? '—'} × {frameMeta.height ?? '—'}
+            </span>
+            <span>
+              FPS:{' '}
+              {frameMeta.fps != null
+                ? Number(frameMeta.fps)
+                    .toFixed(3)
+                    .replace(/\.000$/, '')
+                : '—'}
+            </span>
+            <span>Frame type: {frameMeta.frame_type ?? '—'}</span>
+          </div>
+        ) : (
+          <div className="frame-meta-row">No frame metadata available</div>
         )}
       </div>
 

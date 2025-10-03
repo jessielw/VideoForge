@@ -34,11 +34,21 @@ export function useScriptEditor({
   );
 
   const applyChanges = useCallback(() => {
-    onScriptChange(localScript);
-    setHasUnsavedChanges(false);
-    if (onApply) {
-      onApply();
-    }
+    // Validate before applying. We expect validateScript to set validationStatus.
+    (async () => {
+      try {
+        const valid = await validateScript();
+        if (!valid) return; // don't apply if validation failed
+
+        onScriptChange(localScript);
+        setHasUnsavedChanges(false);
+        if (onApply) {
+          onApply();
+        }
+      } catch (err) {
+        console.error('Error during apply:', err);
+      }
+    })();
   }, [localScript, onScriptChange, onApply]);
 
   const validateScript = useCallback(async () => {
@@ -67,9 +77,13 @@ export function useScriptEditor({
         if (result.valid) {
           setValidationStatus('valid');
           setValidationMessage('Script is valid');
+          if (onValidate) onValidate();
+          return true;
         } else {
           setValidationStatus('error');
           setValidationMessage(result.error || 'Script validation failed');
+          if (onValidate) onValidate();
+          return false;
         }
       } else {
         throw new Error('Validation request failed');
@@ -78,10 +92,8 @@ export function useScriptEditor({
       setValidationStatus('error');
       setValidationMessage('Failed to validate script');
       console.error('Script validation error:', error);
-    }
-
-    if (onValidate) {
-      onValidate();
+      if (onValidate) onValidate();
+      return false;
     }
   }, [localScript, onValidate]);
 
@@ -90,15 +102,17 @@ export function useScriptEditor({
       editorRef.current = editor;
 
       // Add keyboard shortcuts
+      // Ctrl+S now performs Apply (validate + apply)
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-        validateScript();
+        applyChanges();
       });
 
+      // Ctrl+Enter also performs Apply
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
         applyChanges();
       });
     },
-    [validateScript, applyChanges]
+    [applyChanges]
   );
 
   const resetScript = useCallback(() => {

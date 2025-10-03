@@ -36,6 +36,7 @@ export default function App(): JSX.Element {
   // Indexing state
   const [indexing, setIndexing] = useState(false);
   const [indexInfo, setIndexInfo] = useState<any>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   // Preview trigger (increment to tell FramePreview to fetch new frames)
   const [previewVersion, setPreviewVersion] = useState(0);
   // Track last path we've indexed via Apply/auto-index so we don't re-index repeatedly
@@ -218,6 +219,7 @@ export default function App(): JSX.Element {
                   indexInfo={indexInfo}
                   onScriptChange={setScript}
                   previewVersion={previewVersion}
+                  onPreviewError={(err: string | null) => setPreviewError(err)}
                 />
               </div>
             </div>
@@ -265,6 +267,9 @@ export default function App(): JSX.Element {
   } else if (indexInfo && indexInfo.vapoursynth && indexInfo.vapoursynth.error) {
     // Probe failed; prevent user from using Processing/Output since previews/encodes won't work
     disabledTabs = ['processing', 'output'];
+  } else if (previewError) {
+    // If the preview failed (script/runtime error), block Processing/Output
+    disabledTabs = [...disabledTabs, 'processing', 'output'];
   }
 
   // If inputPath is cleared, ensure we return to Source tab
