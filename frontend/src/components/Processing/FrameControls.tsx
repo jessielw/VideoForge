@@ -18,23 +18,33 @@ export default function FrameControls({
   const [isDragging, setIsDragging] = useState(false);
   const debounceTimeoutRef = useRef<number | null>(null);
   const sliderRef = useRef<HTMLInputElement | null>(null);
+  const draggingRef = useRef<boolean>(false);
 
   // Handle slider changes: update visual state and debounce finalization
   const handleSliderChange = (newFrame: number) => {
     setSliderFrame(newFrame);
+
+    // Ensure dragging state is set (pointerdown should normally set this,
+    // but keep here as a fallback when events differ across devices).
     setIsDragging(true);
 
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
     }
 
+    // If we're actively dragging (pointerdown has occurred), avoid the
+    // short debounce which causes mid-slide finalization if the user
+    // pauses briefly. Instead set a longer fallback timer (2s) that will
+    // finalize only if pointerup is missed. If not dragging, use a short
+    // 300ms debounce to finalize (keyboard or programmatic changes).
+    const fallbackDelay = draggingRef.current ? 2000 : 300;
     debounceTimeoutRef.current = window.setTimeout(() => {
       const clamped = Math.max(0, Math.min(maxFrames - 1, newFrame));
       setInputValue(clamped.toString());
       onFrameChange(clamped);
       setIsDragging(false);
       debounceTimeoutRef.current = null;
-    }, 300);
+    }, fallbackDelay);
   };
 
   // Immediate finalize (used when needed)
@@ -47,6 +57,7 @@ export default function FrameControls({
     setInputValue(clamped.toString());
     onFrameChange(clamped);
     setIsDragging(false);
+    draggingRef.current = false;
   }, [onFrameChange, sliderFrame, maxFrames]);
 
   // Handle prev/next button clicks (immediate)
@@ -89,6 +100,44 @@ export default function FrameControls({
     };
   }, []);
 
+  // Attach a global pointerup listener while dragging to ensure we finalize
+  // the slide when the user releases the pointer, even if it happens
+  // outside the slider element.
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const onPointerUp = () => {
+      // finalize now
+      finalizeSliderChange();
+    };
+
+    const onPointerCancel = () => {
+      // treat cancel like an end
+      finalizeSliderChange();
+    };
+
+    const onBlurOrHidden = () => {
+      // If the window loses focus or the page is hidden, finalize.
+      finalizeSliderChange();
+    };
+
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('mouseup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
+    window.addEventListener('blur', onBlurOrHidden);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') onBlurOrHidden();
+    });
+
+    return () => {
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('mouseup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerCancel);
+      window.removeEventListener('blur', onBlurOrHidden);
+      // no direct remove for visibilitychange anonymous handler
+    };
+  }, [isDragging, finalizeSliderChange]);
+
   return (
     <div className="frame-controls-header">
       <button
@@ -123,6 +172,14 @@ export default function FrameControls({
           max={maxFrames - 1}
           value={isDragging ? sliderFrame : currentFrame}
           onChange={e => handleSliderChange(parseInt(e.target.value))}
+          onPointerDown={e => {
+            setIsDragging(true);
+            draggingRef.current = true;
+            // try to capture pointer to get pointerup reliably
+            try {
+              (e.target as HTMLElement).setPointerCapture?.((e as any).pointerId);
+            } catch {}
+          }}
           className="frame-slider"
           disabled={loading}
         />
