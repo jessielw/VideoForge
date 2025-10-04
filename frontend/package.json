@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "focus-trap-react": "^11.0.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
