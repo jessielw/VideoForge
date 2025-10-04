@@ -7,13 +7,16 @@ import FilterPanel from './components/Processing/FilterPanel';
 import FramePreview from './components/Processing/FramePreview';
 import TargetSection from './components/Target';
 import FileBrowserModal from './components/FileBrowserModal';
-import IndexingModal from './components/Processing/IndexingModal';
 import ProbeFailureModal from './components/Source/ProbeFailureModal';
+import GlobalOverlay from './components/GlobalOverlay';
+import { useOverlay } from './context/OverlayContext';
 import './styles/index.css';
 
 const API = 'http://127.0.0.1:8000';
 
 export default function App(): JSX.Element {
+  const overlay = useOverlay();
+
   // Tab state
   const [activeTab, setActiveTab] = useState<string>('source');
 
@@ -104,6 +107,10 @@ export default function App(): JSX.Element {
   // Index the selected file
   async function indexFile(path: string) {
     setIndexing(true);
+    overlay.show({
+      type: 'indexing',
+      message: 'Please wait while the video is being analyzed. This operation locks the UI.',
+    });
     console.log('Indexing file:', path);
     try {
       const indexResp = await fetch(`${API}/api/mediainfo`, {
@@ -134,6 +141,7 @@ export default function App(): JSX.Element {
       return { ok: false, reason: String(error) };
     } finally {
       setIndexing(false);
+      overlay.hide();
     }
   }
 
@@ -162,6 +170,10 @@ export default function App(): JSX.Element {
     // Probe the selected file via VapourSynth (frame/fps/size). This is the Apply action.
     if (!inputPath) return;
     setIndexing(true);
+    overlay.show({
+      type: 'indexing',
+      message: 'Analyzing video with VapourSynth...',
+    });
     try {
       const resp = await fetch(`${API}/api/vs/probe`, {
         method: 'POST',
@@ -180,6 +192,7 @@ export default function App(): JSX.Element {
       console.error('Probing failed during apply:', e);
     } finally {
       setIndexing(false);
+      overlay.hide();
     }
   };
 
@@ -305,8 +318,8 @@ export default function App(): JSX.Element {
       {outputPane}
       {jobsPane}
 
-      {/* Blocking indexing modal shown while indexing is running */}
-      <IndexingModal indexing={indexing} />
+      {/* Global blocking overlay for all blocking operations */}
+      <GlobalOverlay />
 
       {/* Probe failure modal blocks processing/output when VapourSynth probe failed */}
       <ProbeFailureModal

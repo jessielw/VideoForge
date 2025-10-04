@@ -4,6 +4,7 @@ import ZoomControls from './ZoomControls';
 import DisplayEffects from './DisplayEffects';
 import AutoCropModal from './AutoCropModal';
 import { useAutoCropDetection } from '../../hooks/useAutoCropDetection';
+import { useOverlay } from '../../context/OverlayContext';
 
 interface FramePreviewProps {
   inputPath: string;
@@ -57,6 +58,7 @@ export default function FramePreview({
   const videoHeight = (typeof vsInfo.height === 'number' && vsInfo.height) || 1080;
 
   const API = 'http://127.0.0.1:8000';
+  const overlay = useOverlay();
 
   // Use the auto crop detection hook
   const { autoCropDetecting, autoCropResult, detectAutoCrop } = useAutoCropDetection({
@@ -241,6 +243,11 @@ export default function FramePreview({
     if (!inputPath) return;
 
     setLoading(true);
+    overlay.show({
+      type: 'loading',
+      message: 'Loading frame preview...',
+    });
+
     try {
       let url = `${API}/api/frame?path=${encodeURIComponent(inputPath)}&frame=${frame}`;
 
@@ -312,6 +319,7 @@ export default function FramePreview({
       setFrameMeta(null);
     } finally {
       setLoading(false);
+      overlay.hide();
     }
   };
 
@@ -324,6 +332,23 @@ export default function FramePreview({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewVersion, currentFrame]);
+
+  // Show AutoCropModal in the global overlay when detecting or when results are available
+  useEffect(() => {
+    if (autoCropDetecting || autoCropResult) {
+      overlay.show({
+        type: 'autocrop',
+        customContent: (
+          <AutoCropModal autoCropDetecting={autoCropDetecting} autoCropResult={autoCropResult} />
+        ),
+      });
+    } else {
+      // Only hide if the overlay is currently showing autocrop content
+      if (overlay.state.type === 'autocrop') {
+        overlay.hide();
+      }
+    }
+  }, [autoCropDetecting, autoCropResult]);
 
   // Track scroll position for minimap
   useEffect(() => {
@@ -620,8 +645,6 @@ export default function FramePreview({
           <div className="frame-meta-row">No frame metadata available</div>
         )}
       </div>
-
-      <AutoCropModal autoCropDetecting={autoCropDetecting} autoCropResult={autoCropResult} />
     </div>
   );
 }

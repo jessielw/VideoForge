@@ -1,0 +1,103 @@
+/* Blocking Overlay Styles */
+.blocking-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.blocking-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.blocking-overlay-panel {
+  position: relative;
+  background: white;
+  padding: 32px 40px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  max-width: 520px;
+  width: 90%;
+  text-align: center;
+  animation: slideIn 0.3s ease-out;
+  outline: none; /* Remove focus outline since this is just for focus trap */
+}
+
+.blocking-overlay-content {
+  position: relative;
+  z-index: 1;
+  animation: slideIn 0.3s ease-out;
+}
+
+.blocking-overlay-spinner {
+  font-size: 48px;
+  margin-bottom: 16px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.blocking-overlay-panel h3 {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  color: #2c3e50;
+}
+
+.blocking-overlay-panel p {
+  margin: 0;
+  color: #636e72;
+  line-height: 1.5;
+}
+
+.blocking-overlay-dismiss {
+  margin-top: 20px;
+  padding: 10px 24px;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s ease;
+}
+
+.blocking-overlay-dismiss:hover {
+  background: #2980b9;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
