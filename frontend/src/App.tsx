@@ -182,7 +182,17 @@ export default function App(): JSX.Element {
       });
       const data = await resp.json();
       console.log('Probe data:', data);
-      setIndexInfo(data);
+      // The probe endpoint returns vapoursynth/probe-only data. Don't overwrite
+      // the full mediainfo previously fetched by indexFile — merge the
+      // vapoursynth/probe result into the existing indexInfo so MediaInfoPanel
+      // continues to show the previously loaded media information.
+      setIndexInfo((prev: any) => {
+        // If the probe returned a full index (ok + mediainfo), replace.
+        if (data && data.ok && (data.mediainfo || data.tracks)) return data;
+        // Otherwise merge vapoursynth/probe result into previous indexInfo.
+        const vap = data && data.vapoursynth ? data.vapoursynth : data || {};
+        return { ...(prev || {}), vapoursynth: { ...(prev?.vapoursynth || {}), ...vap } };
+      });
       if (data && data.ok) {
         setLastIndexedPath(inputPath);
       }
