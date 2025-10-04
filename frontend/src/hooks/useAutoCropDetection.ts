@@ -76,7 +76,7 @@ export function useAutoCropDetection({
         }
 
         // Clear result after a few seconds
-        setTimeout(() => setAutoCropResult(null), 4000);
+        setTimeout(() => setAutoCropResult(null), 3000);
       } catch (error) {
         console.error('Auto crop failed:', error);
         setAutoCropResult({ success: false, command: null, crop: null });
