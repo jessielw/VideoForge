@@ -3,11 +3,12 @@
    ======================================== */
 
 .file-browser-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100vh;
   background: rgba(0, 0, 0, 0.5);
   z-index: 2000;
   display: flex;
@@ -26,7 +27,7 @@
 }
 
 .file-browser-modal {
-  background: var(--bg-primary, #ffffff);
+  background: var(--surface, var(--bg, #ffffff));
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   width: 90%;
@@ -55,32 +56,29 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color, #e0e0e0);
-  background: var(--bg-secondary, #f8f9fa);
+  border-bottom: 1px solid var(--border, #e0e0e0);
+  background: color-mix(in srgb, var(--surface, #ffffff) 96%, transparent);
   border-radius: 12px 12px 0 0;
 }
 
 .file-browser-header h2 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary, #222);
+  color: var(--text, #222);
 }
 
 .close-button {
   background: transparent;
   border: none;
-  font-size: 24px;
-  color: var(--text-secondary, #666);
+  color: var(--header-text, var(--muted, #666));
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: all 0.2s;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: background 0.16s ease, color 0.16s ease;
 }
 
 .close-button:hover {
-  background: var(--bg-hover, #e0e0e0);
-  color: var(--text-primary, #222);
+  background: color-mix(in srgb, var(--surface, #fff) 88%, black 4%);
+  color: var(--text, #222);
 }
 
 /* Location bar */
@@ -89,20 +87,19 @@
   align-items: center;
   gap: 12px;
   padding: 12px 20px;
-  border-bottom: 1px solid var(--border-color, #e0e0e0);
-  background: var(--bg-primary, #ffffff);
+  border-bottom: 1px solid var(--border, #e0e0e0);
+  background: var(--surface, var(--bg, #ffffff));
 }
 
 .nav-button {
-  padding: 6px 12px;
-  background: var(--primary-color, #0066cc);
-  color: white;
+  /* padding: 6px 12px; */
+  background: var(--primary, #0066cc);
+  color: var(--on-primary, #fff);
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
   font-weight: 500;
-  transition: all 0.2s;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
   white-space: nowrap;
 }
 
@@ -122,11 +119,11 @@
 .current-path {
   flex: 1;
   padding: 8px 12px;
-  background: var(--bg-secondary, #f5f5f5);
+  background: color-mix(in srgb, var(--surface-2, #fff) 94%, black 2%);
   border-radius: 6px;
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 13px;
-  color: var(--text-secondary, #555);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm1);
+  color: var(--muted, #555);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -134,21 +131,19 @@
 
 .new-folder-button {
   padding: 6px 12px;
-  background: var(--success-color, #28a745);
-  color: white;
+  background: var(--success, #28a745);
+  color: var(--on-success, #fff);
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
   font-weight: 500;
-  transition: all 0.2s;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
   white-space: nowrap;
 }
 
 .new-folder-button:hover {
-  background: var(--success-hover, #218838);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.16);
 }
 
 /* Content area */
@@ -156,7 +151,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 8px;
-  background: var(--bg-primary, #ffffff);
+  background: transparent; /* let modal surface show through */
 }
 
 /* Loading, error, empty states */
@@ -169,15 +164,14 @@
   justify-content: center;
   height: 100%;
   gap: 12px;
-  color: var(--text-secondary, #666);
-  font-size: 14px;
+  color: var(--muted, #666);
 }
 
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid var(--border-color, #e0e0e0);
-  border-top-color: var(--primary-color, #0066cc);
+  border: 4px solid color-mix(in srgb, var(--surface, #fff) 84%, black 8%);
+  border-top-color: var(--primary, #0066cc);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -189,29 +183,45 @@
 }
 
 .error-state {
-  color: var(--error-color, #dc3545);
-}
-
-.error-icon {
-  font-size: 48px;
+  color: var(--error, #dc3545);
 }
 
 .empty-state span:first-child {
-  font-size: 48px;
   opacity: 0.5;
+}
+
+/* File-browser specific empty state (overrides any generic .empty-state rules) */
+.file-browser-content .empty-state {
+  /* Use a subtle surface variant so empty area reads as part of the modal */
+  background: var(--surface-2, color-mix(in srgb, var(--surface, #fff) 96%, transparent));
+  border-radius: 8px;
+  border: 2px dashed var(--border, #ccc);
+  width: 100%;
+  height: calc(100% - 8px);
+  box-sizing: border-box;
+  padding: 2.5rem;
+  color: var(--muted, #666);
+}
+
+.file-browser-content .empty-state span:first-child {
+  opacity: 0.7;
+}
+
+.file-browser-content .empty-state .empty-hint {
+  color: var(--muted, #9aa6b2);
 }
 
 /* File list table */
 .file-list {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: var(--fs-sm2);
 }
 
 .file-list thead {
   position: sticky;
   top: 0;
-  background: var(--bg-secondary, #f8f9fa);
+  background: var(--header-bg, color-mix(in srgb, var(--surface, #fff) 96%, transparent));
   z-index: 10;
 }
 
@@ -219,9 +229,8 @@
   padding: 10px 12px;
   text-align: left;
   font-weight: 600;
-  color: var(--text-secondary, #555);
-  border-bottom: 2px solid var(--border-color, #e0e0e0);
-  font-size: 13px;
+  color: var(--header-text, var(--muted, #555));
+  border-bottom: 2px solid var(--border, #e0e0e0);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -249,16 +258,17 @@
 }
 
 .file-entry:hover {
-  background: var(--bg-hover, #f0f7ff);
+  /* stronger, semantic row hover for better contrast */
+  background: var(--row-hover, color-mix(in srgb, var(--primary, #0066cc) 12%, transparent));
 }
 
 .file-entry.is-directory:hover {
-  background: var(--bg-hover-alt, #e8f5e9);
+  background: var(--row-hover, color-mix(in srgb, var(--primary, #0066cc) 12%, transparent));
 }
 
 .file-entry td {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border-light, #f0f0f0);
+  border-bottom: 1px solid var(--border, color-mix(in srgb, var(--surface, #fff) 84%, black 8%));
 }
 
 .file-entry .col-icon {
@@ -267,32 +277,31 @@
 }
 
 .file-entry .col-name {
-  font-weight: 500;
-  color: var(--text-primary, #222);
+  color: var(--text, #222);
 }
 
 .file-entry.is-directory .col-name {
-  color: var(--primary-color, #0066cc);
-  font-weight: 600;
+  color: var(--primary, #0066cc);
 }
 
 .file-entry .col-size {
   text-align: right;
-  color: var(--text-secondary, #666);
-  font-size: 13px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  color: var(--muted, #666);
+}
+
+.file-entry .col-modified {
+  color: var(--muted, #666);
 }
 
 .file-entry .col-modified {
   color: var(--text-secondary, #666);
-  font-size: 12px;
 }
 
 /* Footer (save mode) */
 .file-browser-footer {
   padding: 16px 20px;
-  border-top: 1px solid var(--border-color, #e0e0e0);
-  background: var(--bg-secondary, #f8f9fa);
+  border-top: 1px solid var(--border, #e0e0e0);
+  background: color-mix(in srgb, var(--surface, #fff) 96%, transparent);
   border-radius: 0 0 12px 12px;
 }
 
@@ -305,25 +314,23 @@
 
 .filename-input-group label {
   font-weight: 600;
-  color: var(--text-primary, #222);
+  color: var(--text, #222);
   min-width: 80px;
-  font-size: 14px;
 }
 
 .filename-input {
   flex: 1;
   padding: 10px 12px;
-  border: 1px solid var(--border-color, #ccc);
+  border: 1px solid var(--border, #ccc);
   border-radius: 6px;
-  font-size: 14px;
   font-family: 'Consolas', 'Monaco', monospace;
-  transition: all 0.2s;
+  transition: box-shadow 0.12s ease, border-color 0.12s ease;
 }
 
 .filename-input:focus {
   outline: none;
-  border-color: var(--primary-color, #0066cc);
-  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+  border-color: var(--primary, #0066cc);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary, #0066cc) 10%, transparent);
 }
 
 .footer-actions {
@@ -336,15 +343,14 @@
   padding: 10px 24px;
   border: none;
   border-radius: 6px;
-  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .cancel-button {
-  background: var(--bg-secondary, #e0e0e0);
-  color: var(--text-primary, #222);
+  background: color-mix(in srgb, var(--surface, #fff) 92%, black 6%);
+  color: var(--text, #222);
 }
 
 .cancel-button:hover {
@@ -353,8 +359,8 @@
 }
 
 .save-button {
-  background: var(--primary-color, #0066cc);
-  color: white;
+  background: var(--primary, #0066cc);
+  color: var(--on-primary, #fff);
 }
 
 .save-button:hover:not(:disabled) {
@@ -397,8 +403,6 @@
 
 .new-folder-dialog h3 {
   margin: 0 0 16px 0;
-  font-size: 18px;
-  font-weight: 600;
   color: var(--text-primary, #222);
 }
 
@@ -407,7 +411,6 @@
   padding: 10px 12px;
   border: 1px solid var(--border-color, #ccc);
   border-radius: 6px;
-  font-size: 14px;
   margin-bottom: 16px;
   transition: all 0.2s;
   box-sizing: border-box;
@@ -429,7 +432,6 @@
   padding: 10px 24px;
   border: none;
   border-radius: 6px;
-  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
