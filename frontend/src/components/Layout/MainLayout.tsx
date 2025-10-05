@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react';
 import TabBar, { Tab } from './TabBar';
+import ThemeToggle from '../../theme/ThemeToggle';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -27,7 +28,10 @@ export default function MainLayout({
   return (
     <div className="main-layout">
       <div className="layout-header">
-        <h1 className="app-title">Video Forge</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h1 className="app-title">Video Forge</h1>
+          <ThemeToggle />
+        </div>
         <TabBar
           tabs={tabs}
           activeTab={activeTab}

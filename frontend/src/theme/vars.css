@@ -1,0 +1,261 @@
+/* CSS theme variables for the app - light by default, toggled by .dark on <html> */
+:root {
+  /* === Light palette base (user-supplied + helpers) === */
+  --seasalt: #f8f9fa; /* user: seasalt variant */
+  --antiflash-white: #e9ecef;
+  --platinum: #dee2e6;
+  --french-gray: #ced4da;
+  --french-gray-2: #adb5bd;
+  --slate-gray: #6c757d;
+  --outer-space-light: #495057;
+  --onyx: #343a40;
+  --eerie-black-light: #212529;
+
+  /* Semantic tokens for light */
+  --bg: var(--seasalt);
+  --surface: #ffffff;
+  --surface-2: var(--antiflash-white);
+  --text: var(--eerie-black-light);
+  --muted: var(--slate-gray);
+  --primary: #3f72af; /* accent blue from provided palette */
+  --on-primary: #ffffff;
+  --border: var(--platinum);
+  --hover: color-mix(in srgb, var(--primary) 6%, var(--surface) 94%);
+  --row-hover: color-mix(in srgb, var(--primary) 4%, var(--surface) 96%);
+  --header-bg: color-mix(in srgb, var(--surface) 92%, black 8%);
+  --header-text: var(--text);
+  --disabled: var(--french-gray-2);
+  --focus-ring: color-mix(in srgb, var(--primary) 16%, transparent);
+  --success: #16a34a;
+  --on-success: #ffffff;
+  --error: #dc3545;
+
+  /* Global fonts */
+  --font-sans: sans-serif, 'Inter var', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial;
+  --font-heading: 'Montserrat Variable', var(--font-sans);
+  --font-mono: 'Fira Mono', SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace;
+  --font-ui: 'Segoe UI', system-ui, -apple-system, 'Roboto', 'Helvetica Neue', Arial;
+  /* weights */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-bold: 700;
+  /* sizes */
+  --fs-xs: 0.75rem;
+  --fs-sm1: 0.8rem;
+  --fs-sm2: 0.85rem;
+  --fs-sm3: 0.9rem;
+  --fs-base: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.3rem;
+  --fs-2xl: 1.4rem;
+  --fs-3xl: 1.5rem;
+  --fs-4xl: 1.8rem;
+}
+
+.dark {
+  /* === Dark palette base (user-supplied) === */
+  --black: #000000ff;
+  --night: #111111ff;
+  --eerie-black: #232323ff;
+  --jet: #343434ff;
+  --outer-space: #464646ff;
+  --davys-gray: #575757ff;
+  --dim-gray: #696969ff;
+  --gray: #7a7a7aff;
+
+  /* Semantic tokens for dark mode, mapped to the darker palette */
+  --bg: var(--night);
+  --surface: var(--eerie-black);
+  --surface-2: var(--jet);
+  --text: #eeeeee;
+  --muted: var(--dim-gray);
+  --primary: #00adb5; /* teal from provided palette */
+  --on-primary: var(--black);
+  --border: var(--outer-space);
+  --hover: color-mix(in srgb, var(--primary) 8%, transparent);
+  --row-hover: color-mix(in srgb, var(--primary) 6%, transparent);
+  --header-bg: var(--jet);
+  --header-text: var(--text);
+  --disabled: var(--davys-gray);
+  --focus-ring: color-mix(in srgb, var(--primary) 24%, transparent);
+  --success: #2ecc71;
+  --on-success: #07201a;
+  --error: #ff6b6b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  font: var(--font-1);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+/* Apply global fonts */
+html,
+body {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+}
+
+h1 {
+  font-size: var(--fs-4xl);
+  line-height: var(--lh-heading);
+  font-weight: var(--fw-bold);
+  font-family: var(--font-heading);
+}
+
+h2 {
+  font-size: var(--fs-3xl);
+  line-height: var(--lh-heading);
+  font-weight: var(--fw-medium);
+  font-family: var(--font-heading);
+}
+
+h3 {
+  font-size: var(--fs-3xl);
+  line-height: var(--lh-heading);
+}
+h4 {
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-heading);
+}
+h5 {
+  font-size: var(--fs-xl);
+  line-height: var(--lh-heading);
+}
+h6 {
+  font-size: var(--fs-lg);
+  line-height: var(--lh-heading);
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+/* Expose some utilities */
+.bg-surface {
+  background: var(--surface);
+}
+.text-primary {
+  color: var(--text);
+}
+.muted {
+  color: var(--muted);
+}
+
+/* Theme toggle segmented control */
+.theme-toggle {
+  display: inline-flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  align-items: center;
+}
+
+.theme-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.theme-toggle .indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: calc(100% / 3);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.02));
+  border-radius: 6px;
+  margin: 4px;
+  transition: transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
+  z-index: 0;
+}
+
+.theme-toggle button {
+  position: relative;
+  z-index: 1; /* sit above indicator */
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.theme-toggle button.active {
+  color: var(--primary);
+}
+
+.theme-toggle .theme-toggle-icon {
+  display: inline-block;
+  font-size: 14px;
+}
+
+.theme-toggle .theme-toggle-resolved {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  padding-right: 8px;
+}
+
+/* screen-reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+/* Single-icon theme toggle (stacked icons) */
+.single-theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.single-theme-toggle:focus {
+  outline: 3px solid rgba(0, 102, 204, 0.12);
+  outline-offset: 2px;
+}
+
+.single-theme-toggle .icon {
+  position: absolute;
+  transition: transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1), opacity 200ms ease;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.95);
+  color: var(--text);
+}
+
+.single-theme-toggle .icon.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.single-theme-toggle .icon.hidden {
+  pointer-events: none;
+}

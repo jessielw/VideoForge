@@ -1,25 +1,26 @@
 import React, { useState } from 'react';
+
+import { OutputConfig } from './types/output';
+import { EncoderConfig } from './types/encoder';
+import { useOverlay } from './context/OverlayContext';
+import GlobalOverlay from './components/GlobalOverlay';
 import MainLayout from './components/Layout/MainLayout';
+import { useMediaInfo } from './context/MediaInfoContext';
 import FileSelector from './components/Source/FileSelector';
+import JobQueuePanel from './components/Jobs/JobQueuePanel';
+import FileBrowserModal from './components/FileBrowserModal';
+import FilterPanel from './components/Processing/FilterPanel';
 import MediaInfoPanel from './components/Source/MediaInfoPanel';
 import ScriptEditor from './components/Processing/ScriptEditor';
-import FilterPanel from './components/Processing/FilterPanel';
 import FramePreview from './components/Processing/FramePreview';
-import TargetSection from './components/Target';
-import FileBrowserModal from './components/FileBrowserModal';
-import ProbeFailureModal from './components/Source/ProbeFailureModal';
-import GlobalOverlay from './components/GlobalOverlay';
+import OutputSettings from './components/Output/OutputSettings';
 import EncoderSettings from './components/Encoder/EncoderSettings';
+import ProbeFailureModal from './components/Source/ProbeFailureModal';
 import AudioConfigSection from './components/Audio/AudioConfigSection';
 import { MultiTrackAudioConfig } from './components/Audio/AudioConfigSection';
 import SubtitleConfigSection from './components/Subtitles/SubtitleConfigSection';
 import { MultiTrackSubtitleConfig } from './components/Subtitles/SubtitleConfigSection';
-import OutputSettings from './components/Output/OutputSettings';
-import JobQueuePanel from './components/Jobs/JobQueuePanel';
-import { useOverlay } from './context/OverlayContext';
-import { useMediaInfo } from './context/MediaInfoContext';
-import { EncoderConfig } from './types/encoder';
-import { OutputConfig } from './types/output';
+
 import './styles/index.css';
 
 const API = 'http://127.0.0.1:8000';
@@ -343,7 +344,9 @@ export default function App(): JSX.Element {
         subtitleConfig: subtitleConfig,
         outputConfig: outputConfig,
         // Auto-generate job name from source filename
-        name: `${inputPath.split(/[\\/]/).pop()?.split('.')[0] || 'Encode'} → ${outputConfig.container.toUpperCase()}`,
+        name: `${
+          inputPath.split(/[\\/]/).pop()?.split('.')[0] || 'Encode'
+        } → ${outputConfig.container.toUpperCase()}`,
       };
 
       const response = await fetch('http://localhost:8000/api/jobs/submit', {

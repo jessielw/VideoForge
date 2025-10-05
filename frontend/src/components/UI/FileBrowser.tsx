@@ -6,7 +6,11 @@
  * - 'save': Browse folders and specify output filename (allows new files)
  */
 
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+
+import CloseIcon from '@mui/icons-material/Close';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+
 import '../../styles/file-browser.css';
 
 export interface FileEntry {
@@ -141,10 +145,6 @@ export default function FileBrowser({
       folderPath = newFolderName.trim();
     }
 
-    console.log('📁 Frontend: Creating folder:', folderPath);
-    console.log('📁 Frontend: Current path:', currentPath);
-    console.log('📁 Frontend: New folder name:', newFolderName.trim());
-
     try {
       const response = await fetch('http://localhost:8000/api/mkdir', {
         method: 'POST',
@@ -189,7 +189,7 @@ export default function FileBrowser({
         <div className="file-browser-header">
           <h2>{title || (mode === 'open' ? 'Open File' : 'Save File')}</h2>
           <button className="close-button" onClick={onClose} title="Close">
-            ✕
+            <CloseIcon />
           </button>
         </div>
 
@@ -201,7 +201,7 @@ export default function FileBrowser({
             disabled={!currentPath}
             title="Go up one level"
           >
-            ⬆️ Up
+            <ArrowUpwardIcon />
           </button>
           <div className="current-path">{currentPath || '(Root)'}</div>
           {mode === 'save' && (

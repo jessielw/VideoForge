@@ -1,9 +1,25 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Video Forge</title>
+    <script>
+      // Prevent flash of incorrect theme on first paint by applying the theme
+      // class early based on saved preference or system setting.
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme');
+          if (stored === 'dark') return document.documentElement.classList.add('dark');
+          if (stored === 'light') return document.documentElement.classList.remove('dark');
+          var prefersDark =
+            window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (prefersDark) document.documentElement.classList.add('dark');
+        } catch (e) {
+          /* ignore */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
