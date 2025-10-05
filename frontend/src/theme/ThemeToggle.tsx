@@ -1,8 +1,10 @@
 import React from 'react';
-import { useTheme } from './ThemeProvider';
-import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
+
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
+import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
+
+import { useTheme } from './ThemeProvider';
 
 export default function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -26,7 +28,9 @@ export default function ThemeToggle() {
       className="single-theme-toggle"
       onClick={cycle}
       onKeyDown={handleKey}
-      aria-label={theme === 'system' ? 'Theme: Auto' : theme === 'light' ? 'Theme: Light' : 'Theme: Dark'}
+      aria-label={
+        theme === 'system' ? 'Theme: Auto' : theme === 'light' ? 'Theme: Light' : 'Theme: Dark'
+      }
       title={theme === 'system' ? 'Auto' : theme === 'light' ? 'Light' : 'Dark'}
     >
       <span className={`icon icon-system ${theme === 'system' ? 'visible' : 'hidden'}`}>

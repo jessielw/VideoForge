@@ -24,6 +24,12 @@
   font-weight: 600;
 }
 
+.layout-header-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
 .layout-content {
   flex: 1;
   overflow: auto;
