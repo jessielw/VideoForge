@@ -8,3 +8,4 @@ dev_docs/
 
 *.pyc
 .env
+*.db
