@@ -201,3 +201,6 @@ Next steps
 
 This approach gives a single backend serving both headless and desktop frontends, and avoids exposing arbitrary filesystem paths to untrusted browsers.
 
+## CSS TODOS
+- Need to ensure that font-size is properly sized for ALL styling
+  - file-browser.css is completed
