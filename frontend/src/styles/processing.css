@@ -1,9 +1,11 @@
-/* Processing Tab */
+/* Filters Tab (formerly Processing) */
+.filters-tab,
 .processing-tab {
   width: 100%;
   max-width: none;
 }
 
+.filters-layout,
 .processing-layout {
   display: grid;
   grid-template-columns: minmax(400px, 1fr) minmax(400px, 1fr);
@@ -13,6 +15,7 @@
 }
 
 @media (max-width: 1400px) {
+  .filters-layout,
   .processing-layout {
     grid-template-columns: minmax(350px, 1fr) minmax(350px, 1fr);
     gap: 16px;
@@ -20,6 +23,7 @@
 }
 
 @media (max-width: 1200px) {
+  .filters-layout,
   .processing-layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
@@ -28,21 +32,25 @@
     min-height: calc(100vh - 160px);
   }
 
+  .filters-left,
   .processing-left {
     order: 1;
   }
 
+  .filters-right,
   .processing-right {
     order: 2;
   }
 }
 
 @media (max-width: 768px) {
+  .filters-layout,
   .processing-layout {
     gap: 12px;
   }
 }
 
+.filters-left,
 .processing-left {
   display: flex;
   flex-direction: column;

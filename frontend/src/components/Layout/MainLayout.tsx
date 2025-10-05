@@ -9,10 +9,13 @@ interface MainLayoutProps {
 }
 
 const tabs: Tab[] = [
-  { id: 'source', label: 'Source', icon: '📁' },
-  { id: 'processing', label: 'Processing', icon: '⚙️' },
-  { id: 'output', label: 'Output', icon: '📤' },
-  { id: 'jobs', label: 'Jobs', icon: '📋' },
+  { id: 'source', label: 'Source', icon: '📁', flowStep: 1 },
+  { id: 'filters', label: 'Filters', icon: '⚙️', flowStep: 2 },
+  { id: 'video', label: 'Video', icon: '🎬', flowStep: 3 },
+  { id: 'audio', label: 'Audio', icon: '🔊', flowStep: 4 },
+  { id: 'subtitles', label: 'Subtitles', icon: '📝', flowStep: 5 },
+  { id: 'output', label: 'Output', icon: '📤', flowStep: 6 },
+  { id: 'jobs', label: 'Jobs', icon: '📋', flowStep: null }, // Not part of main flow
 ];
 
 export default function MainLayout({

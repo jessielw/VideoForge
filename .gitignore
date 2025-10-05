@@ -4,6 +4,7 @@ reference/
 node_modules/
 apps/
 frontend/dist/
+dev_docs/
 
 *.pyc
 .env

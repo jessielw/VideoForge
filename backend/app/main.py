@@ -1,6 +1,7 @@
 import io
 import json
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -14,11 +15,52 @@ from PIL import Image
 from pydantic import BaseModel
 from pymediainfo import MediaInfo
 
+from .audio_presets import router as audio_presets_router
+from .database import init_database
+from .job_worker import init_worker, start_worker, stop_worker
+from .jobs import router as jobs_router
+from .presets import router as presets_router
+
 # os.environ["VAPOURSYNTH_PLUGIN_PATH"] = r"C:\VapourSynth\vs-plugins"
 
 load_dotenv()
 
-app = FastAPI()
+vs_pipe_path = r"C:\VapourSynth\VSPipe.exe"
+x264_path = r"D:\programming\video-forge\apps\x264.exe"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize database and start job worker on startup.
+
+    Note: Worker runs in manual mode - jobs must be explicitly started
+    via the API (Start Next button). Worker only processes jobs with
+    status='running'.
+    """
+    print("🔧 Initializing database...", flush=True)
+    init_database()
+    print("✅ Database initialized successfully", flush=True)
+
+    print("🔧 Initializing job worker (manual mode)...", flush=True)
+    init_worker(vspipe_path=vs_pipe_path, x264_path=x264_path)
+    start_worker()
+    print("✅ Job worker started successfully", flush=True)
+
+    yield
+
+    # Cleanup on shutdown
+    print("🛑 Shutting down job worker...", flush=True)
+    stop_worker()
+    print("✅ Job worker stopped", flush=True)
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+# Include routers
+app.include_router(presets_router)
+app.include_router(audio_presets_router)
+app.include_router(jobs_router)
 
 origins = [
     "http://localhost:5173",
@@ -36,21 +78,38 @@ app.add_middleware(
 
 
 def get_allowed_roots():
+    """Get configured media roots for file browsing.
+
+    Returns a list of Path objects representing allowed root directories.
+    If no roots are configured, returns None (allowing unrestricted access).
+
+    This is primarily for UI browsing organization, not strict security enforcement.
+    In a desktop application, we trust the user's configured paths.
+    """
     roots = os.environ.get("media")
     if roots:
         return [Path(p).resolve() for p in roots.split(";") if p]
-    # Default to /media for Docker/Linux, or C:/media for Windows
-    # if os.name == 'nt':
-    #     return [Path("C:/media").resolve()]
-    # else:
-    # return [Path("/media").resolve()]
+    # For desktop app: If no roots configured, allow browsing from system roots
+    # The file browser will show drive letters on Windows or root on Unix
+    return None
 
 
 def is_under_allowed_roots(p: Path, roots):
+    """Check if a path is under allowed roots.
+
+    If roots is None or empty, always returns True (permissive mode for desktop app).
+    This provides a convenience check for file browser organization without
+    being overly restrictive.
+    """
+    # No roots configured = trust everything
+    if not roots:
+        return True
+
     try:
         rp = p.resolve()
     except Exception:
         return False
+
     for r in roots:
         try:
             if r in rp.parents or rp == r:
@@ -91,56 +150,157 @@ async def health():
     return {"status": "ok"}
 
 
+@app.post("/api/mkdir")
+async def create_directory(request: Request):
+    """Create a new directory.
+
+    Request JSON: { path: string }
+    Response: { ok: bool, path?: string, error?: string }
+
+    The path should be an absolute path. If a relative path is provided,
+    it will be rejected to avoid creating folders in unexpected locations.
+    """
+    data = await request.json()
+    dir_path = data.get("path")
+
+    print(f"📁 mkdir request received: {dir_path}", flush=True)
+
+    if not dir_path:
+        return {"ok": False, "error": "No path provided"}
+
+    # Convert to Path and resolve to absolute path
+    p = Path(dir_path)
+    print(f"📁 Path object: {p}", flush=True)
+    print(f"📁 Is absolute: {p.is_absolute()}", flush=True)
+    print(f"📁 Current working dir: {Path.cwd()}", flush=True)
+
+    # If the path isn't absolute, try to make it absolute
+    # This handles both Windows (C:/) and Unix (/) absolute paths
+    if not p.is_absolute():
+        return {"ok": False, "error": f"Path must be absolute. Received: {dir_path}"}
+
+    # Resolve the path (handles .. and symlinks)
+    try:
+        p_resolved = p.resolve()
+    except Exception as e:
+        return {"ok": False, "error": f"Invalid path: {str(e)}"}
+
+    # Check if directory already exists
+    if p_resolved.exists():
+        if p_resolved.is_dir():
+            return {"ok": False, "error": "Directory already exists"}
+        else:
+            return {"ok": False, "error": "A file with that name already exists"}
+
+    try:
+        # Create the directory and all parent directories if needed
+        p_resolved.mkdir(parents=True, exist_ok=False)
+        print(f"✅ Created directory: {p_resolved}", flush=True)
+        return {"ok": True, "path": str(p_resolved)}
+    except PermissionError:
+        return {"ok": False, "error": "Permission denied - check folder permissions"}
+    except FileExistsError:
+        return {"ok": False, "error": "Directory already exists"}
+    except Exception as e:
+        return {"ok": False, "error": f"Failed to create directory: {str(e)}"}
+
+
 @app.get("/api/list")
 async def file_list(path: str = Query(None)):
-    """List files/folders under allowed roots. If no path, return roots."""
+    """List files/folders under allowed roots. If no path, return roots or system drives.
+
+    For desktop applications with configured media paths, we start browsing from those roots.
+    If no media paths are configured, we show system drives (Windows) or root (Unix).
+    """
     roots = get_allowed_roots()
-    if not roots:
-        return {"ok": False, "reason": "No allowed roots configured"}
 
     if not path:
-        # Return roots as entries
-        entries = []
-        for r in roots:
-            try:
-                stat = r.stat()
+        # If roots are configured, return them as starting points
+        if roots:
+            entries = []
+            for r in roots:
+                try:
+                    stat = r.stat()
+                    entries.append(
+                        {
+                            "name": str(r),
+                            "is_dir": True,
+                            "normalized": str(r),
+                            "size": stat.st_size if r.exists() else None,
+                            "mtime": stat.st_mtime if r.exists() else None,
+                        }
+                    )
+                except Exception:
+                    entries.append(
+                        {"name": str(r), "is_dir": True, "normalized": str(r)}
+                    )
+            return {"ok": True, "entries": entries, "path": None}
+        else:
+            # No roots configured - show system drives on Windows, root on Unix
+            entries = []
+            if os.name == "nt":
+                # Windows: list available drives
+                import string
+
+                for letter in string.ascii_uppercase:
+                    drive = Path(f"{letter}:/")
+                    if drive.exists():
+                        try:
+                            entries.append(
+                                {
+                                    "name": f"{letter}:/",
+                                    "is_dir": True,
+                                    "normalized": str(drive),
+                                }
+                            )
+                        except Exception:
+                            pass
+            else:
+                # Unix: start at root
                 entries.append(
                     {
-                        "name": str(r),
+                        "name": "/",
                         "is_dir": True,
-                        "normalized": str(r),
-                        "size": stat.st_size if r.exists() else None,
-                        "mtime": stat.st_mtime if r.exists() else None,
+                        "normalized": "/",
                     }
                 )
-            except Exception:
-                entries.append({"name": str(r), "is_dir": True, "normalized": str(r)})
-        return {"ok": True, "entries": entries, "path": None}
+            return {"ok": True, "entries": entries, "path": None}
 
     p = Path(path)
+
+    # Check if path is accessible (permissive check when roots=None)
     if not is_under_allowed_roots(p, roots):
-        # If not under allowed roots, just return roots list
-        entries = []
-        for r in roots:
-            try:
-                stat = r.stat()
-                entries.append(
-                    {
-                        "name": str(r),
-                        "is_dir": True,
-                        "normalized": str(r),
-                        "size": stat.st_size if r.exists() else None,
-                        "mtime": stat.st_mtime if r.exists() else None,
-                    }
-                )
-            except Exception:
-                entries.append({"name": str(r), "is_dir": True, "normalized": str(r)})
-        return {"ok": True, "entries": entries, "path": None}
+        # Path not under allowed roots - redirect to roots if configured
+        if roots:
+            entries = []
+            for r in roots:
+                try:
+                    stat = r.stat()
+                    entries.append(
+                        {
+                            "name": str(r),
+                            "is_dir": True,
+                            "normalized": str(r),
+                            "size": stat.st_size if r.exists() else None,
+                            "mtime": stat.st_mtime if r.exists() else None,
+                        }
+                    )
+                except Exception:
+                    entries.append(
+                        {"name": str(r), "is_dir": True, "normalized": str(r)}
+                    )
+            return {"ok": True, "entries": entries, "path": None}
+        # If no roots, this shouldn't happen due to permissive is_under_allowed_roots
+        # but handle gracefully anyway
+
     if not p.exists():
         return {"ok": False, "reason": "Path does not exist"}
     if not p.is_dir():
         # If it's a file, return its parent directory
         p = p.parent
+
+    # Resolve to absolute path for consistency
+    p = p.resolve()
 
     entries = []
     try:
@@ -171,6 +331,7 @@ async def file_list(path: str = Query(None)):
     except Exception as e:
         return {"ok": False, "reason": f"Could not list directory: {e}"}
 
+    # Return absolute path
     return {"ok": True, "entries": entries, "path": str(p)}
 
 
@@ -194,7 +355,97 @@ async def mediainfo_file(request: Request):
 
     try:
         media_info = MediaInfo.parse(str(p), legacy_stream_display=True)
-        result = {"ok": True, "path": str(p), "mediainfo": media_info.to_data()}
+        raw_data = media_info.to_data()
+
+        # Parse tracks into structured format for frontend
+        tracks = raw_data.get("tracks", [])
+
+        # Extract general info
+        general_track = next(
+            (t for t in tracks if t.get("track_type") == "General"), {}
+        )
+
+        # Extract video tracks
+        video_tracks = [
+            {
+                "track_id": t.get("track_id"),
+                "format": t.get("format"),
+                "format_profile": t.get("format_profile"),
+                "format_level": t.get("format_level"),
+                "width": t.get("width"),
+                "height": t.get("height"),
+                "display_aspect_ratio": t.get("display_aspect_ratio"),
+                "pixel_aspect_ratio": t.get("pixel_aspect_ratio"),
+                "frame_rate": t.get("frame_rate"),
+                "frame_count": t.get("frame_count"),
+                "bit_rate": t.get("bit_rate"),
+                "bit_depth": t.get("bit_depth"),
+                "chroma_subsampling": t.get("chroma_subsampling"),
+                "color_space": t.get("color_space"),
+                "scan_type": t.get("scan_type"),
+                "codec_id": t.get("codec_id"),
+            }
+            for t in tracks
+            if t.get("track_type") == "Video"
+        ]
+
+        # Extract audio tracks
+        audio_tracks = [
+            {
+                "track_id": t.get("track_id"),
+                "format": t.get("format"),
+                "format_profile": t.get("format_profile"),
+                "codec_id": t.get("codec_id"),
+                "channels": t.get(
+                    "channel_s"
+                ),  # Note: pymediainfo uses "channel_s" not "channels"
+                "channel_layout": t.get("channel_layout"),
+                "sampling_rate": t.get("sampling_rate"),
+                "bit_rate": t.get("bit_rate"),
+                "bit_depth": t.get("bit_depth"),
+                "language": t.get("language"),
+                "title": t.get("title"),
+                "default": t.get("default"),
+                "forced": t.get("forced"),
+                "compression_mode": t.get("compression_mode"),
+            }
+            for t in tracks
+            if t.get("track_type") == "Audio"
+        ]
+
+        # Extract subtitle tracks
+        subtitle_tracks = [
+            {
+                "track_id": t.get("track_id"),
+                "format": t.get("format"),
+                "codec_id": t.get("codec_id"),
+                "language": t.get("language"),
+                "title": t.get("title"),
+                "default": t.get("default"),
+                "forced": t.get("forced"),
+            }
+            for t in tracks
+            if t.get("track_type") in ("Text", "Subtitle")
+        ]
+
+        result = {
+            "ok": True,
+            "path": str(p),
+            "general": {
+                "filename": general_track.get("file_name"),
+                "format": general_track.get("format"),
+                "file_size": general_track.get("file_size"),
+                "duration": general_track.get("duration"),
+                "overall_bitrate": general_track.get("overall_bit_rate"),
+                "format_profile": general_track.get("format_profile"),
+                "writing_application": general_track.get("writing_application"),
+                "writing_library": general_track.get("writing_library"),
+            },
+            "video_tracks": video_tracks,
+            "audio_tracks": audio_tracks,
+            "subtitle_tracks": subtitle_tracks,
+            "mediainfo": raw_data,  # Keep raw data for MediaInfoPanel compatibility
+        }
         return result
     except Exception as e:
         print(f"MediaInfo parsing failed: {e}", flush=True)

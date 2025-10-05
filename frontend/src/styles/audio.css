@@ -1,0 +1,474 @@
+/* Audio Settings Styles */
+
+.audio-settings {
+  padding: 1.5rem;
+  max-width: 1000px;
+  margin: 0 auto;
+  height: 100%;
+  overflow-y: auto;
+  background: #ecf0f1;
+}
+
+.audio-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.audio-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.audio-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Audio Track Selector */
+
+.audio-track-selector {
+  padding: 1.25rem;
+  background: white;
+  border: 1px solid #bdc3c7;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.audio-track-selector label {
+  display: block;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.audio-track-selector .track-dropdown {
+  width: 100%;
+  padding: 0.625rem;
+  border: 1px solid #bdc3c7;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.95rem;
+  color: #2c3e50;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.audio-track-selector .track-dropdown:hover {
+  border-color: #3498db;
+}
+
+.audio-track-selector .track-dropdown:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+}
+
+.audio-track-selector .track-details {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #ecf0f1;
+}
+
+.audio-track-selector .track-info-line {
+  font-size: 0.875rem;
+  color: #7f8c8d;
+  line-height: 1.4;
+}
+
+.audio-track-selector .no-tracks-message {
+  padding: 1rem;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  color: #856404;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+/* Audio Encoder Plugin Specific Styles */
+
+.audio-encoder-specific-options {
+  margin-top: 1rem;
+}
+
+.audio-encoder-plugin {
+  padding: 1.5rem;
+  background: white;
+  border: 1px solid #bdc3c7;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.audio-encoder-plugin h3 {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #2c3e50;
+  border-bottom: 2px solid #ecf0f1;
+  padding-bottom: 0.5rem;
+}
+
+.audio-encoder-plugin .form-group {
+  margin-bottom: 1.5rem;
+}
+
+.audio-encoder-plugin .form-group:last-child {
+  margin-bottom: 0;
+}
+
+/* Info Box */
+
+.info-box {
+  padding: 1rem;
+  background: #e8f4f8;
+  border: 1px solid #b8dae5;
+  border-radius: 4px;
+  margin-top: 1rem;
+}
+
+.info-box strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #2c3e50;
+}
+
+.info-box ul {
+  margin: 0.5rem 0 0 0;
+  padding-left: 1.5rem;
+}
+
+.info-box li {
+  margin-bottom: 0.25rem;
+  color: #5a6c7d;
+  font-size: 0.9rem;
+}
+
+/* Command Preview in Audio */
+
+.audio-form .command-preview-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid #ecf0f1;
+}
+
+.audio-form .command-preview-section h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.audio-form .command-preview {
+  padding: 1rem;
+  background: #263238;
+  border: 1px solid #37474f;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.audio-form .command-preview code {
+  display: block;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.85rem;
+  color: #a5d6a7;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-weight: 500;
+}
+
+/* ===========================
+   Audio Preset Manager
+   =========================== */
+
+.audio-preset-manager {
+  padding: 1.25rem;
+  background: white;
+  border: 1px solid #bdc3c7;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.audio-preset-manager .preset-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #ecf0f1;
+}
+
+.audio-preset-manager .preset-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.audio-preset-manager .save-preset-btn {
+  padding: 0.5rem 1rem;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.audio-preset-manager .save-preset-btn:hover {
+  background: #2980b9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(52, 152, 219, 0.3);
+}
+
+.audio-preset-manager .preset-error {
+  padding: 0.75rem;
+  background: #ffe6e6;
+  border: 1px solid #e74c3c;
+  border-radius: 4px;
+  color: #c0392b;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.audio-preset-manager .preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.audio-preset-manager .no-presets {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #95a5a6;
+  font-style: italic;
+  font-size: 0.95rem;
+}
+
+.audio-preset-manager .preset-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.875rem;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.audio-preset-manager .preset-item:hover {
+  border-color: #3498db;
+  box-shadow: 0 2px 6px rgba(52, 152, 219, 0.2);
+  transform: translateY(-1px);
+}
+
+.audio-preset-manager .preset-info {
+  flex: 1;
+}
+
+.audio-preset-manager .preset-name {
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.audio-preset-manager .builtin-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  background: #3498db;
+  color: white;
+  font-size: 0.75rem;
+  border-radius: 3px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.audio-preset-manager .preset-description {
+  font-size: 0.85rem;
+  color: #7f8c8d;
+  margin-bottom: 0.25rem;
+}
+
+.audio-preset-manager .preset-details {
+  font-size: 0.8rem;
+  color: #95a5a6;
+}
+
+.audio-preset-manager .preset-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.audio-preset-manager .load-preset-btn,
+.audio-preset-manager .delete-preset-btn {
+  padding: 0.4rem 0.875rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.audio-preset-manager .load-preset-btn {
+  background: #27ae60;
+  color: white;
+}
+
+.audio-preset-manager .load-preset-btn:hover {
+  background: #229954;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(39, 174, 96, 0.3);
+}
+
+.audio-preset-manager .delete-preset-btn {
+  background: #e74c3c;
+  color: white;
+}
+
+.audio-preset-manager .delete-preset-btn:hover {
+  background: #c0392b;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(231, 76, 60, 0.3);
+}
+
+/* Preset Save Dialog */
+
+.preset-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.preset-dialog {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  max-width: 500px;
+  width: 90%;
+  padding: 1.5rem;
+}
+
+.preset-dialog h3 {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.preset-dialog .dialog-content {
+  margin-bottom: 1.5rem;
+}
+
+.preset-dialog .form-group {
+  margin-bottom: 1rem;
+}
+
+.preset-dialog .form-group label {
+  display: block;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.preset-dialog .form-group input,
+.preset-dialog .form-group textarea {
+  width: 100%;
+  padding: 0.625rem;
+  border: 1px solid #bdc3c7;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  color: #2c3e50;
+  font-family: inherit;
+}
+
+.preset-dialog .form-group input:focus,
+.preset-dialog .form-group textarea:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+}
+
+.preset-dialog .current-settings {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+}
+
+.preset-dialog .current-settings strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #2c3e50;
+}
+
+.preset-dialog .current-settings div {
+  font-size: 0.9rem;
+  color: #5a6c7d;
+  margin-bottom: 0.25rem;
+}
+
+.preset-dialog .dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.preset-dialog .cancel-btn,
+.preset-dialog .save-btn {
+  padding: 0.625rem 1.25rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preset-dialog .cancel-btn {
+  background: #95a5a6;
+  color: white;
+}
+
+.preset-dialog .cancel-btn:hover:not(:disabled) {
+  background: #7f8c8d;
+}
+
+.preset-dialog .save-btn {
+  background: #3498db;
+  color: white;
+}
+
+.preset-dialog .save-btn:hover:not(:disabled) {
+  background: #2980b9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(52, 152, 219, 0.3);
+}
+
+.preset-dialog .cancel-btn:disabled,
+.preset-dialog .save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}

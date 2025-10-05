@@ -45,19 +45,75 @@ Job config shape (example):
 - **Script Validation API**: Backend endpoint to validate and apply Vapoursynth scripts
 - **Enhanced Frame API**: Support for script application and crop detection
 
-### Phase 2: Enhanced Output Control
-- **Advanced Encoder Settings UI**: x264/x265 preset management and custom arguments
-- **Audio Track Management**: Multi-track selection, encoding options (AAC, copy, etc.)
-- **Container & Muxing Options**: MKV/MP4 selection with mkvmerge/mp4box integration
-- **Output Path Validation**: Smart path handling and conflict resolution
-- **Encoding Profiles**: Save/load common encoding configurations
+### Phase 2: Enhanced Output Control (IN PROGRESS)
+- **✅ Tab Restructure**: Renamed Processing → Filters, added Video/Audio tabs with flow indicator
+- **✅ Video Encoder Settings UI**: x264/x265 encoder selection with CRF/2-Pass/Bitrate modes
+- **✅ Preset Management System**: Save/Load/Delete custom encoder presets with built-in defaults
+- **✅ Common Encoder Settings**: CRF slider, preset/tune dropdowns, custom arguments field
+- **✅ Command Preview**: Real-time preview of generated encoder command
+- **✅ Enhanced File Browser**: Universal file/folder browser with open/save modes
+  - Table view with name, size, modified date columns
+  - Navigate up/into directories with breadcrumb navigation
+  - Create new folders in save mode
+  - File filtering (e.g., only .mkv/.mp4 for video files)
+  - Responsive design with smooth animations
+- **✅ Output Path Browser**: Integrated file browser for output path selection with filename input
+- **✅ Directory Creation API**: Backend endpoint for creating folders (`POST /api/mkdir`)
+- **✅ Permissive Path Handling**: Desktop-app mode trusts user-configured paths
+  - No artificial restrictions on folder creation within configured roots
+  - System file permissions are the security boundary
+  - Graceful fallback to system drives when no roots configured
+  - Proper error messages for permission issues
+- **❌ Audio Track Management UI**: Multi-track selection, encoding options (AAC, copy, etc.) - TODO PHASE 2
+- **❌ Container & Muxing Options UI**: MKV/MP4 selection with mkvmerge/mp4box settings - TODO PHASE 2
+- **❌ Output Path Validation**: Smart path handling and conflict resolution - TODO PHASE 2
+- **❌ Backend Integration**: Wire encoder settings to frameserver pipeline - TODO PHASE 2
 
-### Phase 3: Job Management & Queue System
-- **Priority Queue System**: Job ordering, pause, cancel, retry functionality
-- **Live Progress Updates**: WebSocket-based frame-level progress with encoder logs
-- **Job Templates**: Save processing pipelines for batch operations
-- **Job History**: Success/failure tracking with detailed logs
-- **Batch Processing**: Apply same settings to multiple input files
+### Phase 3: Job Management & Queue System (IN PROGRESS)
+- **✅ Job Queue Backend**: Complete CRUD API (submit, list, start, cancel, delete) with position-based ordering
+- **✅ Job Queue Frontend**: JobCard and JobQueuePanel with drag-and-drop reordering, enable/disable checkboxes
+- **✅ Job Database Schema**: SQLite with position/enabled fields (replaced priority), progress tracking, configs (JSON)
+- **✅ Audio Preset System**: Save/load/delete audio encoder configurations with built-in presets
+- **✅ Auto-refresh Polling**: 2-second REST API polling for job status updates (MVP)
+- **✅ Jobs Tab Always Accessible**: Users can view job queue without loading source file
+- **✅ Manual Start System**: StaxRip-style manual "Start Next" button (no auto-start)
+- **✅ Job Worker**: Background thread monitoring queue for manually-started jobs
+- **✅ Job Executor**: Basic vspipe → x264 pipeline implemented
+- **✅ Job Execution Backend**: Full pipeline with multi-track audio support:
+  - ✅ **Frame count detection** via `vspipe --info` with 30s timeout
+  - ✅ **Audio track detection** with ffprobe JSON parsing
+  - ✅ **Multiple audio track processing** (process multiple tracks in one job)
+  - ✅ **Audio extraction** using ffmpeg copy mode (per track)
+  - ✅ **Audio encoding** (AAC/Opus with configurable bitrate + copy mode per track)
+  - ✅ **Multi-track muxing** with mkvmerge (MKV) and ffmpeg (MP4/fallback)
+  - ✅ **Temp file management** with automatic cleanup (tracks all temp files)
+  - ✅ **Graceful degradation** (skips failed tracks, creates video-only if all fail)
+  - ✅ **Per-track configuration** (sourceTrack, encoder, bitrate, language, name)
+  - ❌ **2-pass encoding** mode support (TODO: x264 pass 1 + pass 2)
+  - ❌ **Multiple video encoder support** (TODO: x265, SVT-AV1, NVENC)
+- **✅ Progress Tracking**: Complete implementation with frame count:
+  - ✅ **Frame count detection** from VapourSynth script
+  - ✅ **Percentage calculation** (current/total * 100)
+  - ✅ **ETA calculation** ((total - current) / fps)
+  - ✅ **FPS tracking** from encoder output
+  - ✅ **File size tracking** (source_size, output_size in database)
+  - ✅ **Graceful fallback** if frame count unavailable (shows frames without %)
+- **✅ Error Handling**: Robust cleanup and recovery:
+  - ✅ **Temp file cleanup** on success/failure/cancellation
+  - ✅ **Process termination** on cancel (vspipe + encoder)
+  - ✅ **Fallback muxing** (mkvmerge → ffmpeg)
+  - ✅ **Video-only output** if audio processing fails
+  - ✅ **Detailed console logging** for debugging
+  - ❌ **Retry logic** for recoverable errors (TODO)
+  - ❌ **Better error messages** to UI (TODO: structured error types)
+  - ❌ **Log file preservation** for debugging (TODO: separate log files per job)
+- **📋 TODO: WebSocket Real-time Updates**: Replace polling with WebSocket push for efficiency
+  - Server emits events on job status/progress changes
+  - Client receives real-time updates without polling overhead
+  - Consider for Phase 4 or when performance becomes bottleneck
+- **Job Templates**: Save processing pipelines for batch operations - FUTURE
+- **Job History**: Success/failure tracking with detailed logs - FUTURE
+- **Batch Processing**: Apply same settings to multiple input files - FUTURE
 
 ### Phase 4: Advanced Features & Polish
 - **Plugin System**: Custom Vapoursynth filter integration

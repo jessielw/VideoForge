@@ -1,0 +1,49 @@
+/* SubtitleConfigSection.css */
+
+.subtitle-config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: #ecf0f1;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.subtitle-config-summary {
+  padding: 1rem;
+  background: white;
+  border: 1px solid #bdc3c7;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.subtitle-config-summary h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.subtitle-config-summary ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.subtitle-config-summary li {
+  padding: 0.5rem;
+  background: #ecf0f1;
+  border-left: 3px solid #9b59b6;
+  border-radius: 3px;
+  font-size: 0.9rem;
+  color: #2c3e50;
+}
+
+.subtitle-config-summary li strong {
+  color: #9b59b6;
+  margin-right: 0.5rem;
+}

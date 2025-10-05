@@ -1,0 +1,505 @@
+/* ========================================
+   File Browser Component Styles
+   ======================================== */
+
+.file-browser-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.file-browser-modal {
+  background: var(--bg-primary, #ffffff);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  max-width: 900px;
+  height: 80vh;
+  max-height: 700px;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Header */
+.file-browser-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  background: var(--bg-secondary, #f8f9fa);
+  border-radius: 12px 12px 0 0;
+}
+
+.file-browser-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #222);
+}
+
+.close-button {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.close-button:hover {
+  background: var(--bg-hover, #e0e0e0);
+  color: var(--text-primary, #222);
+}
+
+/* Location bar */
+.file-browser-location {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  background: var(--bg-primary, #ffffff);
+}
+
+.nav-button {
+  padding: 6px 12px;
+  background: var(--primary-color, #0066cc);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.nav-button:hover:not(:disabled) {
+  background: var(--primary-hover, #0052a3);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.3);
+}
+
+.nav-button:disabled {
+  background: var(--bg-disabled, #ccc);
+  color: var(--text-disabled, #999);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.current-path {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 6px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  color: var(--text-secondary, #555);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-folder-button {
+  padding: 6px 12px;
+  background: var(--success-color, #28a745);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.new-folder-button:hover {
+  background: var(--success-hover, #218838);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+
+/* Content area */
+.file-browser-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--bg-primary, #ffffff);
+}
+
+/* Loading, error, empty states */
+.loading-state,
+.error-state,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  color: var(--text-secondary, #666);
+  font-size: 14px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--border-color, #e0e0e0);
+  border-top-color: var(--primary-color, #0066cc);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error-state {
+  color: var(--error-color, #dc3545);
+}
+
+.error-icon {
+  font-size: 48px;
+}
+
+.empty-state span:first-child {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+/* File list table */
+.file-list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.file-list thead {
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary, #f8f9fa);
+  z-index: 10;
+}
+
+.file-list th {
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary, #555);
+  border-bottom: 2px solid var(--border-color, #e0e0e0);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.file-list .col-icon {
+  width: 40px;
+}
+
+.file-list .col-name {
+  width: auto;
+}
+
+.file-list .col-size {
+  width: 100px;
+  text-align: right;
+}
+
+.file-list .col-modified {
+  width: 180px;
+}
+
+.file-entry {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.file-entry:hover {
+  background: var(--bg-hover, #f0f7ff);
+}
+
+.file-entry.is-directory:hover {
+  background: var(--bg-hover-alt, #e8f5e9);
+}
+
+.file-entry td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-light, #f0f0f0);
+}
+
+.file-entry .col-icon {
+  font-size: 20px;
+  text-align: center;
+}
+
+.file-entry .col-name {
+  font-weight: 500;
+  color: var(--text-primary, #222);
+}
+
+.file-entry.is-directory .col-name {
+  color: var(--primary-color, #0066cc);
+  font-weight: 600;
+}
+
+.file-entry .col-size {
+  text-align: right;
+  color: var(--text-secondary, #666);
+  font-size: 13px;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.file-entry .col-modified {
+  color: var(--text-secondary, #666);
+  font-size: 12px;
+}
+
+/* Footer (save mode) */
+.file-browser-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+  background: var(--bg-secondary, #f8f9fa);
+  border-radius: 0 0 12px 12px;
+}
+
+.filename-input-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.filename-input-group label {
+  font-weight: 600;
+  color: var(--text-primary, #222);
+  min-width: 80px;
+  font-size: 14px;
+}
+
+.filename-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  transition: all 0.2s;
+}
+
+.filename-input:focus {
+  outline: none;
+  border-color: var(--primary-color, #0066cc);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
+.footer-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.footer-actions button {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancel-button {
+  background: var(--bg-secondary, #e0e0e0);
+  color: var(--text-primary, #222);
+}
+
+.cancel-button:hover {
+  background: var(--bg-hover, #d0d0d0);
+  transform: translateY(-1px);
+}
+
+.save-button {
+  background: var(--primary-color, #0066cc);
+  color: white;
+}
+
+.save-button:hover:not(:disabled) {
+  background: var(--primary-hover, #0052a3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3);
+}
+
+.save-button:disabled {
+  background: var(--bg-disabled, #ccc);
+  color: var(--text-disabled, #999);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* New folder dialog */
+.new-folder-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.new-folder-dialog {
+  background: var(--bg-primary, #ffffff);
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+.new-folder-dialog h3 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #222);
+}
+
+.folder-name-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 16px;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.folder-name-input:focus {
+  outline: none;
+  border-color: var(--primary-color, #0066cc);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.dialog-actions button {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dialog-actions button:first-child {
+  background: var(--bg-secondary, #e0e0e0);
+  color: var(--text-primary, #222);
+}
+
+.dialog-actions button:first-child:hover {
+  background: var(--bg-hover, #d0d0d0);
+}
+
+.dialog-actions button:last-child {
+  background: var(--success-color, #28a745);
+  color: white;
+}
+
+.dialog-actions button:last-child:hover:not(:disabled) {
+  background: var(--success-hover, #218838);
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+
+.dialog-actions button:disabled {
+  background: var(--bg-disabled, #ccc);
+  color: var(--text-disabled, #999);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Scrollbar styling */
+.file-browser-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.file-browser-content::-webkit-scrollbar-track {
+  background: var(--bg-secondary, #f5f5f5);
+}
+
+.file-browser-content::-webkit-scrollbar-thumb {
+  background: var(--border-color, #ccc);
+  border-radius: 5px;
+}
+
+.file-browser-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary, #999);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .file-browser-modal {
+    width: 95%;
+    height: 90vh;
+  }
+
+  .file-browser-location {
+    flex-wrap: wrap;
+  }
+
+  .current-path {
+    flex-basis: 100%;
+    order: 3;
+  }
+
+  .file-list .col-modified {
+    display: none;
+  }
+
+  .file-list .col-size {
+    width: 80px;
+  }
+}

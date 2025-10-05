@@ -9,13 +9,24 @@ import TargetSection from './components/Target';
 import FileBrowserModal from './components/FileBrowserModal';
 import ProbeFailureModal from './components/Source/ProbeFailureModal';
 import GlobalOverlay from './components/GlobalOverlay';
+import EncoderSettings from './components/Encoder/EncoderSettings';
+import AudioConfigSection from './components/Audio/AudioConfigSection';
+import { MultiTrackAudioConfig } from './components/Audio/AudioConfigSection';
+import SubtitleConfigSection from './components/Subtitles/SubtitleConfigSection';
+import { MultiTrackSubtitleConfig } from './components/Subtitles/SubtitleConfigSection';
+import OutputSettings from './components/Output/OutputSettings';
+import JobQueuePanel from './components/Jobs/JobQueuePanel';
 import { useOverlay } from './context/OverlayContext';
+import { useMediaInfo } from './context/MediaInfoContext';
+import { EncoderConfig } from './types/encoder';
+import { OutputConfig } from './types/output';
 import './styles/index.css';
 
 const API = 'http://127.0.0.1:8000';
 
 export default function App(): JSX.Element {
   const overlay = useOverlay();
+  const { setMediaInfo, getAudioTracks, getSubtitleTracks } = useMediaInfo();
 
   // Tab state
   const [activeTab, setActiveTab] = useState<string>('source');
@@ -31,10 +42,35 @@ export default function App(): JSX.Element {
   // Script state
   const [script, setScript] = useState<string>('');
 
-  // Target state
-  const [outputPath, setOutputPath] = useState<string>('');
-  const [container, setContainer] = useState<string>('mkv');
-  const [videoCodec, setVideoCodec] = useState<string>('x264');
+  // Encoder state
+  const [encoderConfig, setEncoderConfig] = useState<EncoderConfig>({
+    encoder: 'x264',
+    mode: 'crf',
+    crf: 23,
+    bitrate: 5000,
+    preset: 'medium',
+    tune: 'none',
+    customArgs: '',
+  });
+
+  // Audio state (multi-track)
+  const [audioConfig, setAudioConfig] = useState<MultiTrackAudioConfig>({
+    tracks: [],
+  });
+
+  // Subtitle state (multi-track)
+  const [subtitleConfig, setSubtitleConfig] = useState<MultiTrackSubtitleConfig>({
+    tracks: [],
+  });
+
+  // Output state
+  const [outputConfig, setOutputConfig] = useState<OutputConfig>({
+    outputPath: '',
+    container: 'mkv',
+    muxer: 'mkvmerge',
+    fastStart: false,
+    overwrite: false,
+  });
 
   // Indexing state
   const [indexing, setIndexing] = useState(false);
@@ -121,6 +157,9 @@ export default function App(): JSX.Element {
       const indexData = await indexResp.json();
       console.log('Index data:', indexData);
       setIndexInfo(indexData);
+
+      // Store in global context for use by other components (Audio, Video, etc.)
+      setMediaInfo(indexData);
 
       return indexData;
 
@@ -224,13 +263,10 @@ export default function App(): JSX.Element {
     </div>
   );
 
-  const processingPane = (
-    <div
-      className="processing-tab"
-      style={{ display: activeTab === 'processing' ? 'block' : 'none' }}
-    >
-      <div className="processing-layout">
-        <div className="processing-left">
+  const filtersPane = (
+    <div className="filters-tab" style={{ display: activeTab === 'filters' ? 'block' : 'none' }}>
+      <div className="filters-layout">
+        <div className="filters-left">
           <ScriptEditor
             script={script}
             onScriptChange={setScript}
@@ -241,7 +277,7 @@ export default function App(): JSX.Element {
           />
           <FilterPanel onFilterAdd={handleFilterAdd} resetSignal={processingResetVersion} />
         </div>
-        <div className="processing-right">
+        <div className="filters-right">
           <FramePreview
             inputPath={inputPath}
             script={script}
@@ -256,51 +292,125 @@ export default function App(): JSX.Element {
     </div>
   );
 
+  const videoPane = (
+    <div className="video-tab" style={{ display: activeTab === 'video' ? 'block' : 'none' }}>
+      <div className="video-layout">
+        <EncoderSettings config={encoderConfig} onChange={setEncoderConfig} />
+      </div>
+    </div>
+  );
+
+  const audioPane = (
+    <div className="audio-tab" style={{ display: activeTab === 'audio' ? 'block' : 'none' }}>
+      <div className="audio-layout">
+        <AudioConfigSection
+          sourceAudioTracks={getAudioTracks()}
+          config={audioConfig}
+          onChange={setAudioConfig}
+        />
+      </div>
+    </div>
+  );
+
+  const subtitlesPane = (
+    <div
+      className="subtitles-tab"
+      style={{ display: activeTab === 'subtitles' ? 'block' : 'none' }}
+    >
+      <div className="subtitles-layout">
+        <SubtitleConfigSection
+          sourceSubtitleTracks={getSubtitleTracks()}
+          config={subtitleConfig}
+          onChange={setSubtitleConfig}
+        />
+      </div>
+    </div>
+  );
+
+  const handleAddToJobs = async () => {
+    if (!inputPath) {
+      alert('No source file selected');
+      return;
+    }
+
+    try {
+      // Prepare job submission payload
+      const jobConfig = {
+        sourcePath: inputPath,
+        vsScript: script, // Current VapourSynth script
+        videoConfig: encoderConfig,
+        audioConfig: audioConfig,
+        subtitleConfig: subtitleConfig,
+        outputConfig: outputConfig,
+        // Auto-generate job name from source filename
+        name: `${inputPath.split(/[\\/]/).pop()?.split('.')[0] || 'Encode'} → ${outputConfig.container.toUpperCase()}`,
+      };
+
+      const response = await fetch('http://localhost:8000/api/jobs/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          config: jobConfig,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.ok) {
+        alert(`✅ Job added to queue: ${result.message}`);
+        // Switch to jobs tab to show the new job
+        setActiveTab('jobs');
+      } else {
+        alert(`❌ Failed to add job: ${result.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to submit job:', error);
+      alert(`❌ Failed to add job: ${error instanceof Error ? error.message : 'Network error'}`);
+    }
+  };
+
   const outputPane = (
     <div className="output-tab" style={{ display: activeTab === 'output' ? 'block' : 'none' }}>
-      <TargetSection
-        outputPath={outputPath}
-        setOutputPath={setOutputPath}
-        container={container}
-        setContainer={setContainer}
-        videoCodec={videoCodec}
-        setVideoCodec={setVideoCodec}
-        onStart={() => alert('Start encode - not wired yet')}
-        onReset={() => {
-          setOutputPath('');
-          setInputPath('');
-          setScript('');
-        }}
-      />
+      <div className="output-layout">
+        <OutputSettings
+          config={outputConfig}
+          onChange={setOutputConfig}
+          sourcePath={inputPath}
+          onAddToJobs={handleAddToJobs}
+        />
+      </div>
     </div>
   );
 
   const jobsPane = (
     <div className="jobs-tab" style={{ display: activeTab === 'jobs' ? 'block' : 'none' }}>
-      <h2>Jobs</h2>
-      <p>Job management coming in Phase 3...</p>
+      <JobQueuePanel autoRefresh={true} refreshInterval={2000} />
     </div>
   );
 
-  // Disable Processing and Output tabs when there's no input path loaded,
+  // Disable all workflow tabs when there's no input path loaded,
   // or when the VapourSynth probe has failed (in which case we cannot proceed).
   let disabledTabs: string[] = [];
   if (!inputPath) {
-    disabledTabs = ['processing', 'output'];
+    disabledTabs = ['filters', 'video', 'audio', 'subtitles', 'output'];
   } else if (indexInfo && indexInfo.vapoursynth && indexInfo.vapoursynth.error) {
-    // Probe failed; prevent user from using Processing/Output since previews/encodes won't work
-    disabledTabs = ['processing', 'output'];
+    // Probe failed; prevent user from using workflow tabs since previews/encodes won't work
+    disabledTabs = ['filters', 'video', 'audio', 'subtitles', 'output'];
   } else if (previewError) {
-    // If the preview failed (script/runtime error), block Processing/Output
-    disabledTabs = [...disabledTabs, 'processing', 'output'];
+    // If the preview failed (script/runtime error), block workflow tabs
+    disabledTabs = [...disabledTabs, 'filters', 'video', 'audio', 'subtitles', 'output'];
   }
 
-  // If inputPath is cleared, ensure we return to Source tab
+  // If inputPath is cleared, ensure we return to Source tab and clear mediaInfo
+  // Exception: Allow Jobs tab to be accessed without input (for viewing job queue)
   React.useEffect(() => {
-    if (!inputPath && activeTab !== 'source') {
+    if (!inputPath && activeTab !== 'source' && activeTab !== 'jobs') {
       setActiveTab('source');
+      setMediaInfo(null); // Clear mediaInfo when no file is selected
     }
-  }, [inputPath, activeTab]);
+  }, [inputPath, activeTab, setMediaInfo]);
 
   // Redirect user to Source if the vapoursynth probe failed while they were on a blocked tab
   React.useEffect(() => {
@@ -309,11 +419,11 @@ export default function App(): JSX.Element {
     }
   }, [indexInfo?.vapoursynth?.error, activeTab]);
 
-  // When the user opens the Processing tab, auto-run the apply/index once for the current
+  // When the user opens the Filters tab, auto-run the apply/index once for the current
   // input path if it hasn't been indexed yet. This provides an initial preview without
   // requiring the user to click Apply every time they open the tab.
   React.useEffect(() => {
-    if (activeTab !== 'processing') return;
+    if (activeTab !== 'filters') return;
     if (!inputPath) return;
     if (lastIndexedPath === inputPath) return; // already indexed
 
@@ -324,7 +434,10 @@ export default function App(): JSX.Element {
   return (
     <MainLayout activeTab={activeTab} onTabChange={setActiveTab} disabledTabs={disabledTabs}>
       {sourcePane}
-      {processingPane}
+      {filtersPane}
+      {videoPane}
+      {audioPane}
+      {subtitlesPane}
       {outputPane}
       {jobsPane}
 

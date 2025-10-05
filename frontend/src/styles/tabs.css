@@ -2,6 +2,29 @@
 .tab-bar {
   display: flex;
   background: #34495e;
+  align-items: center;
+  gap: 0;
+}
+
+.tab-bar-flow {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0;
+}
+
+.tab-bar-extra {
+  display: flex;
+  margin-left: auto;
+  padding-left: 1rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tab-arrow {
+  color: #7f8c8d;
+  font-size: 1.2rem;
+  padding: 0 0.5rem;
+  user-select: none;
 }
 
 .tab-button {
@@ -15,6 +38,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
 }
 
 .tab-button:hover {
