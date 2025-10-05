@@ -15,13 +15,21 @@ from PIL import Image
 from pydantic import BaseModel
 from pymediainfo import MediaInfo
 
-from .audio_presets import router as audio_presets_router
-from .database import init_database
-from .job_worker import init_worker, start_worker, stop_worker
-from .jobs import router as jobs_router
-from .presets import router as presets_router
+from app.audio_presets import router as audio_presets_router
+from app.database import init_database
+from app.job_worker import init_worker, start_worker, stop_worker
+from app.jobs import router as jobs_router
+from app.presets import router as presets_router
 
 # os.environ["VAPOURSYNTH_PLUGIN_PATH"] = r"C:\VapourSynth\vs-plugins"
+
+import logging
+
+class EndpointFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Check if the log message contains the specific endpoint path
+        # For example, to filter out logs for "/health" endpoint
+        return record.getMessage().find("/api/jobs/list") == -1
 
 load_dotenv()
 
@@ -40,6 +48,7 @@ async def lifespan(app: FastAPI):
     print("🔧 Initializing database...", flush=True)
     init_database()
     print("✅ Database initialized successfully", flush=True)
+    logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
 
     print("🔧 Initializing job worker (manual mode)...", flush=True)
     init_worker(vspipe_path=vs_pipe_path, x264_path=x264_path)
