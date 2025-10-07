@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -13,23 +14,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from PIL import Image
 from pydantic import BaseModel
-from pymediainfo import MediaInfo
 
 from app.audio_presets import router as audio_presets_router
 from app.database import init_database
 from app.job_worker import init_worker, start_worker, stop_worker
 from app.jobs import router as jobs_router
 from app.presets import router as presets_router
+from app.routes.mediainfo import router as mi_router
+from app.utils.file_utils import get_allowed_roots, is_under_allowed_roots
 
 # os.environ["VAPOURSYNTH_PLUGIN_PATH"] = r"C:\VapourSynth\vs-plugins"
 
-import logging
 
 class EndpointFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         # Check if the log message contains the specific endpoint path
         # For example, to filter out logs for "/health" endpoint
         return record.getMessage().find("/api/jobs/list") == -1
+
 
 load_dotenv()
 
@@ -48,7 +50,9 @@ async def lifespan(app: FastAPI):
     print("🔧 Initializing database...", flush=True)
     init_database()
     print("✅ Database initialized successfully", flush=True)
-    logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
+    logging.getLogger("uvicorn.access").addFilter(
+        EndpointFilter()
+    )  # TODO: put back later - FILTER THIS OUT FOR NOW
 
     print("🔧 Initializing job worker (manual mode)...", flush=True)
     init_worker(vspipe_path=vs_pipe_path, x264_path=x264_path)
@@ -70,6 +74,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(presets_router)
 app.include_router(audio_presets_router)
 app.include_router(jobs_router)
+app.include_router(mi_router)
 
 origins = [
     "http://localhost:5173",
@@ -84,48 +89,6 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Frame-Meta"],
 )
-
-
-def get_allowed_roots():
-    """Get configured media roots for file browsing.
-
-    Returns a list of Path objects representing allowed root directories.
-    If no roots are configured, returns None (allowing unrestricted access).
-
-    This is primarily for UI browsing organization, not strict security enforcement.
-    In a desktop application, we trust the user's configured paths.
-    """
-    roots = os.environ.get("media")
-    if roots:
-        return [Path(p).resolve() for p in roots.split(";") if p]
-    # For desktop app: If no roots configured, allow browsing from system roots
-    # The file browser will show drive letters on Windows or root on Unix
-    return None
-
-
-def is_under_allowed_roots(p: Path, roots):
-    """Check if a path is under allowed roots.
-
-    If roots is None or empty, always returns True (permissive mode for desktop app).
-    This provides a convenience check for file browser organization without
-    being overly restrictive.
-    """
-    # No roots configured = trust everything
-    if not roots:
-        return True
-
-    try:
-        rp = p.resolve()
-    except Exception:
-        return False
-
-    for r in roots:
-        try:
-            if r in rp.parents or rp == r:
-                return True
-        except Exception:
-            continue
-    return False
 
 
 # VapourSynth initialization helper
@@ -344,128 +307,12 @@ async def file_list(path: str = Query(None)):
     return {"ok": True, "entries": entries, "path": str(p)}
 
 
-@app.post("/api/mediainfo")
-async def mediainfo_file(request: Request):
-    """Return MediaInfo for a file. This endpoint only runs MediaInfo parsing and returns track info.
-    VapourSynth probing (frame count/size/fps) is handled by /api/vs/probe which uses the VapourSynth API directly.
+@app.post("/api/vs/info")
+async def vapoursynth_info(request: Request):
     """
-    data = await request.json()
-    file_path = data.get("path")
-    if not file_path:
-        return {"ok": False, "error": "No path provided"}
+    Probe a file using VapourSynth directly to get frame count, width, height, and fps.
 
-    p = Path(file_path)
-    roots = get_allowed_roots()
-    if roots and not is_under_allowed_roots(p, roots):
-        return {"ok": False, "error": "Path not under allowed roots"}
-
-    if not p.exists():
-        return {"ok": False, "error": "File not found"}
-
-    try:
-        media_info = MediaInfo.parse(str(p), legacy_stream_display=True)
-        raw_data = media_info.to_data()
-
-        # Parse tracks into structured format for frontend
-        tracks = raw_data.get("tracks", [])
-
-        # Extract general info
-        general_track = next(
-            (t for t in tracks if t.get("track_type") == "General"), {}
-        )
-
-        # Extract video tracks
-        video_tracks = [
-            {
-                "track_id": t.get("track_id"),
-                "format": t.get("format"),
-                "format_profile": t.get("format_profile"),
-                "format_level": t.get("format_level"),
-                "width": t.get("width"),
-                "height": t.get("height"),
-                "display_aspect_ratio": t.get("display_aspect_ratio"),
-                "pixel_aspect_ratio": t.get("pixel_aspect_ratio"),
-                "frame_rate": t.get("frame_rate"),
-                "frame_count": t.get("frame_count"),
-                "bit_rate": t.get("bit_rate"),
-                "bit_depth": t.get("bit_depth"),
-                "chroma_subsampling": t.get("chroma_subsampling"),
-                "color_space": t.get("color_space"),
-                "scan_type": t.get("scan_type"),
-                "codec_id": t.get("codec_id"),
-            }
-            for t in tracks
-            if t.get("track_type") == "Video"
-        ]
-
-        # Extract audio tracks
-        audio_tracks = [
-            {
-                "track_id": t.get("track_id"),
-                "format": t.get("format"),
-                "format_profile": t.get("format_profile"),
-                "codec_id": t.get("codec_id"),
-                "channels": t.get(
-                    "channel_s"
-                ),  # Note: pymediainfo uses "channel_s" not "channels"
-                "channel_layout": t.get("channel_layout"),
-                "sampling_rate": t.get("sampling_rate"),
-                "bit_rate": t.get("bit_rate"),
-                "bit_depth": t.get("bit_depth"),
-                "language": t.get("language"),
-                "title": t.get("title"),
-                "default": t.get("default"),
-                "forced": t.get("forced"),
-                "compression_mode": t.get("compression_mode"),
-            }
-            for t in tracks
-            if t.get("track_type") == "Audio"
-        ]
-
-        # Extract subtitle tracks
-        subtitle_tracks = [
-            {
-                "track_id": t.get("track_id"),
-                "format": t.get("format"),
-                "codec_id": t.get("codec_id"),
-                "language": t.get("language"),
-                "title": t.get("title"),
-                "default": t.get("default"),
-                "forced": t.get("forced"),
-            }
-            for t in tracks
-            if t.get("track_type") in ("Text", "Subtitle")
-        ]
-
-        result = {
-            "ok": True,
-            "path": str(p),
-            "general": {
-                "filename": general_track.get("file_name"),
-                "format": general_track.get("format"),
-                "file_size": general_track.get("file_size"),
-                "duration": general_track.get("duration"),
-                "overall_bitrate": general_track.get("overall_bit_rate"),
-                "format_profile": general_track.get("format_profile"),
-                "writing_application": general_track.get("writing_application"),
-                "writing_library": general_track.get("writing_library"),
-            },
-            "video_tracks": video_tracks,
-            "audio_tracks": audio_tracks,
-            "subtitle_tracks": subtitle_tracks,
-            "mediainfo": raw_data,  # Keep raw data for MediaInfoPanel compatibility
-        }
-        return result
-    except Exception as e:
-        print(f"MediaInfo parsing failed: {e}", flush=True)
-        return {"ok": False, "error": f"Failed to parse media info: {str(e)}"}
-
-
-@app.post("/api/vs/probe")
-async def vapoursynth_probe_file(request: Request):
-    """Probe a file using VapourSynth directly to get frame count, width, height, and fps.
-
-    Returns a combined result with MediaInfo + VapourSynth probing when possible.
+    Returns VapourSynth data.
     """
     data = await request.json()
     file_path = data.get("path")

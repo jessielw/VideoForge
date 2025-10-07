@@ -121,7 +121,7 @@ export default function App(): JSX.Element {
 
   // Loading state (used for indexing/probing/mediainfo operations)
   const [isLoading, setIsLoading] = useState(false);
-  const [indexInfo, setIndexInfo] = useState<any>(null);
+  const [vsInfo, setVsInfo] = useState<any>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   // Preview trigger (increment to tell FramePreview to fetch new frames)
   const [previewVersion, setPreviewVersion] = useState(0);
@@ -189,6 +189,11 @@ export default function App(): JSX.Element {
     // Reset preview/index markers so preview will be regenerated for the new file
     setPreviewVersion(0);
     setLastIndexedPath(null);
+
+    // Ensure we return to the Source tab when a new source is opened.
+    // The Jobs tab is intentionally left accessible and is not affected
+    // by source-selection resets.
+    setActiveTab('source');
   }
 
   // Select file from browser
@@ -233,7 +238,9 @@ export default function App(): JSX.Element {
       console.log('MediaInfo data:', mediaInfoData);
 
       // Store in global context for use by other components (Audio, Video, etc.)
-      setMediaInfo(mediaInfoData);
+      setMediaInfo(mediaInfoData); // TODO: continue here and be sure we're using it properly throughout the app instead of calling ffmpeg etc multiple times, this needs to also be handled with a single load on the backend and not in multiple routes
+      // Note: do NOT set indexInfo here. indexInfo is the probe/index result
+      // (vapoursynth/probe) and is managed separately by probe/apply flows.
     } catch (error) {
       console.error('Failed to fetch mediainfo for file:', error);
       return { ok: false, reason: String(error) };
@@ -273,24 +280,18 @@ export default function App(): JSX.Element {
       message: 'Analyzing video with VapourSynth...',
     });
     try {
-      const resp = await fetch(`${API}/api/vs/probe`, {
+      const resp = await fetch(`${API}/api/vs/info`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: inputPath }),
       });
       const data = await resp.json();
       console.log('Probe data:', data);
-      // The probe endpoint returns vapoursynth/probe-only data. Don't overwrite
-      // the full mediainfo previously fetched by indexFile — merge the
-      // vapoursynth/probe result into the existing indexInfo so MediaInfoPanel
-      // continues to show the previously loaded media information.
-      setIndexInfo((prev: any) => {
-        // If the probe returned a full index (ok + mediainfo), replace.
-        if (data && data.ok && (data.mediainfo || data.tracks)) return data;
-        // Otherwise merge vapoursynth/probe result into previous indexInfo.
-        const vap = data && data.vapoursynth ? data.vapoursynth : data || {};
-        return { ...(prev || {}), vapoursynth: { ...(prev?.vapoursynth || {}), ...vap } };
-      });
+      const vap = data && data.vapoursynth ? data.vapoursynth : data || {};
+      setVsInfo((prev: any) => ({
+        ...(prev || {}),
+        vapoursynth: { ...(prev?.vapoursynth || {}), ...vap },
+      }));
       if (data && data.ok) {
         setLastIndexedPath(inputPath);
       }
@@ -316,7 +317,7 @@ export default function App(): JSX.Element {
             onBrowseClick={openFileModal}
             isLoading={isLoading}
           />
-          <MediaInfoPanel filePath={inputPath} indexInfo={indexInfo} />
+          <MediaInfoPanel filePath={inputPath} />
         </div>
       </div>
     </div>
@@ -340,7 +341,7 @@ export default function App(): JSX.Element {
           <FramePreview
             inputPath={inputPath}
             script={script}
-            indexInfo={indexInfo}
+            vsInfo={vsInfo}
             onScriptChange={setScript}
             previewVersion={previewVersion}
             onPreviewError={(err: string | null) => setPreviewError(err)}
@@ -456,7 +457,7 @@ export default function App(): JSX.Element {
   let disabledTabs: string[] = [];
   if (!inputPath) {
     disabledTabs = ['filters', 'video', 'audio', 'subtitles', 'output'];
-  } else if (indexInfo && indexInfo.vapoursynth && indexInfo.vapoursynth.error) {
+  } else if (vsInfo && vsInfo.vapoursynth && vsInfo.vapoursynth.error) {
     // Probe failed; prevent user from using workflow tabs since previews/encodes won't work
     disabledTabs = ['filters', 'video', 'audio', 'subtitles', 'output'];
   } else if (previewError) {
@@ -464,21 +465,26 @@ export default function App(): JSX.Element {
     disabledTabs = [...disabledTabs, 'filters', 'video', 'audio', 'subtitles', 'output'];
   }
 
-  // If inputPath is cleared, ensure we return to Source tab and clear mediaInfo
-  // Exception: Allow Jobs tab to be accessed without input (for viewing job queue)
+  // Only clear mediaInfo when the inputPath transitions from a selected file
+  // to empty (i.e. the file was unloaded). This prevents accidental clearing
+  // when the user simply switches tabs.
+  const prevInputPath = useRef<string | null>(null);
   React.useEffect(() => {
-    if (!inputPath && activeTab !== 'source' && activeTab !== 'jobs') {
+    // If we had a previous path and now it's empty, clear media info and
+    // return the user to Source. Don't run this effect on tab changes.
+    if (!inputPath && prevInputPath.current) {
       setActiveTab('source');
-      setMediaInfo(null); // Clear mediaInfo when no file is selected
+      setMediaInfo(null);
     }
-  }, [inputPath, activeTab, setMediaInfo]);
+    prevInputPath.current = inputPath || null;
+  }, [inputPath, setMediaInfo]);
 
   // Redirect user to Source if the vapoursynth probe failed while they were on a blocked tab
   React.useEffect(() => {
-    if (indexInfo && indexInfo.vapoursynth && indexInfo.vapoursynth.error) {
+    if (vsInfo && vsInfo.vapoursynth && vsInfo.vapoursynth.error) {
       if (activeTab !== 'source') setActiveTab('source');
     }
-  }, [indexInfo?.vapoursynth?.error, activeTab]);
+  }, [vsInfo?.vapoursynth?.error, activeTab]);
 
   // When the user opens the Filters tab, auto-run the apply/index once for the current
   // input path if it hasn't been indexed yet. This provides an initial preview without
@@ -518,10 +524,10 @@ export default function App(): JSX.Element {
 
         {/* Probe failure modal blocks processing/output when VapourSynth probe failed */}
         <ProbeFailureModal
-          error={indexInfo?.vapoursynth?.error}
+          error={vsInfo?.vapoursynth?.error}
           onClose={() => {
             // Clear probe error locally so user can attempt to re-index/probe
-            setIndexInfo((prev: any) => {
+            setVsInfo((prev: any) => {
               if (!prev) return prev;
               const copy = { ...prev };
               if (copy.vapoursynth) copy.vapoursynth = { ...copy.vapoursynth, error: null };

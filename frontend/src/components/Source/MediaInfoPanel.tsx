@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useMediaInfo } from '../../context/MediaInfoContext';
 
 interface VideoTrack {
   track_id?: number;
@@ -82,7 +83,6 @@ interface MediaInfo {
 
 interface MediaInfoPanelProps {
   filePath: string | null;
-  indexInfo: MediaInfo | null;
 }
 
 function formatFileSize(bytes?: number): string {
@@ -124,12 +124,19 @@ function formatBitrate(bps?: number): string {
   }
 }
 
-export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelProps): JSX.Element {
+export default function MediaInfoPanel({ filePath }: MediaInfoPanelProps): JSX.Element {
   const [activeTab, setActiveTab] = useState<'general' | 'video' | 'audio' | 'subtitles'>(
     'general'
   );
 
-  if (!filePath || !indexInfo) {
+  // MediaInfoPanel only displays the mediainfo fetched on selection. Probe/index
+  // (vapoursynth) data is handled separately by the indexing/probe flows and
+  // should not overwrite or mask mediainfo. Read mediaInfo from context only.
+  const { mediaInfo } = useMediaInfo();
+  const effectiveInfo: MediaInfo | null = (mediaInfo as any) || null;
+  const vapoursynthFromMediaInfo = (mediaInfo as any)?.vapoursynth || null;
+
+  if (!filePath || !effectiveInfo) {
     return (
       <div className="media-info-panel">
         <h3>Media Information</h3>
@@ -138,7 +145,7 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
     );
   }
 
-  if (!indexInfo.ok) {
+  if (!effectiveInfo.ok) {
     return (
       <div className="media-info-panel">
         <h3>Media Information</h3>
@@ -148,7 +155,7 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
   }
 
   // mediainfo from backend
-  const mi = (indexInfo as any).mediainfo || indexInfo;
+  const mi = (effectiveInfo as any).mediainfo || effectiveInfo;
 
   // Helper to safely parse numeric-like fields that sometimes come back as strings
   const parseNum = (v: any): number | undefined => {
@@ -238,9 +245,12 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
                 <span>
                   {track.width && track.height
                     ? `${track.width} × ${track.height}`
-                    : indexInfo.vapoursynth?.width && indexInfo.vapoursynth?.height
-                      ? `${indexInfo.vapoursynth.width} × ${indexInfo.vapoursynth.height}`
-                      : 'Unknown'}
+                    : (vapoursynthFromMediaInfo?.width || effectiveInfo?.vapoursynth?.width) &&
+                      (vapoursynthFromMediaInfo?.height || effectiveInfo?.vapoursynth?.height)
+                    ? `${vapoursynthFromMediaInfo?.width || effectiveInfo?.vapoursynth?.width} × ${
+                        vapoursynthFromMediaInfo?.height || effectiveInfo?.vapoursynth?.height
+                      }`
+                    : 'Unknown'}
                 </span>
               </div>
               <div className="info-item">
@@ -248,14 +258,21 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
                 <span>
                   {track.frame_rate
                     ? `${track.frame_rate} fps`
-                    : indexInfo.vapoursynth?.fps
-                      ? `${indexInfo.vapoursynth.fps.toFixed(3)} fps`
-                      : 'Unknown'}
+                    : vapoursynthFromMediaInfo?.fps || effectiveInfo?.vapoursynth?.fps
+                    ? `${(
+                        (vapoursynthFromMediaInfo?.fps || effectiveInfo?.vapoursynth?.fps) as number
+                      ).toFixed(3)} fps`
+                    : 'Unknown'}
                 </span>
               </div>
               <div className="info-item">
                 <label>Total Frames:</label>
-                <span>{track.frame_count || indexInfo.vapoursynth?.frames || 'Unknown'}</span>
+                <span>
+                  {track.frame_count ||
+                    vapoursynthFromMediaInfo?.frames ||
+                    effectiveInfo?.vapoursynth?.frames ||
+                    'Unknown'}
+                </span>
               </div>
               <div className="info-item">
                 <label>Bitrate:</label>
@@ -454,9 +471,9 @@ export default function MediaInfoPanel({ filePath, indexInfo }: MediaInfoPanelPr
     <div className="media-info-panel">
       <h3>Media Information</h3>
 
-      {indexInfo.vapoursynth?.error && (
+      {vapoursynthFromMediaInfo?.error && (
         <div className="vs-warning">
-          <span>⚠️ VapourSynth probe failed: {indexInfo.vapoursynth.error}</span>
+          <span>⚠️ VapourSynth probe reported in mediainfo: {vapoursynthFromMediaInfo.error}</span>
         </div>
       )}
 

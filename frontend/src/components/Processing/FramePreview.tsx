@@ -9,7 +9,7 @@ import { useOverlay } from '../../context/OverlayContext';
 interface FramePreviewProps {
   inputPath: string;
   script?: string;
-  indexInfo: any;
+  vsInfo: any;
   onScriptChange?: (script: string) => void;
   // A numeric counter; increment to trigger a preview fetch (applies the script)
   previewVersion?: number;
@@ -21,7 +21,7 @@ interface FramePreviewProps {
 export default function FramePreview({
   inputPath,
   script,
-  indexInfo,
+  vsInfo,
   onScriptChange,
   previewVersion = 0,
   onPreviewError,
@@ -50,12 +50,12 @@ export default function FramePreview({
   const scrollTimeoutRef = useRef<number | null>(null);
 
   // Use VapourSynth probe results for preview. If the probe isn't present,
-  // fall back to safe defaults.
-  const vsInfo = indexInfo?.vapoursynth || {};
+  // fall back to safe defaults. vsInfo.vapoursynth is the probe result.
+  const vsProbe = vsInfo?.vapoursynth || {};
 
-  const maxFrames = (typeof vsInfo.frames === 'number' && vsInfo.frames) || 1000;
-  const videoWidth = (typeof vsInfo.width === 'number' && vsInfo.width) || 1920;
-  const videoHeight = (typeof vsInfo.height === 'number' && vsInfo.height) || 1080;
+  const maxFrames = (typeof vsProbe.frames === 'number' && vsProbe.frames) || 1000;
+  const videoWidth = (typeof vsProbe.width === 'number' && vsProbe.width) || 1920;
+  const videoHeight = (typeof vsProbe.height === 'number' && vsProbe.height) || 1080;
 
   const API = 'http://127.0.0.1:8000';
   const overlay = useOverlay();
