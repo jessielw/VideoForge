@@ -85,7 +85,7 @@ export default function SubtitleTrackManager({
     <div className="subtitle-track-manager">
       <div className="subtitle-track-manager__header">
         <h3>Subtitle Tracks</h3>
-        <button className="btn-add-track" onClick={handleAddTrack} type="button">
+        <button className="themed-btn" onClick={handleAddTrack} type="button">
           <span>+</span> Add Subtitle
         </button>
       </div>
