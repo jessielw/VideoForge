@@ -44,7 +44,7 @@ export default function App(): JSX.Element {
   const [script, setScript] = useState<string>('');
 
   // Encoder state
-  const [encoderConfig, setEncoderConfig] = useState<EncoderConfig>({
+  const defaultEncoderConfig: EncoderConfig = {
     encoder: 'x264',
     mode: 'crf',
     crf: 23,
@@ -52,7 +52,8 @@ export default function App(): JSX.Element {
     preset: 'medium',
     tune: 'none',
     customArgs: '',
-  });
+  };
+  const [encoderConfig, setEncoderConfig] = useState<EncoderConfig>(defaultEncoderConfig);
 
   // Audio state (multi-track)
   const [audioConfig, setAudioConfig] = useState<MultiTrackAudioConfig>({
@@ -65,13 +66,14 @@ export default function App(): JSX.Element {
   });
 
   // Output state
-  const [outputConfig, setOutputConfig] = useState<OutputConfig>({
+  const defaultOutputConfig: OutputConfig = {
     outputPath: '',
     container: 'mkv',
     muxer: 'mkvmerge',
     fastStart: false,
     overwrite: false,
-  });
+  };
+  const [outputConfig, setOutputConfig] = useState<OutputConfig>(defaultOutputConfig);
 
   // Indexing state
   const [indexing, setIndexing] = useState(false);
@@ -129,10 +131,34 @@ export default function App(): JSX.Element {
   // Select file from browser
   async function selectFile(path: string) {
     // When a new source is selected, fully reset processing widget state
-    // so that the preview/frame and script template return to defaults.
+    // so that the preview/frame and tab-specific editors return to defaults.
+    // Only reset when the selected path actually changes (avoid clobbering
+    // state if the user re-selects the same file).
+    const isDifferent = path !== inputPath;
+
     setProcessingResetVersion(v => v + 1);
     setInputPath(path);
     setFileModalOpen(false);
+
+    if (isDifferent) {
+      // Reset editor/script state
+      setScript('');
+
+      // Reset encoder settings to the same defaults used at mount
+      setEncoderConfig(defaultEncoderConfig);
+
+      // Clear multi-track configs
+      setAudioConfig({ tracks: [] });
+      setSubtitleConfig({ tracks: [] });
+
+      // Reset output config to defaults (don't touch Jobs tab)
+      setOutputConfig(defaultOutputConfig);
+
+      // Reset preview/index markers so preview will be regenerated for the new file
+      setPreviewVersion(0);
+      setLastIndexedPath(null);
+    }
+
     // Fetch MediaInfo/index info for UI immediately on selection
     try {
       await indexFile(path);
