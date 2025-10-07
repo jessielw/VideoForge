@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, ReactNode } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
+
 import FocusTrap from 'focus-trap-react';
-import '../../styles/blockingoverlay.css';
+
+import '../../styles/UI/BlockingOverlay.css';
 
 interface BlockingOverlayProps {
   visible: boolean;

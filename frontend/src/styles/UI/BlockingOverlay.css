@@ -1,4 +1,3 @@
-/* Blocking Overlay Styles */
 .blocking-overlay {
   position: fixed;
   inset: 0;
@@ -18,7 +17,8 @@
 
 .blocking-overlay-panel {
   position: relative;
-  background: white;
+  background: var(--surface);
+  color: var(--text);
   padding: 32px 40px;
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
@@ -26,7 +26,8 @@
   width: 90%;
   text-align: center;
   animation: slideIn 0.3s ease-out;
-  outline: none; /* Remove focus outline since this is just for focus trap */
+  outline: none;
+  border: 1px solid var(--border);
 }
 
 .blocking-overlay-content {
@@ -44,20 +45,20 @@
 .blocking-overlay-panel h3 {
   margin: 0 0 12px 0;
   font-size: 20px;
-  color: #2c3e50;
+  color: var(--header-text);
 }
 
 .blocking-overlay-panel p {
   margin: 0;
-  color: #636e72;
+  color: var(--muted);
   line-height: 1.5;
 }
 
 .blocking-overlay-dismiss {
   margin-top: 20px;
   padding: 10px 24px;
-  background: #3498db;
-  color: white;
+  background: var(--primary);
+  color: var(--on-primary);
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -66,7 +67,7 @@
 }
 
 .blocking-overlay-dismiss:hover {
-  background: #2980b9;
+  background: var(--primary-hover);
 }
 
 /* Animations */

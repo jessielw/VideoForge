@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 import { OutputConfig } from './types/output';
 import { EncoderConfig } from './types/encoder';
 import { useOverlay } from './context/OverlayContext';
 import GlobalOverlay from './components/GlobalOverlay';
+import ErrorBoundary from './components/ErrorBoundary';
+import CriticalErrorOverlay from './components/UI/CriticalErrorOverlay';
 import MainLayout from './components/Layout/MainLayout';
 import { useMediaInfo } from './context/MediaInfoContext';
 import FileSelector from './components/Source/FileSelector';
@@ -28,6 +30,48 @@ const API = 'http://127.0.0.1:8000';
 export default function App(): JSX.Element {
   const overlay = useOverlay();
   const { setMediaInfo, getAudioTracks, getSubtitleTracks } = useMediaInfo();
+
+  // Global error handler -> show blocking themed overlay with Reload action.
+  // We dedupe repeated identical errors using a ref to avoid spamming the user.
+  const lastGlobalError = useRef<string | null>(null);
+
+  useEffect(() => {
+    const showCritical = (title: string, details?: string) => {
+      const message = details || title || 'An unexpected error occurred';
+      if (lastGlobalError.current === message) return;
+      lastGlobalError.current = message;
+
+      overlay.show({
+        type: 'custom',
+        message,
+        customContent: <CriticalErrorOverlay message={message} />,
+        dismissible: false,
+      });
+    };
+
+    const onUnhandledRejection = (ev: PromiseRejectionEvent) => {
+      try {
+        const reason = ev.reason as any;
+        const msg = typeof reason === 'string' ? reason : reason?.message || JSON.stringify(reason);
+        showCritical('Unhandled promise rejection', msg);
+      } catch (e) {
+        showCritical('Unhandled promise rejection', String(ev));
+      }
+    };
+
+    const onWindowError = (event: ErrorEvent | any) => {
+      const msg = event?.error?.message || event?.message || String(event);
+      showCritical('Unhandled error', msg);
+    };
+
+    window.addEventListener('unhandledrejection', onUnhandledRejection as any);
+    window.addEventListener('error', onWindowError as any);
+
+    return () => {
+      window.removeEventListener('unhandledrejection', onUnhandledRejection as any);
+      window.removeEventListener('error', onWindowError as any);
+    };
+  }, [overlay]);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<string>('source');
@@ -461,44 +505,56 @@ export default function App(): JSX.Element {
   }, [activeTab, inputPath, lastIndexedPath]);
 
   return (
-    <MainLayout activeTab={activeTab} onTabChange={setActiveTab} disabledTabs={disabledTabs}>
-      {sourcePane}
-      {filtersPane}
-      {videoPane}
-      {audioPane}
-      {subtitlesPane}
-      {outputPane}
-      {jobsPane}
+    <ErrorBoundary
+      onError={error => {
+        // forward to overlay
+        overlay.show({
+          type: 'custom',
+          message: String(error?.message || 'An unexpected render error occurred'),
+          customContent: <CriticalErrorOverlay message={String(error?.message || error)} />,
+          dismissible: false,
+        });
+      }}
+    >
+      <MainLayout activeTab={activeTab} onTabChange={setActiveTab} disabledTabs={disabledTabs}>
+        {sourcePane}
+        {filtersPane}
+        {videoPane}
+        {audioPane}
+        {subtitlesPane}
+        {outputPane}
+        {jobsPane}
 
-      {/* Global blocking overlay for all blocking operations */}
-      <GlobalOverlay />
+        {/* Global blocking overlay for all blocking operations */}
+        <GlobalOverlay />
 
-      {/* Probe failure modal blocks processing/output when VapourSynth probe failed */}
-      <ProbeFailureModal
-        error={indexInfo?.vapoursynth?.error}
-        onClose={() => {
-          // Clear probe error locally so user can attempt to re-index/probe
-          setIndexInfo((prev: any) => {
-            if (!prev) return prev;
-            const copy = { ...prev };
-            if (copy.vapoursynth) copy.vapoursynth = { ...copy.vapoursynth, error: null };
-            return copy;
-          });
-        }}
-      />
-
-      {fileModalOpen && (
-        <FileBrowserModal
-          fileCurrent={fileCurrent}
-          goUp={goUp}
-          fileLoading={fileLoading}
-          fileError={fileError}
-          fileEntries={fileEntries}
-          drill={drill}
-          selectFile={selectFile}
-          onClose={() => setFileModalOpen(false)}
+        {/* Probe failure modal blocks processing/output when VapourSynth probe failed */}
+        <ProbeFailureModal
+          error={indexInfo?.vapoursynth?.error}
+          onClose={() => {
+            // Clear probe error locally so user can attempt to re-index/probe
+            setIndexInfo((prev: any) => {
+              if (!prev) return prev;
+              const copy = { ...prev };
+              if (copy.vapoursynth) copy.vapoursynth = { ...copy.vapoursynth, error: null };
+              return copy;
+            });
+          }}
         />
-      )}
-    </MainLayout>
+
+        {fileModalOpen && (
+          <FileBrowserModal
+            fileCurrent={fileCurrent}
+            goUp={goUp}
+            fileLoading={fileLoading}
+            fileError={fileError}
+            fileEntries={fileEntries}
+            drill={drill}
+            selectFile={selectFile}
+            onClose={() => setFileModalOpen(false)}
+          />
+        )}
+      </MainLayout>
+    </ErrorBoundary>
   );
 }

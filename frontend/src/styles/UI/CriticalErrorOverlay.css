@@ -1,0 +1,20 @@
+.critical-error-container {
+  max-width: 720px;
+  text-align: left;
+}
+
+.critical-error-title {
+  margin-top: 0;
+}
+
+.critical-error-message {
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+.critical-error-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
