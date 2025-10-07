@@ -1,13 +1,8 @@
-/**
- * AudioConfigSection - Multi-track audio configuration UI
- * Replaces the old single-track AudioSettings
- */
-
-import React from 'react';
 import AudioTrackManager, { OutputAudioTrack } from './AudioTrackManager';
 import { AudioTrack } from '../../context/MediaInfoContext';
-import './AudioTrackManager.css';
-import './AudioConfigSection.css';
+
+import '../../styles/components/AudioTrackManager.css';
+import '../../styles/components/AudioConfigSection.css';
 
 export interface MultiTrackAudioConfig {
   tracks: OutputAudioTrack[];
