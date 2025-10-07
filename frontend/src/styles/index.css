@@ -1,4 +1,6 @@
 /* Import all component styles */
+/* TODO: slowly migrate away from this moving anything global into main and hook up each comp/ui etc to it's
+correct module directly */
 @import './global.css';
 @import './layout.css';
 @import './tabs.css';
