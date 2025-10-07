@@ -1,22 +1,12 @@
-/**
- * AudioTrackManager - StaxRip-style multi-track audio management
- * 
- * Features:
- * - Add multiple output tracks from same/different source tracks
- * - Configure each output track independently (encoder, bitrate, language, name)
- * - Reorder output tracks via drag & drop
- * - Remove tracks
- * - Visual source → output mapping
- */
-
 import React, { useState } from 'react';
 import { AudioTrack } from '../../context/MediaInfoContext';
+import { AudioEncoder, AUDIO_ENCODER_OPTIONS } from '../../types/audio_encoders';
 
 // Output track configuration (what goes in final file)
 export interface OutputAudioTrack {
   id: string; // Unique ID for React keys
   sourceTrack: number; // Which source track to use
-  encoder: 'aac' | 'opus' | 'copy';
+  encoder: AudioEncoder;
   bitrate: number; // kbps (ignored for copy)
   language?: string; // Language tag (eng, jpn, etc.)
   name?: string; // Track name/title
@@ -34,12 +24,14 @@ export default function AudioTrackManager({
   onChange,
 }: AudioTrackManagerProps): JSX.Element {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
 
   const handleAddTrack = () => {
     const newTrack: OutputAudioTrack = {
       id: `track_${Date.now()}_${Math.random()}`,
       sourceTrack: 0,
-      encoder: 'aac',
+      encoder: AUDIO_ENCODER_OPTIONS[0].value,
       bitrate: 192,
       language: undefined,
       name: undefined,
@@ -64,8 +56,13 @@ export default function AudioTrackManager({
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
-    if (draggedIndex === null || draggedIndex === index) return;
+    if (draggedIndex === null || draggedIndex === index) {
+      setDropIndex(index);
+      return;
+    }
 
+    // show where it will be dropped, and reorder immediately so UI updates
+    setDropIndex(index);
     const newTracks = [...outputTracks];
     const draggedTrack = newTracks[draggedIndex];
     newTracks.splice(draggedIndex, 1);
@@ -77,13 +74,14 @@ export default function AudioTrackManager({
 
   const handleDragEnd = () => {
     setDraggedIndex(null);
+    setDropIndex(null);
   };
 
   return (
     <div className="audio-track-manager">
       <div className="audio-track-manager__header">
         <h3>Audio Tracks</h3>
-        <button className="btn-add-track" onClick={handleAddTrack} type="button">
+        <button className="themed-btn" onClick={handleAddTrack} type="button">
           <span>+</span> Add Track
         </button>
       </div>
@@ -95,51 +93,70 @@ export default function AudioTrackManager({
       ) : (
         <div className="audio-track-manager__list">
           {outputTracks.map((track, index) => (
-            <AudioTrackCard
-              key={track.id}
-              track={track}
-              index={index}
-              sourceAudioTracks={sourceAudioTracks}
-              onUpdate={updates => handleUpdateTrack(index, updates)}
-              onRemove={() => handleRemoveTrack(index)}
-              onDragStart={() => handleDragStart(index)}
-              onDragOver={e => handleDragOver(e, index)}
-              onDragEnd={handleDragEnd}
-              isDragging={draggedIndex === index}
-            />
+            <React.Fragment key={track.id}>
+              {/* Drop indicator above the item when dragging */}
+              {draggedIndex !== null && dropIndex === index && (
+                <div className="audio-track-drop-indicator" />
+              )}
+
+              <AudioTrackCard
+                track={track}
+                index={index}
+                sourceAudioTracks={sourceAudioTracks}
+                onRemove={() => handleRemoveTrack(index)}
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={e => handleDragOver(e, index)}
+                onDragEnd={handleDragEnd}
+                isDragging={draggedIndex === index}
+                onEdit={() => setEditingTrackId(track.id)}
+              />
+            </React.Fragment>
           ))}
+
+          {/* If dropping at the end of the list, show indicator */}
+          {draggedIndex !== null && dropIndex === outputTracks.length && (
+            <div className="audio-track-drop-indicator" />
+          )}
         </div>
       )}
-
-      <div className="audio-track-manager__info">
-        <p>💡 Tip: You can select the same source track multiple times with different encoders/bitrates</p>
-      </div>
+      {editingTrackId && (
+        <AudioTrackEditorModal
+          editingTrackId={editingTrackId}
+          onClose={() => setEditingTrackId(null)}
+          outputTracks={outputTracks}
+          onChange={onChange}
+          sourceAudioTracks={sourceAudioTracks}
+        />
+      )}
     </div>
   );
 }
+
+// Attach modal to main export render
+// ...existing code...
 
 interface AudioTrackCardProps {
   track: OutputAudioTrack;
   index: number;
   sourceAudioTracks: AudioTrack[];
-  onUpdate: (updates: Partial<OutputAudioTrack>) => void;
   onRemove: () => void;
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   isDragging: boolean;
+  onEdit?: () => void;
 }
 
 function AudioTrackCard({
   track,
   index,
   sourceAudioTracks,
-  onUpdate,
   onRemove,
   onDragStart,
   onDragOver,
   onDragEnd,
   isDragging,
+  onEdit,
 }: AudioTrackCardProps): JSX.Element {
   const sourceTrack = sourceAudioTracks[track.sourceTrack];
 
@@ -158,97 +175,139 @@ function AudioTrackCard({
         <div className="audio-track-card__title">
           <strong>Output Track #{index + 1}</strong>
         </div>
-        <button
-          className="audio-track-card__remove"
-          onClick={onRemove}
-          type="button"
-          title="Remove track"
-        >
+        <div className="audio-track-card__collapsed-summary">
+          {sourceTrack
+            ? `Track ${track.sourceTrack + 1} (${sourceTrack.format || 'unknown'}) → ${
+                track.encoder
+              } ${track.encoder !== 'copy' ? `@ ${track.bitrate}kbps` : '(copy)'} `
+            : 'No source'}
+        </div>
+        <button className="themed-btn-icon" onClick={onEdit} type="button" title="Edit in modal">
+          ✎
+        </button>
+        <button className="themed-btn-icon" onClick={onRemove} type="button" title="Remove track">
           ✕
         </button>
       </div>
+    </div>
+  );
+}
 
-      <div className="audio-track-card__body">
-        {/* Source Track Selection */}
-        <div className="form-group">
-          <label>Source Track</label>
-          <select
-            value={track.sourceTrack}
-            onChange={e => onUpdate({ sourceTrack: parseInt(e.target.value) })}
-          >
-            {sourceAudioTracks.length === 0 ? (
-              <option value={0}>No audio tracks in source</option>
-            ) : (
-              sourceAudioTracks.map((srcTrack, idx) => (
-                <option key={idx} value={idx}>
-                  Track {idx + 1}: {srcTrack.format?.toUpperCase() || 'Unknown'}{' '}
-                  {srcTrack.channels ? `${srcTrack.channels}ch` : ''}{' '}
-                  {srcTrack.language ? `(${srcTrack.language})` : ''}
+// Modal editor (rendered in parent so it has access to outputTracks and onChange)
+function AudioTrackEditorModal({
+  editingTrackId,
+  onClose,
+  outputTracks,
+  onChange,
+  sourceAudioTracks,
+}: {
+  editingTrackId: string | null;
+  onClose: () => void;
+  outputTracks: OutputAudioTrack[];
+  onChange: (tracks: OutputAudioTrack[]) => void;
+  sourceAudioTracks: AudioTrack[];
+}) {
+  if (!editingTrackId) return null;
+
+  const idx = outputTracks.findIndex(t => t.id === editingTrackId);
+  if (idx === -1) return null;
+
+  const track = outputTracks[idx];
+  const sourceTrack = sourceAudioTracks[track.sourceTrack];
+
+  const [local, setLocal] = React.useState<OutputAudioTrack>({ ...track });
+
+  const handleSave = () => {
+    const newTracks = [...outputTracks];
+    newTracks[idx] = { ...newTracks[idx], ...local };
+    onChange(newTracks);
+    onClose();
+  };
+
+  return (
+    <div className="preset-dialog-overlay" onClick={onClose}>
+      <div className="preset-dialog" onClick={e => e.stopPropagation()}>
+        <h3>Edit Output Track #{idx + 1}</h3>
+        <div className="dialog-content">
+          <div className="form-group">
+            <label>Source Track</label>
+            <select
+              value={local.sourceTrack}
+              onChange={e => setLocal({ ...local, sourceTrack: parseInt(e.target.value) })}
+            >
+              {sourceAudioTracks.length === 0 ? (
+                <option value={0}>No audio tracks in source</option>
+              ) : (
+                sourceAudioTracks.map((srcTrack, sidx) => (
+                  <option key={sidx} value={sidx}>
+                    Track {sidx + 1}: {srcTrack.format?.toUpperCase() || 'Unknown'}{' '}
+                    {srcTrack.channels ? `${srcTrack.channels}ch` : ''}{' '}
+                    {srcTrack.language ? `(${srcTrack.language})` : ''}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Encoder</label>
+            <select
+              value={local.encoder}
+              onChange={e => setLocal({ ...local, encoder: e.target.value as any })}
+            >
+              {AUDIO_ENCODER_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
                 </option>
-              ))
-            )}
-          </select>
-          {sourceTrack && (
-            <div className="form-hint">
-              {sourceTrack.format} • {sourceTrack.channels}ch •{' '}
-              {sourceTrack.sampling_rate ? `${sourceTrack.sampling_rate}Hz` : 'Unknown rate'}
+              ))}
+            </select>
+          </div>
+
+          {local.encoder !== 'copy' && (
+            <div className="form-group">
+              <label>Bitrate</label>
+              <div className="input-with-unit">
+                <input
+                  type="number"
+                  value={local.bitrate}
+                  onChange={e => setLocal({ ...local, bitrate: parseInt(e.target.value) || 192 })}
+                  min={64}
+                  max={512}
+                  step={32}
+                />
+                <span className="unit">kbps</span>
+              </div>
             </div>
           )}
-        </div>
 
-        {/* Encoder Selection */}
-        <div className="form-group">
-          <label>Encoder</label>
-          <select value={track.encoder} onChange={e => onUpdate({ encoder: e.target.value as any })}>
-            <option value="aac">AAC (Universal compatibility)</option>
-            <option value="opus">Opus (Best quality/size - MKV only)</option>
-            <option value="copy">Copy (No re-encoding)</option>
-          </select>
-        </div>
-
-        {/* Bitrate (only for encoders, not copy) */}
-        {track.encoder !== 'copy' && (
           <div className="form-group">
-            <label>Bitrate</label>
-            <div className="input-with-unit">
-              <input
-                type="number"
-                value={track.bitrate}
-                onChange={e => onUpdate({ bitrate: parseInt(e.target.value) || 192 })}
-                min={64}
-                max={512}
-                step={32}
-              />
-              <span className="unit">kbps</span>
-            </div>
-            <div className="form-hint">
-              Recommended: 128 (stereo good), 192 (stereo great), 256-384 (5.1/7.1)
-            </div>
+            <label>Language (optional)</label>
+            <input
+              type="text"
+              value={local.language || ''}
+              onChange={e => setLocal({ ...local, language: e.target.value || undefined })}
+              placeholder="e.g., eng, jpn, spa"
+              maxLength={3}
+            />
           </div>
-        )}
 
-        {/* Language Tag (optional) */}
-        <div className="form-group">
-          <label>Language (optional)</label>
-          <input
-            type="text"
-            value={track.language || ''}
-            onChange={e => onUpdate({ language: e.target.value || undefined })}
-            placeholder="e.g., eng, jpn, spa"
-            maxLength={3}
-          />
-          <div className="form-hint">3-letter ISO 639-2 code</div>
+          <div className="form-group">
+            <label>Track Name (optional)</label>
+            <input
+              type="text"
+              value={local.name || ''}
+              onChange={e => setLocal({ ...local, name: e.target.value || undefined })}
+              placeholder="e.g., English Stereo, Japanese 5.1, Commentary"
+            />
+          </div>
         </div>
-
-        {/* Track Name (optional) */}
-        <div className="form-group">
-          <label>Track Name (optional)</label>
-          <input
-            type="text"
-            value={track.name || ''}
-            onChange={e => onUpdate({ name: e.target.value || undefined })}
-            placeholder="e.g., English Stereo, Japanese 5.1, Commentary"
-          />
+        <div className="dialog-actions">
+          <button className="themed-btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="themed-btn" onClick={handleSave}>
+            Save
+          </button>
         </div>
       </div>
     </div>

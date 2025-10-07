@@ -1,28 +1,26 @@
-/* AudioConfigSection.css */
-
 .audio-config-section {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  padding: 1.5rem;
-  background: #ecf0f1;
+  padding: 1.25rem;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
   height: 100%;
   overflow-y: auto;
 }
 
 .audio-config-summary {
   padding: 1rem;
-  background: white;
-  border: 1px solid #bdc3c7;
-  border-radius: 6px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 .audio-config-summary h4 {
   margin: 0 0 0.75rem 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #2c3e50;
+  font-size: var(--fs-sm1);
+  font-weight: var(--fw-medium);
+  color: var(--text, #222);
 }
 
 .audio-config-summary ul {
@@ -36,14 +34,14 @@
 
 .audio-config-summary li {
   padding: 0.5rem;
-  background: #ecf0f1;
-  border-left: 3px solid #3498db;
-  border-radius: 3px;
-  font-size: 0.9rem;
-  color: #2c3e50;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  border-left: 3px solid var(--primary);
+  border-radius: 0.25rem;
+  font-size: var(--fs-sm2, 0.9rem);
+  color: var(--text, #222);
 }
 
 .audio-config-summary li strong {
-  color: #3498db;
+  color: var(--primary);
   margin-right: 0.5rem;
 }
