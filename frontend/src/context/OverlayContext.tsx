@@ -1,9 +1,9 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode } from 'react';
 
 interface OverlayState {
   visible: boolean;
   message?: string;
-  type?: 'loading' | 'indexing' | 'autocrop' | 'probe-failure' | 'custom';
+  type?: 'loading' | 'indexing' | 'autocrop' | 'probe-failure' | 'mediainfo' | 'custom';
   customContent?: ReactNode;
   dismissible?: boolean;
 }

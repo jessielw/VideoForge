@@ -1,18 +1,17 @@
-import React from 'react';
-
 interface FileSelectProps {
   inputPath: string;
   onFileSelect: (path: string) => void;
   onBrowseClick: () => void;
-  indexing: boolean;
+  isLoading: boolean;
 }
 
 export default function FileSelector({
   inputPath,
   onFileSelect,
   onBrowseClick,
-  indexing,
+  isLoading,
 }: FileSelectProps): JSX.Element {
+  const busy = isLoading;
   return (
     <div className="file-selector">
       <h3>Source File</h3>
@@ -23,16 +22,16 @@ export default function FileSelector({
           onChange={e => onFileSelect(e.target.value)}
           placeholder="Select or enter file path..."
           className="file-input"
-          disabled={indexing}
+          disabled={busy}
         />
-        <button onClick={onBrowseClick} className="browse-button" disabled={indexing}>
+        <button onClick={onBrowseClick} className="browse-button" disabled={busy}>
           📁 Browse
         </button>
       </div>
-      {indexing && (
-        <div className="indexing-status">
+      {busy && (
+        <div className="loading-status">
           <div className="spinner"></div>
-          <span>Indexing file...</span>
+          <span>Loading...</span>
         </div>
       )}
     </div>

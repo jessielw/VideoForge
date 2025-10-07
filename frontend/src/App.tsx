@@ -119,8 +119,8 @@ export default function App(): JSX.Element {
   };
   const [outputConfig, setOutputConfig] = useState<OutputConfig>(defaultOutputConfig);
 
-  // Indexing state
-  const [indexing, setIndexing] = useState(false);
+  // Loading state (used for indexing/probing/mediainfo operations)
+  const [isLoading, setIsLoading] = useState(false);
   const [indexInfo, setIndexInfo] = useState<any>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   // Preview trigger (increment to tell FramePreview to fetch new frames)
@@ -172,6 +172,25 @@ export default function App(): JSX.Element {
     }
   }
 
+  function resetUi() {
+    // Reset editor/script state
+    setScript('');
+
+    // Reset encoder settings to the same defaults used at mount
+    setEncoderConfig(defaultEncoderConfig);
+
+    // Clear multi-track configs
+    setAudioConfig({ tracks: [] });
+    setSubtitleConfig({ tracks: [] });
+
+    // Reset output config to defaults (don't touch Jobs tab)
+    setOutputConfig(defaultOutputConfig);
+
+    // Reset preview/index markers so preview will be regenerated for the new file
+    setPreviewVersion(0);
+    setLastIndexedPath(null);
+  }
+
   // Select file from browser
   async function selectFile(path: string) {
     // When a new source is selected, fully reset processing widget state
@@ -185,72 +204,41 @@ export default function App(): JSX.Element {
     setFileModalOpen(false);
 
     if (isDifferent) {
-      // Reset editor/script state
-      setScript('');
-
-      // Reset encoder settings to the same defaults used at mount
-      setEncoderConfig(defaultEncoderConfig);
-
-      // Clear multi-track configs
-      setAudioConfig({ tracks: [] });
-      setSubtitleConfig({ tracks: [] });
-
-      // Reset output config to defaults (don't touch Jobs tab)
-      setOutputConfig(defaultOutputConfig);
-
-      // Reset preview/index markers so preview will be regenerated for the new file
-      setPreviewVersion(0);
-      setLastIndexedPath(null);
+      resetUi();
     }
 
-    // Fetch MediaInfo/index info for UI immediately on selection
+    // Fetch MediaInfo info for UI immediately on selection
     try {
-      await indexFile(path);
+      await fetchMediaInfo(path);
     } catch (e) {
-      console.error('Index on select failed:', e);
+      console.error(`Failed to fetch media info for file ${path}:`, e);
     }
   }
 
-  // Index the selected file
-  async function indexFile(path: string) {
-    setIndexing(true);
+  // Fetch media info for the selected file
+  async function fetchMediaInfo(path: string) {
+    setIsLoading(true);
     overlay.show({
-      type: 'indexing',
-      message: 'Please wait while the video is being analyzed. This operation locks the UI.',
+      type: 'mediainfo',
+      message: 'Parsing mediainfo...',
     });
-    console.log('Indexing file:', path);
+    console.log('Parsing mediainfo:', path);
     try {
       const indexResp = await fetch(`${API}/api/mediainfo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path }),
       });
-      const indexData = await indexResp.json();
-      console.log('Index data:', indexData);
-      setIndexInfo(indexData);
+      const mediaInfoData = await indexResp.json();
+      console.log('MediaInfo data:', mediaInfoData);
 
       // Store in global context for use by other components (Audio, Video, etc.)
-      setMediaInfo(indexData);
-
-      return indexData;
-
-      //       // Generate basic script template
-      //       if (indexData.ok) {
-      //         const template = `import vapoursynth as vs
-      // core = vs.core
-
-      // # Load source
-      // clip = core.lsmas.LWLibavSource(r'${path.replace(/\\/g, '\\\\')}')
-
-      // # Add your filters here
-      // `;
-      //         setScript(template);
-      //       }
+      setMediaInfo(mediaInfoData);
     } catch (error) {
-      console.error('Failed to index file:', error);
+      console.error('Failed to fetch mediainfo for file:', error);
       return { ok: false, reason: String(error) };
     } finally {
-      setIndexing(false);
+      setIsLoading(false);
       overlay.hide();
     }
   }
@@ -279,7 +267,7 @@ export default function App(): JSX.Element {
   const handleScriptApply = async () => {
     // Probe the selected file via VapourSynth (frame/fps/size). This is the Apply action.
     if (!inputPath) return;
-    setIndexing(true);
+    setIsLoading(true);
     overlay.show({
       type: 'indexing',
       message: 'Analyzing video with VapourSynth...',
@@ -311,7 +299,7 @@ export default function App(): JSX.Element {
     } catch (e) {
       console.error('Probing failed during apply:', e);
     } finally {
-      setIndexing(false);
+      setIsLoading(false);
       overlay.hide();
     }
   };
@@ -326,7 +314,7 @@ export default function App(): JSX.Element {
             inputPath={inputPath}
             onFileSelect={setInputPath}
             onBrowseClick={openFileModal}
-            indexing={indexing}
+            isLoading={isLoading}
           />
           <MediaInfoPanel filePath={inputPath} indexInfo={indexInfo} />
         </div>
