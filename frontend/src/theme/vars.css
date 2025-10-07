@@ -17,7 +17,8 @@
   --surface-2: var(--antiflash-white);
   --text: var(--eerie-black-light);
   --muted: var(--slate-gray);
-  --primary: #3f72af; /* accent blue from provided palette */
+  --primary: #3f72af;
+  --primary-hover: #0f71e9;
   --on-primary: #ffffff;
   --border: var(--platinum);
   --hover: color-mix(in srgb, var(--primary) 6%, var(--surface) 94%);
@@ -29,6 +30,7 @@
   --success: #16a34a;
   --on-success: #ffffff;
   --error: #dc3545;
+  --danger: #e74c3c;
 
   /* Global fonts */
   --font-sans: sans-serif, 'Inter var', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
@@ -39,6 +41,7 @@
   /* weights */
   --fw-regular: 400;
   --fw-medium: 500;
+  --fw-medium2: 600;
   --fw-bold: 700;
   /* sizes */
   --fs-xs: 0.75rem;
@@ -259,3 +262,37 @@ pre,
 .single-theme-toggle .icon.hidden {
   pointer-events: none;
 }
+
+.themed-btn {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 5px;
+  font-weight: var(--fw-medium2);
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.themed-btn-icon {
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.themed-btn:disabled, .themed-btn-icon:disabled {
+  background: var(--bg-disabled);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.themed-btn:hover, .themed-btn-icon:hover {
+  background: var(--primary-hover);
+  transform: translateY(1px);
+}
+
+
