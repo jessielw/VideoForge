@@ -1,5 +1,4 @@
 /* Encoder Settings Styles */
-
 .encoder-settings {
   padding: 1.5rem;
   max-width: 1000px;
@@ -12,7 +11,7 @@
 .encoder-header {
   margin-bottom: 1.5rem;
   padding-bottom: 0.75rem;
-  border-bottom: 2px solid var(--border-color);
+  border-bottom: 2px solid var(--border);
 }
 
 .encoder-header h2 {
@@ -492,22 +491,22 @@
 }
 
 .btn-primary {
-  background: var(--accent-color);
+  background: var(--primary);
   color: white;
 }
 
 .btn-primary:hover {
-  background: var(--accent-hover, #0056b3);
+  background: var(--primary-hover);
 }
 
 .btn-secondary {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 .btn-secondary:hover {
-  background: var(--bg-hover, #444);
+  background: var(--hover);
 }
 
 .btn-danger {

@@ -62,7 +62,9 @@
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   overflow: hidden;
-  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+  transition:
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
   padding: 0; /* header handles padding */
 }
@@ -83,12 +85,12 @@
   align-items: center;
   gap: 0.75rem;
   padding: 1rem 1rem; /* slightly more vertical padding for touch targets */
-  background: color-mix(in srgb, var(--surface, #fff) 96%, transparent);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
 }
 
 .audio-track-card__drag-handle {
   cursor: move;
-  color: var(--muted, #95a5a6);
+  color: var(--muted);
   user-select: none;
   padding: 0 0.25rem;
 }
@@ -142,7 +144,9 @@
 
 /* Smooth transition when expanding/collapsing */
 .audio-track-card {
-  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+  transition:
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
 }
 
 /* Make certain fields span full width */
@@ -168,7 +172,9 @@
   border-radius: 6px;
   color: var(--text);
   font-size: var(--fs-sm1);
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .form-group select:focus,
@@ -180,7 +186,7 @@
 
 .form-group select:hover,
 .form-group input:hover {
-  border-color: var(--primary, #0066cc);
+  border-color: var(--primary);
 }
 
 .input-with-unit {

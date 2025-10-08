@@ -10,7 +10,7 @@
 .audio-header {
   margin-bottom: 1.5rem;
   padding-bottom: 0.75rem;
-  border-bottom: 2px solid var(--border-color);
+  border-bottom: 2px solid var(--border);
 }
 
 .audio-header h2 {
@@ -395,7 +395,7 @@
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   font-size: var(--fs-sm1);
-  color: var(--text, #222);
+  color: var(--text);
   background: var(--surface-2);
   font-family: inherit;
 }

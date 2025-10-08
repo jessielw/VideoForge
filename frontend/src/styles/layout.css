@@ -34,7 +34,7 @@
   flex: 1;
   overflow: auto;
   padding: 24px;
-  background: #f8f9fa;
+  background: var(--bg);
   width: 100%;
   max-width: none;
 }

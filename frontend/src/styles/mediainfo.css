@@ -1,45 +1,45 @@
 /* Media Info Panel */
 .media-info-panel {
-  background: white;
-  border: 1px solid #dee2e6;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--border) 40%, transparent);
   overflow: hidden;
 }
 
 .media-info-panel h3 {
   margin: 0;
   padding: 16px 20px;
-  color: #2c3e50;
-  font-size: 1.2rem;
-  background: #f8f9fa;
-  border-bottom: 1px solid #dee2e6;
+  color: var(--text);
+  font-size: var(--fs-lg);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
 }
 
 .no-file {
-  color: #7f8c8d;
+  color: var(--muted);
   font-style: italic;
   padding: 20px;
 }
 
 .error-message {
-  color: #e74c3c;
+  color: var(--error);
   font-style: italic;
   padding: 20px;
 }
 
 .vs-warning {
-  background: #fff3cd;
-  color: #856404;
+  background: color-mix(in srgb, var(--surface-2) 70%, var(--surface) 30%);
+  color: color-mix(in srgb, var(--text) 60%, var(--muted) 40%);
   padding: 12px 20px;
-  border-bottom: 1px solid #dee2e6;
-  font-size: 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm2);
 }
 
 .info-tabs {
   display: flex;
-  background: #f8f9fa;
-  border-bottom: 1px solid #dee2e6;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
 }
 
 .info-tab {
@@ -49,20 +49,20 @@
   cursor: pointer;
   border-bottom: 3px solid transparent;
   transition: all 0.2s ease;
-  color: #6c757d;
-  font-size: 14px;
+  color: var(--muted);
+  font-size: var(--fs-sm2);
   font-weight: 500;
 }
 
 .info-tab:hover {
-  background: #e9ecef;
-  color: #495057;
+  background: var(--surface);
+  color: var(--text);
 }
 
 .info-tab.active {
-  background: white;
-  color: #3498db;
-  border-bottom-color: #3498db;
+  background: var(--surface);
+  color: var(--primary);
+  border-bottom-color: var(--primary);
 }
 
 .info-content {
@@ -77,9 +77,9 @@
 .track-info {
   margin-bottom: 28px;
   padding: 16px;
-  background: #f8f9fa;
+  background: var(--surface-2);
   border-radius: 6px;
-  border: 1px solid #e9ecef;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
 }
 
 .track-info:last-child {
@@ -88,11 +88,11 @@
 
 .track-info h4 {
   margin: 0 0 16px 0;
-  color: #2c3e50;
-  font-size: 1rem;
+  color: var(--text);
+  font-size: var(--fs-base);
   font-weight: 600;
   padding-bottom: 8px;
-  border-bottom: 2px solid #dee2e6;
+  border-bottom: 2px solid var(--border);
 }
 
 .additional-info,
@@ -105,11 +105,11 @@
 .color-info h5,
 .technical-info h5 {
   margin: 0 0 12px 0;
-  color: #495057;
-  font-size: 0.9rem;
+  color: var(--text);
+  font-size: var(--fs-sm3);
   font-weight: 600;
   padding-bottom: 6px;
-  border-bottom: 1px solid #ced4da;
+  border-bottom: 1px solid var(--border);
 }
 
 .info-grid {
@@ -123,7 +123,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 10px 0;
-  border-bottom: 1px solid #f1f3f4;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   min-height: 20px;
 }
 
@@ -133,16 +133,16 @@
 
 .info-item label {
   font-weight: 600;
-  color: #495057;
-  font-size: 14px;
+  color: var(--text);
+  font-size: var(--fs-sm2);
   min-width: 140px;
   margin-right: 20px;
   flex-shrink: 0;
 }
 
 .info-item span {
-  color: #2c3e50;
-  font-size: 14px;
+  color: var(--text);
+  font-size: var(--fs-sm2);
   text-align: right;
   flex: 1;
   word-break: break-word;
@@ -150,7 +150,7 @@
 }
 
 .no-tracks {
-  color: #7f8c8d;
+  color: var(--muted);
   font-style: italic;
   text-align: center;
   padding: 40px 20px;
@@ -159,39 +159,39 @@
 /* Legacy audio tracks styling (for backward compatibility) */
 .audio-tracks h4 {
   margin: 0 0 12px 0;
-  color: #2c3e50;
-  font-size: 1.1rem;
+  color: var(--text);
+  font-size: var(--fs-lg);
 }
 
 .audio-track {
   display: flex;
   gap: 12px;
   padding: 8px;
-  background: #f8f9fa;
+  background: var(--surface-2);
   border-radius: 4px;
   margin-bottom: 8px;
-  font-size: 14px;
+  font-size: var(--fs-sm2);
 }
 
 .track-index {
   font-weight: 600;
-  color: #3498db;
+  color: var(--primary);
   min-width: 30px;
 }
 
 .track-codec {
   font-weight: 500;
-  color: #2c3e50;
+  color: var(--text);
 }
 
 .track-channels {
-  color: #7f8c8d;
+  color: var(--muted);
 }
 
 .track-language {
-  background: #3498db;
-  color: white;
+  background: var(--primary);
+  color: var(--on-primary);
   padding: 2px 8px;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: var(--fs-xs);
 }

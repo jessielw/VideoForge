@@ -20,7 +20,7 @@
   margin: 0 0 0.75rem 0;
   font-size: var(--fs-sm1);
   font-weight: var(--fw-medium);
-  color: var(--text, #222);
+  color: var(--text);
 }
 
 .audio-config-summary ul {
@@ -37,8 +37,8 @@
   background: color-mix(in srgb, var(--surface) 96%, transparent);
   border-left: 3px solid var(--primary);
   border-radius: 0.25rem;
-  font-size: var(--fs-sm2, 0.9rem);
-  color: var(--text, #222);
+  font-size: var(--fs-sm2);
+  color: var(--text);
 }
 
 .audio-config-summary li strong {

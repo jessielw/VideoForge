@@ -23,7 +23,7 @@
 }
 
 .file-browser-modal {
-  background: var(--surface, var(--bg, #ffffff));
+  background: var(--surface);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   width: 90%;
@@ -52,29 +52,31 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border, #e0e0e0);
-  background: color-mix(in srgb, var(--surface, #ffffff) 96%, transparent);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
   border-radius: 12px 12px 0 0;
 }
 
 .file-browser-header h2 {
   margin: 0;
-  color: var(--text, #222);
+  color: var(--text);
 }
 
 .close-button {
   background: transparent;
   border: none;
-  color: var(--header-text, var(--muted, #666));
+  color: var(--header-text);
   cursor: pointer;
   padding: 6px 10px;
   border-radius: 6px;
-  transition: background 0.16s ease, color 0.16s ease;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
 }
 
 .close-button:hover {
-  background: color-mix(in srgb, var(--surface, #fff) 88%, black 4%);
-  color: var(--text, #222);
+  background: color-mix(in srgb, var(--surface) 88%, black 4%);
+  color: var(--text);
 }
 
 /* Location bar */
@@ -83,31 +85,33 @@
   align-items: center;
   gap: 12px;
   padding: 12px 20px;
-  border-bottom: 1px solid var(--border, #e0e0e0);
-  background: var(--surface, var(--bg, #ffffff));
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .nav-button {
   /* padding: 6px 12px; */
-  background: var(--primary, #0066cc);
-  color: var(--on-primary, #fff);
+  background: var(--primary);
+  color: var(--on-primary);
   border: none;
   border-radius: 6px;
   cursor: pointer;
   font-weight: 500;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
   white-space: nowrap;
 }
 
 .nav-button:hover:not(:disabled) {
-  background: var(--primary-hover, #0052a3);
+  background: var(--primary-hover);
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(0, 102, 204, 0.3);
 }
 
 .nav-button:disabled {
-  background: var(--bg-disabled, #ccc);
-  color: var(--text-disabled, #999);
+  background: var(--disabled);
+  color: var(--muted);
   cursor: not-allowed;
   opacity: 0.6;
 }
@@ -115,11 +119,11 @@
 .current-path {
   flex: 1;
   padding: 8px 12px;
-  background: color-mix(in srgb, var(--surface-2, #fff) 94%, black 2%);
+  background: color-mix(in srgb, var(--surface-2) 94%, black 2%);
   border-radius: 6px;
   font-family: var(--font-mono);
   font-size: var(--fs-sm1);
-  color: var(--muted, #555);
+  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -127,13 +131,15 @@
 
 .new-folder-button {
   padding: 6px 12px;
-  background: var(--success, #28a745);
-  color: var(--on-success, #fff);
+  background: var(--success);
+  color: var(--on-success);
   border: none;
   border-radius: 6px;
   cursor: pointer;
   font-weight: 500;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
   white-space: nowrap;
 }
 
@@ -160,14 +166,14 @@
   justify-content: center;
   height: 100%;
   gap: 12px;
-  color: var(--muted, #666);
+  color: var(--muted);
 }
 
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid color-mix(in srgb, var(--surface, #fff) 84%, black 8%);
-  border-top-color: var(--primary, #0066cc);
+  border: 4px solid color-mix(in srgb, var(--surface) 84%, black 8%);
+  border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -179,7 +185,7 @@
 }
 
 .error-state {
-  color: var(--error, #dc3545);
+  color: var(--error);
 }
 
 .empty-state span:first-child {
@@ -189,14 +195,14 @@
 /* File-browser specific empty state (overrides any generic .empty-state rules) */
 .file-browser-content .empty-state {
   /* Use a subtle surface variant so empty area reads as part of the modal */
-  background: var(--surface-2, color-mix(in srgb, var(--surface, #fff) 96%, transparent));
+  background: var(--surface-2);
   border-radius: 8px;
-  border: 2px dashed var(--border, #ccc);
+  border: 2px dashed var(--border);
   width: 100%;
   height: calc(100% - 8px);
   box-sizing: border-box;
   padding: 2.5rem;
-  color: var(--muted, #666);
+  color: var(--muted);
 }
 
 .file-browser-content .empty-state span:first-child {
@@ -204,7 +210,7 @@
 }
 
 .file-browser-content .empty-state .empty-hint {
-  color: var(--muted, #9aa6b2);
+  color: var(--muted);
 }
 
 /* File list table */
@@ -217,7 +223,7 @@
 .file-list thead {
   position: sticky;
   top: 0;
-  background: var(--header-bg, color-mix(in srgb, var(--surface, #fff) 96%, transparent));
+  background: var(--header-bg);
   z-index: 10;
 }
 
@@ -225,8 +231,8 @@
   padding: 10px 12px;
   text-align: left;
   font-weight: 600;
-  color: var(--header-text, var(--muted, #555));
-  border-bottom: 2px solid var(--border, #e0e0e0);
+  color: var(--header-text);
+  border-bottom: 2px solid var(--border);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -255,16 +261,16 @@
 
 .file-entry:hover {
   /* stronger, semantic row hover for better contrast */
-  background: var(--row-hover, color-mix(in srgb, var(--primary, #0066cc) 12%, transparent));
+  background: var(--row-hover);
 }
 
 .file-entry.is-directory:hover {
-  background: var(--row-hover, color-mix(in srgb, var(--primary, #0066cc) 12%, transparent));
+  background: var(--row-hover);
 }
 
 .file-entry td {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border, color-mix(in srgb, var(--surface, #fff) 84%, black 8%));
+  border-bottom: 1px solid var(--border);
 }
 
 .file-entry .col-icon {
@@ -273,31 +279,31 @@
 }
 
 .file-entry .col-name {
-  color: var(--text, #222);
+  color: var(--text);
 }
 
 .file-entry.is-directory .col-name {
-  color: var(--primary, #0066cc);
+  color: var(--primary);
 }
 
 .file-entry .col-size {
   text-align: right;
-  color: var(--muted, #666);
+  color: var(--muted);
 }
 
 .file-entry .col-modified {
-  color: var(--muted, #666);
+  color: var(--muted);
 }
 
 .file-entry .col-modified {
-  color: var(--text-secondary, #666);
+  color: var(--muted);
 }
 
 /* Footer (save mode) */
 .file-browser-footer {
   padding: 16px 20px;
-  border-top: 1px solid var(--border, #e0e0e0);
-  background: color-mix(in srgb, var(--surface, #fff) 96%, transparent);
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
   border-radius: 0 0 12px 12px;
 }
 
@@ -310,23 +316,25 @@
 
 .filename-input-group label {
   font-weight: 600;
-  color: var(--text, #222);
+  color: var(--text);
   min-width: 80px;
 }
 
 .filename-input {
   flex: 1;
   padding: 10px 12px;
-  border: 1px solid var(--border, #ccc);
+  border: 1px solid var(--border);
   border-radius: 6px;
   font-family: 'Consolas', 'Monaco', monospace;
-  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+  transition:
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .filename-input:focus {
   outline: none;
-  border-color: var(--primary, #0066cc);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary, #0066cc) 10%, transparent);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
 .footer-actions {
@@ -345,29 +353,29 @@
 }
 
 .cancel-button {
-  background: color-mix(in srgb, var(--surface, #fff) 92%, black 6%);
-  color: var(--text, #222);
+  background: color-mix(in srgb, var(--surface) 92%, black 6%);
+  color: var(--text);
 }
 
 .cancel-button:hover {
-  background: var(--bg-hover, #d0d0d0);
+  background: var(--hover);
   transform: translateY(-1px);
 }
 
 .save-button {
-  background: var(--primary, #0066cc);
-  color: var(--on-primary, #fff);
+  background: var(--primary);
+  color: var(--on-primary);
 }
 
 .save-button:hover:not(:disabled) {
-  background: var(--primary-hover, #0052a3);
+  background: var(--primary-hover);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3);
 }
 
 .save-button:disabled {
-  background: var(--bg-disabled, #ccc);
-  color: var(--text-disabled, #999);
+  background: var(--disabled);
+  color: var(--muted);
   cursor: not-allowed;
   opacity: 0.6;
 }
@@ -388,7 +396,7 @@
 }
 
 .new-folder-dialog {
-  background: var(--bg-primary, #ffffff);
+  background: var(--surface);
   border-radius: 12px;
   padding: 24px;
   width: 90%;
@@ -399,13 +407,13 @@
 
 .new-folder-dialog h3 {
   margin: 0 0 16px 0;
-  color: var(--text-primary, #222);
+  color: var(--text);
 }
 
 .folder-name-input {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid var(--border-color, #ccc);
+  border: 1px solid var(--border);
   border-radius: 6px;
   margin-bottom: 16px;
   transition: all 0.2s;
@@ -414,7 +422,7 @@
 
 .folder-name-input:focus {
   outline: none;
-  border-color: var(--primary-color, #0066cc);
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
 }
 
@@ -430,16 +438,16 @@
 }
 
 .file-browser-content::-webkit-scrollbar-track {
-  background: var(--bg-secondary, #f5f5f5);
+  background: var(--surface-2);
 }
 
 .file-browser-content::-webkit-scrollbar-thumb {
-  background: var(--border-color, #ccc);
+  background: var(--border);
   border-radius: 5px;
 }
 
 .file-browser-content::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary, #999);
+  background: var(--muted);
 }
 
 /* Responsive adjustments */
