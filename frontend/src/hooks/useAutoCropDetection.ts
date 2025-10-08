@@ -36,7 +36,7 @@ export function useAutoCropDetection({
 
       setAutoCropDetecting(true);
       try {
-        const resp = await fetch(`${API}/api/auto-crop`, {
+        const resp = await fetch(`${API}/api/vs/auto-crop`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path: inputPath, sample_count: sampleCountNum }),

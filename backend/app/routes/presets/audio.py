@@ -1,26 +1,16 @@
-"""
-Audio preset management routes
-"""
-
 import json
 import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 
-from .database import get_db_connection
+from app.database import get_db_connection
+from app.schemas.presets.audio import AudioPresetCreate
 
-router = APIRouter(prefix="/api/audio-presets", tags=["audio-presets"])
-
-
-class AudioPresetCreate(BaseModel):
-    name: str
-    description: str = ""
-    config: dict  # AudioEncoderConfig as JSON
+router = APIRouter(tags=["audio_presets"])
 
 
-@router.get("")
+@router.get("/presets/audio")
 async def list_audio_presets():
     """Get all audio presets."""
     conn = get_db_connection()
@@ -54,14 +44,12 @@ async def list_audio_presets():
         return {"ok": True, "presets": presets}
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to list presets: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to list presets: {str(e)}")
     finally:
         conn.close()
 
 
-@router.post("")
+@router.post("/presets/audio")
 async def create_audio_preset(preset: AudioPresetCreate):
     """Create a new audio preset."""
     conn = get_db_connection()
@@ -89,7 +77,11 @@ async def create_audio_preset(preset: AudioPresetCreate):
         )
         conn.commit()
 
-        return {"ok": True, "presetId": preset_id, "message": "Preset created successfully"}
+        return {
+            "ok": True,
+            "presetId": preset_id,
+            "message": "Preset created successfully",
+        }
 
     except Exception as e:
         conn.rollback()
@@ -100,7 +92,7 @@ async def create_audio_preset(preset: AudioPresetCreate):
         conn.close()
 
 
-@router.delete("/{preset_id}")
+@router.delete("/presets/audio/{preset_id}")
 async def delete_audio_preset(preset_id: str):
     """Delete an audio preset."""
     conn = get_db_connection()
@@ -108,7 +100,9 @@ async def delete_audio_preset(preset_id: str):
 
     try:
         # Check if preset is builtin
-        cursor.execute("SELECT is_builtin FROM audio_presets WHERE id = ?", (preset_id,))
+        cursor.execute(
+            "SELECT is_builtin FROM audio_presets WHERE id = ?", (preset_id,)
+        )
         row = cursor.fetchone()
 
         if not row:

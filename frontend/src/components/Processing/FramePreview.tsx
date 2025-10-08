@@ -253,7 +253,7 @@ export default function FramePreview({
     });
 
     try {
-      let url = `${API}/api/frame?path=${encodeURIComponent(inputPath)}&frame=${frame}`;
+      let url = `${API}/api/vs/frame?path=${encodeURIComponent(inputPath)}&frame=${frame}`;
 
       if (script && script.trim()) {
         // Add script as query parameter for processed frame

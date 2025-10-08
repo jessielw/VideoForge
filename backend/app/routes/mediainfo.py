@@ -6,10 +6,10 @@ from app.schemas.mediainfo import MediaInfoResponse
 from app.utils.file_utils import get_allowed_roots, is_under_allowed_roots
 from app.utils.mediainfo import safe_get_mediainfo_async
 
-router = APIRouter(prefix="/api/mediainfo", tags=["mediainfo"])
+router = APIRouter(tags=["mediainfo"])
 
 
-@router.post("", response_model=MediaInfoResponse)
+@router.post("/mediainfo", response_model=MediaInfoResponse)
 async def get_mediainfo(request: Request):
     """Return MediaInfo for a file."""
     data = await request.json()

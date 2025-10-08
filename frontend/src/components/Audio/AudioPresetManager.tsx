@@ -34,7 +34,7 @@ export default function AudioPresetManager({
   // Fetch presets from backend
   const fetchPresets = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/audio-presets');
+      const response = await fetch('http://localhost:8000/api/presets/audio');
       const data = await response.json();
       if (data.ok) {
         setPresets(data.presets);
@@ -59,7 +59,7 @@ export default function AudioPresetManager({
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/audio-presets', {
+      const response = await fetch('http://localhost:8000/api/presets/audio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -96,7 +96,7 @@ export default function AudioPresetManager({
     if (!confirm(`Delete preset "${presetName}"?`)) return;
 
     try {
-      const response = await fetch(`http://localhost:8000/api/audio-presets/${presetId}`, {
+      const response = await fetch(`http://localhost:8000/api/presets/audio/${presetId}`, {
         method: 'DELETE',
       });
 

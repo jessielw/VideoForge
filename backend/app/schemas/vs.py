@@ -25,4 +25,10 @@ class VsResponse(BaseModel):
     vapoursynth: VsProbeModel | None = None
 
 
-__all__ = ["VsProbeModel", "VsResponse"]
+class ScriptValidationRequest(BaseModel):
+    script: str
+
+
+class ScriptValidationResponse(BaseModel):
+    valid: bool
+    error: str | None = None

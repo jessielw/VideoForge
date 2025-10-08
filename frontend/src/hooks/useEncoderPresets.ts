@@ -22,7 +22,7 @@ export function useEncoderPresets() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/presets`);
+      const response = await fetch(`${API_BASE}/api/presets/video`);
       if (!response.ok) {
         throw new Error(`Failed to load presets: ${response.statusText}`);
       }
@@ -61,7 +61,7 @@ export function useEncoderPresets() {
   ): Promise<void> => {
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/presets`, {
+      const response = await fetch(`${API_BASE}/api/presets/video`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -97,7 +97,7 @@ export function useEncoderPresets() {
   const deletePreset = async (id: string): Promise<void> => {
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/presets/${id}`, {
+      const response = await fetch(`${API_BASE}/api/presets/video/${id}`, {
         method: 'DELETE',
       });
 

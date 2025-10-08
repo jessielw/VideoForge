@@ -61,7 +61,7 @@ export function useScriptEditor({
     setValidationMessage('');
 
     try {
-      const response = await fetch(`${API}/api/script/validate`, {
+      const response = await fetch(`${API}/api/vs/script/validate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
