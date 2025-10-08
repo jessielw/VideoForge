@@ -103,7 +103,7 @@ export default function OutputPathSelector({
           className="browse-button"
           title="Browse for save location"
         >
-          📁 Browse
+          📁
         </button>
       </div>
 

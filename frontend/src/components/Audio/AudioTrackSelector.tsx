@@ -4,8 +4,8 @@
  * Displays track metadata: language, codec, channels, sample rate, bitrate
  */
 
-import React from 'react';
-import { useMediaInfo, AudioTrack } from '../../context/MediaInfoContext';
+import { useMediaInfo } from '../../context/MediaInfoContext';
+import type { AudioTrack } from '../../types/mediaInfoContext';
 
 interface AudioTrackSelectorProps {
   selectedTrack: number;

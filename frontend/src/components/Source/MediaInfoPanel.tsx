@@ -1,90 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useMediaInfo } from '../../context/MediaInfoContext';
-
-interface VideoTrack {
-  track_id?: number;
-  format?: string;
-  format_profile?: string;
-  format_level?: string;
-  width?: number;
-  height?: number;
-  display_aspect_ratio?: string;
-  pixel_aspect_ratio?: string;
-  frame_rate?: number;
-  frame_count?: number;
-  bit_rate?: number;
-  bit_depth?: number;
-  chroma_subsampling?: string;
-  color_space?: string;
-  color_range?: string;
-  color_primaries?: string;
-  transfer_characteristics?: string;
-  matrix_coefficients?: string;
-  scan_type?: string;
-  codec_id?: string;
-  encoded_library_name?: string;
-  encoded_library_version?: string;
-}
-
-interface AudioTrack {
-  track_id?: number;
-  format?: string;
-  format_profile?: string;
-  codec_id?: string;
-  channels?: number;
-  channel_layout?: string;
-  sampling_rate?: number;
-  bit_rate?: number;
-  bit_depth?: number;
-  language?: string;
-  title?: string;
-  default?: string;
-  forced?: string;
-  compression_mode?: string;
-  encoded_library_name?: string;
-}
-
-interface SubtitleTrack {
-  track_id?: number;
-  format?: string;
-  codec_id?: string;
-  language?: string;
-  title?: string;
-  default?: string;
-  forced?: string;
-}
-
-interface GeneralInfo {
-  filename?: string;
-  format?: string;
-  file_size?: number;
-  duration?: number;
-  overall_bitrate?: number;
-  format_profile?: string;
-  encoded_date?: string;
-  writing_application?: string;
-  writing_library?: string;
-}
-
-interface MediaInfo {
-  ok: boolean;
-  general?: GeneralInfo;
-  video_tracks?: VideoTrack[];
-  audio_tracks?: AudioTrack[];
-  subtitle_tracks?: SubtitleTrack[];
-  vapoursynth?: {
-    frames?: number;
-    width?: number;
-    height?: number;
-    fps?: number;
-    error?: string;
-  };
-}
+import type { MediaInfoData } from '../../types/mediaInfoContext';
 
 interface MediaInfoPanelProps {
   filePath: string | null;
 }
-
 function formatFileSize(bytes?: number): string {
   if (!bytes) return 'Unknown';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -129,18 +49,23 @@ export default function MediaInfoPanel({ filePath }: MediaInfoPanelProps): JSX.E
     'general'
   );
 
-  // MediaInfoPanel only displays the mediainfo fetched on selection. Probe/index
-  // (vapoursynth) data is handled separately by the indexing/probe flows and
-  // should not overwrite or mask mediainfo. Read mediaInfo from context only.
   const { mediaInfo } = useMediaInfo();
-  const effectiveInfo: MediaInfo | null = (mediaInfo as any) || null;
-  const vapoursynthFromMediaInfo = (mediaInfo as any)?.vapoursynth || null;
+  const effectiveInfo: MediaInfoData | null = mediaInfo || null;
 
-  if (!filePath || !effectiveInfo) {
+  if (!filePath) {
     return (
       <div className="media-info-panel">
         <h3>Media Information</h3>
         <p className="no-file">No file selected</p>
+      </div>
+    );
+  }
+
+  if (!effectiveInfo) {
+    return (
+      <div className="media-info-panel">
+        <h3>Media Information</h3>
+        <p className="no-file">No media information available</p>
       </div>
     );
   }
@@ -154,9 +79,6 @@ export default function MediaInfoPanel({ filePath }: MediaInfoPanelProps): JSX.E
     );
   }
 
-  // mediainfo from backend
-  const mi = (effectiveInfo as any).mediainfo || effectiveInfo;
-
   // Helper to safely parse numeric-like fields that sometimes come back as strings
   const parseNum = (v: any): number | undefined => {
     if (v === undefined || v === null) return undefined;
@@ -164,12 +86,13 @@ export default function MediaInfoPanel({ filePath }: MediaInfoPanelProps): JSX.E
     return Number.isFinite(n) ? n : undefined;
   };
 
-  // Extract tracks from MediaInfo structure
-  const tracks: any[] = Array.isArray(mi?.tracks) ? mi.tracks : [];
-  const generalTrack = tracks.find(t => t.track_type === 'General') || {};
-  const videoTracks = tracks.filter(t => t.track_type === 'Video');
-  const audioTracks = tracks.filter(t => t.track_type === 'Audio');
-  const subtitleTracks = tracks.filter(t => t.track_type === 'Text' || t.track_type === 'Subtitle');
+  // Use backend-parsed arrays directly. These are expected to be present.
+  const videoTracks = effectiveInfo.video_tracks || [];
+  const audioTracks = effectiveInfo.audio_tracks || [];
+  const subtitleTracks = effectiveInfo.text_tracks || [];
+  const generalTrack = effectiveInfo.general || {};
+
+  // TODO: continue here and check out all of this code, stuff is a mess but starting to structure it!
 
   const renderGeneralInfo = () => (
     <div className="info-section">
@@ -195,42 +118,13 @@ export default function MediaInfoPanel({ filePath }: MediaInfoPanelProps): JSX.E
           <span>{formatBitrate(parseNum(generalTrack.overall_bit_rate))}</span>
         </div>
       </div>
-
-      {/* Additional details section */}
-      {(generalTrack.format_profile ||
-        generalTrack.writing_application ||
-        generalTrack.writing_library) && (
-        <div className="additional-info">
-          <h4>Additional Details</h4>
-          <div className="info-grid">
-            {generalTrack.format_profile && (
-              <div className="info-item">
-                <label>Profile:</label>
-                <span>{generalTrack.format_profile}</span>
-              </div>
-            )}
-            {generalTrack.writing_application && (
-              <div className="info-item">
-                <label>Encoded By:</label>
-                <span>{generalTrack.writing_application}</span>
-              </div>
-            )}
-            {generalTrack.writing_library && (
-              <div className="info-item">
-                <label>Library:</label>
-                <span>{generalTrack.writing_library}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 
   const renderVideoInfo = () => (
     <div className="info-section">
       {videoTracks && videoTracks.length > 0 ? (
-        videoTracks.map((track, index) => (
+        videoTracks.map((track: any, index: number) => (
           <div key={index} className="track-info">
             <h4>Video Track {track.track_id || index + 1}</h4>
 
@@ -243,36 +137,16 @@ export default function MediaInfoPanel({ filePath }: MediaInfoPanelProps): JSX.E
               <div className="info-item">
                 <label>Resolution:</label>
                 <span>
-                  {track.width && track.height
-                    ? `${track.width} × ${track.height}`
-                    : (vapoursynthFromMediaInfo?.width || effectiveInfo?.vapoursynth?.width) &&
-                      (vapoursynthFromMediaInfo?.height || effectiveInfo?.vapoursynth?.height)
-                    ? `${vapoursynthFromMediaInfo?.width || effectiveInfo?.vapoursynth?.width} × ${
-                        vapoursynthFromMediaInfo?.height || effectiveInfo?.vapoursynth?.height
-                      }`
-                    : 'Unknown'}
+                  {track.width && track.height ? `${track.width} × ${track.height}` : 'Unknown'}
                 </span>
               </div>
               <div className="info-item">
                 <label>Frame Rate:</label>
-                <span>
-                  {track.frame_rate
-                    ? `${track.frame_rate} fps`
-                    : vapoursynthFromMediaInfo?.fps || effectiveInfo?.vapoursynth?.fps
-                    ? `${(
-                        (vapoursynthFromMediaInfo?.fps || effectiveInfo?.vapoursynth?.fps) as number
-                      ).toFixed(3)} fps`
-                    : 'Unknown'}
-                </span>
+                <span>{track.frame_rate ? `${track.frame_rate} fps` : 'Unknown'}</span>
               </div>
               <div className="info-item">
                 <label>Total Frames:</label>
-                <span>
-                  {track.frame_count ||
-                    vapoursynthFromMediaInfo?.frames ||
-                    effectiveInfo?.vapoursynth?.frames ||
-                    'Unknown'}
-                </span>
+                <span>{track.frame_count || 'Unknown'}</span>
               </div>
               <div className="info-item">
                 <label>Bitrate:</label>
@@ -370,7 +244,7 @@ export default function MediaInfoPanel({ filePath }: MediaInfoPanelProps): JSX.E
   const renderAudioInfo = () => (
     <div className="info-section">
       {audioTracks && audioTracks.length > 0 ? (
-        audioTracks.map((track, index) => (
+        audioTracks.map((track: any, index: number) => (
           <div key={index} className="track-info">
             <h4>
               Audio Track {track.track_id || index + 1}
@@ -387,7 +261,7 @@ export default function MediaInfoPanel({ filePath }: MediaInfoPanelProps): JSX.E
               <div className="info-item">
                 <label>Channels:</label>
                 <span>
-                  {track.channels ? `${track.channels} channels` : 'Unknown'}
+                  {track.channel_s ? `${track.channel_s} channels` : 'Unknown'}
                   {track.channel_layout && ` (${track.channel_layout})`}
                 </span>
               </div>
@@ -438,7 +312,7 @@ export default function MediaInfoPanel({ filePath }: MediaInfoPanelProps): JSX.E
   const renderSubtitleInfo = () => (
     <div className="info-section">
       {subtitleTracks && subtitleTracks.length > 0 ? (
-        subtitleTracks.map((track, index) => (
+        subtitleTracks.map((track: any, index: number) => (
           <div key={index} className="track-info">
             <h4>
               Subtitle Track {track.track_id || index + 1}
@@ -470,13 +344,6 @@ export default function MediaInfoPanel({ filePath }: MediaInfoPanelProps): JSX.E
   return (
     <div className="media-info-panel">
       <h3>Media Information</h3>
-
-      {vapoursynthFromMediaInfo?.error && (
-        <div className="vs-warning">
-          <span>⚠️ VapourSynth probe reported in mediainfo: {vapoursynthFromMediaInfo.error}</span>
-        </div>
-      )}
-
       <div className="info-tabs">
         <button
           className={`info-tab ${activeTab === 'general' ? 'active' : ''}`}

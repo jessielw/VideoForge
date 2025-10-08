@@ -43,8 +43,6 @@ export default function JobCard({
     return `job-status status-${status}`;
   };
 
-
-
   const formatFileSize = (bytes: number | null | undefined): string => {
     if (!bytes) return 'N/A';
     const mb = bytes / 1024 / 1024;
@@ -89,10 +87,10 @@ export default function JobCard({
               className="job-enabled-checkbox"
               checked={job.enabled}
               onChange={() => onToggleEnabled(job.id)}
-              title={job.enabled ? "Disable job" : "Enable job"}
+              title={job.enabled ? 'Disable job' : 'Enable job'}
             />
           )}
-          
+
           <div className="job-status-badge">
             <span className="status-icon">{getStatusIcon(job.status)}</span>
             <span className="status-text">{job.status}</span>

@@ -6,10 +6,14 @@ import AutoCropModal from './AutoCropModal';
 import { useAutoCropDetection } from '../../hooks/useAutoCropDetection';
 import { useOverlay } from '../../context/OverlayContext';
 
+import type { VsProbe, VsResponse } from '../../types/vs';
+import { normalizeVsResponse } from '../../api';
+import { API } from '../../api/base';
+
 interface FramePreviewProps {
   inputPath: string;
   script?: string;
-  vsInfo: any;
+  vsInfo?: VsResponse | null;
   onScriptChange?: (script: string) => void;
   // A numeric counter; increment to trigger a preview fetch (applies the script)
   previewVersion?: number;
@@ -49,15 +53,15 @@ export default function FramePreview({
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollTimeoutRef = useRef<number | null>(null);
 
-  // Use VapourSynth probe results for preview. If the probe isn't present,
-  // fall back to safe defaults. vsInfo.vapoursynth is the probe result.
-  const vsProbe = vsInfo?.vapoursynth || {};
+  // Use processing probe results for preview. Normalize transport shape to UI view-model.
+  // If vsInfo is not present, fall back to an empty probe.
+  const vsProbe: VsProbe = (vsInfo as VsResponse) ? normalizeVsResponse(vsInfo as any) : {};
 
   const maxFrames = (typeof vsProbe.frames === 'number' && vsProbe.frames) || 1000;
   const videoWidth = (typeof vsProbe.width === 'number' && vsProbe.width) || 1920;
   const videoHeight = (typeof vsProbe.height === 'number' && vsProbe.height) || 1080;
 
-  const API = 'http://127.0.0.1:8000';
+  // Use centralized API base from api/base (imported above)
   const overlay = useOverlay();
 
   // Use the auto crop detection hook

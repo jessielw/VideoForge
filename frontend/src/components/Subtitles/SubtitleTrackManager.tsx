@@ -1,6 +1,6 @@
 /**
  * SubtitleTrackManager - Multi-track subtitle management UI
- * 
+ *
  * Features:
  * - Add multiple subtitle tracks from source
  * - Configure each track independently (mode, language, name, flags)
@@ -10,7 +10,7 @@
  */
 
 import React, { useState } from 'react';
-import { SubtitleTrack } from '../../context/MediaInfoContext';
+import type { SubtitleTrack } from '../../types/mediaInfoContext';
 
 // Output subtitle track configuration
 export interface OutputSubtitleTrack {
@@ -92,7 +92,9 @@ export default function SubtitleTrackManager({
 
       {outputTracks.length === 0 ? (
         <div className="subtitle-track-manager__empty">
-          <p>No subtitle tracks configured. Click "Add Subtitle" to include subtitles in the output.</p>
+          <p>
+            No subtitle tracks configured. Click "Add Subtitle" to include subtitles in the output.
+          </p>
         </div>
       ) : (
         <div className="subtitle-track-manager__list">

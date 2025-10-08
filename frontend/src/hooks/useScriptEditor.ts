@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { API } from '../api/base';
 
 interface UseScriptEditorProps {
   script: string;
@@ -6,8 +7,6 @@ interface UseScriptEditorProps {
   onValidate?: () => void;
   onApply?: () => void;
 }
-
-const API = 'http://127.0.0.1:8000';
 
 export function useScriptEditor({
   script,

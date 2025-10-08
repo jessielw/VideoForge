@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AudioTrack } from '../../context/MediaInfoContext';
+import type { AudioTrack } from '../../types/mediaInfoContext';
 import { AudioEncoder, AUDIO_ENCODER_OPTIONS } from '../../types/audio_encoders';
 
 // Output track configuration (what goes in final file)

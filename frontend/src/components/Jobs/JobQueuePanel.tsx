@@ -67,7 +67,7 @@ export default function JobQueuePanel({
     }
 
     setIsStarting(true);
-    
+
     try {
       const response = await fetch('http://localhost:8000/api/jobs/start-next', {
         method: 'POST',
@@ -101,7 +101,7 @@ export default function JobQueuePanel({
       const response = await fetch(`http://localhost:8000/api/jobs/${jobId}/start`, {
         method: 'POST',
       });
-      
+
       if (!response.ok) {
         const result = await response.json();
         throw new Error(result.detail || 'Failed to start job');
@@ -189,7 +189,7 @@ export default function JobQueuePanel({
 
   const handleDrop = async (e: DragEvent<HTMLDivElement>, targetJobId: number) => {
     e.preventDefault();
-    
+
     if (draggedJobId === null || draggedJobId === targetJobId) {
       setDraggedJobId(null);
       return;
@@ -230,9 +230,8 @@ export default function JobQueuePanel({
   };
 
   // Filter jobs
-  const filteredJobs = filterStatus === 'all' 
-    ? jobs 
-    : jobs.filter(job => job.status === filterStatus);
+  const filteredJobs =
+    filterStatus === 'all' ? jobs : jobs.filter(job => job.status === filterStatus);
 
   // Job stats
   const stats = {
@@ -272,18 +271,18 @@ export default function JobQueuePanel({
       <div className="jobs-header">
         <h2>Job Queue</h2>
         <div className="header-actions">
-          <button 
-            onClick={handleStartNextJob} 
+          <button
+            onClick={handleStartNextJob}
             className="start-next-btn"
             disabled={stats.queuedEnabled === 0 || stats.running > 0 || isStarting}
             title={
               isStarting
-                ? "Starting job..."
-                : stats.running > 0 
-                ? "A job is already running" 
-                : stats.queuedEnabled === 0 
-                ? "No enabled jobs in queue" 
-                : "Start next enabled job"
+                ? 'Starting job...'
+                : stats.running > 0
+                  ? 'A job is already running'
+                  : stats.queuedEnabled === 0
+                    ? 'No enabled jobs in queue'
+                    : 'Start next enabled job'
             }
           >
             {isStarting ? '⏳ Starting...' : '▶️ Start Next'}
@@ -301,7 +300,9 @@ export default function JobQueuePanel({
           <span className="stat-label">Total</span>
         </div>
         <div className="stat-item queued">
-          <span className="stat-value">{stats.queuedEnabled}/{stats.queued}</span>
+          <span className="stat-value">
+            {stats.queuedEnabled}/{stats.queued}
+          </span>
           <span className="stat-label">Enabled/Queued</span>
         </div>
         <div className="stat-item running">

@@ -7,7 +7,7 @@ import '../../styles/UI/BlockingOverlay.css';
 interface BlockingOverlayProps {
   visible: boolean;
   message?: string;
-  type?: 'loading' | 'indexing' | 'autocrop' | 'probe-failure' | 'custom';
+  type?: 'loading' | 'indexing' | 'autocrop' | 'probe-failure' | 'mediainfo' | 'custom';
   children?: ReactNode;
   dismissible?: boolean;
   onDismiss?: () => void;

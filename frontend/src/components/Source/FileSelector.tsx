@@ -25,7 +25,7 @@ export default function FileSelector({
           disabled={busy}
         />
         <button onClick={onBrowseClick} className="browse-button" disabled={busy}>
-          📁 Browse
+          📁
         </button>
       </div>
       {busy && (

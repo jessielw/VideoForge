@@ -1,5 +1,5 @@
 import AudioTrackManager, { OutputAudioTrack } from './AudioTrackManager';
-import { AudioTrack } from '../../context/MediaInfoContext';
+import type { AudioTrack } from '../../types/mediaInfoContext';
 
 import '../../styles/components/AudioTrackManager.css';
 import '../../styles/components/AudioConfigSection.css';

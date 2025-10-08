@@ -4,7 +4,7 @@
 
 import React from 'react';
 import SubtitleTrackManager, { OutputSubtitleTrack } from './SubtitleTrackManager';
-import { SubtitleTrack } from '../../context/MediaInfoContext';
+import type { SubtitleTrack } from '../../types/mediaInfoContext';
 import './SubtitleTrackManager.css';
 import './SubtitleConfigSection.css';
 
@@ -46,8 +46,8 @@ export default function SubtitleConfigSection({
                 track.mode === 'copy'
                   ? 'Embedded (soft sub)'
                   : track.mode === 'extract'
-                  ? 'External .srt file'
-                  : 'Burned (hardcoded)';
+                    ? 'External .srt file'
+                    : 'Burned (hardcoded)';
               const sourceLabel = sourceTrack
                 ? `Track ${track.sourceTrack + 1} (${sourceTrack.format})`
                 : `Track ${track.sourceTrack + 1}`;

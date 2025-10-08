@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { API } from '../api/base';
 
 interface CropData {
   left: number;
@@ -18,8 +19,6 @@ interface UseAutoCropDetectionProps {
   script?: string;
   onScriptChange?: (script: string) => void;
 }
-
-const API = 'http://127.0.0.1:8000';
 
 export function useAutoCropDetection({
   inputPath,

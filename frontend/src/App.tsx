@@ -8,6 +8,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import CriticalErrorOverlay from './components/UI/CriticalErrorOverlay';
 import MainLayout from './components/Layout/MainLayout';
 import { useMediaInfo } from './context/MediaInfoContext';
+import type { VsResponse } from './types/vs';
 import FileSelector from './components/Source/FileSelector';
 import JobQueuePanel from './components/Jobs/JobQueuePanel';
 import FileBrowserModal from './components/FileBrowserModal';
@@ -15,6 +16,8 @@ import FilterPanel from './components/Processing/FilterPanel';
 import MediaInfoPanel from './components/Source/MediaInfoPanel';
 import ScriptEditor from './components/Processing/ScriptEditor';
 import FramePreview from './components/Processing/FramePreview';
+import { normalizeVsResponse } from './api';
+import { fetchVsInfo, fetchMediaInfoApi } from './api';
 import OutputSettings from './components/Output/OutputSettings';
 import EncoderSettings from './components/Encoder/EncoderSettings';
 import ProbeFailureModal from './components/Source/ProbeFailureModal';
@@ -24,8 +27,7 @@ import SubtitleConfigSection from './components/Subtitles/SubtitleConfigSection'
 import { MultiTrackSubtitleConfig } from './components/Subtitles/SubtitleConfigSection';
 
 import './styles/index.css';
-
-const API = 'http://127.0.0.1:8000';
+import { API } from './api/base';
 
 export default function App(): JSX.Element {
   const overlay = useOverlay();
@@ -121,7 +123,7 @@ export default function App(): JSX.Element {
 
   // Loading state (used for indexing/probing/mediainfo operations)
   const [isLoading, setIsLoading] = useState(false);
-  const [vsInfo, setVsInfo] = useState<any>(null);
+  const [vsInfo, setVsInfo] = useState<VsResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   // Preview trigger (increment to tell FramePreview to fetch new frames)
   const [previewVersion, setPreviewVersion] = useState(0);
@@ -229,18 +231,13 @@ export default function App(): JSX.Element {
     });
     console.log('Parsing mediainfo:', path);
     try {
-      const indexResp = await fetch(`${API}/api/mediainfo`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path }),
-      });
-      const mediaInfoData = await indexResp.json();
+      const mediaInfoData = await fetchMediaInfoApi(path, true);
       console.log('MediaInfo data:', mediaInfoData);
 
-      // Store in global context for use by other components (Audio, Video, etc.)
-      setMediaInfo(mediaInfoData); // TODO: continue here and be sure we're using it properly throughout the app instead of calling ffmpeg etc multiple times, this needs to also be handled with a single load on the backend and not in multiple routes
+      // Store the raw transport in context for use by other components
+      setMediaInfo(mediaInfoData);
       // Note: do NOT set indexInfo here. indexInfo is the probe/index result
-      // (vapoursynth/probe) and is managed separately by probe/apply flows.
+      // (processing probe) and is managed separately by probe/apply flows.
     } catch (error) {
       console.error('Failed to fetch mediainfo for file:', error);
       return { ok: false, reason: String(error) };
@@ -272,25 +269,24 @@ export default function App(): JSX.Element {
 
   // Handle script application (refresh preview)
   const handleScriptApply = async () => {
-    // Probe the selected file via VapourSynth (frame/fps/size). This is the Apply action.
+    // Probe the selected file to gather processing info (frames/fps/size). This is the Apply action.
     if (!inputPath) return;
     setIsLoading(true);
     overlay.show({
       type: 'indexing',
-      message: 'Analyzing video with VapourSynth...',
+      message: 'Analyzing video (processing probe)...',
     });
     try {
-      const resp = await fetch(`${API}/api/vs/info`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: inputPath }),
-      });
-      const data = await resp.json();
+      const data = (await fetchVsInfo(inputPath)) as VsResponse;
       console.log('Probe data:', data);
-      const vap = data && data.vapoursynth ? data.vapoursynth : data || {};
-      setVsInfo((prev: any) => ({
-        ...(prev || {}),
-        vapoursynth: { ...(prev?.vapoursynth || {}), ...vap },
+      // Normalize using the adapter produced above. This converts strings -> numbers
+      // and computes a friendly VsProbe shape for UI consumption.
+      const normalized = normalizeVsResponse(data);
+      // Use the original typed response as the base so required wrapper fields (ok/path)
+      // are preserved. Replace vapoursynth with the normalized probe.
+      setVsInfo((prev: VsResponse | null) => ({
+        ...data,
+        vapoursynth: { ...(prev?.vapoursynth || {}), ...normalized },
       }));
       if (data && data.ok) {
         setLastIndexedPath(inputPath);
@@ -453,7 +449,7 @@ export default function App(): JSX.Element {
   );
 
   // Disable all workflow tabs when there's no input path loaded,
-  // or when the VapourSynth probe has failed (in which case we cannot proceed).
+  // or when the processing probe has failed (in which case we cannot proceed).
   let disabledTabs: string[] = [];
   if (!inputPath) {
     disabledTabs = ['filters', 'video', 'audio', 'subtitles', 'output'];
@@ -479,7 +475,7 @@ export default function App(): JSX.Element {
     prevInputPath.current = inputPath || null;
   }, [inputPath, setMediaInfo]);
 
-  // Redirect user to Source if the vapoursynth probe failed while they were on a blocked tab
+  // Redirect user to Source if the processing probe failed while they were on a blocked tab
   React.useEffect(() => {
     if (vsInfo && vsInfo.vapoursynth && vsInfo.vapoursynth.error) {
       if (activeTab !== 'source') setActiveTab('source');
@@ -522,12 +518,12 @@ export default function App(): JSX.Element {
         {/* Global blocking overlay for all blocking operations */}
         <GlobalOverlay />
 
-        {/* Probe failure modal blocks processing/output when VapourSynth probe failed */}
+        {/* Probe failure modal blocks processing/output when the processing probe failed */}
         <ProbeFailureModal
           error={vsInfo?.vapoursynth?.error}
           onClose={() => {
             // Clear probe error locally so user can attempt to re-index/probe
-            setVsInfo((prev: any) => {
+            setVsInfo((prev: VsResponse | null) => {
               if (!prev) return prev;
               const copy = { ...prev };
               if (copy.vapoursynth) copy.vapoursynth = { ...copy.vapoursynth, error: null };
