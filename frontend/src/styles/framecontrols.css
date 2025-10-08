@@ -12,8 +12,8 @@
   padding: 6px 12px;
   border: none;
   border-radius: 4px;
-  background: #007bff;
-  color: white;
+  background: var(--primary);
+  color: var(--on-primary);
   cursor: pointer;
   font-size: 0.85rem;
   transition: background 0.2s;
@@ -21,11 +21,11 @@
 }
 
 .frame-controls-header .nav-button:hover:not(:disabled) {
-  background: #0056b3;
+  background: var(--primary-hover);
 }
 
 .frame-controls-header .nav-button:disabled {
-  background: #6c757d;
+  background: var(--disabled);
   cursor: not-allowed;
 }
 
@@ -33,10 +33,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: white;
+  background: var(--surface);
   padding: 4px 8px;
   border-radius: 4px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   flex-shrink: 0;
   position: relative;
 }
@@ -49,11 +49,13 @@
   text-align: center;
   font-size: 0.85rem;
   outline: none;
+  color: var(--text);
+  font-weight: var(--fw-medium1);
 }
 
 .frame-controls-header .frame-total {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -104,8 +106,8 @@
   }
 
   .crop-button {
-    background: #fd7e14;
-    color: white;
+    background: color-mix(in srgb, var(--primary) 60%, var(--success) 40%);
+    color: var(--on-primary);
     border: none;
     padding: 8px 12px;
     border-radius: 4px;
@@ -115,11 +117,11 @@
   }
 
   .crop-button:hover {
-    background: #e8590c;
+    background: color-mix(in srgb, var(--primary) 48%, var(--success) 52%);
   }
 
   .crop-button.active {
-    background: #dc3545;
+    background: var(--danger);
   }
 
   .preview-loading {

@@ -29,6 +29,7 @@
   --focus-ring: color-mix(in srgb, var(--primary) 16%, transparent);
   --success: #16a34a;
   --on-success: #ffffff;
+  --warning: #ffc107;
   --error: #dc3545;
   --danger: #e74c3c;
 
@@ -85,6 +86,7 @@
   --focus-ring: color-mix(in srgb, var(--primary) 24%, transparent);
   --success: #2ecc71;
   --on-success: #07201a;
+  --warning: #ffb84d;
   --error: #ff6b6b;
 }
 

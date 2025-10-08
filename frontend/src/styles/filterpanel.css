@@ -1,21 +1,21 @@
 /* Filter Panel */
 .filter-panel {
-  background: white;
-  border: 1px solid #dee2e6;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--border) 10%, transparent);
 }
 
 .filter-panel h3 {
   margin: 0 0 16px 0;
-  color: #2c3e50;
+  color: var(--header-text);
   font-size: 1.2rem;
 }
 
 .filter-help {
   margin: 0 0 16px 0;
-  color: #6c757d;
+  color: var(--muted);
   font-size: 14px;
   font-style: italic;
 }
@@ -29,9 +29,9 @@
 
 .filter-preset {
   padding: 12px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #f8f9fa;
+  background: var(--surface-2);
   transition: all 0.2s ease;
 }
 
@@ -40,10 +40,10 @@
 }
 
 .filter-preset.clickable:hover {
-  background: #e9ecef;
-  border-color: #3498db;
+  background: color-mix(in srgb, var(--surface-2) 85%, var(--surface) 15%);
+  border-color: var(--primary);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.15);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 .filter-header {
@@ -55,7 +55,7 @@
 
 .filter-name {
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--header-text);
 }
 
 .copy-icon {
@@ -66,5 +66,5 @@
 .filter-description {
   margin: 0;
   font-size: 14px;
-  color: #6c757d;
+  color: var(--muted);
 }

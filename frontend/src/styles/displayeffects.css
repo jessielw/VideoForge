@@ -8,17 +8,17 @@
 
 .effects-label {
   font-size: 0.9rem;
-  color: #6c757d;
+  color: var(--muted);
   font-weight: 500;
   margin-right: 4px;
 }
 
 .effect-button {
   padding: 6px 10px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: white;
-  color: #666;
+  background: var(--surface);
+  color: var(--muted);
   cursor: pointer;
   font-size: 0.8rem;
   transition: all 0.2s;
@@ -26,14 +26,14 @@
 }
 
 .effect-button:hover:not(:disabled) {
-  background: #f0f0f0;
-  border-color: #ccc;
+  background: var(--row-hover);
+  border-color: var(--border);
 }
 
 .effect-button.active {
-  background: #28a745;
-  color: white;
-  border-color: #28a745;
+  background: var(--success);
+  color: var(--on-success);
+  border-color: var(--success);
 }
 
 .effect-button:disabled {
@@ -42,20 +42,20 @@
 }
 
 .auto-crop-button {
-  background: #ffc107;
-  color: #212529;
-  border-color: #ffc107;
+  background: var(--warning);
+  color: var(--text);
+  border-color: var(--warning);
 }
 
 .auto-crop-button:hover:not(:disabled) {
-  background: #e0a800;
-  border-color: #d39e00;
+  background: color-mix(in srgb, var(--warning) 86%, var(--surface) 14%);
+  border-color: color-mix(in srgb, var(--warning) 86%, var(--border) 14%);
 }
 
 .auto-crop-button:disabled {
-  background: #f8f9fa;
-  color: #6c757d;
-  border-color: #dee2e6;
+  background: var(--surface-2);
+  color: var(--muted);
+  border-color: var(--border);
 }
 
 .auto-crop-controls {
@@ -75,9 +75,9 @@
 
 .auto-crop-controls input[type='range'] {
   width: 68px;
-  background: #f0f0f0;
+  background: var(--row-hover);
   border-radius: 6px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   outline: none;
   cursor: pointer;
 }

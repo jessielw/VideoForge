@@ -1,9 +1,9 @@
 /* Script Editor */
 .script-editor {
-  background: white;
-  border: 1px solid #dee2e6;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--border) 8%, transparent);
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -15,14 +15,14 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid #dee2e6;
-  background: #f8f9fa;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
   border-radius: 8px 8px 0 0;
 }
 
 .editor-title h3 {
   margin: 0;
-  color: #2c3e50;
+  color: var(--header-text);
   font-size: 1.2rem;
 }
 
@@ -42,6 +42,10 @@
 
 .indexer-select {
   padding: 8px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
 }
 
 .editor-actions-btn-group {
@@ -50,8 +54,8 @@
 }
 
 .editor-actions .validate-button {
-  background: #28a745;
-  color: white;
+  background: var(--success);
+  color: var(--on-success);
   border: none;
   padding: 8px 16px;
   border-radius: 4px;
@@ -64,17 +68,18 @@
 }
 
 .editor-actions .validate-button:hover:not(:disabled) {
-  background: #218838;
+  background: color-mix(in srgb, var(--success) 80%, var(--primary) 20%);
 }
 
 .editor-actions .validate-button:disabled {
-  opacity: 0.6;
+  background: var(--disabled);
+  color: var(--muted);
   cursor: not-allowed;
 }
 
 .editor-actions .apply-button {
-  background: #007bff;
-  color: white;
+  background: var(--primary);
+  color: var(--on-primary);
   border: none;
   padding: 8px 16px;
   border-radius: 4px;
@@ -87,17 +92,19 @@
 }
 
 .editor-actions .apply-button:hover:not(:disabled) {
-  background: #0056b3;
+  background: var(--primary-hover);
 }
 
 .editor-actions .apply-button:disabled {
-  opacity: 0.6;
+  background: var(--disabled);
+  color: var(--muted);
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .editor-actions .reset-button {
-  background: #6c757d;
-  color: white;
+  background: var(--disabled);
+  color: var(--muted);
   border: none;
   padding: 8px 16px;
   border-radius: 4px;
@@ -107,7 +114,7 @@
 }
 
 .editor-actions .reset-button:hover:not(:disabled) {
-  background: #545b62;
+  background: color-mix(in srgb, var(--disabled) 80%, var(--surface) 20%);
 }
 
 .editor-content {
@@ -118,28 +125,28 @@
 
 .editor-status {
   padding: 8px 20px;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid var(--border);
   font-size: 0.85rem;
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #f8f9fa;
+  background: var(--surface-2);
 }
 
 .editor-status.idle {
-  color: #6c757d;
+  color: var(--muted);
 }
 
 .editor-status.validating {
-  color: #007bff;
+  color: var(--primary);
 }
 
 .editor-status.valid {
-  color: #28a745;
+  color: var(--success);
 }
 
 .editor-status.error {
-  color: #dc3545;
+  color: var(--error);
 }
 
 .editor-status .status-icon {
@@ -152,8 +159,8 @@
 }
 
 .template-button {
-  background: #17a2b8;
-  color: white;
+  background: var(--primary);
+  color: var(--on-primary);
   border: none;
   padding: 8px 12px;
   border-radius: 4px;
@@ -161,38 +168,33 @@
 }
 
 .template-button:hover {
-  background: #138496;
+  background: var(--primary-hover);
 }
 
 .validate-button {
-  background: #28a745;
-  color: white;
+  background: var(--success);
+  color: var(--on-success);
 }
-
 .validate-button:hover {
-  background: #218838;
+  background: color-mix(in srgb, var(--success) 80%, var(--primary) 20%);
 }
-
 .apply-button {
-  background: #007bff;
-  color: white;
+  background: var(--primary);
+  color: var(--on-primary);
 }
-
 .apply-button:hover {
-  background: #0056b3;
+  background: var(--primary-hover);
 }
-
 .reset-button {
-  background: #dc3545;
-  color: white;
+  background: var(--danger);
+  color: var(--on-primary);
 }
-
 .reset-button:hover {
-  background: #c82333;
+  background: color-mix(in srgb, var(--danger) 85%, var(--surface) 15%);
 }
 
 .apply-button-highlight {
-  background: #28a745 !important;
+  background: var(--success) !important;
   animation: pulse 2s infinite;
 }
 
@@ -205,23 +207,23 @@
 
 .validation-status {
   padding: 12px 20px;
-  border-bottom: 1px solid #dee2e6;
+  border-bottom: 1px solid var(--border);
   font-size: 14px;
 }
 
 .validation-status.validating {
-  background: #fff3cd;
-  color: #856404;
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface) 92%);
+  color: color-mix(in srgb, var(--primary) 40%, var(--text) 60%);
 }
 
 .validation-status.valid {
-  background: #d4edda;
-  color: #155724;
+  background: color-mix(in srgb, var(--success) 10%, var(--surface) 90%);
+  color: color-mix(in srgb, var(--success) 40%, var(--text) 60%);
 }
 
 .validation-status.error {
-  background: #f8d7da;
-  color: #721c24;
+  background: color-mix(in srgb, var(--error) 10%, var(--surface) 90%);
+  color: color-mix(in srgb, var(--error) 40%, var(--text) 60%);
 }
 
 .editor-container {
@@ -241,23 +243,23 @@
   line-height: 1.4;
   resize: none;
   outline: none;
-  background: #fafafa;
-  color: #2c3e50;
+  background: color-mix(in srgb, var(--surface) 6%, var(--bg) 94%);
+  color: var(--text);
   min-height: 300px;
 }
 
 .editor-hints {
   padding: 12px 20px;
-  background: #f8f9fa;
-  border-top: 1px solid #dee2e6;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
   border-radius: 0 0 8px 8px;
   font-size: 12px;
-  color: #6c757d;
+  color: var(--muted);
 }
 
 .effect-button:hover {
-  background: #f0f0f0;
-  border-color: #bbb;
+  background: color-mix(in srgb, var(--surface-2) 80%, var(--surface) 20%);
+  border-color: var(--border);
 }
 
 /* Responsive adjustments */

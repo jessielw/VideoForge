@@ -129,17 +129,17 @@
 
 .control-group label {
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--header-text);
   font-size: 0.95rem;
 }
 
 .filter-select,
 .sort-select {
   padding: 0.5rem 1rem;
-  border: 2px solid #bdc3c7;
+  border: 2px solid var(--border);
   border-radius: 6px;
-  background: white;
-  color: #2c3e50;
+  background: var(--surface);
+  color: var(--text);
   font-size: 0.95rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -147,14 +147,14 @@
 
 .filter-select:hover,
 .sort-select:hover {
-  border-color: #3498db;
+  border-color: var(--primary);
 }
 
 .filter-select:focus,
 .sort-select:focus {
   outline: none;
-  border-color: #3498db;
-  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
 /* Job List */

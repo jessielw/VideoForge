@@ -9,10 +9,10 @@
 
 .zoom-button {
   padding: 4px 8px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 3px;
-  background: white;
-  color: #666;
+  background: var(--surface);
+  color: var(--muted);
   cursor: pointer;
   font-size: 0.75rem;
   transition: all 0.2s;
@@ -21,26 +21,26 @@
 }
 
 .zoom-button:hover {
-  background: #f0f0f0;
-  border-color: #ccc;
+  background: var(--row-hover);
+  border-color: var(--border);
 }
 
 .zoom-button.active {
-  background: #007bff;
-  color: white;
-  border-color: #007bff;
+  background: var(--primary);
+  color: var(--on-primary);
+  border-color: var(--primary);
 }
 
 .zoom-info {
   font-size: 0.8rem;
-  color: #666;
+  color: var(--muted);
   margin-left: 8px;
   font-weight: 500;
 }
 
 .auto-apply-button {
-  background: #17a2b8;
-  color: white;
+  background: var(--primary);
+  color: var(--on-primary);
   border: none;
   padding: 8px 12px;
   border-radius: 4px;
@@ -50,16 +50,16 @@
 }
 
 .auto-apply-button:hover {
-  background: #138496;
+  background: var(--primary-hover);
 }
 
 .auto-apply-button.active {
-  background: #28a745;
+  background: var(--success);
 }
 
 .preview-mode-button {
-  background: #6c757d;
-  color: white;
+  background: var(--surface-2);
+  color: var(--text);
   border: none;
   padding: 8px 12px;
   border-radius: 4px;
@@ -69,11 +69,11 @@
 }
 
 .preview-mode-button.original {
-  background: #17a2b8;
+  background: var(--primary);
 }
 
 .preview-mode-button.processed {
-  background: #28a745;
+  background: var(--success);
 }
 
 .preview-mode-button:hover:not(:disabled) {
