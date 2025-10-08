@@ -29,7 +29,7 @@ export default function MainLayout({
     <div className="main-layout">
       <div className="layout-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h1 className="app-title">Video Forge</h1>
+          <h1 className="app-title">VideoForge</h1>
         </div>
         <div className="layout-header-right">
           <TabBar
