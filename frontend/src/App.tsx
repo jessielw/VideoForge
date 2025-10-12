@@ -1,14 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
+import { API } from './api/base';
+import logger from './utils/logger';
+import { normalizeVsResponse } from './api';
 import { OutputConfig } from './types/output';
+import { VsResponse } from './types/vs';
 import { EncoderConfig } from './types/encoder';
 import { useOverlay } from './context/OverlayContext';
 import GlobalOverlay from './components/GlobalOverlay';
 import ErrorBoundary from './components/ErrorBoundary';
-import CriticalErrorOverlay from './components/UI/CriticalErrorOverlay';
+import { fetchMediaInfoApi, fetchVsInfo } from './api';
 import MainLayout from './components/Layout/MainLayout';
 import { useMediaInfo } from './context/MediaInfoContext';
-import type { VsResponse } from './types/vs';
 import FileSelector from './components/Source/FileSelector';
 import JobQueuePanel from './components/Jobs/JobQueuePanel';
 import FileBrowserModal from './components/FileBrowserModal';
@@ -16,18 +19,16 @@ import FilterPanel from './components/Processing/FilterPanel';
 import MediaInfoPanel from './components/Source/MediaInfoPanel';
 import ScriptEditor from './components/Processing/ScriptEditor';
 import FramePreview from './components/Processing/FramePreview';
-import { normalizeVsResponse } from './api';
-import { fetchVsInfo, fetchMediaInfoApi } from './api';
 import OutputSettings from './components/Output/OutputSettings';
 import EncoderSettings from './components/Encoder/EncoderSettings';
 import ProbeFailureModal from './components/Source/ProbeFailureModal';
 import AudioConfigSection from './components/Audio/AudioConfigSection';
+import CriticalErrorOverlay from './components/UI/CriticalErrorOverlay';
 import { MultiTrackAudioConfig } from './components/Audio/AudioConfigSection';
 import SubtitleConfigSection from './components/Subtitles/SubtitleConfigSection';
 import { MultiTrackSubtitleConfig } from './components/Subtitles/SubtitleConfigSection';
 
 import './styles/index.css';
-import { API } from './api/base';
 
 export default function App(): JSX.Element {
   const overlay = useOverlay();
@@ -403,6 +404,8 @@ export default function App(): JSX.Element {
           inputPath.split(/[\\/]/).pop()?.split('.')[0] || 'Encode'
         } → ${outputConfig.container.toUpperCase()}`,
       };
+
+      logger.debug('Submitting job with audioConfig:', JSON.stringify(audioConfig, null, 2));
 
       const response = await fetch('http://localhost:8000/api/jobs/submit', {
         method: 'POST',
