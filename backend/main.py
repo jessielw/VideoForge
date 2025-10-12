@@ -8,12 +8,13 @@ from app.config import settings
 from app.database import init_database
 from app.job_worker import init_worker, start_worker, stop_worker
 from app.jobs import router as jobs_router
+from app.routes.audio import router as audio_router
 from app.routes.files import router as file_router
 from app.routes.health import router as health_router
 from app.routes.mediainfo import router as mi_router
-from app.routes.vs import router as vs_router
-from app.routes.presets.video import router as video_presets_router
 from app.routes.presets.audio import router as audio_presets_router
+from app.routes.presets.video import router as video_presets_router
+from app.routes.vs import router as vs_router
 
 
 class EndpointFilter(logging.Filter):
@@ -59,6 +60,7 @@ app = FastAPI(lifespan=lifespan)
 
 # routers
 app.include_router(health_router, prefix=settings.API_PREFIX)
+app.include_router(audio_router, prefix=settings.API_PREFIX)
 app.include_router(file_router, prefix=settings.API_PREFIX)
 app.include_router(vs_router, prefix=settings.API_PREFIX)
 app.include_router(video_presets_router, prefix=settings.API_PREFIX)
@@ -73,5 +75,4 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Frame-Meta"],
 )
