@@ -279,6 +279,12 @@ export default function MediaInfoPanel({ filePath }: MediaInfoPanelProps): JSX.E
                   <span>{track.bit_depth} bit</span>
                 </div>
               )}
+              {track.title && (
+                <div className="info-item">
+                  <label>Title:</label>
+                  <span>{track.title}</span>
+                </div>
+              )}
             </div>
 
             {/* Track Properties */}
