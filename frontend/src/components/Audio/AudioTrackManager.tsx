@@ -1,16 +1,21 @@
-import React, { useState } from 'react';
-import type { AudioTrack } from '../../types/mediaInfoContext';
-import { AudioEncoder, AUDIO_ENCODER_OPTIONS } from '../../types/audio_encoders';
+import React, { useEffect, useState } from 'react';
 
-// Output track configuration (what goes in final file)
-export interface OutputAudioTrack {
-  id: string; // Unique ID for React keys
-  sourceTrack: number; // Which source track to use
-  encoder: AudioEncoder;
-  bitrate: number; // kbps (ignored for copy)
-  language?: string; // Language tag (eng, jpn, etc.)
-  name?: string; // Track name/title
-}
+import logger from '../../utils/logger';
+import DeezyEncoderOptions from './DeezyEncoderOptions';
+import { fetchEncoderAvailability } from '../../api/audio';
+import { AudioTrack } from '../../types/mediaInfoContext';
+import {
+  getAtmosModeByValue,
+  getDDChannelByValue,
+  getDDPChannelByValue,
+} from '../../constants/audio/deezy';
+import {
+  AudioEncoderConfig,
+  CopyConfig,
+  DeezyConfig,
+  EncoderAvailabilityResponse,
+  OutputAudioTrack,
+} from '../../types/audio';
 
 interface AudioTrackManagerProps {
   sourceAudioTracks: AudioTrack[]; // Detected from source file
@@ -26,27 +31,61 @@ export default function AudioTrackManager({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
+  const [availability, setAvailability] = useState<EncoderAvailabilityResponse | null>(null);
+  const [isLoadingAvailability, setIsLoadingAvailability] = useState(true);
+
+  // Fetch encoder availability on mount
+  useEffect(() => {
+    fetchEncoderAvailability()
+      .then(avail => {
+        setAvailability(avail);
+        setIsLoadingAvailability(false);
+      })
+      .catch(err => {
+        logger.error('Failed to load encoder availability:', err);
+        setIsLoadingAvailability(false);
+      });
+  }, []);
 
   const handleAddTrack = () => {
+    if (!availability) return;
+
+    let defaultConfig: AudioEncoderConfig;
+
+    // Check if DeeZy is available, otherwise fall back to copy
+    if (availability.availability.deezy) {
+      // Default to DD 5.1 @ 448kbps
+      defaultConfig = {
+        encoder_type: 'deezy',
+        codec_format: 'dd',
+        source_track: 0,
+        channels: 6,
+        bitrate: 448,
+        dialnorm: 0,
+        language: sourceAudioTracks?.[0]?.language,
+        title: sourceAudioTracks?.[0]?.title,
+      };
+    } else {
+      // Fallback to copy (always available)
+      defaultConfig = {
+        encoder_type: 'copy',
+        source_track: 0,
+        language: sourceAudioTracks?.[0]?.language,
+        title: sourceAudioTracks?.[0]?.title,
+      } as CopyConfig;
+    }
+    logger.debug('Adding new track with default config:', JSON.stringify(defaultConfig, null, 2));
+
     const newTrack: OutputAudioTrack = {
       id: `track_${Date.now()}_${Math.random()}`,
-      sourceTrack: 0,
-      encoder: AUDIO_ENCODER_OPTIONS[0].value,
-      bitrate: 192,
-      language: undefined,
-      name: undefined,
+      config: defaultConfig,
     };
+
     onChange([...outputTracks, newTrack]);
   };
 
   const handleRemoveTrack = (index: number) => {
     const newTracks = outputTracks.filter((_, i) => i !== index);
-    onChange(newTracks);
-  };
-
-  const handleUpdateTrack = (index: number, updates: Partial<OutputAudioTrack>) => {
-    const newTracks = [...outputTracks];
-    newTracks[index] = { ...newTracks[index], ...updates };
     onChange(newTracks);
   };
 
@@ -61,7 +100,6 @@ export default function AudioTrackManager({
       return;
     }
 
-    // show where it will be dropped, and reorder immediately so UI updates
     setDropIndex(index);
     const newTracks = [...outputTracks];
     const draggedTrack = newTracks[draggedIndex];
@@ -76,6 +114,30 @@ export default function AudioTrackManager({
     setDraggedIndex(null);
     setDropIndex(null);
   };
+
+  if (isLoadingAvailability) {
+    return (
+      <div className="audio-track-manager">
+        <div className="audio-track-manager__header">
+          <h3>Audio Tracks</h3>
+        </div>
+        <div className="audio-track-manager__loading">Checking encoder availability...</div>
+      </div>
+    );
+  }
+
+  if (!availability) {
+    return (
+      <div className="audio-track-manager">
+        <div className="audio-track-manager__header">
+          <h3>Audio Tracks</h3>
+        </div>
+        <div className="audio-track-manager__error">
+          Failed to check encoder availability. Please check backend connection.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="audio-track-manager">
@@ -94,7 +156,6 @@ export default function AudioTrackManager({
         <div className="audio-track-manager__list">
           {outputTracks.map((track, index) => (
             <React.Fragment key={track.id}>
-              {/* Drop indicator above the item when dragging */}
               {draggedIndex !== null && dropIndex === index && (
                 <div className="audio-track-drop-indicator" />
               )}
@@ -113,12 +174,12 @@ export default function AudioTrackManager({
             </React.Fragment>
           ))}
 
-          {/* If dropping at the end of the list, show indicator */}
           {draggedIndex !== null && dropIndex === outputTracks.length && (
             <div className="audio-track-drop-indicator" />
           )}
         </div>
       )}
+
       {editingTrackId && (
         <AudioTrackEditorModal
           editingTrackId={editingTrackId}
@@ -132,8 +193,9 @@ export default function AudioTrackManager({
   );
 }
 
-// Attach modal to main export render
-// ...existing code...
+// ============================================================================
+// AudioTrackCard Component
+// ============================================================================
 
 interface AudioTrackCardProps {
   track: OutputAudioTrack;
@@ -158,7 +220,8 @@ function AudioTrackCard({
   isDragging,
   onEdit,
 }: AudioTrackCardProps): JSX.Element {
-  const sourceTrack = sourceAudioTracks[track.sourceTrack];
+  const sourceTrack = sourceAudioTracks[track.config.source_track];
+  const encoderLabel = getEncoderSummary(track.config);
 
   return (
     <div
@@ -177,10 +240,10 @@ function AudioTrackCard({
         </div>
         <div className="audio-track-card__collapsed-summary">
           {sourceTrack
-            ? `Track ${track.sourceTrack + 1} (${sourceTrack.format || 'unknown'}) → ${
-                track.encoder
-              } ${track.encoder !== 'copy' ? `@ ${track.bitrate}kbps` : '(copy)'} `
-            : 'No source'}
+            ? `Track ${track.config.source_track + 1} (${
+                sourceTrack.format || 'unknown'
+              }) → ${encoderLabel}`
+            : `Track ${track.config.source_track + 1} → ${encoderLabel}`}
         </div>
         <button className="themed-btn-icon" onClick={onEdit} type="button" title="Edit in modal">
           ✎
@@ -193,54 +256,142 @@ function AudioTrackCard({
   );
 }
 
-// Modal editor (rendered in parent so it has access to outputTracks and onChange)
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+function getEncoderSummary(config: AudioEncoderConfig): string {
+  if (config.encoder_type === 'copy') {
+    return 'Copy (no re-encode)';
+  }
+
+  if (config.encoder_type === 'deezy') {
+    const deezyConfig = config as DeezyConfig;
+    const format = deezyConfig.codec_format.toUpperCase();
+
+    if (deezyConfig.codec_format === 'dd') {
+      const channelConfig = getDDChannelByValue(deezyConfig.channels);
+      const channelLabel = channelConfig?.label ?? String(deezyConfig.channels);
+      const bitrate = deezyConfig.bitrate !== null ? `${deezyConfig.bitrate}kbps` : 'Auto';
+      return `${format} ${channelLabel} @ ${bitrate}`;
+    }
+
+    if (deezyConfig.codec_format === 'ddp') {
+      const channelConfig = getDDPChannelByValue(deezyConfig.channels);
+      const channelLabel = channelConfig?.label ?? String(deezyConfig.channels);
+      const bitrate = deezyConfig.bitrate !== null ? `${deezyConfig.bitrate}kbps` : 'Auto';
+      return `${format} ${channelLabel} @ ${bitrate}`;
+    }
+
+    if (deezyConfig.codec_format === 'atmos') {
+      const modeConfig = getAtmosModeByValue(deezyConfig.atmos_mode);
+      const modeLabel = modeConfig?.label ?? deezyConfig.atmos_mode;
+      return `Atmos ${modeLabel} @ ${deezyConfig.bitrate}kbps`;
+    }
+
+    if (deezyConfig.codec_format === 'ac4') {
+      return `AC-4 Immersive Stereo @ ${deezyConfig.bitrate}kbps`;
+    }
+  }
+
+  return 'Unknown';
+}
+
+// ============================================================================
+// AudioTrackEditorModal Component
+// ============================================================================
+
+interface AudioTrackEditorModalProps {
+  editingTrackId: string | null;
+  onClose: () => void;
+  outputTracks: OutputAudioTrack[];
+  onChange: (tracks: OutputAudioTrack[]) => void;
+  sourceAudioTracks: AudioTrack[];
+}
+
 function AudioTrackEditorModal({
   editingTrackId,
   onClose,
   outputTracks,
   onChange,
   sourceAudioTracks,
-}: {
-  editingTrackId: string | null;
-  onClose: () => void;
-  outputTracks: OutputAudioTrack[];
-  onChange: (tracks: OutputAudioTrack[]) => void;
-  sourceAudioTracks: AudioTrack[];
-}) {
+}: AudioTrackEditorModalProps) {
   if (!editingTrackId) return null;
 
   const idx = outputTracks.findIndex(t => t.id === editingTrackId);
   if (idx === -1) return null;
 
   const track = outputTracks[idx];
-  const sourceTrack = sourceAudioTracks[track.sourceTrack];
-
   const [local, setLocal] = React.useState<OutputAudioTrack>({ ...track });
 
   const handleSave = () => {
+    logger.debug('Saving track config:', JSON.stringify(local.config, null, 2));
     const newTracks = [...outputTracks];
-    newTracks[idx] = { ...newTracks[idx], ...local };
+    newTracks[idx] = local;
     onChange(newTracks);
     onClose();
   };
 
+  const handleEncoderChange = (newEncoderType: string) => {
+    let newConfig: AudioEncoderConfig;
+
+    if (newEncoderType === 'copy') {
+      newConfig = {
+        encoder_type: 'copy',
+        source_track: local.config.source_track,
+        language: local.config.language,
+        title: local.config.title,
+      } as CopyConfig;
+    } else if (newEncoderType === 'deezy') {
+      // Default to DD 5.1 @ 448kbps
+      newConfig = {
+        encoder_type: 'deezy',
+        codec_format: 'dd',
+        source_track: local.config.source_track,
+        language: local.config.language,
+        title: local.config.title,
+        channels: 6,
+        bitrate: 448,
+        dialnorm: 0,
+      };
+    } else {
+      return; // Unknown encoder
+    }
+
+    setLocal({ ...local, config: newConfig });
+  };
+
   return (
     <div className="preset-dialog-overlay" onClick={onClose}>
-      <div className="preset-dialog" onClick={e => e.stopPropagation()}>
+      <div className="preset-dialog audio-editor-modal" onClick={e => e.stopPropagation()}>
         <h3>Edit Output Track #{idx + 1}</h3>
         <div className="dialog-content">
+          {/* Source Track Selection */}
           <div className="form-group">
             <label>Source Track</label>
             <select
-              value={local.sourceTrack}
-              onChange={e => setLocal({ ...local, sourceTrack: parseInt(e.target.value) })}
+              value={local.config.source_track}
+              onChange={e => {
+                const newSrcTrackNum = parseInt(e.target.value);
+                const newConfig = {
+                  ...local.config,
+                  source_track: newSrcTrackNum,
+                  language: sourceAudioTracks?.[newSrcTrackNum]?.language,
+                  title: sourceAudioTracks?.[newSrcTrackNum]?.title,
+                };
+                logger.debug('After source_track change:', JSON.stringify(newConfig, null, 2));
+                setLocal({
+                  ...local,
+                  config: newConfig,
+                });
+              }}
             >
               {sourceAudioTracks.length === 0 ? (
                 <option value={0}>No audio tracks in source</option>
               ) : (
-                sourceAudioTracks.map((srcTrack, sidx) => (
-                  <option key={sidx} value={sidx}>
-                    Track {sidx + 1}: {srcTrack.format?.toUpperCase() || 'Unknown'}{' '}
+                sourceAudioTracks.map((srcTrack, sIDX) => (
+                  <option key={sIDX} value={sIDX}>
+                    Track {sIDX + 1}: {srcTrack.format?.toUpperCase() || 'Unknown'}{' '}
                     {srcTrack.channels ? `${srcTrack.channels}ch` : ''}{' '}
                     {srcTrack.language ? `(${srcTrack.language})` : ''}
                   </option>
@@ -249,58 +400,77 @@ function AudioTrackEditorModal({
             </select>
           </div>
 
+          {/* Encoder Type Selection */}
           <div className="form-group">
             <label>Encoder</label>
             <select
-              value={local.encoder}
-              onChange={e => setLocal({ ...local, encoder: e.target.value as any })}
+              value={local.config.encoder_type}
+              onChange={e => handleEncoderChange(e.target.value)}
             >
-              {AUDIO_ENCODER_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              <option value="copy">Copy (No Re-encode)</option>
+              <option value="deezy">DeeZy (Professional Dolby Encoding)</option>
             </select>
           </div>
 
-          {local.encoder !== 'copy' && (
-            <div className="form-group">
-              <label>Bitrate</label>
-              <div className="input-with-unit">
-                <input
-                  type="number"
-                  value={local.bitrate}
-                  onChange={e => setLocal({ ...local, bitrate: parseInt(e.target.value) || 192 })}
-                  min={64}
-                  max={512}
-                  step={32}
-                />
-                <span className="unit">kbps</span>
-              </div>
-            </div>
+          {/* DeeZy-specific options */}
+          {local.config.encoder_type === 'deezy' && (
+            <DeezyEncoderOptions
+              config={local.config as DeezyConfig}
+              onChange={newConfig => setLocal({ ...local, config: newConfig })}
+            />
           )}
 
+          {/* Language */}
           <div className="form-group">
             <label>Language (optional)</label>
             <input
               type="text"
-              value={local.language || ''}
-              onChange={e => setLocal({ ...local, language: e.target.value || undefined })}
+              value={local.config.language || ''}
+              onChange={e =>
+                setLocal({
+                  ...local,
+                  config: { ...local.config, language: e.target.value || undefined },
+                })
+              }
               placeholder="e.g., eng, jpn, spa"
               maxLength={3}
             />
           </div>
 
+          {/* Title */}
           <div className="form-group">
-            <label>Track Name (optional)</label>
+            <label>Track Title (optional)</label>
             <input
               type="text"
-              value={local.name || ''}
-              onChange={e => setLocal({ ...local, name: e.target.value || undefined })}
+              value={local.config.title || ''}
+              onChange={e =>
+                setLocal({
+                  ...local,
+                  config: { ...local.config, title: e.target.value || undefined },
+                })
+              }
               placeholder="e.g., English Stereo, Japanese 5.1, Commentary"
             />
           </div>
+
+          {/* Custom Arguments */}
+          <div className="form-group">
+            <label>Custom Arguments (optional)</label>
+            <input
+              type="text"
+              value={local.config.custom_args || ''}
+              onChange={e =>
+                setLocal({
+                  ...local,
+                  config: { ...local.config, custom_args: e.target.value || undefined },
+                })
+              }
+              placeholder="e.g., --extra-flag value"
+            />
+            <small>Additional command line arguments to append to the encoder command</small>
+          </div>
         </div>
+
         <div className="dialog-actions">
           <button className="themed-btn" onClick={onClose}>
             Cancel
@@ -313,3 +483,5 @@ function AudioTrackEditorModal({
     </div>
   );
 }
+
+export type { OutputAudioTrack };
