@@ -329,7 +329,7 @@ function CommonDeezyOptions({ config, onChange }: CommonDeezyOptionsProps) {
       </div>
 
       <div className="form-group">
-        <label>Dialog Normalization</label>
+        <label>Custom Dialnorm</label>
         <div className="input-with-unit">
           <input
             type="number"
