@@ -32,10 +32,11 @@ def plan_for(
     *,
     external_subs: list[SubTrack] | None = None,
     chapters: Path | None = None,
+    external_audio: list[AudioTrack] | None = None,
 ) -> Plan:
     """The manual profile's plan for already-probed inputs."""
     inputs = JobInputs(source=src.path or Path(src.name), encode=encode.path if encode else None, chapters=chapters)
-    probed = ProbedInputs(inputs, src, encode, list(external_subs or []))
+    probed = ProbedInputs(inputs, src, encode, list(external_subs or []), external_audio=list(external_audio or []))
     return ManualProfile().plan(probed, None, overrides or Overrides())
 
 

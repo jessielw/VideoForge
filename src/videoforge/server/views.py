@@ -66,10 +66,11 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
         out["plan"] = plan
     if e.probed is not None:
         src = e.probed.source
-        tracks = [*src.audio, *src.subs, *e.probed.external_subs]
+        tracks = [*src.audio, *e.probed.external_audio, *src.subs, *e.probed.external_subs]
         out["tracks"] = {
             "video": to_json(src.video) if src.video else None,
-            "audio": [to_json(t) | {"key": track_key(t), "detected": profile.detected_flags(t)} for t in src.audio],
+            "audio": [to_json(t) | {"key": track_key(t), "detected": profile.detected_flags(t)}
+                      for t in [*src.audio, *(e.probed.external_audio if profile.external_audio else [])]],
             "subs": [to_json(t) | {"key": track_key(t), "detected": profile.detected_flags(t)}
                      for t in [*src.subs, *e.probed.external_subs]],
             "has_chapters": src.has_chapters,

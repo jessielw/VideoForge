@@ -119,6 +119,7 @@ class ManualProfile(Profile):
     name = "Manual"
     container = "mkv"
     external_subtitles = True
+    external_audio = True
     track_editor = True
     track_properties =tuple(TrackProperty(key, label, kind, help) for kind in TrackKind for key, label, help in _FLAGS)
 
@@ -139,9 +140,9 @@ class ManualProfile(Profile):
 
         if overrides.audio_track_ids is not None:
             by_id = {t.id: t for t in source.audio}
-            audio_tracks = [by_id[i] for i in overrides.audio_track_ids if i in by_id]
+            audio_tracks = [by_id[i] for i in overrides.audio_track_ids if i in by_id] + probed.external_audio
         else:
-            audio_tracks = ordered(source.audio, overrides.order)
+            audio_tracks = ordered(source.audio + probed.external_audio, overrides.order)
         audio_tracks = [t for t in audio_tracks if not _excluded(t, overrides)]
         if source.audio and not audio_tracks:
             issues.append(Issue(Severity.WARN, "audio.none", "No audio tracks selected"))
@@ -151,6 +152,9 @@ class ManualProfile(Profile):
         for t in audio_tracks:
             ov = overrides.tracks.get(track_key(t))
             language, title, flags = _settings(t, ov)
+            if t.external_path is not None and language == "und":
+                issues.append(Issue(Severity.WARN, "audio.language",
+                                    f"{t.external_path.name} has no language: set it in the track editor"))
             audio.append(PlannedAudio(source=t, **audio_output(t, ov, issues), language=language, title=title, **flags))
         subs: list[PlannedSub] = []
         for t in sub_tracks:

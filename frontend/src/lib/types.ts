@@ -123,6 +123,7 @@ export interface JobInputs {
   subtitles: string[]
   chapters: string | null
   encode_state: string
+  audio: string[]
 }
 
 export interface JobSpec {
@@ -155,6 +156,7 @@ export interface AudioTrack {
   delay_ms: number
   format_name: string
   detected: Record<string, boolean>
+  external_path?: string | null // an added audio file (id and index are that file's)
 }
 
 export interface SubTrack {

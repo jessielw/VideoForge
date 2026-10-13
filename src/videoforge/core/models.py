@@ -87,6 +87,11 @@ class AudioTrack:
     bitrate_kbps: int | None = None
     delay_ms: int = 0  # relative to video
     format_name: str = ""  # raw MediaInfo format, for display
+    external_path: Path | None = None  # an added audio file (id and index are then that file's)
+
+    @property
+    def is_external(self) -> bool:
+        return self.external_path is not None
 
     @property
     def base_language(self) -> str:
@@ -158,6 +163,7 @@ class JobInputs:
     subtitles: list[Path] = field(default_factory=list)
     chapters: Path | None = None
     encode_state: EncodeState = EncodeState.UNKNOWN
+    audio: list[Path] = field(default_factory=list)  # added audio files; their tracks join the source's
 
 
 # --- Plan -----------------------------------------------------------------------
@@ -255,8 +261,13 @@ class Overrides:
 
 
 def track_key(track: AudioTrack | SubTrack) -> str:
-    external = getattr(track, "external_path", None)
-    return f"ext:{external.name}" if external else f"id:{track.id}"
+    """"id:<mkvmerge id>" for a source track, "ext:<file name>" for an added file (an added audio
+    file's second track on is "ext:<file name>#<n>")."""
+    external = track.external_path
+    if external is None:
+        return f"id:{track.id}"
+    more = f"#{track.index}" if isinstance(track, AudioTrack) and track.index else ""
+    return f"ext:{external.name}{more}"
 
 
 @dataclass(slots=True)

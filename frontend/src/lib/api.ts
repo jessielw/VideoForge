@@ -65,6 +65,7 @@ export interface InputSlots {
 // A job's files, each replaced when given (a folder adds its files of that kind).
 export interface InputChanges {
   subtitles?: string[]
+  audio?: string[]
   chapters?: string | null
   encode?: string | null
 }

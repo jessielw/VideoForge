@@ -151,3 +151,41 @@ def test_every_flag_is_written_explicitly():
 )
 def test_frame_rate(ns, rate):
     assert _frame_rate(ns) == rate
+
+
+def test_added_audio_files_are_their_own_inputs():
+    src = source([audio(C.FLAC, "2.0", "ja", index=0)], name="Show.S01E01.mkv")
+    src.video = VideoInfo(1920, 1080, start_ms=0, default_duration_ns=41708333)
+    commentary = audio(C.AC3, "2.0", "en", index=0, title="Commentary")
+    commentary.id, commentary.external_path, commentary.delay_ms = 0, Path("extra/Commentary DELAY 42ms.ac3"), 42
+    dub = audio(C.DTS_HD_MA, "5.1", "de", index=1)
+    dub.id, dub.external_path, dub.delay_ms = 1, Path("extra/German.mka"), -10
+    plan = plan_for(src, source(name="enc.h264"), external_audio=[commentary, dub])
+    plan.encode_path = Path("enc.h264")
+    plan.audio[2].action, plan.audio[2].out_codec = AudioAction.FLAC, C.FLAC  # the German track gets encoded
+    argv = mux_command(plan, {2: Path("tmp/audio2_de.flac")}, OUT, "mkvmerge", RAW)
+
+    i = argv.index(str(Path("extra/Commentary DELAY 42ms.ac3")))
+    own = argv[argv.index("--no-video", argv.index("Show.S01E01.mkv")) : i]
+    assert value(own, "--audio-tracks") == ["0"] and value(own, "--sync") == ["0:42"]
+    assert value(own, "--track-name") == ["0:Commentary"] and "--no-subtitles" in own
+    assert value(argv, "--audio-tracks") == ["1", "0"]  # the source's track, then the commentary's
+    assert str(Path("extra/German.mka")) not in argv  # encoded: muxed from its encode, its delay applied there
+    j = argv.index(str(Path("tmp/audio2_de.flac")))
+    assert value(argv[i:j], "--sync") == ["0:-10"]
+    assert value(argv, "--track-order") == ["0:0,1:1,2:0,3:0"]
+
+
+def test_added_audio_keys_and_names():
+    from videoforge.core.models import track_key
+    from videoforge.core.pairing import name_delay_ms, name_language, name_without_delay
+
+    t = audio(C.AC3, "2.0", index=0)
+    t.external_path = Path("x/Show DELAY -42ms.ac3")
+    assert track_key(t) == "ext:Show DELAY -42ms.ac3"
+    t.index = 2
+    assert track_key(t) == "ext:Show DELAY -42ms.ac3#2"
+    assert name_delay_ms("Show T2 eng DELAY -42ms") == -42 and name_delay_ms("Show 3 2 1") is None
+    assert name_language("Show.Commentary.en") == "en" and name_language("Show 5.1") is None
+    assert name_language(name_without_delay("Commentary.en DELAY 100ms")) == "en"
+    assert name_language(name_without_delay("Movie T2 eng DELAY -42ms")) == "en"

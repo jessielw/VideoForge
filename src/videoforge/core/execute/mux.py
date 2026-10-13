@@ -1,12 +1,14 @@
 """The single mkvmerge pass that builds a release from a plan.
 
 Inputs, in order: the encode (video only), the source (copied audio and
-subtitles), then one file per encoded audio track and per external subtitle.
+subtitles), then one file per encoded audio track, per copied track of an added
+audio file, and per external subtitle.
 
 Timing: the encode starts at 0. Source tracks are shifted by the source video's
 start offset so they line up with it. DeeZy output already carries the source's
 "delay relative to video"; AAC starts at its first sample, so it gets the delay
-here.
+here. A copied track of an added audio file gets its own delay (e.g. from
+"DELAY 42ms" in its name).
 gMKVExtract SRTs keep the source's container timestamps, so they get the same
 shift as the source tracks; other external SRTs are used as timed.
 """
@@ -99,7 +101,7 @@ def mux_command(
     argv += ["--default-track-flag", "0:1", str(plan.encode_path)]
 
     # 1: the source, copied audio and subtitles only.
-    copied = [a for a in plan.audio if a.action is AudioAction.COPY]
+    copied = [a for a in plan.audio if a.action is AudioAction.COPY and not a.source.is_external]
     internal_subs = [s for s in plan.subs if not s.source.is_external]
     argv += ["--no-video", "--no-attachments", "--no-global-tags"]
     if external_chapters:
@@ -116,6 +118,15 @@ def mux_command(
     file_id = 2
     audio_order: list[str] = []
     for pos, a in enumerate(plan.audio):
+        if a.action is AudioAction.COPY and a.source.is_external:
+            tid = a.source.id
+            argv += ["--no-video", "--no-subtitles", "--no-chapters", "--no-attachments", "--no-global-tags",
+                     "--audio-tracks", str(tid)]
+            argv += _track_args(tid, a) + _sync(tid, a.source.delay_ms)
+            argv.append(str(a.source.external_path))
+            audio_order.append(f"{file_id}:{tid}")
+            file_id += 1
+            continue
         if a.action is AudioAction.COPY:
             audio_order.append(f"1:{a.source.id}")
             continue

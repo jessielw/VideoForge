@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from conftest import audio, plan_for, simulate_output, source, sub
 
 from videoforge.core.models import AudioAction, Layout, Overrides, Severity, TrackOverride
@@ -154,3 +156,17 @@ def test_ffmpeg_encode_bitrates_are_checked():
     assert not encoded(stereo, id_1=TrackOverride(action=AudioAction.AC3, bitrate_kbps=192)).issues
     flac = encoded(stereo, id_1=TrackOverride(action=AudioAction.FLAC, bitrate_kbps=999))  # ignored
     assert not flac.issues and flac.audio[0].bitrate_kbps is None
+
+
+def test_added_audio_files_join_the_tracks():
+    extra = audio(C.AC3, "2.0", "und", index=0, title="Commentary")
+    extra.external_path = Path("Commentary.ac3")
+    plan = plan_for(source([audio(C.FLAC, "2.0", "ja", index=0)]), source(name="E.mkv"), external_audio=[extra])
+    assert [(a.source.external_path, a.action) for a in plan.audio] == [(None, AudioAction.COPY),
+                                                                         (Path("Commentary.ac3"), AudioAction.COPY)]
+    assert [i.code for i in plan.issues] == ["audio.language"]
+    ov = Overrides(order=["ext:Commentary.ac3", "id:1"],
+                   tracks={"ext:Commentary.ac3": TrackOverride(language="en", action=AudioAction.OPUS)})
+    plan = plan_for(source([audio(C.FLAC, "2.0", "ja", index=0)]), source(name="E.mkv"), ov, external_audio=[extra])
+    assert not plan.issues
+    assert [(a.language, a.action) for a in plan.audio] == [("en", AudioAction.OPUS), ("ja", AudioAction.COPY)]

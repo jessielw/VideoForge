@@ -3,7 +3,7 @@
   // and subtitle track in output order. Drag a track by its handle (or use the arrows) to reorder,
   // untick it to leave it out, edit its title, language and flags, and copy or encode each audio
   // track. Every change saves and replans; each track shows what will be written.
-  // Files can be added to the job here (subtitles, chapters) and removed again.
+  // Files can be added to the job here (subtitles, audio, chapters) and removed again.
   import type { InputChanges } from '../lib/api'
   import { emptyOverride, isEmpty, LANGUAGES } from '../lib/format'
   import { app } from '../lib/state.svelte'
@@ -25,18 +25,31 @@
 
   // --- the job's files ---
   const SUB_EXTENSIONS = ['.srt', '.ass', '.ssa', '.sup', '.idx']
+  const AUDIO_EXTENSIONS = ['.ac3', '.eac3', '.ec3', '.dts', '.dtshd', '.thd', '.truehd', '.mlp', '.flac', '.wav', '.w64',
+    '.m4a', '.aac', '.mka', '.opus', '.ogg']
+  const extOf = (p: string) => (p.match(/\.[^.\\/]+$/)?.[0] ?? '').toLowerCase()
   const CHAPTER_EXTENSIONS = ['.xml', '.txt']
   let browsing = $state<'files' | 'chapters' | null>(null)
   const sourceDir = $derived(job.spec.inputs.source.replace(/[\\/][^\\/]*$/, ''))
   const sameFile = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 
+  // Picked files go to subtitles or audio by extension; a folder goes to both (each takes its kind).
   function addFiles(paths: string[]) {
-    const subs = job.spec.inputs.subtitles
-    const more = paths.filter(p => !subs.some(s => sameFile(s, p)))
-    if (more.length) saveInputs({ subtitles: [...subs, ...more] })
+    const { subtitles, audio } = job.spec.inputs
+    const isSub = (p: string) => SUB_EXTENSIONS.includes(extOf(p))
+    const isAudioFile = (p: string) => AUDIO_EXTENSIONS.includes(extOf(p))
+    const newSubs = paths.filter(p => !isAudioFile(p) && !subtitles.some(s => sameFile(s, p)))
+    const newAudio = paths.filter(p => !isSub(p) && !audio.some(s => sameFile(s, p)))
+    const changes: InputChanges = {}
+    if (newSubs.length) changes.subtitles = [...subtitles, ...newSubs]
+    if (newAudio.length) changes.audio = [...audio, ...newAudio]
+    if (Object.keys(changes).length) saveInputs(changes)
   }
 
-  const removeFile = (path: string) => saveInputs({ subtitles: job.spec.inputs.subtitles.filter(s => !sameFile(s, path)) })
+  function removeFile(path: string, kind: Kind) {
+    const keep = (list: string[]) => list.filter(s => !sameFile(s, path))
+    saveInputs(kind === 'audio' ? { audio: keep(job.spec.inputs.audio) } : { subtitles: keep(job.spec.inputs.subtitles) })
+  }
 
   type Kind = 'audio' | 'sub'
   type Track = AudioTrack | SubTrack
@@ -55,7 +68,7 @@
     const ids = overrides.audio_track_ids
     const order = overrides.order ?? []
     const rank = (t: T) => {
-      const i = ids && isAudio(t) ? ids.indexOf(t.id) : order.indexOf(t.key)
+      const i = ids && isAudio(t) && !t.external_path ? ids.indexOf(t.id) : order.indexOf(t.key)
       return i < 0 ? 10_000 + list.indexOf(t) : i
     }
     return [...list].sort((a, b) => rank(a) - rank(b))
@@ -63,7 +76,10 @@
 
   const audioRows = $derived(inOrder(tracks?.audio ?? []))
   const subRows = $derived(inOrder(tracks?.subs ?? []))
-  const plannedAudio = $derived(new Map((plan?.audio ?? []).map((a, i) => [a.source.id, { pos: i, a }])))
+  // Planned audio by track key: ids repeat across added files.
+  const audioKey = (t: Pick<AudioTrack, 'id' | 'index' | 'external_path'>) =>
+    t.external_path ? `ext:${basename(t.external_path)}${t.index ? `#${t.index}` : ''}` : `id:${t.id}`
+  const plannedAudio = $derived(new Map((plan?.audio ?? []).map((a, i) => [audioKey(a.source), { pos: i, a }])))
   const plannedSubs = $derived(
     new Map(
       (plan?.subs ?? []).map((s, i) => [s.source.external_path ? `ext:${basename(s.source.external_path)}` : `id:${s.source.id}`, i]),
@@ -72,15 +88,17 @@
 
   const ovOf = (t: Track): TrackOverride | undefined => overrides.tracks[t.key]
   const excluded = (t: Track) =>
-    !!ovOf(t)?.exclude || (!!overrides.audio_track_ids && isAudio(t) && !overrides.audio_track_ids.includes(t.id))
-  const outPos = (t: Track) => (isAudio(t) ? plannedAudio.get(t.id)?.pos : plannedSubs.get(t.key))
+    !!ovOf(t)?.exclude ||
+    (!!overrides.audio_track_ids && isAudio(t) && !t.external_path && !overrides.audio_track_ids.includes(t.id))
+  const outPos = (t: Track) => (isAudio(t) ? plannedAudio.get(t.key)?.pos : plannedSubs.get(t.key))
 
   // A copy of the overrides to change, in the editor's terms: an audio id list becomes
   // order + exclusions, so the two ways of choosing tracks never disagree.
   function draft(): Overrides {
     const o = structuredClone($state.snapshot(overrides)) as Overrides
     if (o.audio_track_ids) {
-      for (const t of audioRows) if (!o.audio_track_ids.includes(t.id)) edit(o, t.key, ov => (ov.exclude = true))
+      for (const t of audioRows)
+        if (!t.external_path && !o.audio_track_ids.includes(t.id)) edit(o, t.key, ov => (ov.exclude = true))
       o.audio_track_ids = null
     }
     return o
@@ -158,7 +176,8 @@
   function sourceLabel(t: Track): string {
     if (isAudio(t)) {
       const fmt = t.format_name || CODEC[t.codec] || t.codec
-      return `#${t.id} ${fmt}${t.atmos ? ' Atmos' : t.dtsx ? ' DTS:X' : ''} ${t.layout}`
+      const where = t.external_path ? `${basename(t.external_path)}${t.index ? ` #${t.index + 1}` : ''}:` : `#${t.id}`
+      return `${where} ${fmt}${t.atmos ? ' Atmos' : t.dtsx ? ' DTS:X' : ''} ${t.layout}`
     }
     return t.external_path ? `${basename(t.external_path)} (${t.format})` : `#${t.id} ${t.format.toUpperCase()}`
   }
@@ -240,10 +259,10 @@
       <span class="min-w-0 flex-1 truncate text-sm {off ? 'text-muted line-through' : ''}" title={t.title}>
         {sourceLabel(t)} <span class="text-muted">· {t.language}{t.title ? ` · ${t.title}` : ''}</span>
       </span>
-      {#if !isAudio(t) && t.external_path}
+      {#if t.external_path}
         {@const path = t.external_path}
         <span class="rounded bg-raised px-1.5 text-xs text-muted" title={path}>added</span>
-        <button class="btn-ghost px-1 hover:text-bad" onclick={() => removeFile(path)} title="Remove this file from the job">
+        <button class="btn-ghost px-1 hover:text-bad" onclick={() => removeFile(path, kind)} title="Remove this file from the job">
           <Icon name="x" size={14} />
         </button>
       {/if}
@@ -286,7 +305,7 @@
       </div>
       {#if isAudio(t)}
         {@const action = actionOf(t)}
-        {@const planned = plannedAudio.get(t.id)?.a}
+        {@const planned = plannedAudio.get(t.key)?.a}
         {@const enc = encodeOf(action)}
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line/60 px-3 py-2 text-sm">
           <select class="field" value={action} aria-label="Copy or encode" onchange={e => setAction(t, e.currentTarget.value as AudioAction)}>
@@ -348,7 +367,7 @@
         {#each LANGUAGES as [tag, name] (tag)}<option value={tag}>{name}</option>{/each}
       </datalist>
       <span class="text-xs text-muted">Drag a track by its handle to reorder; every change saves.</span>
-      <button class="btn ml-auto" onclick={() => (browsing = 'files')} title="Add subtitle files to this job">
+      <button class="btn ml-auto" onclick={() => (browsing = 'files')} title="Add subtitle or audio files to this job">
         <Icon name="new" />Add files…
       </button>
       <button class="btn" onclick={reset}><Icon name="refresh" />Reset tracks</button>
@@ -369,7 +388,7 @@
             {/each}
           </div>
         {:else}
-          <p class="text-sm text-muted">None in the source{section.kind === 'sub' ? ' or added' : ''}.</p>
+          <p class="text-sm text-muted">None in the source or added.</p>
         {/if}
       </section>
     {/each}
@@ -395,8 +414,8 @@
 
 {#if browsing}
   <FileBrowser
-    title={browsing === 'files' ? 'Add subtitle files' : 'Chapters file'}
-    extensions={browsing === 'files' ? SUB_EXTENSIONS : CHAPTER_EXTENSIONS}
+    title={browsing === 'files' ? 'Add subtitle or audio files' : 'Chapters file'}
+    extensions={browsing === 'files' ? [...SUB_EXTENSIONS, ...AUDIO_EXTENSIONS] : CHAPTER_EXTENSIONS}
     start={sourceDir}
     onpick={paths => {
       if (browsing === 'files') addFiles(paths)

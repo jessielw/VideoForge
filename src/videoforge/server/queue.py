@@ -303,7 +303,7 @@ class JobQueue:
             if inputs is not None and inputs != s.inputs:
                 if inputs.source != s.inputs.source:
                     raise ValueError("A job's source can't change")
-                reprobe = e.probed is None or inputs.encode != s.inputs.encode
+                reprobe = e.probed is None or inputs.encode != s.inputs.encode or inputs.audio != s.inputs.audio
                 s.inputs = inputs
                 if not reprobe:
                     ext, issues = external_tracks(e.probed.source, inputs.subtitles)

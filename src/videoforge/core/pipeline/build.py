@@ -103,17 +103,19 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
     settings = profile.audio_settings()
     encoded: dict[int, Path] = {}
     for pos, a in enumerate(plan.audio):
-        cmd = audio_command(a, pos, plan.source.path, work, settings, app.tools)
+        src = a.source.external_path or plan.source.path  # an added audio file is read from itself
+        cmd = audio_command(a, pos, src, work, settings, app.tools)
         if cmd is None:
             continue
         encoded[pos] = cmd.output
         steps.append(Step(f"audio.{pos + 1}", f"Encode audio {pos + 1}: {a.title}", argvs=cmd.argvs,
-                          outputs=(cmd.output,), inputs=(plan.source.path,), weight=4))
+                          outputs=(cmd.output,), inputs=(src,), weight=4))
 
     partial = output.with_name(output.name + ".partial")
     mux = MUXERS[profile.container].command(plan, encoded, partial, app)
     mux_inputs = [p for p in (plan.encode_path, plan.chapters_path, *encoded.values()) if p is not None]
     mux_inputs += [s.source.external_path for s in plan.subs if s.source.external_path is not None]
+    mux_inputs += [a.source.external_path for a in plan.audio if a.source.external_path is not None]
     steps.append(Step("mux", "Mux", argvs=(tuple(mux),), outputs=(output,), writes=(partial,),
                       inputs=(plan.source.path, *mux_inputs), finalize=lambda: partial.replace(output), weight=3))
     return JobSteps(steps, output, encoded)

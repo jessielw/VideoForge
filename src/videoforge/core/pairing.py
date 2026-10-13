@@ -272,6 +272,27 @@ def srt_entry_count(path: Path) -> int | None:
         return None
 
 
+AUDIO_EXTENSIONS = (".ac3", ".eac3", ".ec3", ".dts", ".dtshd", ".thd", ".truehd", ".mlp", ".flac", ".wav", ".w64",
+                    ".m4a", ".aac", ".mka", ".opus", ".ogg")
+_DELAY_RE = re.compile(r"\bdelay\s*(-?\d+)\s*ms\b", re.IGNORECASE)
+
+
+def name_language(stem: str) -> str | None:
+    """The language a file name carries ("Movie.en.srt", "[eng]", "es-419"), if any."""
+    language = _language_with_region(stem) or _language_from_name(stem)
+    return language if language and language != "und" else None
+
+
+def name_without_delay(stem: str) -> str:
+    return _DELAY_RE.sub(" ", stem)
+
+
+def name_delay_ms(stem: str) -> int | None:
+    """eac3to-style "DELAY -42ms" in a file name."""
+    m = _DELAY_RE.search(stem)
+    return int(m.group(1)) if m else None
+
+
 SUB_FORMATS = {".srt": SubFormat.SRT, ".ass": SubFormat.ASS, ".ssa": SubFormat.ASS, ".sup": SubFormat.PGS,
                ".idx": SubFormat.VOBSUB}
 

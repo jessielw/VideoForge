@@ -53,11 +53,14 @@ def _ms(ns: int | None) -> int:
 
 def probe(path: Path, mkvmerge: str) -> SourceInfo:
     ident = mkvmerge_identify(path, mkvmerge)
+    mi_all = MediaInfo.parse(str(path)).tracks
     mi_tracks = {
         t.track_id: t
-        for t in MediaInfo.parse(str(path)).tracks
+        for t in mi_all
         if t.track_type in ("Video", "Audio", "Text") and t.track_id is not None
     }
+    # A raw stream (.ac3, .flac, ...) has no track ids in MediaInfo: pair its audio tracks by order.
+    mi_audio = [t for t in mi_all if t.track_type == "Audio"]
 
     video: VideoInfo | None = None
     audio: list[AudioTrack] = []
@@ -79,6 +82,8 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                 default_duration_ns=props.get("default_duration"),
             )
         elif kind == "audio":
+            if mi is None and len(audio) < len(mi_audio) and mi_audio[len(audio)].track_id is None:
+                mi = mi_audio[len(audio)]
             fmt = parse_audio_format(
                 getattr(mi, "format", None),
                 getattr(mi, "commercial_name", None),

@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from videoforge.core.config import AppConfig
-from videoforge.core.models import EncodeState, Issue, JobInputs, Overrides, Plan, Severity, SourceInfo, SubTrack
-from videoforge.core.pairing import MatchResult, discover, external_sub_track
+from videoforge.core.models import AudioTrack, EncodeState, Issue, JobInputs, Overrides, Plan, Severity, SourceInfo, SubTrack
+from videoforge.core.pairing import MatchResult, discover, external_sub_track, name_delay_ms, name_language, name_without_delay
 from videoforge.core.probe import mkvmerge_identify, probe
 
 if TYPE_CHECKING:
@@ -41,6 +41,7 @@ class ProbedInputs:
     encode: SourceInfo | None
     external_subs: list[SubTrack] = field(default_factory=list)
     issues: list[Issue] = field(default_factory=list)  # from reading the inputs (e.g. unparseable sub names)
+    external_audio: list[AudioTrack] = field(default_factory=list)  # the tracks of added audio files
 
 
 def external_tracks(source: SourceInfo, paths: list[Path]) -> tuple[list[SubTrack], list[Issue]]:
@@ -75,12 +76,30 @@ def external_tracks(source: SourceInfo, paths: list[Path]) -> tuple[list[SubTrac
     return tracks, issues
 
 
+def external_audio_tracks(paths: list[Path], mkvmerge: str) -> tuple[list[AudioTrack], list[Issue]]:
+    """Probe added audio files: each audio track is kept with its file. A language the container
+    lacks comes from the file name; an eac3to "DELAY Xms" in the name is the delay to apply."""
+    tracks: list[AudioTrack] = []
+    issues: list[Issue] = []
+    for path in paths:
+        info = probe(path, mkvmerge)
+        if not info.audio:
+            issues.append(Issue(Severity.WARN, "audio.external_none", f"Ignored {path.name}: it has no audio track"))
+        delay = name_delay_ms(path.stem)
+        for t in info.audio:
+            language = t.language if t.language != "und" else (name_language(name_without_delay(path.stem)) or "und")
+            tracks.append(replace(t, external_path=path, language=language,
+                                  delay_ms=t.delay_ms if delay is None else delay))
+    return tracks, issues
+
+
 def probe_inputs(inputs: JobInputs, app: AppConfig) -> ProbedInputs:
     mkvmerge = app.tools.mkvmerge
     source = probe(inputs.source, mkvmerge)
     encode = probe(inputs.encode, mkvmerge) if inputs.encode else None
     ext, ext_issues = external_tracks(source, inputs.subtitles)
-    return ProbedInputs(inputs, source, encode, ext, ext_issues)
+    ext_audio, audio_issues = external_audio_tracks(inputs.audio, mkvmerge)
+    return ProbedInputs(inputs, source, encode, ext, ext_issues + audio_issues, ext_audio)
 
 
 def plan_job(
@@ -91,6 +110,8 @@ def plan_job(
 ) -> Plan:
     """The profile's plan, plus what the engine knows about the inputs."""
     inputs = probed.inputs
+    if not profile.external_audio and probed.external_audio:
+        probed = replace(probed, external_audio=[])
     if not profile.external_subtitles and probed.external_subs:
         probed = replace(probed, external_subs=[])
     elif profile.track_editor:  # the user sets a missing language there (the profile warns while it's unset)
