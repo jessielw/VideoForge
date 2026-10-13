@@ -2,6 +2,7 @@
 import type {
   ClipInfo,
   CommandStep,
+  ConfigState,
   Crop,
   DirListing,
   JobDetail,
@@ -11,6 +12,7 @@ import type {
   Profile,
   QueueState,
   StepOutput,
+  ToolCheck,
   ScriptCheck,
   ScriptParts,
 } from './types'
@@ -59,6 +61,11 @@ export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides
 
 export const api = {
   profiles: () => get<Profile[]>('/api/profiles'),
+  config: () => get<ConfigState>('/api/config'),
+  saveConfig: (changes: { tools?: Record<string, string | null>; roots?: string[] | null; profile?: string | null }) =>
+    request<ConfigState>('PUT', '/api/config', changes),
+  toolChecks: () => get<ToolCheck[]>('/api/config/tools'),
+  checkTool: (name: string, path: string) => post<ToolCheck>('/api/config/tools/check', { name, path }),
   settings: () => get<{ output_dir: string; last_dir: string }>('/api/settings'),
   saveSettings: (s: { output_dir?: string; last_dir?: string }) => request('PUT', '/api/settings', s),
 

@@ -297,7 +297,42 @@ export interface CommandStep {
   command: string
 }
 
-export type StepStatus = 'pending' | 'running' | 'done' | 'reused' | 'failed' | 'cancelled'
+// The Settings page (GET/PUT /api/config)
+export interface ToolSetting {
+  name: string
+  label: string
+  purpose: string
+  folder: boolean
+  path: string // in use
+  default: string // from videoforge.toml
+  custom: string | null // set on the Settings page
+}
+
+export interface ConfigState {
+  tools: ToolSetting[]
+  roots: string[]
+  roots_custom: boolean
+  default_roots: string[]
+  profile: string
+  profile_default: string
+  profiles: { id: string; name: string }[]
+  restart: string[]
+}
+
+export type ToolStatus = 'ok' | 'unknown' | 'missing' | 'broken'
+
+export interface ToolCheck {
+  name: string
+  label: string
+  purpose: string
+  path: string
+  found: string
+  status: ToolStatus
+  version: string
+  detail: string
+}
+
+export type StepStatus ='pending' | 'running' | 'done' | 'reused' | 'failed' | 'cancelled'
 
 // One step of a job's last run (GET /jobs/<id>/steps adds its output lines).
 export interface StepRun {

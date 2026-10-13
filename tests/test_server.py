@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -225,6 +226,39 @@ def test_restart_requeues_an_interrupted_job(tmp_path):
     with make_client(tmp_path) as client:  # after a restart the steps come from the saved state
         (step,) = client.get(f"/api/jobs/{job_id}/steps").json()
         assert step["status"] == "done" and step["lines"] == ["[x264] [ 50.0%] 1/2 frames"]
+
+
+def test_settings_page_config(tmp_path):
+    folder = tmp_path / "media"
+    folder.mkdir()
+    with make_client(tmp_path) as client:
+        cfg = client.get("/api/config").json()
+        tools = {t["name"]: t for t in cfg["tools"]}
+        assert tools["x264"]["path"] == "x264" and tools["x264"]["custom"] is None
+        assert cfg["profile"] == "manual" and not cfg["roots_custom"] and cfg["restart"] == []
+
+        changed = client.put("/api/config", json={"tools": {"x264": sys.executable}, "roots": [str(folder)]}).json()
+        assert {t["name"]: t for t in changed["tools"]}["x264"]["path"] == sys.executable
+        assert client.app.state.queue.app.tools.x264 == sys.executable  # new runs use it
+        assert client.get("/api/fs/roots").json() == [str(folder)] and changed["roots_custom"]
+        assert client.get("/api/fs/list", params={"path": str(tmp_path)}).status_code == 403
+
+        checked = client.post("/api/config/tools/check", json={"name": "x264", "path": sys.executable}).json()
+        assert checked["found"] == sys.executable and checked["status"] in ("ok", "unknown")
+        assert len(client.get("/api/config/tools").json()) == len(cfg["tools"])
+
+        assert client.put("/api/config", json={"tools": {"nope": "x"}}).status_code == 422
+        assert client.put("/api/config", json={"roots": [str(tmp_path / "missing")]}).status_code == 422
+        assert client.put("/api/config", json={"profile": "not-installed"}).status_code == 422
+        changed = client.put("/api/config", json={"tools": {"vs_plugins": str(folder)}}).json()
+        assert changed["restart"] and "preview" in changed["restart"][0]
+
+    with make_client(tmp_path) as client:  # kept across a restart
+        cfg = client.get("/api/config").json()
+        assert {t["name"]: t for t in cfg["tools"]}["x264"]["custom"] == sys.executable
+        assert cfg["roots"] == [str(folder)]
+        reset = client.put("/api/config", json={"tools": {"x264": None}, "roots": None, "profile": None}).json()
+        assert {t["name"]: t for t in reset["tools"]}["x264"]["path"] == "x264" and not reset["roots_custom"]
 
 
 def test_folder_browser(tmp_path):

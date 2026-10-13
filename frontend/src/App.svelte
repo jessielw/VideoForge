@@ -7,12 +7,14 @@
   import Queue from './pages/Queue.svelte'
   import Fix from './pages/Fix.svelte'
   import Log from './pages/Log.svelte'
+  import Settings from './pages/Settings.svelte'
 
   const NAV: { page: Page; label: string; icon: IconName }[] = [
     { page: 'new', label: 'New jobs', icon: 'new' },
     { page: 'queue', label: 'Queue', icon: 'queue' },
     { page: 'fix', label: 'Fix release', icon: 'fix' },
     { page: 'log', label: 'Log', icon: 'log' },
+    { page: 'settings', label: 'Settings', icon: 'settings' },
   ]
 
   let startError = $state('')
@@ -71,6 +73,8 @@
       <Queue />
     {:else if router.page === 'fix'}
       <Fix />
+    {:else if router.page === 'settings'}
+      <Settings />
     {:else}
       <Log />
     {/if}

@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 import sys
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 from videoforge.core.pairing import MatchRules
@@ -53,6 +53,21 @@ def _merged(base: dict, over: dict) -> dict:
     for key, value in over.items():
         out[key] = _merged(out[key], value) if isinstance(value, dict) and isinstance(out.get(key), dict) else value
     return out
+
+
+def with_tools(cfg: AppConfig, paths: dict[str, str], base: Path = PROJECT_ROOT) -> AppConfig:
+    """cfg with some tool paths replaced (the Settings page's; relative ones resolve against base).
+    A new mkvmerge brings the mkvpropedit next to it, unless that is set too."""
+    names = asdict(cfg.tools)
+    for name, value in paths.items():
+        if name in names and value:
+            names[name] = _resolve_tool(value, base)
+    if paths.get("mkvmerge") and not paths.get("mkvpropedit"):
+        mkvmerge = Path(names["mkvmerge"])
+        sibling = mkvmerge.with_name("mkvpropedit" + mkvmerge.suffix)
+        if sibling.is_file():
+            names["mkvpropedit"] = str(sibling)
+    return replace(cfg, tools=Tools(**names))
 
 
 def load_app_config(path: Path | None = None) -> AppConfig:

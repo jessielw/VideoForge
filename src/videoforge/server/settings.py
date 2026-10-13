@@ -30,3 +30,24 @@ class ServerSettings:
     @property
     def db_path(self) -> Path:
         return self.data_dir / "videoforge.db"
+
+
+@dataclass(slots=True)
+class SavedSettings:
+    """What the Settings page changed, kept in the store and layered over videoforge.toml at startup.
+    Anything left out (an empty value) falls back to the toml / the defaults."""
+
+    tools: dict[str, str] = field(default_factory=dict)  # Tools field -> path
+    roots: list[str] | None = None  # folder-browser roots; None = every drive
+    profile: str | None = None  # default profile for new jobs
+
+    @classmethod
+    def load(cls, store) -> SavedSettings:
+        tools = store.get_setting("tools") or {}
+        return cls({k: v for k, v in tools.items() if isinstance(v, str) and v}, store.get_setting("roots"),
+                   store.get_setting("profile"))
+
+    def save(self, store) -> None:
+        store.set_setting("tools", self.tools)
+        store.set_setting("roots", self.roots)
+        store.set_setting("profile", self.profile)
