@@ -18,6 +18,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from videoforge.core.config import Tools
+from videoforge.core.models import AudioAction, Issue, Plan, Severity
 
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _VERSION = re.compile(r"\d+\.\d+|\br\d{2,}\b|\bv\d+\b", re.IGNORECASE)
@@ -66,6 +67,36 @@ class ToolCheck:
     status: ToolStatus
     version: str = ""
     detail: str = ""  # why it's missing/broken, or what a folder holds
+
+
+# What each audio encode runs (execute/audio.py): DeeZy drives DEE and decodes with ffmpeg
+# (and truehdd for Atmos); AAC pipes ffmpeg into qaac.
+ENCODE_TOOLS: dict[AudioAction, tuple[str, ...]] = {
+    AudioAction.DDP: ("deezy", "dee", "ffmpeg"),
+    AudioAction.ATMOS: ("deezy", "dee", "ffmpeg", "truehdd"),
+    AudioAction.AAC: ("ffmpeg", "qaac"),
+}
+_LABEL = {t.name: t.label for t in TOOLS}
+_ACTION_LABEL = {AudioAction.DDP: "DDP", AudioAction.ATMOS: "DDP Atmos", AudioAction.AAC: "AAC"}
+
+
+def missing_for_encodes(tools: Tools) -> dict[AudioAction, list[str]]:
+    """Each audio encode's tools that aren't there (by label); an empty list = it can run.
+    Only looks for the files (cheap), it doesn't run them."""
+    paths = asdict(tools)
+    gone = {name: not locate(paths[name]) for name in {n for names in ENCODE_TOOLS.values() for n in names}}
+    return {action: [_LABEL[n] for n in names if gone[n]] for action, names in ENCODE_TOOLS.items()}
+
+
+def tool_issues(plan: Plan, tools: Tools) -> list[Issue]:
+    """A BLOCK for each kind of audio encode the plan needs whose tools are missing."""
+    missing = missing_for_encodes(tools)
+    issues = []
+    for action in dict.fromkeys(a.action for a in plan.audio):
+        if missing.get(action):
+            issues.append(Issue(Severity.BLOCK, "tools.missing",
+                                f"{_ACTION_LABEL[action]} needs {', '.join(missing[action])}: set it in Settings"))
+    return issues
 
 
 Runner = Callable[[Sequence[str], float], str]

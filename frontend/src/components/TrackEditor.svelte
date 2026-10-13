@@ -103,6 +103,9 @@
   const channels = (layout: string) => layout.split('.').reduce((n, x) => n + +x, 0)
   const actionOf = (t: AudioTrack): AudioAction => ovOf(t)?.action ?? 'copy'
   const canAtmos = (t: AudioTrack) => t.atmos && t.codec === 'truehd'
+  // An encode whose tools are missing can't be picked (one already picked stays, and blocks the job).
+  const needs = (a: AudioAction) => (app.missingTools[a]?.length ? ` (needs ${app.missingTools[a].join(', ')})` : '')
+  const unavailable = (a: AudioAction, current: AudioAction) => !!app.missingTools[a]?.length && current !== a
 
   function layoutChoices(t: AudioTrack, action: 'ddp' | 'aac'): string[] {
     return LAYOUTS[action].filter(
@@ -256,9 +259,11 @@
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line/60 px-3 py-2 text-sm">
           <select class="field" value={action} aria-label="Copy or encode" onchange={e => setAction(t, e.currentTarget.value as AudioAction)}>
             <option value="copy">Copy</option>
-            <option value="ddp">Encode: DDP (E-AC-3)</option>
-            {#if canAtmos(t) || action === 'atmos'}<option value="atmos">Encode: DDP Atmos</option>{/if}
-            <option value="aac">Encode: AAC</option>
+            <option value="ddp" disabled={unavailable('ddp', action)}>Encode: DDP (E-AC-3){needs('ddp')}</option>
+            {#if canAtmos(t) || action === 'atmos'}
+              <option value="atmos" disabled={unavailable('atmos', action)}>Encode: DDP Atmos{needs('atmos')}</option>
+            {/if}
+            <option value="aac" disabled={unavailable('aac', action)}>Encode: AAC{needs('aac')}</option>
           </select>
           {#if action === 'ddp' || action === 'aac'}
             <select class="field" value={ov?.layout ?? ''} aria-label="Channels" onchange={e => setLayout(t, e.currentTarget.value)}>

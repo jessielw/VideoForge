@@ -228,6 +228,25 @@ def test_restart_requeues_an_interrupted_job(tmp_path):
         assert step["status"] == "done" and step["lines"] == ["[x264] [ 50.0%] 1/2 frames"]
 
 
+def test_missing_encoder_tools_block_until_set(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:  # APP's qaac64/ffmpeg/dee... don't exist here
+        (job_id,) = add(client, tmp_path)
+        wait_for(client, job_id, "ready", "warn")
+        assert client.get("/api/config/encoders").json()["aac"]  # something is missing
+        job = client.get(f"/api/jobs/{job_id}").json()
+        key = f"id:{job['plan']['audio'][0]['source']['id']}"
+        overrides = job["spec"]["overrides"] | {"tracks": {key: {"action": "aac"}}}
+        job = client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides}).json()
+        assert job["status"] == "blocked"
+        assert any(i["code"] == "tools.missing" and "AAC needs" in i["message"] for i in job["issues"])
+
+        client.put("/api/config", json={"tools": {"qaac": sys.executable, "ffmpeg": sys.executable}})
+        assert client.get("/api/config/encoders").json()["aac"] == []
+        job = client.get(f"/api/jobs/{job_id}").json()  # replanned when the tools changed
+        assert not any(i["code"] == "tools.missing" for i in job["issues"]) and job["status"] != "blocked"
+
+
 def test_settings_page_config(tmp_path):
     folder = tmp_path / "media"
     folder.mkdir()

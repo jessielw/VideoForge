@@ -51,6 +51,7 @@
   async function setTool(t: ToolSetting, value: string) {
     const path = value.trim()
     if (!(await change({ tools: { [t.name]: path && path !== t.default ? path : null } }))) return
+    app.loadEncoders()
     checking = { ...checking, [t.name]: true }
     try {
       const now = config!.tools.find(x => x.name === t.name)!

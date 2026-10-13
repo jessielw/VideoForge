@@ -19,6 +19,7 @@ from videoforge.core.models import JobInputs, Plan, Severity, SourceInfo
 from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.pipeline.steps import ProgressFn, Runner, run_steps
 from videoforge.core.probe import probe
+from videoforge.core.tools import tool_issues
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -76,6 +77,8 @@ def _run(spec, plan, profile, app, state, log, cancel, progress, on_record, on_s
     missing = missing_inputs(spec)
     if missing:
         return JobResult(plan, JobStatus.FAILED, error="Missing input: " + ", ".join(str(p) for p in missing))
+    if no_tools := tool_issues(plan, app.tools):  # a plan made before a tool went missing
+        return JobResult(plan, JobStatus.FAILED, error="; ".join(i.message for i in no_tools))
     if spec.output_dir is None:
         return JobResult(plan, JobStatus.FAILED, error="No output folder set")
     output = output_path(plan, spec.output_dir, profile)

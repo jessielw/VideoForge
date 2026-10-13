@@ -5,8 +5,21 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from conftest import audio, plan_for, source
+
 from videoforge.core.config import AppConfig, Tools, with_tools
-from videoforge.core.tools import TOOL_NAMES, TOOLS, ToolStatus, check, detect, version_line
+from videoforge.core.models import AudioAction, Severity
+from videoforge.core.models import AudioCodec as C
+from videoforge.core.tools import (
+    TOOL_NAMES,
+    TOOLS,
+    ToolStatus,
+    check,
+    detect,
+    missing_for_encodes,
+    tool_issues,
+    version_line,
+)
 
 INFO = {t.name: t for t in TOOLS}
 
@@ -72,6 +85,24 @@ def test_plugin_folder(tmp_path):
 def test_detect_covers_every_tool_in_order(tmp_path):
     tools = Tools(**{name: str(tmp_path / name) for name in TOOL_NAMES})
     assert [c.name for c in detect(tools, runner=lambda *_: "v1")] == list(TOOL_NAMES)
+
+
+def test_encodes_need_their_tools(tmp_path):
+    for exe in ("deezy.exe", "ffmpeg.exe", "qaac.exe", "truehdd.exe"):
+        (tmp_path / exe).write_bytes(b"")
+    tools = Tools(mkvmerge="mkvmerge", deezy=str(tmp_path / "deezy.exe"), dee=str(tmp_path / "no-dee.exe"),
+                  truehdd=str(tmp_path / "truehdd.exe"), qaac=str(tmp_path / "qaac.exe"), ffmpeg=str(tmp_path / "ffmpeg.exe"))
+    missing = missing_for_encodes(tools)
+    assert missing == {AudioAction.DDP: ["Dolby Encoding Engine"], AudioAction.ATMOS: ["Dolby Encoding Engine"],
+                       AudioAction.AAC: []}
+
+    plan = plan_for(source([audio(C.FLAC, "2.0", index=0), audio(C.TRUEHD, "5.1", index=1)]), source(name="E.mkv"))
+    plan.audio[0].action, plan.audio[1].action = AudioAction.AAC, AudioAction.DDP
+    issues = tool_issues(plan, tools)
+    assert [(i.severity, i.code) for i in issues] == [(Severity.BLOCK, "tools.missing")]
+    assert issues[0].message == "DDP needs Dolby Encoding Engine: set it in Settings"
+    plan.audio[1].action = AudioAction.COPY
+    assert tool_issues(plan, tools) == []
 
 
 def test_with_tools_layers_paths_and_brings_mkvpropedit(tmp_path):

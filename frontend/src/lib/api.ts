@@ -65,6 +65,7 @@ export const api = {
   saveConfig: (changes: { tools?: Record<string, string | null>; roots?: string[] | null; profile?: string | null }) =>
     request<ConfigState>('PUT', '/api/config', changes),
   toolChecks: () => get<ToolCheck[]>('/api/config/tools'),
+  encoders: () => get<Record<string, string[]>>('/api/config/encoders'),
   checkTool: (name: string, path: string) => post<ToolCheck>('/api/config/tools/check', { name, path }),
   settings: () => get<{ output_dir: string; last_dir: string }>('/api/settings'),
   saveSettings: (s: { output_dir?: string; last_dir?: string }) => request('PUT', '/api/settings', s),

@@ -7,7 +7,9 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -24,8 +26,19 @@ from videoforge.core.pipeline.build import build_steps
 from videoforge.core.pipeline.run import run_job, run_plan
 from videoforge.core.video.settings import Crop, EncoderSettings, RateControl
 
-APP = AppConfig(tools=Tools(mkvmerge="mkvmerge", deezy="deezy", dee="dee", truehdd="truehdd", qaac="qaac64",
-                            ffmpeg="ffmpeg", x264="x264", vspipe="vspipe"))
+
+def fake_tool_files(*names: str) -> dict[str, str]:
+    """Empty files standing in for tools that must exist (audio encodes are blocked without them);
+    the fake runner never starts them, and their stems are the tool names."""
+    folder = Path(tempfile.mkdtemp(prefix="vf-tools-"))
+    for name in names:
+        (folder / f"{name}.exe").write_bytes(b"")
+    return {name: str(folder / f"{name}.exe") for name in names}
+
+
+_AUDIO = fake_tool_files("deezy", "dee", "truehdd", "qaac64", "ffmpeg")
+APP = AppConfig(tools=Tools(mkvmerge="mkvmerge", deezy=_AUDIO["deezy"], dee=_AUDIO["dee"], truehdd=_AUDIO["truehdd"],
+                            qaac=_AUDIO["qaac64"], ffmpeg=_AUDIO["ffmpeg"], x264="x264", vspipe="vspipe"))
 
 
 def encode_audio(plan: Plan) -> None:
@@ -148,6 +161,15 @@ def test_missing_input_fails_before_running(profile, tmp_path):
     runner = FakeRunner()
     result = run_plan(plan, tmp_path / "out", profile, APP, runner=runner)
     assert result.status is JobStatus.FAILED and "Show.S01E01.en.srt" in result.error
+    assert not runner.calls
+
+
+def test_missing_encoder_tool_fails_before_running(profile, tmp_path):
+    plan = make_plan(tmp_path)  # encodes AAC and DDP
+    app = replace(APP, tools=replace(APP.tools, qaac=str(tmp_path / "qaac64.exe")))
+    runner = FakeRunner()
+    result = run_plan(plan, tmp_path / "out", profile, app, runner=runner)
+    assert result.status is JobStatus.FAILED and result.error == "AAC needs qaac: set it in Settings"
     assert not runner.calls
 
 

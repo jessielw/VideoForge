@@ -17,7 +17,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 
 from videoforge.core.config import with_tools
 from videoforge.core.plan_io import to_json
-from videoforge.core.tools import TOOL_NAMES, TOOLS, check, detect
+from videoforge.core.tools import TOOL_NAMES, TOOLS, check, detect, missing_for_encodes
 from videoforge.core.video import vs as vsx
 from videoforge.profiles import default_profile_id
 from videoforge.server.settings import SavedSettings
@@ -87,6 +87,8 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     s.config = cfg
     s.queue.app = cfg  # new probes and runs use it; a running job keeps the one it started with
     s.settings.roots = [Path(r) for r in roots] if roots else list(s.default_roots)
+    if cfg.tools != before:
+        s.queue.replan_all()  # an encode whose tool went missing (or came back) blocks (or unblocks)
     if cfg.tools.vs_plugins != before.vs_plugins:
         vsx.configure(cfg.tools.vs_plugins)  # vspipe runs inherit it from now on
         s.restart_for.add("vs_plugins")
@@ -94,6 +96,12 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         with suppress(Exception):  # a broken vspipe shows in the tools check
             vsx.ensure_vspipe(cfg.tools.vspipe)
     return _state(request)
+
+
+@router.get("/encoders")
+def encoders(request: Request) -> dict[str, list[str]]:
+    """Each audio encode's missing tools ([] = available); cheap (looks for the files only)."""
+    return {action.value: missing for action, missing in missing_for_encodes(request.app.state.config.tools).items()}
 
 
 @router.get("/tools")

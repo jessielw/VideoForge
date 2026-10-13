@@ -23,10 +23,20 @@ class AppState {
   runs = $state<Record<string, StepRun[]>>({})
   runStarts = $state<Record<string, number>>({}) // logSeq when each job's latest run began
   logSeq = 0
+  missingTools = $state<Record<string, string[]>>({})
 
   #socket: WebSocket | null = null
   #refreshTimer: ReturnType<typeof setTimeout> | null = null
   #retry = 500
+
+  // Which audio encodes can't run, and the tools they lack (e.g. { aac: ['qaac'] }).
+  async loadEncoders(): Promise<void> {
+    try {
+      this.missingTools = await api.encoders()
+    } catch {
+      /* shown as available; the job's plan still blocks a missing tool */
+    }
+  }
 
   get defaultProfile(): Profile | undefined {
     return this.profiles.find(p => p.default) ?? this.profiles[0]
@@ -39,6 +49,7 @@ class AppState {
 
   async start(): Promise<void> {
     this.profiles = await api.profiles()
+    this.loadEncoders()
     await this.refreshJobs()
     this.connect()
   }

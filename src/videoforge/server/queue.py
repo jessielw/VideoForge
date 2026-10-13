@@ -263,11 +263,20 @@ class JobQueue:
         if e.probed is None:
             return
         try:
-            e.plan = plan_spec(e.spec, e.probed, self.profile(e))
+            e.plan = plan_spec(e.spec, e.probed, self.profile(e), self.app.tools)
             if e.spec.overrides.original_language is None:  # pin the guess so it survives edits
                 e.spec.overrides.original_language = e.plan.original_language
         except Exception as ex:  # noqa: BLE001 - a profile bug shouldn't take the queue down
             e.plan, e.probe_error = None, f"Planning failed: {type(ex).__name__}: {ex}"
+
+    def replan_all(self) -> None:
+        """Plan every probed, idle job again (e.g. a tool path changed: missing tools block)."""
+        for e in self.entries():
+            with self._lock:
+                if e.busy or e.probed is None:
+                    continue
+                self._replan(e)
+            self._changed(e)
 
     # --- editing -----------------------------------------------------------------------
 

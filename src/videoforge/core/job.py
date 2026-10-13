@@ -19,9 +19,10 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from videoforge.core.config import AppConfig
+from videoforge.core.config import AppConfig, Tools
 from videoforge.core.jobs import ProbedInputs, plan_job, probe_inputs
 from videoforge.core.models import Issue, JobInputs, Overrides, Plan, SourceInfo, VideoInfo
+from videoforge.core.tools import tool_issues
 from videoforge.core.video.encoders import output_name
 from videoforge.core.video.qpf import qpf_paths
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
@@ -168,7 +169,10 @@ def replan(spec: JobSpec, probed: ProbedInputs) -> ProbedInputs:
     return replace(probed, inputs=spec_inputs(spec))
 
 
-def plan_spec(spec: JobSpec, probed: ProbedInputs, profile: Profile) -> Plan:
+def plan_spec(spec: JobSpec, probed: ProbedInputs, profile: Profile, tools: Tools | None = None) -> Plan:
+    """The profile's plan for the job. With tools, an audio encode whose tools are missing blocks it."""
     plan = plan_job(profile, replan(spec, probed), spec.overrides.original_language, spec.overrides)
     plan.inputs = spec.inputs  # what the user gave; generated files aren't inputs
+    if tools is not None:
+        plan.issues += tool_issues(plan, tools)
     return plan
