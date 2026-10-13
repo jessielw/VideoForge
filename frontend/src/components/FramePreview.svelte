@@ -137,10 +137,16 @@
 
   function onpointerdown(e: PointerEvent) {
     if (!zoom || !viewport || e.button !== 0) return
-    // Leave the scrollbars to the browser.
+    // Leave the scrollbars to the browser. Classic ones sit outside the client area and
+    // their presses target the viewport itself; overlay ones (Firefox on Windows 11, macOS)
+    // sit over the picture, so the strip along each scrolling edge is theirs too.
+    if (e.target === viewport) return
     const r = viewport.getBoundingClientRect()
-    if (e.clientX - r.left - viewport.clientLeft >= viewport.clientWidth) return
-    if (e.clientY - r.top - viewport.clientTop >= viewport.clientHeight) return
+    const x = e.clientX - r.left - viewport.clientLeft
+    const y = e.clientY - r.top - viewport.clientTop
+    const BAR = 16
+    if (x >= viewport.clientWidth - (viewport.scrollHeight > viewport.clientHeight ? BAR : 0)) return
+    if (y >= viewport.clientHeight - (viewport.scrollWidth > viewport.clientWidth ? BAR : 0)) return
     viewport.setPointerCapture(e.pointerId)
     drag = { x: e.clientX, y: e.clientY, left: viewport.scrollLeft, top: viewport.scrollTop, id: e.pointerId }
     panning = true
