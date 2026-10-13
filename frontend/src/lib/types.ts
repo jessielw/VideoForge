@@ -97,6 +97,17 @@ export interface AudioEncodeInfo {
   vbr_default: boolean // no bitrate = the encoder's quality VBR
   default_max: string | null
   missing: string[] // tools it lacks ([] = it can run)
+  options: EncodeOptionInfo[]
+}
+
+// One setting of an encode: a pick list (choices), a whole number (range), or free text.
+export interface EncodeOptionInfo {
+  key: string
+  label: string
+  default: string
+  help: string
+  choices: { value: string; label: string }[]
+  range: [number, number] | null
 }
 
 export interface TrackOverride {
@@ -108,6 +119,7 @@ export interface TrackOverride {
   action: AudioAction | null
   bitrate_kbps: number | null
   layout: string | null // "2.0", "5.1", ...
+  options: Record<string, string> // the encode's own settings (AudioEncodeInfo.options keys)
 }
 
 export interface Overrides {
@@ -191,6 +203,7 @@ export interface PlannedAudio {
   hearing_impaired: boolean
   commentary: boolean
   original: boolean
+  options: Record<string, string> // the encode's settings, defaults filled in
 }
 
 export interface PlannedSub {

@@ -83,7 +83,7 @@ export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number)
 }
 
 export function emptyOverride(): TrackOverride {
-  return { exclude: null, language: null, title: null, flags: {}, action: null, bitrate_kbps: null, layout: null }
+  return { exclude: null, language: null, title: null, flags: {}, action: null, bitrate_kbps: null, layout: null, options: {} }
 }
 
 // An override that changes nothing (the server drops those too).
@@ -95,7 +95,8 @@ export function isEmpty(ov: TrackOverride): boolean {
     !Object.keys(ov.flags).length &&
     ov.action === null &&
     ov.bitrate_kbps === null &&
-    ov.layout === null
+    ov.layout === null &&
+    !Object.keys(ov.options ?? {}).length
   )
 }
 

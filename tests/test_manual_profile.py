@@ -170,3 +170,14 @@ def test_added_audio_files_join_the_tracks():
     plan = plan_for(source([audio(C.FLAC, "2.0", "ja", index=0)]), source(name="E.mkv"), ov, external_audio=[extra])
     assert not plan.issues
     assert [(a.language, a.action) for a in plan.audio] == [("en", AudioAction.OPUS), ("ja", AudioAction.COPY)]
+
+
+def test_encode_options_default_and_are_checked():
+    stereo = [audio(C.FLAC, "2.0", index=0)]
+    plan = encoded(stereo, id_1=TrackOverride(action=AudioAction.OPUS, options={"vbr": "constrained", "nope": "x"}))
+    assert plan.audio[0].options == {"vbr": "constrained", "application": "audio", "complexity": "10", "extra": ""}
+    bad = encoded(stereo, id_1=TrackOverride(action=AudioAction.FLAC, options={"level": "13"}))
+    assert [i.code for i in bad.issues] == ["audio.option"] and "0 to 12" in bad.issues[0].message
+    assert bad.audio[0].options["level"] == "8"  # the default stands in
+    quotes = encoded(stereo, id_1=TrackOverride(action=AudioAction.AC3, options={"extra": '-metadata title="x'}))
+    assert [i.code for i in quotes.issues] == ["audio.option"]

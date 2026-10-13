@@ -198,6 +198,7 @@ class PlannedAudio:
     hearing_impaired: bool = False
     commentary: bool = False
     original: bool = False
+    options: dict[str, str] = field(default_factory=dict)  # the encode's settings, defaults filled in
 
 
 @dataclass(slots=True)
@@ -241,11 +242,12 @@ class TrackOverride:
     action: AudioAction | None = None
     bitrate_kbps: int | None = None
     layout: Layout | None = None
+    options: dict[str, str] = field(default_factory=dict)  # the encode's own settings (execute.audio.EncodeOption keys)
 
     @property
     def empty(self) -> bool:
         return (self.exclude is None and self.language is None and self.title is None and not self.flags
-                and self.action is None and self.bitrate_kbps is None and self.layout is None)
+                and self.action is None and self.bitrate_kbps is None and self.layout is None and not self.options)
 
 
 @dataclass(slots=True)

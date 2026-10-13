@@ -107,7 +107,10 @@ def encoders(request: Request) -> list[dict[str, Any]]:
     return [{"id": e.action.value, "label": e.label, "codec": e.codec.value, "layouts": [str(x) for x in e.layouts],
              "bitrates": None if e.bitrates is None else {str(c): k for c, k in e.bitrates.items()},
              "bitrate_choices": list(e.bitrate_choices), "vbr_default": e.vbr_default,
-             "default_max": str(e.default_max) if e.default_max else None, "missing": missing[e.action]}
+             "default_max": str(e.default_max) if e.default_max else None, "missing": missing[e.action],
+             "options": [{"key": o.key, "label": o.label, "default": o.default, "help": o.help,
+                          "choices": [{"value": v, "label": lab} for v, lab in o.choices],
+                          "range": list(o.int_range) if o.int_range else None} for o in e.options]}
             for e in ENCODES.values()]
 
 

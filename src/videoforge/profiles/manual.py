@@ -105,8 +105,10 @@ def audio_output(t: AudioTrack, ov: TrackOverride | None, issues: list[Issue]) -
         problem = enc.bitrate_problem(bitrate, layout) if bitrate else ""
         if problem:
             issues.append(Issue(Severity.BLOCK, "audio.bitrate", f"Audio #{t.id}: {problem}"))
+    options, problems = enc.resolve_options(ov.options if ov else {})
+    issues += [Issue(Severity.BLOCK, "audio.option", f"Audio #{t.id}: {p}") for p in problems]
     return {"action": action, "out_codec": enc.codec, "out_layout": layout, "out_atmos": False,
-            "bitrate_kbps": bitrate, "upmix_50": upmix_50}
+            "bitrate_kbps": bitrate, "upmix_50": upmix_50, "options": options}
 
 
 def _excluded(track: AudioTrack | SubTrack, overrides: Overrides) -> bool:

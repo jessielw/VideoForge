@@ -14,6 +14,7 @@ into qaac) starts at the first audio sample, so those get the delay at mux
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +24,35 @@ from videoforge.core.models import AudioAction, AudioCodec, Layout, PlannedAudio
 
 def _layouts(*names: str) -> tuple[Layout, ...]:
     return tuple(Layout.parse(n) for n in names)
+
+
+@dataclass(frozen=True, slots=True)
+class EncodeOption:
+    """One setting of an encode, kept as text in TrackOverride.options / PlannedAudio.options."""
+
+    key: str
+    label: str
+    default: str
+    choices: tuple[tuple[str, str], ...] = ()  # (value, label); a pick list when set
+    int_range: tuple[int, int] | None = None  # a whole number in this range when set
+    help: str = ""  # anything else is free text
+
+    def problem(self, value: str) -> str:
+        """Why this value can't be used ("" when it can)."""
+        if self.choices and value not in {v for v, _ in self.choices}:
+            return f"{self.label} must be one of {', '.join(v for v, _ in self.choices)}"
+        if self.int_range:
+            lo, hi = self.int_range
+            if not value.lstrip("-").isdigit() or not lo <= int(value) <= hi:
+                return f"{self.label} must be a whole number from {lo} to {hi}"
+        if not self.choices and not self.int_range and value.count('"') % 2:
+            return f"{self.label} has an unclosed quote"
+        return ""
+
+
+_EXTRA = EncodeOption("extra", "Extra ffmpeg arguments", "", help="Added before the output file, e.g. -cutoff 20000")
+_DIALNORM = EncodeOption("dialnorm", "Dialogue level (dialnorm)", "-31", int_range=(-31, -1),
+                         help="-31 leaves the level alone; players turn quieter dialogue up")
 
 
 AC3_BITRATES = (32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 576, 640)
@@ -47,6 +77,20 @@ class AudioEncode:
     vbr_default: bool = False  # no bitrate set = the encoder's quality VBR
     default_max: Layout | None = None  # the default layout is at most this (a downmix below it is chosen)
     delay_in_encode: bool = False  # it applies the source delay itself, so the mux must not
+    options: tuple[EncodeOption, ...] = ()
+
+    def resolve_options(self, given: dict[str, str]) -> tuple[dict[str, str], list[str]]:
+        """Every option's value (the given one, else its default), and the problems with given ones.
+        Keys this encode doesn't have are dropped (they belong to another encode)."""
+        out, problems = {}, []
+        for o in self.options:
+            value = given.get(o.key, o.default).strip()
+            problem = o.problem(value) if value != o.default else ""
+            if problem:
+                problems.append(problem)
+                value = o.default
+            out[o.key] = value
+        return out, problems
 
     def default_bitrate(self, layout: Layout) -> int | None:
         if not self.bitrates or self.vbr_default:
@@ -77,15 +121,26 @@ ENCODES: dict[AudioAction, AudioEncode] = {e.action: e for e in (
     AudioEncode(AudioAction.AAC, "AAC (qaac)", AudioCodec.AAC, ".m4a", _layouts("1.0", "2.0", "5.1"),
                 ("ffmpeg", "qaac"), bitrates={1: 96, 2: 192, 6: 384}, bitrate_range=(8, 1280), vbr_default=True,
                 default_max=Layout(2, 0)),
-    AudioEncode(AudioAction.FLAC, "FLAC", AudioCodec.FLAC, ".flac", _ANY, ("ffmpeg",), ffmpeg_encoder="flac"),
+    AudioEncode(AudioAction.FLAC, "FLAC", AudioCodec.FLAC, ".flac", _ANY, ("ffmpeg",), ffmpeg_encoder="flac",
+                options=(EncodeOption("level", "Compression level", "8", int_range=(0, 12),
+                                      help="Higher is smaller and slower; every level is lossless"), _EXTRA)),
     AudioEncode(AudioAction.OPUS, "Opus", AudioCodec.OPUS, ".opus", _ANY, ("ffmpeg",), ffmpeg_encoder="libopus",
-                bitrates={1: 96, 2: 160, 6: 384, 8: 512}, bitrate_range=(6, 2048), per_channel_max=256),
+                bitrates={1: 96, 2: 160, 6: 384, 8: 512}, bitrate_range=(6, 2048), per_channel_max=256,
+                options=(EncodeOption("vbr", "Bitrate mode", "on",
+                                      choices=(("on", "Variable"), ("constrained", "Constrained variable"), ("off", "Constant"))),
+                         EncodeOption("application", "Tuned for", "audio",
+                                      choices=(("audio", "Music and film"), ("voip", "Speech"), ("lowdelay", "Low delay"))),
+                         EncodeOption("complexity", "Complexity", "10", int_range=(0, 10), help="10 is the best quality"),
+                         _EXTRA)),
     AudioEncode(AudioAction.AAC_FFMPEG, "AAC (ffmpeg)", AudioCodec.AAC, ".m4a", _ANY, ("ffmpeg",),
-                ffmpeg_encoder="aac", bitrates={1: 96, 2: 192, 6: 384, 8: 512}, bitrate_range=(8, 1536)),
+                ffmpeg_encoder="aac", bitrates={1: 96, 2: 192, 6: 384, 8: 512}, bitrate_range=(8, 1536),
+                options=(EncodeOption("coder", "Coder", "twoloop", choices=(("twoloop", "Two-loop (better)"), ("fast", "Fast"))),
+                         _EXTRA)),
     AudioEncode(AudioAction.AC3, "AC-3", AudioCodec.AC3, ".ac3", _DOLBY, ("ffmpeg",), ffmpeg_encoder="ac3",
-                bitrates={1: 192, 2: 224, 6: 640}, bitrate_choices=AC3_BITRATES),
+                bitrates={1: 192, 2: 224, 6: 640}, bitrate_choices=AC3_BITRATES, options=(_DIALNORM, _EXTRA)),
     AudioEncode(AudioAction.EAC3, "E-AC-3 (ffmpeg)", AudioCodec.EAC3, ".eac3", _DOLBY, ("ffmpeg",),
-                ffmpeg_encoder="eac3", bitrates={1: 192, 2: 256, 6: 640}, bitrate_range=(32, 6144)),
+                ffmpeg_encoder="eac3", bitrates={1: 192, 2: 256, 6: 640}, bitrate_range=(32, 6144),
+                options=(_DIALNORM, _EXTRA)),
 )}
 
 
@@ -163,13 +218,20 @@ def _aac(planned: PlannedAudio, source: Path, output: Path, settings: AudioSetti
 # ffmpeg's name for each layout (aformat sets it exactly: libopus refuses 5.1(side), and a
 # downmix to a count alone could pick a layout the encoder doesn't take).
 _FFMPEG_LAYOUT = {"1.0": "mono", "2.0": "stereo"}
+def _opt(p: PlannedAudio, key: str) -> str:
+    return p.options.get(key) or next(o.default for o in ENCODES[p.action].options if o.key == key)
+
+
 _FFMPEG_ARGS = {
-    AudioAction.FLAC: lambda p: ("-c:a", "flac", "-compression_level", "8", "-f", "flac"),
-    AudioAction.OPUS: lambda p: ("-c:a", "libopus", "-b:a", f"{p.bitrate_kbps}k", "-vbr", "on",
-                                 "-compression_level", "10", "-f", "opus"),
-    AudioAction.AAC_FFMPEG: lambda p: ("-c:a", "aac", "-b:a", f"{p.bitrate_kbps}k", "-f", "mp4"),
-    AudioAction.AC3: lambda p: ("-c:a", "ac3", "-b:a", f"{p.bitrate_kbps}k", "-f", "ac3"),
-    AudioAction.EAC3: lambda p: ("-c:a", "eac3", "-b:a", f"{p.bitrate_kbps}k", "-f", "eac3"),
+    AudioAction.FLAC: lambda p: ("-c:a", "flac", "-compression_level", _opt(p, "level"), "-f", "flac"),
+    AudioAction.OPUS: lambda p: ("-c:a", "libopus", "-b:a", f"{p.bitrate_kbps}k", "-vbr", _opt(p, "vbr"),
+                                 "-application", _opt(p, "application"), "-compression_level", _opt(p, "complexity"),
+                                 "-f", "opus"),
+    AudioAction.AAC_FFMPEG: lambda p: ("-c:a", "aac", "-b:a", f"{p.bitrate_kbps}k", "-aac_coder", _opt(p, "coder"),
+                                       "-f", "mp4"),
+    AudioAction.AC3: lambda p: ("-c:a", "ac3", "-b:a", f"{p.bitrate_kbps}k", "-dialnorm", _opt(p, "dialnorm"), "-f", "ac3"),
+    AudioAction.EAC3: lambda p: ("-c:a", "eac3", "-b:a", f"{p.bitrate_kbps}k", "-dialnorm", _opt(p, "dialnorm"),
+                                 "-f", "eac3"),
 }
 
 
@@ -180,7 +242,8 @@ def _ffmpeg(planned: PlannedAudio, source: Path, output: Path, tools: Tools) -> 
         "-i", str(source),
         "-map", f"0:a:{planned.source.index}", "-vn", "-sn", "-dn", "-map_chapters", "-1", "-map_metadata", "-1",
         "-af", f"aformat=channel_layouts={_FFMPEG_LAYOUT.get(layout, layout)}",
-        *_FFMPEG_ARGS[planned.action](planned), str(output),
+        *_FFMPEG_ARGS[planned.action](planned),
+        *shlex.split(planned.options.get("extra", ""), posix=False), str(output),
     )
 
 

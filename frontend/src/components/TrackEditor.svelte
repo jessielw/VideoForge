@@ -7,7 +7,7 @@
   import type { InputChanges } from '../lib/api'
   import { emptyOverride, isEmpty, LANGUAGES } from '../lib/format'
   import { app } from '../lib/state.svelte'
-  import type { AudioAction, AudioEncodeInfo, AudioTrack, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
+  import type { AudioAction, AudioEncodeInfo, AudioTrack, EncodeOptionInfo, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
   import FileBrowser from './FileBrowser.svelte'
   import Icon from './Icon.svelte'
 
@@ -159,7 +159,19 @@
     editTrack(t, ov => {
       ov.action = a === 'copy' ? null : a
       ov.layout = ov.bitrate_kbps = null
+      ov.options = {}
     })
+
+  // The encode's own settings, folded away under a "Settings" toggle per track.
+  let openSettings = $state<Record<string, boolean>>({})
+  const setOption = (t: AudioTrack, o: EncodeOptionInfo, v: string) =>
+    editTrack(t, ov => {
+      ov.options ??= {}
+      if (v.trim() === o.default || !v.trim() && !o.choices.length && !o.range) delete ov.options[o.key]
+      else ov.options[o.key] = v.trim()
+    })
+  const changedOptions = (t: AudioTrack, e: AudioEncodeInfo) =>
+    e.options.filter(o => ovOf(t)?.options?.[o.key] !== undefined).length
   const setLayout = (t: AudioTrack, v: string) => editTrack(t, ov => (ov.layout = v || null))
   function setBitrate(t: AudioTrack, v: string) {
     const n = Math.round(+v)
@@ -341,8 +353,40 @@
               {/if}kb/s
             </label>
           {/if}
+          {#if enc?.options.length}
+            {@const changed = changedOptions(t, enc)}
+            <button
+              class="btn-ghost text-xs {openSettings[t.key] ? 'text-accent' : ''}"
+              onclick={() => (openSettings[t.key] = !openSettings[t.key])}
+              title="{enc.label} settings"
+            >
+              <Icon name="settings" size={14} />Settings{changed ? ` (${changed})` : ''}
+            </button>
+          {/if}
           {#if planned}<span class="text-xs text-muted">→ {audioOut(planned)}</span>{/if}
         </div>
+        {#if enc?.options.length && openSettings[t.key]}
+          <div class="grid gap-x-4 gap-y-2 border-t border-line/60 px-3 py-2 text-sm sm:grid-cols-[12rem_1fr]">
+            {#each enc.options as o (o.key)}
+              {@const value = ov?.options?.[o.key] ?? planned?.options?.[o.key] ?? o.default}
+              <label class="text-muted" for="opt-{t.key}-{o.key}" title={o.help}>{o.label}</label>
+              <div class="flex items-center gap-2">
+                {#if o.choices.length}
+                  <select id="opt-{t.key}-{o.key}" class="field" {value} onchange={e => setOption(t, o, e.currentTarget.value)}>
+                    {#each o.choices as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
+                  </select>
+                {:else if o.range}
+                  <input id="opt-{t.key}-{o.key}" class="field w-24 text-right" type="number" min={o.range[0]} max={o.range[1]}
+                    {value} onchange={e => setOption(t, o, e.currentTarget.value)} />
+                {:else}
+                  <input id="opt-{t.key}-{o.key}" class="field min-w-0 flex-1 font-mono text-xs" {value} placeholder={o.help}
+                    onchange={e => setOption(t, o, e.currentTarget.value)} />
+                {/if}
+                {#if o.help && (o.choices.length || o.range)}<span class="text-xs text-muted">{o.help}</span>{/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
       {/if}
     {/if}
   </div>

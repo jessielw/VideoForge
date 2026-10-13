@@ -152,3 +152,19 @@ def test_ffmpeg_encodes_for_real(tmp_path, action, out_layout, channels):
     subprocess.run(cmd.argvs[0], check=True)
     probe = subprocess.run([FFMPEG, "-hide_banner", "-i", str(cmd.output)], capture_output=True, text=True).stderr
     assert "Audio:" in probe and (f"{channels} channels" in probe or ("5.1" if channels == 6 else "stereo") in probe)
+
+
+def test_ffmpeg_encode_options():
+    p = planned(C.TRUEHD, "5.1", A.OPUS, bitrate=384)
+    p.options = {"vbr": "off", "application": "voip", "complexity": "5", "extra": "-cutoff 20000"}
+    (argv,) = command(p).argvs
+    assert argv[argv.index("-vbr") + 1] == "off" and argv[argv.index("-application") + 1] == "voip"
+    assert argv[argv.index("-compression_level") + 1] == "5"
+    assert argv[-3:-1] == ("-cutoff", "20000")  # extra arguments go just before the output
+    flac = planned(C.TRUEHD, "5.1", A.FLAC)
+    flac.options = {"level": "12"}
+    (argv,) = command(flac).argvs
+    assert argv[argv.index("-compression_level") + 1] == "12"
+    ac3 = planned(C.TRUEHD, "5.1", A.AC3, bitrate=640)
+    (argv,) = command(ac3).argvs
+    assert argv[argv.index("-dialnorm") + 1] == "-31"  # the default when none is planned
