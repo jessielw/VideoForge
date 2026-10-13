@@ -75,7 +75,7 @@ def profiles(request: Request) -> list[dict[str, Any]]:
         video, encoder = p.video_defaults()
         out.append({
             "id": pid, "name": p.name, "container": p.container, "external_subtitles": p.external_subtitles,
-            "track_properties": [to_json(t) for t in p.track_properties],
+            "track_properties": [to_json(t) for t in p.track_properties], "track_editor": p.track_editor,
             "defaults": {"video": to_json(video), "encoder": to_json(encoder)},
             "default": pid == request.app.state.default_profile,
         })

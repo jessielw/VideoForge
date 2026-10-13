@@ -25,6 +25,9 @@ class Profile(ABC):
     external_subtitles: ClassVar[bool] = True  # False: added subtitle files are ignored
     # Per-track on/off properties the user can override (TrackOverride.flags keys); the GUI builds its controls from these.
     track_properties: ClassVar[tuple[TrackProperty, ...]] = ()
+    # True: the plan follows the user's track order (Overrides.order), titles and per-track audio
+    # encodes (TrackOverride.action/bitrate_kbps/layout), so the UI offers the full track editor.
+    track_editor: ClassVar[bool] = False
 
     @abstractmethod
     def plan(self, probed: ProbedInputs, original_language: str | None, overrides: Overrides) -> Plan:

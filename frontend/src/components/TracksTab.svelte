@@ -2,7 +2,7 @@
   // Audio and subtitle choices: what the profile's rules picked, and per-job overrides
   // (audio tracks and order, subtitle use / language / the profile's flags). Every change
   // replans on the server; the output columns always show what the rules now produce.
-  import { LANGUAGES } from '../lib/format'
+  import { emptyOverride, isEmpty, LANGUAGES } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type { AudioTrack, JobDetail, Overrides, SubTrack, TrackOverride } from '../lib/types'
   import Icon from './Icon.svelte'
@@ -74,9 +74,9 @@
 
   function editTrack(key: string, change: (ov: TrackOverride) => void) {
     const o = copy()
-    const ov = o.tracks[key] ?? { exclude: null, language: null, title: null, flags: {} }
+    const ov = o.tracks[key] ?? emptyOverride()
     change(ov)
-    if (ov.exclude === null && ov.language === null && ov.title === null && !Object.keys(ov.flags).length) delete o.tracks[key]
+    if (isEmpty(ov)) delete o.tracks[key]
     else o.tracks[key] = ov
     save(o)
   }

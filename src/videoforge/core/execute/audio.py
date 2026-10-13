@@ -79,8 +79,10 @@ def _aac(planned: PlannedAudio, source: Path, output: Path, settings: AudioSetti
     )
     # --ignorelength: a piped WAV header has no real data size.
     # --no-delay: compensate encoder priming in the stream itself; MKV has no gapless metadata.
+    # A bitrate means constrained VBR at about that rate; none means true VBR at the profile's quality.
+    mode = ("--cvbr", str(planned.bitrate_kbps)) if planned.bitrate_kbps else ("--tvbr", str(settings.qaac_tvbr))
     qaac = (
-        tools.qaac, "--tvbr", str(settings.qaac_tvbr), "--ignorelength", "--no-delay", "--threading",
+        tools.qaac, *mode, "--ignorelength", "--no-delay", "--threading",
         *settings.qaac_extra_args, "-o", str(output), "-",
     )
     return ffmpeg, qaac

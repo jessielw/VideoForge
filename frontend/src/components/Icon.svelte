@@ -31,6 +31,7 @@
     chapters: 'M6 3h12v18l-6-4-6 4z',
     copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
     home: 'M3 11l9-7 9 7M5 10v10h14V10',
+    grip: 'M8.5 6h1M8.5 12h1M8.5 18h1M14.5 6h1M14.5 12h1M14.5 18h1',
   } as const
   export type IconName = keyof typeof PATHS
 </script>

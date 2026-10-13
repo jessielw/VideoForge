@@ -2,8 +2,10 @@
 
 Every source track (and every added subtitle file) goes into an MKV in source
 order, copied unchanged with its language, title and flags. The user excludes,
-reorders and edits tracks through the job's overrides. Only missing inputs block
-a job, and the finished file is checked against the plan it was muxed from.
+reorders and edits tracks through the job's overrides, and can have an audio track
+encoded (DDP, DDP Atmos or AAC) instead of copied. Only missing inputs and
+impossible encodes block a job, and the finished file is checked against the plan
+it was muxed from.
 """
 
 from __future__ import annotations
@@ -14,8 +16,10 @@ from videoforge.core import lang
 from videoforge.core.jobs import ProbedInputs
 from videoforge.core.models import (
     AudioAction,
+    AudioCodec,
     AudioTrack,
     Issue,
+    Layout,
     Overrides,
     Plan,
     PlannedAudio,
@@ -60,6 +64,50 @@ def _settings(track: AudioTrack | SubTrack, ov: TrackOverride | None) -> tuple[s
     return language, track.title if ov.title is None else ov.title, flags
 
 
+# Output layouts each encoder takes, and the bitrate a DDP encode gets when none is set.
+ENCODE_LAYOUTS = {
+    AudioAction.DDP: tuple(Layout.parse(x) for x in ("1.0", "2.0", "5.1", "7.1")),
+    AudioAction.AAC: tuple(Layout.parse(x) for x in ("1.0", "2.0", "5.1")),
+}
+DDP_BITRATE = {1: 192, 2: 256, 6: 640, 8: 1024}  # by channels
+ATMOS_BITRATE = 768
+
+
+def _default_layout(action: AudioAction, source: Layout) -> Layout:
+    """DDP keeps the channels (5.0 -> 5.1, more than 6 -> 7.1); AAC keeps mono/stereo, else stereo."""
+    if source.channels <= 2:
+        return Layout(2, 0) if source.channels == 2 else Layout(1, 0)
+    if action is AudioAction.AAC:
+        return Layout(2, 0)
+    return Layout(7, 1) if source.channels > 6 else Layout(5, 1)
+
+
+def audio_output(t: AudioTrack, ov: TrackOverride | None, issues: list[Issue]) -> dict:
+    """PlannedAudio's action/format fields for a track: copied, or encoded as the override asks.
+    Adds a BLOCK for an encode that can't be done (Atmos from a non-Atmos source, an upmix)."""
+    action = (ov.action if ov else None) or AudioAction.COPY
+    if action is AudioAction.COPY:
+        return {"action": action, "out_codec": t.codec, "out_layout": t.layout, "out_atmos": t.atmos,
+                "bitrate_kbps": None, "upmix_50": False}
+    bitrate = ov.bitrate_kbps if ov else None
+    if action is AudioAction.ATMOS:
+        if not (t.atmos and t.codec is AudioCodec.TRUEHD):
+            issues.append(Issue(Severity.BLOCK, "audio.atmos_source",
+                                f"Audio #{t.id}: DDP Atmos needs a TrueHD Atmos source"))
+        return {"action": action, "out_codec": AudioCodec.EAC3, "out_layout": Layout(5, 1), "out_atmos": True,
+                "bitrate_kbps": bitrate or ATMOS_BITRATE, "upmix_50": False}
+    layout = (ov.layout if ov else None) or _default_layout(action, t.layout)
+    upmix_50 = action is AudioAction.DDP and t.layout == Layout(5, 0) and layout == Layout(5, 1)
+    if layout not in ENCODE_LAYOUTS[action]:
+        issues.append(Issue(Severity.BLOCK, "audio.layout", f"Audio #{t.id}: {action.value} can't be {layout}"))
+    elif layout.channels > t.layout.channels and not upmix_50:
+        issues.append(Issue(Severity.BLOCK, "audio.upmix", f"Audio #{t.id}: {t.layout} can't be upmixed to {layout}"))
+    if action is AudioAction.DDP:
+        bitrate = bitrate or DDP_BITRATE.get(layout.channels, 640)
+    return {"action": action, "out_codec": AudioCodec.EAC3 if action is AudioAction.DDP else AudioCodec.AAC,
+            "out_layout": layout, "out_atmos": False, "bitrate_kbps": bitrate, "upmix_50": upmix_50}
+
+
 def _excluded(track: AudioTrack | SubTrack, overrides: Overrides) -> bool:
     ov = overrides.tracks.get(track_key(track))
     return bool(ov and ov.exclude)
@@ -70,7 +118,8 @@ class ManualProfile(Profile):
     name = "Manual"
     container = "mkv"
     external_subtitles = True
-    track_properties = tuple(TrackProperty(key, label, kind, help) for kind in TrackKind for key, label, help in _FLAGS)
+    track_editor = True
+    track_properties =tuple(TrackProperty(key, label, kind, help) for kind in TrackKind for key, label, help in _FLAGS)
 
     def plan(self, probed: ProbedInputs, original_language: str | None, overrides: Overrides) -> Plan:
         source, encode = probed.source, probed.encode
@@ -99,21 +148,9 @@ class ManualProfile(Profile):
 
         audio: list[PlannedAudio] = []
         for t in audio_tracks:
-            language, title, flags = _settings(t, overrides.tracks.get(track_key(t)))
-            audio.append(
-                PlannedAudio(
-                    source=t,
-                    action=AudioAction.COPY,
-                    out_codec=t.codec,
-                    out_layout=t.layout,
-                    out_atmos=t.atmos,
-                    bitrate_kbps=None,
-                    upmix_50=False,
-                    language=language,
-                    title=title,
-                    **flags,
-                )
-            )
+            ov = overrides.tracks.get(track_key(t))
+            language, title, flags = _settings(t, ov)
+            audio.append(PlannedAudio(source=t, **audio_output(t, ov, issues), language=language, title=title, **flags))
         subs: list[PlannedSub] = []
         for t in sub_tracks:
             language, title, flags = _settings(t, overrides.tracks.get(track_key(t)))

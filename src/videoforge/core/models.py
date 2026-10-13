@@ -177,7 +177,7 @@ class PlannedAudio:
     out_codec: AudioCodec
     out_layout: Layout
     out_atmos: bool
-    bitrate_kbps: int | None  # None for AAC TVBR and copies
+    bitrate_kbps: int | None  # None for copies and AAC TVBR (an AAC bitrate means qaac CVBR)
     upmix_50: bool
     language: str
     title: str
@@ -224,10 +224,16 @@ class TrackOverride:
     language: str | None = None
     title: str | None = None
     flags: dict[str, bool] = field(default_factory=dict)  # TrackProperty.key -> value
+    # Audio, for profiles with a track editor: copy or encode it (None = the profile's choice),
+    # the bitrate (None = the encoder's default / AAC's quality mode) and the output layout (None = the default).
+    action: AudioAction | None = None
+    bitrate_kbps: int | None = None
+    layout: Layout | None = None
 
     @property
     def empty(self) -> bool:
-        return self.exclude is None and self.language is None and self.title is None and not self.flags
+        return (self.exclude is None and self.language is None and self.title is None and not self.flags
+                and self.action is None and self.bitrate_kbps is None and self.layout is None)
 
 
 @dataclass(slots=True)

@@ -1,4 +1,4 @@
-import type { Severity, Status } from './types'
+import type { Severity, Status, TrackOverride } from './types'
 
 export const STATUS_LABEL: Record<Status, string> = {
   probing: 'Probing',
@@ -80,6 +80,23 @@ export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number)
     clearTimeout(t)
     t = setTimeout(() => fn(...a), ms)
   }
+}
+
+export function emptyOverride(): TrackOverride {
+  return { exclude: null, language: null, title: null, flags: {}, action: null, bitrate_kbps: null, layout: null }
+}
+
+// An override that changes nothing (the server drops those too).
+export function isEmpty(ov: TrackOverride): boolean {
+  return (
+    ov.exclude === null &&
+    ov.language === null &&
+    ov.title === null &&
+    !Object.keys(ov.flags).length &&
+    ov.action === null &&
+    ov.bitrate_kbps === null &&
+    ov.layout === null
+  )
 }
 
 // A clip's running time (frames / fps) as h:mm:ss.mmm.

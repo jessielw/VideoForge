@@ -98,3 +98,8 @@ def test_aac_pipes_ffmpeg_into_qaac(layout, out, channels):
     assert qaac[qaac.index("--tvbr") + 1] == "127"
     assert qaac[qaac.index("-o") + 1] == str(cmd.output)
     assert cmd.output.suffix == ".m4a"
+
+
+def test_aac_bitrate_is_constrained_vbr():
+    _, qaac = command(planned(C.FLAC, "2.0", A.AAC, bitrate=192)).argvs
+    assert qaac[qaac.index("--cvbr") + 1] == "192" and "--tvbr" not in qaac

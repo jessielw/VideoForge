@@ -8,6 +8,7 @@
   import EncoderPanel from './EncoderPanel.svelte'
   import Icon from './Icon.svelte'
   import FileBrowser from './FileBrowser.svelte'
+  import TrackEditor from './TrackEditor.svelte'
   import TracksTab from './TracksTab.svelte'
   import JobLog from './JobLog.svelte'
   import VideoTab from './VideoTab.svelte'
@@ -139,7 +140,11 @@
           </div>
         </div>
       {:else if tab === 'tracks'}
-        <TracksTab {job} {editable} save={overrides => save({ overrides })} />
+        {#if app.profiles.find(p => p.id === job?.profile)?.track_editor}
+          <TrackEditor {job} {editable} save={overrides => save({ overrides })} />
+        {:else}
+          <TracksTab {job} {editable} save={overrides => save({ overrides })} />
+        {/if}
       {:else if tab === 'output'}
         <div class="max-w-3xl space-y-5">
           <div class="grid grid-cols-[8rem_1fr] items-center gap-3 text-sm">

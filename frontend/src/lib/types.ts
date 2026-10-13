@@ -84,11 +84,17 @@ export interface Issue {
   message: string
 }
 
+export type AudioAction = 'copy' | 'ddp' | 'atmos' | 'aac'
+
 export interface TrackOverride {
   exclude: boolean | null
   language: string | null
   title: string | null
   flags: Record<string, boolean>
+  // Audio, for profiles with the track editor (null = the profile's choice / the default)
+  action: AudioAction | null
+  bitrate_kbps: number | null
+  layout: string | null // "2.0", "5.1", ...
 }
 
 export interface Overrides {
@@ -253,6 +259,7 @@ export interface Profile {
   container: string
   external_subtitles: boolean
   track_properties: TrackProperty[]
+  track_editor: boolean // follows the user's track order, titles and audio encodes
   defaults: { video: VideoSettings; encoder: EncoderSettings }
   default: boolean
 }
