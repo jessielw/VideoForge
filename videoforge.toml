@@ -1,0 +1,34 @@
+# Rules new jobs are planned with: "manual" (built in) or an installed profile's id.
+# Machine-specific settings (tool paths, profile) can go in videoforge.local.toml
+# next to this file; its tables are merged over these.
+profile = "manual"
+
+# Tool locations. Relative paths resolve against this file's folder.
+# A bare name (e.g. "ffmpeg") is looked up on PATH.
+
+[tools]
+mkvmerge = "tools/MKVToolNix/mkvmerge.exe"
+deezy = "tools/DeeZy/deezy.exe"
+dee = "tools/DEE/dee.exe"
+truehdd = "tools/truehdd/truehdd.exe"
+qaac = "tools/qaac/qaac64.exe"
+ffmpeg = "ffmpeg"
+x264 = "tools/x264/x264.exe"
+x265 = "tools/x265/x265.exe"
+# VapourSynth plugins (bestsource, lsmas, ffms2, filters). vspipe comes with the
+# vapoursynth Python package; set `vspipe` here only to use another one.
+vs_plugins = "tools/vs-plugins"
+
+[pairing]
+# StaxRip output stems are matched as "<source stem><suffix>" (e.g.
+# "Show.S01E01_job.h264"); "" matches identical stems in different folders.
+# TV episodes also match on their SxxEyy token.
+encode_suffixes = ["_job", "_out", "_new", ""]
+# Raw streams StaxRip writes when muxing is off. MKVs without audio also count.
+encode_extensions = [".h264", ".264", ".avc", ".hevc", ".265", ".h265"]
+# Also take SRTs next to the source and one folder down (e.g. subs/) that share
+# its stem or SxxEyy token, on top of the subtitle files added to a job.
+scan_source_folder = true
+# Read <source>_temp (StaxRip): the job log for "still encoding", and
+# a_qpf/qpf_chapters.txt for chapters when no chapter file was added.
+staxrip_temp = true

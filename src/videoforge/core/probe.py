@@ -1,0 +1,135 @@
+"""Probe a local MKV: mkvmerge -J for track ids/flags/languages, MediaInfo for audio detail.
+
+The two are joined on the MKV track number (mkvmerge ``properties.number`` ==
+MediaInfo ``track_id``).
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+from typing import Any
+
+from pymediainfo import MediaInfo
+
+from videoforge.core import lang
+from videoforge.core.classify import (
+    parse_audio_format,
+    parse_channel_count,
+    parse_layout,
+    parse_sub_format,
+    resolve_sub_language,
+)
+from videoforge.core.models import AudioTrack, SourceInfo, SubTrack, VideoInfo
+
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+class ProbeError(RuntimeError):
+    pass
+
+
+def mkvmerge_identify(path: Path, mkvmerge: str) -> dict[str, Any]:
+    result = subprocess.run(
+        [mkvmerge, "-J", str(path)],
+        capture_output=True,
+        check=False,
+        encoding="utf-8",
+        errors="replace",
+        creationflags=_NO_WINDOW,
+    )
+    if result.returncode not in (0, 1):  # 1 = warnings
+        raise ProbeError(f"mkvmerge -J failed for {path.name}: {result.stdout or result.stderr}")
+    data = json.loads(result.stdout)
+    if not data.get("container", {}).get("recognized", False):
+        raise ProbeError(f"{path.name} is not a container mkvmerge recognizes")
+    return data
+
+
+def _ms(ns: int | None) -> int:
+    return round((ns or 0) / 1_000_000)
+
+
+def probe(path: Path, mkvmerge: str) -> SourceInfo:
+    ident = mkvmerge_identify(path, mkvmerge)
+    mi_tracks = {
+        t.track_id: t
+        for t in MediaInfo.parse(str(path)).tracks
+        if t.track_type in ("Video", "Audio", "Text") and t.track_id is not None
+    }
+
+    video: VideoInfo | None = None
+    audio: list[AudioTrack] = []
+    subs: list[SubTrack] = []
+
+    for track in ident.get("tracks", []):
+        props = track.get("properties", {})
+        mi = mi_tracks.get(props.get("number"))
+        kind = track.get("type")
+        language = lang.normalize(props.get("language_ietf") or props.get("language"))
+        title = props.get("track_name") or ""
+
+        if kind == "video" and video is None:
+            dims = (props.get("pixel_dimensions") or "0x0").split("x")
+            video = VideoInfo(
+                width=int(dims[0]),
+                height=int(dims[1]),
+                start_ms=_ms(props.get("minimum_timestamp")),
+                default_duration_ns=props.get("default_duration"),
+            )
+        elif kind == "audio":
+            fmt = parse_audio_format(
+                getattr(mi, "format", None),
+                getattr(mi, "commercial_name", None),
+                getattr(mi, "format_additionalfeatures", None),
+            )
+            channels = parse_channel_count(getattr(mi, "channel_s", None)) or props.get("audio_channels")
+            bit_rate = getattr(mi, "bit_rate", None)
+            audio.append(
+                AudioTrack(
+                    id=track["id"],
+                    index=len(audio),
+                    codec=fmt.codec,
+                    layout=parse_layout(getattr(mi, "channel_layout", None), channels),
+                    language=language,
+                    title=title,
+                    default=bool(props.get("default_track")),
+                    forced=bool(props.get("forced_track")),
+                    hearing_impaired=bool(props.get("flag_hearing_impaired")),
+                    commentary=bool(props.get("flag_commentary")),
+                    original=bool(props.get("flag_original")),
+                    atmos=fmt.atmos,
+                    dtsx=fmt.dtsx,
+                    bitrate_kbps=round(bit_rate / 1000) if isinstance(bit_rate, int) else None,
+                    delay_ms=int(getattr(mi, "delay_relative_to_video", None) or 0),
+                    format_name=getattr(mi, "format", "") or track.get("codec", ""),
+                )
+            )
+        elif kind == "subtitles":
+            count = props.get("num_index_entries") or getattr(mi, "count_of_elements", None)
+            subs.append(
+                SubTrack(
+                    id=track["id"],
+                    index=len(subs),
+                    format=parse_sub_format(track.get("codec"), props.get("codec_id")),
+                    language=resolve_sub_language(language, title),
+                    title=title,
+                    default=bool(props.get("default_track")),
+                    forced=bool(props.get("forced_track")),
+                    hearing_impaired=bool(props.get("flag_hearing_impaired")),
+                    commentary=bool(props.get("flag_commentary")),
+                    original=bool(props.get("flag_original")),
+                    element_count=int(count) if count else None,
+                    number=props.get("number"),
+                )
+            )
+
+    return SourceInfo(
+        path=path,
+        name=path.name,
+        video=video,
+        audio=audio,
+        subs=subs,
+        has_chapters=bool(ident.get("chapters")),
+    )

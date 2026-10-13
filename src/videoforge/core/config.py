@@ -1,0 +1,80 @@
+"""Load videoforge.toml (and videoforge.local.toml over it): tool paths, matching rules, the default profile."""
+
+from __future__ import annotations
+
+import shutil
+import sys
+import tomllib
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from videoforge.core.pairing import MatchRules
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+@dataclass(frozen=True)
+class Tools:
+    mkvmerge: str
+    deezy: str
+    dee: str
+    truehdd: str
+    qaac: str
+    ffmpeg: str
+    mkvpropedit: str = "mkvpropedit"  # default: next to mkvmerge
+    x264: str = "x264"
+    x265: str = "x265"
+    vspipe: str = ""  # default: the one pip's vapoursynth installs next to this Python
+    vs_plugins: str = ""  # extra VapourSynth plugin folder (VAPOURSYNTH_EXTRA_PLUGIN_PATH)
+
+
+@dataclass(frozen=True)
+class AppConfig:
+    tools: Tools
+    matching: MatchRules = field(default_factory=MatchRules)
+    profile: str | None = None  # default profile id for new jobs; None = the built-in one
+
+
+def _resolve_tool(value: str, base: Path) -> str:
+    candidate = base / value
+    if candidate.exists():
+        return str(candidate)
+    found = shutil.which(value)
+    return found or value
+
+
+def default_vspipe() -> str:
+    exe = Path(sys.executable).with_name("vspipe.exe" if sys.platform == "win32" else "vspipe")
+    return str(exe) if exe.is_file() else shutil.which("vspipe") or "vspipe"
+
+
+def _merged(base: dict, over: dict) -> dict:
+    out = dict(base)
+    for key, value in over.items():
+        out[key] = _merged(out[key], value) if isinstance(value, dict) and isinstance(out.get(key), dict) else value
+    return out
+
+
+def load_app_config(path: Path | None = None) -> AppConfig:
+    path = path or PROJECT_ROOT / "videoforge.toml"
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    local = path.with_name(path.stem + ".local.toml")
+    if local.is_file():
+        data = _merged(data, tomllib.loads(local.read_text(encoding="utf-8")))
+    base = path.parent
+    names = {name: _resolve_tool(v, base) for name, v in data["tools"].items()}
+    if "mkvpropedit" not in names:
+        sibling = Path(names["mkvmerge"]).with_name("mkvpropedit" + Path(names["mkvmerge"]).suffix)
+        names["mkvpropedit"] = str(sibling) if sibling.is_file() else _resolve_tool("mkvpropedit", base)
+    if "vspipe" not in names:
+        names["vspipe"] = default_vspipe()
+    tools = Tools(**names)
+    pairing = data.get("pairing", {})
+    d = MatchRules()
+    matching = MatchRules(
+        encode_suffixes=tuple(pairing.get("encode_suffixes", d.encode_suffixes)),
+        encode_extensions=tuple(e.lower() for e in pairing.get("encode_extensions", d.encode_extensions)),
+        scan_source_folder=pairing.get("scan_source_folder", d.scan_source_folder),
+        staxrip_temp=pairing.get("staxrip_temp", d.staxrip_temp),
+    )
+    return AppConfig(tools=tools, matching=matching, profile=data.get("profile"))

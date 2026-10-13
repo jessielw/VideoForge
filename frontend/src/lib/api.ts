@@ -1,0 +1,93 @@
+// Thin typed client for /api. Errors carry the server's `detail` message.
+import type {
+  ClipInfo,
+  CommandStep,
+  Crop,
+  DirListing,
+  JobDetail,
+  JobSpec,
+  JobSummary,
+  MatchResult,
+  Profile,
+  QueueState,
+} from './types'
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!res.ok) {
+    let message = `${res.status} ${res.statusText}`
+    try {
+      const data = await res.json()
+      if (data?.detail) message = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(res.status, message)
+  }
+  return (await res.json()) as T
+}
+
+const get = <T>(path: string) => request<T>('GET', path)
+const post = <T>(path: string, body: unknown = {}) => request<T>('POST', path, body)
+const patch = <T>(path: string, body: unknown) => request<T>('PATCH', path, body)
+
+export interface InputSlots {
+  sources: string[]
+  encodes: string[]
+  subtitles: string[]
+  chapters: string[]
+  profile: string
+}
+
+export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides' | 'output_dir' | 'qpf' | 'profile'>>
+
+export const api = {
+  profiles: () => get<Profile[]>('/api/profiles'),
+  settings: () => get<{ output_dir: string; last_dir: string }>('/api/settings'),
+  saveSettings: (s: { output_dir?: string; last_dir?: string }) => request('PUT', '/api/settings', s),
+
+  roots: () => get<string[]>('/api/fs/roots'),
+  list: (path: string, extensions: string[] = []) =>
+    get<DirListing>(`/api/fs/list?path=${encodeURIComponent(path)}&extensions=${encodeURIComponent(extensions.join(','))}`),
+
+  match: (slots: InputSlots) => post<MatchResult>('/api/match', slots),
+  addJobs: (body: InputSlots & { original_language: string | null; output_dir: string | null }) =>
+    post<{ added: string[]; skipped: string[]; unmatched: string[] }>('/api/jobs', body),
+
+  jobs: () => get<JobSummary[]>('/api/jobs'),
+  job: (id: string) => get<JobDetail>(`/api/jobs/${id}`),
+  update: (id: string, changes: SpecChanges) => patch<JobDetail>(`/api/jobs/${id}`, changes),
+  apply: (ids: string[], changes: SpecChanges) =>
+    post<{ updated: string[]; skipped: string[] }>('/api/jobs/apply', { ids, ...changes }),
+  remove: (ids: string[]) => post<{ removed: string[] }>('/api/jobs/remove', { ids }),
+  reorder: (ids: string[]) => post<{ ids: string[] }>('/api/jobs/reorder', { ids }),
+  reprobe: (ids: string[]) => post('/api/jobs/reprobe', { ids }),
+  log: (id: string) => get<{ lines: string[] }>(`/api/jobs/${id}/log`),
+  commands: (id: string) => get<CommandStep[]>(`/api/jobs/${id}/commands`),
+
+  queue: () => get<QueueState>('/api/queue'),
+  start: (ids?: string[]) => post<QueueState>('/api/queue/start', ids ? { ids } : {}),
+  enqueue: (ids: string[]) => post<QueueState>('/api/queue/enqueue', { ids }),
+  dequeue: (ids: string[]) => post<QueueState>('/api/queue/dequeue', { ids }),
+  stop: () => post<QueueState>('/api/queue/stop'),
+  cancel: () => post<QueueState>('/api/queue/cancel'),
+
+  clipInfo: (id: string, stage: 'source' | 'output') => get<ClipInfo>(`/api/jobs/${id}/video/info?stage=${stage}`),
+  frameUrl: (id: string, n: number, stage: 'source' | 'output', version: number, fmt: 'jpeg' | 'png' = 'jpeg') =>
+    `/api/jobs/${id}/video/frame?n=${n}&stage=${stage}&fmt=${fmt}&v=${version}`,
+  autocrop: (id: string, samples = 20) => post<Crop>(`/api/jobs/${id}/video/autocrop?samples=${samples}`),
+  script: (id: string) => get<{ script: string }>(`/api/jobs/${id}/video/script`),
+}

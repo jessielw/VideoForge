@@ -1,0 +1,76 @@
+"""VideoSettings -> a VapourSynth script. The one generator behind both the preview and the encode.
+
+Layout of every script:
+
+    import vapoursynth as vs
+    core = vs.core
+    src = <source filter>(<source>, index in the work folder)
+    clip = src
+    <crop, resize, filters>  or  <custom body>
+    <bit depth conversion for the encoder>
+    clip.set_output()
+
+`stage="source"` stops after `clip = src` (the crop editor shows the uncropped frame).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Literal
+
+from videoforge.core.video.settings import SourceFilter, VideoSettings
+
+Stage = Literal["source", "output"]
+
+
+def _q(path: Path | str) -> str:
+    return repr(str(path))  # a valid Python string literal for any Windows path
+
+
+def source_line(source: Path, source_filter: SourceFilter, index_dir: Path) -> str:
+    if source_filter is SourceFilter.BESTSOURCE:
+        # cachemode 4: always read/write the index at cachepath + track + extension.
+        index = index_dir / source.name
+        return f"src = core.bs.VideoSource({_q(source)}, cachemode=4, cachepath={_q(index)})"
+    if source_filter is SourceFilter.LSMASH:
+        return f"src = core.lsmas.LWLibavSource({_q(source)}, cachefile={_q(index_dir / (source.name + '.lwi'))})"
+    return f"src = core.ffms2.Source({_q(source)}, cachefile={_q(index_dir / (source.name + '.ffindex'))})"
+
+
+def processing_lines(settings: VideoSettings) -> list[str]:
+    if settings.custom is not None:
+        return settings.custom.strip().splitlines()
+    lines = []
+    c = settings.crop
+    if not c.is_zero:
+        lines.append(f"clip = core.std.Crop(clip, left={c.left}, right={c.right}, top={c.top}, bottom={c.bottom})")
+    if settings.resize is not None:
+        r = settings.resize
+        lines.append(f"clip = core.resize.{r.kernel}(clip, width={r.width}, height={r.height})")
+    if settings.filters.strip():
+        lines += settings.filters.strip().splitlines()
+    return lines
+
+
+def build_script(
+    settings: VideoSettings, source: Path, index_dir: Path, *, depth: int | None = None, stage: Stage = "output"
+) -> str:
+    """The script text. depth converts the output to that bit depth (dithered) when it differs."""
+    lines = [
+        "import vapoursynth as vs",
+        "core = vs.core",
+        source_line(source, settings.source_filter, index_dir),
+        "clip = src",
+    ]
+    if stage == "output":
+        lines += processing_lines(settings)
+        if depth is not None:
+            lines += [
+                f"if clip.format.bits_per_sample != {depth}:",
+                (
+                    f"    clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample={depth}),"
+                    ' dither_type="error_diffusion")'
+                ),
+            ]
+    lines.append("clip.set_output()")
+    return "\n".join(lines) + "\n"

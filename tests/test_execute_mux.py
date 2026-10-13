@@ -1,0 +1,153 @@
+"""mkvmerge command built from a plan."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from conftest import audio, plan_for, source, sub
+
+from videoforge.core.execute.mux import MuxError, _frame_rate, mux_command
+from videoforge.core.models import AudioAction, Layout, Overrides, TrackOverride, VideoInfo
+from videoforge.core.models import AudioCodec as C
+from videoforge.core.models import SubFormat as F
+
+RAW = (".h264", ".hevc")
+OUT = Path("out.mkv")
+
+
+def aot_plan(*, encode="Show.S01E01_job.h264", start_ms=0, chapters=True):
+    src = source(
+        [
+            audio(C.FLAC, "2.0", "ja", index=0),
+            audio(C.TRUEHD, "5.1", "en", index=1),
+        ],
+        [
+            sub(F.PGS, "en", "English", index=0, elements=600),
+            sub(F.ASS, "fr", "French", index=1),
+            sub(F.SRT, "en", external="subs/Show.S01E01.NF.en.synced.srt"),
+            sub(F.SRT, "en", "English (Foreign)", external="subs/Show_track4_[eng].srt", forced=True),
+        ],
+        name="Show.S01E01.mkv",
+    )
+    src.video = VideoInfo(1920, 1080, start_ms=start_ms, default_duration_ns=41708333)
+    src.audio[0].delay_ms = -7  # AAC: applied at mux
+    src.audio[1].delay_ms = 12  # DDP: applied by DeeZy
+    src.subs[3].extracted_from = 4
+    external = src.subs[2:]
+    src.subs[2:] = []  # external files aren't tracks of the source
+    plan = plan_for(src, source(name=encode), external_subs=external,
+                    chapters=Path("qpf_chapters.txt") if chapters else None)
+    plan.encode_path = Path(encode)
+    # Encode both audio tracks: Japanese to AAC, English to DDP.
+    a0, a1 = plan.audio
+    a0.action, a0.out_codec = AudioAction.AAC, C.AAC
+    a1.action, a1.out_codec, a1.bitrate_kbps, a1.out_layout = AudioAction.DDP, C.EAC3, 640, Layout(5, 1)
+    return plan
+
+
+def value(argv, flag, prefix=""):
+    return [argv[i + 1] for i, a in enumerate(argv) if a == flag and argv[i + 1].startswith(prefix)]
+
+
+def test_aot_layout():
+    plan = aot_plan()
+    encoded = {0: Path("tmp/audio0_ja.m4a"), 1: Path("tmp/audio1_en.ec3")}
+    argv = mux_command(plan, encoded, OUT, "mkvmerge", RAW)
+
+    assert argv[:3] == ["mkvmerge", "--output", "out.mkv"]
+    assert value(argv, "--default-duration") == ["0:24000/1001p"]
+    assert value(argv, "--chapters") == ["qpf_chapters.txt"]
+    # Inputs: encode, source, 2 audio, 2 external SRTs
+    inputs = [a for a in argv if a.endswith((".h264", ".mkv", ".m4a", ".ec3", ".srt")) and a != "out.mkv"]
+    assert inputs == [
+        "Show.S01E01_job.h264",
+        "Show.S01E01.mkv",
+        str(Path("tmp/audio0_ja.m4a")),
+        str(Path("tmp/audio1_en.ec3")),
+        *[str(s.source.external_path) for s in plan.subs if s.source.is_external],
+    ]
+    # Source contributes no video/audio, only the internal subs
+    assert "--no-video" in argv and "--no-audio" in argv
+    internal = [s.source.id for s in plan.subs if not s.source.is_external]
+    assert value(argv, "--subtitle-tracks") == [",".join(map(str, internal))]
+    # Track order: video, audio in plan order, subs in plan order
+    order = value(argv, "--track-order")[0].split(",")
+    assert order[:3] == ["0:0", "2:0", "3:0"]
+    assert len(order) == 1 + len(plan.audio) + len(plan.subs)
+    # Delay once: AAC at mux; DeeZy already baked the DDP delay in
+    assert value(argv, "--sync") == ["0:-7"]
+
+
+def test_titles_and_flags_follow_plan():
+    plan = aot_plan()
+    argv = mux_command(plan, {0: Path("a.m4a"), 1: Path("b.ec3")}, OUT, "mkvmerge", RAW)
+    titles = {n.split(":", 1)[1] for n in value(argv, "--track-name")}
+    assert {a.title for a in plan.audio} | {s.title for s in plan.subs} == titles
+    forced = value(argv, "--forced-display-flag")
+    assert forced.count("0:1") == 1  # the external forced SRT
+
+
+def test_video_start_shifts_source_and_extracted_srt():
+    plan = aot_plan(start_ms=838)
+    argv = mux_command(plan, {0: Path("a.m4a"), 1: Path("b.ec3")}, OUT, "mkvmerge", RAW)
+    syncs = value(argv, "--sync")
+    internal = [s.source.id for s in plan.subs if not s.source.is_external]
+    for tid in internal:
+        assert f"{tid}:-838" in syncs
+    # extracted SRT shifted, NF SRT not; encoded audio keeps only its own delay
+    assert syncs.count("0:-838") == 1
+    assert "0:-7" in syncs and "0:12" not in syncs
+
+
+def test_mkv_encode_and_source_chapters():
+    plan = aot_plan(encode="Show.S01E01_job.mkv", chapters=False)
+    argv = mux_command(plan, {0: Path("a.m4a"), 1: Path("b.ec3")}, OUT, "mkvmerge", RAW)
+    assert "--default-duration" not in argv
+    assert "--chapters" not in argv
+    encode_args = argv[: argv.index("Show.S01E01_job.mkv")]
+    assert {"--no-audio", "--no-subtitles", "--no-chapters"} <= set(encode_args)
+    source_args = argv[argv.index("Show.S01E01_job.mkv") : argv.index("Show.S01E01.mkv")]
+    assert "--no-chapters" not in source_args
+
+
+def test_copied_audio_keeps_container_delay_without_sync():
+    src = source([audio(C.AC3, "5.1", "en", index=0)], name="Movie.mkv")
+    src.video = VideoInfo(1920, 1080, default_duration_ns=41708333)
+    src.audio[0].delay_ms = 25
+    plan = plan_for(src, source(name="Movie_job.h264"), external_subs=[sub(F.SRT, "en", external="Movie.en.srt")])
+    plan.encode_path = Path("Movie_job.h264")
+    argv = mux_command(plan, {}, OUT, "mkvmerge", RAW)
+    assert value(argv, "--audio-tracks") == [str(src.audio[0].id)]
+    assert "--sync" not in argv  # mkvmerge carries the copied track's own timestamps
+
+
+def test_missing_encoded_audio_fails():
+    with pytest.raises(MuxError):
+        mux_command(aot_plan(), {0: Path("a.m4a")}, OUT, "mkvmerge", RAW)
+
+
+def test_every_flag_is_written_explicitly():
+    src = source(
+        [audio(C.AC3, "5.1", "en", index=0, default=True), audio(C.AC3, "2.0", "en", index=1, commentary=True)],
+        [sub(F.SRT, "en", index=0, hi=True)],
+        name="Movie.mkv",
+    )
+    ov = Overrides(tracks={"id:1": TrackOverride(flags={"original": True}), "id:10": TrackOverride(title="English SDH")})
+    plan = plan_for(src, source(name="Movie_job.mkv"), ov)
+    argv = mux_command(plan, {}, OUT, "mkvmerge", RAW)
+    assert value(argv, "--default-track-flag", "1:") == ["1:1"]
+    assert value(argv, "--original-flag") == ["1:1", "2:0", "10:0"]
+    assert value(argv, "--commentary-flag") == ["1:0", "2:1", "10:0"]
+    assert value(argv, "--hearing-impaired-flag") == ["1:0", "2:0", "10:1"]
+    assert "10:English SDH" in value(argv, "--track-name")
+    assert value(argv, "--audio-tracks") == ["1,2"]
+
+
+@pytest.mark.parametrize(
+    ("ns", "rate"),
+    [(41708333, "24000/1001p"), (41708334, "24000/1001p"), (40000000, "25p"), (16683333, "60000/1001p"),
+     (41666667, "24p"), (12345678, "12345678ns")],
+)
+def test_frame_rate(ns, rate):
+    assert _frame_rate(ns) == rate

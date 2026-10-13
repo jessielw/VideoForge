@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets and licensed/vendored binaries (DEE ships a license file)
+.env
+tools/
+
+# Local data
+videoforge.local.toml
+*.log

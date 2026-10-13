@@ -1,0 +1,45 @@
+[project]
+name = "videoforge"
+version = "0.1.0"
+description = "Encode and mux job queue in the browser: VapourSynth, x264/x265, audio, subtitles, MKV"
+authors = [
+    { name = "jessielw", email = "jessielw4049@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "autoqpf>=0.2.5",
+    "fastapi>=0.143.0",
+    "numpy>=2.5.4",
+    "pillow>=12.3.0",
+    "pymediainfo>=7.0.1",
+    "rich>=15.0.0",
+    "uvicorn[standard]>=0.54.0",
+    "vapoursynth>=81",
+]
+
+[project.scripts]
+videoforge = "videoforge:main"
+
+# Profiles (the rules a job is planned with). A group's profile is its own
+# package that adds an entry to this group.
+[project.entry-points."videoforge.profiles"]
+manual = "videoforge.profiles.manual:ManualProfile"
+
+[build-system]
+requires = ["uv_build>=0.12.24,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",  # fastapi.testclient
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["legacy", "frontend"]

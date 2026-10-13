@@ -1,0 +1,76 @@
+@import 'tailwindcss';
+
+/* Colour tokens: dark by default (a video tool lives next to dark players), light when the OS asks. */
+@theme {
+  --color-bg: #121214;
+  --color-panel: #1a1a1d;
+  --color-raised: #232327;
+  --color-line: #2e2e33;
+  --color-text: #e7e5e4;
+  --color-muted: #a1a1aa;
+  --color-accent: #c9a876;
+  --color-accent-strong: #b39770;
+  --color-ok: #4ade80;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+  --color-info: #60a5fa;
+  --font-sans: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-bg: #f5f5f4;
+    --color-panel: #ffffff;
+    --color-raised: #f0efee;
+    --color-line: #dedcda;
+    --color-text: #1c1917;
+    --color-muted: #6b6b70;
+    --color-accent: #8a6d3f;
+    --color-accent-strong: #75592f;
+    --color-ok: #15803d;
+    --color-warn: #b45309;
+    --color-bad: #b91c1c;
+    --color-info: #2563eb;
+  }
+}
+
+:root {
+  color-scheme: dark light;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+/* Shared controls (Tailwind 4 utilities, so they compose with @apply and variants). */
+@utility btn {
+  @apply inline-flex items-center gap-1.5 rounded-md border border-line bg-raised px-3 py-1.5 text-sm text-text
+    hover:border-accent/60 disabled:cursor-not-allowed disabled:opacity-40;
+}
+@utility btn-primary {
+  @apply btn border-accent-strong bg-accent-strong text-stone-950 hover:bg-accent;
+}
+@utility btn-ghost {
+  @apply btn border-transparent bg-transparent hover:bg-raised;
+}
+@utility field {
+  @apply rounded-md border border-line bg-panel px-2 py-1 text-sm text-text outline-none focus:border-accent
+    disabled:opacity-50;
+}
+@utility label {
+  @apply text-xs font-medium tracking-wide text-muted uppercase;
+}
+@utility panel {
+  @apply rounded-lg border border-line bg-panel;
+}
