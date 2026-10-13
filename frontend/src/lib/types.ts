@@ -289,3 +289,21 @@ export interface CommandStep {
   label: string
   command: string
 }
+
+export type StepStatus = 'pending' | 'running' | 'done' | 'reused' | 'failed' | 'cancelled'
+
+// One step of a job's last run (GET /jobs/<id>/steps adds its output lines).
+export interface StepRun {
+  id: string
+  label: string
+  command: string // '' = runs inside VideoForge
+  status: StepStatus
+  exit_code: number | null
+  seconds: number
+  error: string
+}
+
+export interface StepOutput extends StepRun {
+  lines: string[]
+  partial: boolean // only the saved tail is left (after a restart)
+}

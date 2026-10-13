@@ -20,17 +20,30 @@ from typing import Any
 
 from videoforge.core.config import AppConfig
 from videoforge.core.execute.process import CancelToken
-from videoforge.core.job import JobResult, JobSpec, JobState, JobStatus, StepRecord, plan_spec, probe_spec
+from videoforge.core.job import (
+    STEP_TAIL,
+    JobResult,
+    JobSpec,
+    JobState,
+    JobStatus,
+    StepRecord,
+    StepRun,
+    StepStatus,
+    plan_spec,
+    probe_spec,
+)
 from videoforge.core.jobs import ProbedInputs
 from videoforge.core.models import JobInputs, Overrides, Plan, Severity
 from videoforge.core.pipeline.run import run_job
 from videoforge.core.pipeline.steps import StepProgress
+from videoforge.core.plan_io import to_json
 from videoforge.core.profile import Profile
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
 from videoforge.server.events import EventHub
 from videoforge.server.store import Store
 
 LOG_LINES = 5000
+STEP_LINES = 3000  # per step, in memory
 _PROGRESS_INTERVAL = 0.25  # seconds between progress events per job
 
 
@@ -67,6 +80,9 @@ class Entry:
     running: bool = False
     progress: dict[str, Any] | None = None
     log: deque[str] = field(default_factory=lambda: deque(maxlen=LOG_LINES))
+    # The last run's output per step (in memory; state.run keeps only each step's tail).
+    step_lines: dict[str, deque[str]] = field(default_factory=dict)
+    current_step: str | None = None
 
     @property
     def id(self) -> str:
@@ -403,10 +419,25 @@ class JobQueue:
         def on_record(_r: StepRecord) -> None:
             self._save(e)  # a crash after this step resumes after it
 
+        def on_step(run: StepRun) -> None:
+            if run.status is StepStatus.RUNNING:
+                e.current_step = run.id
+                e.step_lines[run.id] = deque(maxlen=STEP_LINES)
+            elif e.current_step == run.id:
+                e.current_step = None
+            if run.status is not StepStatus.PENDING:
+                self._save(e)
+            index = next((i for i, r in enumerate(e.state.run) if r is run), -1)
+            # index 0 pending = a new run's list starts (the browser drops the last run's)
+            self.events.publish("step", id=e.id, index=index, total=len(e.state.run),
+                                step=step_json(run, with_tail=False))
+
+        with self._lock:
+            e.step_lines, e.current_step = {}, None
         log(f"### {e.spec.name} ({datetime.now().isoformat(timespec='seconds')})")
         try:
             result = self.services.run(e.spec, e.plan, self.profile(e), self.app, state=e.state, log=log,
-                                       cancel=self._cancel, progress=progress, on_record=on_record)
+                                       cancel=self._cancel, progress=progress, on_record=on_record, on_step=on_step)
         except Exception as ex:  # noqa: BLE001 - a bug must not kill the queue
             result = JobResult(e.plan, JobStatus.FAILED, error=f"{type(ex).__name__}: {ex}")
             e.state.status, e.state.error = result.status, result.error
@@ -420,7 +451,7 @@ class JobQueue:
         if log_file is not None:
             log_file.close()
         with self._lock:
-            e.running, e.progress = False, None
+            e.running, e.progress, e.current_step = False, None, None
             self._save(e)
         self._changed(e)
 
@@ -431,7 +462,30 @@ class JobQueue:
                 file.write(line + "\n")
             except OSError:
                 pass
-        self.events.publish("log", id=e.id, line=line)
+        step = e.current_step
+        if step is not None and not line.startswith("== "):  # the step header is the step's panel
+            e.step_lines[step].append(line)
+        else:
+            step = None
+        self.events.publish("log", id=e.id, line=line, step=step)
+
+    def step_output(self, e: Entry) -> list[dict[str, Any]]:
+        """The last run's steps with their output: all of it while it's in memory, else the saved tail."""
+        out = []
+        for run in e.state.run:
+            lines = e.step_lines.get(run.id)
+            item = step_json(run, with_tail=False)
+            item["lines"] = list(lines) if lines is not None else list(run.tail)
+            item["partial"] = lines is None and len(run.tail) >= STEP_TAIL
+            out.append(item)
+        return out
+
+
+def step_json(run: StepRun, *, with_tail: bool = True) -> dict[str, Any]:
+    data = to_json(run)
+    if not with_tail:
+        data.pop("tail")
+    return data
 
 
 def _copy(obj):

@@ -9,6 +9,7 @@
   import Icon from './Icon.svelte'
   import FileBrowser from './FileBrowser.svelte'
   import TracksTab from './TracksTab.svelte'
+  import JobLog from './JobLog.svelte'
   import VideoTab from './VideoTab.svelte'
 
   let { jobId }: { jobId: string } = $props()
@@ -18,10 +19,8 @@
   let job = $state<JobDetail | null>(null)
   let error = $state('')
   let commands = $state<CommandStep[]>([])
-  let logLines = $state<string[]>([])
   let showInfo = $state(false)
   let browsing = $state(false)
-  let logBase = 0
 
   async function load() {
     try {
@@ -44,19 +43,6 @@
       api.commands(jobId).then(c => (commands = c)).catch(() => (commands = []))
     }
   })
-
-  const jobLog = $derived(app.log.filter(l => l.job === jobId).map(l => l.line))
-
-  $effect(() => {
-    if (tab === 'log') {
-      api.log(jobId).then(r => {
-        logLines = r.lines
-        logBase = app.log.filter(l => l.job === jobId).length // live lines after this are new
-      })
-    }
-  })
-
-  const allLog = $derived(tab === 'log' ? [...logLines, ...jobLog.slice(logBase)] : [])
 
   async function save(changes: SpecChanges) {
     try {
@@ -112,6 +98,9 @@
           {/each}
           {#if !showInfo && problems.length > 2}<div class="text-xs text-muted">+{problems.length - 2} more…</div>{/if}
         </button>
+      {/if}
+      {#if (job.status === 'failed' || job.status === 'invalid') && tab !== 'log'}
+        <button class="text-xs text-accent underline" onclick={() => (tab = 'log')}>Open the failed step in the Log tab</button>
       {/if}
       {#if error}<div class="text-sm text-bad">{error}</div>{/if}
       <nav class="-mb-3 flex gap-1">
@@ -190,7 +179,7 @@
           {/if}
         </div>
       {:else}
-        <pre class="h-full overflow-auto rounded-md border border-line bg-black/40 p-3 font-mono text-xs leading-relaxed">{allLog.join('\n') || 'No output yet.'}</pre>
+        <JobLog {jobId} running={job.status === 'running'} />
       {/if}
     </div>
   </div>

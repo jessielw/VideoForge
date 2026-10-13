@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from pathlib import Path
 
 from videoforge.core.execute import process
 from videoforge.core.execute.process import CancelToken, LogFn, ToolError
-from videoforge.core.job import StepRecord
+from videoforge.core.job import StepRecord, StepRun, StepStatus
 from videoforge.core.video.encoders import progress as encoder_progress
 
 Runner = Callable[[Sequence[Sequence[str]], LogFn, CancelToken | None], None]
@@ -43,6 +44,14 @@ class Step:
     @property
     def written(self) -> tuple[Path, ...]:
         return self.outputs if self.writes is None else self.writes
+
+    @property
+    def command_line(self) -> str:
+        """The command(s) as one line a shell would take; "" for a Python step."""
+        return " | ".join(subprocess.list2cmdline(a) for a in self.argvs)
+
+    def to_run(self) -> StepRun:
+        return StepRun(self.id, self.label, self.command_line)
 
     def fingerprint(self) -> str:
         stats = []
@@ -94,55 +103,86 @@ def run_steps(
     progress: ProgressFn | None = None,
     on_record: Callable[[StepRecord], None] | None = None,
     runner: Runner = process.run,
+    runs: list[StepRun] | None = None,
+    on_step: Callable[[StepRun], None] | None = None,
 ) -> None:
     """Run the steps in order. records: the job's last finished steps, updated in place.
-    Raises ToolError (a step failed or didn't write its outputs) or Cancelled."""
+    runs: one StepRun per step (default: fresh ones), updated as each step starts, ends or fails;
+    on_step hears every change. Raises ToolError (a step failed or didn't write its outputs) or Cancelled."""
     total_weight = sum(s.weight for s in steps) or 1.0
     done_weight = 0.0
+    runs = runs if runs is not None else [s.to_run() for s in steps]
 
     def report(i: int, step: Step, frac: float, reused: bool = False) -> None:
         if progress:
             overall = (done_weight + step.weight * frac) / total_weight
             progress(StepProgress(i, len(steps), step, frac, overall, reused))
 
+    def changed(run: StepRun) -> None:
+        if on_step:
+            on_step(run)
+
     for i, step in enumerate(steps):
-        if _reusable(step, records.get(step.id)):
+        run = runs[i]
+        if _reusable(step, prior := records.get(step.id)):
             log(f"== {i + 1}/{len(steps)} {step.label}: done in an earlier run, reused")
+            run.status, run.seconds = StepStatus.REUSED, prior.seconds
+            changed(run)
             report(i, step, 1.0, reused=True)
             done_weight += step.weight
             continue
         if cancel is not None and cancel.cancelled:
             raise process.Cancelled()
+        run.status, run.exit_code, run.error, run.tail = StepStatus.RUNNING, None, "", []
+        changed(run)
         log(f"== {i + 1}/{len(steps)} {step.label}")
         report(i, step, 0.0)
         records.pop(step.id, None)
-        for out in step.written:  # a stale file from an earlier run must not pass for this one's
-            out.unlink(missing_ok=True)
         started = time.monotonic()
-        if step.call is not None:
-            step.call(log)
-        else:
-            last = [-1.0]
 
-            def tool_log(line: str, i: int = i, step: Step = step, last: list[float] = last) -> None:
-                log(line)
-                frac = line_progress(line)
-                if frac is not None and frac - last[0] >= 0.002:  # throttle progress events
-                    last[0] = frac
-                    report(i, step, min(frac, 1.0))
+        def step_log(line: str, run: StepRun = run) -> None:
+            run.log(line)
+            log(line)
 
-            runner(step.argvs, tool_log, cancel)
-        for out in step.written:
-            if not out.exists():
-                raise ToolError(f"{step.label}: {out.name} was not written")
-        if step.finalize is not None:
-            step.finalize()
-        for out in step.outputs:
-            if not out.exists():
-                raise ToolError(f"{step.label}: {out.name} is missing")
+        try:
+            for out in step.written:  # a stale file from an earlier run must not pass for this one's
+                out.unlink(missing_ok=True)
+            if step.call is not None:
+                step.call(step_log)
+            else:
+                last = [-1.0]
+
+                def tool_log(line: str, i: int = i, step: Step = step, last: list[float] = last) -> None:
+                    step_log(line)
+                    frac = line_progress(line)
+                    if frac is not None and frac - last[0] >= 0.002:  # throttle progress events
+                        last[0] = frac
+                        report(i, step, min(frac, 1.0))
+
+                runner(step.argvs, tool_log, cancel)
+            for out in step.written:
+                if not out.exists():
+                    raise ToolError(f"{step.label}: {out.name} was not written")
+            if step.finalize is not None:
+                step.finalize()
+            for out in step.outputs:
+                if not out.exists():
+                    raise ToolError(f"{step.label}: {out.name} is missing")
+        except process.Cancelled:
+            run.status, run.seconds = StepStatus.CANCELLED, round(time.monotonic() - started, 1)
+            changed(run)
+            raise
+        except Exception as e:
+            run.status, run.seconds = StepStatus.FAILED, round(time.monotonic() - started, 1)
+            run.error, run.exit_code = str(e) or type(e).__name__, getattr(e, "returncode", None)
+            changed(run)
+            raise
         record = StepRecord(step.id, step.fingerprint(), list(step.outputs), round(time.monotonic() - started, 1))
         records[step.id] = record
         if on_record:
             on_record(record)
+        run.status, run.seconds = StepStatus.DONE, record.seconds
+        run.exit_code = 0 if step.argvs else None
+        changed(run)
         report(i, step, 1.0)
         done_weight += step.weight

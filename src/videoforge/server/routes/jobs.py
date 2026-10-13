@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -175,14 +174,17 @@ def job_commands(request: Request, job_id: str) -> list[dict[str, Any]]:
         built = build_steps(e.spec, e.plan, profile, q.app, output_path(e.plan, out_dir, profile))
     except (ToolError, ValueError) as ex:
         raise HTTPException(422, str(ex)) from None
-    return [
-        {"id": s.id, "label": s.label,
-         "command": " | ".join(subprocess.list2cmdline(a) for a in s.argvs) if s.argvs else "(runs in VideoForge)"}
-        for s in built.steps
-    ]
+    return [{"id": s.id, "label": s.label, "command": s.command_line or "(runs in VideoForge)"} for s in built.steps]
 
 
 @router.get("/jobs/{job_id}/log")
 def job_log(request: Request, job_id: str, tail: int = 2000) -> dict[str, Any]:
     e = _entry(queue_of(request), job_id)
     return {"lines": list(e.log)[-tail:]}
+
+
+@router.get("/jobs/{job_id}/steps")
+def job_steps(request: Request, job_id: str) -> list[dict[str, Any]]:
+    """The last run's steps: command line, status, exit code, time, error and output lines."""
+    q = queue_of(request)
+    return q.step_output(_entry(q, job_id))

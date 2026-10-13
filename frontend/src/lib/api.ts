@@ -10,6 +10,7 @@ import type {
   MatchResult,
   Profile,
   QueueState,
+  StepOutput,
   ScriptCheck,
   ScriptParts,
 } from './types'
@@ -79,6 +80,7 @@ export const api = {
   reprobe: (ids: string[]) => post('/api/jobs/reprobe', { ids }),
   log: (id: string) => get<{ lines: string[] }>(`/api/jobs/${id}/log`),
   commands: (id: string) => get<CommandStep[]>(`/api/jobs/${id}/commands`),
+  steps: (id: string) => get<StepOutput[]>(`/api/jobs/${id}/steps`),
 
   queue: () => get<QueueState>('/api/queue'),
   start: (ids?: string[]) => post<QueueState>('/api/queue/start', ids ? { ids } : {}),

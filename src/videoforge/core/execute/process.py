@@ -19,6 +19,8 @@ _OK_CODES = {"mkvmerge": {0, 1}, "mkvpropedit": {0, 1}}
 # Progress bars redraw with \r, so a "line" ends at either.
 _LINE_SPLIT = re.compile(r"[\r\n]+")
 _TAIL = 20
+# A producer's complaint that its pipe closed (vspipe's fwrite error, EPIPE/EINVAL on Windows).
+_BROKEN_PIPE = re.compile(r"fwrite\(\) call failed|broken pipe|errno:? (?:22|32)\b", re.IGNORECASE)
 
 
 class Cancelled(Exception):
@@ -26,7 +28,11 @@ class Cancelled(Exception):
 
 
 class ToolError(RuntimeError):
-    pass
+    """A step failed. returncode is the failing tool's exit code, when a tool failed."""
+
+    def __init__(self, message: str, returncode: int | None = None) -> None:
+        super().__init__(message)
+        self.returncode = returncode
 
 
 class CancelToken:
@@ -76,6 +82,11 @@ def _kill_tree(proc: subprocess.Popen) -> None:
         proc.kill()
 
 
+def _signed(code: int) -> int:
+    """Windows reports exit codes as unsigned 32-bit: 4294967295 is -1."""
+    return code - (1 << 32) if code >= 1 << 31 else code
+
+
 def run(argvs: Sequence[Sequence[str]], log: LogFn, cancel: CancelToken | None = None) -> None:
     """Run one command, or pipe the first command's stdout into the second.
 
@@ -121,8 +132,12 @@ def run(argvs: Sequence[Sequence[str]], log: LogFn, cancel: CancelToken | None =
         for t in pumps:
             t.join(timeout=5)
 
-    for argv, proc, tail in zip(argvs, procs, tails):
-        name = tool_name(argv)
-        if proc.returncode not in _OK_CODES.get(name, {0}):
-            detail = "\n".join(tail[-5:])
-            raise ToolError(f"{name} exited with code {proc.returncode}" + (f":\n{detail}" if detail else ""))
+    failed = [(tool_name(argv), _signed(proc.returncode), tail) for argv, proc, tail in zip(argvs, procs, tails)
+              if proc.returncode not in _OK_CODES.get(tool_name(argv), {0})]
+    if failed:
+        # A consumer that fails (e.g. x264 on a bad option) makes the producer fail writing into the
+        # pipe: lead with the tool that didn't just lose its pipe.
+        failed.sort(key=lambda f: bool(_BROKEN_PIPE.search("\n".join(f[2]))))
+        message = "\n".join(f"{name} exited with code {code}" + (":\n" + "\n".join(tail[-5:]) if tail else "")
+                            for name, code, tail in failed)
+        raise ToolError(message, failed[0][1])

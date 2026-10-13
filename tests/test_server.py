@@ -16,7 +16,7 @@ from conftest import audio, source, sub
 from fastapi.testclient import TestClient
 
 from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools
-from videoforge.core.job import JobResult, JobSpec, JobStatus, StepRecord, planned_encode
+from videoforge.core.job import JobResult, JobSpec, JobStatus, StepRecord, StepStatus, planned_encode
 from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioCodec as C
 from videoforge.core.models import SubFormat as F
@@ -57,18 +57,29 @@ class FakeRun:
         self.runs: list[str] = []
         self.block = block
 
-    def __call__(self, spec, plan, profile, app, *, state, log, cancel, progress, on_record):
+    def __call__(self, spec, plan, profile, app, *, state, log, cancel, progress, on_record, on_step):
         self.runs.append(spec.name)
-        step = Step("video", "Video (x264)")
+        step = Step("video", "Video (x264)", argvs=(("x264", "--crf", "18"),))
+        run = step.to_run()
+        state.run = [run]
+        on_step(run)
+        run.status = StepStatus.RUNNING
+        on_step(run)
+        log("== 1/1 Video (x264)")
         log("[x264] [ 50.0%] 1/2 frames")
+        run.log("[x264] [ 50.0%] 1/2 frames")  # as run_steps keeps a step's tail
         progress(StepProgress(0, 1, step, 0.5, 0.5))
         if self.block:
             while not cancel.cancelled:
                 time.sleep(0.01)
+            run.status = StepStatus.CANCELLED
+            on_step(run)
             state.status, state.error = JobStatus.CANCELLED, "Cancelled"
             return JobResult(plan, JobStatus.CANCELLED, error="Cancelled")
         state.steps["video"] = StepRecord("video", "abc")
         on_record(state.steps["video"])
+        run.status, run.exit_code = StepStatus.DONE, 0
+        on_step(run)
         out = spec.output_dir / spec.inputs.source.name
         state.status, state.output = JobStatus.DONE, out
         return JobResult(plan, JobStatus.DONE, out)
@@ -152,17 +163,26 @@ def test_queue_runs_jobs_and_streams_events(tmp_path):
         with client.websocket_connect("/api/events") as ws:
             assert ws.receive_json()["type"] == "hello"
             assert client.post("/api/queue/start").json()["running"] in (True, False)
-            seen = set()
+            seen, events = set(), []
             end = time.monotonic() + 5
-            while not {"progress", "log"} <= seen and time.monotonic() < end:
-                seen.add(ws.receive_json()["type"])
-            assert {"progress", "log"} <= seen
+            while not {"progress", "log", "step"} <= seen and time.monotonic() < end:
+                events.append(ws.receive_json())
+                seen.add(events[-1]["type"])
+            assert {"progress", "log", "step"} <= seen
+            step_event = next(ev for ev in events if ev["type"] == "step")
+            assert step_event["step"]["id"] == "video" and "tail" not in step_event["step"]
+            assert (step_event["index"], step_event["total"], step_event["step"]["status"]) == (0, 1, "pending")
+            tool_line = next(ev for ev in events if ev["type"] == "log" and ev["line"].startswith("[x264]"))
+            assert tool_line["step"] == "video"
         for i in ids:
             job = wait_for(client, i, "done")
             assert job["steps"]["video"]["fingerprint"] == "abc"
         assert len(records) == 2
         log = client.get(f"/api/jobs/{ids[0]}/log").json()["lines"]
         assert "[x264] [ 50.0%] 1/2 frames" in log
+        (step,) = client.get(f"/api/jobs/{ids[0]}/steps").json()
+        assert (step["status"], step["command"], step["exit_code"]) == ("done", "x264 --crf 18", 0)
+        assert step["lines"] == ["[x264] [ 50.0%] 1/2 frames"] and not step["partial"]  # not the header
         assert (tmp_path / "src" / "Show.S01E01.mkv_tmp" / "videoforge.log").is_file()
 
         # Editing a finished job clears its outcome (but keeps its finished steps).
@@ -202,6 +222,9 @@ def test_restart_requeues_an_interrupted_job(tmp_path):
         assert "Interrupted" in job["issue"]
         client.post("/api/queue/start")
         wait_for(client, job_id, "done")
+    with make_client(tmp_path) as client:  # after a restart the steps come from the saved state
+        (step,) = client.get(f"/api/jobs/{job_id}/steps").json()
+        assert step["status"] == "done" and step["lines"] == ["[x264] [ 50.0%] 1/2 frames"]
 
 
 def test_folder_browser(tmp_path):

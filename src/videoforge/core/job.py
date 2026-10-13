@@ -94,9 +94,40 @@ class StepRecord:
     seconds: float = 0.0
 
 
+class StepStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    REUSED = "reused"  # done in an earlier run, skipped
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+STEP_TAIL = 30  # output lines a StepRun keeps (persisted with the job; the full log is videoforge.log)
+
+
+@dataclass(slots=True)
+class StepRun:
+    """One step of the last run, as the job's Log tab shows it."""
+
+    id: str
+    label: str
+    command: str = ""  # the command line; "" = runs inside VideoForge
+    status: StepStatus = StepStatus.PENDING
+    exit_code: int | None = None
+    seconds: float = 0.0
+    error: str = ""
+    tail: list[str] = field(default_factory=list)  # its last output lines
+
+    def log(self, line: str) -> None:
+        self.tail.append(line)
+        del self.tail[:-STEP_TAIL]
+
+
 @dataclass(slots=True)
 class JobState:
     steps: dict[str, StepRecord] = field(default_factory=dict)
+    run: list[StepRun] = field(default_factory=list)  # the last run's steps, in order
     status: JobStatus | None = None  # of the last run
     output: Path | None = None
     issues: list[Issue] = field(default_factory=list)

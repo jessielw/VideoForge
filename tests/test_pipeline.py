@@ -16,7 +16,7 @@ from conftest import audio, plan_for, simulate_output, source, sub
 from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools
 from videoforge.core.execute import process
 from videoforge.core.execute.process import Cancelled, CancelToken, ToolError
-from videoforge.core.job import JobSpec, JobState, JobStatus
+from videoforge.core.job import JobSpec, JobState, JobStatus, StepStatus
 from videoforge.core.models import AudioAction, Issue, JobInputs, Layout, Plan, Severity, VideoInfo
 from videoforge.core.models import AudioCodec as C
 from videoforge.core.models import SubFormat as F
@@ -66,7 +66,8 @@ class FakeRunner:
         self.calls.append([list(a) for a in argvs])
         last = list(argvs[-1])
         if self.fail_on and self.fail_on in last[0]:
-            raise ToolError(f"{last[0]} exited with code 2")
+            log(f"[{Path(last[0]).stem}] Error: something broke")
+            raise ToolError(f"{last[0]} exited with code 2", 2)
         for flag in ("-o", "--output", "--stats"):
             if flag in last and last[last.index(flag) + 1] != os.devnull:
                 Path(last[last.index(flag) + 1]).write_bytes(b"out")
@@ -164,7 +165,60 @@ def test_cancel_is_reported(profile, tmp_path):
     def cancelled(*_):
         raise Cancelled()
 
-    assert run_plan(plan, tmp_path / "out", profile, APP, runner=cancelled).status is JobStatus.CANCELLED
+    state = JobState()
+    assert run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=cancelled).status is JobStatus.CANCELLED
+    assert [r.status for r in state.run] == [StepStatus.CANCELLED] + [StepStatus.PENDING] * 3
+
+
+# --- the per-step record the Log tab shows ---------------------------------------------
+
+
+def test_step_runs_record_each_step(profile, tmp_path):
+    plan = make_plan(tmp_path)
+    state, seen = JobState(), []
+    prober = lambda *_: simulate_output(plan)
+    on_step = lambda r: seen.append((r.id, r.status))
+    run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=FakeRunner(), prober=prober, on_step=on_step)
+    ids = ["audio.1", "audio.2", "mux", "validate"]
+    assert [r.id for r in state.run] == ids
+    assert seen[:4] == [(i, StepStatus.PENDING) for i in ids]  # the whole list first
+    assert seen[4:6] == [("audio.1", StepStatus.RUNNING), ("audio.1", StepStatus.DONE)]
+    assert all(r.status is StepStatus.DONE for r in state.run)
+    mux = state.run[2]
+    assert mux.command.startswith("mkvmerge") and " --output " in mux.command and mux.exit_code == 0
+    assert mux.tail == ["[mkvmerge] [ 50.0%] 1/2 frames"]  # its own lines, not the step header
+    assert state.run[-1].command == "" and state.run[-1].exit_code is None
+
+    run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=FakeRunner(), prober=prober)
+    assert [r.status for r in state.run] == [StepStatus.REUSED] * 3 + [StepStatus.DONE]
+
+
+def test_failed_step_is_named(profile, tmp_path):
+    plan = make_plan(tmp_path)
+    state = JobState()
+    result = run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=FakeRunner(fail_on="deezy"))
+    assert [r.status for r in state.run] == [StepStatus.DONE, StepStatus.FAILED, StepStatus.PENDING, StepStatus.PENDING]
+    failed = state.run[1]
+    assert failed.exit_code == 2 and "exited with code 2" in failed.error
+    assert failed.tail == ["[deezy] Error: something broke"]
+    assert result.error.startswith(f"Step 2/4 · {failed.label}: ") and "deezy" in result.error
+    assert state.error == result.error
+
+
+def test_failed_validation_is_the_last_step(profile, tmp_path):
+    plan = make_plan(tmp_path)
+    bad = simulate_output(plan)
+    bad.subs[0].title = "Wrong"
+    state = JobState()
+    run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=FakeRunner(), prober=lambda *_: bad)
+    v = state.run[-1]
+    assert v.status is StepStatus.FAILED and v.error and any(line.startswith("block:") for line in v.tail)
+
+    def broken_probe(*_):
+        raise ToolError("mkvmerge could not read the output")
+
+    result = run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=FakeRunner(), prober=broken_probe)
+    assert state.run[-1].status is StepStatus.FAILED and result.error.startswith("Step 4/4 · Validate: mkvmerge")
 
 
 def test_video_steps_two_pass(profile, tmp_path):
@@ -276,6 +330,23 @@ def test_process_run_pipe(tmp_path):
     consumer = py(f"import sys; open(r'{out}', 'wb').write(sys.stdin.buffer.read())")
     process.run([producer, consumer], lambda _l: None)
     assert out.read_bytes() == b"x" * 300000
+
+
+def test_process_run_pipe_blames_the_consumer():
+    """The consumer quits on bad input; the producer then fails writing: the consumer leads the error."""
+    producer = py("import sys\nfor _ in range(100): sys.stdout.buffer.write(b'x' * 65536); sys.stdout.flush()")
+    consumer = py("import sys; print('unknown option -- bogus'); sys.exit(4)")
+    with pytest.raises(ToolError) as e:
+        process.run([producer, consumer], lambda _l: None)
+    assert e.value.returncode == 4
+    assert str(e.value).startswith(f"{Path(consumer[0]).stem} exited with code 4:\nunknown option -- bogus")
+    assert "\n" + Path(producer[0]).stem + " exited with code" in str(e.value)  # the producer's failure follows
+
+
+def test_process_run_negative_exit_code():
+    with pytest.raises(ToolError) as e:
+        process.run([py("import os; os._exit(-1)")], lambda _l: None)
+    assert e.value.returncode == -1 and "code -1" in str(e.value)
 
 
 def test_process_run_cancel():
