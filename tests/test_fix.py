@@ -80,7 +80,7 @@ def test_drop_reorder_or_add_is_a_remux():
     assert "--no-subtitles" in argv  # the old SRT is dropped
     assert argv.index("R.mkv") < argv.index("new.en.srt")
     i = argv.index("new.en.srt")
-    assert argv[i - 10 : i - 6] == ["--language", "0:en", "--track-name", "0:English"]  # its own options precede it
+    assert argv[i - 14 : i - 10] == ["--language", "0:en", "--track-name", "0:English"]  # its own options precede it
     assert argv[-2:] == ["--track-order", "0:0,0:1,0:2,1:0"]
 
 
@@ -139,6 +139,8 @@ def test_in_place_edit_on_a_real_file(release):
     wanted.tracks[2].default = False
     wanted.tracks[3].forced = True
     wanted.tracks[3].hearing_impaired = True
+    wanted.tracks[1].original = True
+    wanted.tracks[2].commentary = True
     lines = []
     result = apply_fix(current, wanted, TOOLS, log=lines.append)
     assert result.method is FixMethod.IN_PLACE

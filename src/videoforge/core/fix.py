@@ -1,7 +1,7 @@
 """Fix mode: correct a finished MKV the cheapest way.
 
 Header-only changes (segment title, track names, languages, default / forced /
-hearing-impaired flags) are written in place by mkvpropedit, in seconds.
+hearing-impaired / commentary / original flags) are written in place by mkvpropedit, in seconds.
 Dropping, reordering or adding tracks (e.g. a replacement SRT) is a remux:
 mkvmerge with the existing file as its input, so nothing is re-encoded. The remux
 is written next to the file and swapped in only once it is complete. Works on any
@@ -49,6 +49,8 @@ class HeaderTrack:
     default: bool = False
     forced: bool = False
     hearing_impaired: bool = False
+    commentary: bool = False
+    original: bool = False
     keep: bool = True
     path: Path | None = None  # an added file (a replacement SRT); muxed as its own input
 
@@ -98,6 +100,8 @@ def read_state(path: Path, mkvmerge: str) -> FixState:
                 default=bool(p.get("default_track")),
                 forced=bool(p.get("forced_track")),
                 hearing_impaired=bool(p.get("flag_hearing_impaired")),
+                commentary=bool(p.get("flag_commentary")),
+                original=bool(p.get("flag_original")),
             )
         )
     return FixState(path, title, tracks)
@@ -132,6 +136,8 @@ def propedit_command(tool: str, current: FixState, wanted: FixState) -> list[str
             ("flag-default", w.default, c.default),
             ("flag-forced", w.forced, c.forced),
             ("flag-hearing-impaired", w.hearing_impaired, c.hearing_impaired),
+            ("flag-commentary", w.commentary, c.commentary),
+            ("flag-original", w.original, c.original),
         ):
             if a != b:
                 sets += ["--set", f"{prop}={_flag(a)}"]
@@ -147,6 +153,8 @@ def _track_options(tid: int, t: HeaderTrack) -> list[str]:
         "--default-track-flag", f"{tid}:{_flag(t.default)}",
         "--forced-display-flag", f"{tid}:{_flag(t.forced)}",
         "--hearing-impaired-flag", f"{tid}:{_flag(t.hearing_impaired)}",
+        "--commentary-flag", f"{tid}:{_flag(t.commentary)}",
+        "--original-flag", f"{tid}:{_flag(t.original)}",
     ]  # fmt: skip
 
 
@@ -244,7 +252,8 @@ def suggest(
             continue
         if a.action is not AudioAction.COPY:
             notes.append(f"{t.label}: the profile would encode it ({a.action.value}); fix mode keeps it as it is")
-        t.name, t.language, t.default, t.forced = a.title, a.language, a.default, False
+        t.name, t.language, t.default, t.forced = a.title, a.language, a.default, a.forced
+        t.hearing_impaired, t.commentary, t.original = a.hearing_impaired, a.commentary, a.original
         order.append(t)
     for sp in plan.subs:
         t = by_id.get(sp.source.id)
@@ -252,6 +261,7 @@ def suggest(
             continue
         t.name, t.language, t.default = sp.title, sp.language, sp.default
         t.forced, t.hearing_impaired = sp.forced, sp.hearing_impaired
+        t.commentary, t.original = sp.commentary, sp.original
         order.append(t)
     placed = {id(t) for t in order}
     for t in by_id.values():
