@@ -4,9 +4,10 @@
   import { api, type SpecChanges } from '../lib/api'
   import { basename, SEVERITY_TONE, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { app } from '../lib/state.svelte'
-  import type { CommandStep, EncoderSettings, JobDetail } from '../lib/types'
+  import type { CommandStep, JobDetail } from '../lib/types'
   import EncoderPanel from './EncoderPanel.svelte'
   import Icon from './Icon.svelte'
+  import PresetMenu from './PresetMenu.svelte'
   import FileBrowser from './FileBrowser.svelte'
   import TrackEditor from './TrackEditor.svelte'
   import TracksTab from './TracksTab.svelte'
@@ -52,11 +53,6 @@
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     }
-  }
-
-  async function resetEncoder() {
-    const p = app.profiles.find(x => x.id === job?.profile)
-    if (p) await save({ encoder: structuredClone($state.snapshot(p.defaults.encoder)) as EncoderSettings })
   }
 
   const editable = $derived(!!job && !['queued', 'running'].includes(job.status))
@@ -123,9 +119,9 @@
         {/if}
       {:else if tab === 'encoder'}
         <div class="grid max-w-5xl gap-6 xl:grid-cols-[1fr_1fr]">
-          <div>
+          <div class="space-y-4">
+            <PresetMenu kind="encoder" profile={job.profile} current={job.spec.encoder} disabled={!editable} apply={encoder => save({ encoder })} />
             <EncoderPanel value={job.spec.encoder} disabled={!editable} onchange={encoder => save({ encoder })} />
-            <button class="btn mt-4" disabled={!editable} onclick={resetEncoder}><Icon name="refresh" />Profile defaults</button>
           </div>
           <div class="space-y-2">
             <span class="label">Commands this job runs</span>

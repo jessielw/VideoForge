@@ -280,6 +280,26 @@ def test_settings_page_config(tmp_path):
         assert {t["name"]: t for t in reset["tools"]}["x264"]["path"] == "x264" and not reset["roots_custom"]
 
 
+def test_presets(tmp_path):
+    with make_client(tmp_path) as client:
+        assert client.get("/api/presets").json() == {"video": [], "encoder": []}
+        saved = client.put("/api/presets/encoder/Fast x265", json={"encoder": "x265", "crf": 20, "preset": "fast"}).json()
+        (enc,) = saved["encoder"]
+        assert enc["name"] == "Fast x265" and enc["data"]["crf"] == 20 and enc["data"]["depth"] == 8  # filled in
+        video = {"source_filter": "lsmash", "crop": {"left": 2, "top": 0, "right": 0, "bottom": 0},
+                 "resize": {"width": 1280, "height": 720}, "filters": "clip = clip"}
+        (vid,) = client.put("/api/presets/video/720p", json=video).json()["video"]
+        assert "crop" not in vid["data"] and vid["data"]["resize"]["kernel"] == "Spline36"
+
+        assert client.put("/api/presets/audio/x", json={}).status_code == 404
+        assert client.put("/api/presets/encoder/%20", json={}).status_code == 422
+        assert client.put("/api/presets/encoder/bad", json={"rate_control": "nope"}).status_code == 422
+
+    with make_client(tmp_path) as client:  # kept across a restart
+        assert [p["name"] for p in client.get("/api/presets").json()["encoder"]] == ["Fast x265"]
+        assert client.delete("/api/presets/encoder/Fast x265").json()["encoder"] == []
+
+
 def test_folder_browser(tmp_path):
     make_files(tmp_path)
     with make_client(tmp_path) as client:

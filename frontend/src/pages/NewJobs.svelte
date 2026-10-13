@@ -20,6 +20,11 @@
   let matching = $state(false)
   let error = $state('')
   let adding = $state(false)
+  // Indexes into the preset choices; 0 is the profile's defaults (sent as nothing).
+  let videoPreset = $state(0)
+  let encoderPreset = $state(0)
+  const videoChoices = $derived(app.presetChoices('video', profile))
+  const encoderChoices = $derived(app.presetChoices('encoder', profile))
 
   const takesSubs = $derived(app.profiles.find(p => p.id === profile)?.external_subtitles ?? true)
 
@@ -69,7 +74,13 @@
     adding = true
     error = ''
     try {
-      const r = await api.addJobs({ ...slots(), original_language: language || null, output_dir: output[0] ?? null })
+      const r = await api.addJobs({
+        ...slots(),
+        original_language: language || null,
+        output_dir: output[0] ?? null,
+        video: videoPreset ? $state.snapshot(videoChoices[videoPreset]?.data) : undefined,
+        encoder: encoderPreset ? $state.snapshot(encoderChoices[encoderPreset]?.data) : undefined,
+      })
       for (const name of r.skipped) app.addLog(`Skipped ${name}: it is queued or running`)
       for (const p of r.unmatched) app.addLog(`Not matched to any source: ${p}`)
       sources = encodes = subtitles = chapters = []
@@ -104,6 +115,21 @@
         <datalist id="languages">
           {#each LANGUAGES as [tag, name] (tag)}<option value={tag}>{name}</option>{/each}
         </datalist>
+      </div>
+      <div class="text-sm text-muted">Presets</div>
+      <div class="flex flex-wrap items-center gap-3 text-sm text-muted">
+        <label class="flex items-center gap-2">
+          Video
+          <select class="field" bind:value={videoPreset}>
+            {#each videoChoices as c, i (i)}<option value={i}>{c.name}</option>{/each}
+          </select>
+        </label>
+        <label class="flex items-center gap-2">
+          Encoder
+          <select class="field" bind:value={encoderPreset}>
+            {#each encoderChoices as c, i (i)}<option value={i}>{c.name}</option>{/each}
+          </select>
+        </label>
       </div>
     </div>
     <PathSlot label="Sources" hint="Remux MKVs, or a folder of them" bind:paths={sources} extensions={['.mkv']} />

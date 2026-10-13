@@ -264,6 +264,18 @@ export interface Profile {
   default: boolean
 }
 
+// A user preset (the built-in ones are each profile's defaults). Video presets have no crop.
+export type VideoPresetData = Omit<VideoSettings, 'crop'>
+export interface Preset<T> {
+  name: string
+  data: T
+}
+export interface Presets {
+  video: Preset<VideoPresetData>[]
+  encoder: Preset<EncoderSettings>[]
+}
+export type PresetKind = keyof Presets
+
 export interface QueueState {
   running: boolean
   current: string | null

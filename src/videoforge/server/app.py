@@ -23,7 +23,7 @@ from videoforge.core.profile import Profile
 from videoforge.core.video import vs as vsx
 from videoforge.server.events import EventHub
 from videoforge.server.queue import JobQueue, Services
-from videoforge.server.routes import config, jobs, queue, system, video
+from videoforge.server.routes import config, jobs, presets, queue, system, video
 from videoforge.server.settings import SavedSettings, ServerSettings
 from videoforge.server.store import Store
 
@@ -83,7 +83,7 @@ def create_app(
     app.state.clips = vsx.ClipCache()
     app.state.profile_ids = ids
     app.state.default_profile = default
-    for module in (jobs, queue, video, system, config):
+    for module in (jobs, queue, video, system, config, presets):
         app.include_router(module.router)
     _mount_frontend(app, settings)
     return app

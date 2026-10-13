@@ -5,16 +5,20 @@ import type {
   ConfigState,
   Crop,
   DirListing,
+  EncoderSettings,
   JobDetail,
   JobSpec,
   JobSummary,
   MatchResult,
+  PresetKind,
+  Presets,
   Profile,
   QueueState,
   StepOutput,
   ToolCheck,
   ScriptCheck,
   ScriptParts,
+  VideoSettings,
 } from './types'
 
 export class ApiError extends Error {
@@ -61,6 +65,10 @@ export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides
 
 export const api = {
   profiles: () => get<Profile[]>('/api/profiles'),
+  presets: () => get<Presets>('/api/presets'),
+  savePreset: (kind: PresetKind, name: string, data: unknown) =>
+    request<Presets>('PUT', `/api/presets/${kind}/${encodeURIComponent(name)}`, data),
+  deletePreset: (kind: PresetKind, name: string) => request<Presets>('DELETE', `/api/presets/${kind}/${encodeURIComponent(name)}`),
   config: () => get<ConfigState>('/api/config'),
   saveConfig: (changes: { tools?: Record<string, string | null>; roots?: string[] | null; profile?: string | null }) =>
     request<ConfigState>('PUT', '/api/config', changes),
@@ -75,7 +83,14 @@ export const api = {
     get<DirListing>(`/api/fs/list?path=${encodeURIComponent(path)}&extensions=${encodeURIComponent(extensions.join(','))}`),
 
   match: (slots: InputSlots) => post<MatchResult>('/api/match', slots),
-  addJobs: (body: InputSlots & { original_language: string | null; output_dir: string | null }) =>
+  addJobs: (
+    body: InputSlots & {
+      original_language: string | null
+      output_dir: string | null
+      video?: Partial<VideoSettings>
+      encoder?: EncoderSettings
+    },
+  ) =>
     post<{ added: string[]; skipped: string[]; unmatched: string[] }>('/api/jobs', body),
 
   jobs: () => get<JobSummary[]>('/api/jobs'),

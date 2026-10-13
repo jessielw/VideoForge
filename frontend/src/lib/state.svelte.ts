@@ -1,6 +1,6 @@
 // App-wide state, kept current by the server's event WebSocket (/api/events).
 import { api } from './api'
-import type { JobSummary, Profile, QueueState, StepRun } from './types'
+import type { EncoderSettings, JobSummary, Preset, PresetKind, Presets, Profile, QueueState, StepRun, VideoPresetData } from './types'
 
 const MAX_LOG = 20000
 
@@ -10,6 +10,8 @@ export interface LogLine {
   step: string | null // the step it came from (its header and job messages: null)
   line: string
 }
+
+export type PresetData<K extends PresetKind> = K extends 'video' ? VideoPresetData : EncoderSettings
 
 class AppState {
   jobs = $state<JobSummary[]>([])
@@ -24,6 +26,7 @@ class AppState {
   runStarts = $state<Record<string, number>>({}) // logSeq when each job's latest run began
   logSeq = 0
   missingTools = $state<Record<string, string[]>>({})
+  presets = $state<Presets>({ video: [], encoder: [] })
 
   #socket: WebSocket | null = null
   #refreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -38,6 +41,21 @@ class AppState {
     }
   }
 
+  async loadPresets(): Promise<void> {
+    try {
+      this.presets = await api.presets()
+    } catch {
+      /* only the profiles' defaults are offered */
+    }
+  }
+
+  // A kind's presets for a profile: its defaults first (built in), then the user's.
+  presetChoices<K extends PresetKind>(kind: K, profileId: string): (Preset<PresetData<K>> & { builtin: boolean })[] {
+    const p = this.profiles.find(x => x.id === profileId)
+    const own = p ? [{ name: `${p.name} defaults`, data: p.defaults[kind] as PresetData<K>, builtin: true }] : []
+    return [...own, ...(this.presets[kind] as Preset<PresetData<K>>[]).map(x => ({ ...x, builtin: false }))]
+  }
+
   get defaultProfile(): Profile | undefined {
     return this.profiles.find(p => p.default) ?? this.profiles[0]
   }
@@ -50,6 +68,7 @@ class AppState {
   async start(): Promise<void> {
     this.profiles = await api.profiles()
     this.loadEncoders()
+    this.loadPresets()
     await this.refreshJobs()
     this.connect()
   }

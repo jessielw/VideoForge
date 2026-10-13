@@ -10,6 +10,7 @@
   import type { ClipInfo, Crop, JobDetail, ScriptCheck, ScriptParts, SourceFilter, VideoSettings } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import Icon from './Icon.svelte'
+  import PresetMenu from './PresetMenu.svelte'
   import ScriptEditor from './ScriptEditor.svelte'
 
   let {
@@ -272,6 +273,16 @@
     </section>
   {:else}
     <aside class="w-72 shrink-0 space-y-5 overflow-auto pr-1">
+      <PresetMenu
+        kind="video"
+        profile={job.profile}
+        current={video}
+        disabled={!editable}
+        apply={data => {
+          video = { ...data, crop: video.crop }
+          commit(0)
+        }}
+      />
       <fieldset disabled={!editable} class="space-y-5">
         <section class="space-y-2">
           <div class="flex items-center justify-between">
