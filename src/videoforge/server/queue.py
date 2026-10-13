@@ -12,7 +12,7 @@ import threading
 from collections import deque
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
@@ -32,7 +32,7 @@ from videoforge.core.job import (
     plan_spec,
     probe_spec,
 )
-from videoforge.core.jobs import ProbedInputs
+from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import JobInputs, Overrides, Plan, Severity
 from videoforge.core.pipeline.run import run_job
 from videoforge.core.pipeline.steps import StepProgress
@@ -290,12 +290,24 @@ class JobQueue:
         output_dir: Path | None = None,
         qpf: bool | None = None,
         profile: str | None = None,
+        inputs: JobInputs | None = None,
     ) -> Entry:
+        """Change a job's settings and replan. New inputs (added subtitle files, chapters) are read
+        at once; a different encode means probing again."""
         e = self.get(job_id)
+        reprobe = False
         with self._lock:
             if e.busy:
                 raise Busy(f"{e.spec.name} is queued or running")
             s = e.spec
+            if inputs is not None and inputs != s.inputs:
+                if inputs.source != s.inputs.source:
+                    raise ValueError("A job's source can't change")
+                reprobe = e.probed is None or inputs.encode != s.inputs.encode
+                s.inputs = inputs
+                if not reprobe:
+                    ext, issues = external_tracks(e.probed.source, inputs.subtitles)
+                    e.probed = replace(e.probed, external_subs=ext, issues=issues)
             if profile is not None and profile != s.profile:
                 self.profiles(profile)  # unknown -> KeyError
                 s.profile = profile
@@ -313,6 +325,8 @@ class JobQueue:
             self._replan(e)
             self._save(e)
         self._changed(e)
+        if reprobe:
+            self.probe([e.id])
         return e
 
     def remove(self, ids: Iterable[str]) -> list[str]:

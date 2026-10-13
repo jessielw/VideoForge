@@ -154,6 +154,41 @@ def test_add_inspect_and_edit(tmp_path):
         assert manual["id"] == "manual" and manual["default"] and manual["defaults"]["encoder"]["crf"] == 18
 
 
+def test_files_added_to_a_job(tmp_path):
+    make_files(tmp_path)
+    extra = tmp_path / "extra"
+    extra.mkdir()
+    (extra / "Signs.ass").write_text("[Script Info]\n", encoding="utf-8")  # no language in the name
+    (extra / "Show.fr.srt").write_text("1\n00:00:01,000 --> 00:00:02,000\nSalut\n", encoding="utf-8")
+    (extra / "notes.txt").write_text("x", encoding="utf-8")
+    chapters = tmp_path / "chapters.xml"
+    chapters.write_text("<Chapters/>", encoding="utf-8")
+    with make_client(tmp_path) as client:
+        (job_id,) = add(client, tmp_path)
+        job = wait_for(client, job_id, "ready", "warn")
+        en = job["spec"]["inputs"]["subtitles"]
+        subs = en + [str(extra)]  # a folder adds its subtitle files
+
+        job = client.patch(f"/api/jobs/{job_id}", json={"inputs": {"subtitles": subs, "chapters": str(chapters)}}).json()
+        assert job["status"] in ("ready", "warn")  # read at once, no re-probe
+        added = [s for s in job["tracks"]["subs"] if s["external_path"]]
+        assert [(Path(s["external_path"]).name, s["format"], s["language"]) for s in added] == [
+            ("Show.S01E01.en.srt", "srt", "en"), ("Show.fr.srt", "srt", "fr"), ("Signs.ass", "ass", "und")]
+        assert job["plan"]["chapters_path"] == str(chapters)
+        assert [i["code"] for i in job["issues"]] == ["subs.language"]  # the manual profile asks for a language
+
+        key = next(s["key"] for s in added if s["language"] == "und")
+        overrides = job["spec"]["overrides"] | {"tracks": {key: {"language": "en", "flags": {"forced": True}}}}
+        job = client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides}).json()
+        assert not job["issues"] and ("en", True) in [(s["language"], s["forced"]) for s in job["plan"]["subs"]]
+
+        job = client.patch(f"/api/jobs/{job_id}", json={"inputs": {"subtitles": en, "chapters": None}}).json()
+        assert len([s for s in job["tracks"]["subs"] if s["external_path"]]) == 1
+        assert job["plan"]["chapters_path"].endswith("chapters_chapters.txt")  # back to AutoQPF's
+        bad = client.patch(f"/api/jobs/{job_id}", json={"inputs": {"subtitles": [str(extra / "gone.srt")]}})
+        assert bad.status_code == 422
+
+
 def test_queue_runs_jobs_and_streams_events(tmp_path):
     make_files(tmp_path, "S01E01", "S01E02")
     records: list = []

@@ -137,7 +137,7 @@
         </div>
       {:else if tab === 'tracks'}
         {#if app.profiles.find(p => p.id === job?.profile)?.track_editor}
-          <TrackEditor {job} {editable} save={overrides => save({ overrides })} />
+          <TrackEditor {job} {editable} save={overrides => save({ overrides })} saveInputs={inputs => save({ inputs })} />
         {:else}
           <TracksTab {job} {editable} save={overrides => save({ overrides })} />
         {/if}

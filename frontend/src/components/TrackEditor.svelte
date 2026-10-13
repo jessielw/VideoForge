@@ -3,16 +3,40 @@
   // and subtitle track in output order. Drag a track by its handle (or use the arrows) to reorder,
   // untick it to leave it out, edit its title, language and flags, and copy or encode each audio
   // track. Every change saves and replans; each track shows what will be written.
+  // Files can be added to the job here (subtitles, chapters) and removed again.
+  import type { InputChanges } from '../lib/api'
   import { emptyOverride, isEmpty, LANGUAGES } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type { AudioAction, AudioEncodeInfo, AudioTrack, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
+  import FileBrowser from './FileBrowser.svelte'
   import Icon from './Icon.svelte'
 
   let {
     job,
     save,
+    saveInputs,
     editable,
-  }: { job: JobDetail; save: (o: Overrides) => Promise<void>; editable: boolean } = $props()
+  }: {
+    job: JobDetail
+    save: (o: Overrides) => Promise<void>
+    saveInputs: (inputs: InputChanges) => Promise<void>
+    editable: boolean
+  } = $props()
+
+  // --- the job's files ---
+  const SUB_EXTENSIONS = ['.srt', '.ass', '.ssa', '.sup', '.idx']
+  const CHAPTER_EXTENSIONS = ['.xml', '.txt']
+  let browsing = $state<'files' | 'chapters' | null>(null)
+  const sourceDir = $derived(job.spec.inputs.source.replace(/[\\/][^\\/]*$/, ''))
+  const sameFile = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+
+  function addFiles(paths: string[]) {
+    const subs = job.spec.inputs.subtitles
+    const more = paths.filter(p => !subs.some(s => sameFile(s, p)))
+    if (more.length) saveInputs({ subtitles: [...subs, ...more] })
+  }
+
+  const removeFile = (path: string) => saveInputs({ subtitles: job.spec.inputs.subtitles.filter(s => !sameFile(s, path)) })
 
   type Kind = 'audio' | 'sub'
   type Track = AudioTrack | SubTrack
@@ -216,6 +240,13 @@
       <span class="min-w-0 flex-1 truncate text-sm {off ? 'text-muted line-through' : ''}" title={t.title}>
         {sourceLabel(t)} <span class="text-muted">· {t.language}{t.title ? ` · ${t.title}` : ''}</span>
       </span>
+      {#if !isAudio(t) && t.external_path}
+        {@const path = t.external_path}
+        <span class="rounded bg-raised px-1.5 text-xs text-muted" title={path}>added</span>
+        <button class="btn-ghost px-1 hover:text-bad" onclick={() => removeFile(path)} title="Remove this file from the job">
+          <Icon name="x" size={14} />
+        </button>
+      {/if}
       <button class="btn-ghost px-1" disabled={i === 0} onclick={() => move(kind, t.key, i - 1)} aria-label="Move up">
         <Icon name="up" size={14} />
       </button>
@@ -317,7 +348,10 @@
         {#each LANGUAGES as [tag, name] (tag)}<option value={tag}>{name}</option>{/each}
       </datalist>
       <span class="text-xs text-muted">Drag a track by its handle to reorder; every change saves.</span>
-      <button class="btn ml-auto" onclick={reset}><Icon name="refresh" />Reset tracks</button>
+      <button class="btn ml-auto" onclick={() => (browsing = 'files')} title="Add subtitle files to this job">
+        <Icon name="new" />Add files…
+      </button>
+      <button class="btn" onclick={reset}><Icon name="refresh" />Reset tracks</button>
     </div>
 
     {#each [{ kind: 'audio' as Kind, rows: audioRows, icon: 'audio' as const, title: 'Audio' }, { kind: 'sub' as Kind, rows: subRows, icon: 'sub' as const, title: 'Subtitles' }] as section (section.kind)}
@@ -340,9 +374,35 @@
       </section>
     {/each}
 
-    <section class="text-sm text-muted">
-      <Icon name="chapters" class="inline text-accent" />
-      Chapters: {plan.chapters_path ? basename(plan.chapters_path) : tracks.has_chapters ? 'from the source' : 'none'}
+    <section class="flex flex-wrap items-center gap-2 text-sm text-muted">
+      <Icon name="chapters" class="text-accent" />
+      Chapters: {job.spec.inputs.chapters
+        ? basename(job.spec.inputs.chapters)
+        : plan.chapters_path
+          ? `${basename(plan.chapters_path)} (AutoQPF)`
+          : tracks.has_chapters
+            ? 'from the source'
+            : 'none'}
+      <button class="btn-ghost text-xs" onclick={() => (browsing = 'chapters')}>
+        {job.spec.inputs.chapters ? 'Change…' : 'Use a file…'}
+      </button>
+      {#if job.spec.inputs.chapters}
+        <button class="btn-ghost text-xs hover:text-bad" onclick={() => saveInputs({ chapters: null })}>Remove</button>
+      {/if}
     </section>
   </fieldset>
+{/if}
+
+{#if browsing}
+  <FileBrowser
+    title={browsing === 'files' ? 'Add subtitle files' : 'Chapters file'}
+    extensions={browsing === 'files' ? SUB_EXTENSIONS : CHAPTER_EXTENSIONS}
+    start={sourceDir}
+    onpick={paths => {
+      if (browsing === 'files') addFiles(paths)
+      else if (paths[0]) saveInputs({ chapters: paths[0] })
+      browsing = null
+    }}
+    onclose={() => (browsing = null)}
+  />
 {/if}

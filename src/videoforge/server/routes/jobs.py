@@ -8,8 +8,8 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Request
 
 from videoforge.core.execute.process import ToolError
-from videoforge.core.models import Overrides
-from videoforge.core.pairing import match_files, slot_files
+from videoforge.core.models import JobInputs, Overrides
+from videoforge.core.pairing import SUB_FORMATS, match_files, slot_files
 from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
@@ -104,12 +104,47 @@ def _changes(body: dict[str, Any]) -> dict[str, Any]:
     return changes
 
 
+def _files(paths: list[str], suffixes: set[str]) -> list[Path]:
+    """Files as given, a folder as its files with these suffixes (by name); each must exist."""
+    out: list[Path] = []
+    for p in map(Path, paths):
+        if p.is_dir():
+            out += sorted((f for f in p.iterdir() if f.is_file() and f.suffix.lower() in suffixes), key=lambda f: f.name.lower())
+        elif p.is_file():
+            out.append(p)
+        else:
+            raise HTTPException(422, f"No file {p}")
+    return list(dict.fromkeys(out))
+
+
+def _inputs(current: JobInputs, body: dict[str, Any]) -> JobInputs:
+    """The job's inputs with any of subtitles (the whole list), chapters, encode (a path or null) replaced."""
+    def one(key: str, old: Path | None) -> Path | None:
+        if key not in body:
+            return old
+        if not body[key]:
+            return None
+        path = Path(body[key])
+        if not path.is_file():
+            raise HTTPException(422, f"No file {path}")
+        return path
+
+    subs = _files(body["subtitles"], set(SUB_FORMATS)) if "subtitles" in body else current.subtitles
+    return JobInputs(current.source, encode=one("encode", current.encode), subtitles=subs,
+                     chapters=one("chapters", current.chapters), encode_state=current.encode_state)
+
+
 @router.patch("/jobs/{job_id}")
 def update_job(request: Request, job_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """Change a job: any of video, encoder, overrides, output_dir, qpf, profile, and inputs
+    ({subtitles?: [paths or folders], chapters?: path | null, encode?: path | null})."""
     q = queue_of(request)
-    _entry(q, job_id)
+    e = _entry(q, job_id)
     try:
-        e = q.update(job_id, **_changes(body))
+        changes = _changes(body)
+        if body.get("inputs") is not None:
+            changes["inputs"] = _inputs(e.spec.inputs, body["inputs"])
+        e = q.update(job_id, **changes)
     except Busy as ex:
         raise HTTPException(409, str(ex)) from None
     except (KeyError, ValueError, TypeError) as ex:

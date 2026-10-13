@@ -62,7 +62,16 @@ export interface InputSlots {
   profile: string
 }
 
-export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides' | 'output_dir' | 'qpf' | 'profile'>>
+// A job's files, each replaced when given (a folder adds its files of that kind).
+export interface InputChanges {
+  subtitles?: string[]
+  chapters?: string | null
+  encode?: string | null
+}
+
+export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides' | 'output_dir' | 'qpf' | 'profile'>> & {
+  inputs?: InputChanges
+}
 
 export const api = {
   profiles: () => get<Profile[]>('/api/profiles'),

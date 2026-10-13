@@ -272,8 +272,13 @@ def srt_entry_count(path: Path) -> int | None:
         return None
 
 
-def external_sub_track(path: Path, source_stem: str, index: int) -> SubTrack | None:
-    """Turn an external SRT into a SubTrack, or None if no language can be found.
+SUB_FORMATS = {".srt": SubFormat.SRT, ".ass": SubFormat.ASS, ".ssa": SubFormat.ASS, ".sup": SubFormat.PGS,
+               ".idx": SubFormat.VOBSUB}
+
+
+def external_sub_track(path: Path, source_stem: str, index: int, *, keep_unknown: bool = False) -> SubTrack | None:
+    """Turn an external subtitle file (SRT, ASS/SSA, SUP, IDX) into a SubTrack, or None if no
+    language can be found (with keep_unknown, it is kept as "und" for the user to set).
 
     Language comes from the last language-like token ("en", "[eng]", "es-419");
     forced/sdh/dub words become tags; "_trackN_" (gMKVExtract) links the file
@@ -284,17 +289,20 @@ def external_sub_track(path: Path, source_stem: str, index: int) -> SubTrack | N
     tags = frozenset(_TAG_ALIASES[w] for w in words if w in _TAG_ALIASES)
     language = _language_with_region(stem) or _language_from_name(stem)
     if not language or language == "und":
-        return None
+        if not keep_unknown:
+            return None
+        language = "und"
     m = _TRACK_NO_RE.search(stem)
+    fmt = SUB_FORMATS.get(path.suffix.lower(), SubFormat.OTHER)
     return SubTrack(
         id=-1,
         index=1000 + index,  # sorts after source tracks when preferences tie
-        format=SubFormat.SRT,
+        format=fmt,
         language=language,
         title="",
         forced="forced" in tags,
         hearing_impaired="sdh" in tags,
-        element_count=srt_entry_count(path),
+        element_count=srt_entry_count(path) if fmt is SubFormat.SRT else None,
         external_path=path,
         extracted_from=int(m.group(1)) if m else None,
         tags=tags,

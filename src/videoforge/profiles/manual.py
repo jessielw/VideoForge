@@ -155,6 +155,9 @@ class ManualProfile(Profile):
         subs: list[PlannedSub] = []
         for t in sub_tracks:
             language, title, flags = _settings(t, overrides.tracks.get(track_key(t)))
+            if t.external_path is not None and language == "und":
+                issues.append(Issue(Severity.WARN, "subs.language",
+                                    f"{t.external_path.name} has no language: set it in the track editor"))
             subs.append(PlannedSub(source=t, slot="", language=language, title=title, **flags))
 
         orig = overrides.original_language or original_language or (audio[0].language if audio else "und")

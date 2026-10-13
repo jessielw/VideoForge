@@ -44,8 +44,10 @@ class ProbedInputs:
 
 
 def external_tracks(source: SourceInfo, paths: list[Path]) -> tuple[list[SubTrack], list[Issue]]:
-    """Parse external SRTs into tracks.
+    """Parse external subtitle files into tracks.
 
+    A file whose name has no language is kept as "und" with a WARN; plan_job drops it
+    unless the profile has a track editor (where the user sets the language).
     A file extracted from the source ("_trackN_") inherits that track's title and
     forced/SDH flags, so "English (ASS Foreign)" converted to SRT is still forced.
     """
@@ -54,12 +56,13 @@ def external_tracks(source: SourceInfo, paths: list[Path]) -> tuple[list[SubTrac
     stem = source.path.stem if source.path else source.name.rsplit(".", 1)[0]
     by_number = {s.number: s for s in source.subs if s.number is not None}
     for i, path in enumerate(paths):
-        track = external_sub_track(path, stem, i)
+        track = external_sub_track(path, stem, i, keep_unknown=True)
         if track is None:
+            continue
+        if track.language == "und":
             issues.append(
                 Issue(Severity.WARN, "subs.external_name", f"Ignored {path.name}: no language in the file name (e.g. .en.srt)")
             )
-            continue
         origin = by_number.get(track.extracted_from) if track.extracted_from else None
         if origin is not None:
             track = replace(
@@ -90,6 +93,10 @@ def plan_job(
     inputs = probed.inputs
     if not profile.external_subtitles and probed.external_subs:
         probed = replace(probed, external_subs=[])
+    elif profile.track_editor:  # the user sets a missing language there (the profile warns while it's unset)
+        probed = replace(probed, issues=[i for i in probed.issues if i.code != "subs.external_name"])
+    else:
+        probed = replace(probed, external_subs=[t for t in probed.external_subs if t.language != "und"])
     plan = profile.plan(probed, original_language, overrides or Overrides())
     plan.profile = profile.id
     plan.inputs = inputs
