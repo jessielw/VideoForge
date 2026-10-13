@@ -5,6 +5,9 @@ description = "Encode and mux job queue in the browser: VapourSynth, x264/x265, 
 authors = [
     { name = "jessielw", email = "jessielw4049@gmail.com" }
 ]
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "autoqpf>=0.2.5",

@@ -47,3 +47,7 @@ you exclude, reorder, retitle and flag tracks yourself.
 
 Other profiles (for example a release group's rules) are separate Python packages that register
 under the `videoforge.profiles` entry point group. See [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## License
+
+[MIT](LICENSE)
