@@ -121,3 +121,36 @@ def test_output_is_checked_against_the_plan():
     codes = [i.code for i in profile.validate_output(plan, out)]
     assert "plan.audio" in codes and "plan.subs_count" in codes and "plan.subs" in codes
     assert profile.validate_release(out) == []  # no group rules
+
+
+def test_ffmpeg_encodes_keep_the_layout_they_can_and_pick_bitrates():
+    tracks = [audio(C.TRUEHD, "7.1", index=0), audio(C.DTS_HD_MA, "5.0", index=1), audio(C.LPCM, "6.1", index=2),
+              audio(C.FLAC, "2.0", index=3), audio(C.TRUEHD, "7.1", index=4)]
+    plan = encoded(
+        tracks,
+        id_1=TrackOverride(action=AudioAction.FLAC),
+        id_2=TrackOverride(action=AudioAction.OPUS),
+        id_3=TrackOverride(action=AudioAction.AC3),
+        id_4=TrackOverride(action=AudioAction.AAC_FFMPEG),
+        id_5=TrackOverride(action=AudioAction.EAC3),
+    )
+    assert not plan.issues
+    got = [(a.action, a.out_codec, str(a.out_layout), a.bitrate_kbps) for a in plan.audio]
+    assert got == [
+        (AudioAction.FLAC, C.FLAC, "7.1", None),  # lossless: no bitrate
+        (AudioAction.OPUS, C.OPUS, "5.0", 384),  # kept as is; 5 channels take the 5.1 rate
+        (AudioAction.AC3, C.AC3, "5.1", 640),  # AC-3 tops out at 5.1
+        (AudioAction.AAC_FFMPEG, C.AAC, "2.0", 192),
+        (AudioAction.EAC3, C.EAC3, "5.1", 640),
+    ]
+
+
+def test_ffmpeg_encode_bitrates_are_checked():
+    stereo = [audio(C.FLAC, "2.0", index=0)]
+    ac3 = encoded(stereo, id_1=TrackOverride(action=AudioAction.AC3, bitrate_kbps=700))
+    assert [i.code for i in ac3.issues] == ["audio.bitrate"] and ac3.blocked
+    opus = encoded(stereo, id_1=TrackOverride(action=AudioAction.OPUS, bitrate_kbps=600))
+    assert "256 kb/s per channel" in opus.issues[0].message
+    assert not encoded(stereo, id_1=TrackOverride(action=AudioAction.AC3, bitrate_kbps=192)).issues
+    flac = encoded(stereo, id_1=TrackOverride(action=AudioAction.FLAC, bitrate_kbps=999))  # ignored
+    assert not flac.issues and flac.audio[0].bitrate_kbps is None

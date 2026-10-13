@@ -233,16 +233,17 @@ def test_missing_encoder_tools_block_until_set(tmp_path):
     with make_client(tmp_path) as client:  # APP's qaac64/ffmpeg/dee... don't exist here
         (job_id,) = add(client, tmp_path)
         wait_for(client, job_id, "ready", "warn")
-        assert client.get("/api/config/encoders").json()["aac"]  # something is missing
+        missing = {e["id"]: e["missing"] for e in client.get("/api/config/encoders").json()}
+        assert missing["aac"] and missing["flac"] == missing["ddp"] == []  # qaac is missing
         job = client.get(f"/api/jobs/{job_id}").json()
         key = f"id:{job['plan']['audio'][0]['source']['id']}"
         overrides = job["spec"]["overrides"] | {"tracks": {key: {"action": "aac"}}}
         job = client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides}).json()
         assert job["status"] == "blocked"
-        assert any(i["code"] == "tools.missing" and "AAC needs" in i["message"] for i in job["issues"])
+        assert any(i["code"] == "tools.missing" and "AAC (qaac) needs" in i["message"] for i in job["issues"])
 
         client.put("/api/config", json={"tools": {"qaac": sys.executable, "ffmpeg": sys.executable}})
-        assert client.get("/api/config/encoders").json()["aac"] == []
+        assert {e["id"]: e["missing"] for e in client.get("/api/config/encoders").json()}["aac"] == []
         job = client.get(f"/api/jobs/{job_id}").json()  # replanned when the tools changed
         assert not any(i["code"] == "tools.missing" for i in job["issues"]) and job["status"] != "blocked"
 

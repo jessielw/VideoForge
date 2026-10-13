@@ -168,6 +168,12 @@ class AudioAction(StrEnum):
     DDP = "ddp"  # DeeZy E-AC-3
     ATMOS = "atmos"  # DeeZy E-AC-3 JOC from TrueHD Atmos
     AAC = "aac"  # ffmpeg -> qaac TVBR
+    # ffmpeg's own encoders (core.execute.audio.ENCODES has each one's layouts and bitrates)
+    FLAC = "flac"
+    OPUS = "opus"  # libopus
+    AAC_FFMPEG = "aac_ffmpeg"
+    AC3 = "ac3"
+    EAC3 = "eac3"
 
 
 @dataclass(slots=True)

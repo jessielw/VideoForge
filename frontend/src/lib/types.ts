@@ -84,7 +84,20 @@ export interface Issue {
   message: string
 }
 
-export type AudioAction = 'copy' | 'ddp' | 'atmos' | 'aac'
+export type AudioAction = 'copy' | 'ddp' | 'atmos' | 'aac' | 'flac' | 'opus' | 'aac_ffmpeg' | 'ac3' | 'eac3'
+
+// One audio encode as the server describes it (core.execute.audio.ENCODES).
+export interface AudioEncodeInfo {
+  id: Exclude<AudioAction, 'copy'>
+  label: string
+  codec: string
+  layouts: string[]
+  bitrates: Record<string, number> | null // default kb/s by channels; null = lossless (no bitrate)
+  bitrate_choices: number[] // only these, when not empty
+  vbr_default: boolean // no bitrate = the encoder's quality VBR
+  default_max: string | null
+  missing: string[] // tools it lacks ([] = it can run)
+}
 
 export interface TrackOverride {
   exclude: boolean | null

@@ -3,7 +3,8 @@
 Every source track (and every added subtitle file) goes into an MKV in source
 order, copied unchanged with its language, title and flags. The user excludes,
 reorders and edits tracks through the job's overrides, and can have an audio track
-encoded (DDP, DDP Atmos or AAC) instead of copied. Only missing inputs and
+encoded instead of copied (any of core.execute.audio.ENCODES: DDP, DDP Atmos, AAC,
+FLAC, Opus, AC-3, E-AC-3). Only missing inputs and
 impossible encodes block a job, and the finished file is checked against the plan
 it was muxed from.
 """
@@ -13,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from videoforge.core import lang
+from videoforge.core.execute.audio import ENCODES, AudioEncode
 from videoforge.core.jobs import ProbedInputs
 from videoforge.core.models import (
     AudioAction,
@@ -64,22 +66,16 @@ def _settings(track: AudioTrack | SubTrack, ov: TrackOverride | None) -> tuple[s
     return language, track.title if ov.title is None else ov.title, flags
 
 
-# Output layouts each encoder takes, and the bitrate a DDP encode gets when none is set.
-ENCODE_LAYOUTS = {
-    AudioAction.DDP: tuple(Layout.parse(x) for x in ("1.0", "2.0", "5.1", "7.1")),
-    AudioAction.AAC: tuple(Layout.parse(x) for x in ("1.0", "2.0", "5.1")),
-}
-DDP_BITRATE = {1: 192, 2: 256, 6: 640, 8: 1024}  # by channels
-ATMOS_BITRATE = 768
-
-
-def _default_layout(action: AudioAction, source: Layout) -> Layout:
-    """DDP keeps the channels (5.0 -> 5.1, more than 6 -> 7.1); AAC keeps mono/stereo, else stereo."""
-    if source.channels <= 2:
-        return Layout(2, 0) if source.channels == 2 else Layout(1, 0)
-    if action is AudioAction.AAC:
-        return Layout(2, 0)
-    return Layout(7, 1) if source.channels > 6 else Layout(5, 1)
+def _default_layout(enc: AudioEncode, source: Layout) -> Layout:
+    """The source's layout when the encoder takes it (up to its default_max); else the biggest one it
+    takes that is no bigger. DDP makes 5.1 from 5.0 (DeeZy adds the LFE)."""
+    if enc.action is AudioAction.DDP and source == Layout(5, 0):
+        return Layout(5, 1)
+    cap = enc.default_max.channels if enc.default_max else source.channels
+    fits = [lay for lay in enc.layouts if lay.channels <= min(source.channels, cap)]
+    if source in fits:
+        return source
+    return max(fits, key=lambda lay: (lay.channels, lay.lfe)) if fits else enc.layouts[0]
 
 
 def audio_output(t: AudioTrack, ov: TrackOverride | None, issues: list[Issue]) -> dict:
@@ -89,23 +85,28 @@ def audio_output(t: AudioTrack, ov: TrackOverride | None, issues: list[Issue]) -
     if action is AudioAction.COPY:
         return {"action": action, "out_codec": t.codec, "out_layout": t.layout, "out_atmos": t.atmos,
                 "bitrate_kbps": None, "upmix_50": False}
-    bitrate = ov.bitrate_kbps if ov else None
+    enc = ENCODES[action]
     if action is AudioAction.ATMOS:
         if not (t.atmos and t.codec is AudioCodec.TRUEHD):
             issues.append(Issue(Severity.BLOCK, "audio.atmos_source",
                                 f"Audio #{t.id}: DDP Atmos needs a TrueHD Atmos source"))
-        return {"action": action, "out_codec": AudioCodec.EAC3, "out_layout": Layout(5, 1), "out_atmos": True,
-                "bitrate_kbps": bitrate or ATMOS_BITRATE, "upmix_50": False}
-    layout = (ov.layout if ov else None) or _default_layout(action, t.layout)
+        layout = Layout(5, 1)
+        return {"action": action, "out_codec": enc.codec, "out_layout": layout, "out_atmos": True,
+                "bitrate_kbps": (ov.bitrate_kbps if ov else None) or enc.default_bitrate(layout), "upmix_50": False}
+    layout = (ov.layout if ov else None) or _default_layout(enc, t.layout)
     upmix_50 = action is AudioAction.DDP and t.layout == Layout(5, 0) and layout == Layout(5, 1)
-    if layout not in ENCODE_LAYOUTS[action]:
-        issues.append(Issue(Severity.BLOCK, "audio.layout", f"Audio #{t.id}: {action.value} can't be {layout}"))
+    if layout not in enc.layouts:
+        issues.append(Issue(Severity.BLOCK, "audio.layout", f"Audio #{t.id}: {enc.label} can't be {layout}"))
     elif layout.channels > t.layout.channels and not upmix_50:
         issues.append(Issue(Severity.BLOCK, "audio.upmix", f"Audio #{t.id}: {t.layout} can't be upmixed to {layout}"))
-    if action is AudioAction.DDP:
-        bitrate = bitrate or DDP_BITRATE.get(layout.channels, 640)
-    return {"action": action, "out_codec": AudioCodec.EAC3 if action is AudioAction.DDP else AudioCodec.AAC,
-            "out_layout": layout, "out_atmos": False, "bitrate_kbps": bitrate, "upmix_50": upmix_50}
+    bitrate = None
+    if enc.bitrates is not None:  # lossless encodes take none
+        bitrate = (ov.bitrate_kbps if ov else None) or enc.default_bitrate(layout)
+        problem = enc.bitrate_problem(bitrate, layout) if bitrate else ""
+        if problem:
+            issues.append(Issue(Severity.BLOCK, "audio.bitrate", f"Audio #{t.id}: {problem}"))
+    return {"action": action, "out_codec": enc.codec, "out_layout": layout, "out_atmos": False,
+            "bitrate_kbps": bitrate, "upmix_50": upmix_50}
 
 
 def _excluded(track: AudioTrack | SubTrack, overrides: Overrides) -> bool:

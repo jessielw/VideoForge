@@ -1,6 +1,6 @@
 // App-wide state, kept current by the server's event WebSocket (/api/events).
 import { api } from './api'
-import type { EncoderSettings, JobSummary, Preset, PresetKind, Presets, Profile, QueueState, StepRun, VideoPresetData } from './types'
+import type { AudioEncodeInfo, EncoderSettings, JobSummary, Preset, PresetKind, Presets, Profile, QueueState, StepRun, VideoPresetData } from './types'
 
 const MAX_LOG = 20000
 
@@ -25,17 +25,17 @@ class AppState {
   runs = $state<Record<string, StepRun[]>>({})
   runStarts = $state<Record<string, number>>({}) // logSeq when each job's latest run began
   logSeq = 0
-  missingTools = $state<Record<string, string[]>>({})
+  encodes = $state<AudioEncodeInfo[]>([])
   presets = $state<Presets>({ video: [], encoder: [] })
 
   #socket: WebSocket | null = null
   #refreshTimer: ReturnType<typeof setTimeout> | null = null
   #retry = 500
 
-  // Which audio encodes can't run, and the tools they lack (e.g. { aac: ['qaac'] }).
+  // The audio encodes, with the tools each one lacks.
   async loadEncoders(): Promise<void> {
     try {
-      this.missingTools = await api.encoders()
+      this.encodes = await api.encoders()
     } catch {
       /* shown as available; the job's plan still blocks a missing tool */
     }

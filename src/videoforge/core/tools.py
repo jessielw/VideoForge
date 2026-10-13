@@ -7,6 +7,7 @@ the first output line that looks like a version, so the Settings page can show
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import shutil
@@ -18,6 +19,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from videoforge.core.config import Tools
+from videoforge.core.execute.audio import ENCODES
 from videoforge.core.models import AudioAction, Issue, Plan, Severity
 
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -69,23 +71,48 @@ class ToolCheck:
     detail: str = ""  # why it's missing/broken, or what a folder holds
 
 
-# What each audio encode runs (execute/audio.py): DeeZy drives DEE and decodes with ffmpeg
-# (and truehdd for Atmos); AAC pipes ffmpeg into qaac.
-ENCODE_TOOLS: dict[AudioAction, tuple[str, ...]] = {
-    AudioAction.DDP: ("deezy", "dee", "ffmpeg"),
-    AudioAction.ATMOS: ("deezy", "dee", "ffmpeg", "truehdd"),
-    AudioAction.AAC: ("ffmpeg", "qaac"),
-}
 _LABEL = {t.name: t.label for t in TOOLS}
-_ACTION_LABEL = {AudioAction.DDP: "DDP", AudioAction.ATMOS: "DDP Atmos", AudioAction.AAC: "AAC"}
+
+
+def ffmpeg_encoders(path: str) -> frozenset[str] | None:
+    """The encoders an ffmpeg build has (`ffmpeg -encoders`, cached per file and its mtime),
+    or None when it can't be asked (then nothing is assumed missing)."""
+    found = locate(path)
+    if not found:
+        return None
+    try:
+        stamp = os.stat(found).st_mtime_ns
+    except OSError:
+        return None
+    return _encoders(found, stamp)
+
+
+@functools.lru_cache(maxsize=8)
+def _encoders(found: str, _stamp: int) -> frozenset[str] | None:
+    try:
+        out = subprocess.run([found, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=15,
+                             creationflags=_NO_WINDOW).stdout
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    # " A....D flac   FLAC (Free Lossless Audio Codec)": six flag columns, then the name.
+    names = {parts[1] for parts in (line.split() for line in out.splitlines())
+             if len(parts) >= 2 and len(parts[0]) == 6 and parts[0][0] in "VAS"}
+    return frozenset(names) or None
 
 
 def missing_for_encodes(tools: Tools) -> dict[AudioAction, list[str]]:
-    """Each audio encode's tools that aren't there (by label); an empty list = it can run.
-    Only looks for the files (cheap), it doesn't run them."""
+    """Each audio encode's missing tools (by label), from execute.audio.ENCODES; an empty list =
+    it can run. Looks for the files, and asks ffmpeg (once per build) which encoders it has."""
     paths = asdict(tools)
-    gone = {name: not locate(paths[name]) for name in {n for names in ENCODE_TOOLS.values() for n in names}}
-    return {action: [_LABEL[n] for n in names if gone[n]] for action, names in ENCODE_TOOLS.items()}
+    gone = {name: not locate(paths[name]) for name in {n for e in ENCODES.values() for n in e.tools}}
+    have = None if gone.get("ffmpeg", True) else ffmpeg_encoders(tools.ffmpeg)
+    out: dict[AudioAction, list[str]] = {}
+    for action, e in ENCODES.items():
+        missing = [_LABEL[n] for n in e.tools if gone[n]]
+        if e.ffmpeg_encoder and have is not None and e.ffmpeg_encoder not in have:
+            missing.append(f"an ffmpeg build with {e.ffmpeg_encoder}")
+        out[action] = missing
+    return out
 
 
 def tool_issues(plan: Plan, tools: Tools) -> list[Issue]:
@@ -95,7 +122,7 @@ def tool_issues(plan: Plan, tools: Tools) -> list[Issue]:
     for action in dict.fromkeys(a.action for a in plan.audio):
         if missing.get(action):
             issues.append(Issue(Severity.BLOCK, "tools.missing",
-                                f"{_ACTION_LABEL[action]} needs {', '.join(missing[action])}: set it in Settings"))
+                                f"{ENCODES[action].label} needs {', '.join(missing[action])}: set it in Settings"))
     return issues
 
 

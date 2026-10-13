@@ -16,6 +16,7 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Request
 
 from videoforge.core.config import with_tools
+from videoforge.core.execute.audio import ENCODES
 from videoforge.core.plan_io import to_json
 from videoforge.core.tools import TOOL_NAMES, TOOLS, check, detect, missing_for_encodes
 from videoforge.core.video import vs as vsx
@@ -99,9 +100,15 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
 
 
 @router.get("/encoders")
-def encoders(request: Request) -> dict[str, list[str]]:
-    """Each audio encode's missing tools ([] = available); cheap (looks for the files only)."""
-    return {action.value: missing for action, missing in missing_for_encodes(request.app.state.config.tools).items()}
+def encoders(request: Request) -> list[dict[str, Any]]:
+    """The audio encodes (execute.audio.ENCODES) for the track editor: layouts, bitrates, and the
+    tools each one is missing ([] = it can run)."""
+    missing = missing_for_encodes(request.app.state.config.tools)
+    return [{"id": e.action.value, "label": e.label, "codec": e.codec.value, "layouts": [str(x) for x in e.layouts],
+             "bitrates": None if e.bitrates is None else {str(c): k for c, k in e.bitrates.items()},
+             "bitrate_choices": list(e.bitrate_choices), "vbr_default": e.vbr_default,
+             "default_max": str(e.default_max) if e.default_max else None, "missing": missing[e.action]}
+            for e in ENCODES.values()]
 
 
 @router.get("/tools")

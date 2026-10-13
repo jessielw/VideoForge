@@ -1,10 +1,15 @@
-"""Audio encode commands for a planned track (DeeZy for DDP/Atmos, ffmpeg | qaac for AAC).
+"""Audio encodes: what each one makes (ENCODES) and the command for a planned track.
+
+DeeZy makes DDP and DDP Atmos, ffmpeg | qaac makes AAC, and ffmpeg's own encoders
+make FLAC, Opus, AAC, AC-3 and E-AC-3. ENCODES is the one list the planner, the tool
+checks and the UI read: a new encode is an AudioAction, an entry here and its command.
 
 Delay: the source's "delay relative to video" is applied exactly once. DeeZy
 never reads it from the container (only from --delay or a "DELAY Xms" file name
 token), so we pass it explicitly; DeeZy bakes it into the stream (padding or
-trimming, plus DEE's own priming) and the output starts at 0. ffmpeg | qaac
-starts at the first audio sample, so AAC gets the delay at mux (mkvmerge --sync).
+trimming, plus DEE's own priming) and the output starts at 0. ffmpeg (alone or
+into qaac) starts at the first audio sample, so those get the delay at mux
+(mkvmerge --sync).
 """
 
 from __future__ import annotations
@@ -13,14 +18,81 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from videoforge.core.config import Tools
-from videoforge.core.models import AudioAction, PlannedAudio
+from videoforge.core.models import AudioAction, AudioCodec, Layout, PlannedAudio
 
-_SUFFIX = {AudioAction.DDP: ".ec3", AudioAction.ATMOS: ".ec3", AudioAction.AAC: ".m4a"}
+
+def _layouts(*names: str) -> tuple[Layout, ...]:
+    return tuple(Layout.parse(n) for n in names)
+
+
+AC3_BITRATES = (32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 576, 640)
+
+
+@dataclass(frozen=True, slots=True)
+class AudioEncode:
+    """One way to encode an audio track."""
+
+    action: AudioAction
+    label: str
+    codec: AudioCodec
+    suffix: str  # of the encoded file in the work folder
+    layouts: tuple[Layout, ...]  # output layouts it takes
+    tools: tuple[str, ...]  # Tools field names it needs
+    ffmpeg_encoder: str = ""  # an encoder the ffmpeg build must have
+    # Default kb/s by output channels (the nearest count for others, the lower on a tie); None = no bitrate (lossless).
+    bitrates: dict[int, int] | None = None
+    bitrate_range: tuple[int, int] | None = None  # allowed kb/s (None = not checked here)
+    bitrate_choices: tuple[int, ...] = ()  # only these, when set
+    per_channel_max: int | None = None  # kb/s per channel
+    vbr_default: bool = False  # no bitrate set = the encoder's quality VBR
+    default_max: Layout | None = None  # the default layout is at most this (a downmix below it is chosen)
+    delay_in_encode: bool = False  # it applies the source delay itself, so the mux must not
+
+    def default_bitrate(self, layout: Layout) -> int | None:
+        if not self.bitrates or self.vbr_default:
+            return None
+        nearest = min(self.bitrates, key=lambda c: (abs(c - layout.channels), c))
+        return self.bitrates[nearest]
+
+    def bitrate_problem(self, kbps: int, layout: Layout) -> str:
+        """Why this bitrate can't be used ("" when it can)."""
+        if self.bitrates is None:
+            return ""
+        if self.bitrate_choices and kbps not in self.bitrate_choices:
+            return f"{self.label} takes {', '.join(map(str, self.bitrate_choices))} kb/s"
+        if self.bitrate_range and not self.bitrate_range[0] <= kbps <= self.bitrate_range[1]:
+            return f"{self.label} takes {self.bitrate_range[0]} to {self.bitrate_range[1]} kb/s"
+        if self.per_channel_max and kbps > self.per_channel_max * layout.channels:
+            return f"{self.label} takes at most {self.per_channel_max} kb/s per channel"
+        return ""
+
+
+_DOLBY = _layouts("1.0", "2.0", "5.0", "5.1")
+_ANY = _layouts("1.0", "2.0", "5.0", "5.1", "6.1", "7.1")
+ENCODES: dict[AudioAction, AudioEncode] = {e.action: e for e in (
+    AudioEncode(AudioAction.DDP, "DDP (DEE)", AudioCodec.EAC3, ".ec3", _layouts("1.0", "2.0", "5.1", "7.1"),
+                ("deezy", "dee", "ffmpeg"), bitrates={1: 192, 2: 256, 6: 640, 8: 1024}, delay_in_encode=True),
+    AudioEncode(AudioAction.ATMOS, "DDP Atmos (DEE)", AudioCodec.EAC3, ".ec3", _layouts("5.1"),
+                ("deezy", "dee", "ffmpeg", "truehdd"), bitrates={6: 768}, delay_in_encode=True),
+    AudioEncode(AudioAction.AAC, "AAC (qaac)", AudioCodec.AAC, ".m4a", _layouts("1.0", "2.0", "5.1"),
+                ("ffmpeg", "qaac"), bitrates={1: 96, 2: 192, 6: 384}, bitrate_range=(8, 1280), vbr_default=True,
+                default_max=Layout(2, 0)),
+    AudioEncode(AudioAction.FLAC, "FLAC", AudioCodec.FLAC, ".flac", _ANY, ("ffmpeg",), ffmpeg_encoder="flac"),
+    AudioEncode(AudioAction.OPUS, "Opus", AudioCodec.OPUS, ".opus", _ANY, ("ffmpeg",), ffmpeg_encoder="libopus",
+                bitrates={1: 96, 2: 160, 6: 384, 8: 512}, bitrate_range=(6, 2048), per_channel_max=256),
+    AudioEncode(AudioAction.AAC_FFMPEG, "AAC (ffmpeg)", AudioCodec.AAC, ".m4a", _ANY, ("ffmpeg",),
+                ffmpeg_encoder="aac", bitrates={1: 96, 2: 192, 6: 384, 8: 512}, bitrate_range=(8, 1536)),
+    AudioEncode(AudioAction.AC3, "AC-3", AudioCodec.AC3, ".ac3", _DOLBY, ("ffmpeg",), ffmpeg_encoder="ac3",
+                bitrates={1: 192, 2: 224, 6: 640}, bitrate_choices=AC3_BITRATES),
+    AudioEncode(AudioAction.EAC3, "E-AC-3 (ffmpeg)", AudioCodec.EAC3, ".eac3", _DOLBY, ("ffmpeg",),
+                ffmpeg_encoder="eac3", bitrates={1: 192, 2: 256, 6: 640}, bitrate_range=(32, 6144)),
+)}
 
 
 def delay_in_encode(action: AudioAction) -> bool:
     """True when the encoder applies the source delay itself, so the mux must not."""
-    return action in (AudioAction.DDP, AudioAction.ATMOS)
+    enc = ENCODES.get(action)
+    return enc is not None and enc.delay_in_encode
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +115,7 @@ class AudioCommand:
 
 
 def output_path(planned: PlannedAudio, position: int, temp_dir: Path) -> Path:
-    return temp_dir / f"audio{position}_{planned.language}{_SUFFIX[planned.action]}"
+    return temp_dir / f"audio{position}_{planned.language}{ENCODES[planned.action].suffix}"
 
 
 def _deezy(planned: PlannedAudio, source: Path, output: Path, temp_dir: Path, settings: AudioSettings, tools: Tools) -> tuple[str, ...]:
@@ -88,6 +160,30 @@ def _aac(planned: PlannedAudio, source: Path, output: Path, settings: AudioSetti
     return ffmpeg, qaac
 
 
+# ffmpeg's name for each layout (aformat sets it exactly: libopus refuses 5.1(side), and a
+# downmix to a count alone could pick a layout the encoder doesn't take).
+_FFMPEG_LAYOUT = {"1.0": "mono", "2.0": "stereo"}
+_FFMPEG_ARGS = {
+    AudioAction.FLAC: lambda p: ("-c:a", "flac", "-compression_level", "8", "-f", "flac"),
+    AudioAction.OPUS: lambda p: ("-c:a", "libopus", "-b:a", f"{p.bitrate_kbps}k", "-vbr", "on",
+                                 "-compression_level", "10", "-f", "opus"),
+    AudioAction.AAC_FFMPEG: lambda p: ("-c:a", "aac", "-b:a", f"{p.bitrate_kbps}k", "-f", "mp4"),
+    AudioAction.AC3: lambda p: ("-c:a", "ac3", "-b:a", f"{p.bitrate_kbps}k", "-f", "ac3"),
+    AudioAction.EAC3: lambda p: ("-c:a", "eac3", "-b:a", f"{p.bitrate_kbps}k", "-f", "eac3"),
+}
+
+
+def _ffmpeg(planned: PlannedAudio, source: Path, output: Path, tools: Tools) -> tuple[str, ...]:
+    layout = str(planned.out_layout)
+    return (
+        tools.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+        "-i", str(source),
+        "-map", f"0:a:{planned.source.index}", "-vn", "-sn", "-dn", "-map_chapters", "-1", "-map_metadata", "-1",
+        "-af", f"aformat=channel_layouts={_FFMPEG_LAYOUT.get(layout, layout)}",
+        *_FFMPEG_ARGS[planned.action](planned), str(output),
+    )
+
+
 def audio_command(
     planned: PlannedAudio, position: int, source: Path, temp_dir: Path, settings: AudioSettings, tools: Tools
 ) -> AudioCommand | None:
@@ -97,6 +193,8 @@ def audio_command(
     output = output_path(planned, position, temp_dir)
     if planned.action is AudioAction.AAC:
         argvs = _aac(planned, source, output, settings, tools)
+    elif planned.action in _FFMPEG_ARGS:
+        argvs = (_ffmpeg(planned, source, output, tools),)
     else:
         argvs = (_deezy(planned, source, output, temp_dir, settings, tools),)
     return AudioCommand(planned, output, argvs)

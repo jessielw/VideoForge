@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -103,3 +105,50 @@ def test_aac_pipes_ffmpeg_into_qaac(layout, out, channels):
 def test_aac_bitrate_is_constrained_vbr():
     _, qaac = command(planned(C.FLAC, "2.0", A.AAC, bitrate=192)).argvs
     assert qaac[qaac.index("--cvbr") + 1] == "192" and "--tvbr" not in qaac
+
+
+# --- ffmpeg's own encoders ------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("action", "suffix", "codec_args"), [
+    (A.FLAC, ".flac", ["-c:a", "flac", "-compression_level", "8"]),
+    (A.OPUS, ".opus", ["-c:a", "libopus", "-b:a", "384k"]),
+    (A.AAC_FFMPEG, ".m4a", ["-c:a", "aac", "-b:a", "384k"]),
+    (A.AC3, ".ac3", ["-c:a", "ac3", "-b:a", "384k"]),
+    (A.EAC3, ".eac3", ["-c:a", "eac3", "-b:a", "384k"]),
+])
+def test_ffmpeg_encodes(action, suffix, codec_args):
+    cmd = command(planned(C.TRUEHD, "7.1", action, out_layout="5.1", bitrate=None if action is A.FLAC else 384, index=2))
+    (argv,) = cmd.argvs
+    assert argv[0] == "ffmpeg" and argv[argv.index("-map") + 1] == "0:a:2"
+    assert argv[argv.index("-af") + 1] == "aformat=channel_layouts=5.1"  # exact, so libopus takes 5.1(side) sources
+    i = argv.index("-c:a")
+    assert list(argv[i : i + len(codec_args)]) == codec_args
+    assert cmd.output.suffix == suffix and argv[-1] == str(cmd.output)
+
+
+def test_ffmpeg_names_mono_and_stereo():
+    (argv,) = command(planned(C.AC3, "2.0", A.OPUS, out_layout="2.0", bitrate=160)).argvs
+    assert argv[argv.index("-af") + 1] == "aformat=channel_layouts=stereo"
+
+
+FFMPEG = shutil.which("ffmpeg")
+
+
+@pytest.mark.skipif(FFMPEG is None, reason="needs ffmpeg")
+@pytest.mark.parametrize(("action", "out_layout", "channels"), [
+    (A.FLAC, "5.1", 6), (A.OPUS, "5.1", 6), (A.OPUS, "2.0", 2), (A.AAC_FFMPEG, "5.1", 6), (A.AC3, "5.1", 6),
+    (A.EAC3, "2.0", 2),
+])
+def test_ffmpeg_encodes_for_real(tmp_path, action, out_layout, channels):
+    """A 5.1(side) source (what TrueHD/DTS decode to) through each encode."""
+    src = tmp_path / "src.mka"
+    subprocess.run([FFMPEG, "-v", "error", "-f", "lavfi", "-i", "sine=f=440:d=1", "-filter_complex",
+                    "[0]asplit=6[a][b][c][d][e][f];[a][b][c][d][e][f]join=inputs=6:channel_layout=5.1(side)",
+                    "-c:a", "pcm_s24le", str(src)], check=True)  # fmt: skip
+    p = planned(C.LPCM, "5.1", action, out_layout=out_layout, bitrate=None if action is A.FLAC else 192)
+    tools = Tools(mkvmerge="", deezy="", dee="", truehdd="", qaac="", ffmpeg=FFMPEG)
+    cmd = audio_command(p, 1, src, tmp_path, AudioSettings(), tools)
+    subprocess.run(cmd.argvs[0], check=True)
+    probe = subprocess.run([FFMPEG, "-hide_banner", "-i", str(cmd.output)], capture_output=True, text=True).stderr
+    assert "Audio:" in probe and (f"{channels} channels" in probe or ("5.1" if channels == 6 else "stereo") in probe)

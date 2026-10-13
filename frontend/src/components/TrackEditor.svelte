@@ -5,7 +5,7 @@
   // track. Every change saves and replans; each track shows what will be written.
   import { emptyOverride, isEmpty, LANGUAGES } from '../lib/format'
   import { app } from '../lib/state.svelte'
-  import type { AudioAction, AudioTrack, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
+  import type { AudioAction, AudioEncodeInfo, AudioTrack, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
   import Icon from './Icon.svelte'
 
   let {
@@ -95,7 +95,6 @@
   }
 
   // --- audio encodes ---
-  const LAYOUTS: Record<'ddp' | 'aac', string[]> = { ddp: ['1.0', '2.0', '5.1', '7.1'], aac: ['1.0', '2.0', '5.1'] }
   const CODEC: Record<string, string> = {
     eac3: 'E-AC-3', ac3: 'AC-3', aac: 'AAC', truehd: 'TrueHD', dts: 'DTS', dts_hd_ma: 'DTS-HD MA',
     dts_hd_hra: 'DTS-HD HRA', lpcm: 'LPCM', flac: 'FLAC', opus: 'Opus',
@@ -103,14 +102,15 @@
   const channels = (layout: string) => layout.split('.').reduce((n, x) => n + +x, 0)
   const actionOf = (t: AudioTrack): AudioAction => ovOf(t)?.action ?? 'copy'
   const canAtmos = (t: AudioTrack) => t.atmos && t.codec === 'truehd'
-  // An encode whose tools are missing can't be picked (one already picked stays, and blocks the job).
-  const needs = (a: AudioAction) => (app.missingTools[a]?.length ? ` (needs ${app.missingTools[a].join(', ')})` : '')
-  const unavailable = (a: AudioAction, current: AudioAction) => !!app.missingTools[a]?.length && current !== a
+  // The encodes come from the server; one whose tools are missing can't be picked (one already
+  // picked stays, and blocks the job). Atmos is offered for TrueHD Atmos sources only.
+  const encodeOf = (a: AudioAction) => app.encodes.find(e => e.id === a)
+  const needs = (e: AudioEncodeInfo) => (e.missing.length ? ` (needs ${e.missing.join(', ')})` : '')
+  const offered = (t: AudioTrack, current: AudioAction) => app.encodes.filter(e => e.id !== 'atmos' || canAtmos(t) || current === 'atmos')
 
-  function layoutChoices(t: AudioTrack, action: 'ddp' | 'aac'): string[] {
-    return LAYOUTS[action].filter(
-      l => channels(l) <= channels(t.layout) || (action === 'ddp' && t.layout === '5.0' && l === '5.1'),
-    )
+  // The layouts an encode can make from this track: no upmix (DDP's 5.0 -> 5.1 aside).
+  function layoutChoices(t: AudioTrack, e: AudioEncodeInfo): string[] {
+    return e.layouts.filter(l => channels(l) <= channels(t.layout) || (e.id === 'ddp' && t.layout === '5.0' && l === '5.1'))
   }
 
   const setAction = (t: AudioTrack, a: AudioAction) =>
@@ -127,7 +127,7 @@
   function audioOut(p: PlannedAudio): string {
     const codec = (CODEC[p.out_codec] ?? p.out_codec) + (p.out_atmos ? ' Atmos' : '')
     if (p.action === 'copy') return `copied · ${codec} ${p.out_layout}`
-    const rate = p.bitrate_kbps ? `${p.bitrate_kbps} kb/s` : 'quality VBR'
+    const rate = p.bitrate_kbps ? `${p.bitrate_kbps} kb/s` : encodeOf(p.action as AudioAction)?.bitrates === null ? 'lossless' : 'quality VBR'
     return `${codec} ${p.out_layout} · ${rate}${p.upmix_50 ? ' · 5.0 upmixed to 5.1' : ''}`
   }
 
@@ -256,33 +256,39 @@
       {#if isAudio(t)}
         {@const action = actionOf(t)}
         {@const planned = plannedAudio.get(t.id)?.a}
+        {@const enc = encodeOf(action)}
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line/60 px-3 py-2 text-sm">
           <select class="field" value={action} aria-label="Copy or encode" onchange={e => setAction(t, e.currentTarget.value as AudioAction)}>
             <option value="copy">Copy</option>
-            <option value="ddp" disabled={unavailable('ddp', action)}>Encode: DDP (E-AC-3){needs('ddp')}</option>
-            {#if canAtmos(t) || action === 'atmos'}
-              <option value="atmos" disabled={unavailable('atmos', action)}>Encode: DDP Atmos{needs('atmos')}</option>
-            {/if}
-            <option value="aac" disabled={unavailable('aac', action)}>Encode: AAC{needs('aac')}</option>
+            {#each offered(t, action) as e (e.id)}
+              <option value={e.id} disabled={!!e.missing.length && action !== e.id}>Encode: {e.label}{needs(e)}</option>
+            {/each}
           </select>
-          {#if action === 'ddp' || action === 'aac'}
+          {#if enc && enc.layouts.length > 1}
             <select class="field" value={ov?.layout ?? ''} aria-label="Channels" onchange={e => setLayout(t, e.currentTarget.value)}>
               <option value="">Channels: auto{planned && !ov?.layout ? ` (${planned.out_layout})` : ''}</option>
-              {#each layoutChoices(t, action) as l (l)}<option value={l}>{l}</option>{/each}
+              {#each layoutChoices(t, enc) as l (l)}<option value={l}>{l}</option>{/each}
             </select>
           {/if}
-          {#if action !== 'copy'}
+          {#if enc && enc.bitrates !== null}
             <label class="flex items-center gap-1.5 text-muted">
-              <input
-                class="field w-20 text-right"
-                type="number"
-                min="32"
-                step="8"
-                placeholder={action === 'aac' ? 'VBR' : String(planned?.bitrate_kbps ?? '')}
-                value={ov?.bitrate_kbps ?? ''}
-                aria-label="Bitrate"
-                onchange={e => setBitrate(t, e.currentTarget.value)}
-              />kb/s
+              {#if enc.bitrate_choices.length}
+                <select class="field" value={ov?.bitrate_kbps ?? ''} aria-label="Bitrate" onchange={e => setBitrate(t, e.currentTarget.value)}>
+                  <option value="">auto{planned?.bitrate_kbps && !ov?.bitrate_kbps ? ` (${planned.bitrate_kbps})` : ''}</option>
+                  {#each enc.bitrate_choices as b (b)}<option value={b}>{b}</option>{/each}
+                </select>
+              {:else}
+                <input
+                  class="field w-20 text-right"
+                  type="number"
+                  min="6"
+                  step="8"
+                  placeholder={enc.vbr_default ? 'VBR' : String(planned?.bitrate_kbps ?? '')}
+                  value={ov?.bitrate_kbps ?? ''}
+                  aria-label="Bitrate"
+                  onchange={e => setBitrate(t, e.currentTarget.value)}
+                />
+              {/if}kb/s
             </label>
           {/if}
           {#if planned}<span class="text-xs text-muted">→ {audioOut(planned)}</span>{/if}
