@@ -2,6 +2,8 @@
   // A job's frames from the server (VapourSynth): zoom (fit .. 800%, Ctrl+wheel, double-click),
   // drag to pan with a minimap, an edge-detect view for spotting borders, a crop overlay,
   // and frame stepping (←/→ 1, Shift 10, PgUp/PgDn 1 s, Home/End). From the video-forge app.
+  // A new frame replaces the old one only once it has decoded, so zoom, scroll and the picture
+  // stay put while it loads; a failed load keeps the last frame under an error banner.
   import { api } from '../lib/api'
   import type { Crop } from '../lib/types'
   import Icon from './Icon.svelte'
@@ -16,6 +18,7 @@
     version = 0,
     crop = null,
     frame = $bindable(0),
+    notice = null,
   }: {
     jobId: string
     stage: 'source' | 'output'
@@ -26,6 +29,7 @@
     version?: number
     crop?: Crop | null
     frame?: number
+    notice?: { text: string; tone: 'muted' | 'bad' } | null
   } = $props()
 
   const ZOOMS = [0, 25, 50, 75, 100, 150, 200, 300, 400, 600, 800] // 0 = fit
@@ -61,9 +65,16 @@
         }
         throw new Error(msg)
       }
-      const blob = await res.blob()
+      const url = URL.createObjectURL(await res.blob())
+      const img = new Image()
+      img.src = url
+      await img.decode().catch(() => {})
+      if (controller !== c) {
+        URL.revokeObjectURL(url)
+        return
+      }
       if (src) URL.revokeObjectURL(src)
-      src = URL.createObjectURL(blob)
+      src = url
       pictType = res.headers.get('X-Frame-Type') ?? ''
       error = ''
       if (edges) makeEdges()
@@ -126,6 +137,10 @@
 
   function onpointerdown(e: PointerEvent) {
     if (!zoom || !viewport || e.button !== 0) return
+    // Leave the scrollbars to the browser.
+    const r = viewport.getBoundingClientRect()
+    if (e.clientX - r.left - viewport.clientLeft >= viewport.clientWidth) return
+    if (e.clientY - r.top - viewport.clientTop >= viewport.clientHeight) return
     viewport.setPointerCapture(e.pointerId)
     drag = { x: e.clientX, y: e.clientY, left: viewport.scrollLeft, top: viewport.scrollTop, id: e.pointerId }
     panning = true
@@ -234,7 +249,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
     <div
       bind:this={viewport}
-      class="absolute inset-0 overflow-auto rounded-md border border-line bg-black outline-none focus:border-accent/60
+      class="absolute inset-0 overflow-auto border border-line bg-black outline-none focus:border-accent/60
         {zoom ? (panning ? 'cursor-grabbing' : 'cursor-grab') : ''}"
       tabindex="0"
       role="application"
@@ -249,13 +264,13 @@
       onscroll={() => zoom && updateMap()}
     >
       {#if shown}
-        <div class={zoom ? 'inline-block' : 'flex h-full w-full items-center justify-center'}>
-          <div class="relative {zoom ? '' : 'max-h-full max-w-full'}" style={zoom ? `width:${(width * zoom) / 100}px` : ''}>
+        <div class={zoom ? 'inline-block align-top' : 'flex h-full w-full items-center justify-center'}>
+          <div class="relative {zoom ? '' : 'max-h-full max-w-full'}" style={zoom ? `width:${(width * zoom) / 100}px;height:${(height * zoom) / 100}px` : ''}>
             <img
               src={shown}
               alt="Frame {frame}"
               draggable="false"
-              class="block select-none {zoom ? 'w-full' : 'max-h-[calc(100vh-22rem)] max-w-full object-contain'}
+              class="block select-none {zoom ? 'h-full w-full' : 'max-h-[calc(100vh-22rem)] max-w-full object-contain'}
                 {loading ? 'opacity-80' : ''}"
               style="image-rendering: {zoom >= 200 ? 'pixelated' : 'auto'}"
             />
@@ -280,16 +295,29 @@
           </div>
         </div>
       {/if}
-      {#if error}
-        <div class="absolute inset-0 flex items-center justify-center p-6">
-          <pre class="max-w-full overflow-auto rounded-md border border-bad/50 bg-bad/10 p-3 text-xs whitespace-pre-wrap text-bad">{error}</pre>
-        </div>
-      {:else if !src}
-        <div class="absolute inset-0 flex items-center justify-center text-muted">
-          {loading ? 'Loading the frame (the first one indexes the source, which can take a while)…' : ''}
-        </div>
-      {/if}
     </div>
+
+    {#if !src}
+      <div class="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+        {#if error}
+          <pre class="max-w-full overflow-auto border border-bad/50 bg-bad/10 p-3 text-xs whitespace-pre-wrap text-bad">{error}</pre>
+        {:else if loading}
+          <span class="text-muted">Loading the frame (the first one indexes the source, which can take a while)…</span>
+        {/if}
+      </div>
+    {:else if error || notice}
+      <!-- Over the kept frame: why it isn't the newest. -->
+      <div class="pointer-events-none absolute inset-x-2 top-2 flex flex-col items-start gap-1 text-xs">
+        {#if error}
+          <pre class="max-h-24 max-w-full overflow-hidden bg-bad px-2 py-1 whitespace-pre-wrap text-white">{error}</pre>
+        {/if}
+        {#if notice}
+          <span class="px-2 py-1 text-white {notice.tone === 'bad' ? 'bg-bad' : 'bg-black/70'}"
+            >{notice.text}</span
+          >
+        {/if}
+      </div>
+    {/if}
 
     {#if zoom && (panning || showMap) && shown}
       <div class="pointer-events-none absolute right-3 bottom-3 w-48 overflow-hidden rounded border border-line bg-black/80 shadow-lg">

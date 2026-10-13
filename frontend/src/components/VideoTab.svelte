@@ -2,6 +2,8 @@
   // The job's VapourSynth processing: preview (source with the crop drawn, or the output),
   // crop (auto-crop, mod 2), source filter, resize, extra filter lines, and the script editor
   // (Run saves an edited body as the job's custom script, then shows its info and frames or the error).
+  // Every save hands us a new `job` object, so effects key on derived values (jobId, scriptKey)
+  // that only change when the content does; otherwise each save would remount the preview.
   import { untrack } from 'svelte'
   import { api } from '../lib/api'
   import { clipLength } from '../lib/format'
@@ -33,7 +35,11 @@
   let checked = $state<ScriptCheck | null>(null)
   let running = $state(false)
   let refreshSeq = 0
+  let refreshedKey = ''
+  let adoptNext = false
   const dirty = $derived(!!parts && body !== parts.body.join('\n'))
+  const jobId = $derived(job.id)
+  const scriptKey = $derived(job.id + JSON.stringify(job.spec.video) + job.spec.encoder.depth)
 
   // A new job (or a change made elsewhere) resets the local copy.
   let lastJob = ''
@@ -46,9 +52,10 @@
   })
 
   // Called from effects: it must not read `info` before its await, or the effect that
-  // resets `info` would depend on it and loop.
+  // resets `info` would depend on it and loop. A failure keeps the last good info, so the
+  // preview keeps its frame (under the error) instead of unmounting.
   async function loadInfo(st: 'source' | 'output') {
-    const id = job.id
+    const id = jobId
     let value: ClipInfo | null = null
     try {
       value = await api.clipInfo(id, st)
@@ -56,12 +63,13 @@
     } catch (e) {
       infoError = e instanceof Error ? e.message : String(e)
     }
-    info = { ...info, [st]: value }
+    if (id === jobId) info = { ...info, [st]: value ?? info[st] }
   }
 
   $effect(() => {
-    void job.id
+    void jobId
     info = { source: null, output: null }
+    checked = null
     loadInfo('source')
   })
 
@@ -72,41 +80,48 @@
     }
   })
 
-  // Reload the script and run it. adopt = take the server's body even over local edits (after a save).
-  // Called from an effect: nothing it writes is read before the first await.
-  async function refresh(adopt = false) {
-    const id = job.id
+  // Reload the script and run it. After a Run's save the server's body is taken even over local edits.
+  // A failed run keeps the last good output info and frame (no version bump), so the preview stays
+  // where it was. Called from an effect: nothing it writes is read before the first await.
+  async function refresh() {
+    const id = jobId
+    const adopt = adoptNext
+    adoptNext = false
+    refreshedKey = scriptKey
     const seq = ++refreshSeq
-    const p = await api.script(id).catch(() => null)
-    if (seq !== refreshSeq || !p) return
-    const keep = dirty && !adopt
-    parts = p
-    if (!keep) body = p.body.join('\n')
     running = true
     try {
+      const p = await api.script(id).catch(() => null)
+      if (seq !== refreshSeq || !p) return
+      const keep = dirty && !adopt
+      parts = p
+      if (!keep) body = p.body.join('\n')
       const c = await api.checkScript(id).catch(e => ({ ok: false as const, error: String(e.message ?? e), line: null }))
       if (seq !== refreshSeq) return
       checked = c
-      info = { ...info, output: c.ok ? c.info : null }
-      version++
+      if (c.ok) {
+        info = { ...info, output: c.info }
+        version++
+      }
     } finally {
       if (seq === refreshSeq) running = false
     }
   }
 
+  // Script view: run whenever the script's inputs change (once per change, not per job event).
   $effect(() => {
     if (view === 'script') {
-      void job.id
-      void JSON.stringify(job.spec.video)
-      void job.spec.encoder.depth
-      refresh()
+      const key = scriptKey
+      untrack(() => key !== refreshedKey && refresh())
     }
   })
 
   async function run() {
+    const before = refreshSeq
     if (dirty && editable) {
       clearTimeout(timer)
       video.custom = body
+      adoptNext = true
       saving = true
       try {
         await save($state.snapshot(video) as VideoSettings)
@@ -114,7 +129,12 @@
         saving = false
       }
     }
-    await refresh(true)
+    // The save's new job usually starts the run through the effect already. If the save
+    // failed, run what the server has but keep the edits.
+    if (refreshSeq === before) {
+      adoptNext = job.spec.video.custom === video.custom
+      await refresh()
+    }
   }
 
   function useGenerated() {
@@ -146,7 +166,7 @@
   async function autoCrop() {
     detecting = true
     try {
-      video.crop = await api.autocrop(job.id, 20)
+      video.crop = await api.autocrop(jobId, 20)
       commit(0)
     } finally {
       detecting = false
@@ -154,6 +174,13 @@
   }
 
   const current = $derived(info[stage])
+  const notice = $derived.by(() => {
+    if (view !== 'script') return null
+    if (running) return { text: 'Running the script…', tone: 'muted' as const }
+    if (checked && !checked.ok)
+      return { text: `The script failed${checked.line ? ` (line ${checked.line})` : ''}: this is the last good frame.`, tone: 'bad' as const }
+    return null
+  })
   const src = $derived(info.source)
   const outW = $derived(src ? src.width - video.crop.left - video.crop.right : 0)
   const outH = $derived(src ? src.height - video.crop.top - video.crop.bottom : 0)
@@ -181,7 +208,7 @@
     </div>
     {#if current}
       <FramePreview
-        jobId={job.id}
+        {jobId}
         {stage}
         frames={current.frames}
         fps={current.fps}
@@ -190,13 +217,14 @@
         {version}
         crop={stage === 'source' ? video.crop : null}
         bind:frame
+        {notice}
       />
     {:else if view === 'script'}
-      <div class="flex flex-1 items-center justify-center rounded-md border border-line text-muted">
+      <div class="flex flex-1 items-center justify-center border border-line text-muted">
         {running ? 'Running the script (the first run indexes the source)…' : 'No frames: the script failed.'}
       </div>
     {:else}
-      <div class="flex flex-1 items-center justify-center rounded-md border border-line text-muted">
+      <div class="flex flex-1 items-center justify-center border border-line text-muted">
         {infoError ? 'No preview' : 'Opening the source (the first time indexes it, which can take minutes on a large remux)…'}
       </div>
     {/if}
