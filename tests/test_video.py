@@ -17,7 +17,7 @@ from videoforge.core.config import PROJECT_ROOT
 from videoforge.core.video import crop as autocrop
 from videoforge.core.video import vs as vsx
 from videoforge.core.video.encoders import encoder_command, output_name, progress, vspipe_command
-from videoforge.core.video.script import build_script
+from videoforge.core.video.script import build_script, script_parts
 from videoforge.core.video.settings import (
     Crop,
     Encoder,
@@ -54,6 +54,33 @@ def test_script_layout():
     custom = build_script(VideoSettings(source_filter=SourceFilter.LSMASH, custom="clip = src[10:20]"),
                           Path("a.mkv"), Path("w"))
     assert "lsmas.LWLibavSource" in custom and "clip = src[10:20]" in custom and "Crop" not in custom
+
+
+def test_script_parts_split_the_editable_body():
+    s = VideoSettings(crop=Crop(0, 22, 0, 22), filters="clip = clip.std.Invert()")
+    head, body, tail = script_parts(s, Path("a.mkv"), Path("w"), depth=10)
+    assert head[-1] == "clip = src" and tail[-1] == "clip.set_output()"
+    assert body == ["clip = core.std.Crop(clip, left=0, right=0, top=22, bottom=22)", "clip = clip.std.Invert()"]
+    assert "\n".join(head + body + tail) + "\n" == build_script(s, Path("a.mkv"), Path("w"), depth=10)
+    s.custom = "\n  clip = src[1:]\n\n"
+    assert script_parts(s, Path("a.mkv"), Path("w"))[1] == ["  clip = src[1:]"]
+    assert script_parts(s, Path("a.mkv"), Path("w"), stage="source")[1:] == ([], ["clip.set_output()"])
+
+
+@pytest.mark.parametrize(
+    ("script", "line", "message"),
+    [
+        ("a = 1\nb = (\n", 2, "SyntaxError"),
+        ("a = 1\n\nb = undefined_name\n", 3, "NameError: name 'undefined_name' is not defined"),
+        ("def f():\n    raise ValueError('bad')\n\nf()\n", 2, "ValueError: bad"),  # the innermost script line
+        ("clip = 1\n", None, "must leave a video clip"),
+    ],
+)
+def test_script_errors_carry_the_line(script, line, message):
+    with pytest.raises(vsx.ScriptError) as e:
+        vsx.load_clip(script)
+    assert e.value.line == line and message in e.value.message
+    assert str(e.value).startswith(f"Line {line}: ") if line else str(e.value) == e.value.message
 
 
 # --- encoders -----------------------------------------------------------------------

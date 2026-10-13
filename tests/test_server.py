@@ -245,7 +245,24 @@ def test_video_preview_endpoints(tmp_path):
         frame = client.get(f"{base}/frame", params={"n": 10})
         assert frame.headers["content-type"] == "image/jpeg" and frame.content[:2] == b"\xff\xd8"
         assert frame.headers["x-frame-count"] == "48"
-        assert "core.std.Crop" in client.get(f"{base}/script").json()["script"]
-        bad = client.get(f"/api/jobs/{job_id}").json()["spec"]["video"] | {"custom": "clip = 1"}
-        client.patch(f"/api/jobs/{job_id}", json={"video": bad})
+        parts = client.get(f"{base}/script").json()
+        assert "core.std.Crop" in parts["script"] and parts["body"][0].startswith("clip = core.std.Crop")
+        assert not parts["custom"] and parts["script"] == "\n".join(parts["head"] + parts["body"] + parts["tail"]) + "\n"
+        checked = client.get(f"{base}/check").json()
+        assert checked["ok"] and checked["info"]["frames"] == 48 and checked["info"]["format"] == "YUV420P8"
+
+        def run(custom):
+            video = client.get(f"/api/jobs/{job_id}").json()["spec"]["video"] | {"custom": custom}
+            client.patch(f"/api/jobs/{job_id}", json={"video": video})
+            return client.get(f"{base}/check").json()
+
+        head = len(parts["head"])
+        bad = run("clip = src\nclip = core.std.Crop(clip, left=1000)")  # wider than the clip
+        assert not bad["ok"] and bad["line"] == head + 2 and "Crop" in bad["error"]
         assert client.get(f"{base}/info").status_code == 422
+        assert client.get(f"{base}/info").json()["detail"].startswith(f"Line {head + 2}: ")
+        assert run("clip = src[:10]\nclip = (")["line"] == head + 2  # a syntax error
+        not_a_clip = run("clip = 1")  # fails in the generated tail (the depth conversion)
+        assert not_a_clip["line"] > head + 1 and "the body must leave a video clip" in not_a_clip["error"]
+        assert client.get(f"{base}/script").json()["custom"]
+        assert run("clip = src[5:15]")["info"]["frames"] == 10

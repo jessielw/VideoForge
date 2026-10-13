@@ -1,11 +1,14 @@
 <script lang="ts">
   // The job's VapourSynth processing: preview (source with the crop drawn, or the output),
-  // crop (auto-crop, mod 2), source filter, resize, extra filter lines or a custom body.
+  // crop (auto-crop, mod 2), source filter, resize, extra filter lines, and the script editor
+  // (Run saves an edited body as the job's custom script, then shows its info and frames or the error).
   import { untrack } from 'svelte'
   import { api } from '../lib/api'
-  import type { ClipInfo, Crop, JobDetail, SourceFilter, VideoSettings } from '../lib/types'
+  import { clipLength } from '../lib/format'
+  import type { ClipInfo, Crop, JobDetail, ScriptCheck, ScriptParts, SourceFilter, VideoSettings } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import Icon from './Icon.svelte'
+  import ScriptEditor from './ScriptEditor.svelte'
 
   let {
     job,
@@ -13,7 +16,9 @@
     editable,
   }: { job: JobDetail; save: (v: VideoSettings) => Promise<void>; editable: boolean } = $props()
 
-  let stage = $state<'source' | 'output'>('source')
+  type View = 'source' | 'output' | 'script'
+  let view = $state<View>('source')
+  const stage = $derived(view === 'source' ? 'source' : 'output')
   let frame = $state(0)
   let info = $state<Record<string, ClipInfo | null>>({ source: null, output: null })
   let infoError = $state('')
@@ -21,9 +26,14 @@
   let detecting = $state(false)
   // The editable copy; the effect below resets it when the job changes on the server.
   let video = $state<VideoSettings>(untrack(() => structuredClone($state.snapshot(job.spec.video)) as VideoSettings))
-  let script = $state('')
-  let showScript = $state(false)
   let saving = $state(false)
+  // The script editor: the server's parts, the edited body, and the last Run's result.
+  let parts = $state<ScriptParts | null>(null)
+  let body = $state('')
+  let checked = $state<ScriptCheck | null>(null)
+  let running = $state(false)
+  let refreshSeq = 0
+  const dirty = $derived(!!parts && body !== parts.body.join('\n'))
 
   // A new job (or a change made elsewhere) resets the local copy.
   let lastJob = ''
@@ -56,11 +66,62 @@
   })
 
   $effect(() => {
-    if (stage === 'output') {
+    if (view === 'output') {
       void version
       loadInfo('output')
     }
   })
+
+  // Reload the script and run it. adopt = take the server's body even over local edits (after a save).
+  // Called from an effect: nothing it writes is read before the first await.
+  async function refresh(adopt = false) {
+    const id = job.id
+    const seq = ++refreshSeq
+    const p = await api.script(id).catch(() => null)
+    if (seq !== refreshSeq || !p) return
+    const keep = dirty && !adopt
+    parts = p
+    if (!keep) body = p.body.join('\n')
+    running = true
+    try {
+      const c = await api.checkScript(id).catch(e => ({ ok: false as const, error: String(e.message ?? e), line: null }))
+      if (seq !== refreshSeq) return
+      checked = c
+      info = { ...info, output: c.ok ? c.info : null }
+      version++
+    } finally {
+      if (seq === refreshSeq) running = false
+    }
+  }
+
+  $effect(() => {
+    if (view === 'script') {
+      void job.id
+      void JSON.stringify(job.spec.video)
+      void job.spec.encoder.depth
+      refresh()
+    }
+  })
+
+  async function run() {
+    if (dirty && editable) {
+      clearTimeout(timer)
+      video.custom = body
+      saving = true
+      try {
+        await save($state.snapshot(video) as VideoSettings)
+      } finally {
+        saving = false
+      }
+    }
+    await refresh(true)
+  }
+
+  function useGenerated() {
+    video.custom = null
+    if (parts) body = parts.body.join('\n') // not dirty, so the reload takes the generated body
+    commit(0)
+  }
 
   let timer: ReturnType<typeof setTimeout> | undefined
   function commit(delay = 350) {
@@ -70,7 +131,6 @@
       try {
         await save($state.snapshot(video) as VideoSettings)
         version++
-        if (showScript) script = (await api.script(job.id)).script
       } finally {
         saving = false
       }
@@ -93,32 +153,31 @@
     }
   }
 
-  async function toggleScript() {
-    showScript = !showScript
-    if (showScript) script = (await api.script(job.id)).script
-  }
-
   const current = $derived(info[stage])
   const src = $derived(info.source)
   const outW = $derived(src ? src.width - video.crop.left - video.crop.right : 0)
   const outH = $derived(src ? src.height - video.crop.top - video.crop.bottom : 0)
   const SIDES: (keyof Crop)[] = ['left', 'top', 'right', 'bottom']
+  const VIEWS: { id: View; label: string }[] = [
+    { id: 'source', label: 'Source + crop' },
+    { id: 'output', label: 'Output' },
+    { id: 'script', label: 'Script' },
+  ]
 </script>
 
 <div class="flex h-full min-h-0 gap-4">
   <div class="flex min-w-0 flex-1 flex-col gap-2">
     <div class="flex items-center gap-2">
       <div class="flex rounded-md border border-line p-0.5">
-        {#each ['source', 'output'] as st (st)}
+        {#each VIEWS as v (v.id)}
           <button
-            class="rounded px-3 py-1 text-sm {stage === st ? 'bg-raised text-accent' : 'text-muted'}"
-            onclick={() => (stage = st as 'source' | 'output')}
-            >{st === 'source' ? 'Source + crop' : 'Output'}</button
+            class="rounded px-3 py-1 text-sm {view === v.id ? 'bg-raised text-accent' : 'text-muted'}"
+            onclick={() => (view = v.id)}>{v.label}</button
           >
         {/each}
       </div>
       {#if saving}<span class="text-xs text-muted">saving…</span>{/if}
-      {#if infoError}<span class="truncate text-xs text-bad" title={infoError}>{infoError}</span>{/if}
+      {#if infoError && view !== 'script'}<span class="truncate text-xs text-bad" title={infoError}>{infoError}</span>{/if}
     </div>
     {#if current}
       <FramePreview
@@ -132,6 +191,10 @@
         crop={stage === 'source' ? video.crop : null}
         bind:frame
       />
+    {:else if view === 'script'}
+      <div class="flex flex-1 items-center justify-center rounded-md border border-line text-muted">
+        {running ? 'Running the script (the first run indexes the source)…' : 'No frames: the script failed.'}
+      </div>
     {:else}
       <div class="flex flex-1 items-center justify-center rounded-md border border-line text-muted">
         {infoError ? 'No preview' : 'Opening the source (the first time indexes it, which can take minutes on a large remux)…'}
@@ -139,121 +202,148 @@
     {/if}
   </div>
 
-  <aside class="w-72 shrink-0 space-y-5 overflow-auto pr-1">
-    <fieldset disabled={!editable} class="space-y-5">
-      <section class="space-y-2">
-        <div class="flex items-center justify-between">
-          <span class="label">Crop</span>
-          <span class="text-xs text-muted">{outW}×{outH}</span>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          {#each SIDES as side (side)}
-            <label class="flex items-center gap-2 text-sm">
-              <span class="w-12 text-muted capitalize">{side}</span>
-              <input
-                class="field w-full"
-                type="number"
-                step="2"
-                min="0"
-                value={video.crop[side]}
-                onchange={e => setCrop(side, +(e.target as HTMLInputElement).value)}
-              />
-            </label>
-          {/each}
-        </div>
-        <div class="flex gap-2">
-          <button class="btn flex-1" onclick={autoCrop} disabled={detecting}>
-            <Icon name="wand" />{detecting ? 'Detecting…' : 'Auto-crop'}
-          </button>
-          <button
-            class="btn"
-            onclick={() => {
-              video.crop = { left: 0, top: 0, right: 0, bottom: 0 }
-              commit(0)
-            }}>Reset</button
-          >
-        </div>
-        {#if outW % 4 || outH % 4}
-          <p class="text-xs text-warn">The output isn't mod 4 ({outW}×{outH}).</p>
+  {#if view === 'script'}
+    <section class="flex w-[45%] shrink-0 flex-col gap-2">
+      <div class="flex items-center gap-2">
+        <button class="btn-primary" onclick={run} disabled={running || saving} title="Save the body and run the script (Ctrl+Enter)">
+          <Icon name="play" />{running ? 'Running…' : dirty && editable ? 'Save & run' : 'Run'}
+        </button>
+        {#if parts?.custom}
+          <button class="btn" onclick={useGenerated} disabled={!editable || running}
+            title="Drop the custom body: crop, resize and filters make the script again">Back to generated</button>
         {/if}
-      </section>
-
-      <section class="space-y-2">
-        <span class="label">Source filter</span>
-        <select
-          class="field w-full"
-          value={video.source_filter}
-          onchange={e => {
-            video.source_filter = (e.target as HTMLSelectElement).value as SourceFilter
-            info = { source: null, output: null }
-            commit(0)
-            setTimeout(() => loadInfo('source'), 400)
-          }}
-        >
-          <option value="bestsource">BestSource (exact seeking)</option>
-          <option value="lsmash">L-SMASH Works</option>
-          <option value="ffms2">FFMS2</option>
-        </select>
-      </section>
-
-      <section class="space-y-2">
-        <label class="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={!!video.resize}
-            onchange={e => {
-              video.resize = (e.target as HTMLInputElement).checked ? { width: outW, height: outH, kernel: 'Spline36' } : null
-              commit()
-            }}
-          />
-          <span class="label">Resize</span>
-        </label>
-        {#if video.resize}
-          <div class="flex items-center gap-2">
-            <input class="field w-20" type="number" step="2" bind:value={video.resize.width} onchange={() => commit()} />
-            ×
-            <input class="field w-20" type="number" step="2" bind:value={video.resize.height} onchange={() => commit()} />
-            <select class="field flex-1" bind:value={video.resize.kernel} onchange={() => commit()}>
-              {#each ['Spline36', 'Spline64', 'Lanczos', 'Bicubic', 'Bilinear', 'Point'] as k (k)}<option value={k}>{k}</option>{/each}
-            </select>
-          </div>
-        {/if}
-      </section>
-
-      <section class="space-y-2">
-        <span class="label">Filters (VapourSynth lines on <code>clip</code>)</span>
-        <textarea
-          class="field h-24 w-full font-mono text-xs"
-          placeholder="clip = core.std.Levels(clip, ...)"
-          bind:value={video.filters}
-          onchange={() => commit(0)}
-          disabled={video.custom !== null}
-        ></textarea>
-        <label class="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={video.custom !== null}
-            onchange={e => {
-              const c = video.crop
-              video.custom = (e.target as HTMLInputElement).checked
-                ? `clip = src\nclip = core.std.Crop(clip, left=${c.left}, right=${c.right}, top=${c.top}, bottom=${c.bottom})\n${video.filters}`.trim()
-                : null
-              commit(0)
-            }}
-          />
-          Custom script body (replaces crop, resize and filters)
-        </label>
-        {#if video.custom !== null}
-          <textarea class="field h-40 w-full font-mono text-xs" bind:value={video.custom} onchange={() => commit(0)}></textarea>
-        {/if}
-      </section>
-    </fieldset>
-
-    <section class="space-y-2">
-      <button class="btn-ghost text-xs" onclick={toggleScript}>{showScript ? 'Hide' : 'Show'} the generated script</button>
-      {#if showScript}
-        <pre class="overflow-auto rounded-md border border-line bg-black/40 p-2 text-[11px] leading-snug">{script}</pre>
+        <span class="ml-auto text-xs text-muted">
+          {#if !editable}read-only while {job.status}{:else if dirty}edited, not saved{:else if parts?.custom}custom body{:else}generated from crop, resize and filters (editing makes it custom){/if}
+        </span>
+      </div>
+      {#if parts}
+        <ScriptEditor
+          head={parts.head}
+          tail={parts.tail}
+          bind:body
+          errorLine={checked && !checked.ok ? checked.line : null}
+          disabled={!editable}
+          onrun={run}
+        />
+      {:else}
+        <div class="flex flex-1 items-center justify-center rounded-md border border-line text-muted">Loading the script…</div>
+      {/if}
+      {#if checked && !checked.ok}
+        <pre class="max-h-40 shrink-0 overflow-auto rounded-md border border-bad/50 bg-bad/10 p-2 text-xs whitespace-pre-wrap text-bad">{checked.line ? `Line ${checked.line}: ` : ''}{checked.error}</pre>
+      {:else if checked?.ok}
+        {@const i = checked.info}
+        <div class="flex shrink-0 flex-wrap gap-x-4 gap-y-1 rounded-md border border-line px-3 py-2 text-xs">
+          <span class="text-ok"><Icon name="check" size={13} class="mr-1 inline" />Runs</span>
+          <span><span class="text-muted">Frames</span> {i.frames}</span>
+          <span><span class="text-muted">Size</span> {i.width}×{i.height}</span>
+          <span><span class="text-muted">Format</span> {i.format}</span>
+          <span><span class="text-muted">FPS</span> {+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span>
+          <span><span class="text-muted">Length</span> {clipLength(i.frames, i.fps_num, i.fps_den)}</span>
+        </div>
       {/if}
     </section>
-  </aside>
+  {:else}
+    <aside class="w-72 shrink-0 space-y-5 overflow-auto pr-1">
+      <fieldset disabled={!editable} class="space-y-5">
+        <section class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="label">Crop</span>
+            <span class="text-xs text-muted">{outW}×{outH}</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            {#each SIDES as side (side)}
+              <label class="flex items-center gap-2 text-sm">
+                <span class="w-12 text-muted capitalize">{side}</span>
+                <input
+                  class="field w-full"
+                  type="number"
+                  step="2"
+                  min="0"
+                  value={video.crop[side]}
+                  onchange={e => setCrop(side, +(e.target as HTMLInputElement).value)}
+                />
+              </label>
+            {/each}
+          </div>
+          <div class="flex gap-2">
+            <button class="btn flex-1" onclick={autoCrop} disabled={detecting}>
+              <Icon name="wand" />{detecting ? 'Detecting…' : 'Auto-crop'}
+            </button>
+            <button
+              class="btn"
+              onclick={() => {
+                video.crop = { left: 0, top: 0, right: 0, bottom: 0 }
+                commit(0)
+              }}>Reset</button
+            >
+          </div>
+          {#if outW % 4 || outH % 4}
+            <p class="text-xs text-warn">The output isn't mod 4 ({outW}×{outH}).</p>
+          {/if}
+        </section>
+
+        <section class="space-y-2">
+          <span class="label">Source filter</span>
+          <select
+            class="field w-full"
+            value={video.source_filter}
+            onchange={e => {
+              video.source_filter = (e.target as HTMLSelectElement).value as SourceFilter
+              info = { source: null, output: null }
+              commit(0)
+              setTimeout(() => loadInfo('source'), 400)
+            }}
+          >
+            <option value="bestsource">BestSource (exact seeking)</option>
+            <option value="lsmash">L-SMASH Works</option>
+            <option value="ffms2">FFMS2</option>
+          </select>
+        </section>
+
+        <section class="space-y-2">
+          <label class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={!!video.resize}
+              onchange={e => {
+                video.resize = (e.target as HTMLInputElement).checked ? { width: outW, height: outH, kernel: 'Spline36' } : null
+                commit()
+              }}
+            />
+            <span class="label">Resize</span>
+          </label>
+          {#if video.resize}
+            <div class="flex items-center gap-2">
+              <input class="field w-20" type="number" step="2" bind:value={video.resize.width} onchange={() => commit()} />
+              ×
+              <input class="field w-20" type="number" step="2" bind:value={video.resize.height} onchange={() => commit()} />
+              <select class="field flex-1" bind:value={video.resize.kernel} onchange={() => commit()}>
+                {#each ['Spline36', 'Spline64', 'Lanczos', 'Bicubic', 'Bilinear', 'Point'] as k (k)}<option value={k}>{k}</option>{/each}
+              </select>
+            </div>
+          {/if}
+        </section>
+
+        <section class="space-y-2">
+          <span class="label">Filters (VapourSynth lines on <code>clip</code>)</span>
+          <textarea
+            class="field h-24 w-full font-mono text-xs"
+            placeholder="clip = core.std.Levels(clip, ...)"
+            bind:value={video.filters}
+            onchange={() => commit(0)}
+            disabled={video.custom !== null}
+          ></textarea>
+          {#if video.custom !== null}
+            <p class="text-xs text-warn">
+              A custom script body is in use, so crop, resize and filters don't apply.
+              <button class="underline" onclick={() => (view = 'script')}>Edit it</button> ·
+              <button class="underline" onclick={useGenerated}>Back to generated</button>
+            </p>
+          {:else}
+            <button class="btn-ghost text-xs" onclick={() => (view = 'script')}>Edit the whole script…</button>
+          {/if}
+        </section>
+      </fieldset>
+    </aside>
+  {/if}
 </div>

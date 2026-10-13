@@ -1,5 +1,5 @@
 """A job's video in the browser: clip info, frames (source = uncropped, output = processed),
-auto-crop, and the generated script.
+auto-crop, the generated script, and a check that runs it (the script editor's Run).
 
 Clips come from the same script generator the encode uses and are cached by
 script text. The first request for a source builds its index in the job's work
@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from videoforge.core.plan_io import to_json
 from videoforge.core.video import crop as autocrop
 from videoforge.core.video import vs as vsx
-from videoforge.core.video.script import build_script
+from videoforge.core.video.script import build_script, script_parts
 from videoforge.server.queue import Entry, JobQueue
 
 router = APIRouter(prefix="/api/jobs/{job_id}/video")
@@ -46,7 +46,34 @@ def _clip(request: Request, e: Entry, stage: Stage):
 
 @router.get("/script")
 def script(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
-    return {"script": script_for(_entry(request, job_id), stage)}
+    """The script, and its parts: head and tail are generated, body is what the user edits
+    (the custom body, or the lines crop/resize/filters make). Line numbers count from the head."""
+    spec = _entry(request, job_id).spec
+    head, body, tail = script_parts(spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage)
+    return {"script": "\n".join(head + body + tail) + "\n", "head": head, "body": body, "tail": tail,
+            "custom": spec.video.custom is not None}
+
+
+@router.get("/check")
+def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
+    """Run the script and render its first frame: the clip's info, or the error and its script line."""
+    e = _entry(request, job_id)
+    cache: vsx.ClipCache = request.app.state.clips
+    try:
+        clip = cache.get(script_for(e, stage))
+    except vsx.ScriptError as ex:
+        message = ex.message
+        spec = e.spec
+        head, body, _ = script_parts(spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage)
+        if ex.line and ex.line > len(head) + len(body):
+            message += " (in the generated end of the script: the body must leave a video clip in `clip`)"
+        return {"ok": False, "error": message, "line": ex.line}
+    try:
+        clip.get_frame(0)
+    except Exception as ex:  # noqa: BLE001 - a filter failing on a frame; report it, don't 500
+        return {"ok": False, "error": f"Frame 0: {type(ex).__name__}: {ex}", "line": None}
+    i = vsx.clip_info(clip)
+    return {"ok": True, "info": to_json(i) | {"fps": i.fps}}
 
 
 @router.get("/info")
@@ -60,8 +87,11 @@ def info(request: Request, job_id: str, stage: Stage = "output") -> dict[str, An
 def frame(request: Request, job_id: str, n: int = 0, stage: Stage = "output",
           fmt: Literal["jpeg", "png"] = "jpeg", quality: int = 90) -> Response:
     clip = _clip(request, _entry(request, job_id), stage)
-    data = vsx.frame_image(clip, n, fmt, quality)
-    props = vsx.frame_props(clip, n)
+    try:
+        data = vsx.frame_image(clip, n, fmt, quality)
+        props = vsx.frame_props(clip, n)
+    except Exception as ex:  # noqa: BLE001 - a filter failing on this frame
+        raise HTTPException(422, f"Frame {n}: {type(ex).__name__}: {ex}") from None
     pict = props.get("_PictType", "")
     return Response(data, media_type=f"image/{fmt}",
                     headers={"Cache-Control": "no-store", "X-Frame-Type": str(pict), "X-Frame-Count": str(clip.num_frames)})

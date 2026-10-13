@@ -39,7 +39,12 @@ def source_line(source: Path, source_filter: SourceFilter, index_dir: Path) -> s
 
 def processing_lines(settings: VideoSettings) -> list[str]:
     if settings.custom is not None:
-        return settings.custom.strip().splitlines()
+        lines = settings.custom.splitlines()
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        while lines and not lines[-1].strip():
+            lines.pop()
+        return lines  # as typed (indentation kept), less blank lines at either end
     lines = []
     c = settings.crop
     if not c.is_zero:
@@ -52,25 +57,35 @@ def processing_lines(settings: VideoSettings) -> list[str]:
     return lines
 
 
-def build_script(
+def script_parts(
     settings: VideoSettings, source: Path, index_dir: Path, *, depth: int | None = None, stage: Stage = "output"
-) -> str:
-    """The script text. depth converts the output to that bit depth (dithered) when it differs."""
-    lines = [
+) -> tuple[list[str], list[str], list[str]]:
+    """The script as (head, body, tail) lines. The body is the part the user edits (crop/resize/filters
+    or the custom body); head (imports, source) and tail (depth conversion, output) are generated."""
+    head = [
         "import vapoursynth as vs",
         "core = vs.core",
         source_line(source, settings.source_filter, index_dir),
         "clip = src",
     ]
-    if stage == "output":
-        lines += processing_lines(settings)
-        if depth is not None:
-            lines += [
-                f"if clip.format.bits_per_sample != {depth}:",
-                (
-                    f"    clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample={depth}),"
-                    ' dither_type="error_diffusion")'
-                ),
-            ]
-    lines.append("clip.set_output()")
-    return "\n".join(lines) + "\n"
+    if stage == "source":
+        return head, [], ["clip.set_output()"]
+    tail = []
+    if depth is not None:
+        tail += [
+            f"if clip.format.bits_per_sample != {depth}:",
+            (
+                f"    clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample={depth}),"
+                ' dither_type="error_diffusion")'
+            ),
+        ]
+    tail.append("clip.set_output()")
+    return head, processing_lines(settings), tail
+
+
+def build_script(
+    settings: VideoSettings, source: Path, index_dir: Path, *, depth: int | None = None, stage: Stage = "output"
+) -> str:
+    """The script text. depth converts the output to that bit depth (dithered) when it differs."""
+    head, body, tail = script_parts(settings, source, index_dir, depth=depth, stage=stage)
+    return "\n".join(head + body + tail) + "\n"

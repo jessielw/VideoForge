@@ -229,6 +229,17 @@ export interface ClipInfo {
   fps: number
 }
 
+// The job's script: head and tail are generated, body is the editable part (line numbers run head -> tail).
+export interface ScriptParts {
+  script: string
+  head: string[]
+  body: string[]
+  tail: string[]
+  custom: boolean
+}
+
+export type ScriptCheck = { ok: true; info: ClipInfo } | { ok: false; error: string; line: number | null }
+
 export interface TrackProperty {
   key: string
   label: string

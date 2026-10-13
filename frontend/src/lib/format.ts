@@ -81,3 +81,14 @@ export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number)
     t = setTimeout(() => fn(...a), ms)
   }
 }
+
+// A clip's running time (frames / fps) as h:mm:ss.mmm.
+export function clipLength(frames: number, fpsNum: number, fpsDen: number): string {
+  if (!fpsNum) return '?'
+  const ms = Math.round((frames * fpsDen * 1000) / fpsNum)
+  const h = Math.floor(ms / 3_600_000)
+  const m = Math.floor(ms / 60_000) % 60
+  const s = Math.floor(ms / 1000) % 60
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
+  return `${h}:${pad(m)}:${pad(s)}.${pad(ms % 1000, 3)}`
+}

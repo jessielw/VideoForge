@@ -304,12 +304,12 @@
     {/if}
   </div>
 
-  <div class="flex items-center gap-2">
+  <div class="flex flex-wrap items-center gap-2">
     <button class="btn-ghost px-2" onclick={() => seek(0)} title="First (Home)"><Icon name="first" /></button>
     <button class="btn-ghost px-2" onclick={() => seek(frame - 1)} title="Previous (←)"><Icon name="left" /></button>
     <input
       type="range"
-      class="flex-1 accent-[var(--color-accent)]"
+      class="min-w-16 flex-1 accent-[var(--color-accent)]"
       min="0"
       max={Math.max(0, frames - 1)}
       value={frame}

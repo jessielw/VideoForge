@@ -27,8 +27,32 @@ PLUGIN_ENV = "VAPOURSYNTH_EXTRA_PLUGIN_PATH"
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
+SCRIPT_NAME = "<script>"  # the file name scripts are compiled under; their traceback frames carry it
+
+
 class ScriptError(RuntimeError):
-    pass
+    """A script that fails to run. line is the script's 1-based line that failed, when known."""
+
+    def __init__(self, message: str, line: int | None = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.line = line
+
+    def __str__(self) -> str:
+        return f"Line {self.line}: {self.message}" if self.line else self.message
+
+
+def error_line(e: BaseException) -> int | None:
+    """The script line an exception came from: a syntax error's line, else the innermost script frame."""
+    if isinstance(e, SyntaxError) and e.filename == SCRIPT_NAME:
+        return e.lineno
+    line = None
+    tb = e.__traceback__
+    while tb is not None:
+        if tb.tb_frame.f_code.co_filename == SCRIPT_NAME:
+            line = tb.tb_lineno
+        tb = tb.tb_next
+    return line
 
 
 def configure(plugin_dir: str | Path | None) -> None:
@@ -52,9 +76,10 @@ def load_clip(script: str) -> vs.VideoNode:
 
     namespace: dict[str, object] = {"__name__": "__vapoursynth__"}
     try:
-        exec(compile(script, "<script>", "exec"), namespace)  # noqa: S102 - running the user's script is the point
+        exec(compile(script, SCRIPT_NAME, "exec"), namespace)  # noqa: S102 - running the user's script is the point
     except Exception as e:
-        raise ScriptError(f"{type(e).__name__}: {e}") from e
+        msg = e.msg if isinstance(e, SyntaxError) else str(e)
+        raise ScriptError(f"{type(e).__name__}: {msg}", error_line(e)) from e
     clip = namespace.get("clip")
     if not isinstance(clip, vs.VideoNode):
         raise ScriptError("The script must leave a video clip in `clip`")

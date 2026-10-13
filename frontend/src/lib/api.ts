@@ -10,6 +10,8 @@ import type {
   MatchResult,
   Profile,
   QueueState,
+  ScriptCheck,
+  ScriptParts,
 } from './types'
 
 export class ApiError extends Error {
@@ -89,5 +91,6 @@ export const api = {
   frameUrl: (id: string, n: number, stage: 'source' | 'output', version: number, fmt: 'jpeg' | 'png' = 'jpeg') =>
     `/api/jobs/${id}/video/frame?n=${n}&stage=${stage}&fmt=${fmt}&v=${version}`,
   autocrop: (id: string, samples = 20) => post<Crop>(`/api/jobs/${id}/video/autocrop?samples=${samples}`),
-  script: (id: string) => get<{ script: string }>(`/api/jobs/${id}/video/script`),
+  script: (id: string) => get<ScriptParts>(`/api/jobs/${id}/video/script`),
+  checkScript: (id: string) => get<ScriptCheck>(`/api/jobs/${id}/video/check`),
 }
