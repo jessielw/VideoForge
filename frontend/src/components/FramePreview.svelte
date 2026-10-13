@@ -1,9 +1,12 @@
 <script lang="ts">
-  // A job's frames from the server (VapourSynth): zoom (fit .. 800%, Ctrl+wheel, double-click),
-  // drag to pan with a minimap, an edge-detect view for spotting borders, a crop overlay,
-  // and frame stepping (←/→ 1, Shift 10, PgUp/PgDn 1 s, Home/End). From the video-forge app.
+  // A job's frames from the server (VapourSynth, lossless PNG): zoom (fit .. 800%, Ctrl+wheel and
+  // double-click zoom at the pointer), drag to pan with a minimap, an edge-detect view for spotting
+  // borders, a crop overlay, and frame stepping (←/→ 1, Shift 10, PgUp/PgDn 1 s, Home/End).
+  // The frame sits on a matte (gray, black or white) with a margin all round, so every edge pixel
+  // can be scrolled into view clear of the scrollbars and told apart from the background.
   // A new frame replaces the old one only once it has decoded, so zoom, scroll and the picture
   // stay put while it loads; a failed load keeps the last frame under an error banner.
+  import { tick } from 'svelte'
   import { api } from '../lib/api'
   import type { Crop } from '../lib/types'
   import Icon from './Icon.svelte'
@@ -32,8 +35,15 @@
     notice?: { text: string; tone: 'muted' | 'bad' } | null
   } = $props()
 
-  const ZOOMS = [0, 25, 50, 75, 100, 150, 200, 300, 400, 600, 800] // 0 = fit
-  let zoom = $state(0)
+  const ZOOMS = [25, 50, 75, 100, 150, 200, 300, 400, 600, 800]
+  const PAD = 24 // matte margin around the frame, px
+  const MATTES = { gray: '#404040', black: '#000000', white: '#ffffff' } as const
+  type Matte = keyof typeof MATTES
+  let zoom = $state(0) // percent; 0 = fit
+  let vw = $state(0) // the viewport's client size
+  let vh = $state(0)
+  let frameEl = $state<HTMLDivElement>()
+  let matte = $state<Matte>(readMatte())
   let src = $state<string | null>(null)
   let loading = $state(false)
   let error = $state('')
@@ -55,7 +65,7 @@
     controller = c
     loading = true
     try {
-      const res = await fetch(api.frameUrl(jobId, n, st as 'source' | 'output', v), { signal: c.signal })
+      const res = await fetch(api.frameUrl(jobId, n, st as 'source' | 'output', v, 'png'), { signal: c.signal })
       if (!res.ok) {
         let msg = `${res.status}`
         try {
@@ -115,28 +125,95 @@
     e.preventDefault()
   }
 
-  function zoomBy(dir: number) {
-    const i = ZOOMS.indexOf(zoom)
-    zoom = ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, (i < 0 ? 0 : i) + dir))]
+  // --- zoom ---
+  $effect(() => {
+    const v = viewport
+    if (!v) return
+    const ro = new ResizeObserver(() => {
+      vw = v.clientWidth
+      vh = v.clientHeight
+    })
+    ro.observe(v)
+    return () => ro.disconnect()
+  })
+
+  const fitScale = $derived(vw && vh ? Math.max(0.01, Math.min((vw - 2 * PAD) / width, (vh - 2 * PAD) / height)) : 1)
+  const scale = $derived(zoom ? zoom / 100 : fitScale)
+  const dispW = $derived(Math.floor(width * scale))
+  const dispH = $derived(Math.floor(height * scale))
+  const pannable = $derived(dispW + 2 * PAD > vw + 1 || dispH + 2 * PAD > vh + 1)
+
+  // Change the zoom keeping the frame point under (cx, cy) (client coordinates; default the
+  // viewport's centre) where it is.
+  async function setZoom(z: number, cx?: number, cy?: number) {
+    if (z === zoom) return
+    if (!viewport || !frameEl) {
+      zoom = z
+      return
+    }
+    const r = viewport.getBoundingClientRect()
+    const x = cx === undefined ? viewport.clientWidth / 2 : cx - r.left - viewport.clientLeft
+    const y = cy === undefined ? viewport.clientHeight / 2 : cy - r.top - viewport.clientTop
+    const before = scale
+    const fx = (viewport.scrollLeft + x - frameEl.offsetLeft) / before
+    const fy = (viewport.scrollTop + y - frameEl.offsetTop) / before
+    zoom = z
+    await tick()
+    viewport.scrollLeft = fx * scale + frameEl.offsetLeft - x
+    viewport.scrollTop = fy * scale + frameEl.offsetTop - y
+    updateMap()
+  }
+
+  // One step in or out; zooming out past the fit size lands on Fit.
+  function zoomBy(dir: number, cx?: number, cy?: number) {
+    const cur = scale * 100
+    if (dir > 0) {
+      const next = ZOOMS.find(z => z > cur + 0.5)
+      if (next) setZoom(next, cx, cy)
+    } else if (zoom) {
+      const next = [...ZOOMS].reverse().find(z => z < cur - 0.5)
+      setZoom(next && next > fitScale * 100 + 0.5 ? next : 0, cx, cy)
+    }
   }
 
   function onwheel(e: WheelEvent) {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault()
-      zoomBy(e.deltaY > 0 ? -1 : 1)
-    } else if (zoom) flashMap()
+      zoomBy(e.deltaY > 0 ? -1 : 1, e.clientX, e.clientY)
+    } else if (pannable) flashMap()
   }
 
-  function ondblclick() {
-    const i = ZOOMS.indexOf(zoom)
-    zoom = i < 0 || i === ZOOMS.length - 1 ? 0 : zoom === 0 ? 100 : ZOOMS[i + 1]
+  // Fit <-> a close look (100%, or more when the fit is already that big) at the pointer.
+  function ondblclick(e: MouseEvent) {
+    if (zoom) setZoom(0)
+    else setZoom(ZOOMS.find(z => z >= 100 && z > fitScale * 100 + 1) ?? ZOOMS[ZOOMS.length - 1], e.clientX, e.clientY)
+  }
+
+  function readMatte(): Matte {
+    try {
+      const m = localStorage.getItem('videoforge.matte')
+      if (m && m in MATTES) return m as Matte
+    } catch {
+      /* storage blocked */
+    }
+    return 'gray'
+  }
+
+  function nextMatte() {
+    const keys = Object.keys(MATTES) as Matte[]
+    matte = keys[(keys.indexOf(matte) + 1) % keys.length]
+    try {
+      localStorage.setItem('videoforge.matte', matte)
+    } catch {
+      /* storage blocked */
+    }
   }
 
   // --- panning + minimap ---
   let drag = { x: 0, y: 0, left: 0, top: 0, id: -1 }
 
   function onpointerdown(e: PointerEvent) {
-    if (!zoom || !viewport || e.button !== 0) return
+    if (!pannable || !viewport || e.button !== 0) return
     // Leave the scrollbars to the browser. Classic ones sit outside the client area and
     // their presses target the viewport itself; overlay ones (Firefox on Windows 11, macOS)
     // sit over the picture, so the strip along each scrolling edge is theirs too.
@@ -166,14 +243,18 @@
     }
   }
 
+  // The visible part of the frame, in % of the frame (the matte margin left out).
   function updateMap() {
-    if (!viewport) return
-    const { scrollLeft, scrollTop, scrollWidth, scrollHeight, clientWidth, clientHeight } = viewport
+    if (!viewport || !frameEl || !dispW || !dispH) return
+    const left = Math.max(0, viewport.scrollLeft - frameEl.offsetLeft)
+    const top = Math.max(0, viewport.scrollTop - frameEl.offsetTop)
+    const right = Math.min(dispW, viewport.scrollLeft + viewport.clientWidth - frameEl.offsetLeft)
+    const bottom = Math.min(dispH, viewport.scrollTop + viewport.clientHeight - frameEl.offsetTop)
     mapPos = {
-      left: (scrollLeft / scrollWidth) * 100,
-      top: (scrollTop / scrollHeight) * 100,
-      w: Math.min(100, (clientWidth / scrollWidth) * 100),
-      h: Math.min(100, (clientHeight / scrollHeight) * 100),
+      left: (left / dispW) * 100,
+      top: (top / dispH) * 100,
+      w: (Math.max(0, right - left) / dispW) * 100,
+      h: (Math.max(0, bottom - top) / dispH) * 100,
     }
   }
 
@@ -235,16 +316,20 @@
   <div class="flex flex-wrap items-center gap-2 text-sm">
     <div class="flex items-center gap-1">
       <button class="btn-ghost px-2" onclick={() => zoomBy(-1)} title="Zoom out (-)"><Icon name="zoomOut" /></button>
-      <select class="field" bind:value={zoom}>
-        {#each ZOOMS as z (z)}<option value={z}>{z === 0 ? 'Fit' : `${z}%`}</option>{/each}
+      <select class="field" value={zoom} onchange={e => setZoom(+(e.target as HTMLSelectElement).value)}>
+        <option value={0}>Fit ({Math.round(fitScale * 100)}%)</option>
+        {#each ZOOMS as z (z)}<option value={z}>{z}%</option>{/each}
       </select>
       <button class="btn-ghost px-2" onclick={() => zoomBy(1)} title="Zoom in (+)"><Icon name="zoomIn" /></button>
     </div>
     <button class="btn-ghost {edges ? 'text-accent' : ''}" onclick={toggleEdges} title="Show edges, to judge borders">
       Edges
     </button>
+    <button class="btn-ghost" onclick={nextMatte} title="Background around the frame: {matte} (click to change)">
+      <span class="inline-block size-3.5 border border-line" style="background:{MATTES[matte]}"></span>Matte
+    </button>
     <span class="ml-auto text-xs text-muted">
-      {width}×{height}{crop && stage === 'source' ? ` → ${outW}×${outH}` : ''}
+      {width}×{height}{crop && stage === 'source' ? ` → ${outW}×${outH}` : ''} · {Math.round(scale * 100)}%
       {#if pictType}· {pictType}-frame{/if}
       {#if loading}· loading…{/if}
     </span>
@@ -255,8 +340,9 @@
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
     <div
       bind:this={viewport}
-      class="absolute inset-0 overflow-auto border border-line bg-black outline-none focus:border-accent/60
-        {zoom ? (panning ? 'cursor-grabbing' : 'cursor-grab') : ''}"
+      class="absolute inset-0 overflow-auto border border-line outline-none focus:border-accent/60
+        {pannable ? (panning ? 'cursor-grabbing' : 'cursor-grab') : ''}"
+      style="background:{MATTES[matte]}"
       tabindex="0"
       role="application"
       aria-label="Frame {frame}: arrow keys step, Ctrl+wheel zooms, drag pans"
@@ -267,18 +353,18 @@
       {onpointermove}
       {onpointerup}
       onpointercancel={onpointerup}
-      onscroll={() => zoom && updateMap()}
+      onscroll={() => pannable && updateMap()}
     >
-      {#if shown}
-        <div class={zoom ? 'inline-block align-top' : 'flex h-full w-full items-center justify-center'}>
-          <div class="relative {zoom ? '' : 'max-h-full max-w-full'}" style={zoom ? `width:${(width * zoom) / 100}px;height:${(height * zoom) / 100}px` : ''}>
+      <!-- At least the viewport's size, centring the frame; bigger when the frame (plus its margin) is. -->
+      <div class="grid min-h-full min-w-full place-items-center" style="width:max-content;height:max-content;padding:{PAD}px">
+        <div bind:this={frameEl} class="relative" style="width:{dispW}px;height:{dispH}px">
+          {#if shown}
             <img
               src={shown}
               alt="Frame {frame}"
               draggable="false"
-              class="block select-none {zoom ? 'h-full w-full' : 'max-h-[calc(100vh-22rem)] max-w-full object-contain'}
-                {loading ? 'opacity-80' : ''}"
-              style="image-rendering: {zoom >= 200 ? 'pixelated' : 'auto'}"
+              class="block h-full w-full select-none {loading ? 'opacity-80' : ''}"
+              style="image-rendering: {scale >= 2 ? 'pixelated' : 'auto'}"
             />
             {#if crop && stage === 'source'}
               <div class="pointer-events-none absolute inset-0">
@@ -298,9 +384,9 @@
                 ></div>
               </div>
             {/if}
-          </div>
+          {/if}
         </div>
-      {/if}
+      </div>
     </div>
 
     {#if !src}
@@ -325,7 +411,7 @@
       </div>
     {/if}
 
-    {#if zoom && (panning || showMap) && shown}
+    {#if pannable && (panning || showMap) && shown}
       <div class="pointer-events-none absolute right-3 bottom-3 w-48 overflow-hidden rounded border border-line bg-black/80 shadow-lg">
         <div class="relative">
           <img src={shown} alt="" class="block w-full opacity-70" />

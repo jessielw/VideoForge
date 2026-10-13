@@ -7,6 +7,7 @@
   import { api } from '../lib/api'
   import { percent, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { router } from '../lib/router.svelte'
+  import { layout } from '../lib/layout.svelte'
   import { app } from '../lib/state.svelte'
   import type { EncoderSettings, JobDetail } from '../lib/types'
 
@@ -100,8 +101,37 @@
 </script>
 
 <div class="flex h-full">
+  {#if layout.queueCollapsed}
+    <!-- The list as a rail: one chip per job (its place, coloured by status). -->
+    <section class="flex w-14 shrink-0 flex-col items-center border-r border-line">
+      <button class="btn-ghost my-2 px-2" onclick={() => (layout.queueCollapsed = false)} title="Show the queue list">
+        <Icon name="right" />
+      </button>
+      <div class="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-auto border-t border-line py-2">
+        {#each app.jobs as job, i (job.id)}
+          <button
+            class="relative flex h-9 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border text-xs
+              {selected.includes(job.id) ? 'border-accent bg-accent-strong/15' : 'border-line hover:bg-raised'}
+              {STATUS_TONE[job.status]}"
+            onclick={e => click(e, job.id)}
+            title="{job.name}: {STATUS_LABEL[job.status]}{job.issue ? ` (${job.issue})` : ''}"
+          >
+            {i + 1}
+            {#if job.status === 'running' && job.progress}
+              <span class="absolute inset-x-0 bottom-0 h-1 bg-raised">
+                <span class="block h-full bg-info" style="width:{job.progress.overall * 100}%"></span>
+              </span>
+            {/if}
+          </button>
+        {/each}
+      </div>
+    </section>
+  {:else}
   <section class="flex w-[28rem] shrink-0 flex-col border-r border-line">
-    <div class="flex flex-wrap items-center gap-1.5 border-b border-line p-2">
+    <div class="flex flex-wrap items-center gap-1 border-b border-line p-2">
+      <button class="btn-ghost px-1" onclick={() => (layout.queueCollapsed = true)} title="Collapse the list, for more room">
+        <Icon name="left" />
+      </button>
       {#if app.queue.running}
         <button class="btn" onclick={() => act(api.stop)} title="Finish the current job, then stop">
           <Icon name="pause" />{app.queue.stop_after_current ? 'Stopping…' : 'Stop after current'}
@@ -116,12 +146,12 @@
         <Icon name="play" />Run selected
       </button>
       <span class="flex-1"></span>
-      <button class="btn-ghost px-2" disabled={!selected.length} onclick={() => move(-1)} title="Move up"><Icon name="up" /></button>
-      <button class="btn-ghost px-2" disabled={!selected.length} onclick={() => move(1)} title="Move down"><Icon name="down" /></button>
-      <button class="btn-ghost px-2" disabled={!selected.length} onclick={() => act(() => api.reprobe(selected))} title="Probe again">
+      <button class="btn-ghost px-1.5" disabled={!selected.length} onclick={() => move(-1)} title="Move up"><Icon name="up" /></button>
+      <button class="btn-ghost px-1.5" disabled={!selected.length} onclick={() => move(1)} title="Move down"><Icon name="down" /></button>
+      <button class="btn-ghost px-1.5" disabled={!selected.length} onclick={() => act(() => api.reprobe(selected))} title="Probe again">
         <Icon name="refresh" />
       </button>
-      <button class="btn-ghost px-2 hover:text-bad" disabled={!selected.length} onclick={remove} title="Remove"><Icon name="trash" /></button>
+      <button class="btn-ghost px-1.5 hover:text-bad" disabled={!selected.length} onclick={remove} title="Remove"><Icon name="trash" /></button>
     </div>
 
     <div class="min-h-0 flex-1 overflow-auto">
@@ -164,6 +194,7 @@
     </div>
     {#if message}<div class="border-t border-line px-3 py-2 text-xs text-muted">{message}</div>{/if}
   </section>
+  {/if}
 
   <section class="min-w-0 flex-1">
     {#if single}

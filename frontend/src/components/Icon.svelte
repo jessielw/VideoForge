@@ -33,6 +33,8 @@
     home: 'M3 11l9-7 9 7M5 10v10h14V10',
     settings: 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
     grip:'M8.5 6h1M8.5 12h1M8.5 18h1M14.5 6h1M14.5 12h1M14.5 18h1',
+    expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+    shrink: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5',
   } as const
   export type IconName = keyof typeof PATHS
 </script>

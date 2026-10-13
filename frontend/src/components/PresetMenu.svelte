@@ -81,7 +81,15 @@
   }
 </script>
 
-<svelte:window onpointerdown={onwindow} onkeydown={e => open && e.key === 'Escape' && (open = false)} />
+<svelte:window
+  onpointerdown={onwindow}
+  onkeydowncapture={e => {
+    if (open && e.key === 'Escape') {
+      e.preventDefault() // the menu takes this Escape (not the expanded editor)
+      open = false
+    }
+  }}
+/>
 
 <div class="relative" bind:this={root}>
   <button class="btn max-w-full" {disabled} onclick={() => (open = !open)} title="Load or save a {kind} preset">

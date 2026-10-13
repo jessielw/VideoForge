@@ -6,6 +6,7 @@
   // that only change when the content does; otherwise each save would remount the preview.
   import { untrack } from 'svelte'
   import { api } from '../lib/api'
+  import { layout } from '../lib/layout.svelte'
   import { clipLength } from '../lib/format'
   import type { ClipInfo, Crop, JobDetail, ScriptCheck, ScriptParts, SourceFilter, VideoSettings } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
@@ -41,6 +42,9 @@
   const dirty = $derived(!!parts && body !== parts.body.join('\n'))
   const jobId = $derived(job.id)
   const scriptKey = $derived(job.id + JSON.stringify(job.spec.video) + job.spec.encoder.depth)
+
+  // Expanded is for this tab only: leaving it (another tab, job or page) puts the layout back.
+  $effect(() => () => (layout.videoExpanded = false))
 
   // A new job (or a change made elsewhere) resets the local copy.
   let lastJob = ''
@@ -193,7 +197,9 @@
   ]
 </script>
 
-<div class="flex h-full min-h-0 gap-4">
+<svelte:window onkeydown={e => e.key === 'Escape' && !e.defaultPrevented && layout.videoExpanded && (layout.videoExpanded = false)} />
+
+<div class="flex min-h-0 gap-4 {layout.videoExpanded ? 'fixed inset-0 z-40 bg-bg p-4' : 'h-full'}">
   <div class="flex min-w-0 flex-1 flex-col gap-2">
     <div class="flex items-center gap-2">
       <div class="flex rounded-md border border-line p-0.5">
@@ -206,6 +212,13 @@
       </div>
       {#if saving}<span class="text-xs text-muted">saving…</span>{/if}
       {#if infoError && view !== 'script'}<span class="truncate text-xs text-bad" title={infoError}>{infoError}</span>{/if}
+      <button
+        class="btn-ghost ml-auto"
+        onclick={() => (layout.videoExpanded = !layout.videoExpanded)}
+        title={layout.videoExpanded ? 'Back to the page (Esc)' : 'Fill the window with the video editor'}
+      >
+        <Icon name={layout.videoExpanded ? 'shrink' : 'expand'} />{layout.videoExpanded ? 'Restore' : 'Expand'}
+      </button>
     </div>
     {#if current}
       <FramePreview
