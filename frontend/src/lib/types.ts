@@ -84,7 +84,7 @@ export interface Issue {
   message: string
 }
 
-export type AudioAction = 'copy' | 'ddp' | 'atmos' | 'aac' | 'flac' | 'opus' | 'aac_ffmpeg' | 'ac3' | 'eac3'
+export type AudioAction = 'copy' | 'ddp' | 'atmos' | 'aac' | 'flac' | 'opus' | 'opusenc' | 'aac_ffmpeg' | 'ac3' | 'eac3'
 
 // One audio encode as the server describes it (core.execute.audio.ENCODES).
 export interface AudioEncodeInfo {

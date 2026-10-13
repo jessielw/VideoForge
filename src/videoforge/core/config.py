@@ -24,6 +24,7 @@ class Tools:
     mkvpropedit: str = "mkvpropedit"  # default: next to mkvmerge
     x264: str = "x264"
     x265: str = "x265"
+    opusenc: str = "opusenc"
     vspipe: str = ""  # default: the one pip's vapoursynth installs next to this Python
     vs_plugins: str = ""  # extra VapourSynth plugin folder (VAPOURSYNTH_EXTRA_PLUGIN_PATH)
 

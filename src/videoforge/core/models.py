@@ -177,6 +177,7 @@ class AudioAction(StrEnum):
     # ffmpeg's own encoders (core.execute.audio.ENCODES has each one's layouts and bitrates)
     FLAC = "flac"
     OPUS = "opus"  # libopus
+    OPUSENC = "opusenc"  # ffmpeg -> opusenc (opus-tools)
     AAC_FFMPEG = "aac_ffmpeg"
     AC3 = "ac3"
     EAC3 = "eac3"

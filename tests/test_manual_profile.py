@@ -6,7 +6,8 @@ from pathlib import Path
 
 from conftest import audio, plan_for, simulate_output, source, sub
 
-from videoforge.core.models import AudioAction, Layout, Overrides, Severity, TrackOverride
+from videoforge.core.jobs import ProbedInputs
+from videoforge.core.models import AudioAction, JobInputs, Layout, Overrides, Severity, TrackOverride
 from videoforge.core.models import AudioCodec as C
 from videoforge.core.models import SubFormat as F
 from videoforge.profiles import default_profile_id, get_profile, profile_ids
@@ -181,3 +182,22 @@ def test_encode_options_default_and_are_checked():
     assert bad.audio[0].options["level"] == "8"  # the default stands in
     quotes = encoded(stereo, id_1=TrackOverride(action=AudioAction.AC3, options={"extra": '-metadata title="x'}))
     assert [i.code for i in quotes.issues] == ["audio.option"]
+
+
+def test_encode_options_take_the_profiles_defaults():
+    class Bluray(ManualProfile):
+        id = "bluray-test"
+
+        def audio_settings(self):
+            from videoforge.core.execute.audio import AudioSettings
+            return AudioSettings(atmos_mode="bluray", qaac_tvbr=91)
+
+    src = source([audio(C.TRUEHD, "7.1", "en", atmos=True, index=0), audio(C.FLAC, "2.0", "en", index=1)])
+    ov = Overrides(tracks={"id:1": TrackOverride(action=AudioAction.ATMOS),
+                           "id:2": TrackOverride(action=AudioAction.AAC, options={"quality": "200"})})
+    inputs = JobInputs(source=Path(src.name), encode=Path("E.mkv"))
+    plan = Bluray().plan(ProbedInputs(inputs, src, source(name="E.mkv"), []), None, ov)
+    atmos, aac = plan.audio
+    assert atmos.options["atmos_mode"] == "bluray" and atmos.options["drc_line"] == ""
+    assert aac.options["quality"] == "91"  # 200 is out of range, so the profile's default stands in
+    assert [i.code for i in plan.issues] == ["audio.option"]

@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from videoforge.core import lang
-from videoforge.core.execute.audio import ENCODES, AudioEncode
+from videoforge.core.execute.audio import ENCODES, AudioEncode, AudioSettings
 from videoforge.core.jobs import ProbedInputs
 from videoforge.core.models import (
     AudioAction,
@@ -78,7 +78,8 @@ def _default_layout(enc: AudioEncode, source: Layout) -> Layout:
     return max(fits, key=lambda lay: (lay.channels, lay.lfe)) if fits else enc.layouts[0]
 
 
-def audio_output(t: AudioTrack, ov: TrackOverride | None, issues: list[Issue]) -> dict:
+def audio_output(t: AudioTrack, ov: TrackOverride | None, issues: list[Issue], settings: AudioSettings | None = None
+                 ) -> dict:
     """PlannedAudio's action/format fields for a track: copied, or encoded as the override asks.
     Adds a BLOCK for an encode that can't be done (Atmos from a non-Atmos source, an upmix)."""
     action = (ov.action if ov else None) or AudioAction.COPY
@@ -86,13 +87,16 @@ def audio_output(t: AudioTrack, ov: TrackOverride | None, issues: list[Issue]) -
         return {"action": action, "out_codec": t.codec, "out_layout": t.layout, "out_atmos": t.atmos,
                 "bitrate_kbps": None, "upmix_50": False}
     enc = ENCODES[action]
+    options, problems = enc.resolve_options(ov.options if ov else {}, (settings or AudioSettings()).option_defaults(action))
+    issues += [Issue(Severity.BLOCK, "audio.option", f"Audio #{t.id}: {p}") for p in problems]
     if action is AudioAction.ATMOS:
         if not (t.atmos and t.codec is AudioCodec.TRUEHD):
             issues.append(Issue(Severity.BLOCK, "audio.atmos_source",
                                 f"Audio #{t.id}: DDP Atmos needs a TrueHD Atmos source"))
         layout = Layout(5, 1)
         return {"action": action, "out_codec": enc.codec, "out_layout": layout, "out_atmos": True,
-                "bitrate_kbps": (ov.bitrate_kbps if ov else None) or enc.default_bitrate(layout), "upmix_50": False}
+                "bitrate_kbps": (ov.bitrate_kbps if ov else None) or enc.default_bitrate(layout), "upmix_50": False,
+                "options": options}
     layout = (ov.layout if ov else None) or _default_layout(enc, t.layout)
     upmix_50 = action is AudioAction.DDP and t.layout == Layout(5, 0) and layout == Layout(5, 1)
     if layout not in enc.layouts:
@@ -105,8 +109,6 @@ def audio_output(t: AudioTrack, ov: TrackOverride | None, issues: list[Issue]) -
         problem = enc.bitrate_problem(bitrate, layout) if bitrate else ""
         if problem:
             issues.append(Issue(Severity.BLOCK, "audio.bitrate", f"Audio #{t.id}: {problem}"))
-    options, problems = enc.resolve_options(ov.options if ov else {})
-    issues += [Issue(Severity.BLOCK, "audio.option", f"Audio #{t.id}: {p}") for p in problems]
     return {"action": action, "out_codec": enc.codec, "out_layout": layout, "out_atmos": False,
             "bitrate_kbps": bitrate, "upmix_50": upmix_50, "options": options}
 
@@ -157,7 +159,7 @@ class ManualProfile(Profile):
             if t.external_path is not None and language == "und":
                 issues.append(Issue(Severity.WARN, "audio.language",
                                     f"{t.external_path.name} has no language: set it in the track editor"))
-            audio.append(PlannedAudio(source=t, **audio_output(t, ov, issues), language=language, title=title, **flags))
+            audio.append(PlannedAudio(source=t, **audio_output(t, ov, issues, self.audio_settings()), language=language, title=title, **flags))
         subs: list[PlannedSub] = []
         for t in sub_tracks:
             language, title, flags = _settings(t, overrides.tracks.get(track_key(t)))

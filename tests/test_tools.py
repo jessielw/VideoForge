@@ -94,7 +94,8 @@ def test_encodes_need_their_tools(tmp_path):
                   truehdd=str(tmp_path / "truehdd.exe"), qaac=str(tmp_path / "qaac.exe"), ffmpeg=str(tmp_path / "ffmpeg.exe"))
     missing = missing_for_encodes(tools)
     assert missing == {AudioAction.DDP: ["Dolby Encoding Engine"], AudioAction.ATMOS: ["Dolby Encoding Engine"],
-                       AudioAction.AAC: [], AudioAction.FLAC: [], AudioAction.OPUS: [], AudioAction.AAC_FFMPEG: [],
+                       AudioAction.AAC: [], AudioAction.FLAC: [], AudioAction.OPUS: [], AudioAction.OPUSENC: ["opusenc"],
+                       AudioAction.AAC_FFMPEG: [],
                        AudioAction.AC3: [], AudioAction.EAC3: []}  # a fake ffmpeg can't be asked for its encoders
 
     plan = plan_for(source([audio(C.FLAC, "2.0", index=0), audio(C.TRUEHD, "5.1", index=1)]), source(name="E.mkv"))

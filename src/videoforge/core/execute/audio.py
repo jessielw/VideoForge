@@ -1,14 +1,16 @@
 """Audio encodes: what each one makes (ENCODES) and the command for a planned track.
 
-DeeZy makes DDP and DDP Atmos, ffmpeg | qaac makes AAC, and ffmpeg's own encoders
-make FLAC, Opus, AAC, AC-3 and E-AC-3. ENCODES is the one list the planner, the tool
-checks and the UI read: a new encode is an AudioAction, an entry here and its command.
+DeeZy makes DDP and DDP Atmos, ffmpeg | qaac makes AAC, ffmpeg | opusenc makes Opus,
+and ffmpeg's own encoders make FLAC, Opus, AAC, AC-3 and E-AC-3. ENCODES is the one list
+the planner, the tool checks and the UI read: a new encode is an AudioAction, an entry
+here and its command. Each encode's options are per-track settings; a profile's
+AudioSettings can change some of their defaults (option_defaults).
 
 Delay: the source's "delay relative to video" is applied exactly once. DeeZy
 never reads it from the container (only from --delay or a "DELAY Xms" file name
 token), so we pass it explicitly; DeeZy bakes it into the stream (padding or
 trimming, plus DEE's own priming) and the output starts at 0. ffmpeg (alone or
-into qaac) starts at the first audio sample, so those get the delay at mux
+into qaac or opusenc) starts at the first audio sample, so those get the delay at mux
 (mkvmerge --sync).
 """
 
@@ -50,7 +52,18 @@ class EncodeOption:
         return ""
 
 
-_EXTRA = EncodeOption("extra", "Extra ffmpeg arguments", "", help="Added before the output file, e.g. -cutoff 20000")
+def _extra(tool: str, example: str) -> EncodeOption:
+    return EncodeOption("extra", f"Extra {tool} arguments", "", help=f"Added to the {tool} command, e.g. {example}")
+
+
+_EXTRA = _extra("ffmpeg", "-cutoff 20000")
+_DRC = (("", "DeeZy's default"), ("film_standard", "Film standard"), ("film_light", "Film light"),
+        ("music_standard", "Music standard"), ("music_light", "Music light"), ("speech", "Speech"))
+_DEEZY = (
+    EncodeOption("drc_line", "DRC line mode", "", choices=_DRC, help="Dynamic range compression"),
+    EncodeOption("drc_rf", "DRC RF mode", "", choices=_DRC, help="Dynamic range compression"),
+    EncodeOption("dialnorm", "Dialogue level (dialnorm)", "0", int_range=(-31, 0), help="0 lets DEE measure it"),
+)
 _DIALNORM = EncodeOption("dialnorm", "Dialogue level (dialnorm)", "-31", int_range=(-31, -1),
                          help="-31 leaves the level alone; players turn quieter dialogue up")
 
@@ -79,16 +92,18 @@ class AudioEncode:
     delay_in_encode: bool = False  # it applies the source delay itself, so the mux must not
     options: tuple[EncodeOption, ...] = ()
 
-    def resolve_options(self, given: dict[str, str]) -> tuple[dict[str, str], list[str]]:
-        """Every option's value (the given one, else its default), and the problems with given ones.
-        Keys this encode doesn't have are dropped (they belong to another encode)."""
+    def resolve_options(self, given: dict[str, str], defaults: dict[str, str] | None = None
+                        ) -> tuple[dict[str, str], list[str]]:
+        """Every option's value (the given one, else the profile's default, else the option's own),
+        and the problems with given ones. Keys this encode doesn't have are dropped (another encode's)."""
         out, problems = {}, []
         for o in self.options:
-            value = given.get(o.key, o.default).strip()
-            problem = o.problem(value) if value != o.default else ""
+            default = (defaults or {}).get(o.key, o.default)
+            value = given.get(o.key, default).strip()
+            problem = o.problem(value) if value != default else ""
             if problem:
                 problems.append(problem)
-                value = o.default
+                value = default
             out[o.key] = value
         return out, problems
 
@@ -115,16 +130,34 @@ _DOLBY = _layouts("1.0", "2.0", "5.0", "5.1")
 _ANY = _layouts("1.0", "2.0", "5.0", "5.1", "6.1", "7.1")
 ENCODES: dict[AudioAction, AudioEncode] = {e.action: e for e in (
     AudioEncode(AudioAction.DDP, "DDP (DEE)", AudioCodec.EAC3, ".ec3", _layouts("1.0", "2.0", "5.1", "7.1"),
-                ("deezy", "dee", "ffmpeg"), bitrates={1: 192, 2: 256, 6: 640, 8: 1024}, delay_in_encode=True),
+                ("deezy", "dee", "ffmpeg"), bitrates={1: 192, 2: 256, 6: 640, 8: 1024}, delay_in_encode=True,
+                options=(*_DEEZY,
+                         EncodeOption("stereo_downmix", "Stereo downmix", "",
+                                      choices=(("", "DeeZy's default"), ("loro", "Lo/Ro"), ("ltrt", "Lt/Rt"),
+                                               ("dpl2", "Dolby Pro Logic II")),
+                                      help="Used when making 2.0 from more channels"),
+                         _extra("DeeZy", "--metering-mode 1770_3"))),
     AudioEncode(AudioAction.ATMOS, "DDP Atmos (DEE)", AudioCodec.EAC3, ".ec3", _layouts("5.1"),
-                ("deezy", "dee", "ffmpeg", "truehdd"), bitrates={6: 768}, delay_in_encode=True),
+                ("deezy", "dee", "ffmpeg", "truehdd"), bitrates={6: 768}, delay_in_encode=True,
+                options=(EncodeOption("atmos_mode", "Atmos mode", "streaming",
+                                      choices=(("streaming", "Streaming"), ("bluray", "Blu-ray"))),
+                         *_DEEZY,
+                         EncodeOption("warp", "Warp mode", "",
+                                      choices=(("", "DeeZy's default"), ("normal", "Normal"), ("warping", "Warping"),
+                                               ("prologiciix", "Pro Logic IIx"), ("loro", "Lo/Ro")),
+                                      help="Used when the TrueHD doesn't say"),
+                         EncodeOption("bed_conform", "Bed conformance", "off", choices=(("off", "Off"), ("on", "On"))),
+                         _extra("DeeZy", "--metering-mode 1770_3"))),
     AudioEncode(AudioAction.AAC, "AAC (qaac)", AudioCodec.AAC, ".m4a", _layouts("1.0", "2.0", "5.1"),
                 ("ffmpeg", "qaac"), bitrates={1: 96, 2: 192, 6: 384}, bitrate_range=(8, 1280), vbr_default=True,
-                default_max=Layout(2, 0)),
+                default_max=Layout(2, 0),
+                options=(EncodeOption("quality", "Quality (TVBR)", "127", int_range=(0, 127),
+                                      help="Used when no bitrate is set; 127 is the best"),
+                         _extra("qaac", "--lowpass 20000"))),
     AudioEncode(AudioAction.FLAC, "FLAC", AudioCodec.FLAC, ".flac", _ANY, ("ffmpeg",), ffmpeg_encoder="flac",
                 options=(EncodeOption("level", "Compression level", "8", int_range=(0, 12),
                                       help="Higher is smaller and slower; every level is lossless"), _EXTRA)),
-    AudioEncode(AudioAction.OPUS, "Opus", AudioCodec.OPUS, ".opus", _ANY, ("ffmpeg",), ffmpeg_encoder="libopus",
+    AudioEncode(AudioAction.OPUS, "Opus (ffmpeg)", AudioCodec.OPUS, ".opus", _ANY, ("ffmpeg",), ffmpeg_encoder="libopus",
                 bitrates={1: 96, 2: 160, 6: 384, 8: 512}, bitrate_range=(6, 2048), per_channel_max=256,
                 options=(EncodeOption("vbr", "Bitrate mode", "on",
                                       choices=(("on", "Variable"), ("constrained", "Constrained variable"), ("off", "Constant"))),
@@ -132,6 +165,15 @@ ENCODES: dict[AudioAction, AudioEncode] = {e.action: e for e in (
                                       choices=(("audio", "Music and film"), ("voip", "Speech"), ("lowdelay", "Low delay"))),
                          EncodeOption("complexity", "Complexity", "10", int_range=(0, 10), help="10 is the best quality"),
                          _EXTRA)),
+    AudioEncode(AudioAction.OPUSENC, "Opus (opusenc)", AudioCodec.OPUS, ".opus", _ANY, ("ffmpeg", "opusenc"),
+                bitrates={1: 96, 2: 160, 6: 384, 8: 512}, bitrate_range=(6, 2048), per_channel_max=256,
+                options=(EncodeOption("mode", "Bitrate mode", "vbr",
+                                      choices=(("vbr", "Variable"), ("cvbr", "Constrained variable"), ("hard-cbr", "Constant"))),
+                         EncodeOption("tune", "Tuned for", "",
+                                      choices=(("", "Automatic"), ("music", "Music"), ("speech", "Speech")),
+                                      help="Matters at low bitrates"),
+                         EncodeOption("comp", "Complexity", "10", int_range=(0, 10), help="10 is the best quality"),
+                         _extra("opusenc", "--framesize 40"))),
     AudioEncode(AudioAction.AAC_FFMPEG, "AAC (ffmpeg)", AudioCodec.AAC, ".m4a", _ANY, ("ffmpeg",),
                 ffmpeg_encoder="aac", bitrates={1: 96, 2: 192, 6: 384, 8: 512}, bitrate_range=(8, 1536),
                 options=(EncodeOption("coder", "Coder", "twoloop", choices=(("twoloop", "Two-loop (better)"), ("fast", "Fast"))),
@@ -156,8 +198,16 @@ class AudioSettings:
 
     atmos_mode: str = "streaming"
     qaac_tvbr: int = 127
-    deezy_extra_args: tuple[str, ...] = ()
+    deezy_extra_args: tuple[str, ...] = ()  # before each track's own extra arguments
     qaac_extra_args: tuple[str, ...] = ()
+
+    def option_defaults(self, action: AudioAction) -> dict[str, str]:
+        """This profile's defaults for an encode's options (ENCODES[action].options keys)."""
+        if action is AudioAction.ATMOS:
+            return {"atmos_mode": self.atmos_mode}
+        if action is AudioAction.AAC:
+            return {"quality": str(self.qaac_tvbr)}
+        return {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,12 +237,21 @@ def _deezy(planned: PlannedAudio, source: Path, output: Path, temp_dir: Path, se
         "--truehdd", tools.truehdd,
     )
     if planned.action is AudioAction.ATMOS:
-        mode = ("encode", "atmos", f"--atmos-mode={settings.atmos_mode}")
+        mode = ("encode", "atmos", f"--atmos-mode={_opt(planned, 'atmos_mode', settings)}")
     else:
         mode = ("encode", "ddp", f"--channels={planned.out_layout.channels}")
         if planned.upmix_50:
             mode += ("--upmix-50-to-51",)
-    return (tools.deezy, *mode, *common, *settings.deezy_extra_args, str(source))
+    chosen = ()
+    for key, flag in (("drc_line", "--drc-line-mode"), ("drc_rf", "--drc-rf-mode"), ("stereo_downmix", "--stereo-down-mix"),
+                      ("warp", "--thd-warp-mode")):
+        if value := _opt(planned, key):
+            chosen += (f"{flag}={value}",)
+    if _opt(planned, "dialnorm") not in ("", "0"):
+        chosen += (f"--custom-dialnorm={_opt(planned, 'dialnorm')}",)
+    if _opt(planned, "bed_conform") == "on":
+        chosen += ("--bed-conform",)
+    return (tools.deezy, *mode, *common, *chosen, *settings.deezy_extra_args, *_extra_args(planned), str(source))
 
 
 def _aac(planned: PlannedAudio, source: Path, output: Path, settings: AudioSettings, tools: Tools) -> tuple[tuple[str, ...], ...]:
@@ -207,19 +266,50 @@ def _aac(planned: PlannedAudio, source: Path, output: Path, settings: AudioSetti
     # --ignorelength: a piped WAV header has no real data size.
     # --no-delay: compensate encoder priming in the stream itself; MKV has no gapless metadata.
     # A bitrate means constrained VBR at about that rate; none means true VBR at the profile's quality.
-    mode = ("--cvbr", str(planned.bitrate_kbps)) if planned.bitrate_kbps else ("--tvbr", str(settings.qaac_tvbr))
+    mode = ("--cvbr", str(planned.bitrate_kbps)) if planned.bitrate_kbps else ("--tvbr", _opt(planned, "quality", settings))
     qaac = (
         tools.qaac, *mode, "--ignorelength", "--no-delay", "--threading",
-        *settings.qaac_extra_args, "-o", str(output), "-",
+        *settings.qaac_extra_args, *_extra_args(planned), "-o", str(output), "-",
     )
     return ffmpeg, qaac
+
+
+def _opusenc(planned: PlannedAudio, source: Path, output: Path, tools: Tools) -> tuple[tuple[str, ...], ...]:
+    # Float WAV with the exact layout, so opusenc's channel mapping reads the right speakers.
+    # No metadata and bitexact: opusenc warns about every LIST chunk ffmpeg would add.
+    layout = str(planned.out_layout)
+    ffmpeg = (
+        tools.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error",
+        "-i", str(source),
+        "-map", f"0:a:{planned.source.index}", "-vn", "-sn", "-dn", "-map_metadata", "-1", "-fflags", "+bitexact",
+        "-af", f"aformat=channel_layouts={_FFMPEG_LAYOUT.get(layout, layout)}",
+        "-c:a", "pcm_f32le", "-f", "wav", "-",
+    )
+    tune = _opt(planned, "tune")
+    opusenc = (
+        tools.opusenc, "--quiet", "--bitrate", str(planned.bitrate_kbps), f"--{_opt(planned, 'mode')}",
+        *((f"--{tune}",) if tune else ()), "--comp", _opt(planned, "comp"), "--ignorelength",
+        *_extra_args(planned), "-", str(output),
+    )
+    return ffmpeg, opusenc
 
 
 # ffmpeg's name for each layout (aformat sets it exactly: libopus refuses 5.1(side), and a
 # downmix to a count alone could pick a layout the encoder doesn't take).
 _FFMPEG_LAYOUT = {"1.0": "mono", "2.0": "stereo"}
-def _opt(p: PlannedAudio, key: str) -> str:
-    return p.options.get(key) or next(o.default for o in ENCODES[p.action].options if o.key == key)
+
+
+def _opt(p: PlannedAudio, key: str, settings: AudioSettings | None = None) -> str:
+    """A track's option: its own value, else the profile's default, else the encode's ("" for a key it lacks)."""
+    if value := p.options.get(key):
+        return value
+    if settings and (value := settings.option_defaults(p.action).get(key)):
+        return value
+    return next((o.default for o in ENCODES[p.action].options if o.key == key), "")
+
+
+def _extra_args(p: PlannedAudio) -> list[str]:
+    return shlex.split(p.options.get("extra", ""), posix=False)
 
 
 _FFMPEG_ARGS = {
@@ -243,7 +333,7 @@ def _ffmpeg(planned: PlannedAudio, source: Path, output: Path, tools: Tools) -> 
         "-map", f"0:a:{planned.source.index}", "-vn", "-sn", "-dn", "-map_chapters", "-1", "-map_metadata", "-1",
         "-af", f"aformat=channel_layouts={_FFMPEG_LAYOUT.get(layout, layout)}",
         *_FFMPEG_ARGS[planned.action](planned),
-        *shlex.split(planned.options.get("extra", ""), posix=False), str(output),
+        *_extra_args(planned), str(output),
     )
 
 
@@ -256,6 +346,8 @@ def audio_command(
     output = output_path(planned, position, temp_dir)
     if planned.action is AudioAction.AAC:
         argvs = _aac(planned, source, output, settings, tools)
+    elif planned.action is AudioAction.OPUSENC:
+        argvs = _opusenc(planned, source, output, tools)
     elif planned.action in _FFMPEG_ARGS:
         argvs = (_ffmpeg(planned, source, output, tools),)
     else:

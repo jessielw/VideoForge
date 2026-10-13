@@ -21,7 +21,7 @@ and finished steps are skipped on a rerun.
     VapourSynth itself and `vspipe` come with the `vapoursynth` Python package.
   - ffmpeg and MediaInfo
   - Optional, for audio encodes: [DeeZy](https://github.com/jessielw/DeeZy) with Dolby Encoding Engine
-    and truehdd (DDP / Atmos), and qaac (AAC)
+    and truehdd (DDP / Atmos), qaac (AAC), and opusenc (Opus)
 
 ## Quick start
 

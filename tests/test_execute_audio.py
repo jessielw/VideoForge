@@ -168,3 +168,70 @@ def test_ffmpeg_encode_options():
     ac3 = planned(C.TRUEHD, "5.1", A.AC3, bitrate=640)
     (argv,) = command(ac3).argvs
     assert argv[argv.index("-dialnorm") + 1] == "-31"  # the default when none is planned
+
+
+# --- DeeZy, qaac and opusenc options -------------------------------------------------------
+
+
+def test_deezy_options():
+    ddp = planned(C.TRUEHD, "5.1", A.DDP, "2.0", 256)
+    (argv,) = command(ddp).argvs
+    assert not any(a.startswith(("--drc", "--custom-dialnorm", "--stereo-down-mix")) for a in argv)  # DeeZy's own
+    ddp.options = {"drc_line": "film_light", "drc_rf": "speech", "dialnorm": "-27", "stereo_downmix": "dpl2",
+                   "extra": "--metering-mode 1770_3"}
+    (argv,) = command(ddp, AudioSettings(deezy_extra_args=("--x",))).argvs
+    assert {"--drc-line-mode=film_light", "--drc-rf-mode=speech", "--custom-dialnorm=-27",
+            "--stereo-down-mix=dpl2"} <= set(argv)
+    assert argv[-4:] == ("--x", "--metering-mode", "1770_3", str(SRC))  # the profile's extras, then the track's
+
+    atmos = planned(C.TRUEHD, "7.1", A.ATMOS, "5.1", 1024, atmos=True)
+    atmos.options = {"atmos_mode": "bluray", "warp": "loro", "bed_conform": "on"}
+    (argv,) = command(atmos).argvs
+    assert {"--atmos-mode=bluray", "--thd-warp-mode=loro", "--bed-conform"} <= set(argv)
+
+
+def test_profile_defaults_stand_in_for_unset_options():
+    settings = AudioSettings(atmos_mode="bluray", qaac_tvbr=91)
+    (argv,) = command(planned(C.TRUEHD, "7.1", A.ATMOS, "5.1", 1024, atmos=True), settings).argvs
+    assert "--atmos-mode=bluray" in argv
+    aac = planned(C.FLAC, "2.0", A.AAC)
+    aac.options = {"quality": "100", "extra": "--lowpass 20000"}
+    _, qaac = command(aac, settings).argvs
+    assert qaac[qaac.index("--tvbr") + 1] == "100"  # the track's own beats the profile's
+    assert qaac[-5:] == ("--lowpass", "20000", "-o", qaac[-2], "-")
+
+
+def test_opusenc_pipes_ffmpeg_into_opusenc():
+    p = planned(C.TRUEHD, "7.1", A.OPUSENC, "5.1", 384, index=1)
+    cmd = command(p)
+    ffmpeg, opusenc = cmd.argvs
+    assert ffmpeg[ffmpeg.index("-map") + 1] == "0:a:1" and ffmpeg[-1] == "-"
+    assert ffmpeg[ffmpeg.index("-af") + 1] == "aformat=channel_layouts=5.1"
+    assert opusenc[0] == "opusenc" and opusenc[-2:] == ("-", str(cmd.output)) and cmd.output.suffix == ".opus"
+    assert opusenc[opusenc.index("--bitrate") + 1] == "384" and "--vbr" in opusenc
+    assert opusenc[opusenc.index("--comp") + 1] == "10" and "--music" not in opusenc and "--speech" not in opusenc
+    p.options = {"mode": "hard-cbr", "tune": "speech", "comp": "6", "extra": "--framesize 40"}
+    _, opusenc = command(p).argvs
+    assert "--hard-cbr" in opusenc and "--speech" in opusenc and opusenc[opusenc.index("--comp") + 1] == "6"
+    assert opusenc[-4:-2] == ("--framesize", "40")
+
+
+OPUSENC = Path(__file__).resolve().parents[1] / "tools" / "opus-tools" / "opusenc.exe"
+
+
+@pytest.mark.skipif(FFMPEG is None or not OPUSENC.exists(), reason="needs ffmpeg and tools/opus-tools")
+@pytest.mark.parametrize(("out_layout", "channels"), [("5.1", 6), ("2.0", 2)])
+def test_opusenc_for_real(tmp_path, out_layout, channels):
+    src = tmp_path / "src.mka"
+    subprocess.run([FFMPEG, "-v", "error", "-f", "lavfi", "-i", "sine=f=440:d=1", "-filter_complex",
+                    "[0]asplit=6[a][b][c][d][e][f];[a][b][c][d][e][f]join=inputs=6:channel_layout=5.1(side)",
+                    "-c:a", "pcm_s24le", str(src)], check=True)  # fmt: skip
+    p = planned(C.LPCM, "5.1", A.OPUSENC, out_layout=out_layout, bitrate=192)
+    tools = Tools(mkvmerge="", deezy="", dee="", truehdd="", qaac="", ffmpeg=FFMPEG, opusenc=str(OPUSENC))
+    cmd = audio_command(p, 1, src, tmp_path, AudioSettings(), tools)
+    decode = subprocess.Popen(cmd.argvs[0], stdout=subprocess.PIPE)
+    encode = subprocess.run(cmd.argvs[1], stdin=decode.stdout, capture_output=True, text=True, check=False)
+    decode.wait()
+    assert encode.returncode == 0 and not encode.stderr  # no warnings about the WAV
+    probe = subprocess.run([FFMPEG, "-hide_banner", "-i", str(cmd.output)], capture_output=True, text=True, check=False).stderr
+    assert "Audio: opus" in probe and ("5.1" if channels == 6 else "stereo") in probe
