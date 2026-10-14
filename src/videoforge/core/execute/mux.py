@@ -2,7 +2,8 @@
 
 Inputs, in order: the encode (video only), the source (copied audio and
 subtitles), then one file per encoded audio track, per copied track of an added
-audio file, and per external subtitle.
+audio file or copy of a track (Overrides.copies: mkvmerge takes a track once per
+input), and per external subtitle.
 
 Timing: the encode starts at 0. Source tracks are shifted by the source video's
 start offset so they line up with it. DeeZy output already carries the source's
@@ -101,7 +102,7 @@ def mux_command(
     argv += ["--default-track-flag", "0:1", str(plan.encode_path)]
 
     # 1: the source, copied audio and subtitles only.
-    copied = [a for a in plan.audio if a.action is AudioAction.COPY and not a.source.is_external]
+    copied = [a for a in plan.audio if a.action is AudioAction.COPY and not a.source.is_external and not a.source.copy]
     internal_subs = [s for s in plan.subs if not s.source.is_external]
     argv += ["--no-video", "--no-attachments", "--no-global-tags"]
     if external_chapters:
@@ -118,12 +119,13 @@ def mux_command(
     file_id = 2
     audio_order: list[str] = []
     for pos, a in enumerate(plan.audio):
-        if a.action is AudioAction.COPY and a.source.is_external:
+        if a.action is AudioAction.COPY and (a.source.is_external or a.source.copy):
             tid = a.source.id
             argv += ["--no-video", "--no-subtitles", "--no-chapters", "--no-attachments", "--no-global-tags",
                      "--audio-tracks", str(tid)]
-            argv += _track_args(tid, a) + _sync(tid, a.source.delay_ms)
-            argv.append(str(a.source.external_path))
+            shift = a.source.delay_ms if a.source.is_external else -start_ms
+            argv += _track_args(tid, a) + _sync(tid, shift)
+            argv.append(str(a.source.external_path or plan.source.path))
             audio_order.append(f"{file_id}:{tid}")
             file_id += 1
             continue

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 
@@ -88,6 +88,11 @@ class AudioTrack:
     delay_ms: int = 0  # relative to video
     format_name: str = ""  # raw MediaInfo format, for display
     external_path: Path | None = None  # an added audio file (id and index are then that file's)
+    sample_rate: int | None = None  # Hz
+    bit_depth: int | None = None  # lossless formats only (a lossy decoder's depth means nothing)
+    size_bytes: int | None = None  # the stream's size, when the file says
+    duration_ms: int | None = None
+    copy: int = 0  # 1, 2, ...: another output track made from this same track (Overrides.copies)
 
     @property
     def is_external(self) -> bool:
@@ -261,16 +266,38 @@ class Overrides:
     # Output order as track keys, for profiles that let the user reorder. Audio and
     # subtitles each keep their own order; unlisted tracks follow in source order.
     order: list[str] | None = None
+    # More output tracks made from an audio track, as "<track key>+<n>" (e.g. "id:1+1"): the same
+    # source track again, with its own encode, title and flags (StaxRip's extra audio profiles).
+    copies: list[str] = field(default_factory=list)
 
 
 def track_key(track: AudioTrack | SubTrack) -> str:
     """"id:<mkvmerge id>" for a source track, "ext:<file name>" for an added file (an added audio
-    file's second track on is "ext:<file name>#<n>")."""
+    file's second track on is "ext:<file name>#<n>"); a copy of an audio track adds "+<n>"."""
     external = track.external_path
+    copy = f"+{track.copy}" if isinstance(track, AudioTrack) and track.copy else ""
     if external is None:
-        return f"id:{track.id}"
+        return f"id:{track.id}{copy}"
     more = f"#{track.index}" if isinstance(track, AudioTrack) and track.index else ""
-    return f"ext:{external.name}{more}"
+    return f"ext:{external.name}{more}{copy}"
+
+
+def copy_base(key: str) -> tuple[str, int]:
+    """("id:1", 2) for the copy key "id:1+2"; (key, 0) for anything else."""
+    base, _, n = key.rpartition("+")
+    return (base, int(n)) if base and n.isdigit() and int(n) > 0 else (key, 0)
+
+
+def with_copies(tracks: list[AudioTrack], copies: list[str]) -> list[AudioTrack]:
+    """The tracks, then each copy (Overrides.copies) of one of them. A copy starts as its track
+    without the default flag; copies of tracks that aren't there are skipped."""
+    by_key = {track_key(t): t for t in tracks}
+    out = list(tracks)
+    for key in copies:
+        base, n = copy_base(key)
+        if n and base in by_key:
+            out.append(replace(by_key[base], copy=n, default=False))
+    return out
 
 
 @dataclass(slots=True)

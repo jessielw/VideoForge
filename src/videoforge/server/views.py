@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from videoforge.core.models import Issue, Severity, track_key
+from videoforge.core.models import Issue, Severity, track_key, with_copies
 from videoforge.core.plan_io import to_json
 from videoforge.core.video.settings import EncoderSettings, RateControl
 from videoforge.server.queue import Entry, JobQueue
@@ -67,10 +67,12 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     if e.probed is not None:
         src = e.probed.source
         tracks = [*src.audio, *e.probed.external_audio, *src.subs, *e.probed.external_subs]
+        audio = [*src.audio, *(e.probed.external_audio if profile.external_audio else [])]
+        if profile.track_editor:
+            audio = with_copies(audio, e.spec.overrides.copies)
         out["tracks"] = {
             "video": to_json(src.video) if src.video else None,
-            "audio": [to_json(t) | {"key": track_key(t), "detected": profile.detected_flags(t)}
-                      for t in [*src.audio, *(e.probed.external_audio if profile.external_audio else [])]],
+            "audio": [to_json(t) | {"key": track_key(t), "detected": profile.detected_flags(t)} for t in audio],
             "subs": [to_json(t) | {"key": track_key(t), "detected": profile.detected_flags(t)}
                      for t in [*src.subs, *e.probed.external_subs]],
             "has_chapters": src.has_chapters,

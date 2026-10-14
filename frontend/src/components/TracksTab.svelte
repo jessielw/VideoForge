@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Audio and subtitle choices: what the profile's rules picked, and per-job overrides
+  // Audio or subtitle choices (one kind per tab): what the profile's rules picked, and per-job overrides
   // (audio tracks and order, subtitle use / language / the profile's flags). Every change
   // replans on the server; the output columns always show what the rules now produce.
   import { emptyOverride, isEmpty, LANGUAGES } from '../lib/format'
@@ -11,7 +11,8 @@
     job,
     save,
     editable,
-  }: { job: JobDetail; save: (o: Overrides) => Promise<void>; editable: boolean } = $props()
+    kind,
+  }: { job: JobDetail; save: (o: Overrides) => Promise<void>; editable: boolean; kind: 'audio' | 'sub' } = $props()
 
   const overrides = $derived(job.spec.overrides)
   const plan = $derived(job.plan)
@@ -104,7 +105,7 @@
   }
 
   function reset() {
-    save({ original_language: overrides.original_language, audio_track_ids: null, tracks: {}, order: null })
+    save({ original_language: overrides.original_language, audio_track_ids: null, tracks: {}, order: null, copies: [] })
   }
 
   function audioLabel(t: AudioTrack) {
@@ -132,6 +133,7 @@
       <button class="btn ml-auto" onclick={reset}><Icon name="refresh" />Reset overrides</button>
     </div>
 
+    {#if kind === 'audio'}
     <section>
       <div class="mb-2 flex items-center gap-2">
         <Icon name="audio" class="text-accent" /><span class="font-medium">Audio</span>
@@ -166,7 +168,9 @@
         </tbody>
       </table>
     </section>
+    {/if}
 
+    {#if kind === 'sub'}
     <section>
       <div class="mb-2 flex items-center gap-2"><Icon name="sub" class="text-accent" /><span class="font-medium">Subtitles</span></div>
       <table class="w-full text-sm">
@@ -225,10 +229,6 @@
         </tbody>
       </table>
     </section>
-
-    <section class="text-sm text-muted">
-      <Icon name="chapters" class="inline text-accent" />
-      Chapters: {plan.chapters_path ? basename(plan.chapters_path) : tracks.has_chapters ? 'from the source' : 'none'}
-    </section>
+    {/if}
   </fieldset>
 {/if}

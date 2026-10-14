@@ -33,19 +33,30 @@ from videoforge.core.models import (
     TrackOverride,
     TrackProperty,
     track_key,
+    with_copies,
 )
 from videoforge.core.profile import Profile
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl, VideoSettings
 
-# Track flags the user can set; each key is a field of AudioTrack/SubTrack and of PlannedAudio/PlannedSub.
-_FLAGS = (
-    ("default", "Default", "Played when no track is chosen"),
-    ("forced", "Forced", "Shown even when subtitles are off (foreign parts only)"),
-    ("hearing_impaired", "SDH", "For the deaf and hard of hearing"),
-    ("commentary", "Commentary", "Commentary track"),
-    ("original", "Original", "In the content's original language"),
-)
-FLAG_KEYS = tuple(key for key, _, _ in _FLAGS)
+# Track flags the user can set (Matroska's track flags), worded per kind; each key is a field of
+# AudioTrack/SubTrack and of PlannedAudio/PlannedSub.
+_FLAGS = {
+    TrackKind.AUDIO: (
+        ("default", "Default", "The track players pick when no language preference matches"),
+        ("forced", "Forced", "Played even when the viewer chose another language (rare for audio)"),
+        ("hearing_impaired", "Hearing impaired", "Made for the hard of hearing (e.g. clearer dialogue)"),
+        ("commentary", "Commentary", "A commentary track"),
+        ("original", "Original", "In the content's original language"),
+    ),
+    TrackKind.SUB: (
+        ("default", "Default", "Shown when no subtitle is chosen"),
+        ("forced", "Forced", "Shown even when subtitles are off (foreign parts only)"),
+        ("hearing_impaired", "SDH", "For the deaf and hard of hearing"),
+        ("commentary", "Commentary", "Commentary subtitles"),
+        ("original", "Original", "In the content's original language"),
+    ),
+}
+FLAG_KEYS = tuple(key for key, _, _ in _FLAGS[TrackKind.AUDIO])
 
 
 def ordered[T: (AudioTrack, SubTrack)](tracks: Sequence[T], order: list[str] | None) -> list[T]:
@@ -125,7 +136,7 @@ class ManualProfile(Profile):
     external_subtitles = True
     external_audio = True
     track_editor = True
-    track_properties =tuple(TrackProperty(key, label, kind, help) for kind in TrackKind for key, label, help in _FLAGS)
+    track_properties = tuple(TrackProperty(key, label, kind, help) for kind in TrackKind for key, label, help in _FLAGS[kind])
 
     def plan(self, probed: ProbedInputs, original_language: str | None, overrides: Overrides) -> Plan:
         source, encode = probed.source, probed.encode
@@ -146,7 +157,7 @@ class ManualProfile(Profile):
             by_id = {t.id: t for t in source.audio}
             audio_tracks = [by_id[i] for i in overrides.audio_track_ids if i in by_id] + probed.external_audio
         else:
-            audio_tracks = ordered(source.audio + probed.external_audio, overrides.order)
+            audio_tracks = ordered(with_copies(source.audio + probed.external_audio, overrides.copies), overrides.order)
         audio_tracks = [t for t in audio_tracks if not _excluded(t, overrides)]
         if source.audio and not audio_tracks:
             issues.append(Issue(Severity.WARN, "audio.none", "No audio tracks selected"))

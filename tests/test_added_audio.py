@@ -31,3 +31,6 @@ def test_raw_audio_files(tmp_path):
         (flac.name, AudioCodec.FLAC, Layout(5, 1), "de", 0),
     ]
     assert not issues
+    # At a glance: rate, depth (lossless only), duration.
+    assert [(t.sample_rate, t.bit_depth) for t in tracks] == [(44100, None), (44100, 16)]
+    assert all(t.duration_ms and 900 <= t.duration_ms <= 1100 for t in tracks)

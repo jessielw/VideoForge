@@ -302,19 +302,19 @@
             <span class="label">Crop</span>
             <span class="text-xs text-muted">{outW}×{outH}</span>
           </div>
-          <div class="grid grid-cols-2 gap-2">
+          <!-- Label, box, label, box: the labels get their own columns, so every box is the same width. -->
+          <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">
             {#each SIDES as side (side)}
-              <label class="flex items-center gap-2 text-sm">
-                <span class="w-12 text-muted capitalize">{side}</span>
-                <input
-                  class="field w-full"
-                  type="number"
-                  step="2"
-                  min="0"
-                  value={video.crop[side]}
-                  onchange={e => setCrop(side, +(e.target as HTMLInputElement).value)}
-                />
-              </label>
+              <label class="text-muted capitalize" for="crop-{side}">{side}</label>
+              <input
+                id="crop-{side}"
+                class="field w-full"
+                type="number"
+                step="2"
+                min="0"
+                value={video.crop[side]}
+                onchange={e => setCrop(side, +(e.target as HTMLInputElement).value)}
+              />
             {/each}
           </div>
           <div class="flex gap-2">

@@ -189,3 +189,31 @@ def test_added_audio_keys_and_names():
     assert name_language("Show.Commentary.en") == "en" and name_language("Show 5.1") is None
     assert name_language(name_without_delay("Commentary.en DELAY 100ms")) == "en"
     assert name_language(name_without_delay("Movie T2 eng DELAY -42ms")) == "en"
+
+
+def test_copies_of_a_track():
+    from videoforge.core.models import copy_base, track_key, with_copies
+
+    assert copy_base("id:1+2") == ("id:1", 2) and copy_base("ext:a+b.flac") == ("ext:a+b.flac", 0)
+    assert copy_base("ext:a+b.flac+1") == ("ext:a+b.flac", 1) and copy_base("id:1+0") == ("id:1+0", 0)
+    src = source([audio(C.TRUEHD, "7.1", "en", index=0, default=True), audio(C.AC3, "2.0", "en", index=1)],
+                 name="Movie.mkv")
+    src.video = VideoInfo(1920, 1080, start_ms=40, default_duration_ns=41708333)
+    copies = with_copies(src.audio, ["id:1+1", "id:1+2", "id:9+1"])  # id:9 isn't there
+    assert [track_key(t) for t in copies] == ["id:1", "id:2", "id:1+1", "id:1+2"]
+    assert copies[2].default is False and copies[2].id == 1  # the same source track
+
+    # One copy encoded, one copied as is (its own input: mkvmerge takes a track once per input).
+    ov = Overrides(copies=["id:1+1", "id:1+2"], order=["id:1+1", "id:1", "id:2", "id:1+2"],
+                   tracks={"id:1+1": TrackOverride(action=AudioAction.AAC_FFMPEG, layout=Layout(2, 0))})
+    plan = plan_for(src, source(name="enc.h264"), ov)
+    plan.encode_path = Path("enc.h264")
+    assert [(track_key(a.source), a.action) for a in plan.audio] == [
+        ("id:1+1", AudioAction.AAC_FFMPEG), ("id:1", AudioAction.COPY), ("id:2", AudioAction.COPY),
+        ("id:1+2", AudioAction.COPY)]
+    argv = mux_command(plan, {0: Path("tmp/audio0_en.m4a")}, OUT, "mkvmerge", RAW)
+    assert value(argv, "--audio-tracks") == ["1,2", "1"]
+    assert argv.count("Movie.mkv") == 2
+    second = argv[argv.index("Movie.mkv") + 1 : len(argv) - argv[::-1].index("Movie.mkv")]
+    assert value(second, "--sync") == ["1:-40"]  # shifted like the source's other tracks
+    assert value(argv, "--track-order") == ["0:0,2:0,1:1,1:2,3:1"]

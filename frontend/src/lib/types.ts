@@ -127,6 +127,7 @@ export interface Overrides {
   audio_track_ids: number[] | null
   tracks: Record<string, TrackOverride>
   order: string[] | null // track keys in output order (profiles that let the user reorder)
+  copies: string[] // more output tracks from an audio track: "<track key>+<n>"
 }
 
 export interface JobInputs {
@@ -169,6 +170,11 @@ export interface AudioTrack {
   format_name: string
   detected: Record<string, boolean>
   external_path?: string | null // an added audio file (id and index are that file's)
+  sample_rate: number | null // Hz
+  bit_depth: number | null // lossless only
+  size_bytes: number | null
+  duration_ms: number | null
+  copy: number // 1, 2, ...: another output track from the same source track
 }
 
 export interface SubTrack {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // One job, StaxRip-style: issues on top, then Video | Encoder | Tracks | Output | Log.
+  // One job, StaxRip-style: issues on top, then Video | Encoder | Audio | Subtitles | Output | Log.
   // Changes save straight away (the server replans); a queued or running job is read-only.
   import { api, type SpecChanges } from '../lib/api'
   import { basename, SEVERITY_TONE, STATUS_LABEL, STATUS_TONE } from '../lib/format'
@@ -16,13 +16,13 @@
 
   let { jobId }: { jobId: string } = $props()
 
-  type Tab = 'video' | 'encoder' | 'tracks' | 'output' | 'log'
+  type Tab = 'video' | 'encoder' | 'audio' | 'subs' | 'output' | 'log'
   let tab = $state<Tab>('video')
   let job = $state<JobDetail | null>(null)
   let error = $state('')
   let commands = $state<CommandStep[]>([])
   let showInfo = $state(false)
-  let browsing = $state(false)
+  let browsing = $state<'output' | 'chapters' | null>(null)
 
   async function load() {
     try {
@@ -59,7 +59,8 @@
   const TABS: { id: Tab; label: string }[] = [
     { id: 'video', label: 'Video' },
     { id: 'encoder', label: 'Encoder' },
-    { id: 'tracks', label: 'Audio & subtitles' },
+    { id: 'audio', label: 'Audio' },
+    { id: 'subs', label: 'Subtitles' },
     { id: 'output', label: 'Output' },
     { id: 'log', label: 'Log' },
   ]
@@ -135,11 +136,12 @@
             {/each}
           </div>
         </div>
-      {:else if tab === 'tracks'}
+      {:else if tab === 'audio' || tab === 'subs'}
+        {@const kind = tab === 'audio' ? 'audio' : 'sub'}
         {#if app.profiles.find(p => p.id === job?.profile)?.track_editor}
-          <TrackEditor {job} {editable} save={overrides => save({ overrides })} saveInputs={inputs => save({ inputs })} />
+          <TrackEditor {job} {editable} {kind} save={overrides => save({ overrides })} saveInputs={inputs => save({ inputs })} />
         {:else}
-          <TracksTab {job} {editable} save={overrides => save({ overrides })} />
+          <TracksTab {job} {editable} {kind} save={overrides => save({ overrides })} />
         {/if}
       {:else if tab === 'output'}
         <div class="max-w-3xl space-y-5">
@@ -152,9 +154,27 @@
                 disabled={!editable}
                 onchange={e => save({ output_dir: (e.target as HTMLInputElement).value.trim() || null })}
               />
-              <button class="btn" disabled={!editable} onclick={() => (browsing = true)}><Icon name="folder" />Browse…</button>
+              <button class="btn" disabled={!editable} onclick={() => (browsing = 'output')}><Icon name="folder" />Browse…</button>
             </div>
             <span class="text-muted">Chapters</span>
+            <div class="flex flex-wrap items-center gap-2">
+              <span>
+                {job.spec.inputs.chapters
+                  ? basename(job.spec.inputs.chapters)
+                  : job.plan?.chapters_path
+                    ? `${basename(job.plan.chapters_path)} (AutoQPF)`
+                    : job.tracks?.has_chapters
+                      ? 'From the source'
+                      : 'None'}
+              </span>
+              <button class="btn-ghost text-xs" disabled={!editable} onclick={() => (browsing = 'chapters')}>
+                {job.spec.inputs.chapters ? 'Change…' : 'Use a file…'}
+              </button>
+              {#if job.spec.inputs.chapters}
+                <button class="btn-ghost text-xs hover:text-bad" disabled={!editable} onclick={() => save({ inputs: { chapters: null } })}>Remove</button>
+              {/if}
+            </div>
+            <span></span>
             <label class="flex items-center gap-2">
               <input type="checkbox" checked={job.spec.qpf} disabled={!editable} onchange={e => save({ qpf: (e.target as HTMLInputElement).checked })} />
               AutoQPF: chapters from the source (or every 5%) and keyframes on them
@@ -186,15 +206,26 @@
   </div>
 {/if}
 
-{#if browsing && job}
+{#if browsing === 'output' && job}
   <FileBrowser
     title="Output folder"
     mode="folder"
     start={job.spec.output_dir ?? ''}
     onpick={paths => {
-      browsing = false
+      browsing = null
       if (paths[0]) save({ output_dir: paths[0] })
     }}
-    onclose={() => (browsing = false)}
+    onclose={() => (browsing = null)}
+  />
+{:else if browsing === 'chapters' && job}
+  <FileBrowser
+    title="Chapters file"
+    extensions={['.xml', '.txt']}
+    start={job.spec.inputs.source.replace(/[\\/][^\\/]*$/, '')}
+    onpick={paths => {
+      browsing = null
+      if (paths[0]) save({ inputs: { chapters: paths[0] } })
+    }}
+    onclose={() => (browsing = null)}
   />
 {/if}

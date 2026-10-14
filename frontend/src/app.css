@@ -68,6 +68,11 @@ body {
   @apply rounded-md border border-line bg-panel px-2 py-1 text-sm text-text outline-none focus:border-accent
     disabled:opacity-50;
 }
+/* Number boxes: keep the value clear of the spin arrows (Chromium draws them inside the text area;
+   Firefox beside it, where the value is left-aligned anyway). */
+input[type='number']::-webkit-inner-spin-button {
+  margin-left: 0.5rem;
+}
 @utility label {
   @apply text-xs font-medium tracking-wide text-muted uppercase;
 }

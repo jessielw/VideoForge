@@ -1,9 +1,11 @@
 <script lang="ts">
-  // The full track editor, for profiles that follow it (track_editor, e.g. manual): every audio
-  // and subtitle track in output order. Drag a track by its handle (or use the arrows) to reorder,
-  // untick it to leave it out, edit its title, language and flags, and copy or encode each audio
-  // track. Every change saves and replans; each track shows what will be written.
-  // Files can be added to the job here (subtitles, audio, chapters) and removed again.
+  // The full track editor, for profiles that follow it (track_editor, e.g. manual): the audio or
+  // the subtitle tracks (one kind per tab) in output order. Drag a track by its handle (or use
+  // the arrows) to reorder, untick it to leave it out, edit its title, language and flags, and
+  // copy or encode each audio track. Every change saves and replans; each track shows its source
+  // at a glance and what will be written.
+  // Files can be added to the job here and removed again, and an audio track can be used more
+  // than once ("Add a track from…": a copy with its own encode, title and flags).
   import type { InputChanges } from '../lib/api'
   import { emptyOverride, isEmpty, LANGUAGES } from '../lib/format'
   import { app } from '../lib/state.svelte'
@@ -11,53 +13,46 @@
   import FileBrowser from './FileBrowser.svelte'
   import Icon from './Icon.svelte'
 
+  type Kind = 'audio' | 'sub'
+  type Track = AudioTrack | SubTrack
+
   let {
     job,
     save,
     saveInputs,
     editable,
+    kind,
   }: {
     job: JobDetail
     save: (o: Overrides) => Promise<void>
     saveInputs: (inputs: InputChanges) => Promise<void>
     editable: boolean
+    kind: Kind
   } = $props()
 
   // --- the job's files ---
   const SUB_EXTENSIONS = ['.srt', '.ass', '.ssa', '.sup', '.idx']
   const AUDIO_EXTENSIONS = ['.ac3', '.eac3', '.ec3', '.dts', '.dtshd', '.thd', '.truehd', '.mlp', '.flac', '.wav', '.w64',
     '.m4a', '.aac', '.mka', '.opus', '.ogg']
-  const extOf = (p: string) => (p.match(/\.[^.\\/]+$/)?.[0] ?? '').toLowerCase()
-  const CHAPTER_EXTENSIONS = ['.xml', '.txt']
-  let browsing = $state<'files' | 'chapters' | null>(null)
+  let browsing = $state(false)
   const sourceDir = $derived(job.spec.inputs.source.replace(/[\\/][^\\/]*$/, ''))
   const sameFile = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+  const inputList = (k: Kind) => (k === 'audio' ? job.spec.inputs.audio : job.spec.inputs.subtitles)
+  const listChange = (k: Kind, list: string[]): InputChanges => (k === 'audio' ? { audio: list } : { subtitles: list })
 
-  // Picked files go to subtitles or audio by extension; a folder goes to both (each takes its kind).
+  // Picked files (or folders: the server takes each one's files of this kind) join this kind's list.
   function addFiles(paths: string[]) {
-    const { subtitles, audio } = job.spec.inputs
-    const isSub = (p: string) => SUB_EXTENSIONS.includes(extOf(p))
-    const isAudioFile = (p: string) => AUDIO_EXTENSIONS.includes(extOf(p))
-    const newSubs = paths.filter(p => !isAudioFile(p) && !subtitles.some(s => sameFile(s, p)))
-    const newAudio = paths.filter(p => !isSub(p) && !audio.some(s => sameFile(s, p)))
-    const changes: InputChanges = {}
-    if (newSubs.length) changes.subtitles = [...subtitles, ...newSubs]
-    if (newAudio.length) changes.audio = [...audio, ...newAudio]
-    if (Object.keys(changes).length) saveInputs(changes)
+    const have = inputList(kind)
+    const add = paths.filter(p => !have.some(s => sameFile(s, p)))
+    if (add.length) saveInputs(listChange(kind, [...have, ...add]))
   }
 
-  function removeFile(path: string, kind: Kind) {
-    const keep = (list: string[]) => list.filter(s => !sameFile(s, path))
-    saveInputs(kind === 'audio' ? { audio: keep(job.spec.inputs.audio) } : { subtitles: keep(job.spec.inputs.subtitles) })
-  }
-
-  type Kind = 'audio' | 'sub'
-  type Track = AudioTrack | SubTrack
+  const removeFile = (path: string) => saveInputs(listChange(kind, inputList(kind).filter(s => !sameFile(s, path))))
 
   const overrides = $derived(job.spec.overrides)
   const plan = $derived(job.plan)
   const tracks = $derived(job.tracks)
-  const properties = $derived(app.profiles.find(p => p.id === job.profile)?.track_properties ?? [])
+  const properties = $derived(app.profiles.find(p => p.id === job.profile)?.track_properties.filter(p => p.kind === kind) ?? [])
 
   const isAudio = (t: Track): t is AudioTrack => 'codec' in t
   const basename = (p: string) => p.split(/[\\/]/).pop() ?? p
@@ -68,7 +63,7 @@
     const ids = overrides.audio_track_ids
     const order = overrides.order ?? []
     const rank = (t: T) => {
-      const i = ids && isAudio(t) && !t.external_path ? ids.indexOf(t.id) : order.indexOf(t.key)
+      const i = ids && isAudio(t) && !t.external_path && !t.copy ? ids.indexOf(t.id) : order.indexOf(t.key)
       return i < 0 ? 10_000 + list.indexOf(t) : i
     }
     return [...list].sort((a, b) => rank(a) - rank(b))
@@ -76,9 +71,11 @@
 
   const audioRows = $derived(inOrder(tracks?.audio ?? []))
   const subRows = $derived(inOrder(tracks?.subs ?? []))
-  // Planned audio by track key: ids repeat across added files.
-  const audioKey = (t: Pick<AudioTrack, 'id' | 'index' | 'external_path'>) =>
-    t.external_path ? `ext:${basename(t.external_path)}${t.index ? `#${t.index}` : ''}` : `id:${t.id}`
+  const rows = $derived<Track[]>(kind === 'audio' ? audioRows : subRows)
+  // Planned audio by track key: ids repeat across added files and copies.
+  const audioKey = (t: Pick<AudioTrack, 'id' | 'index' | 'external_path' | 'copy'>) =>
+    (t.external_path ? `ext:${basename(t.external_path)}${t.index ? `#${t.index}` : ''}` : `id:${t.id}`) +
+    (t.copy ? `+${t.copy}` : '')
   const plannedAudio = $derived(new Map((plan?.audio ?? []).map((a, i) => [audioKey(a.source), { pos: i, a }])))
   const plannedSubs = $derived(
     new Map(
@@ -89,16 +86,17 @@
   const ovOf = (t: Track): TrackOverride | undefined => overrides.tracks[t.key]
   const excluded = (t: Track) =>
     !!ovOf(t)?.exclude ||
-    (!!overrides.audio_track_ids && isAudio(t) && !t.external_path && !overrides.audio_track_ids.includes(t.id))
+    (!!overrides.audio_track_ids && isAudio(t) && !t.external_path && !t.copy && !overrides.audio_track_ids.includes(t.id))
   const outPos = (t: Track) => (isAudio(t) ? plannedAudio.get(t.key)?.pos : plannedSubs.get(t.key))
 
   // A copy of the overrides to change, in the editor's terms: an audio id list becomes
   // order + exclusions, so the two ways of choosing tracks never disagree.
   function draft(): Overrides {
     const o = structuredClone($state.snapshot(overrides)) as Overrides
+    o.copies ??= []
     if (o.audio_track_ids) {
       for (const t of audioRows)
-        if (!t.external_path && !o.audio_track_ids.includes(t.id)) edit(o, t.key, ov => (ov.exclude = true))
+        if (!t.external_path && !t.copy && !o.audio_track_ids.includes(t.id)) edit(o, t.key, ov => (ov.exclude = true))
       o.audio_track_ids = null
     }
     return o
@@ -134,6 +132,29 @@
       if (on === (t.detected[key] ?? false)) delete ov.flags[key]
       else ov.flags[key] = on
     })
+  }
+
+  // --- copies: another output track from the same audio track ---
+  const isCopyOf = (t: AudioTrack, base: AudioTrack) => t.key === base.key || t.key.startsWith(`${base.key}+`)
+  function addCopy(base: AudioTrack) {
+    const o = draft()
+    let n = 1
+    while (o.copies.includes(`${base.key}+${n}`)) n++
+    const key = `${base.key}+${n}`
+    o.copies = [...o.copies, key]
+    const keys = audioRows.map(t => t.key)
+    const last = Math.max(...audioRows.map((t, i) => (isCopyOf(t, base) ? i : -1)))
+    keys.splice(last + 1, 0, key) // just after the track and its other copies
+    o.order = [...keys, ...subRows.map(t => t.key)]
+    save(o)
+  }
+
+  function removeCopy(t: AudioTrack) {
+    const o = draft()
+    o.copies = o.copies.filter(k => k !== t.key)
+    delete o.tracks[t.key]
+    o.order = (o.order ?? []).filter(k => k !== t.key)
+    save(o)
   }
 
   // --- audio encodes ---
@@ -185,33 +206,63 @@
     return `${codec} ${p.out_layout} · ${rate}${p.upmix_50 ? ' · 5.0 upmixed to 5.1' : ''}`
   }
 
+  // --- the source at a glance ---
   function sourceLabel(t: Track): string {
     if (isAudio(t)) {
       const fmt = t.format_name || CODEC[t.codec] || t.codec
       const where = t.external_path ? `${basename(t.external_path)}${t.index ? ` #${t.index + 1}` : ''}:` : `#${t.id}`
       return `${where} ${fmt}${t.atmos ? ' Atmos' : t.dtsx ? ' DTS:X' : ''} ${t.layout}`
     }
-    return t.external_path ? `${basename(t.external_path)} (${t.format})` : `#${t.id} ${t.format.toUpperCase()}`
+    return t.external_path ? `${basename(t.external_path)} (${t.format.toUpperCase()})` : `#${t.id} ${t.format.toUpperCase()}`
+  }
+
+  function duration(ms: number): string {
+    const s = Math.round(ms / 1000)
+    const [h, m] = [Math.floor(s / 3600), Math.floor((s % 3600) / 60)]
+    return `${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${String(s % 60).padStart(2, '0')}`
+  }
+
+  function size(bytes: number): string {
+    const units = ['B', 'KB', 'MB', 'GB']
+    let n = bytes
+    let u = 0
+    while (n >= 1024 && u < units.length - 1) [n, u] = [n / 1024, u + 1]
+    return `${n.toFixed(u && n < 10 ? 1 : 0)} ${units[u]}`
+  }
+
+  function details(t: Track): string[] {
+    if (!isAudio(t)) {
+      const images = t.format === 'pgs' || t.format === 'vobsub'
+      return t.element_count ? [`${t.element_count.toLocaleString()} ${images ? 'images' : 'lines'}`] : []
+    }
+    return [
+      t.sample_rate ? `${+(t.sample_rate / 1000).toFixed(1)} kHz` : '',
+      t.bit_depth ? `${t.bit_depth}-bit` : '',
+      t.bitrate_kbps ? `${t.bitrate_kbps.toLocaleString()} kb/s` : '',
+      t.delay_ms ? `delay ${t.delay_ms > 0 ? '+' : ''}${t.delay_ms} ms` : '',
+      t.duration_ms ? duration(t.duration_ms) : '',
+      t.size_bytes ? size(t.size_bytes) : '',
+    ].filter(Boolean)
   }
 
   // --- reordering: drag the handle, or the arrows ---
-  let drag = $state<{ kind: Kind; key: string } | null>(null)
-  let dropAt = $state<{ kind: Kind; index: number } | null>(null) // insert before this row
+  let drag = $state<string | null>(null)
+  let dropAt = $state<number | null>(null) // insert before this row
 
-  function move(kind: Kind, key: string, to: number) {
-    const rows = [...(kind === 'audio' ? audioRows : subRows)] as Track[]
-    const from = rows.findIndex(t => t.key === key)
+  function move(key: string, to: number) {
+    const list = [...rows]
+    const from = list.findIndex(t => t.key === key)
     const target = to > from ? to - 1 : to
-    if (from < 0 || target === from || target < 0 || target >= rows.length) return
-    const [t] = rows.splice(from, 1)
-    rows.splice(target, 0, t)
+    if (from < 0 || target === from || target < 0 || target >= list.length) return
+    const [t] = list.splice(from, 1)
+    list.splice(target, 0, t)
     const o = draft()
-    if (kind === 'audio') commit(o, rows, subRows)
-    else commit(o, audioRows, rows)
+    if (kind === 'audio') commit(o, list, subRows)
+    else commit(o, audioRows, list)
   }
 
-  function dragStart(e: DragEvent, kind: Kind, t: Track) {
-    drag = { kind, key: t.key }
+  function dragStart(e: DragEvent, t: Track) {
+    drag = t.key
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = 'move'
       e.dataTransfer.setData('text/plain', t.key)
@@ -220,21 +271,27 @@
     }
   }
 
-  function dragOver(e: DragEvent, kind: Kind, i: number) {
-    if (drag?.kind !== kind) return
+  function dragOver(e: DragEvent, i: number) {
+    if (drag === null) return
     e.preventDefault()
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    dropAt = { kind, index: e.clientY < r.top + r.height / 2 ? i : i + 1 }
+    dropAt = e.clientY < r.top + r.height / 2 ? i : i + 1
   }
 
-  function drop(e: DragEvent, kind: Kind) {
+  function drop(e: DragEvent) {
     e.preventDefault()
-    if (drag?.kind === kind && dropAt?.kind === kind) move(kind, drag.key, dropAt.index)
+    if (drag !== null && dropAt !== null) move(drag, dropAt)
     drag = dropAt = null
   }
 
+  // Back to the profile's choices for this kind (the other tab's edits stay).
   function reset() {
-    save({ original_language: overrides.original_language, audio_track_ids: null, tracks: {}, order: null })
+    const o = draft()
+    const mine = new Set(rows.map(t => t.key))
+    for (const key of Object.keys(o.tracks)) if (mine.has(key)) delete o.tracks[key]
+    if (kind === 'audio') o.copies = []
+    o.order = (o.order ?? []).filter(key => !mine.has(key))
+    save(o)
   }
 
   function setOriginal(tag: string) {
@@ -242,25 +299,28 @@
     o.original_language = tag || null
     save(o)
   }
+
+  const title = $derived(kind === 'audio' ? 'Audio' : 'Subtitles')
 </script>
 
-{#snippet trackRow(kind: Kind, t: Track, i: number, count: number)}
+{#snippet trackRow(t: Track, i: number, count: number)}
   {@const ov = ovOf(t)}
   {@const off = excluded(t)}
   {@const pos = outPos(t)}
-  {#if dropAt?.kind === kind && dropAt.index === i}<div class="-my-1 h-0.5 rounded bg-accent"></div>{/if}
+  {@const copy = isAudio(t) && t.copy ? t : null}
+  {#if dropAt === i}<div class="-my-1 h-0.5 rounded bg-accent"></div>{/if}
   <div
     data-row
     role="listitem"
-    class="rounded-md border border-line bg-panel {drag?.key === t.key ? 'opacity-40' : ''}"
-    ondragover={e => dragOver(e, kind, i)}
-    ondrop={e => drop(e, kind)}
+    class="rounded-md border border-line bg-panel {drag === t.key ? 'opacity-40' : ''}"
+    ondragover={e => dragOver(e, i)}
+    ondrop={drop}
   >
     <div class="flex items-center gap-2 px-2 py-1.5">
       <span
         class="rounded p-0.5 text-muted {editable ? 'cursor-grab hover:bg-raised hover:text-text' : 'opacity-40'}"
         draggable={editable}
-        ondragstart={e => dragStart(e, kind, t)}
+        ondragstart={e => dragStart(e, t)}
         ondragend={() => (drag = dropAt = null)}
         title="Drag to reorder"
         role="button"
@@ -268,20 +328,33 @@
       >
       <input type="checkbox" checked={!off} title="In the output" onchange={e => setIncluded(t, e.currentTarget.checked)} />
       <span class="w-5 text-center text-xs {off ? 'text-muted' : 'text-accent'}">{pos === undefined ? '–' : pos + 1}</span>
-      <span class="min-w-0 flex-1 truncate text-sm {off ? 'text-muted line-through' : ''}" title={t.title}>
-        {sourceLabel(t)} <span class="text-muted">· {t.language}{t.title ? ` · ${t.title}` : ''}</span>
-      </span>
-      {#if t.external_path}
+      <div class="min-w-0 flex-1">
+        <div class="truncate text-sm {off ? 'text-muted line-through' : ''}" title={t.title}>
+          <span class="font-medium">{sourceLabel(t)}</span>
+          <span class="text-muted">· {t.language}{t.title ? ` · ${t.title}` : ''}</span>
+        </div>
+        {#if details(t).length}
+          <div class="flex flex-wrap gap-x-3 text-xs text-muted tabular-nums" data-details>
+            {#each details(t) as d (d)}<span>{d}</span>{/each}
+          </div>
+        {/if}
+      </div>
+      {#if copy}
+        <span class="rounded bg-accent/15 px-1.5 text-xs text-accent" title="Another output track from {sourceLabel(t)}">copy {copy.copy}</span>
+        <button class="btn-ghost px-1 hover:text-bad" onclick={() => removeCopy(copy)} title="Remove this copy">
+          <Icon name="x" size={14} />
+        </button>
+      {:else if t.external_path}
         {@const path = t.external_path}
         <span class="rounded bg-raised px-1.5 text-xs text-muted" title={path}>added</span>
-        <button class="btn-ghost px-1 hover:text-bad" onclick={() => removeFile(path, kind)} title="Remove this file from the job">
+        <button class="btn-ghost px-1 hover:text-bad" onclick={() => removeFile(path)} title="Remove this file from the job">
           <Icon name="x" size={14} />
         </button>
       {/if}
-      <button class="btn-ghost px-1" disabled={i === 0} onclick={() => move(kind, t.key, i - 1)} aria-label="Move up">
+      <button class="btn-ghost px-1" disabled={i === 0} onclick={() => move(t.key, i - 1)} aria-label="Move up">
         <Icon name="up" size={14} />
       </button>
-      <button class="btn-ghost px-1" disabled={i === count - 1} onclick={() => move(kind, t.key, i + 2)} aria-label="Move down">
+      <button class="btn-ghost px-1" disabled={i === count - 1} onclick={() => move(t.key, i + 2)} aria-label="Move down">
         <Icon name="down" size={14} />
       </button>
     </div>
@@ -301,16 +374,17 @@
           aria-label="Language"
           onchange={e => setLanguage(t, e.currentTarget.value.trim())}
         />
-        <div class="flex flex-wrap gap-1">
-          {#each properties.filter(p => p.kind === kind) as f (f.key)}
+        <div class="flex flex-wrap gap-1" role="group" aria-label="Track flags">
+          {#each properties as f (f.key)}
             {@const on = flagOn(t, f.key)}
             <button
-              class="rounded-full border px-2 py-0.5 text-xs {on
+              class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs {on
                 ? 'border-accent bg-accent/15 text-accent'
                 : 'border-line text-muted hover:text-text'} {flagSet(t, f.key) ? 'underline decoration-dotted' : ''}"
               aria-pressed={on}
               title="{f.help}{flagSet(t, f.key) ? ' (set by you)' : ''}"
-              onclick={() => toggleFlag(t, f.key)}>{f.label}</button
+              onclick={() => toggleFlag(t, f.key)}
+              >{#if on}<Icon name="check" size={12} />{/if}{f.label}</button
             >
           {/each}
         </div>
@@ -341,7 +415,7 @@
                 </select>
               {:else}
                 <input
-                  class="field w-20 text-right"
+                  class="field w-24"
                   type="number"
                   min="6"
                   step="8"
@@ -376,7 +450,7 @@
                     {#each o.choices as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
                   </select>
                 {:else if o.range}
-                  <input id="opt-{t.key}-{o.key}" class="field w-24 text-right" type="number" min={o.range[0]} max={o.range[1]}
+                  <input id="opt-{t.key}-{o.key}" class="field w-24" type="number" min={o.range[0]} max={o.range[1]}
                     {value} onchange={e => setOption(t, o, e.currentTarget.value)} />
                 {:else}
                   <input id="opt-{t.key}-{o.key}" class="field min-w-0 flex-1 font-mono text-xs" {value} placeholder={o.help}
@@ -390,13 +464,13 @@
       {/if}
     {/if}
   </div>
-  {#if i === count - 1 && dropAt?.kind === kind && dropAt.index === count}<div class="-my-1 h-0.5 rounded bg-accent"></div>{/if}
+  {#if i === count - 1 && dropAt === count}<div class="-my-1 h-0.5 rounded bg-accent"></div>{/if}
 {/snippet}
 
 {#if !tracks || !plan}
   <div class="p-6 text-muted">{job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}</div>
 {:else}
-  <fieldset disabled={!editable} class="max-w-5xl space-y-6">
+  <fieldset disabled={!editable} class="max-w-5xl space-y-4">
     <div class="flex flex-wrap items-center gap-3">
       <label class="flex items-center gap-2 text-sm text-muted">
         Original language
@@ -410,47 +484,46 @@
       <datalist id="track-languages">
         {#each LANGUAGES as [tag, name] (tag)}<option value={tag}>{name}</option>{/each}
       </datalist>
-      <span class="text-xs text-muted">Drag a track by its handle to reorder; every change saves.</span>
-      <button class="btn ml-auto" onclick={() => (browsing = 'files')} title="Add subtitle or audio files to this job">
-        <Icon name="new" />Add files…
-      </button>
-      <button class="btn" onclick={reset}><Icon name="refresh" />Reset tracks</button>
+      <div class="ml-auto flex flex-wrap gap-2">
+        {#if kind === 'audio'}
+          <select
+            class="field"
+            value=""
+            aria-label="Add a track from"
+            title="Use a track again: another output track with its own encode, title and flags"
+            onchange={e => {
+              const base = audioRows.find(t => t.key === e.currentTarget.value)
+              e.currentTarget.value = ''
+              if (base) addCopy(base)
+            }}
+          >
+            <option value="">+ Add a track from…</option>
+            {#each audioRows.filter(t => !t.copy) as t (t.key)}
+              <option value={t.key}>{sourceLabel(t)} · {t.language}{t.title ? ` · ${t.title}` : ''}</option>
+            {/each}
+          </select>
+        {/if}
+        <button class="btn" onclick={() => (browsing = true)} title="Add {kind === 'audio' ? 'audio' : 'subtitle'} files to this job">
+          <Icon name="new" />Add files…
+        </button>
+        <button class="btn" onclick={reset} title="Back to the profile's choices for these tracks"><Icon name="refresh" />Reset</button>
+      </div>
     </div>
 
-    {#each [{ kind: 'audio' as Kind, rows: audioRows, icon: 'audio' as const, title: 'Audio' }, { kind: 'sub' as Kind, rows: subRows, icon: 'sub' as const, title: 'Subtitles' }] as section (section.kind)}
-      <section>
-        <div class="mb-2 flex items-center gap-2">
-          <Icon name={section.icon} class="text-accent" /><span class="font-medium">{section.title}</span>
-          <span class="text-xs text-muted">
-            {section.rows.filter(t => !excluded(t)).length} of {section.rows.length} in the output
-          </span>
+    <section>
+      <div class="mb-2 flex items-center gap-2">
+        <Icon name={kind === 'audio' ? 'audio' : 'sub'} class="text-accent" /><span class="font-medium">{title}</span>
+        <span class="text-xs text-muted">{rows.filter(t => !excluded(t)).length} of {rows.length} in the output</span>
+        <span class="ml-auto text-xs text-muted">Drag a track by its handle to reorder; every change saves.</span>
+      </div>
+      {#if rows.length}
+        <div class="space-y-2" role="list">
+          {#each rows as t, i (t.key)}
+            {@render trackRow(t, i, rows.length)}
+          {/each}
         </div>
-        {#if section.rows.length}
-          <div class="space-y-2" role="list">
-            {#each section.rows as t, i (t.key)}
-              {@render trackRow(section.kind, t, i, section.rows.length)}
-            {/each}
-          </div>
-        {:else}
-          <p class="text-sm text-muted">None in the source or added.</p>
-        {/if}
-      </section>
-    {/each}
-
-    <section class="flex flex-wrap items-center gap-2 text-sm text-muted">
-      <Icon name="chapters" class="text-accent" />
-      Chapters: {job.spec.inputs.chapters
-        ? basename(job.spec.inputs.chapters)
-        : plan.chapters_path
-          ? `${basename(plan.chapters_path)} (AutoQPF)`
-          : tracks.has_chapters
-            ? 'from the source'
-            : 'none'}
-      <button class="btn-ghost text-xs" onclick={() => (browsing = 'chapters')}>
-        {job.spec.inputs.chapters ? 'Change…' : 'Use a file…'}
-      </button>
-      {#if job.spec.inputs.chapters}
-        <button class="btn-ghost text-xs hover:text-bad" onclick={() => saveInputs({ chapters: null })}>Remove</button>
+      {:else}
+        <p class="text-sm text-muted">None in the source or added.</p>
       {/if}
     </section>
   </fieldset>
@@ -458,14 +531,13 @@
 
 {#if browsing}
   <FileBrowser
-    title={browsing === 'files' ? 'Add subtitle or audio files' : 'Chapters file'}
-    extensions={browsing === 'files' ? [...SUB_EXTENSIONS, ...AUDIO_EXTENSIONS] : CHAPTER_EXTENSIONS}
+    title={kind === 'audio' ? 'Add audio files' : 'Add subtitle files'}
+    extensions={kind === 'audio' ? AUDIO_EXTENSIONS : SUB_EXTENSIONS}
     start={sourceDir}
     onpick={paths => {
-      if (browsing === 'files') addFiles(paths)
-      else if (paths[0]) saveInputs({ chapters: paths[0] })
-      browsing = null
+      addFiles(paths)
+      browsing = false
     }}
-    onclose={() => (browsing = null)}
+    onclose={() => (browsing = false)}
   />
 {/if}

@@ -51,6 +51,17 @@ def _ms(ns: int | None) -> int:
     return round((ns or 0) / 1_000_000)
 
 
+def _int(value: Any) -> int | None:
+    """A MediaInfo number (an int, a float, or text like "48000 / 44100": the first one)."""
+    if isinstance(value, (int, float)):
+        return int(value)
+    head = str(value or "").split("/")[0].strip()
+    try:
+        return int(float(head)) if head else None
+    except ValueError:
+        return None
+
+
 def probe(path: Path, mkvmerge: str) -> SourceInfo:
     ident = mkvmerge_identify(path, mkvmerge)
     mi_all = MediaInfo.parse(str(path)).tracks
@@ -91,6 +102,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
             )
             channels = parse_channel_count(getattr(mi, "channel_s", None)) or props.get("audio_channels")
             bit_rate = getattr(mi, "bit_rate", None)
+            lossless = getattr(mi, "compression_mode", None) == "Lossless"
             audio.append(
                 AudioTrack(
                     id=track["id"],
@@ -109,6 +121,10 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                     bitrate_kbps=round(bit_rate / 1000) if isinstance(bit_rate, int) else None,
                     delay_ms=int(getattr(mi, "delay_relative_to_video", None) or 0),
                     format_name=getattr(mi, "format", "") or track.get("codec", ""),
+                    sample_rate=_int(getattr(mi, "sampling_rate", None)) or props.get("audio_sampling_frequency"),
+                    bit_depth=(_int(getattr(mi, "bit_depth", None)) or props.get("audio_bits_per_sample")) if lossless else None,
+                    size_bytes=_int(getattr(mi, "stream_size", None)),
+                    duration_ms=_int(getattr(mi, "duration", None)),
                 )
             )
         elif kind == "subtitles":
