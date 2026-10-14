@@ -16,6 +16,7 @@ from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template import Template
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
 from videoforge.server.queue import Busy, JobQueue
+from videoforge.server.routes.presets import default_template
 from videoforge.server.views import detail, summary
 
 router = APIRouter(prefix="/api")
@@ -72,7 +73,7 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         output_dir=out_dir,
         video=from_json(VideoSettings, body["video"]) if body.get("video") else None,
         encoder=from_json(EncoderSettings, body["encoder"]) if body.get("encoder") else None,
-        template=_template(body),
+        template=_template(body) or _default_template(request, body),
     )
     left = result.unmatched
     return {"added": [e.id for e in added], "skipped": skipped,
@@ -93,6 +94,13 @@ def get_job(request: Request, job_id: str) -> dict[str, Any]:
 def _template(body: dict[str, Any]) -> Template | None:
     """A template's settings, sent whole (the UI has the user's and each profile's defaults)."""
     return from_json(Template, body["template"]) if body.get("template") else None
+
+
+def _default_template(request: Request, body: dict[str, Any]) -> Template | None:
+    """Jobs added with no settings of their own get the profile's default template, if it has one."""
+    if body.get("video") or body.get("encoder") or "template" in body:
+        return None
+    return default_template(request.app.state.store, body.get("profile") or request.app.state.default_profile)
 
 
 def _changes(body: dict[str, Any]) -> dict[str, Any]:

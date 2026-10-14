@@ -393,7 +393,7 @@ def test_settings_page_config(tmp_path):
 
 def test_presets(tmp_path):
     with make_client(tmp_path) as client:
-        assert client.get("/api/presets").json() == {"video": [], "encoder": [], "template": []}
+        assert client.get("/api/presets").json() == {"video": [], "encoder": [], "template": [], "template_defaults": {}}
         saved = client.put("/api/presets/encoder/Fast x265", json={"encoder": "x265", "crf": 20, "preset": "fast"}).json()
         (enc,) = saved["encoder"]
         assert enc["name"] == "Fast x265" and enc["data"]["crf"] == 20 and enc["data"]["depth"] == 8  # filled in
@@ -463,6 +463,22 @@ def test_templates(tmp_path):
         saved = client.put("/api/presets/template/Show", json=fixed).json()["template"]
         assert saved[0]["data"]["video"]["crop"]["left"] == 4  # a template keeps its crop
         assert client.get("/api/profiles").json()[0]["defaults"]["template"]["crop_mode"] == "keep"
+
+        # The profile's default template: jobs added with no settings of their own get it; it follows a
+        # rename and falls back to the profile's own defaults when deleted.
+        assert client.put("/api/presets/template-default/manual", json={"name": "Nope"}).status_code == 404
+        assert client.put("/api/presets/template-default/other", json={"name": "Show"}).status_code == 404
+        listed = client.put("/api/presets/template-default/manual", json={"name": "Show"}).json()
+        assert listed["template_defaults"] == {"manual": "Show"}
+        listed = client.post("/api/presets/template/Show/rename", json={"to": "Show 1080p"}).json()
+        assert [t["name"] for t in listed["template"]] == ["Show 1080p"] and listed["template_defaults"] == {"manual": "Show 1080p"}
+        client.post("/api/jobs/remove", json={"ids": ids})
+        (new,) = add(client, tmp_path, sources=[str(tmp_path / "src" / "Show.S01E01.mkv")])
+        spec = client.get(f"/api/jobs/{new}").json()["spec"]
+        assert spec["encoder"]["encoder"] == "x265" and spec["video"]["crop"]["left"] == 4
+        (own,) = add(client, tmp_path, sources=[str(tmp_path / "src" / "Show.S01E01.mkv")], encoder={"crf": 20})
+        assert client.get(f"/api/jobs/{own}").json()["spec"]["encoder"]["encoder"] == "x264"  # its own settings
+        assert client.delete("/api/presets/template/Show 1080p").json()["template_defaults"] == {}
 
 
 def test_folder_browser(tmp_path):
