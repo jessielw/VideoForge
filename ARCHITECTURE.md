@@ -28,7 +28,8 @@ src/videoforge/
       crop.py            Auto-crop detection
       encoders.py        x264 / x265: settings -> argv (1 or 2 pass), progress parsing
       qpf.py             AutoQPF: chapters -> qpf + chapter file
-    execute/             audio.py, mux.py, process.py (external tools, piping, cancel)
+    execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel)
+                         mux.MUXERS: mkvmerge (MKV) and MP4Box (MP4), each with what its container can't hold
                          audio.ENCODES: every audio encode (DEE, qaac, opusenc, ffmpeg's FLAC/Opus/AAC/AC-3/E-AC-3)
                          with its layouts, bitrates and tools; planner, tool checks and UI all read it
     pipeline/
@@ -56,7 +57,7 @@ tools/                   Binaries (gitignored): MKVToolNix, DEE, DeeZy, qaac, op
 
 - **JobSpec** (persisted, edited in the UI): id, profile, inputs (source; an existing
   encode to reuse, optional; subtitles; chapters), original language, track
-  overrides, VideoSettings, EncoderSettings, output folder.
+  overrides, VideoSettings, EncoderSettings, output folder, MuxSettings (container, extra muxer arguments).
 - **Plan** (derived): what the profile's rules make of the probed inputs: audio
   actions, subtitle selection, titles and flags. Recomputed on every edit.
 - **JobState** (persisted, written by the runner): status, current step, progress,
@@ -78,10 +79,15 @@ index ─► qpf/chapters ─► video (vspipe | x264/x265, 1 or 2 passes) ─�
   (change a subtitle flag and only the mux runs again).
 - An imported encode (e.g. from StaxRip) replaces the video steps.
 - The plan is container-neutral: tracks carry plain flags (default, forced, hearing impaired,
-  commentary, original, visual impaired), languages and titles. The muxer the profile picks
-  (`execute/mux.py` `MUXERS`, by `Profile.container`) maps them to its tool: mkvmerge track flags
-  today; an MP4Box muxer would map them to its options (e.g. `:lang=`, `:name=`, `:kind=` roles
-  such as commentary or description) and set the output extension.
+  commentary, original, visual impaired), languages and titles. The job's container
+  (`JobSpec.container()`: its `MuxSettings.container` when the profile lists it in `containers`,
+  else `Profile.container`) picks the muxer (`execute/mux.py` `MUXERS`) and the output extension;
+  the job's extra arguments go to that tool as typed.
+  - mkvmerge writes every flag.
+  - MP4Box: language, title (handler name; MP4Box can't take ':' in it), default = the enabled
+    track of its alternate group, forced on timed text. Other flags warn; PGS/ASS/LPCM block.
+    Chapters must be OGM text, so a chapter XML or the source's chapters are converted first.
+  - The output check reads an MP4 for language, enabled (default) and format only.
 
 ## VapourSynth
 
