@@ -18,6 +18,8 @@ src/videoforge/
     profile.py           Profile ABC: plan rules, checks, track properties, video defaults
     jobs.py              probe_inputs / plan_job
     job.py               JobSpec (what to build, persisted) + JobState (runtime, persisted)
+    template.py          Template: a job's whole run (video, crop mode, encoder, audio by position, container,
+                         AutoQPF); apply() to a spec, apply_audio() once the source's tracks are known
     plan_io.py           Type-driven JSON codec for every model
     workdir.py           <source>_tmp/ per job: indexes, script, encodes, stats, logs
     history.py           Finished-output records
@@ -42,7 +44,7 @@ src/videoforge/
   server/                FastAPI. The only place that knows about HTTP.
     app.py               create_app(): /api routers + the built frontend (SPA fallback)
     settings.py          Port, data folder, browsable roots
-    store.py             SQLite (app data): jobs (spec + state JSON, order), presets
+    store.py             SQLite (app data): jobs (spec + state JSON, order), presets (video, encoder, template)
     queue.py             The queue: one worker thread runs jobs in order; start/stop/cancel
     events.py            Progress, log lines and job changes -> WebSocket /api/events
     routes/              fs (folder browser), jobs, media (probe), video (frames, crop, script),
@@ -67,6 +69,23 @@ tools/                   Binaries (gitignored): MKVToolNix, DEE, DeeZy, qaac, op
 
 A batch is one setup applied to many sources: each job gets its own copy of the
 settings, and edits can be applied to several selected jobs at once.
+
+## Templates
+
+A template (`core/template.py`, StaxRip's idea) is the settings for a job's whole run, set up on the
+Templates page without a file or saved from a job: VideoSettings, a crop mode (keep each job's / the
+template's crop / detect it per job), EncoderSettings, MuxSettings, AutoQPF, and optionally audio. Each
+profile's own defaults are a built-in template; the user can star one of theirs as a profile's default
+(New jobs starts on it; `POST /api/jobs` with no settings gets it). Templates are applied when jobs are
+added, to one job, or to a batch; a template applied after a job's own edits replaces them.
+
+- **Auto crop:** `JobSpec.autocrop` is set; once the job is probed the queue runs the preview's
+  auto-crop in its probe pool (status "cropping", not runnable meanwhile). A crop set by hand wins.
+- **Audio, by position:** slot n is for the source's nth audio track (copy or an encode, title, flags,
+  leave out, more outputs from the same track); slots past a source's tracks are ignored and tracks
+  past the slots are kept or left out. It waits in `JobSpec.audio_template` until the tracks are known,
+  then becomes the job's track overrides (added audio files and subtitles keep theirs). Only profiles
+  with the track editor follow audio overrides; a group's rules may ignore them.
 
 ## Pipeline
 
@@ -104,7 +123,7 @@ index ─► qpf/chapters ─► video (vspipe | x264/x265, 1 or 2 passes) ─�
 ## Frontend
 
 Pages: New jobs | Queue (job list + job editor tabs: Video, Encoder, Audio, Subtitles, Output, Log) |
-Log | Settings. The frame preview (zoom, pan, crop overlay,
+Templates | Log | Settings. The frame preview (zoom, pan, crop overlay,
 auto-crop), the folder browser and the encoder option panels are ported from the
 user's video-forge React app. Live updates come over one WebSocket. The video editor's view
 (preview/output/script, frame, zoom, scroll, edges, unsaved script text) is kept per job in memory
