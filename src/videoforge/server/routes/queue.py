@@ -33,8 +33,10 @@ def start(request: Request, body: dict[str, Any] | None = Body(None)) -> dict[st
 
 @router.post("/enqueue")
 def enqueue(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """Queue the given jobs: the queue's state, plus the ids it queued (`enqueued`; `queued` is the count)."""
     q = queue_of(request)
-    return {"queued": q.enqueue(body.get("ids")), **q.queue_state()}
+    enqueued = q.enqueue(body.get("ids"))
+    return {**q.queue_state(), "enqueued": enqueued}
 
 
 @router.post("/dequeue")

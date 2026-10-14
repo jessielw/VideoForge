@@ -126,7 +126,7 @@ export const api = {
 
   queue: () => get<QueueState>('/api/queue'),
   start: (ids?: string[]) => post<QueueState>('/api/queue/start', ids ? { ids } : {}),
-  enqueue: (ids: string[]) => post<QueueState>('/api/queue/enqueue', { ids }),
+  enqueue: (ids: string[]) => post<QueueState & { enqueued: string[] }>('/api/queue/enqueue', { ids }),
   dequeue: (ids: string[]) => post<QueueState>('/api/queue/dequeue', { ids }),
   stop: () => post<QueueState>('/api/queue/stop'),
   cancel: () => post<QueueState>('/api/queue/cancel'),

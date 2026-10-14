@@ -449,13 +449,16 @@ def test_templates(tmp_path):
         gate.clear()
         client.patch(f"/api/jobs/{ids[0]}", json={"template": template})
         job = wait_for(client, ids[0], "cropping")
-        client.post("/api/queue/enqueue", json={"ids": [ids[0]]})
-        assert client.get(f"/api/jobs/{ids[0]}").json()["status"] == "cropping"  # not queued
+        assert client.post("/api/queue/enqueue", json={"ids": [ids[0]]}).json()["enqueued"] == []
+        assert client.get(f"/api/jobs/{ids[0]}").json()["status"] == "cropping"
         hand = job["spec"]["video"] | {"crop": {"left": 0, "top": 8, "right": 0, "bottom": 8}}
         client.patch(f"/api/jobs/{ids[0]}", json={"video": hand})
         gate.set()
         job = wait_for(client, ids[0], "ready", "warn")
         assert job["spec"]["video"]["crop"]["top"] == 8 and not job["spec"]["autocrop"]
+        state = client.post("/api/queue/enqueue", json={"ids": [ids[0]]}).json()
+        assert state["enqueued"] == [ids[0]] and state["queued"] == 1  # the ids it queued; the queue's count
+        client.post("/api/queue/dequeue", json={"ids": [ids[0]]})
 
         saved = client.put("/api/presets/template/Show", json=fixed).json()["template"]
         assert saved[0]["data"]["video"]["crop"]["left"] == 4  # a template keeps its crop
