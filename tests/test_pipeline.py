@@ -422,3 +422,36 @@ def test_process_run_cancel():
     threading.Timer(0.3, token.cancel).start()
     with pytest.raises(Cancelled):
         process.run([py("import time; time.sleep(30)")], lambda _l: None, token)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Job Objects are Windows only")
+def test_process_run_tools_die_with_a_hard_killed_server():
+    """TerminateProcess on the process running run() ends the tool and the child it started."""
+    import ctypes
+
+    tool = ("import os, subprocess, sys, time\n"
+            "c = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+            "print(os.getpid(), c.pid, flush=True)\n"
+            "time.sleep(60)")
+    server = py("import sys\nfrom videoforge.core.execute import process\n"
+                f"process.run([[sys.executable, '-c', {tool!r}]], lambda line: print(line, flush=True))")
+    helper = subprocess.Popen(server, stdout=subprocess.PIPE, text=True)
+    kernel32 = ctypes.WinDLL("kernel32")
+    kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    pids: list[int] = []
+    handles: list[int] = []
+    try:
+        pids = [int(p) for p in helper.stdout.readline().split("] ", 1)[1].split()]
+        handles = [kernel32.OpenProcess(0x100000, False, pid) for pid in pids]  # SYNCHRONIZE, before the kill
+        assert all(handles)
+        helper.kill()  # TerminateProcess: no Python cleanup runs
+        helper.wait()
+        assert [kernel32.WaitForSingleObject(h, 5000) for h in handles] == [0, 0]  # both ended
+    finally:
+        for h in handles:
+            kernel32.CloseHandle(h)
+        helper.kill()
+        for pid in pids:
+            subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, check=False)

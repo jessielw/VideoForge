@@ -10,6 +10,8 @@ import threading
 from collections.abc import Callable, Sequence
 from typing import IO
 
+from videoforge.core.execute import jobobject
+
 LogFn = Callable[[str], None]
 
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -106,11 +108,12 @@ def run(argvs: Sequence[Sequence[str]], log: LogFn, cancel: CancelToken | None =
                 stdin=procs[0].stdout if i == 1 else subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE if producer else subprocess.STDOUT,
-                creationflags=_NO_WINDOW,
+                creationflags=_NO_WINDOW | jobobject.SUSPENDED,
             )
+            procs.append(proc)
+            jobobject.adopt(proc)  # ends with VideoForge, even on a crash
             if i == 1:
                 procs[0].stdout.close()  # the producer sees a broken pipe if the consumer dies
-            procs.append(proc)
             tail: list[str] = []
             tails.append(tail)
             stream = proc.stderr if producer else proc.stdout

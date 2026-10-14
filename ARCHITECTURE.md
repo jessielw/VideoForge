@@ -28,7 +28,7 @@ src/videoforge/
       crop.py            Auto-crop detection
       encoders.py        x264 / x265: settings -> argv (1 or 2 pass), progress parsing
       qpf.py             AutoQPF: chapters -> qpf + chapter file
-    execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel)
+    execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel), jobobject.py (tools end with the server, Windows)
                          mux.MUXERS: mkvmerge (MKV) and MP4Box (MP4), each with what its container can't hold
                          audio.ENCODES: every audio encode (DEE, qaac, opusenc, ffmpeg's FLAC/Opus/AAC/AC-3/E-AC-3)
                          with its layouts, bitrates and tools; planner, tool checks and UI all read it
