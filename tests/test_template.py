@@ -4,10 +4,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from conftest import audio
+
 from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.job import JobSpec
-from videoforge.core.models import JobInputs
-from videoforge.core.template import CropMode, Template
+from videoforge.core.models import (
+    AudioAction,
+    AudioCodec,
+    AudioSlot,
+    JobInputs,
+    Layout,
+    OtherAudio,
+    Overrides,
+    TemplateAudio,
+    TrackOverride,
+)
+from videoforge.core.template import CropMode, Template, apply_audio
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 
 
@@ -38,11 +50,6 @@ def test_keep_fixed_and_auto_crop():
 
 
 def test_audio_slots_go_to_the_source_tracks_by_position():
-    from conftest import audio
-
-    from videoforge.core.models import AudioAction, AudioCodec, AudioSlot, Layout, OtherAudio, Overrides, TemplateAudio, TrackOverride
-    from videoforge.core.template import apply_audio
-
     tracks = [audio(AudioCodec.TRUEHD, "7.1", "en", index=0), audio(AudioCodec.AC3, "5.1", "en", index=1),
               audio(AudioCodec.AAC, "2.0", "en", index=2, commentary=True)]
     ddp = TrackOverride(action=AudioAction.DDP, layout=Layout.parse("5.1"), bitrate_kbps=640, language="fr")
