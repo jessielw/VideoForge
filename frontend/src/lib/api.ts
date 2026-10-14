@@ -11,6 +11,7 @@ import type {
   JobSpec,
   JobSummary,
   MatchResult,
+  PathKind,
   PresetKind,
   Presets,
   Profile,
@@ -92,6 +93,7 @@ export const api = {
   roots: () => get<string[]>('/api/fs/roots'),
   list: (path: string, extensions: string[] = []) =>
     get<DirListing>(`/api/fs/list?path=${encodeURIComponent(path)}&extensions=${encodeURIComponent(extensions.join(','))}`),
+  pathKinds: (paths: string[]) => post<PathKind[]>('/api/fs/kinds', { paths }),
 
   match: (slots: InputSlots) => post<MatchResult>('/api/match', slots),
   addJobs: (

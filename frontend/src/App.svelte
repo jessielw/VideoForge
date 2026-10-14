@@ -11,6 +11,7 @@
   import { Button } from '$lib/components/ui/button'
   import { Toaster } from '$lib/components/ui/sonner'
   import ThemeToggle from './components/ThemeToggle.svelte'
+  import { installDrops } from './lib/dropPaths.svelte'
   import { router, type Page } from './lib/router.svelte'
   import { layout } from './lib/layout.svelte'
   import { app } from './lib/state.svelte'
@@ -29,6 +30,7 @@
   let startError = $state('')
 
   onMount(() => {
+    installDrops()
     app.start().catch(e => (startError = String(e)))
   })
 

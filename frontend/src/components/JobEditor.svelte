@@ -19,6 +19,7 @@
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import PresetMenu from './PresetMenu.svelte'
   import FileBrowser from './FileBrowser.svelte'
+  import { pastedPaths, pathDrop } from '../lib/dropPaths.svelte'
   import TrackEditor from './TrackEditor.svelte'
   import TracksTab from './TracksTab.svelte'
   import JobLog from './JobLog.svelte'
@@ -180,12 +181,22 @@
         <div class="max-w-3xl space-y-5">
           <div class="grid grid-cols-[8rem_1fr] items-center gap-3 text-sm">
             <span class="text-muted-foreground">Output folder</span>
-            <div class="flex gap-2">
+            <div
+              class="-m-1 flex gap-2 rounded-lg p-1 outline-none"
+              role="group"
+              aria-label="Output folder (drop or paste a folder)"
+              use:pathDrop={{
+                rule: { mode: 'folder', label: 'Output folder' },
+                accept: paths => save({ output_dir: paths[0] }),
+                disabled: !editable,
+              }}
+            >
               <Input
                 class="flex-1 font-mono text-xs"
+                aria-label="Output folder"
                 value={job.spec.output_dir ?? ''}
                 disabled={!editable}
-                onchange={e => save({ output_dir: (e.target as HTMLInputElement).value.trim() || null })}
+                onchange={e => save({ output_dir: pastedPaths((e.target as HTMLInputElement).value)[0] || null })}
               />
               <Button variant="outline" disabled={!editable} onclick={() => (browsing = 'output')}><FolderOpenIcon />Browse…</Button>
             </div>
@@ -216,7 +227,16 @@
               onchange={e => save({ mux: { ...job!.spec.mux, extra: (e.target as HTMLInputElement).value.trim() } })}
             />
             <span class="text-muted-foreground">Chapters</span>
-            <div class="flex flex-wrap items-center gap-2">
+            <div
+              class="-m-1 flex flex-wrap items-center gap-2 rounded-lg p-1 outline-none"
+              role="group"
+              aria-label="Chapters (drop or paste a file)"
+              use:pathDrop={{
+                rule: { mode: 'file', extensions: ['.xml', '.txt'], label: 'Chapters' },
+                accept: paths => save({ inputs: { chapters: paths[0] } }),
+                disabled: !editable,
+              }}
+            >
               <span>
                 {job.spec.inputs.chapters
                   ? basename(job.spec.inputs.chapters)

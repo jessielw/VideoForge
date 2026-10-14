@@ -11,6 +11,7 @@
   import { app } from '../lib/state.svelte'
   import type { AudioAction, AudioEncodeInfo, AudioTrack, EncodeOptionInfo, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
   import FileBrowser from './FileBrowser.svelte'
+  import { drops, pathDrop } from '../lib/dropPaths.svelte'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import AudioLinesIcon from '@lucide/svelte/icons/audio-lines'
@@ -545,12 +546,22 @@
       </div>
     </div>
 
-    <section>
+    <section
+      class="-m-2 rounded-lg p-2 outline-none"
+      aria-label="{title} (drop or paste files to add them)"
+      use:pathDrop={{
+        rule: { mode: 'files', extensions: kind === 'audio' ? AUDIO_EXTENSIONS : SUB_EXTENSIONS, label: title },
+        accept: addFiles,
+        disabled: !editable,
+      }}
+    >
       <div class="mb-2 flex items-center gap-2">
         {#if kind === 'audio'}<AudioLinesIcon class="size-4 text-primary" />{:else}<CaptionsIcon class="size-4 text-primary" />{/if}
         <span class="font-medium">{title}</span>
         <span class="text-xs text-muted-foreground">{rows.filter(t => !excluded(t)).length} of {rows.length} in the output</span>
-        <span class="ml-auto text-xs text-muted-foreground">Drag a track by its handle to reorder; every change saves.</span>
+        <span class="ml-auto text-xs text-muted-foreground"
+          >Drag a track by its handle to reorder; {drops.desktop ? 'drop' : 'paste'} files here to add them; every change saves.</span
+        >
       </div>
       {#if rows.length}
         <div class="space-y-2" role="list">
