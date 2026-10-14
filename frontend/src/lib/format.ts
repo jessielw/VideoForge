@@ -17,24 +17,24 @@ export const STATUS_LABEL: Record<Status, string> = {
 
 /** Tailwind text colour per job status. */
 export const STATUS_TONE: Record<Status, string> = {
-  probing: 'text-muted',
-  error: 'text-bad',
-  ready: 'text-ok',
-  warn: 'text-warn',
-  blocked: 'text-bad',
+  probing: 'text-muted-foreground',
+  error: 'text-destructive',
+  ready: 'text-success',
+  warn: 'text-warning',
+  blocked: 'text-destructive',
   queued: 'text-info',
   running: 'text-info',
-  done: 'text-ok',
-  invalid: 'text-bad',
-  failed: 'text-bad',
-  skipped: 'text-warn',
-  cancelled: 'text-warn',
+  done: 'text-success',
+  invalid: 'text-destructive',
+  failed: 'text-destructive',
+  skipped: 'text-warning',
+  cancelled: 'text-warning',
 }
 
 export const SEVERITY_TONE: Record<Severity, string> = {
-  block: 'text-bad',
-  warn: 'text-warn',
-  info: 'text-muted',
+  block: 'text-destructive',
+  warn: 'text-warning',
+  info: 'text-muted-foreground',
 }
 
 export function basename(path: string | null | undefined): string {

@@ -5,7 +5,14 @@
   import { api } from '../lib/api'
   import { bytes } from '../lib/format'
   import type { DirListing } from '../lib/types'
-  import Icon from './Icon.svelte'
+  import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
+  import FileIcon from '@lucide/svelte/icons/file'
+  import FolderIcon from '@lucide/svelte/icons/folder'
+  import { Button } from '$lib/components/ui/button'
+  import { Checkbox } from '$lib/components/ui/checkbox'
+  import * as Dialog from '$lib/components/ui/dialog'
+  import { Input } from '$lib/components/ui/input'
+  import { NativeSelect } from '$lib/components/ui/native-select'
 
   let {
     title,
@@ -58,81 +65,71 @@
       onpick(picked.length ? picked : listing ? [listing.path] : [])
     }
   }
-
-  function onkey(e: KeyboardEvent) {
-    if (e.key === 'Escape') onclose()
-  }
 </script>
 
-<svelte:window onkeydown={onkey} />
-
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" role="presentation" onclick={onclose}>
-  <div
-    class="panel flex h-[80vh] w-full max-w-3xl flex-col shadow-2xl"
-    role="dialog"
-    aria-label={title}
-    tabindex="-1"
-    onclick={e => e.stopPropagation()}
-    onkeydown={() => {}}
-  >
-    <header class="flex items-center gap-2 border-b border-line p-3">
-      <h2 class="font-semibold">{title}</h2>
-      <select class="field ml-auto" onchange={e => open((e.target as HTMLSelectElement).value)}>
+<Dialog.Root open onOpenChange={o => !o && onclose()}>
+  <Dialog.Content class="flex h-[80vh] flex-col gap-0 p-0 sm:max-w-3xl" showCloseButton={false} aria-label={title}>
+    <header class="flex items-center gap-2 border-b p-3">
+      <Dialog.Title>{title}</Dialog.Title>
+      <NativeSelect class="ml-auto" aria-label="Drive or folder" onchange={e => open((e.target as HTMLSelectElement).value)}>
         {#each roots as r (r)}<option value={r} selected={listing?.path.startsWith(r)}>{r}</option>{/each}
-      </select>
+      </NativeSelect>
     </header>
 
-    <div class="flex items-center gap-2 border-b border-line p-2">
-      <button class="btn-ghost" disabled={!listing?.parent} onclick={() => listing?.parent && open(listing.parent)} title="Up">
-        <Icon name="up" />
-      </button>
-      <input
-        class="field flex-1 font-mono text-xs"
-        bind:value={pathInput}
-        onkeydown={e => e.key === 'Enter' && open(pathInput)}
-      />
+    <div class="flex items-center gap-2 border-b p-2">
+      <Button
+        variant="ghost"
+        size="icon"
+        disabled={!listing?.parent}
+        onclick={() => listing?.parent && open(listing.parent)}
+        title="Up"
+        aria-label="Up"
+      >
+        <ArrowUpIcon />
+      </Button>
+      <Input class="flex-1 font-mono text-xs" aria-label="Path" bind:value={pathInput} onkeydown={e => e.key === 'Enter' && open(pathInput)} />
     </div>
 
-    {#if error}<div class="px-3 py-2 text-sm text-bad">{error}</div>{/if}
+    {#if error}<div class="px-3 py-2 text-sm text-destructive">{error}</div>{/if}
 
     <div class="min-h-0 flex-1 overflow-auto p-1">
       {#if listing}
         {#each listing.dirs as d (d.path)}
-          <div class="flex items-center gap-2 rounded px-2 py-1 hover:bg-raised">
+          <div class="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
             {#if mode === 'files'}
-              <input type="checkbox" checked={picked.includes(d.path)} onchange={() => toggle(d.path)} />
+              <Checkbox checked={picked.includes(d.path)} onCheckedChange={() => toggle(d.path)} aria-label="Pick {d.name}" />
             {/if}
-            <button class="flex flex-1 items-center gap-2 text-left" ondblclick={() => open(d.path)} onclick={() => open(d.path)}>
-              <Icon name="folder" class="text-accent" />{d.name}
+            <button class="flex flex-1 items-center gap-2 text-left" onclick={() => open(d.path)}>
+              <FolderIcon class="size-4 text-primary" />{d.name}
             </button>
           </div>
         {/each}
         {#if mode === 'files'}
           {#each listing.files as f (f.path)}
-            <label class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-raised">
-              <input type="checkbox" checked={picked.includes(f.path)} onchange={() => toggle(f.path)} />
-              <Icon name="file" class="text-muted" />
+            <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
+              <Checkbox checked={picked.includes(f.path)} onCheckedChange={() => toggle(f.path)} />
+              <FileIcon class="size-4 text-muted-foreground" />
               <span class="flex-1 truncate">{f.name}</span>
-              <span class="text-xs text-muted">{bytes(f.size)}</span>
+              <span class="text-xs text-muted-foreground">{bytes(f.size)}</span>
             </label>
           {/each}
           {#if !listing.dirs.length && !listing.files.length}
-            <div class="p-4 text-center text-muted">Nothing here{extensions.length ? ` (${extensions.join(' ')})` : ''}</div>
+            <div class="p-4 text-center text-muted-foreground">Nothing here{extensions.length ? ` (${extensions.join(' ')})` : ''}</div>
           {/if}
         {/if}
       {/if}
     </div>
 
-    <footer class="flex items-center gap-2 border-t border-line p-3">
-      <span class="text-xs text-muted">
+    <footer class="flex items-center gap-2 border-t p-3">
+      <span class="text-xs text-muted-foreground">
         {#if mode === 'files'}
           {picked.length ? `${picked.length} selected` : 'Nothing ticked: the current folder is used'}
         {:else}
           Choose the folder you're in
         {/if}
       </span>
-      <button class="btn ml-auto" onclick={onclose}>Cancel</button>
-      <button class="btn-primary" onclick={confirm}>{mode === 'folder' ? 'Use this folder' : 'Add'}</button>
+      <Button variant="outline" class="ml-auto" onclick={onclose}>Cancel</Button>
+      <Button onclick={confirm}>{mode === 'folder' ? 'Use this folder' : 'Add'}</Button>
     </footer>
-  </div>
-</div>
+  </Dialog.Content>
+</Dialog.Root>

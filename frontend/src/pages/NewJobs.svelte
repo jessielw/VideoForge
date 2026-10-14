@@ -1,7 +1,11 @@
 <script lang="ts">
   // New jobs: profile + language, input slots, output folder, live match preview, Add to queue.
   import { onMount } from 'svelte'
-  import Icon from '../components/Icon.svelte'
+  import PlusIcon from '@lucide/svelte/icons/plus'
+  import { Button } from '$lib/components/ui/button'
+  import * as Card from '$lib/components/ui/card'
+  import { Input } from '$lib/components/ui/input'
+  import { NativeSelect } from '$lib/components/ui/native-select'
   import PathSlot from '../components/PathSlot.svelte'
   import { api } from '../lib/api'
   import { basename, debounce, LANGUAGES } from '../lib/format'
@@ -98,37 +102,37 @@
 <div class="flex h-full flex-col gap-4 overflow-auto p-6">
   <header class="flex items-center gap-3">
     <h1 class="text-xl font-semibold">New jobs</h1>
-    <span class="text-sm text-muted">One job per source; a folder of episodes makes a batch.</span>
+    <span class="text-sm text-muted-foreground">One job per source; a folder of episodes makes a batch.</span>
   </header>
 
-  <section class="panel space-y-3 p-4">
+  <Card.Root class="gap-3 p-4">
     <div class="grid grid-cols-[8rem_1fr] items-center gap-3">
-      <div class="text-sm text-muted">Profile</div>
+      <div class="text-sm text-muted-foreground">Profile</div>
       <div class="flex flex-wrap items-center gap-3">
-        <select class="field" bind:value={profile}>
+        <NativeSelect bind:value={profile} aria-label="Profile">
           {#each app.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-        </select>
-        <label class="flex items-center gap-2 text-sm text-muted">
+        </NativeSelect>
+        <label class="flex items-center gap-2 text-sm text-muted-foreground">
           Original language
-          <input class="field w-44" list="languages" placeholder="Guess from audio" bind:value={language} />
+          <Input class="w-44" list="languages" placeholder="Guess from audio" bind:value={language} />
         </label>
         <datalist id="languages">
           {#each LANGUAGES as [tag, name] (tag)}<option value={tag}>{name}</option>{/each}
         </datalist>
       </div>
-      <div class="text-sm text-muted">Presets</div>
-      <div class="flex flex-wrap items-center gap-3 text-sm text-muted">
+      <div class="text-sm text-muted-foreground">Presets</div>
+      <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
         <label class="flex items-center gap-2">
           Video
-          <select class="field" bind:value={videoPreset}>
+          <NativeSelect bind:value={videoPreset}>
             {#each videoChoices as c, i (i)}<option value={i}>{c.name}</option>{/each}
-          </select>
+          </NativeSelect>
         </label>
         <label class="flex items-center gap-2">
           Encoder
-          <select class="field" bind:value={encoderPreset}>
+          <NativeSelect bind:value={encoderPreset}>
             {#each encoderChoices as c, i (i)}<option value={i}>{c.name}</option>{/each}
-          </select>
+          </NativeSelect>
         </label>
       </div>
     </div>
@@ -149,12 +153,12 @@
     {/if}
     <PathSlot label="Chapters" hint="Optional; otherwise AutoQPF reads or makes them" bind:paths={chapters} extensions={['.txt', '.xml']} />
     <PathSlot label="Output folder" hint="Where the muxed releases go" bind:paths={output} mode="folder" />
-  </section>
+  </Card.Root>
 
-  <section class="panel flex min-h-48 flex-1 flex-col">
-    <div class="flex items-center gap-3 border-b border-line px-4 py-2">
+  <Card.Root class="min-h-48 flex-1 gap-0 py-0">
+    <div class="flex items-center gap-3 border-b px-4 py-2">
       <h2 class="font-medium">Matched files</h2>
-      <span class="text-sm text-muted">
+      <span class="text-sm text-muted-foreground">
         {#if matching}Matching…{:else if result}{result.jobs.length} job(s){result.unmatched.length
             ? ` · ${result.unmatched.length} unmatched`
             : ''}{:else}Add a source to see the jobs{/if}
@@ -163,22 +167,22 @@
     <div class="min-h-0 flex-1 overflow-auto">
       {#if result}
         <table class="w-full text-sm">
-          <thead class="sticky top-0 bg-panel text-left text-xs text-muted uppercase">
+          <thead class="sticky top-0 bg-card text-left text-xs text-muted-foreground uppercase">
             <tr><th class="px-4 py-2">Source</th><th>Video</th><th>Subtitles</th><th>Chapters</th></tr>
           </thead>
           <tbody>
             {#each result.jobs as j (j.source)}
-              <tr class="border-t border-line/60">
+              <tr class="border-t border-border/60">
                 <td class="px-4 py-1.5" title={j.source}>{basename(j.source)}</td>
-                <td class={j.encode ? (j.encode_state === 'in_progress' ? 'text-warn' : '') : 'text-accent'}>
+                <td class={j.encode ? (j.encode_state === 'in_progress' ? 'text-warning' : '') : 'text-primary'}>
                   {j.encode ? basename(j.encode) + (j.encode_state === 'in_progress' ? ' (still encoding)' : '') : 'encode with VapourSynth'}
                 </td>
-                <td class="text-muted">{j.subtitles.map(basename).join(', ') || '—'}</td>
-                <td class="text-muted">{j.chapters ? basename(j.chapters) : 'AutoQPF'}</td>
+                <td class="text-muted-foreground">{j.subtitles.map(basename).join(', ') || '—'}</td>
+                <td class="text-muted-foreground">{j.chapters ? basename(j.chapters) : 'AutoQPF'}</td>
               </tr>
             {/each}
             {#each result.unmatched as p (p)}
-              <tr class="border-t border-line/60 text-muted">
+              <tr class="border-t border-border/60 text-muted-foreground">
                 <td class="px-4 py-1.5" colspan="4">Not matched to any source: {basename(p)}</td>
               </tr>
             {/each}
@@ -186,13 +190,13 @@
         </table>
       {/if}
     </div>
-  </section>
+  </Card.Root>
 
   <footer class="flex items-center gap-3">
-    {#if error}<span class="text-sm text-bad">{error}</span>{/if}
-    <button class="btn ml-auto" onclick={() => (sources = encodes = subtitles = chapters = [])}>Clear</button>
-    <button class="btn-primary" disabled={!result?.jobs.length || adding || !output.length} onclick={add}>
-      <Icon name="new" />Add {result?.jobs.length ? `${result.jobs.length} job(s)` : ''} to queue
-    </button>
+    {#if error}<span class="text-sm text-destructive">{error}</span>{/if}
+    <Button variant="outline" class="ml-auto" onclick={() => (sources = encodes = subtitles = chapters = [])}>Clear</Button>
+    <Button disabled={!result?.jobs.length || adding || !output.length} onclick={add}>
+      <PlusIcon />Add {result?.jobs.length ? `${result.jobs.length} job(s)` : ''} to queue
+    </Button>
   </footer>
 </div>

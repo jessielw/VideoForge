@@ -5,7 +5,15 @@
   import { emptyOverride, isEmpty, LANGUAGES } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type { AudioTrack, JobDetail, Overrides, SubTrack, TrackOverride } from '../lib/types'
-  import Icon from './Icon.svelte'
+  import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
+  import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
+  import AudioLinesIcon from '@lucide/svelte/icons/audio-lines'
+  import CaptionsIcon from '@lucide/svelte/icons/captions'
+  import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
+  import WandSparklesIcon from '@lucide/svelte/icons/wand-sparkles'
+  import { Button } from '$lib/components/ui/button'
+  import { Checkbox } from '$lib/components/ui/checkbox'
+  import { Input } from '$lib/components/ui/input'
 
   let {
     job,
@@ -114,14 +122,14 @@
 </script>
 
 {#if !tracks || !plan}
-  <div class="p-6 text-muted">{job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}</div>
+  <div class="p-6 text-muted-foreground">{job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}</div>
 {:else}
   <fieldset disabled={!editable} class="space-y-6">
     <div class="flex flex-wrap items-center gap-3">
-      <label class="flex items-center gap-2 text-sm text-muted">
+      <label class="flex items-center gap-2 text-sm text-muted-foreground">
         Original language
-        <input
-          class="field w-40"
+        <Input
+          class="w-40"
           list="languages-tracks"
           value={overrides.original_language ?? ''}
           onchange={e => setLanguageOriginal((e.target as HTMLInputElement).value.trim())}
@@ -130,38 +138,38 @@
       <datalist id="languages-tracks">
         {#each LANGUAGES as [tag, name] (tag)}<option value={tag}>{name}</option>{/each}
       </datalist>
-      <button class="btn ml-auto" onclick={reset}><Icon name="refresh" />Reset overrides</button>
+      <Button variant="outline" class="ml-auto" onclick={reset}><RefreshCwIcon />Reset overrides</Button>
     </div>
 
     {#if kind === 'audio'}
     <section>
       <div class="mb-2 flex items-center gap-2">
-        <Icon name="audio" class="text-accent" /><span class="font-medium">Audio</span>
-        <button class="btn-ghost ml-auto text-xs" onclick={automaticAudio} disabled={overrides.audio_track_ids === null}>
-          <Icon name="wand" size={14} />Automatic
-        </button>
+        <AudioLinesIcon class="size-4 text-primary" /><span class="font-medium">Audio</span>
+        <Button variant="ghost" size="sm" class="ml-auto" onclick={automaticAudio} disabled={overrides.audio_track_ids === null}>
+          <WandSparklesIcon />Automatic
+        </Button>
       </div>
       <table class="w-full text-sm">
-        <thead class="text-left text-xs text-muted uppercase">
+        <thead class="text-left text-xs text-muted-foreground uppercase">
           <tr><th class="w-10"></th><th>Source</th><th>Lang</th><th>Title</th><th>Output</th><th class="w-16"></th></tr>
         </thead>
         <tbody>
           {#each audioRows as t (t.id)}
             {@const out = plannedAudio.get(t.id)}
-            <tr class="border-t border-line/60 {out ? '' : 'text-muted'}">
-              <td class="py-1.5"><input type="checkbox" checked={!!out} onchange={e => toggleAudio(t, (e.target as HTMLInputElement).checked)} /></td>
+            <tr class="border-t border-border/60 {out ? '' : 'text-muted-foreground'}">
+              <td class="py-1.5"><Checkbox checked={!!out} aria-label="Use #{t.id}" onCheckedChange={v => toggleAudio(t, v)} /></td>
               <td>{audioLabel(t)}</td>
               <td>{t.language}</td>
               <td class="max-w-48 truncate" title={t.title}>{t.title}</td>
               <td>
                 {#if out}
                   {out.pos + 1}. {out.a.title}
-                  <span class="text-xs text-muted">[{out.a.action}{out.a.bitrate_kbps ? ` ${out.a.bitrate_kbps}k` : ''}{out.a.default ? ', default' : ''}]</span>
+                  <span class="text-xs text-muted-foreground">[{out.a.action}{out.a.bitrate_kbps ? ` ${out.a.bitrate_kbps}k` : ''}{out.a.default ? ', default' : ''}]</span>
                 {:else}—{/if}
               </td>
               <td class="text-right">
-                <button class="btn-ghost px-1" onclick={() => moveAudio(t, -1)} aria-label="Up"><Icon name="up" size={14} /></button>
-                <button class="btn-ghost px-1" onclick={() => moveAudio(t, 1)} aria-label="Down"><Icon name="down" size={14} /></button>
+                <Button variant="ghost" size="icon-sm" onclick={() => moveAudio(t, -1)} aria-label="Up"><ArrowUpIcon /></Button>
+                <Button variant="ghost" size="icon-sm" onclick={() => moveAudio(t, 1)} aria-label="Down"><ArrowDownIcon /></Button>
               </td>
             </tr>
           {/each}
@@ -172,9 +180,9 @@
 
     {#if kind === 'sub'}
     <section>
-      <div class="mb-2 flex items-center gap-2"><Icon name="sub" class="text-accent" /><span class="font-medium">Subtitles</span></div>
+      <div class="mb-2 flex items-center gap-2"><CaptionsIcon class="size-4 text-primary" /><span class="font-medium">Subtitles</span></div>
       <table class="w-full text-sm">
-        <thead class="text-left text-xs text-muted uppercase">
+        <thead class="text-left text-xs text-muted-foreground uppercase">
           <tr>
             <th class="w-10"></th><th>Source</th><th>Format</th><th>Lang</th>
             {#each flags as f (f.key)}<th title={f.help}>{f.label}</th>{/each}
@@ -185,21 +193,17 @@
           {#each subRows as t (t.key)}
             {@const out = plannedSubs.get(t.key)}
             {@const ov = subOverride(t)}
-            <tr class="border-t border-line/60 {out ? '' : 'text-muted'}">
+            <tr class="border-t border-border/60 {out ? '' : 'text-muted-foreground'}">
               <td class="py-1.5">
-                <input
-                  type="checkbox"
-                  checked={!ov?.exclude}
-                  onchange={e => editTrack(t.key, o => (o.exclude = (e.target as HTMLInputElement).checked ? null : true))}
-                />
+                <Checkbox checked={!ov?.exclude} aria-label="Use this track" onCheckedChange={v => editTrack(t.key, o => (o.exclude = v ? null : true))} />
               </td>
               <td class="max-w-56 truncate" title={t.external_path ?? t.title}>
                 {t.external_path ? basename(t.external_path) : `#${t.id}${t.title ? ` · ${t.title}` : ''}`}
               </td>
               <td>{t.format}</td>
               <td>
-                <input
-                  class="field w-24 py-0.5 {ov?.language ? 'border-warn/60' : ''}"
+                <Input
+                  class="h-7 w-24 {ov?.language ? 'border-warning/60' : ''}"
                   list="languages-tracks"
                   value={subLanguage(t)}
                   onchange={e => setLanguage(t, (e.target as HTMLInputElement).value.trim())}
@@ -207,19 +211,19 @@
               </td>
               {#each flags as f (f.key)}
                 <td>
-                  <input
-                    type="checkbox"
-                    class={flagPinned(t, f.key) ? 'outline-2 outline-warn' : ''}
+                  <Checkbox
+                    class={flagPinned(t, f.key) ? 'ring-2 ring-warning/70' : ''}
                     title={flagPinned(t, f.key) ? 'Set by override' : 'As detected'}
+                    aria-label={f.label}
                     checked={flagValue(t, f.key)}
-                    onchange={e => setFlag(t, f.key, (e.target as HTMLInputElement).checked)}
+                    onCheckedChange={v => setFlag(t, f.key, v)}
                   />
                 </td>
               {/each}
               <td>
                 {#if out}
                   {out.pos + 1}. {out.s.title}
-                  <span class="text-xs text-muted">
+                  <span class="text-xs text-muted-foreground">
                     {[out.s.default && 'default', out.s.forced && 'forced', out.s.hearing_impaired && 'SDH', out.s.visual_impaired && 'AD'].filter(Boolean).join(', ')}
                   </span>
                 {:else}—{/if}

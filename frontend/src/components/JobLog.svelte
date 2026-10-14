@@ -5,12 +5,22 @@
   import { api } from '../lib/api'
   import { app } from '../lib/state.svelte'
   import type { StepRun, StepStatus } from '../lib/types'
-  import Icon, { type IconName } from './Icon.svelte'
+  import CheckIcon from '@lucide/svelte/icons/check'
+  import ChevronDownIcon from '@lucide/svelte/icons/chevron-down'
+  import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
+  import CopyIcon from '@lucide/svelte/icons/copy'
+  import LoaderIcon from '@lucide/svelte/icons/loader-circle'
+  import PauseIcon from '@lucide/svelte/icons/pause'
+  import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
+  import SquareIcon from '@lucide/svelte/icons/square'
+  import XIcon from '@lucide/svelte/icons/x'
+  import { Button } from '$lib/components/ui/button'
+  import * as Tabs from '$lib/components/ui/tabs'
 
   let { jobId, running }: { jobId: string; running: boolean } = $props()
 
   const SHOWN = 500 // lines per step on screen; the rest behind "show all"
-  let view = $state<'steps' | 'full'>('steps')
+  let view = $state('steps') // 'steps' | 'full'
   let base = $state<Record<string, string[]>>({}) // each step's lines in the snapshot
   let partial = $state<Record<string, boolean>>({})
   let since = $state(0) // app.logSeq when the snapshot arrived
@@ -70,13 +80,13 @@
     view === 'full' ? [...full, ...app.log.filter(l => l.job === jobId && l.seq > fullSince).map(l => l.line)] : [],
   )
 
-  const LOOK: Record<StepStatus, { icon: IconName; tone: string; text: string }> = {
-    pending: { icon: 'pause', tone: 'text-muted', text: 'waiting' },
-    running: { icon: 'play', tone: 'text-info', text: 'running' },
-    done: { icon: 'check', tone: 'text-ok', text: 'done' },
-    reused: { icon: 'refresh', tone: 'text-ok', text: 'reused' },
-    failed: { icon: 'x', tone: 'text-bad', text: 'failed' },
-    cancelled: { icon: 'stop', tone: 'text-warn', text: 'cancelled' },
+  const LOOK: Record<StepStatus, { icon: typeof CheckIcon; tone: string; text: string }> = {
+    pending: { icon: PauseIcon, tone: 'text-muted-foreground', text: 'waiting' },
+    running: { icon: LoaderIcon, tone: 'text-info', text: 'running' },
+    done: { icon: CheckIcon, tone: 'text-success', text: 'done' },
+    reused: { icon: RefreshCwIcon, tone: 'text-success', text: 'reused' },
+    failed: { icon: XIcon, tone: 'text-destructive', text: 'failed' },
+    cancelled: { icon: SquareIcon, tone: 'text-warning', text: 'cancelled' },
   }
 
   function outcome(s: StepRun): string {
@@ -115,33 +125,31 @@
 
 <div class="flex h-full min-h-0 flex-col gap-3">
   <div class="flex items-center gap-3">
-    <div class="flex rounded-md border border-line p-0.5">
-      {#each [['steps', 'Steps'], ['full', 'Full log']] as [id, label] (id)}
-        <button
-          class="rounded px-3 py-1 text-sm {view === id ? 'bg-raised text-accent' : 'text-muted'}"
-          onclick={() => (view = id as 'steps' | 'full')}>{label}</button
-        >
-      {/each}
-    </div>
+    <Tabs.Root bind:value={view}>
+      <Tabs.List>
+        <Tabs.Trigger value="steps" class="px-3">Steps</Tabs.Trigger>
+        <Tabs.Trigger value="full" class="px-3">Full log</Tabs.Trigger>
+      </Tabs.List>
+    </Tabs.Root>
     {#if view === 'steps' && steps.length}
-      <span class="text-xs text-muted">
+      <span class="text-xs text-muted-foreground">
         {steps.filter(s => s.status === 'done' || s.status === 'reused').length}/{steps.length} steps done
       </span>
-      <button class="btn-ghost ml-auto text-xs" onclick={() => (open = Object.fromEntries(steps.map(s => [s.id, true])))}
-        >Open all</button
+      <Button variant="ghost" size="sm" class="ml-auto" onclick={() => (open = Object.fromEntries(steps.map(s => [s.id, true])))}
+        >Open all</Button
       >
-      <button class="btn-ghost text-xs" onclick={() => (open = Object.fromEntries(steps.map(s => [s.id, false])))}
-        >Close all</button
+      <Button variant="ghost" size="sm" onclick={() => (open = Object.fromEntries(steps.map(s => [s.id, false])))}
+        >Close all</Button
       >
     {/if}
   </div>
 
   {#if view === 'full'}
     <pre
-      class="min-h-0 flex-1 overflow-auto rounded-md border border-line bg-panel p-3 font-mono text-xs leading-relaxed"
+      class="min-h-0 flex-1 overflow-auto rounded-lg border bg-card p-3 font-mono text-xs leading-relaxed"
       use:follow={fullLines.length}>{fullLines.join('\n') || 'No output yet.'}</pre>
   {:else if !steps.length}
-    <p class="text-sm text-muted">
+    <p class="text-sm text-muted-foreground">
       {loaded ? 'No run yet. Each step shows up here when the job runs (the Encoder tab lists their commands).' : 'Loading…'}
     </p>
   {:else}
@@ -149,50 +157,52 @@
       {#each steps as s, i (s.id)}
         {@const look = LOOK[s.status]}
         {@const isOpen = open[s.id] ?? (s.status === 'running' || s.status === 'failed')}
-        <section class="rounded-md border {s.status === 'failed' ? 'border-bad/60' : 'border-line'}">
+        <section class="overflow-hidden rounded-lg border bg-card {s.status === 'failed' ? 'border-destructive/60' : ''}">
           <button
-            class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-raised/50"
+            class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent/50"
             aria-expanded={isOpen}
             onclick={() => (open[s.id] = !isOpen)}
           >
-            <Icon name={isOpen ? 'down' : 'right'} size={14} class="shrink-0 text-muted" />
-            <span class="w-10 shrink-0 text-xs text-muted">{i + 1}/{steps.length}</span>
-            <span class="min-w-0 flex-1 truncate {s.status === 'pending' ? 'text-muted' : ''}">{s.label}</span>
+            {#if isOpen}<ChevronDownIcon class="size-3.5 shrink-0 text-muted-foreground" />{:else}<ChevronRightIcon
+                class="size-3.5 shrink-0 text-muted-foreground"
+              />{/if}
+            <span class="w-10 shrink-0 text-xs text-muted-foreground">{i + 1}/{steps.length}</span>
+            <span class="min-w-0 flex-1 truncate {s.status === 'pending' ? 'text-muted-foreground' : ''}">{s.label}</span>
             <span class="flex shrink-0 items-center gap-1 text-xs {look.tone}">
-              <Icon name={look.icon} size={13} />{look.text}
+              <look.icon class="size-3.5 {s.status === 'running' ? 'animate-spin' : ''}" />{look.text}
             </span>
-            <span class="w-24 shrink-0 text-right text-xs text-muted">{outcome(s)}</span>
+            <span class="w-24 shrink-0 text-right text-xs text-muted-foreground">{outcome(s)}</span>
           </button>
           {#if isOpen}
             {@const lines = linesOf(s.id)}
             {@const shown = showAll[s.id] ? lines : lines.slice(-SHOWN)}
-            <div class="space-y-2 border-t border-line p-3">
+            <div class="space-y-2 border-t p-3">
               {#if s.command}
                 <div class="flex items-start gap-2">
-                  <code class="min-w-0 flex-1 rounded bg-raised px-2 py-1 font-mono text-[11px] break-all">{s.command}</code>
-                  <button class="btn-ghost shrink-0 px-2 text-xs" title="Copy the command line" onclick={() => copy(s)}>
-                    <Icon name={copied === s.id ? 'check' : 'copy'} size={13} />
-                  </button>
+                  <code class="min-w-0 flex-1 rounded-md bg-muted px-2 py-1 font-mono text-[11px] break-all">{s.command}</code>
+                  <Button variant="ghost" size="icon-sm" class="shrink-0" title="Copy the command line" aria-label="Copy the command line" onclick={() => copy(s)}>
+                    {#if copied === s.id}<CheckIcon />{:else}<CopyIcon />{/if}
+                  </Button>
                 </div>
               {:else}
-                <p class="text-xs text-muted">Runs inside VideoForge (no external command).</p>
+                <p class="text-xs text-muted-foreground">Runs inside VideoForge (no external command).</p>
               {/if}
               {#if s.error}
-                <pre class="rounded-md border border-bad/50 bg-bad/10 p-2 text-xs whitespace-pre-wrap text-bad">{s.error}</pre>
+                <pre class="rounded-lg border border-destructive/50 bg-destructive/10 p-2 text-xs whitespace-pre-wrap text-destructive">{s.error}</pre>
               {/if}
               {#if lines.length}
                 {#if lines.length > shown.length}
-                  <button class="btn-ghost text-xs" onclick={() => (showAll[s.id] = true)}
-                    >Show all {lines.length} lines ({lines.length - shown.length} hidden)</button
+                  <Button variant="ghost" size="sm" onclick={() => (showAll[s.id] = true)}
+                    >Show all {lines.length} lines ({lines.length - shown.length} hidden)</Button
                   >
                 {:else if !fresh && partial[s.id]}
-                  <p class="text-xs text-muted">The last lines only (the full output is in the work folder's videoforge.log).</p>
+                  <p class="text-xs text-muted-foreground">The last lines only (the full output is in the work folder's videoforge.log).</p>
                 {/if}
                 <pre
-                  class="max-h-96 overflow-auto rounded-md border border-line bg-panel p-2 font-mono text-[11px] leading-relaxed"
+                  class="max-h-96 overflow-auto rounded-lg border bg-background p-2 font-mono text-[11px] leading-relaxed"
                   use:follow={lines.length}>{shown.join('\n')}</pre>
               {:else if s.status !== 'pending'}
-                <p class="text-xs text-muted">No output.</p>
+                <p class="text-xs text-muted-foreground">No output.</p>
               {/if}
             </div>
           {/if}

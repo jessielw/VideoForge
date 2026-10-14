@@ -9,7 +9,17 @@
   import { tick } from 'svelte'
   import { api } from '../lib/api'
   import type { Crop } from '../lib/types'
-  import Icon from './Icon.svelte'
+  import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left'
+  import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
+  import ChevronsLeftIcon from '@lucide/svelte/icons/chevrons-left'
+  import ChevronsRightIcon from '@lucide/svelte/icons/chevrons-right'
+  import ZoomInIcon from '@lucide/svelte/icons/zoom-in'
+  import ZoomOutIcon from '@lucide/svelte/icons/zoom-out'
+  import { Button } from '$lib/components/ui/button'
+  import { Input } from '$lib/components/ui/input'
+  import { NativeSelect } from '$lib/components/ui/native-select'
+  import { Slider } from '$lib/components/ui/slider'
+  import { Toggle } from '$lib/components/ui/toggle'
 
   let {
     jobId,
@@ -55,6 +65,7 @@
   let showMap = $state(false)
   let mapPos = $state({ left: 0, top: 0, w: 100, h: 100 })
   let frameInput = $state('0')
+  let scrub = $state(0) // the slider's position while dragging; the frame changes on release
 
   let controller: AbortController | null = null
   let mapTimer: ReturnType<typeof setTimeout> | undefined
@@ -101,6 +112,7 @@
 
   $effect(() => {
     frameInput = String(frame)
+    scrub = frame
   })
 
   function seek(n: number) {
@@ -315,20 +327,20 @@
 <div class="flex h-full min-h-0 flex-col gap-2">
   <div class="flex flex-wrap items-center gap-2 text-sm">
     <div class="flex items-center gap-1">
-      <button class="btn-ghost px-2" onclick={() => zoomBy(-1)} title="Zoom out (-)"><Icon name="zoomOut" /></button>
-      <select class="field" value={zoom} onchange={e => setZoom(+(e.target as HTMLSelectElement).value)}>
+      <Button variant="ghost" size="icon" onclick={() => zoomBy(-1)} title="Zoom out (-)" aria-label="Zoom out"><ZoomOutIcon /></Button>
+      <NativeSelect value={zoom} aria-label="Zoom" onchange={e => setZoom(+e.currentTarget.value)}>
         <option value={0}>Fit ({Math.round(fitScale * 100)}%)</option>
         {#each ZOOMS as z (z)}<option value={z}>{z}%</option>{/each}
-      </select>
-      <button class="btn-ghost px-2" onclick={() => zoomBy(1)} title="Zoom in (+)"><Icon name="zoomIn" /></button>
+      </NativeSelect>
+      <Button variant="ghost" size="icon" onclick={() => zoomBy(1)} title="Zoom in (+)" aria-label="Zoom in"><ZoomInIcon /></Button>
     </div>
-    <button class="btn-ghost {edges ? 'text-accent' : ''}" onclick={toggleEdges} title="Show edges, to judge borders">
+    <Toggle pressed={edges} onPressedChange={toggleEdges} class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary" title="Show edges, to judge borders">
       Edges
-    </button>
-    <button class="btn-ghost" onclick={nextMatte} title="Background around the frame: {matte} (click to change)">
-      <span class="inline-block size-3.5 border border-line" style="background:{MATTES[matte]}"></span>Matte
-    </button>
-    <span class="ml-auto text-xs text-muted">
+    </Toggle>
+    <Button variant="ghost" onclick={nextMatte} title="Background around the frame: {matte} (click to change)">
+      <span class="inline-block size-3.5 border" style="background:{MATTES[matte]}"></span>Matte
+    </Button>
+    <span class="ml-auto text-xs text-muted-foreground">
       {width}×{height}{crop && stage === 'source' ? ` → ${outW}×${outH}` : ''} · {Math.round(scale * 100)}%
       {#if pictType}· {pictType}-frame{/if}
       {#if loading}· loading…{/if}
@@ -340,7 +352,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
     <div
       bind:this={viewport}
-      class="absolute inset-0 overflow-auto border border-line outline-none focus:border-accent/60
+      class="absolute inset-0 overflow-auto border border-border outline-none focus:border-primary/60
         {pannable ? (panning ? 'cursor-grabbing' : 'cursor-grab') : ''}"
       style="background:{MATTES[matte]}"
       tabindex="0"
@@ -368,18 +380,18 @@
             />
             {#if crop && stage === 'source'}
               <div class="pointer-events-none absolute inset-0">
-                <div class="absolute inset-x-0 top-0 bg-bad/40" style="height:{pct(crop.top, height)}"></div>
-                <div class="absolute inset-x-0 bottom-0 bg-bad/40" style="height:{pct(crop.bottom, height)}"></div>
+                <div class="absolute inset-x-0 top-0 bg-destructive/40" style="height:{pct(crop.top, height)}"></div>
+                <div class="absolute inset-x-0 bottom-0 bg-destructive/40" style="height:{pct(crop.bottom, height)}"></div>
                 <div
-                  class="absolute left-0 bg-bad/40"
+                  class="absolute left-0 bg-destructive/40"
                   style="top:{pct(crop.top, height)};bottom:{pct(crop.bottom, height)};width:{pct(crop.left, width)}"
                 ></div>
                 <div
-                  class="absolute right-0 bg-bad/40"
+                  class="absolute right-0 bg-destructive/40"
                   style="top:{pct(crop.top, height)};bottom:{pct(crop.bottom, height)};width:{pct(crop.right, width)}"
                 ></div>
                 <div
-                  class="absolute border border-accent"
+                  class="absolute border border-primary"
                   style="top:{pct(crop.top, height)};bottom:{pct(crop.bottom, height)};left:{pct(crop.left, width)};right:{pct(crop.right, width)}"
                 ></div>
               </div>
@@ -392,19 +404,19 @@
     {#if !src}
       <div class="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
         {#if error}
-          <pre class="max-w-full overflow-auto border border-bad/50 bg-bad/10 p-3 text-xs whitespace-pre-wrap text-bad">{error}</pre>
+          <pre class="max-w-full overflow-auto border border-destructive/50 bg-destructive/10 p-3 text-xs whitespace-pre-wrap text-destructive">{error}</pre>
         {:else if loading}
-          <span class="text-muted">Loading the frame (the first one indexes the source, which can take a while)…</span>
+          <span class="text-muted-foreground">Loading the frame (the first one indexes the source, which can take a while)…</span>
         {/if}
       </div>
     {:else if error || notice}
       <!-- Over the kept frame: why it isn't the newest. -->
       <div class="pointer-events-none absolute inset-x-2 top-2 flex flex-col items-start gap-1 text-xs">
         {#if error}
-          <pre class="max-h-24 max-w-full overflow-hidden bg-bad px-2 py-1 whitespace-pre-wrap text-white">{error}</pre>
+          <pre class="max-h-24 max-w-full overflow-hidden bg-destructive px-2 py-1 whitespace-pre-wrap text-white">{error}</pre>
         {/if}
         {#if notice}
-          <span class="px-2 py-1 text-white {notice.tone === 'bad' ? 'bg-bad' : 'bg-black/70'}"
+          <span class="px-2 py-1 text-white {notice.tone === 'bad' ? 'bg-destructive' : 'bg-black/70'}"
             >{notice.text}</span
           >
         {/if}
@@ -412,11 +424,11 @@
     {/if}
 
     {#if pannable && (panning || showMap) && shown}
-      <div class="pointer-events-none absolute right-3 bottom-3 w-48 overflow-hidden rounded border border-line bg-black/80 shadow-lg">
+      <div class="pointer-events-none absolute right-3 bottom-3 w-48 overflow-hidden rounded-md border bg-black/80 shadow-lg">
         <div class="relative">
           <img src={shown} alt="" class="block w-full opacity-70" />
           <div
-            class="absolute border-2 border-accent"
+            class="absolute border-2 border-primary"
             style="left:{mapPos.left}%;top:{mapPos.top}%;width:{mapPos.w}%;height:{mapPos.h}%"
           ></div>
         </div>
@@ -425,24 +437,27 @@
   </div>
 
   <div class="flex flex-wrap items-center gap-2">
-    <button class="btn-ghost px-2" onclick={() => seek(0)} title="First (Home)"><Icon name="first" /></button>
-    <button class="btn-ghost px-2" onclick={() => seek(frame - 1)} title="Previous (←)"><Icon name="left" /></button>
-    <input
-      type="range"
-      class="min-w-16 flex-1 accent-[var(--color-accent)]"
-      min="0"
+    <Button variant="ghost" size="icon" onclick={() => seek(0)} title="First (Home)" aria-label="First frame"><ChevronsLeftIcon /></Button>
+    <Button variant="ghost" size="icon" onclick={() => seek(frame - 1)} title="Previous (←)" aria-label="Previous frame"><ChevronLeftIcon /></Button>
+    <Slider
+      type="single"
+      class="mx-2 min-w-16 flex-1"
+      min={0}
       max={Math.max(0, frames - 1)}
-      value={frame}
-      onchange={e => seek(+(e.target as HTMLInputElement).value)}
+      step={1}
+      bind:value={scrub}
+      onValueCommit={v => seek(v)}
+      aria-label="Frame"
     />
-    <button class="btn-ghost px-2" onclick={() => seek(frame + 1)} title="Next (→)"><Icon name="right" /></button>
-    <button class="btn-ghost px-2" onclick={() => seek(frames - 1)} title="Last (End)"><Icon name="last" /></button>
-    <input
-      class="field w-24 text-right font-mono"
+    <Button variant="ghost" size="icon" onclick={() => seek(frame + 1)} title="Next (→)" aria-label="Next frame"><ChevronRightIcon /></Button>
+    <Button variant="ghost" size="icon" onclick={() => seek(frames - 1)} title="Last (End)" aria-label="Last frame"><ChevronsRightIcon /></Button>
+    <Input
+      class="w-24 text-right font-mono"
+      aria-label="Frame number"
       bind:value={frameInput}
       onkeydown={e => e.key === 'Enter' && seek(+frameInput || 0)}
       onblur={() => seek(+frameInput || 0)}
     />
-    <span class="w-28 text-xs text-muted">/ {frames - 1} · {(frame / (fps || 24)).toFixed(2)} s</span>
+    <span class="w-28 text-xs text-muted-foreground">/ {frames - 1} · {(frame / (fps || 24)).toFixed(2)} s</span>
   </div>
 </div>

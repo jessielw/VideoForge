@@ -6,7 +6,16 @@
   import { app } from '../lib/state.svelte'
   import type { CommandStep, JobDetail } from '../lib/types'
   import EncoderPanel from './EncoderPanel.svelte'
-  import Icon from './Icon.svelte'
+  import CheckIcon from '@lucide/svelte/icons/check'
+  import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
+  import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
+  import { toast } from 'svelte-sonner'
+  import { Badge } from '$lib/components/ui/badge'
+  import { Button } from '$lib/components/ui/button'
+  import { Checkbox } from '$lib/components/ui/checkbox'
+  import { Input } from '$lib/components/ui/input'
+  import { NativeSelect } from '$lib/components/ui/native-select'
+  import * as Tabs from '$lib/components/ui/tabs'
   import PresetMenu from './PresetMenu.svelte'
   import FileBrowser from './FileBrowser.svelte'
   import TrackEditor from './TrackEditor.svelte'
@@ -49,9 +58,8 @@
   async function save(changes: SpecChanges) {
     try {
       job = await api.update(jobId, changes)
-      error = ''
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e)
+      toast.error("Couldn't save the change", { description: e instanceof Error ? e.message : String(e) })
     }
   }
 
@@ -68,19 +76,19 @@
 </script>
 
 {#if !job}
-  <div class="p-6 text-muted">{error || 'Loading…'}</div>
+  <div class="p-6 text-muted-foreground">{error || 'Loading…'}</div>
 {:else}
-  <div class="flex h-full min-h-0 flex-col">
-    <header class="space-y-2 border-b border-line px-5 py-3">
+  <Tabs.Root bind:value={tab} class="h-full min-h-0 gap-0">
+    <header class="space-y-2 border-b px-5 pt-3">
       <div class="flex items-center gap-3">
         <h2 class="truncate text-lg font-semibold" title={job.source}>{job.name}</h2>
         <span class="text-sm {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
-        <span class="text-sm text-muted">· {job.profile} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span>
-        {#if !editable}<span class="rounded bg-info/15 px-2 py-0.5 text-xs text-info">locked while {job.status}</span>{/if}
+        <span class="text-sm text-muted-foreground">· {job.profile} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span>
+        {#if !editable}<Badge variant="outline" class="border-info/40 bg-info/10 text-info">locked while {job.status}</Badge>{/if}
       </div>
       {#if job.progress && job.status === 'running'}
-        <div class="flex items-center gap-3 text-xs text-muted">
-          <div class="h-1.5 flex-1 overflow-hidden rounded bg-raised">
+        <div class="flex items-center gap-3 text-xs text-muted-foreground">
+          <div class="h-1.5 flex-1 overflow-hidden rounded bg-muted">
             <div class="h-full bg-info transition-[width]" style="width:{job.progress.overall * 100}%"></div>
           </div>
           <span>{job.progress.step} · {(job.progress.fraction * 100).toFixed(1)}%</span>
@@ -90,49 +98,46 @@
         <button class="w-full text-left text-sm" onclick={() => (showInfo = !showInfo)}>
           {#each problems.slice(0, showInfo ? problems.length : 2) as i, n (n)}
             <div class={SEVERITY_TONE[i.severity]}>
-              <Icon name="alert" size={13} class="mr-1 inline" />{i.message}
-              <span class="text-xs text-muted">{i.code}</span>
+              <TriangleAlertIcon class="mr-1 inline size-3.5 align-[-2px]" />{i.message}
+              <span class="text-xs text-muted-foreground">{i.code}</span>
             </div>
           {/each}
-          {#if !showInfo && problems.length > 2}<div class="text-xs text-muted">+{problems.length - 2} more…</div>{/if}
+          {#if !showInfo && problems.length > 2}<div class="text-xs text-muted-foreground">+{problems.length - 2} more…</div>{/if}
         </button>
       {/if}
       {#if (job.status === 'failed' || job.status === 'invalid') && tab !== 'log'}
-        <button class="text-xs text-accent underline" onclick={() => (tab = 'log')}>Open the failed step in the Log tab</button>
+        <Button variant="link" size="xs" class="h-auto p-0" onclick={() => (tab = 'log')}>Open the failed step in the Log tab</Button>
       {/if}
-      {#if error}<div class="text-sm text-bad">{error}</div>{/if}
-      <nav class="-mb-3 flex gap-1">
+      {#if error}<div class="text-sm text-destructive">{error}</div>{/if}
+      <Tabs.List variant="line" class="-mx-2 h-9">
         {#each TABS as t (t.id)}
-          <button
-            class="border-b-2 px-3 py-2 text-sm {tab === t.id ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-text'}"
-            onclick={() => (tab = t.id)}>{t.label}</button
-          >
+          <Tabs.Trigger value={t.id} class="px-3">{t.label}</Tabs.Trigger>
         {/each}
-      </nav>
+      </Tabs.List>
     </header>
 
     <div class="min-h-0 flex-1 overflow-auto p-5">
       {#if tab === 'video'}
         {#if job.spec.inputs.encode}
-          <p class="text-muted">This job reuses an existing encode ({basename(job.spec.inputs.encode)}); there is no video step.</p>
+          <p class="text-muted-foreground">This job reuses an existing encode ({basename(job.spec.inputs.encode)}); there is no video step.</p>
         {:else}
           <VideoTab {job} {editable} save={video => save({ video })} />
         {/if}
       {:else if tab === 'encoder'}
-        <div class="grid max-w-5xl gap-6 xl:grid-cols-[1fr_1fr]">
+        <div class="grid max-w-6xl gap-6 2xl:grid-cols-2">
           <div class="space-y-4">
             <PresetMenu kind="encoder" profile={job.profile} current={job.spec.encoder} disabled={!editable} apply={encoder => save({ encoder })} />
             <EncoderPanel value={job.spec.encoder} disabled={!editable} onchange={encoder => save({ encoder })} />
           </div>
           <div class="space-y-2">
-            <span class="label">Commands this job runs</span>
+            <span class="section-label">Commands this job runs</span>
             {#each commands as c (c.id)}
-              <div class="rounded-md border border-line bg-black/30 p-2">
-                <div class="text-xs text-accent">{c.label}</div>
-                <code class="block text-[11px] break-all text-muted">{c.command}</code>
+              <div class="rounded-lg border bg-muted/50 p-2">
+                <div class="text-xs text-primary">{c.label}</div>
+                <code class="block text-[11px] break-all text-muted-foreground">{c.command}</code>
               </div>
             {:else}
-              <p class="text-sm text-muted">Available once the source is probed.</p>
+              <p class="text-sm text-muted-foreground">Available once the source is probed.</p>
             {/each}
           </div>
         </div>
@@ -146,17 +151,17 @@
       {:else if tab === 'output'}
         <div class="max-w-3xl space-y-5">
           <div class="grid grid-cols-[8rem_1fr] items-center gap-3 text-sm">
-            <span class="text-muted">Output folder</span>
+            <span class="text-muted-foreground">Output folder</span>
             <div class="flex gap-2">
-              <input
-                class="field flex-1 font-mono text-xs"
+              <Input
+                class="flex-1 font-mono text-xs"
                 value={job.spec.output_dir ?? ''}
                 disabled={!editable}
                 onchange={e => save({ output_dir: (e.target as HTMLInputElement).value.trim() || null })}
               />
-              <button class="btn" disabled={!editable} onclick={() => (browsing = 'output')}><Icon name="folder" />Browse…</button>
+              <Button variant="outline" disabled={!editable} onclick={() => (browsing = 'output')}><FolderOpenIcon />Browse…</Button>
             </div>
-            <span class="text-muted">Chapters</span>
+            <span class="text-muted-foreground">Chapters</span>
             <div class="flex flex-wrap items-center gap-2">
               <span>
                 {job.spec.inputs.chapters
@@ -167,33 +172,35 @@
                       ? 'From the source'
                       : 'None'}
               </span>
-              <button class="btn-ghost text-xs" disabled={!editable} onclick={() => (browsing = 'chapters')}>
+              <Button variant="ghost" size="sm" disabled={!editable} onclick={() => (browsing = 'chapters')}>
                 {job.spec.inputs.chapters ? 'Change…' : 'Use a file…'}
-              </button>
+              </Button>
               {#if job.spec.inputs.chapters}
-                <button class="btn-ghost text-xs hover:text-bad" disabled={!editable} onclick={() => save({ inputs: { chapters: null } })}>Remove</button>
+                <Button variant="ghost" size="sm" class="hover:text-destructive" disabled={!editable} onclick={() => save({ inputs: { chapters: null } })}
+                  >Remove</Button
+                >
               {/if}
             </div>
             <span></span>
             <label class="flex items-center gap-2">
-              <input type="checkbox" checked={job.spec.qpf} disabled={!editable} onchange={e => save({ qpf: (e.target as HTMLInputElement).checked })} />
+              <Checkbox checked={job.spec.qpf} disabled={!editable} onCheckedChange={v => save({ qpf: v })} />
               AutoQPF: chapters from the source (or every 5%) and keyframes on them
             </label>
-            <span class="text-muted">Profile</span>
-            <select class="field w-48" value={job.profile} disabled={!editable} onchange={e => save({ profile: (e.target as HTMLSelectElement).value })}>
+            <span class="text-muted-foreground">Profile</span>
+            <NativeSelect class="w-48" value={job.profile} disabled={!editable} onchange={e => save({ profile: e.currentTarget.value })}>
               {#each app.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-            </select>
-            <span class="text-muted">Work folder</span>
-            <code class="text-xs break-all text-muted">{job.source}_tmp</code>
-            <span class="text-muted">Output</span>
-            <code class="text-xs break-all text-muted">{job.output ?? '(after the run)'}</code>
+            </NativeSelect>
+            <span class="text-muted-foreground">Work folder</span>
+            <code class="text-xs break-all text-muted-foreground">{job.source}_tmp</code>
+            <span class="text-muted-foreground">Output</span>
+            <code class="text-xs break-all text-muted-foreground">{job.output ?? '(after the run)'}</code>
           </div>
           {#if Object.keys(job.steps).length}
             <div>
-              <span class="label">Finished steps (reused on the next run if nothing they depend on changed)</span>
+              <span class="section-label">Finished steps (reused on the next run if nothing they depend on changed)</span>
               <ul class="mt-2 space-y-1 text-sm">
                 {#each Object.values(job.steps) as s (s.id)}
-                  <li class="flex gap-3"><Icon name="check" class="text-ok" /><span class="w-28">{s.id}</span><span class="text-muted">{s.seconds}s</span></li>
+                  <li class="flex gap-3"><CheckIcon class="size-4 text-success" /><span class="w-28">{s.id}</span><span class="text-muted-foreground">{s.seconds}s</span></li>
                 {/each}
               </ul>
             </div>
@@ -203,7 +210,7 @@
         <JobLog {jobId} running={job.status === 'running'} />
       {/if}
     </div>
-  </div>
+  </Tabs.Root>
 {/if}
 
 {#if browsing === 'output' && job}

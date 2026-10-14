@@ -1,5 +1,7 @@
 // App-wide state, kept current by the server's event WebSocket (/api/events).
+import { toast } from 'svelte-sonner'
 import { api } from './api'
+import { STATUS_LABEL } from './format'
 import type { AudioEncodeInfo, EncoderSettings, JobSummary, Preset, PresetKind, Presets, Profile, QueueState, StepRun, VideoPresetData } from './types'
 
 const MAX_LOG = 20000
@@ -74,7 +76,17 @@ class AppState {
   }
 
   async refreshJobs(): Promise<void> {
+    const before = new Map(this.jobs.map(j => [j.id, j.status]))
     this.jobs = await api.jobs()
+    for (const j of this.jobs) if (before.get(j.id) === 'running' && j.status !== 'running') this.#finished(j)
+  }
+
+  // A toast when a run ends: done, or failed / invalid / cancelled with its first issue.
+  #finished(job: JobSummary): void {
+    const open = { label: 'Open', onClick: () => (location.hash = `#/queue/${encodeURIComponent(job.id)}`) }
+    if (job.status === 'done') toast.success(`${job.name} is done`, { action: open })
+    else if (job.status === 'cancelled') toast.warning(`${job.name} was cancelled`, { action: open })
+    else toast.error(`${job.name}: ${STATUS_LABEL[job.status].toLowerCase()}`, { description: job.issue || undefined, action: open })
   }
 
   #scheduleRefresh(): void {

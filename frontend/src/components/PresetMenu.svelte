@@ -5,7 +5,12 @@
   import { api } from '../lib/api'
   import { app, type PresetData } from '../lib/state.svelte'
   import type { PresetKind } from '../lib/types'
-  import Icon from './Icon.svelte'
+  import CheckIcon from '@lucide/svelte/icons/check'
+  import ChevronDownIcon from '@lucide/svelte/icons/chevron-down'
+  import Trash2Icon from '@lucide/svelte/icons/trash-2'
+  import { Button } from '$lib/components/ui/button'
+  import { Input } from '$lib/components/ui/input'
+  import * as Popover from '$lib/components/ui/popover'
 
   let {
     kind,
@@ -27,7 +32,6 @@
   let name = $state('')
   let error = $state('')
   let busy = $state(false)
-  let root = $state<HTMLDivElement>()
 
   const choices = $derived(app.presetChoices(kind, profile))
   const userNames = $derived(new Set(app.presets[kind].map(p => p.name)))
@@ -75,61 +79,58 @@
       error = e instanceof Error ? e.message : String(e)
     }
   }
-
-  function onwindow(e: PointerEvent) {
-    if (open && root && !root.contains(e.target as Node)) open = false
-  }
 </script>
 
-<svelte:window
-  onpointerdown={onwindow}
-  onkeydowncapture={e => {
-    if (open && e.key === 'Escape') {
-      e.preventDefault() // the menu takes this Escape (not the expanded editor)
-      open = false
-    }
-  }}
-/>
-
-<div class="relative" bind:this={root}>
-  <button class="btn max-w-full" {disabled} onclick={() => (open = !open)} title="Load or save a {kind} preset">
-    <span class="truncate">{matched ? `Preset: ${matched}` : 'Presets'}</span><Icon name="down" size={14} />
-  </button>
-  {#if open}
-    <div
-      class="panel absolute top-full z-20 mt-1 w-72 space-y-2 p-2 text-sm shadow-lg {align === 'right' ? 'right-0' : 'left-0'}"
-    >
-      <ul class="max-h-64 overflow-auto">
-        {#each choices as c (`${c.builtin}:${c.name}`)}
-          <li class="group flex items-center gap-1">
-            <button
-              class="flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1 text-left hover:bg-raised"
-              onclick={() => load(c.data)}
+<Popover.Root bind:open>
+  <Popover.Trigger {disabled} title="Load or save a {kind} preset">
+    {#snippet child({ props })}
+      <Button {...props} variant="outline" class="max-w-full">
+        <span class="truncate">{matched ? `Preset: ${matched}` : 'Presets'}</span><ChevronDownIcon />
+      </Button>
+    {/snippet}
+  </Popover.Trigger>
+  <Popover.Content
+    align={align === 'right' ? 'end' : 'start'}
+    class="w-72 gap-2 p-2"
+    onEscapeKeydown={e => e.stopPropagation()}
+  >
+    <ul class="max-h-64 overflow-auto">
+      {#each choices as c (`${c.builtin}:${c.name}`)}
+        <li class="group flex items-center gap-1">
+          <button
+            class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-accent"
+            onclick={() => load(c.data)}
+          >
+            <span class="w-3.5 shrink-0">{#if c.name === matched}<CheckIcon class="size-3.5 text-primary" />{/if}</span>
+            <span class="truncate">{c.name}</span>
+            {#if c.builtin}<span class="ml-auto shrink-0 text-xs text-muted-foreground">profile</span>{/if}
+          </button>
+          {#if !c.builtin}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              class="opacity-60 group-hover:opacity-100 hover:text-destructive"
+              title="Delete {c.name}"
+              aria-label="Delete {c.name}"
+              onclick={() => remove(c.name)}
             >
-              <span class="w-3.5 shrink-0">{#if c.name === matched}<Icon name="check" size={14} class="text-accent" />{/if}</span>
-              <span class="truncate">{c.name}</span>
-              {#if c.builtin}<span class="ml-auto shrink-0 text-xs text-muted">profile</span>{/if}
-            </button>
-            {#if !c.builtin}
-              <button class="btn-ghost px-1.5 opacity-60 group-hover:opacity-100" title="Delete {c.name}" onclick={() => remove(c.name)}>
-                <Icon name="trash" size={14} />
-              </button>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-      <form
-        class="flex gap-1 border-t border-line pt-2"
-        onsubmit={e => {
-          e.preventDefault()
-          save()
-        }}
-      >
-        <input class="field min-w-0 flex-1" placeholder="Save these settings as…" bind:value={name} />
-        <button class="btn" type="submit" disabled={busy || !name.trim()}>{userNames.has(name.trim()) ? 'Replace' : 'Save'}</button>
-      </form>
-      {#if kind === 'video'}<p class="text-xs text-muted">Video presets keep each job's own crop.</p>{/if}
-      {#if error}<p class="text-xs text-bad">{error}</p>{/if}
-    </div>
-  {/if}
-</div>
+              <Trash2Icon />
+            </Button>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+    <form
+      class="flex gap-1 border-t pt-2"
+      onsubmit={e => {
+        e.preventDefault()
+        save()
+      }}
+    >
+      <Input class="min-w-0 flex-1" placeholder="Save these settings as…" bind:value={name} />
+      <Button variant="outline" type="submit" disabled={busy || !name.trim()}>{userNames.has(name.trim()) ? 'Replace' : 'Save'}</Button>
+    </form>
+    {#if kind === 'video'}<p class="text-xs text-muted-foreground">Video presets keep each job's own crop.</p>{/if}
+    {#if error}<p class="text-xs text-destructive">{error}</p>{/if}
+  </Popover.Content>
+</Popover.Root>

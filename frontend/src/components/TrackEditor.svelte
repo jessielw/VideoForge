@@ -11,7 +11,24 @@
   import { app } from '../lib/state.svelte'
   import type { AudioAction, AudioEncodeInfo, AudioTrack, EncodeOptionInfo, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
   import FileBrowser from './FileBrowser.svelte'
-  import Icon from './Icon.svelte'
+  import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
+  import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
+  import AudioLinesIcon from '@lucide/svelte/icons/audio-lines'
+  import CaptionsIcon from '@lucide/svelte/icons/captions'
+  import CheckIcon from '@lucide/svelte/icons/check'
+  import CopyPlusIcon from '@lucide/svelte/icons/copy-plus'
+  import FilePlusIcon from '@lucide/svelte/icons/file-plus'
+  import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical'
+  import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
+  import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal'
+  import XIcon from '@lucide/svelte/icons/x'
+  import { Badge } from '$lib/components/ui/badge'
+  import { Button } from '$lib/components/ui/button'
+  import { Checkbox } from '$lib/components/ui/checkbox'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
+  import { Input } from '$lib/components/ui/input'
+  import { NativeSelect } from '$lib/components/ui/native-select'
+  import { Toggle } from '$lib/components/ui/toggle'
 
   type Kind = 'audio' | 'sub'
   type Track = AudioTrack | SubTrack
@@ -308,67 +325,83 @@
   {@const off = excluded(t)}
   {@const pos = outPos(t)}
   {@const copy = isAudio(t) && t.copy ? t : null}
-  {#if dropAt === i}<div class="-my-1 h-0.5 rounded bg-accent"></div>{/if}
+  {#if dropAt === i}<div class="-my-1 h-0.5 rounded-full bg-primary"></div>{/if}
   <div
     data-row
     role="listitem"
-    class="rounded-md border border-line bg-panel {drag === t.key ? 'opacity-40' : ''}"
+    class="rounded-lg border bg-card {drag === t.key ? 'opacity-40' : ''}"
     ondragover={e => dragOver(e, i)}
     ondrop={drop}
   >
     <div class="flex items-center gap-2 px-2 py-1.5">
       <span
-        class="rounded p-0.5 text-muted {editable ? 'cursor-grab hover:bg-raised hover:text-text' : 'opacity-40'}"
+        class="rounded-md p-0.5 text-muted-foreground {editable ? 'cursor-grab hover:bg-accent hover:text-foreground' : 'opacity-40'}"
         draggable={editable}
         ondragstart={e => dragStart(e, t)}
         ondragend={() => (drag = dropAt = null)}
         title="Drag to reorder"
         role="button"
-        tabindex="-1"><Icon name="grip" /></span
+        tabindex="-1"><GripVerticalIcon class="size-4" /></span
       >
-      <input type="checkbox" checked={!off} title="In the output" onchange={e => setIncluded(t, e.currentTarget.checked)} />
-      <span class="w-5 text-center text-xs {off ? 'text-muted' : 'text-accent'}">{pos === undefined ? '–' : pos + 1}</span>
+      <Checkbox checked={!off} title="In the output" aria-label="In the output" onCheckedChange={v => setIncluded(t, v)} />
+      <span class="w-5 text-center text-xs {off ? 'text-muted-foreground' : 'text-primary'}">{pos === undefined ? '–' : pos + 1}</span>
       <div class="min-w-0 flex-1">
-        <div class="truncate text-sm {off ? 'text-muted line-through' : ''}" title={t.title}>
+        <div class="truncate text-sm {off ? 'text-muted-foreground line-through' : ''}" title={t.title}>
           <span class="font-medium">{sourceLabel(t)}</span>
-          <span class="text-muted">· {t.language}{t.title ? ` · ${t.title}` : ''}</span>
+          <span class="text-muted-foreground">· {t.language}{t.title ? ` · ${t.title}` : ''}</span>
         </div>
         {#if details(t).length}
-          <div class="flex flex-wrap gap-x-3 text-xs text-muted tabular-nums" data-details>
+          <div class="flex flex-wrap gap-x-3 text-xs text-muted-foreground tabular-nums" data-details>
             {#each details(t) as d (d)}<span>{d}</span>{/each}
           </div>
         {/if}
       </div>
       {#if copy}
-        <span class="rounded bg-accent/15 px-1.5 text-xs text-accent" title="Another output track from {sourceLabel(t)}">copy {copy.copy}</span>
-        <button class="btn-ghost px-1 hover:text-bad" onclick={() => removeCopy(copy)} title="Remove this copy">
-          <Icon name="x" size={14} />
-        </button>
+        <Badge variant="outline" class="border-primary/40 bg-primary/10 text-primary" title="Another output track from {sourceLabel(t)}"
+          >copy {copy.copy}</Badge
+        >
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          class="hover:text-destructive"
+          onclick={() => removeCopy(copy)}
+          title="Remove this copy"
+          aria-label="Remove this copy"
+        >
+          <XIcon />
+        </Button>
       {:else if t.external_path}
         {@const path = t.external_path}
-        <span class="rounded bg-raised px-1.5 text-xs text-muted" title={path}>added</span>
-        <button class="btn-ghost px-1 hover:text-bad" onclick={() => removeFile(path)} title="Remove this file from the job">
-          <Icon name="x" size={14} />
-        </button>
+        <Badge variant="secondary" class="text-muted-foreground" title={path}>added</Badge>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          class="hover:text-destructive"
+          onclick={() => removeFile(path)}
+          title="Remove this file from the job"
+          aria-label="Remove this file from the job"
+        >
+          <XIcon />
+        </Button>
       {/if}
-      <button class="btn-ghost px-1" disabled={i === 0} onclick={() => move(t.key, i - 1)} aria-label="Move up">
-        <Icon name="up" size={14} />
-      </button>
-      <button class="btn-ghost px-1" disabled={i === count - 1} onclick={() => move(t.key, i + 2)} aria-label="Move down">
-        <Icon name="down" size={14} />
-      </button>
+      <Button variant="ghost" size="icon-sm" disabled={i === 0} onclick={() => move(t.key, i - 1)} aria-label="Move up">
+        <ArrowUpIcon />
+      </Button>
+      <Button variant="ghost" size="icon-sm" disabled={i === count - 1} onclick={() => move(t.key, i + 2)} aria-label="Move down">
+        <ArrowDownIcon />
+      </Button>
     </div>
     {#if !off}
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line/60 px-3 py-2 text-sm">
-        <input
-          class="field w-64 {ov?.title !== null && ov?.title !== undefined ? 'border-warn/60' : ''}"
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-3 py-2 text-sm">
+        <Input
+          class="w-64 {ov?.title !== null && ov?.title !== undefined ? 'border-warning/60' : ''}"
           placeholder="No title"
           value={ov?.title ?? t.title}
           aria-label="Title"
           onchange={e => setTitle(t, e.currentTarget.value)}
         />
-        <input
-          class="field w-24 {ov?.language ? 'border-warn/60' : ''}"
+        <Input
+          class="w-24 {ov?.language ? 'border-warning/60' : ''}"
           list="track-languages"
           value={ov?.language ?? t.language}
           aria-label="Language"
@@ -377,14 +410,15 @@
         <div class="flex flex-wrap gap-1" role="group" aria-label="Track flags">
           {#each properties as f (f.key)}
             {@const on = flagOn(t, f.key)}
-            <button
-              class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs {on
-                ? 'border-accent bg-accent/15 text-accent'
-                : 'border-line text-muted hover:text-text'} {flagSet(t, f.key) ? 'underline decoration-dotted' : ''}"
-              aria-pressed={on}
+            <Toggle
+              variant="outline"
+              size="sm"
+              class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
+                data-[state=on]:text-primary {flagSet(t, f.key) ? 'underline decoration-dotted underline-offset-2' : ''}"
+              pressed={on}
               title="{f.help}{flagSet(t, f.key) ? ' (set by you)' : ''}"
-              onclick={() => toggleFlag(t, f.key)}
-              >{#if on}<Icon name="check" size={12} />{/if}{f.label}</button
+              onPressedChange={() => toggleFlag(t, f.key)}
+              >{#if on}<CheckIcon class="size-3" />{/if}{f.label}</Toggle
             >
           {/each}
         </div>
@@ -393,29 +427,29 @@
         {@const action = actionOf(t)}
         {@const planned = plannedAudio.get(t.key)?.a}
         {@const enc = encodeOf(action)}
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line/60 px-3 py-2 text-sm">
-          <select class="field" value={action} aria-label="Copy or encode" onchange={e => setAction(t, e.currentTarget.value as AudioAction)}>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-3 py-2 text-sm">
+          <NativeSelect value={action} aria-label="Copy or encode" onchange={e => setAction(t, e.currentTarget.value as AudioAction)}>
             <option value="copy">Copy</option>
             {#each offered(t, action) as e (e.id)}
               <option value={e.id} disabled={!!e.missing.length && action !== e.id}>Encode: {e.label}{needs(e)}</option>
             {/each}
-          </select>
+          </NativeSelect>
           {#if enc && enc.layouts.length > 1}
-            <select class="field" value={ov?.layout ?? ''} aria-label="Channels" onchange={e => setLayout(t, e.currentTarget.value)}>
+            <NativeSelect value={ov?.layout ?? ''} aria-label="Channels" onchange={e => setLayout(t, e.currentTarget.value)}>
               <option value="">Channels: auto{planned && !ov?.layout ? ` (${planned.out_layout})` : ''}</option>
               {#each layoutChoices(t, enc) as l (l)}<option value={l}>{l}</option>{/each}
-            </select>
+            </NativeSelect>
           {/if}
           {#if enc && enc.bitrates !== null}
-            <label class="flex items-center gap-1.5 text-muted">
+            <label class="flex items-center gap-1.5 text-muted-foreground">
               {#if enc.bitrate_choices.length}
-                <select class="field" value={ov?.bitrate_kbps ?? ''} aria-label="Bitrate" onchange={e => setBitrate(t, e.currentTarget.value)}>
+                <NativeSelect value={ov?.bitrate_kbps ?? ''} aria-label="Bitrate" onchange={e => setBitrate(t, e.currentTarget.value)}>
                   <option value="">auto{planned?.bitrate_kbps && !ov?.bitrate_kbps ? ` (${planned.bitrate_kbps})` : ''}</option>
                   {#each enc.bitrate_choices as b (b)}<option value={b}>{b}</option>{/each}
-                </select>
+                </NativeSelect>
               {:else}
-                <input
-                  class="field w-24"
+                <Input
+                  class="w-24"
                   type="number"
                   min="6"
                   step="8"
@@ -429,34 +463,37 @@
           {/if}
           {#if enc?.options.length}
             {@const changed = changedOptions(t, enc)}
-            <button
-              class="btn-ghost text-xs {openSettings[t.key] ? 'text-accent' : ''}"
+            <Button
+              variant="ghost"
+              size="sm"
+              class={openSettings[t.key] ? 'text-primary hover:text-primary' : ''}
+              aria-expanded={!!openSettings[t.key]}
               onclick={() => (openSettings[t.key] = !openSettings[t.key])}
               title="{enc.label} settings"
             >
-              <Icon name="settings" size={14} />Settings{changed ? ` (${changed})` : ''}
-            </button>
+              <SlidersHorizontalIcon />Settings{changed ? ` (${changed})` : ''}
+            </Button>
           {/if}
-          {#if planned}<span class="text-xs text-muted">→ {audioOut(planned)}</span>{/if}
+          {#if planned}<span class="text-xs text-muted-foreground">→ {audioOut(planned)}</span>{/if}
         </div>
         {#if enc?.options.length && openSettings[t.key]}
-          <div class="grid gap-x-4 gap-y-2 border-t border-line/60 px-3 py-2 text-sm sm:grid-cols-[12rem_1fr]">
+          <div class="grid gap-x-4 gap-y-2 border-t border-border/60 px-3 py-2 text-sm sm:grid-cols-[12rem_1fr]">
             {#each enc.options as o (o.key)}
               {@const value = ov?.options?.[o.key] ?? planned?.options?.[o.key] ?? o.default}
-              <label class="text-muted" for="opt-{t.key}-{o.key}" title={o.help}>{o.label}</label>
+              <label class="text-muted-foreground" for="opt-{t.key}-{o.key}" title={o.help}>{o.label}</label>
               <div class="flex items-center gap-2">
                 {#if o.choices.length}
-                  <select id="opt-{t.key}-{o.key}" class="field" {value} onchange={e => setOption(t, o, e.currentTarget.value)}>
+                  <NativeSelect id="opt-{t.key}-{o.key}" {value} onchange={e => setOption(t, o, e.currentTarget.value)}>
                     {#each o.choices as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
-                  </select>
+                  </NativeSelect>
                 {:else if o.range}
-                  <input id="opt-{t.key}-{o.key}" class="field w-24" type="number" min={o.range[0]} max={o.range[1]}
+                  <Input id="opt-{t.key}-{o.key}" class="w-24" type="number" min={o.range[0]} max={o.range[1]}
                     {value} onchange={e => setOption(t, o, e.currentTarget.value)} />
                 {:else}
-                  <input id="opt-{t.key}-{o.key}" class="field min-w-0 flex-1 font-mono text-xs" {value} placeholder={o.help}
+                  <Input id="opt-{t.key}-{o.key}" class="min-w-0 flex-1 font-mono text-xs" {value} placeholder={o.help}
                     onchange={e => setOption(t, o, e.currentTarget.value)} />
                 {/if}
-                {#if o.help && (o.choices.length || o.range)}<span class="text-xs text-muted">{o.help}</span>{/if}
+                {#if o.help && (o.choices.length || o.range)}<span class="text-xs text-muted-foreground">{o.help}</span>{/if}
               </div>
             {/each}
           </div>
@@ -464,18 +501,18 @@
       {/if}
     {/if}
   </div>
-  {#if i === count - 1 && dropAt === count}<div class="-my-1 h-0.5 rounded bg-accent"></div>{/if}
+  {#if i === count - 1 && dropAt === count}<div class="-my-1 h-0.5 rounded-full bg-primary"></div>{/if}
 {/snippet}
 
 {#if !tracks || !plan}
-  <div class="p-6 text-muted">{job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}</div>
+  <div class="p-6 text-muted-foreground">{job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}</div>
 {:else}
   <fieldset disabled={!editable} class="max-w-5xl space-y-4">
     <div class="flex flex-wrap items-center gap-3">
-      <label class="flex items-center gap-2 text-sm text-muted">
+      <label class="flex items-center gap-2 text-sm text-muted-foreground">
         Original language
-        <input
-          class="field w-40"
+        <Input
+          class="w-40"
           list="track-languages"
           value={overrides.original_language ?? ''}
           onchange={e => setOriginal(e.currentTarget.value.trim())}
@@ -486,35 +523,34 @@
       </datalist>
       <div class="ml-auto flex flex-wrap gap-2">
         {#if kind === 'audio'}
-          <select
-            class="field"
-            value=""
-            aria-label="Add a track from"
-            title="Use a track again: another output track with its own encode, title and flags"
-            onchange={e => {
-              const base = audioRows.find(t => t.key === e.currentTarget.value)
-              e.currentTarget.value = ''
-              if (base) addCopy(base)
-            }}
-          >
-            <option value="">+ Add a track from…</option>
-            {#each audioRows.filter(t => !t.copy) as t (t.key)}
-              <option value={t.key}>{sourceLabel(t)} · {t.language}{t.title ? ` · ${t.title}` : ''}</option>
-            {/each}
-          </select>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger disabled={!editable} title="Use a track again: another output track with its own encode, title and flags">
+              {#snippet child({ props })}
+                <Button {...props} variant="outline"><CopyPlusIcon />Add a track from…</Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end" class="w-auto max-w-[32rem]">
+              {#each audioRows.filter(t => !t.copy) as t (t.key)}
+                <DropdownMenu.Item onSelect={() => addCopy(t)}>
+                  <span class="truncate">{sourceLabel(t)} · {t.language}{t.title ? ` · ${t.title}` : ''}</span>
+                </DropdownMenu.Item>
+              {/each}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         {/if}
-        <button class="btn" onclick={() => (browsing = true)} title="Add {kind === 'audio' ? 'audio' : 'subtitle'} files to this job">
-          <Icon name="new" />Add files…
-        </button>
-        <button class="btn" onclick={reset} title="Back to the profile's choices for these tracks"><Icon name="refresh" />Reset</button>
+        <Button variant="outline" onclick={() => (browsing = true)} title="Add {kind === 'audio' ? 'audio' : 'subtitle'} files to this job">
+          <FilePlusIcon />Add files…
+        </Button>
+        <Button variant="outline" onclick={reset} title="Back to the profile's choices for these tracks"><RefreshCwIcon />Reset</Button>
       </div>
     </div>
 
     <section>
       <div class="mb-2 flex items-center gap-2">
-        <Icon name={kind === 'audio' ? 'audio' : 'sub'} class="text-accent" /><span class="font-medium">{title}</span>
-        <span class="text-xs text-muted">{rows.filter(t => !excluded(t)).length} of {rows.length} in the output</span>
-        <span class="ml-auto text-xs text-muted">Drag a track by its handle to reorder; every change saves.</span>
+        {#if kind === 'audio'}<AudioLinesIcon class="size-4 text-primary" />{:else}<CaptionsIcon class="size-4 text-primary" />{/if}
+        <span class="font-medium">{title}</span>
+        <span class="text-xs text-muted-foreground">{rows.filter(t => !excluded(t)).length} of {rows.length} in the output</span>
+        <span class="ml-auto text-xs text-muted-foreground">Drag a track by its handle to reorder; every change saves.</span>
       </div>
       {#if rows.length}
         <div class="space-y-2" role="list">
@@ -523,7 +559,7 @@
           {/each}
         </div>
       {:else}
-        <p class="text-sm text-muted">None in the source or added.</p>
+        <p class="text-sm text-muted-foreground">None in the source or added.</p>
       {/if}
     </section>
   </fieldset>

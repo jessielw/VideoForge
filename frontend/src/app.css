@@ -1,81 +1,116 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn-svelte/tailwind.css';
 
-/* Colour tokens: dark by default (a video tool lives next to dark players), light when the OS asks. */
-@theme {
-  --color-bg: #121214;
-  --color-panel: #1a1a1d;
-  --color-raised: #232327;
-  --color-line: #2e2e33;
-  --color-text: #e7e5e4;
-  --color-muted: #a1a1aa;
-  --color-accent: #c9a876;
-  --color-accent-strong: #b39770;
-  --color-ok: #4ade80;
-  --color-warn: #fbbf24;
-  --color-bad: #f87171;
-  --color-info: #60a5fa;
+@custom-variant dark (&:is(.dark *));
+
+/* shadcn-svelte tokens. Light, dark and system come from mode-watcher (the `dark` class on <html>);
+   the accent is VideoForge's warm gold. success / warning / info are VideoForge's own (job states). */
+:root {
+  color-scheme: light;
+  --radius: 0.5rem;
+  --background: #f5f5f4;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+  --primary: #8a6d3f;
+  --primary-foreground: #ffffff;
+  --secondary: #f0efee;
+  --secondary-foreground: #1c1917;
+  --muted: #f0efee;
+  --muted-foreground: #6b6b70;
+  --accent: #f0efee;
+  --accent-foreground: #1c1917;
+  --destructive: #b91c1c;
+  --border: #dedcda;
+  --input: #d6d3d1;
+  --ring: #8a6d3f;
+  --success: #15803d;
+  --warning: #b45309;
+  --info: #2563eb;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #121214;
+  --foreground: #e7e5e4;
+  --card: #1a1a1d;
+  --card-foreground: #e7e5e4;
+  --popover: #1a1a1d;
+  --popover-foreground: #e7e5e4;
+  --primary: #c9a876;
+  --primary-foreground: #1c1917;
+  --secondary: #232327;
+  --secondary-foreground: #e7e5e4;
+  --muted: #232327;
+  --muted-foreground: #a1a1aa;
+  --accent: #232327;
+  --accent-foreground: #e7e5e4;
+  --destructive: #f87171;
+  --border: #2e2e33;
+  --input: #3a3a40;
+  --ring: #c9a876;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --info: #60a5fa;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
   --font-sans: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --color-bg: #f5f5f4;
-    --color-panel: #ffffff;
-    --color-raised: #f0efee;
-    --color-line: #dedcda;
-    --color-text: #1c1917;
-    --color-muted: #6b6b70;
-    --color-accent: #8a6d3f;
-    --color-accent-strong: #75592f;
-    --color-ok: #15803d;
-    --color-warn: #b45309;
-    --color-bad: #b91c1c;
-    --color-info: #2563eb;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 14px;
   }
 }
 
-:root {
-  color-scheme: dark light;
+/* Small uppercase heading over a group of controls. */
+@utility section-label {
+  @apply text-xs font-medium tracking-wide text-muted-foreground uppercase;
 }
 
-html,
-body,
-#app {
-  height: 100%;
-}
-
-body {
-  margin: 0;
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-family: var(--font-sans);
-  font-size: 14px;
-}
-
-/* Shared controls (Tailwind 4 utilities, so they compose with @apply and variants). */
-@utility btn {
-  @apply inline-flex items-center gap-1.5 rounded-md border border-line bg-raised px-3 py-1.5 text-sm text-text
-    hover:border-accent/60 disabled:cursor-not-allowed disabled:opacity-40;
-}
-@utility btn-primary {
-  @apply btn border-accent-strong bg-accent-strong text-stone-950 hover:bg-accent;
-}
-@utility btn-ghost {
-  @apply btn border-transparent bg-transparent hover:bg-raised;
-}
-@utility field {
-  @apply rounded-md border border-line bg-panel px-2 py-1 text-sm text-text outline-none focus:border-accent
-    disabled:opacity-50;
-}
 /* Number boxes: keep the value clear of the spin arrows (Chromium draws them inside the text area;
    Firefox beside it, where the value is left-aligned anyway). */
 input[type='number']::-webkit-inner-spin-button {
   margin-left: 0.5rem;
-}
-@utility label {
-  @apply text-xs font-medium tracking-wide text-muted uppercase;
-}
-@utility panel {
-  @apply rounded-lg border border-line bg-panel;
 }

@@ -10,7 +10,17 @@
   import { clipLength } from '../lib/format'
   import type { ClipInfo, Crop, JobDetail, ScriptCheck, ScriptParts, SourceFilter, VideoSettings } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
-  import Icon from './Icon.svelte'
+  import CheckIcon from '@lucide/svelte/icons/check'
+  import MaximizeIcon from '@lucide/svelte/icons/maximize'
+  import MinimizeIcon from '@lucide/svelte/icons/minimize'
+  import PlayIcon from '@lucide/svelte/icons/play'
+  import WandSparklesIcon from '@lucide/svelte/icons/wand-sparkles'
+  import { Button } from '$lib/components/ui/button'
+  import { Checkbox } from '$lib/components/ui/checkbox'
+  import { Input } from '$lib/components/ui/input'
+  import { NativeSelect } from '$lib/components/ui/native-select'
+  import * as Tabs from '$lib/components/ui/tabs'
+  import { Textarea } from '$lib/components/ui/textarea'
   import PresetMenu from './PresetMenu.svelte'
   import ScriptEditor from './ScriptEditor.svelte'
 
@@ -199,26 +209,24 @@
 
 <svelte:window onkeydown={e => e.key === 'Escape' && !e.defaultPrevented && layout.videoExpanded && (layout.videoExpanded = false)} />
 
-<div class="flex min-h-0 gap-4 {layout.videoExpanded ? 'fixed inset-0 z-40 bg-bg p-4' : 'h-full'}">
+<div class="flex min-h-0 gap-4 {layout.videoExpanded ? 'fixed inset-0 z-40 bg-background p-4' : 'h-full'}">
   <div class="flex min-w-0 flex-1 flex-col gap-2">
     <div class="flex items-center gap-2">
-      <div class="flex rounded-md border border-line p-0.5">
-        {#each VIEWS as v (v.id)}
-          <button
-            class="rounded px-3 py-1 text-sm {view === v.id ? 'bg-raised text-accent' : 'text-muted'}"
-            onclick={() => (view = v.id)}>{v.label}</button
-          >
-        {/each}
-      </div>
-      {#if saving}<span class="text-xs text-muted">saving…</span>{/if}
-      {#if infoError && view !== 'script'}<span class="truncate text-xs text-bad" title={infoError}>{infoError}</span>{/if}
-      <button
-        class="btn-ghost ml-auto"
+      <Tabs.Root value={view} onValueChange={v => (view = v as View)}>
+        <Tabs.List>
+          {#each VIEWS as v (v.id)}<Tabs.Trigger value={v.id} class="px-3">{v.label}</Tabs.Trigger>{/each}
+        </Tabs.List>
+      </Tabs.Root>
+      {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
+      {#if infoError && view !== 'script'}<span class="truncate text-xs text-destructive" title={infoError}>{infoError}</span>{/if}
+      <Button
+        variant="ghost"
+        class="ml-auto"
         onclick={() => (layout.videoExpanded = !layout.videoExpanded)}
         title={layout.videoExpanded ? 'Back to the page (Esc)' : 'Fill the window with the video editor'}
       >
-        <Icon name={layout.videoExpanded ? 'shrink' : 'expand'} />{layout.videoExpanded ? 'Restore' : 'Expand'}
-      </button>
+        {#if layout.videoExpanded}<MinimizeIcon />Restore{:else}<MaximizeIcon />Expand{/if}
+      </Button>
     </div>
     {#if current}
       <FramePreview
@@ -234,11 +242,11 @@
         {notice}
       />
     {:else if view === 'script'}
-      <div class="flex flex-1 items-center justify-center border border-line text-muted">
+      <div class="flex flex-1 items-center justify-center border text-muted-foreground">
         {running ? 'Running the script (the first run indexes the source)…' : 'No frames: the script failed.'}
       </div>
     {:else}
-      <div class="flex flex-1 items-center justify-center border border-line text-muted">
+      <div class="flex flex-1 items-center justify-center border text-muted-foreground">
         {infoError ? 'No preview' : 'Opening the source (the first time indexes it, which can take minutes on a large remux)…'}
       </div>
     {/if}
@@ -247,14 +255,14 @@
   {#if view === 'script'}
     <section class="flex w-[45%] shrink-0 flex-col gap-2">
       <div class="flex items-center gap-2">
-        <button class="btn-primary" onclick={run} disabled={running || saving} title="Save the body and run the script (Ctrl+Enter)">
-          <Icon name="play" />{running ? 'Running…' : dirty && editable ? 'Save & run' : 'Run'}
-        </button>
+        <Button onclick={run} disabled={running || saving} title="Save the body and run the script (Ctrl+Enter)">
+          <PlayIcon />{running ? 'Running…' : dirty && editable ? 'Save & run' : 'Run'}
+        </Button>
         {#if parts?.custom}
-          <button class="btn" onclick={useGenerated} disabled={!editable || running}
-            title="Drop the custom body: crop, resize and filters make the script again">Back to generated</button>
+          <Button variant="outline" onclick={useGenerated} disabled={!editable || running}
+            title="Drop the custom body: crop, resize and filters make the script again">Back to generated</Button>
         {/if}
-        <span class="ml-auto text-xs text-muted">
+        <span class="ml-auto text-xs text-muted-foreground">
           {#if !editable}read-only while {job.status}{:else if dirty}edited, not saved{:else if parts?.custom}custom body{:else}generated from crop, resize and filters (editing makes it custom){/if}
         </span>
       </div>
@@ -268,19 +276,19 @@
           onrun={run}
         />
       {:else}
-        <div class="flex flex-1 items-center justify-center rounded-md border border-line text-muted">Loading the script…</div>
+        <div class="flex flex-1 items-center justify-center rounded-lg border text-muted-foreground">Loading the script…</div>
       {/if}
       {#if checked && !checked.ok}
-        <pre class="max-h-40 shrink-0 overflow-auto rounded-md border border-bad/50 bg-bad/10 p-2 text-xs whitespace-pre-wrap text-bad">{checked.line ? `Line ${checked.line}: ` : ''}{checked.error}</pre>
+        <pre class="max-h-40 shrink-0 overflow-auto rounded-lg border border-destructive/50 bg-destructive/10 p-2 text-xs whitespace-pre-wrap text-destructive">{checked.line ? `Line ${checked.line}: ` : ''}{checked.error}</pre>
       {:else if checked?.ok}
         {@const i = checked.info}
-        <div class="flex shrink-0 flex-wrap gap-x-4 gap-y-1 rounded-md border border-line px-3 py-2 text-xs">
-          <span class="text-ok"><Icon name="check" size={13} class="mr-1 inline" />Runs</span>
-          <span><span class="text-muted">Frames</span> {i.frames}</span>
-          <span><span class="text-muted">Size</span> {i.width}×{i.height}</span>
-          <span><span class="text-muted">Format</span> {i.format}</span>
-          <span><span class="text-muted">FPS</span> {+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span>
-          <span><span class="text-muted">Length</span> {clipLength(i.frames, i.fps_num, i.fps_den)}</span>
+        <div class="flex shrink-0 flex-wrap gap-x-4 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs">
+          <span class="text-success"><CheckIcon class="mr-1 inline size-3.5 align-[-2px]" />Runs</span>
+          <span><span class="text-muted-foreground">Frames</span> {i.frames}</span>
+          <span><span class="text-muted-foreground">Size</span> {i.width}×{i.height}</span>
+          <span><span class="text-muted-foreground">Format</span> {i.format}</span>
+          <span><span class="text-muted-foreground">FPS</span> {+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span>
+          <span><span class="text-muted-foreground">Length</span> {clipLength(i.frames, i.fps_num, i.fps_den)}</span>
         </div>
       {/if}
     </section>
@@ -299,16 +307,16 @@
       <fieldset disabled={!editable} class="space-y-5">
         <section class="space-y-2">
           <div class="flex items-center justify-between">
-            <span class="label">Crop</span>
-            <span class="text-xs text-muted">{outW}×{outH}</span>
+            <span class="section-label">Crop</span>
+            <span class="text-xs text-muted-foreground">{outW}×{outH}</span>
           </div>
           <!-- Label, box, label, box: the labels get their own columns, so every box is the same width. -->
           <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">
             {#each SIDES as side (side)}
-              <label class="text-muted capitalize" for="crop-{side}">{side}</label>
-              <input
+              <label class="text-muted-foreground capitalize" for="crop-{side}">{side}</label>
+              <Input
                 id="crop-{side}"
-                class="field w-full"
+                class="w-full"
                 type="number"
                 step="2"
                 min="0"
@@ -318,26 +326,27 @@
             {/each}
           </div>
           <div class="flex gap-2">
-            <button class="btn flex-1" onclick={autoCrop} disabled={detecting}>
-              <Icon name="wand" />{detecting ? 'Detecting…' : 'Auto-crop'}
-            </button>
-            <button
-              class="btn"
+            <Button variant="outline" class="flex-1" onclick={autoCrop} disabled={detecting}>
+              <WandSparklesIcon />{detecting ? 'Detecting…' : 'Auto-crop'}
+            </Button>
+            <Button
+              variant="outline"
               onclick={() => {
                 video.crop = { left: 0, top: 0, right: 0, bottom: 0 }
                 commit(0)
-              }}>Reset</button
+              }}>Reset</Button
             >
           </div>
           {#if outW % 4 || outH % 4}
-            <p class="text-xs text-warn">The output isn't mod 4 ({outW}×{outH}).</p>
+            <p class="text-xs text-warning">The output isn't mod 4 ({outW}×{outH}).</p>
           {/if}
         </section>
 
         <section class="space-y-2">
-          <span class="label">Source filter</span>
-          <select
-            class="field w-full"
+          <span class="section-label">Source filter</span>
+          <NativeSelect
+            class="w-full"
+            aria-label="Source filter"
             value={video.source_filter}
             onchange={e => {
               video.source_filter = (e.target as HTMLSelectElement).value as SourceFilter
@@ -349,50 +358,49 @@
             <option value="bestsource">BestSource (exact seeking)</option>
             <option value="lsmash">L-SMASH Works</option>
             <option value="ffms2">FFMS2</option>
-          </select>
+          </NativeSelect>
         </section>
 
         <section class="space-y-2">
           <label class="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={!!video.resize}
-              onchange={e => {
-                video.resize = (e.target as HTMLInputElement).checked ? { width: outW, height: outH, kernel: 'Spline36' } : null
+              onCheckedChange={on => {
+                video.resize = on ? { width: outW, height: outH, kernel: 'Spline36' } : null
                 commit()
               }}
             />
-            <span class="label">Resize</span>
+            <span class="section-label">Resize</span>
           </label>
           {#if video.resize}
             <div class="flex items-center gap-2">
-              <input class="field w-20" type="number" step="2" bind:value={video.resize.width} onchange={() => commit()} />
+              <Input class="w-20" type="number" step="2" aria-label="Width" bind:value={video.resize.width} onchange={() => commit()} />
               ×
-              <input class="field w-20" type="number" step="2" bind:value={video.resize.height} onchange={() => commit()} />
-              <select class="field flex-1" bind:value={video.resize.kernel} onchange={() => commit()}>
+              <Input class="w-20" type="number" step="2" aria-label="Height" bind:value={video.resize.height} onchange={() => commit()} />
+              <NativeSelect class="min-w-0 flex-1" aria-label="Kernel" bind:value={video.resize.kernel} onchange={() => commit()}>
                 {#each ['Spline36', 'Spline64', 'Lanczos', 'Bicubic', 'Bilinear', 'Point'] as k (k)}<option value={k}>{k}</option>{/each}
-              </select>
+              </NativeSelect>
             </div>
           {/if}
         </section>
 
         <section class="space-y-2">
-          <span class="label">Filters (VapourSynth lines on <code>clip</code>)</span>
-          <textarea
-            class="field h-24 w-full font-mono text-xs"
+          <span class="section-label">Filters (VapourSynth lines on <code>clip</code>)</span>
+          <Textarea
+            class="h-24 w-full font-mono text-xs"
             placeholder="clip = core.std.Levels(clip, ...)"
             bind:value={video.filters}
             onchange={() => commit(0)}
             disabled={video.custom !== null}
-          ></textarea>
+          />
           {#if video.custom !== null}
-            <p class="text-xs text-warn">
+            <p class="text-xs text-warning">
               A custom script body is in use, so crop, resize and filters don't apply.
-              <button class="underline" onclick={() => (view = 'script')}>Edit it</button> ·
-              <button class="underline" onclick={useGenerated}>Back to generated</button>
+              <button class="underline underline-offset-2" onclick={() => (view = 'script')}>Edit it</button> ·
+              <button class="underline underline-offset-2" onclick={useGenerated}>Back to generated</button>
             </p>
           {:else}
-            <button class="btn-ghost text-xs" onclick={() => (view = 'script')}>Edit the whole script…</button>
+            <Button variant="ghost" size="sm" onclick={() => (view = 'script')}>Edit the whole script…</Button>
           {/if}
         </section>
       </fieldset>

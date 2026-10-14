@@ -4,7 +4,15 @@
   // new jobs and runs; videoforge.toml stays the default underneath ("Reset" goes back to it).
   import { onMount } from 'svelte'
   import FileBrowser from '../components/FileBrowser.svelte'
-  import Icon, { type IconName } from '../components/Icon.svelte'
+  import CheckIcon from '@lucide/svelte/icons/check'
+  import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
+  import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
+  import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
+  import XIcon from '@lucide/svelte/icons/x'
+  import { toast } from 'svelte-sonner'
+  import { Button } from '$lib/components/ui/button'
+  import { Input } from '$lib/components/ui/input'
+  import { NativeSelect } from '$lib/components/ui/native-select'
   import { api } from '../lib/api'
   import { app } from '../lib/state.svelte'
   import type { ConfigState, ToolCheck, ToolSetting, ToolStatus } from '../lib/types'
@@ -40,10 +48,9 @@
   async function change(changes: Parameters<typeof api.saveConfig>[0]): Promise<boolean> {
     try {
       config = await api.saveConfig(changes)
-      error = ''
       return true
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e)
+      toast.error("Couldn't save the settings", { description: e instanceof Error ? e.message : String(e) })
       return false
     }
   }
@@ -82,11 +89,11 @@
     return t.folder ? found : found.replace(/[\\/][^\\/]*$/, '')
   }
 
-  const LOOK: Record<ToolStatus, { icon: IconName; tone: string; text: string }> = {
-    ok: { icon: 'check', tone: 'text-ok', text: 'found' },
-    unknown: { icon: 'alert', tone: 'text-warn', text: 'found, no version' },
-    missing: { icon: 'x', tone: 'text-bad', text: 'missing' },
-    broken: { icon: 'x', tone: 'text-bad', text: "won't start" },
+  const LOOK: Record<ToolStatus, { icon: typeof CheckIcon; tone: string; text: string }> = {
+    ok: { icon: CheckIcon, tone: 'text-success', text: 'found' },
+    unknown: { icon: TriangleAlertIcon, tone: 'text-warning', text: 'found, no version' },
+    missing: { icon: XIcon, tone: 'text-destructive', text: 'missing' },
+    broken: { icon: XIcon, tone: 'text-destructive', text: "won't start" },
   }
 </script>
 
@@ -94,65 +101,66 @@
   <div class="max-w-5xl space-y-8">
     <header class="flex items-center gap-3">
       <h1 class="text-xl font-semibold">Settings</h1>
-      <span class="text-sm text-muted">Saved as you go; used by new jobs and runs.</span>
+      <span class="text-sm text-muted-foreground">Saved as you go; used by new jobs and runs.</span>
     </header>
 
-    {#if error}<div class="rounded-md border border-bad/50 bg-bad/10 p-3 text-sm text-bad">{error}</div>{/if}
+    {#if error}<div class="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>{/if}
     {#each config?.restart ?? [] as note (note)}
-      <div class="rounded-md border border-warn/50 bg-warn/10 p-3 text-sm text-warn">{note}</div>
+      <div class="rounded-md border border-warning/50 bg-warning/10 p-3 text-sm text-warning">{note}</div>
     {/each}
 
     {#if !config}
-      <p class="text-muted">{error ? '' : 'Loading…'}</p>
+      <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
     {:else}
       <section class="space-y-3">
         <div class="flex items-center gap-3">
           <h2 class="font-medium">Tools</h2>
-          <span class="text-xs text-muted">A bare name (e.g. ffmpeg) is looked up on PATH.</span>
-          <button class="btn ml-auto" onclick={checkAll} disabled={Object.values(checking).some(Boolean)}>
-            <Icon name="refresh" />Check again
-          </button>
+          <span class="text-xs text-muted-foreground">A bare name (e.g. ffmpeg) is looked up on PATH.</span>
+          <Button variant="outline" class="ml-auto" onclick={checkAll} disabled={Object.values(checking).some(Boolean)}>
+            <RefreshCwIcon />Check again
+          </Button>
         </div>
-        <div class="divide-y divide-line/60 rounded-md border border-line bg-panel">
+        <div class="divide-y divide-border/60 rounded-xl border bg-card">
           {#each config.tools as t (t.name)}
             {@const c = checks[t.name]}
             {@const look = c ? LOOK[c.status] : null}
             <div class="grid grid-cols-[12rem_1fr] gap-x-4 gap-y-1.5 px-4 py-3">
               <div>
                 <div class="text-sm font-medium">{t.label}</div>
-                <div class="text-xs text-muted">{t.purpose}</div>
+                <div class="text-xs text-muted-foreground">{t.purpose}</div>
               </div>
               <div class="flex min-w-0 items-center gap-2">
-                <input
-                  class="field min-w-0 flex-1 font-mono text-xs {t.custom ? 'border-accent/60' : ''}"
+                <Input
+                  class="min-w-0 flex-1 font-mono text-xs {t.custom ? 'border-primary/60' : ''}"
                   value={t.custom ?? t.default}
                   placeholder={t.default || 'not set'}
                   aria-label="{t.label} path"
                   onchange={e => setTool(t, e.currentTarget.value)}
                 />
-                <button class="btn" onclick={() => (browse = { kind: 'tool', tool: t })}><Icon name="folder" />Browse…</button>
-                <button
-                  class="btn-ghost text-xs"
+                <Button variant="outline" onclick={() => (browse = { kind: 'tool', tool: t })}><FolderOpenIcon />Browse…</Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   disabled={!t.custom}
                   title="Back to videoforge.toml's: {t.default || '(none)'}"
-                  onclick={() => setTool(t, '')}>Reset</button
+                  onclick={() => setTool(t, '')}>Reset</Button
                 >
               </div>
               <div></div>
               <div class="flex min-w-0 items-center gap-2 text-xs">
                 {#if checking[t.name]}
-                  <span class="text-muted">checking…</span>
+                  <span class="text-muted-foreground">checking…</span>
                 {:else if c && look}
-                  <span class="flex shrink-0 items-center gap-1 {look.tone}"><Icon name={look.icon} size={13} />{look.text}</span>
+                  <span class="flex shrink-0 items-center gap-1 {look.tone}"><look.icon class="size-3.5" />{look.text}</span>
                   {#if c.version}<span class="truncate" title={c.version}>{c.version}</span>{/if}
-                  {#if c.detail}<span class="truncate text-muted" title={c.detail}>{c.detail}</span>{/if}
-                  {#if c.found && c.found !== t.path}<span class="truncate text-muted" title={c.found}>· {c.found}</span>{/if}
+                  {#if c.detail}<span class="truncate text-muted-foreground" title={c.detail}>{c.detail}</span>{/if}
+                  {#if c.found && c.found !== t.path}<span class="truncate text-muted-foreground" title={c.found}>· {c.found}</span>{/if}
                 {/if}
               </div>
             </div>
           {/each}
         </div>
-        <p class="text-xs text-muted">
+        <p class="text-xs text-muted-foreground">
           Dolby Encoding Engine and qaac's CoreAudioToolbox can't be shipped with VideoForge: install them and point at them
           here. DDP needs DeeZy + DEE (+ truehdd for Atmos); AAC needs ffmpeg + qaac.
         </p>
@@ -161,47 +169,47 @@
       <section class="space-y-3">
         <div class="flex items-center gap-3">
           <h2 class="font-medium">Folder browser</h2>
-          <span class="text-xs text-muted">
+          <span class="text-xs text-muted-foreground">
             {config.roots_custom ? 'Only these folders (and what is under them) can be browsed.' : 'Every drive can be browsed.'}
           </span>
-          <button class="btn-ghost ml-auto text-xs" disabled={!config.roots_custom} onclick={() => setRoots(null)}>
+          <Button variant="ghost" size="sm" class="ml-auto" disabled={!config.roots_custom} onclick={() => setRoots(null)}>
             Reset to every drive
-          </button>
+          </Button>
         </div>
         <div class="flex flex-wrap gap-2">
           {#each config.roots as r (r)}
-            <span class="flex items-center gap-1 rounded bg-raised px-2 py-1 font-mono text-xs">
+            <span class="flex items-center gap-1 rounded-md bg-muted px-2 py-1 font-mono text-xs">
               {r}
               {#if config.roots_custom}
                 <button
-                  class="text-muted hover:text-bad"
+                  class="text-muted-foreground hover:text-destructive"
                   aria-label="Remove {r}"
-                  onclick={() => setRoots(config!.roots.filter(x => x !== r))}><Icon name="x" size={12} /></button
+                  onclick={() => setRoots(config!.roots.filter(x => x !== r))}><XIcon class="size-3" /></button
                 >
               {/if}
             </span>
           {/each}
         </div>
         <div class="flex gap-2">
-          <input
-            class="field w-96 font-mono text-xs"
+          <Input
+            class="w-96 font-mono text-xs"
             placeholder="D:\Media"
             bind:value={newRoot}
             onkeydown={e => e.key === 'Enter' && addRoot(newRoot)}
           />
-          <button class="btn" onclick={() => addRoot(newRoot)} disabled={!newRoot.trim()}>Add folder</button>
-          <button class="btn" onclick={() => (browse = { kind: 'root' })}><Icon name="folder" />Browse…</button>
+          <Button variant="outline" onclick={() => addRoot(newRoot)} disabled={!newRoot.trim()}>Add folder</Button>
+          <Button variant="outline" onclick={() => (browse = { kind: 'root' })}><FolderOpenIcon />Browse…</Button>
         </div>
       </section>
 
       <section class="space-y-3">
         <h2 class="font-medium">Profile</h2>
         <label class="flex items-center gap-3 text-sm">
-          <span class="text-muted">New jobs start with</span>
-          <select class="field" value={config.profile} onchange={e => setProfile(e.currentTarget.value)}>
+          <span class="text-muted-foreground">New jobs start with</span>
+          <NativeSelect value={config.profile} onchange={e => setProfile(e.currentTarget.value)}>
             {#each config.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-          </select>
-          <span class="text-xs text-muted">videoforge.toml says: {config.profile_default}</span>
+          </NativeSelect>
+          <span class="text-xs text-muted-foreground">videoforge.toml says: {config.profile_default}</span>
         </label>
       </section>
     {/if}

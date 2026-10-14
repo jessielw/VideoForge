@@ -2,7 +2,12 @@
   // Encoder settings (x264 / x265): rate control, preset, tune, bit depth, --options, extra args.
   // Emits a fresh copy on every change; the parent decides when to save.
   import type { EncoderName, EncoderSettings, RateControl } from '../lib/types'
-  import Icon from './Icon.svelte'
+  import PlusIcon from '@lucide/svelte/icons/plus'
+  import XIcon from '@lucide/svelte/icons/x'
+  import { Button } from '$lib/components/ui/button'
+  import { Input } from '$lib/components/ui/input'
+  import { NativeSelect } from '$lib/components/ui/native-select'
+  import * as ToggleGroup from '$lib/components/ui/toggle-group'
 
   let {
     value,
@@ -49,27 +54,32 @@
 
 <fieldset class="space-y-4" {disabled}>
   <div class="grid grid-cols-[9rem_1fr] items-center gap-x-4 gap-y-3">
-    <span class="label">Encoder</span>
-    <div class="flex gap-2">
+    <span class="section-label">Encoder</span>
+    <ToggleGroup.Root
+      type="single"
+      variant="outline"
+      class="w-fit"
+      {disabled}
+      value={value.encoder}
+      onValueChange={v => v && set('encoder', v as EncoderName)}
+    >
       {#each ['x264', 'x265'] as enc (enc)}
-        <button
-          class="btn {value.encoder === enc ? 'border-accent text-accent' : ''}"
-          onclick={() => set('encoder', enc as EncoderName)}>{enc}</button
-        >
+        <ToggleGroup.Item value={enc} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">{enc}</ToggleGroup.Item>
       {/each}
-    </div>
+    </ToggleGroup.Root>
 
-    <span class="label">Rate control</span>
+    <span class="section-label">Rate control</span>
     <div class="flex flex-wrap items-center gap-2">
-      <select class="field" value={value.rate_control} onchange={e => set('rate_control', (e.target as HTMLSelectElement).value as RateControl)}>
+      <NativeSelect value={value.rate_control} aria-label="Rate control" onchange={e => set('rate_control', e.currentTarget.value as RateControl)}>
         <option value="crf">CRF (constant quality)</option>
         <option value="abr">Bitrate, 1 pass</option>
         <option value="2pass">Bitrate, 2 passes</option>
-      </select>
+      </NativeSelect>
       {#if value.rate_control === 'crf'}
-        <input
-          class="field w-24"
+        <Input
+          class="w-24"
           type="number"
+          aria-label="CRF"
           step="0.5"
           min="0"
           max="51"
@@ -77,70 +87,73 @@
           onchange={e => set('crf', +(e.target as HTMLInputElement).value)}
         />
       {:else}
-        <input
-          class="field w-28"
+        <Input
+          class="w-28"
           type="number"
+          aria-label="Bitrate"
           step="100"
           min="100"
           value={value.bitrate_kbps}
           onchange={e => set('bitrate_kbps', +(e.target as HTMLInputElement).value)}
-        /><span class="text-sm text-muted">kb/s</span>
+        /><span class="text-sm text-muted-foreground">kb/s</span>
       {/if}
     </div>
 
-    <span class="label">Preset</span>
-    <select class="field w-48" value={value.preset} onchange={e => set('preset', (e.target as HTMLSelectElement).value)}>
+    <span class="section-label">Preset</span>
+    <NativeSelect class="w-48" value={value.preset} aria-label="Preset" onchange={e => set('preset', e.currentTarget.value)}>
       <option value="">(encoder default)</option>
       {#each PRESETS as p (p)}<option value={p}>{p}</option>{/each}
-    </select>
+    </NativeSelect>
 
-    <span class="label">Tune</span>
-    <select class="field w-48" value={value.tune} onchange={e => set('tune', (e.target as HTMLSelectElement).value)}>
+    <span class="section-label">Tune</span>
+    <NativeSelect class="w-48" value={value.tune} aria-label="Tune" onchange={e => set('tune', e.currentTarget.value)}>
       <option value="">none</option>
       {#each TUNES[value.encoder] as t (t)}<option value={t}>{t}</option>{/each}
-    </select>
+    </NativeSelect>
 
-    <span class="label">Bit depth</span>
-    <select class="field w-24" value={value.depth} onchange={e => set('depth', +(e.target as HTMLSelectElement).value)}>
+    <span class="section-label">Bit depth</span>
+    <NativeSelect class="w-24" value={value.depth} aria-label="Bit depth" onchange={e => set('depth', +e.currentTarget.value)}>
       {#each DEPTHS[value.encoder] as d (d)}<option value={d}>{d}-bit</option>{/each}
-    </select>
+    </NativeSelect>
   </div>
 
   <div>
-    <div class="label mb-2">Options (--name value, in order; an empty value is a flag)</div>
-    <div class="overflow-hidden rounded-md border border-line">
+    <div class="section-label mb-2">Options (--name value, in order; an empty value is a flag)</div>
+    <div class="overflow-hidden rounded-lg border">
       {#each Object.entries(value.options) as [key, val] (key)}
-        <div class="flex items-center gap-2 border-b border-line/60 px-2 py-1 last:border-b-0">
-          <span class="font-mono text-xs text-muted">--</span>
-          <input
-            class="field w-44 font-mono text-xs"
+        <div class="flex items-center gap-2 border-b border-border/60 px-2 py-1 last:border-b-0">
+          <span class="font-mono text-xs text-muted-foreground">--</span>
+          <Input
+            class="w-44 font-mono text-xs"
             value={key}
+            aria-label="Option name"
             onchange={e => setOption(key, val, (e.target as HTMLInputElement).value.trim().replace(/^-+/, ''))}
           />
-          <input
-            class="field flex-1 font-mono text-xs"
+          <Input
+            class="flex-1 font-mono text-xs"
             value={val}
+            aria-label="--{key} value"
             placeholder="(flag)"
             onchange={e => setOption(key, (e.target as HTMLInputElement).value.trim())}
           />
-          <button class="btn-ghost px-1.5 text-muted hover:text-bad" onclick={() => setOption(key, null)} aria-label="Remove">
-            <Icon name="x" size={14} />
-          </button>
+          <Button variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" onclick={() => setOption(key, null)} aria-label="Remove">
+            <XIcon />
+          </Button>
         </div>
       {/each}
-      <div class="flex items-center gap-2 bg-raised/50 px-2 py-1">
-        <span class="font-mono text-xs text-muted">--</span>
-        <input class="field w-44 font-mono text-xs" placeholder="name" bind:value={newKey} onkeydown={e => e.key === 'Enter' && addOption()} />
-        <input class="field flex-1 font-mono text-xs" placeholder="value" bind:value={newValue} onkeydown={e => e.key === 'Enter' && addOption()} />
-        <button class="btn-ghost px-1.5" onclick={addOption} aria-label="Add"><Icon name="new" size={14} /></button>
+      <div class="flex items-center gap-2 bg-muted/50 px-2 py-1">
+        <span class="font-mono text-xs text-muted-foreground">--</span>
+        <Input class="w-44 font-mono text-xs" placeholder="name" aria-label="New option name" bind:value={newKey} onkeydown={e => e.key === 'Enter' && addOption()} />
+        <Input class="flex-1 font-mono text-xs" placeholder="value" aria-label="New option value" bind:value={newValue} onkeydown={e => e.key === 'Enter' && addOption()} />
+        <Button variant="ghost" size="icon-sm" onclick={addOption} aria-label="Add"><PlusIcon /></Button>
       </div>
     </div>
   </div>
 
   <label class="block">
-    <span class="label">Extra arguments</span>
-    <input
-      class="field mt-1 w-full font-mono text-xs"
+    <span class="section-label">Extra arguments</span>
+    <Input
+      class="mt-1 w-full font-mono text-xs"
       value={value.extra}
       placeholder="appended as typed"
       onchange={e => set('extra', (e.target as HTMLInputElement).value)}
