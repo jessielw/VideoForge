@@ -29,7 +29,8 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
         print("The window needs pywebview: pip install videoforge[desktop] (or uv sync --extra desktop)")
         return 1
 
-    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="warning"))
+    # Open connections get 5 s to close before the app's shutdown runs (it cancels a running job: up to 10 s).
+    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="warning", timeout_graceful_shutdown=5))
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     while not server.started:
@@ -55,6 +56,9 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
     window.events.loaded += on_loaded
     # Not private: the theme and layout live in the page's localStorage.
     webview.start(private_mode=False, storage_path=str(data_dir / "webview"))
+    # Wait for the whole shutdown: the thread is a daemon, so leaving early would cut off the cancel of a
+    # running encode (its tools left running) and the database close.
+    print("Stopping VideoForge (a running job is cancelled; started again, it skips the steps it finished)...")
     server.should_exit = True
-    thread.join(5)
+    thread.join()
     return 0
