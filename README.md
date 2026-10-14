@@ -33,6 +33,11 @@ cd frontend && npm install && npm run build && cd ..
 uv run videoforge serve          # http://127.0.0.1:8765, opens the browser
 ```
 
+To drop files from Explorer onto path fields, run it in its own window instead (a browser never tells
+a page where a dropped file lives): `uv sync --extra desktop`, then `uv run videoforge serve --window`
+(pywebview; on Windows it uses Edge WebView2). Pasting paths (Explorer: Ctrl+Shift+C, then Ctrl+V on a
+field) works in the browser too.
+
 Machine-specific settings (tool paths, default profile) go in `videoforge.local.toml` next to
 `videoforge.toml`. Its tables are merged over the defaults.
 
