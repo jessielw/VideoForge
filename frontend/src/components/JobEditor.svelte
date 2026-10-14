@@ -33,9 +33,19 @@
   let showInfo = $state(false)
   let browsing = $state<'output' | 'chapters' | null>(null)
 
+  // Saves: each change applies to `job.spec` at once, so the next edit builds on it, and goes
+  // out after the one before. Replies (and refetches) that land while saves are still pending
+  // are dropped: they'd undo the newer edits. The last reply is the job.
+  let pending = $state(0)
+  let edits = 0
+  let chain: Promise<unknown> = Promise.resolve()
+
   async function load() {
+    const at = edits
     try {
-      job = await api.job(jobId)
+      const fresh = await api.job(jobId)
+      if (pending || at !== edits) return
+      job = fresh
       error = ''
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
@@ -48,19 +58,33 @@
     load()
   })
 
+  let commandsSeq = 0
   $effect(() => {
-    if (tab === 'encoder' && job?.plan) {
+    if (tab === 'encoder' && job?.plan && !pending) {
       void job.spec.encoder
-      api.commands(jobId).then(c => (commands = c)).catch(() => (commands = []))
+      const seq = ++commandsSeq
+      api.commands(jobId).then(c => seq === commandsSeq && (commands = c)).catch(() => seq === commandsSeq && (commands = []))
     }
   })
 
-  async function save(changes: SpecChanges) {
-    try {
-      job = await api.update(jobId, changes)
-    } catch (e) {
-      toast.error("Couldn't save the change", { description: e instanceof Error ? e.message : String(e) })
+  function save(changes: SpecChanges): Promise<void> {
+    if (job) {
+      const { inputs, ...rest } = changes
+      job = { ...job, spec: { ...job.spec, ...rest, inputs: { ...job.spec.inputs, ...inputs } } }
     }
+    edits++
+    pending++
+    const send = chain.then(() => api.update(jobId, changes))
+    chain = send.catch(() => {})
+    return send.then(
+      reply => {
+        if (--pending === 0) job = reply
+      },
+      e => {
+        toast.error("Couldn't save the change", { description: e instanceof Error ? e.message : String(e) })
+        if (--pending === 0) load()
+      },
+    )
   }
 
   const editable = $derived(!!job && !['queued', 'running'].includes(job.status))
