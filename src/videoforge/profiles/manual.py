@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from videoforge.core import lang
-from videoforge.core.execute.audio import ENCODES, AudioEncode, AudioSettings
+from videoforge.core.execute.audio import ENCODES, AudioSettings
 from videoforge.core.execute.mux import muxer_for
 from videoforge.core.jobs import ProbedInputs
 from videoforge.core.models import (
@@ -81,18 +81,6 @@ def _settings(track: AudioTrack | SubTrack, ov: TrackOverride | None) -> tuple[s
     return language, track.title if ov.title is None else ov.title, flags
 
 
-def _default_layout(enc: AudioEncode, source: Layout) -> Layout:
-    """The source's layout when the encoder takes it (up to its default_max); else the biggest one it
-    takes that is no bigger. DDP makes 5.1 from 5.0 (DeeZy adds the LFE)."""
-    if enc.action is AudioAction.DDP and source == Layout(5, 0):
-        return Layout(5, 1)
-    cap = enc.default_max.channels if enc.default_max else source.channels
-    fits = [lay for lay in enc.layouts if lay.channels <= min(source.channels, cap)]
-    if source in fits:
-        return source
-    return max(fits, key=lambda lay: (lay.channels, lay.lfe)) if fits else enc.layouts[0]
-
-
 def audio_output(t: AudioTrack, ov: TrackOverride | None, issues: list[Issue], settings: AudioSettings | None = None
                  ) -> dict:
     """PlannedAudio's action/format fields for a track: copied, or encoded as the override asks.
@@ -112,11 +100,11 @@ def audio_output(t: AudioTrack, ov: TrackOverride | None, issues: list[Issue], s
         return {"action": action, "out_codec": enc.codec, "out_layout": layout, "out_atmos": True,
                 "bitrate_kbps": (ov.bitrate_kbps if ov else None) or enc.default_bitrate(layout), "upmix_50": False,
                 "options": options}
-    layout = (ov.layout if ov else None) or _default_layout(enc, t.layout)
-    upmix_50 = action is AudioAction.DDP and t.layout == Layout(5, 0) and layout == Layout(5, 1)
+    layout = (ov.layout if ov else None) or enc.default_layout(t.layout)
+    upmix_50 = enc.upmix_50(t.layout, layout)
     if layout not in enc.layouts:
         issues.append(Issue(Severity.BLOCK, "audio.layout", f"Audio #{t.id}: {enc.label} can't be {layout}"))
-    elif layout.channels > t.layout.channels and not upmix_50:
+    elif enc.upmixes(t.layout, layout):
         issues.append(Issue(Severity.BLOCK, "audio.upmix", f"Audio #{t.id}: {t.layout} can't be upmixed to {layout}"))
     bitrate = None
     if enc.bitrates is not None:  # lossless encodes take none

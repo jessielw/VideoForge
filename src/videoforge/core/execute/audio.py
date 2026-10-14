@@ -107,6 +107,25 @@ class AudioEncode:
             out[o.key] = value
         return out, problems
 
+    def default_layout(self, source: Layout) -> Layout:
+        """The source's layout when this encode takes it (up to its default_max); else the biggest one it
+        takes that is no bigger. DDP makes 5.1 from 5.0 (DeeZy adds the LFE)."""
+        if self.upmix_50(source, Layout(5, 1)):
+            return Layout(5, 1)
+        cap = self.default_max.channels if self.default_max else source.channels
+        fits = [lay for lay in self.layouts if lay.channels <= min(source.channels, cap)]
+        if source in fits:
+            return source
+        return max(fits, key=lambda lay: (lay.channels, lay.lfe)) if fits else self.layouts[0]
+
+    def upmix_50(self, source: Layout, layout: Layout) -> bool:
+        """True for DDP's 5.1 from a 5.0 source, the one upmix allowed (DeeZy adds the LFE)."""
+        return self.action is AudioAction.DDP and source == Layout(5, 0) and layout == Layout(5, 1)
+
+    def upmixes(self, source: Layout, layout: Layout) -> bool:
+        """True when this layout needs channels the source doesn't have."""
+        return layout.channels > source.channels and not self.upmix_50(source, layout)
+
     def default_bitrate(self, layout: Layout) -> int | None:
         if not self.bitrates or self.vbr_default:
             return None

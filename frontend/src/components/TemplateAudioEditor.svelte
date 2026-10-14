@@ -55,7 +55,8 @@
   {:else}
     <p class="text-xs text-muted-foreground">
       By position: track 1 is the source's first audio track. A source with fewer tracks skips the rest; added audio files keep their own
-      settings. Applying the template replaces a job's audio choices.
+      settings. A slot asking for more than its track has gets the best that fits (2.0 stays 2.0, DDP Atmos needs a TrueHD
+      Atmos track). Applying the template replaces a job's audio choices.
     </p>
     {#each value.slots as slot, i (i)}
       <div class="space-y-3 rounded-lg border p-3">

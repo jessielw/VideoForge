@@ -84,7 +84,10 @@ added, to one job, or to a batch; a template applied after a job's own edits rep
 - **Audio, by position:** slot n is for the source's nth audio track (copy or an encode, title, flags,
   leave out, more outputs from the same track); slots past a source's tracks are ignored and tracks
   past the slots are kept or left out. It waits in `JobSpec.audio_template` until the tracks are known,
-  then becomes the job's track overrides (added audio files and subtitles keep theirs). Only profiles
+  then becomes the job's track overrides (added audio files and subtitles keep theirs). Each slot is
+  fitted to its track (`fit_audio`): more channels than the track has -> the encode's default layout,
+  DDP Atmos without an Atmos track -> DDP, and the bitrate goes back to the default with a changed layout
+  or when the encode won't take it; the same settings set by hand still block. Only profiles
   with the track editor follow audio overrides; a group's rules may ignore them.
 
 ## Pipeline

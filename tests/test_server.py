@@ -505,6 +505,24 @@ def test_template_audio(tmp_path):
         assert [(a["action"], a["title"]) for a in job["plan"]["audio"]] == [("flac", "")]  # "Mine" replaced
 
 
+def test_template_audio_fits_each_track(tmp_path):
+    """One template suits sources with less audio: a slot asking for more than its track has is fitted
+    to it instead of blocking the job. The same settings set by hand still block."""
+    make_files(tmp_path, "S01E01")  # FLAC 2.0, TrueHD 5.1 without Atmos
+    ddp51 = {"action": "ddp", "layout": "5.1", "bitrate_kbps": 640}
+    template = {"audio": {"slots": [{"track": ddp51}, {"track": {"action": "atmos", "bitrate_kbps": 768}}]}}
+    with make_client(tmp_path) as client:
+        (job_id,) = add(client, tmp_path, template=template)
+        job = wait_for(client, job_id, "ready", "warn", "blocked")
+        assert job["status"] != "blocked", job["issues"]
+        assert [(a["action"], a["out_layout"], a["bitrate_kbps"]) for a in job["plan"]["audio"]] == [
+            ("ddp", "2.0", 256), ("ddp", "5.1", 640)]
+
+        overrides = job["spec"]["overrides"] | {"tracks": {"id:1": ddp51}}
+        job = client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides}).json()
+        assert job["status"] == "blocked" and any(i["code"] == "audio.upmix" for i in job["issues"])
+
+
 def test_folder_browser(tmp_path):
     make_files(tmp_path)
     with make_client(tmp_path) as client:
