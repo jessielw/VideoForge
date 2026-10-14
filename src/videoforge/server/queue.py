@@ -141,6 +141,7 @@ class JobQueue:
         self._lock = threading.RLock()
         self._probes = ThreadPoolExecutor(max_workers=probe_workers, thread_name_prefix="probe")
         self._worker: threading.Thread | None = None
+        self._active = False  # a worker owns the queue; cleared (under the lock) when it decides to stop
         self._cancel: CancelToken | None = None
         self._stop_after_current = False
 
@@ -156,7 +157,7 @@ class JobQueue:
 
     @property
     def running(self) -> bool:
-        return self._worker is not None and self._worker.is_alive()
+        return self._active
 
     def queue_state(self) -> dict[str, Any]:
         current = next((e.id for e in self.entries() if e.running), None)
@@ -382,7 +383,8 @@ class JobQueue:
     def start(self) -> None:
         with self._lock:
             self._stop_after_current = False
-            if not self.running:
+            if not self._active:
+                self._active = True
                 self._worker = threading.Thread(target=self._work, name="queue-worker", daemon=True)
                 self._worker.start()
         self._queue_changed()
@@ -409,11 +411,23 @@ class JobQueue:
         with self._lock:
             return next((e for e in self.entries() if e.queued and e.plan is not None), None)
 
+    def _take_next(self) -> Entry | None:
+        """The next job to run, or None after giving up the queue (so the last event says not running, and a
+        start() from then on starts a new worker instead of relying on this one)."""
+        with self._lock:
+            e = None if self._stop_after_current else self._next()
+            if e is None:
+                self._active = False
+            return e
+
     def _work(self) -> None:
         try:
-            while not self._stop_after_current and (e := self._next()) is not None:
+            while (e := self._take_next()) is not None:
                 self._run(e)
         finally:
+            with self._lock:
+                if self._worker is threading.current_thread():
+                    self._active = False
             self._cancel = None
             self._queue_changed()
 

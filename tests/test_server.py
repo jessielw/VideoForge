@@ -210,6 +210,10 @@ def test_queue_runs_jobs_and_streams_events(tmp_path):
             assert (step_event["index"], step_event["total"], step_event["step"]["status"]) == (0, 1, "pending")
             tool_line = next(ev for ev in events if ev["type"] == "log" and ev["line"].startswith("[x264]"))
             assert tool_line["step"] == "video"
+            # The worker's last queue event says the queue stopped (it once said running until a reload).
+            while not ((ev := ws.receive_json())["type"] == "queue" and ev["queued"] == 0 and ev["current"] is None):
+                pass
+            assert ev["running"] is False
         for i in ids:
             job = wait_for(client, i, "done")
             assert job["steps"]["video"]["fingerprint"] == "abc"
