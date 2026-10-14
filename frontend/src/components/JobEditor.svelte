@@ -121,7 +121,7 @@
         {#if job.spec.inputs.encode}
           <p class="text-muted-foreground">This job reuses an existing encode ({basename(job.spec.inputs.encode)}); there is no video step.</p>
         {:else}
-          <VideoTab {job} {editable} save={video => save({ video })} />
+          {#key job.id}<VideoTab {job} {editable} save={video => save({ video })} />{/key}
         {/if}
       {:else if tab === 'encoder'}
         <div class="grid max-w-6xl gap-6 2xl:grid-cols-2">

@@ -5,14 +5,17 @@
   // The frame sits on a matte (gray, black or white) with a margin all round, so every edge pixel
   // can be scrolled into view clear of the scrollbars and told apart from the background.
   // A new frame replaces the old one only once it has decoded, so zoom, scroll and the picture
-  // stay put while it loads; a failed load keeps the last frame under an error banner.
-  import { tick } from 'svelte'
+  // stay put while it loads (a spinner shows over it when a load takes a moment); a failed load
+  // keeps the last frame under an error banner. Zoom, edges and scroll are bindable so the caller
+  // can bring a view back as it was left.
+  import { tick, untrack } from 'svelte'
   import { api } from '../lib/api'
   import type { Crop } from '../lib/types'
   import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left'
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
   import ChevronsLeftIcon from '@lucide/svelte/icons/chevrons-left'
   import ChevronsRightIcon from '@lucide/svelte/icons/chevrons-right'
+  import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle'
   import ZoomInIcon from '@lucide/svelte/icons/zoom-in'
   import ZoomOutIcon from '@lucide/svelte/icons/zoom-out'
   import { Button } from '$lib/components/ui/button'
@@ -31,6 +34,9 @@
     version = 0,
     crop = null,
     frame = $bindable(0),
+    zoom = $bindable(0),
+    edges = $bindable(false),
+    scroll = $bindable({ left: 0, top: 0 }),
     notice = null,
   }: {
     jobId: string
@@ -42,6 +48,9 @@
     version?: number
     crop?: Crop | null
     frame?: number
+    zoom?: number // percent; 0 = fit
+    edges?: boolean
+    scroll?: { left: number; top: number }
     notice?: { text: string; tone: 'muted' | 'bad' } | null
   } = $props()
 
@@ -49,16 +58,15 @@
   const PAD = 24 // matte margin around the frame, px
   const MATTES = { gray: '#404040', black: '#000000', white: '#ffffff' } as const
   type Matte = keyof typeof MATTES
-  let zoom = $state(0) // percent; 0 = fit
   let vw = $state(0) // the viewport's client size
   let vh = $state(0)
   let frameEl = $state<HTMLDivElement>()
   let matte = $state<Matte>(readMatte())
   let src = $state<string | null>(null)
   let loading = $state(false)
+  let slow = $state(false) // a load past a short delay: show the spinner (quick steps don't flash it)
   let error = $state('')
   let pictType = $state('')
-  let edges = $state(false)
   let edgeSrc = $state<string | null>(null)
   let viewport = $state<HTMLDivElement>()
   let panning = $state(false)
@@ -75,6 +83,7 @@
     const c = new AbortController()
     controller = c
     loading = true
+    const spin = setTimeout(() => controller === c && (slow = true), 250)
     try {
       const res = await fetch(api.frameUrl(jobId, n, st as 'source' | 'output', v, 'png'), { signal: c.signal })
       if (!res.ok) {
@@ -102,7 +111,8 @@
     } catch (e) {
       if ((e as Error).name !== 'AbortError') error = (e as Error).message
     } finally {
-      if (controller === c) loading = false
+      clearTimeout(spin)
+      if (controller === c) loading = slow = false
     }
   }
 
@@ -135,6 +145,25 @@
     else if (e.key === '-') zoomBy(-1)
     else return
     e.preventDefault()
+  }
+
+  // Back to the scroll position the view was left at (zoom and edges come back through their props).
+  let restored = false
+  $effect(() => {
+    const v = viewport
+    if (v && !restored) {
+      restored = true
+      untrack(() => {
+        v.scrollLeft = scroll.left
+        v.scrollTop = scroll.top
+      })
+    }
+  })
+
+  function onscroll() {
+    if (!viewport) return
+    scroll = { left: viewport.scrollLeft, top: viewport.scrollTop }
+    if (pannable) updateMap()
   }
 
   // --- zoom ---
@@ -340,10 +369,9 @@
     <Button variant="ghost" onclick={nextMatte} title="Background around the frame: {matte} (click to change)">
       <span class="inline-block size-3.5 border" style="background:{MATTES[matte]}"></span>Matte
     </Button>
-    <span class="ml-auto text-xs text-muted-foreground">
+    <span class="ml-auto text-xs whitespace-nowrap text-muted-foreground tabular-nums">
       {width}×{height}{crop && stage === 'source' ? ` → ${outW}×${outH}` : ''} · {Math.round(scale * 100)}%
       {#if pictType}· {pictType}-frame{/if}
-      {#if loading}· loading…{/if}
     </span>
   </div>
 
@@ -365,7 +393,7 @@
       {onpointermove}
       {onpointerup}
       onpointercancel={onpointerup}
-      onscroll={() => pannable && updateMap()}
+      {onscroll}
     >
       <!-- At least the viewport's size, centring the frame; bigger when the frame (plus its margin) is. -->
       <div class="grid min-h-full min-w-full place-items-center" style="width:max-content;height:max-content;padding:{PAD}px">
@@ -375,7 +403,7 @@
               src={shown}
               alt="Frame {frame}"
               draggable="false"
-              class="block h-full w-full select-none {loading ? 'opacity-80' : ''}"
+              class="block h-full w-full select-none"
               style="image-rendering: {scale >= 2 ? 'pixelated' : 'auto'}"
             />
             {#if crop && stage === 'source'}
@@ -390,16 +418,19 @@
                   class="absolute right-0 bg-destructive/40"
                   style="top:{pct(crop.top, height)};bottom:{pct(crop.bottom, height)};width:{pct(crop.right, width)}"
                 ></div>
-                <div
-                  class="absolute border border-primary"
-                  style="top:{pct(crop.top, height)};bottom:{pct(crop.bottom, height)};left:{pct(crop.left, width)};right:{pct(crop.right, width)}"
-                ></div>
+                <!-- No outline round the kept picture: it would cover the edge rows a crop is judged by. -->
               </div>
             {/if}
           {/if}
         </div>
       </div>
     </div>
+
+    {#if src && slow}
+      <div class="pointer-events-none absolute top-3 right-3 rounded-full bg-black/60 p-1.5 text-white" role="status" aria-label="Loading the frame">
+        <LoaderCircleIcon class="size-4 animate-spin" />
+      </div>
+    {/if}
 
     {#if !src}
       <div class="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
@@ -458,6 +489,6 @@
       onkeydown={e => e.key === 'Enter' && seek(+frameInput || 0)}
       onblur={() => seek(+frameInput || 0)}
     />
-    <span class="w-28 text-xs text-muted-foreground">/ {frames - 1} · {(frame / (fps || 24)).toFixed(2)} s</span>
+    <span class="min-w-28 text-xs whitespace-nowrap text-muted-foreground tabular-nums">/ {frames - 1} · {(frame / (fps || 24)).toFixed(2)} s</span>
   </div>
 </div>

@@ -3,6 +3,7 @@ import { toast } from 'svelte-sonner'
 import { api } from './api'
 import { STATUS_LABEL } from './format'
 import type { AudioEncodeInfo, EncoderSettings, JobSummary, Preset, PresetKind, Presets, Profile, QueueState, StepRun, VideoPresetData } from './types'
+import { keepVideoViews } from './videoView.svelte'
 
 const MAX_LOG = 20000
 
@@ -78,6 +79,7 @@ class AppState {
   async refreshJobs(): Promise<void> {
     const before = new Map(this.jobs.map(j => [j.id, j.status]))
     this.jobs = await api.jobs()
+    keepVideoViews(this.jobs.map(j => j.id))
     for (const j of this.jobs) if (before.get(j.id) === 'running' && j.status !== 'running') this.#finished(j)
   }
 

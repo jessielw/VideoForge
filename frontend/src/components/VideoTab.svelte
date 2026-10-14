@@ -7,8 +7,9 @@
   import { untrack } from 'svelte'
   import { api } from '../lib/api'
   import { layout } from '../lib/layout.svelte'
+  import { videoView } from '../lib/videoView.svelte'
   import { clipLength } from '../lib/format'
-  import type { ClipInfo, Crop, JobDetail, ScriptCheck, ScriptParts, SourceFilter, VideoSettings } from '../lib/types'
+  import type { ClipInfo, Crop, JobDetail, SourceFilter, VideoSettings } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import MaximizeIcon from '@lucide/svelte/icons/maximize'
@@ -31,9 +32,9 @@
   }: { job: JobDetail; save: (v: VideoSettings) => Promise<void>; editable: boolean } = $props()
 
   type View = 'source' | 'output' | 'script'
-  let view = $state<View>('source')
-  const stage = $derived(view === 'source' ? 'source' : 'output')
-  let frame = $state(0)
+  // View, frame, zoom, scroll and the script editor's text, kept per job (JobEditor remounts this per job).
+  const vv = videoView(untrack(() => job.id))
+  const stage = $derived(vv.view === 'source' ? 'source' : 'output')
   let info = $state<Record<string, ClipInfo | null>>({ source: null, output: null })
   let infoError = $state('')
   let version = $state(0)
@@ -41,15 +42,12 @@
   // The editable copy; the effect below resets it when the job changes on the server.
   let video = $state<VideoSettings>(untrack(() => structuredClone($state.snapshot(job.spec.video)) as VideoSettings))
   let saving = $state(false)
-  // The script editor: the server's parts, the edited body, and the last Run's result.
-  let parts = $state<ScriptParts | null>(null)
-  let body = $state('')
-  let checked = $state<ScriptCheck | null>(null)
+  // The script editor (in vv): the server's parts, the edited body, and the last Run's result.
   let running = $state(false)
   let refreshSeq = 0
   let refreshedKey = ''
   let adoptNext = false
-  const dirty = $derived(!!parts && body !== parts.body.join('\n'))
+  const dirty = $derived(!!vv.parts && vv.body !== vv.parts.body.join('\n'))
   const jobId = $derived(job.id)
   const scriptKey = $derived(job.id + JSON.stringify(job.spec.video) + job.spec.encoder.depth)
 
@@ -83,13 +81,14 @@
 
   $effect(() => {
     void jobId
-    info = { source: null, output: null }
-    checked = null
+    // A script view left with a good run shows its output again at once (the rerun refreshes it).
+    const ran = untrack(() => vv.checked)
+    info = { source: null, output: ran?.ok ? ran.info : null }
     loadInfo('source')
   })
 
   $effect(() => {
-    if (view === 'output') {
+    if (vv.view === 'output') {
       void version
       loadInfo('output')
     }
@@ -109,11 +108,11 @@
       const p = await api.script(id).catch(() => null)
       if (seq !== refreshSeq || !p) return
       const keep = dirty && !adopt
-      parts = p
-      if (!keep) body = p.body.join('\n')
+      vv.parts = p
+      if (!keep) vv.body = p.body.join('\n')
       const c = await api.checkScript(id).catch(e => ({ ok: false as const, error: String(e.message ?? e), line: null }))
       if (seq !== refreshSeq) return
-      checked = c
+      vv.checked = c
       if (c.ok) {
         info = { ...info, output: c.info }
         version++
@@ -125,7 +124,7 @@
 
   // Script view: run whenever the script's inputs change (once per change, not per job event).
   $effect(() => {
-    if (view === 'script') {
+    if (vv.view === 'script') {
       const key = scriptKey
       untrack(() => key !== refreshedKey && refresh())
     }
@@ -135,7 +134,7 @@
     const before = refreshSeq
     if (dirty && editable) {
       clearTimeout(timer)
-      video.custom = body
+      video.custom = vv.body
       adoptNext = true
       saving = true
       try {
@@ -154,7 +153,7 @@
 
   function useGenerated() {
     video.custom = null
-    if (parts) body = parts.body.join('\n') // not dirty, so the reload takes the generated body
+    if (vv.parts) vv.body = vv.parts.body.join('\n') // not dirty, so the reload takes the generated body
     commit(0)
   }
 
@@ -190,10 +189,10 @@
 
   const current = $derived(info[stage])
   const notice = $derived.by(() => {
-    if (view !== 'script') return null
+    if (vv.view !== 'script') return null
     if (running) return { text: 'Running the script…', tone: 'muted' as const }
-    if (checked && !checked.ok)
-      return { text: `The script failed${checked.line ? ` (line ${checked.line})` : ''}: this is the last good frame.`, tone: 'bad' as const }
+    if (vv.checked && !vv.checked.ok)
+      return { text: `The script failed${vv.checked.line ? ` (line ${vv.checked.line})` : ''}: this is the last good frame.`, tone: 'bad' as const }
     return null
   })
   const src = $derived(info.source)
@@ -212,13 +211,13 @@
 <div class="flex min-h-0 gap-4 {layout.videoExpanded ? 'fixed inset-0 z-40 bg-background p-4' : 'h-full'}">
   <div class="flex min-w-0 flex-1 flex-col gap-2">
     <div class="flex items-center gap-2">
-      <Tabs.Root value={view} onValueChange={v => (view = v as View)}>
+      <Tabs.Root value={vv.view} onValueChange={v => (vv.view = v as View)}>
         <Tabs.List>
           {#each VIEWS as v (v.id)}<Tabs.Trigger value={v.id} class="px-3">{v.label}</Tabs.Trigger>{/each}
         </Tabs.List>
       </Tabs.Root>
       {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
-      {#if infoError && view !== 'script'}<span class="truncate text-xs text-destructive" title={infoError}>{infoError}</span>{/if}
+      {#if infoError && vv.view !== 'script'}<span class="truncate text-xs text-destructive" title={infoError}>{infoError}</span>{/if}
       <Button
         variant="ghost"
         class="ml-auto"
@@ -238,10 +237,13 @@
         height={current.height}
         {version}
         crop={stage === 'source' ? video.crop : null}
-        bind:frame
+        bind:frame={vv.frame}
+        bind:zoom={vv.zoom}
+        bind:edges={vv.edges}
+        bind:scroll={vv.scroll}
         {notice}
       />
-    {:else if view === 'script'}
+    {:else if vv.view === 'script'}
       <div class="flex flex-1 items-center justify-center border text-muted-foreground">
         {running ? 'Running the script (the first run indexes the source)…' : 'No frames: the script failed.'}
       </div>
@@ -252,36 +254,36 @@
     {/if}
   </div>
 
-  {#if view === 'script'}
+  {#if vv.view === 'script'}
     <section class="flex w-[45%] shrink-0 flex-col gap-2">
       <div class="flex items-center gap-2">
         <Button onclick={run} disabled={running || saving} title="Save the body and run the script (Ctrl+Enter)">
           <PlayIcon />{running ? 'Running…' : dirty && editable ? 'Save & run' : 'Run'}
         </Button>
-        {#if parts?.custom}
+        {#if vv.parts?.custom}
           <Button variant="outline" onclick={useGenerated} disabled={!editable || running}
             title="Drop the custom body: crop, resize and filters make the script again">Back to generated</Button>
         {/if}
         <span class="ml-auto text-xs text-muted-foreground">
-          {#if !editable}read-only while {job.status}{:else if dirty}edited, not saved{:else if parts?.custom}custom body{:else}generated from crop, resize and filters (editing makes it custom){/if}
+          {#if !editable}read-only while {job.status}{:else if dirty}edited, not saved{:else if vv.parts?.custom}custom body{:else}generated from crop, resize and filters (editing makes it custom){/if}
         </span>
       </div>
-      {#if parts}
+      {#if vv.parts}
         <ScriptEditor
-          head={parts.head}
-          tail={parts.tail}
-          bind:body
-          errorLine={checked && !checked.ok ? checked.line : null}
+          head={vv.parts.head}
+          tail={vv.parts.tail}
+          bind:body={vv.body}
+          errorLine={vv.checked && !vv.checked.ok ? vv.checked.line : null}
           disabled={!editable}
           onrun={run}
         />
       {:else}
         <div class="flex flex-1 items-center justify-center rounded-lg border text-muted-foreground">Loading the script…</div>
       {/if}
-      {#if checked && !checked.ok}
-        <pre class="max-h-40 shrink-0 overflow-auto rounded-lg border border-destructive/50 bg-destructive/10 p-2 text-xs whitespace-pre-wrap text-destructive">{checked.line ? `Line ${checked.line}: ` : ''}{checked.error}</pre>
-      {:else if checked?.ok}
-        {@const i = checked.info}
+      {#if vv.checked && !vv.checked.ok}
+        <pre class="max-h-40 shrink-0 overflow-auto rounded-lg border border-destructive/50 bg-destructive/10 p-2 text-xs whitespace-pre-wrap text-destructive">{vv.checked.line ? `Line ${vv.checked.line}: ` : ''}{vv.checked.error}</pre>
+      {:else if vv.checked?.ok}
+        {@const i = vv.checked.info}
         <div class="flex shrink-0 flex-wrap gap-x-4 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs">
           <span class="text-success"><CheckIcon class="mr-1 inline size-3.5 align-[-2px]" />Runs</span>
           <span><span class="text-muted-foreground">Frames</span> {i.frames}</span>
@@ -396,11 +398,11 @@
           {#if video.custom !== null}
             <p class="text-xs text-warning">
               A custom script body is in use, so crop, resize and filters don't apply.
-              <button class="underline underline-offset-2" onclick={() => (view = 'script')}>Edit it</button> ·
+              <button class="underline underline-offset-2" onclick={() => (vv.view = 'script')}>Edit it</button> ·
               <button class="underline underline-offset-2" onclick={useGenerated}>Back to generated</button>
             </p>
           {:else}
-            <Button variant="ghost" size="sm" onclick={() => (view = 'script')}>Edit the whole script…</Button>
+            <Button variant="ghost" size="sm" onclick={() => (vv.view = 'script')}>Edit the whole script…</Button>
           {/if}
         </section>
       </fieldset>
