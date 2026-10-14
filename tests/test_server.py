@@ -348,6 +348,10 @@ def test_folder_browser(tmp_path):
         assert listing["parent"] == str(tmp_path)
         assert client.get("/api/fs/list", params={"path": "C:\\Windows"}).status_code == 403
         assert client.get("/api/fs/roots").json() == [str(tmp_path)]
+        paths = [str(tmp_path / "src"), str(tmp_path / "src" / "Show.S01E01.mkv"), str(tmp_path / "nope.mkv"),
+                 "C:\\Windows", "relative.mkv"]
+        kinds = client.post("/api/fs/kinds", json={"paths": paths}).json()
+        assert [k["kind"] for k in kinds] == ["folder", "file", "missing", "outside", "missing"]
 
 
 # --- real VapourSynth preview --------------------------------------------------------

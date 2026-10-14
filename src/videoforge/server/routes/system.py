@@ -59,6 +59,23 @@ def list_dir(request: Request, path: str, extensions: str = "") -> dict[str, Any
     return {"path": str(folder), "parent": parent, "dirs": sorted(dirs, key=key), "files": sorted(files, key=key)}
 
 
+@router.post("/fs/kinds")
+def path_kinds(request: Request, paths: list[str] = Body(..., embed=True)) -> list[dict[str, str]]:  # noqa: B008
+    """What each dropped or pasted path is: file, folder, missing, or outside the browsable folders."""
+    allowed = request.app.state.settings.roots
+    out = []
+    for raw in paths:
+        p = Path(raw)
+        if not p.is_absolute():
+            kind = "missing"
+        elif allowed and not any(_under(p, r) for r in allowed):
+            kind = "outside"
+        else:
+            kind = "folder" if p.is_dir() else "file" if p.is_file() else "missing"
+        out.append({"path": str(p) if p.is_absolute() else raw, "kind": kind})
+    return out
+
+
 def _under(path: Path, root: Path) -> bool:
     # No resolve(): a mapped network drive would turn into its UNC path.
     p, r = (os.path.normcase(os.path.abspath(x)) for x in (path, root))

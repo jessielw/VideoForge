@@ -28,6 +28,11 @@ videoforge = "videoforge:main"
 [project.entry-points."videoforge.profiles"]
 manual = "videoforge.profiles.manual:ManualProfile"
 
+[project.optional-dependencies]
+desktop = [
+    "pywebview>=6.2.1",
+]
+
 [build-system]
 requires = ["uv_build>=0.12.24,<0.13.0"]
 build-backend = "uv_build"

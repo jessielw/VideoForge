@@ -188,6 +188,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
     if args.data_dir:
         settings.data_dir = args.data_dir
     url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"
+    if args.window:
+        from videoforge.desktop import run_window
+
+        console.print(f"VideoForge on [bold]{url}[/], in its own window (close it to stop)")
+        return run_window(create_app(settings), args.host, args.port, url, settings.data_dir)
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, (url,)).start()
     console.print(f"VideoForge on [bold]{url}[/] (Ctrl+C to stop)")
@@ -225,6 +230,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--host", default="127.0.0.1", help="interface to listen on (default: this machine only)")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--no-browser", action="store_true", help="don't open the browser")
+    p.add_argument("--window", action="store_true",
+                   help="open the app in its own window, where dropped files fill path fields (needs the desktop extra)")
     p.add_argument("--data-dir", type=Path, help="where the queue database lives (default: %%APPDATA%%/VideoForge)")
     p.set_defaults(func=cmd_serve)
 
