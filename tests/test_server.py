@@ -9,6 +9,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -265,6 +266,75 @@ def test_restart_requeues_an_interrupted_job(tmp_path):
     with make_client(tmp_path) as client:  # after a restart the steps come from the saved state
         (step,) = client.get(f"/api/jobs/{job_id}/steps").json()
         assert step["status"] == "done" and step["lines"] == ["[x264] [ 50.0%] 1/2 frames"]
+
+
+def test_shutdown_cancels_a_job_that_starts_as_it_begins(tmp_path):
+    """The worker takes a job, then shutdown() cancels before that job has its cancel token: the job must still
+    be cancelled at once, not run until shutdown gives up waiting."""
+    make_files(tmp_path)
+    with make_client(tmp_path, run=FakeRun(block=True)) as client:
+        (job_id,) = add(client, tmp_path)
+        wait_for(client, job_id, "ready", "warn")
+        q = client.app.state.queue
+        taken, go_on = threading.Event(), threading.Event()
+        take = q._take_next
+
+        def held_take_next():
+            e = take()
+            if e is not None:
+                taken.set()
+                go_on.wait(5)
+            return e
+
+        q._take_next = held_take_next
+        client.post("/api/queue/start", json={"ids": [job_id]})
+        assert taken.wait(5)
+        stopper = threading.Thread(target=q.shutdown, kwargs={"timeout": 5})
+        t0 = time.monotonic()
+        stopper.start()
+        time.sleep(0.2)  # shutdown() has cancelled: there was no token yet
+        go_on.set()
+        stopper.join()
+        assert time.monotonic() - t0 < 2
+        assert q.get(job_id).state.status is JobStatus.CANCELLED
+
+
+def test_a_job_that_wont_stop_is_requeued_after_shutdown(tmp_path):
+    """shutdown() stops waiting; the store closes; the job's later saves are dropped, so the store still says
+    running and the next start queues it again, as after a crash."""
+    make_files(tmp_path)
+    release = threading.Event()
+
+    class Stubborn(FakeRun):
+        def __call__(self, spec, plan, profile, app, *, state, log, cancel, progress, on_record, on_step):
+            run = Step("video", "Video (x264)", argvs=(("x264",),)).to_run()
+            state.run = [run]
+            run.status = StepStatus.RUNNING
+            on_step(run)
+            release.wait(5)  # ignores the cancel
+            run.status = StepStatus.CANCELLED
+            on_step(run)  # saves into the closed store
+            return JobResult(plan, JobStatus.CANCELLED, error="Cancelled")
+
+    errors = []
+    old_hook, threading.excepthook = threading.excepthook, lambda a: errors.append(a.exc_value)
+    try:
+        with make_client(tmp_path, run=Stubborn()) as client:
+            (job_id,) = add(client, tmp_path)
+            wait_for(client, job_id, "ready", "warn")
+            q = client.app.state.queue
+            client.post("/api/queue/start", json={"ids": [job_id]})
+            wait_for(client, job_id, "running")
+            q.shutdown(timeout=0.3)
+            client.app.state.store.close()
+            release.set()
+            q.wait(5)
+    finally:
+        threading.excepthook = old_hook
+    assert errors == []
+    with make_client(tmp_path) as client:
+        job = wait_for(client, job_id, "queued")
+        assert "Interrupted" in job["issue"]
 
 
 def test_missing_encoder_tools_block_until_set(tmp_path):

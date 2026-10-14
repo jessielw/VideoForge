@@ -8,6 +8,7 @@ finished steps, so a rerun only redoes what the edit touched.
 
 from __future__ import annotations
 
+import sqlite3
 import threading
 from collections import deque
 from collections.abc import Callable, Iterable
@@ -145,6 +146,7 @@ class JobQueue:
         self._active = False  # a worker owns the queue; cleared (under the lock) when it decides to stop
         self._cancel: CancelToken | None = None
         self._stop_after_current = False
+        self._closing = False  # shutdown() began: a job starting now is cancelled at once
 
     # --- state ---------------------------------------------------------------------
 
@@ -166,7 +168,13 @@ class JobQueue:
                 "queued": sum(e.queued for e in self.entries())}
 
     def _save(self, e: Entry) -> None:
-        self.store.save_job(e.spec, e.state, queued=e.queued, running=e.running)
+        try:
+            self.store.save_job(e.spec, e.state, queued=e.queued, running=e.running)
+        except sqlite3.ProgrammingError:
+            # The store closed after a shutdown that stopped waiting for this job: the store keeps it as
+            # running, so the next start queues it again, as after a crash.
+            if not self._closing:
+                raise
 
     def _changed(self, e: Entry) -> None:
         self.events.publish("job", id=e.id, status=e.status.value)
@@ -405,10 +413,14 @@ class JobQueue:
         if self._worker is not None:
             self._worker.join(timeout)
 
-    def shutdown(self) -> None:
-        self._stop_after_current = True
+    def shutdown(self, timeout: float = 10) -> None:
+        """Stop for good: the running job is cancelled and waited for (it ends cancelled). One that doesn't
+        stop in time is left as the store has it, running, so the next start queues it again."""
+        with self._lock:
+            self._closing = True
+            self._stop_after_current = True
         self.cancel_current()
-        self.wait(10)
+        self.wait(timeout)
         self._probes.shutdown(wait=False, cancel_futures=True)
 
     def _next(self) -> Entry | None:
@@ -440,6 +452,8 @@ class JobQueue:
         with self._lock:
             e.queued, e.running, e.progress = False, True, None
             self._cancel = CancelToken()
+            if self._closing:  # taken just before shutdown() cancelled (it saw no token yet)
+                self._cancel.cancel()
             self._save(e)
         self._changed(e)
         self._queue_changed()
