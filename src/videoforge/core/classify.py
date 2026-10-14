@@ -95,6 +95,8 @@ def parse_sub_format(fmt: str | None, codec_id: str | None = None) -> SubFormat:
         return SubFormat.ASS
     if "VOBSUB" in value or "S_VOBSUB" in value:
         return SubFormat.VOBSUB
+    if "TIMED TEXT" in value or "TX3G" in value:
+        return SubFormat.TX3G
     return SubFormat.OTHER
 
 

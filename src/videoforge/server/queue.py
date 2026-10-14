@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from videoforge.core.config import AppConfig
+from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import CancelToken
 from videoforge.core.job import (
     STEP_TAIL,
@@ -292,6 +293,7 @@ class JobQueue:
         qpf: bool | None = None,
         profile: str | None = None,
         inputs: JobInputs | None = None,
+        mux: MuxSettings | None = None,
     ) -> Entry:
         """Change a job's settings and replan. New inputs (added subtitle files, chapters) are read
         at once; a different encode means probing again."""
@@ -322,6 +324,8 @@ class JobQueue:
                 s.output_dir = output_dir
             if qpf is not None:
                 s.qpf = qpf
+            if mux is not None:
+                s.mux = mux
             e.state.status, e.state.error, e.state.issues = None, "", []
             self._replan(e)
             self._save(e)

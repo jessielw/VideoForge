@@ -1,5 +1,6 @@
-"""The single mkvmerge pass that builds a release from a plan.
+"""The single mux pass that builds a release from a plan: mkvmerge (MKV) or MP4Box (MP4).
 
+mkvmerge: 
 Inputs, in order: the encode (video only), the source (copied audio and
 subtitles), then one file per encoded audio track, per copied track of an added
 audio file or copy of a track (Overrides.copies: mkvmerge takes a track once per
@@ -12,17 +13,25 @@ here. A copied track of an added audio file gets its own delay (e.g. from
 "DELAY 42ms" in its name).
 gMKVExtract SRTs keep the source's container timestamps, so they get the same
 shift as the source tracks; other external SRTs are used as timed.
+
+MP4Box takes the same inputs and timing (`:delay=`), each track straight from its
+file (`#trackID=` = mkvmerge id + 1). MP4 has no track flags as such: the default
+track of each kind is the enabled one in its alternate group, a forced SRT gets
+the timed-text forced flags, and the other flags are left out (a WARN says so).
 """
 
 from __future__ import annotations
 
+import re
+import shlex
+from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
 from typing import Protocol
 
 from videoforge.core.config import AppConfig
 from videoforge.core.execute.audio import delay_in_encode
-from videoforge.core.models import AudioAction, Plan, PlannedAudio, PlannedSub
+from videoforge.core.models import AudioAction, AudioCodec, Issue, Plan, PlannedAudio, PlannedSub, Severity, SubFormat
 
 # Frame durations (ns) of common rates, so a raw stream gets an exact fraction
 # instead of a rounded nanosecond value.
@@ -81,15 +90,17 @@ def mux_command(
     output: Path,
     mkvmerge: str,
     raw_extensions: tuple[str, ...],
+    extra: list[str] | None = None,
 ) -> list[str]:
-    """mkvmerge argv for a plan. encoded_audio maps plan.audio positions to their encoded files."""
+    """mkvmerge argv for a plan. encoded_audio maps plan.audio positions to their encoded files;
+    extra (the user's arguments) goes before the first input."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
     video = plan.source.video
     start_ms = video.start_ms if video else 0
     external_chapters = plan.chapters_path is not None
 
-    argv: list[str] = [mkvmerge, "--output", str(output)]
+    argv: list[str] = [mkvmerge, "--output", str(output), *(extra or [])]
     order: list[str] = ["0:0"]
 
     # 0: the encode, video only.
@@ -162,20 +173,178 @@ def mux_command(
     return argv
 
 
+def _mp4_title(title: str) -> str:
+    """MP4Box splits its track options on ':' and has no escape for it."""
+    return re.sub(r"\s*:\s*", " - ", title).strip(" -")
+
+
+# Plan flags an MP4 can't carry (default is the enabled track; forced only on timed text).
+_MP4_DROPPED = ("hearing_impaired", "commentary", "original", "visual_impaired")
+_MP4_FORCED_TEXT = "C0000000"  # tx3g display flags: some + all samples forced
+
+
+def _mp4_options(t: PlannedAudio | PlannedSub, group: int, delay_ms: int) -> str:
+    opts = [f"lang={t.language}", f"group={group}"]
+    if t.title:
+        opts.append(f"name={_mp4_title(t.title)}")
+    if not t.default:
+        opts.append("disable")
+    if delay_ms:
+        opts.append(f"delay={delay_ms}")
+    if isinstance(t, PlannedSub) and t.forced and t.source.format is SubFormat.SRT:
+        opts.append(f"txtflags={_MP4_FORCED_TEXT}")
+    return ":" + ":".join(opts)
+
+
+def mp4box_command(
+    plan: Plan,
+    encoded_audio: dict[int, Path],
+    output: Path,
+    mp4box: str,
+    raw_extensions: tuple[str, ...],
+    extra: list[str] | None = None,
+) -> list[str]:
+    """MP4Box argv for a plan (the same inputs and timing as mux_command). chapters_path must
+    be OGM text; extra goes just before -new."""
+    if plan.encode_path is None or plan.source.path is None:
+        raise MuxError("Plan has no encode or no source file")
+    video = plan.source.video
+    start_ms = video.start_ms if video else 0
+
+    argv: list[str] = [mp4box, "-noprog"]
+    if plan.encode_path.suffix.lower() in raw_extensions:
+        if not (video and video.default_duration_ns):
+            raise MuxError("Raw encode needs the source frame rate, and the source has none")
+        rate = _known_rate(video.default_duration_ns) or f"1000000000/{video.default_duration_ns}"
+        argv += ["-add", f"{plan.encode_path}:fps={rate}"]
+    else:
+        argv += ["-add", f"{plan.encode_path}#video"]
+
+    for pos, a in enumerate(plan.audio):
+        if a.action is AudioAction.COPY:
+            path = a.source.external_path or plan.source.path
+            delay = a.source.delay_ms if a.source.is_external else -start_ms
+            argv += ["-add", f"{path}#trackID={a.source.id + 1}" + _mp4_options(a, 1, delay)]
+            continue
+        encoded = encoded_audio.get(pos)
+        if encoded is None:
+            raise MuxError(f"No encoded file for audio {pos + 1} ({a.title})")
+        delay = 0 if delay_in_encode(a.action) else a.source.delay_ms
+        argv += ["-add", str(encoded) + _mp4_options(a, 1, delay)]
+
+    for s in plan.subs:
+        if s.source.is_external:
+            delay = -start_ms if s.source.extracted_from is not None else 0
+            argv += ["-add", str(s.source.external_path) + _mp4_options(s, 2, delay)]
+        else:
+            argv += ["-add", f"{plan.source.path}#trackID={s.source.id + 1}" + _mp4_options(s, 2, -start_ms)]
+
+    if plan.chapters_path is not None:
+        argv += ["-chap", str(plan.chapters_path)]
+    argv += [*(extra or []), "-new", str(output)]
+    return argv
+
+
+def split_args(text: str) -> list[str]:
+    """The user's extra arguments, split like a command line (Windows paths keep their backslashes)."""
+    return shlex.split(text, posix=False)
+
+
+@dataclass(slots=True)
+class MuxSettings:
+    """A job's muxer: the container ("" = the profile's) and extra arguments for its tool."""
+
+    container: str = ""
+    extra: str = ""
+
+
 class Muxer(Protocol):
-    """Builds the final container from a plan; a profile picks one by its container."""
+    """Builds the final container from a plan."""
 
+    label: str
     extension: str
+    tool: str  # the Tools field it runs
+    carries_titles: bool  # titles and every flag can be read back by the output check
 
-    def command(self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig) -> list[str]: ...
+    def command(self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig,
+                extra: list[str] | None = None) -> list[str]: ...
+
+    def issues(self, plan: Plan) -> list[Issue]:
+        """What this container can't hold as planned: BLOCK (can't mux) or WARN (left out)."""
+        ...
+
+    def written_format(self, fmt: SubFormat) -> SubFormat:
+        """A subtitle format as the output holds it."""
+        ...
 
 
 class MkvMerge:
+    label = "MKV (mkvmerge)"
     extension = ".mkv"
+    tool = "mkvmerge"
+    carries_titles = True
 
-    def command(self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig) -> list[str]:
-        return mux_command(plan, encoded_audio, output, app.tools.mkvmerge, app.matching.encode_extensions)
+    def command(self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig,
+                extra: list[str] | None = None) -> list[str]:
+        return mux_command(plan, encoded_audio, output, app.tools.mkvmerge, app.matching.encode_extensions, extra)
+
+    def issues(self, plan: Plan) -> list[Issue]:
+        return []
+
+    def written_format(self, fmt: SubFormat) -> SubFormat:
+        return fmt
 
 
-# An MP4 muxer (another group's profile) registers here.
-MUXERS: dict[str, Muxer] = {"mkv": MkvMerge()}
+class Mp4Box:
+    label = "MP4 (MP4Box)"
+    extension = ".mp4"
+    tool = "mp4box"
+    carries_titles = False  # mkvmerge doesn't read MP4 handler names or kinds back
+
+    SUBS = (SubFormat.SRT, SubFormat.TX3G, SubFormat.VOBSUB)
+
+    def command(self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig,
+                extra: list[str] | None = None) -> list[str]:
+        return mp4box_command(plan, encoded_audio, output, app.tools.mp4box, app.matching.encode_extensions, extra)
+
+    def issues(self, plan: Plan) -> list[Issue]:
+        issues: list[Issue] = []
+        for i, a in enumerate(plan.audio, 1):
+            if a.out_codec in (AudioCodec.LPCM, AudioCodec.OTHER):
+                issues.append(Issue(Severity.BLOCK, "mux.mp4_audio",
+                                    f"Audio {i} ({a.out_codec.value}) can't go into MP4: encode it (e.g. FLAC) or use MKV"))
+        for i, s in enumerate(plan.subs, 1):
+            if s.source.format not in self.SUBS:
+                issues.append(Issue(Severity.BLOCK, "mux.mp4_subs",
+                                    f"Subtitle {i} ({s.source.format.value}) can't go into MP4 (SRT and VobSub can): "
+                                    "leave it out or use MKV"))
+        kinds: tuple[tuple[str, list[PlannedAudio] | list[PlannedSub]], ...] = (("Audio", plan.audio), ("Subtitle", plan.subs))
+        for label, tracks in kinds:
+            for i, t in enumerate(tracks, 1):
+                dropped = [k.replace("_", " ") for k in _MP4_DROPPED if getattr(t, k)]
+                if t.forced and not (isinstance(t, PlannedSub) and t.source.format is SubFormat.SRT):
+                    dropped.insert(0, "forced")
+                if dropped:
+                    issues.append(Issue(Severity.WARN, "mux.mp4_flags",
+                                        f"{label} {i}: MP4 has no {', '.join(dropped)} flag; left out"))
+                if t.title and _mp4_title(t.title) != t.title:
+                    issues.append(Issue(Severity.WARN, "mux.mp4_title",
+                                        f"{label} {i}: MP4Box can't write ':' in a title; written as "
+                                        f"'{_mp4_title(t.title)}'"))
+        return issues
+
+    def written_format(self, fmt: SubFormat) -> SubFormat:
+        return SubFormat.TX3G if fmt is SubFormat.SRT else fmt
+
+
+MUXERS: dict[str, Muxer] = {"mkv": MkvMerge(), "mp4": Mp4Box()}
+
+
+def muxer_for(output: Path) -> Muxer:
+    """The muxer that writes files like this one (by extension); mkvmerge's for anything else."""
+    return next((m for m in MUXERS.values() if m.extension == output.suffix.lower()), MUXERS["mkv"])
+
+
+def mux_issues(plan: Plan, container: str) -> list[Issue]:
+    """What the container can't hold as planned."""
+    return MUXERS[container].issues(plan)

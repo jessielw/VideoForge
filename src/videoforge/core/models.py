@@ -46,6 +46,7 @@ class SubFormat(StrEnum):
     PGS = "pgs"
     ASS = "ass"
     VOBSUB = "vobsub"
+    TX3G = "tx3g"  # MP4 timed text
     OTHER = "other"
 
 

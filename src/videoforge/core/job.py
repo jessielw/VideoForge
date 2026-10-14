@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from videoforge.core.config import AppConfig, Tools
+from videoforge.core.execute.mux import MuxSettings, mux_issues
 from videoforge.core.jobs import ProbedInputs, plan_job, probe_inputs
 from videoforge.core.models import Issue, JobInputs, Overrides, Plan, SourceInfo, VideoInfo
 from videoforge.core.tools import tool_issues
@@ -62,6 +63,7 @@ class JobSpec:
     encoder: EncoderSettings = field(default_factory=EncoderSettings)
     qpf: bool = True  # chapters from AutoQPF (keyframes on chapter starts) unless chapters are given
     output_dir: Path | None = None
+    mux: MuxSettings = field(default_factory=MuxSettings)
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
     @property
@@ -83,6 +85,10 @@ class JobSpec:
     @property
     def makes_chapters(self) -> bool:
         return self.encodes_video and self.qpf and self.inputs.chapters is None
+
+    def container(self, profile: Profile) -> str:
+        """The job's container: its own pick when the profile offers it, else the profile's."""
+        return self.mux.container if self.mux.container in profile.containers else profile.container
 
 
 @dataclass(slots=True)
@@ -174,5 +180,6 @@ def plan_spec(spec: JobSpec, probed: ProbedInputs, profile: Profile, tools: Tool
     plan = plan_job(profile, replan(spec, probed), spec.overrides.original_language, spec.overrides)
     plan.inputs = spec.inputs  # what the user gave; generated files aren't inputs
     if tools is not None:
-        plan.issues += tool_issues(plan, tools)
+        plan.issues += tool_issues(plan, tools, spec.container(profile))
+    plan.issues += mux_issues(plan, spec.container(profile))
     return plan

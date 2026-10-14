@@ -328,6 +328,52 @@ def test_real_job_end_to_end(tmp_path):
     assert qpf[:2] == ["0", "K"] and "36" in qpf  # chapter 2 at 1.5 s = frame 36
 
 
+@needs_tools
+@pytest.mark.skipif(shutil.which("MP4Box") is None, reason="needs MP4Box (GPAC) on PATH")
+def test_real_mp4_job_end_to_end(tmp_path):
+    """The same kind of source muxed to MP4: the source's chapters converted, an SRT as timed text."""
+    from videoforge.core.config import load_app_config
+    from videoforge.core.execute.mux import MuxSettings
+    from videoforge.core.job import plan_spec, probe_spec
+    from videoforge.core.models import SubFormat
+    from videoforge.core.probe import probe
+    from videoforge.core.video import vs as vsx
+    from videoforge.profiles import get_profile
+
+    app = load_app_config()
+    vsx.configure(app.tools.vs_plugins)
+    vsx.ensure_vspipe(app.tools.vspipe)
+    src = tmp_path / "Clip.mkv"
+    meta = tmp_path / "chapters.txt"
+    meta.write_text(";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1500\ntitle=Start\n"
+                    "[CHAPTER]\nTIMEBASE=1/1000\nSTART=1500\nEND=3000\ntitle=Middle\n", encoding="utf-8")
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=3:size=320x180:rate=24",
+         "-f", "lavfi", "-i", "sine=duration=3", "-i", str(meta), "-map", "0:v", "-map", "1:a", "-map_chapters", "2",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "2",
+         "-metadata:s:a:0", "language=eng", "-y", str(src)],
+        check=True,
+    )  # fmt: skip
+    srt = tmp_path / "Clip.en.srt"
+    srt.write_text("1\n00:00:00,500 --> 00:00:02,000\nHello\n", encoding="utf-8")
+
+    job = JobSpec(inputs=JobInputs(src, subtitles=[srt]), profile="manual", output_dir=tmp_path / "out", qpf=False,
+                  encoder=EncoderSettings(preset="ultrafast", crf=30), mux=MuxSettings(container="mp4"))
+    profile = get_profile("manual")
+    plan = plan_spec(job, probe_spec(job, app), profile, app.tools)
+    assert not plan.blocked, plan.issues
+
+    lines: list[str] = []
+    result = run_job(job, plan, profile, app, log=lines.append)
+    assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
+    assert result.output == tmp_path / "out" / "Clip.mp4"
+    out = probe(result.output, app.tools.mkvmerge)
+    assert [a.language for a in out.audio] == ["en"] and [s.format for s in out.subs] == [SubFormat.TX3G]
+    assert (job.work_dir / "chapters_mp4.txt").read_text().splitlines()[2:4] == [
+        "CHAPTER02=00:00:01.500", "CHAPTER02NAME=Middle"]
+    assert out.has_chapters
+
+
 # --- process.run on real subprocesses ---------------------------------------------
 
 

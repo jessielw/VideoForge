@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Request
 
+from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import ToolError
 from videoforge.core.models import JobInputs, Overrides
 from videoforge.core.pairing import AUDIO_EXTENSIONS, SUB_FORMATS, match_files, slot_files
@@ -99,6 +100,8 @@ def _changes(body: dict[str, Any]) -> dict[str, Any]:
         changes["output_dir"] = Path(body["output_dir"])
     if "qpf" in body:
         changes["qpf"] = bool(body["qpf"])
+    if "mux" in body:
+        changes["mux"] = from_json(MuxSettings, body["mux"])
     if body.get("profile"):
         changes["profile"] = body["profile"]
     return changes
@@ -137,7 +140,7 @@ def _inputs(current: JobInputs, body: dict[str, Any]) -> JobInputs:
 
 @router.patch("/jobs/{job_id}")
 def update_job(request: Request, job_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    """Change a job: any of video, encoder, overrides, output_dir, qpf, profile, and inputs
+    """Change a job: any of video, encoder, overrides, output_dir, qpf, profile, mux, and inputs
     ({subtitles?, audio?: [paths or folders], chapters?: path | null, encode?: path | null})."""
     q = queue_of(request)
     e = _entry(q, job_id)
@@ -155,7 +158,7 @@ def update_job(request: Request, job_id: str, body: dict[str, Any] = Body(...)) 
 
 @router.post("/jobs/apply")
 def apply_to_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    """The same settings on several jobs (a batch): {ids, video?, encoder?, output_dir?, qpf?}."""
+    """The same settings on several jobs (a batch): {ids, video?, encoder?, output_dir?, qpf?, mux?}."""
     q = queue_of(request)
     body = {k: v for k, v in body.items() if k != "overrides"}  # track overrides are per job
     updated, skipped = [], []
@@ -207,7 +210,7 @@ def job_commands(request: Request, job_id: str) -> list[dict[str, Any]]:
     profile = q.profile(e)
     out_dir = e.spec.output_dir or Path("<output folder>")
     try:
-        built = build_steps(e.spec, e.plan, profile, q.app, output_path(e.plan, out_dir, profile))
+        built = build_steps(e.spec, e.plan, profile, q.app, output_path(e.plan, out_dir, profile, e.spec.container(profile)))
     except (ToolError, ValueError) as ex:
         raise HTTPException(422, str(ex)) from None
     return [{"id": s.id, "label": s.label, "command": s.command_line or "(runs in VideoForge)"} for s in built.steps]

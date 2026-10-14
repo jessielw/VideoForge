@@ -22,6 +22,8 @@ class Profile(ABC):
     id: ClassVar[str]
     name: ClassVar[str]
     container: ClassVar[str] = "mkv"  # a key of core.execute.mux.MUXERS
+    # Containers a job may pick instead (MuxSettings.container); () = only `container`.
+    containers: ClassVar[tuple[str, ...]] = ()
     external_subtitles: ClassVar[bool] = True  # False: added subtitle files are ignored
     external_audio: ClassVar[bool] = False  # True: added audio files' tracks join the source's
     # Per-track on/off properties the user can override (TrackOverride.flags keys); the GUI builds its controls from these.

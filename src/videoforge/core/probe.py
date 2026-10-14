@@ -51,6 +51,11 @@ def _ms(ns: int | None) -> int:
     return round((ns or 0) / 1_000_000)
 
 
+def _default(props: dict[str, Any]) -> bool:
+    """Matroska's default flag; an MP4 track has none, its enabled flag plays that part."""
+    return bool(props.get("default_track", props.get("enabled_track")))
+
+
 def _int(value: Any) -> int | None:
     """A MediaInfo number (an int, a float, or text like "48000 / 44100": the first one)."""
     if isinstance(value, (int, float)):
@@ -111,7 +116,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                     layout=parse_layout(getattr(mi, "channel_layout", None), channels),
                     language=language,
                     title=title,
-                    default=bool(props.get("default_track")),
+                    default=_default(props),
                     forced=bool(props.get("forced_track")),
                     hearing_impaired=bool(props.get("flag_hearing_impaired")),
                     commentary=bool(props.get("flag_commentary")),
@@ -137,7 +142,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                     format=parse_sub_format(track.get("codec"), props.get("codec_id")),
                     language=resolve_sub_language(language, title),
                     title=title,
-                    default=bool(props.get("default_track")),
+                    default=_default(props),
                     forced=bool(props.get("forced_track")),
                     hearing_impaired=bool(props.get("flag_hearing_impaired")),
                     commentary=bool(props.get("flag_commentary")),

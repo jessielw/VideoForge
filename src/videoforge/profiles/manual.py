@@ -12,9 +12,11 @@ it was muxed from.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 
 from videoforge.core import lang
 from videoforge.core.execute.audio import ENCODES, AudioEncode, AudioSettings
+from videoforge.core.execute.mux import muxer_for
 from videoforge.core.jobs import ProbedInputs
 from videoforge.core.models import (
     AudioAction,
@@ -135,6 +137,7 @@ class ManualProfile(Profile):
     id = "manual"
     name = "Manual"
     container = "mkv"
+    containers = ("mkv", "mp4")
     external_subtitles = True
     external_audio = True
     track_editor = True
@@ -212,8 +215,11 @@ def _describe(language: str, title: str, flags: dict[str, bool]) -> str:
 
 
 def output_matches_plan(plan: Plan, output: SourceInfo) -> list[Issue]:
-    """BLOCK where the muxed file's tracks (count, order, language, title, flags, format) differ from the plan."""
+    """BLOCK where the muxed file's tracks (count, order, language, title, flags, format) differ from the plan.
+    An MP4 is checked for what it holds and can be read back: language, default (enabled) and format."""
     issues: list[Issue] = []
+    muxer = muxer_for(output.path or Path(output.name))
+    keys = FLAG_KEYS if muxer.carries_titles else ("default",)
 
     def compare(code: str, label: str, wanted: list, found: list, same_format) -> None:
         if len(found) != len(wanted):
@@ -221,8 +227,9 @@ def output_matches_plan(plan: Plan, output: SourceInfo) -> list[Issue]:
                 Issue(Severity.BLOCK, f"plan.{code}_count", f"Expected {len(wanted)} {label} track(s), found {len(found)}")
             )
         for i, (want, got) in enumerate(zip(wanted, found), 1):
-            w = (lang.normalize(want.language), want.title, {k: getattr(want, k) for k in FLAG_KEYS})
-            g = (lang.normalize(got.language), got.title, {k: getattr(got, k) for k in FLAG_KEYS})
+            titles = muxer.carries_titles
+            w = (lang.normalize(want.language), want.title if titles else "", {k: getattr(want, k) for k in keys})
+            g = (lang.normalize(got.language), got.title if titles else "", {k: getattr(got, k) for k in keys})
             if w != g:
                 issues.append(
                     Issue(Severity.BLOCK, f"plan.{code}", f"{label} {i}: expected {_describe(*w)}, found {_describe(*g)}")
@@ -234,5 +241,6 @@ def output_matches_plan(plan: Plan, output: SourceInfo) -> list[Issue]:
         "audio", "Audio", plan.audio, output.audio,
         lambda want, got: (got.codec, got.layout) == (want.out_codec, want.out_layout),
     )
-    compare("subs", "Subtitle", plan.subs, output.subs, lambda want, got: got.format is want.source.format)
+    compare("subs", "Subtitle", plan.subs, output.subs,
+            lambda want, got: got.format is muxer.written_format(want.source.format))
     return issues

@@ -20,6 +20,7 @@ from pathlib import Path
 
 from videoforge.core.config import Tools
 from videoforge.core.execute.audio import ENCODES
+from videoforge.core.execute.mux import MUXERS
 from videoforge.core.models import AudioAction, Issue, Plan, Severity
 
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -43,6 +44,7 @@ TOOLS: tuple[ToolInfo, ...] = (
     ToolInfo("x265", "x265", "HEVC video encoder"),
     ToolInfo("mkvmerge", "mkvmerge", "Reads sources and muxes the output (MKVToolNix)"),
     ToolInfo("mkvpropedit", "mkvpropedit", "Edits track flags in place (Fix release)"),
+    ToolInfo("mp4box", "MP4Box", "Muxes MP4 output (GPAC)", (("-version",),)),
     ToolInfo("ffmpeg", "ffmpeg", "Decodes audio for the other encoders; its own FLAC, Opus, AAC, AC-3, E-AC-3",
              (("-version",),)),
     ToolInfo("qaac", "qaac", "AAC encoder (needs Apple's CoreAudioToolbox)", (("--check",),)),
@@ -117,10 +119,14 @@ def missing_for_encodes(tools: Tools) -> dict[AudioAction, list[str]]:
     return out
 
 
-def tool_issues(plan: Plan, tools: Tools) -> list[Issue]:
-    """A BLOCK for each kind of audio encode the plan needs whose tools are missing."""
+def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]:
+    """A BLOCK for each kind of audio encode the plan needs whose tools are missing, and for
+    the container's muxer."""
     missing = missing_for_encodes(tools)
     issues = []
+    muxer = MUXERS[container]
+    if not locate(getattr(tools, muxer.tool)):
+        issues.append(Issue(Severity.BLOCK, "tools.missing", f"{muxer.label} needs {_LABEL[muxer.tool]}: set it in Settings"))
     for action in dict.fromkeys(a.action for a in plan.audio):
         if missing.get(action):
             issues.append(Issue(Severity.BLOCK, "tools.missing",

@@ -16,6 +16,8 @@ opusenc = "tools/opus-tools/opusenc.exe"
 ffmpeg = "ffmpeg"
 x264 = "tools/x264/x264.exe"
 x265 = "tools/x265/x265.exe"
+# MP4 output (GPAC); tools/GPAC/mp4box.exe or on PATH.
+mp4box = "MP4Box"
 # VapourSynth plugins (bestsource, lsmas, ffms2, filters). vspipe comes with the
 # vapoursynth Python package; set `vspipe` here only to use another one.
 vs_plugins = "tools/vs-plugins"

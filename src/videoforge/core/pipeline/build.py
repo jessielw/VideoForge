@@ -10,13 +10,14 @@ an existing encode has no script/index/chapters/video steps.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from videoforge.core.config import AppConfig
+from videoforge.core.execute import chapters as ogm
 from videoforge.core.execute.audio import audio_command
-from videoforge.core.execute.mux import MUXERS, frame_rate
+from videoforge.core.execute.mux import MUXERS, frame_rate, split_args
 from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
 from videoforge.core.models import Plan
@@ -37,8 +38,30 @@ class JobSteps:
     encoded_audio: dict[int, Path] = field(default_factory=dict)  # plan.audio position -> file
 
 
-def output_path(plan: Plan, out_dir: Path, profile: Profile) -> Path:
-    return out_dir / (profile.output_stem(plan) + MUXERS[profile.container].extension)
+def output_path(plan: Plan, out_dir: Path, profile: Profile, container: str | None = None) -> Path:
+    return out_dir / (profile.output_stem(plan) + MUXERS[container or profile.container].extension)
+
+
+def mp4_chapters_step(plan: Plan, work: Path) -> Step | None:
+    """MP4Box takes OGM text only: a chapter XML, or the source's own chapters (mkvmerge carries
+    those by itself), become chapters_mp4.txt in the work folder. None when there's nothing to convert."""
+    given = plan.chapters_path
+    if given is not None and given.suffix.lower() != ".xml":
+        return None
+    if given is None and not plan.source.has_chapters:
+        return None
+    src = given or plan.source.path
+    assert src is not None
+    out = work / "chapters_mp4.txt"
+
+    def convert(log: LogFn) -> None:
+        found = ogm.from_xml(src) if given is not None else ogm.from_source(src)
+        if not found:
+            raise ToolError(f"No chapters could be read from {src.name}")
+        out.write_text(ogm.ogm_text(found), encoding="utf-8")
+        log(f"{len(found)} chapters written for MP4Box")
+
+    return Step("chapters.mp4", "Chapters for MP4", call=convert, outputs=(out,), inputs=(src,), weight=0.05)
 
 
 def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
@@ -111,8 +134,12 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
         steps.append(Step(f"audio.{pos + 1}", f"Encode audio {pos + 1}: {a.title}", argvs=cmd.argvs,
                           outputs=(cmd.output,), inputs=(src,), weight=4))
 
+    container = spec.container(profile)
+    if container == "mp4" and (chapters := mp4_chapters_step(plan, work)) is not None:
+        steps.append(chapters)
+        plan = replace(plan, chapters_path=chapters.outputs[0])
     partial = output.with_name(output.name + ".partial")
-    mux = MUXERS[profile.container].command(plan, encoded, partial, app)
+    mux = MUXERS[container].command(plan, encoded, partial, app, split_args(spec.mux.extra))
     mux_inputs = [p for p in (plan.encode_path, plan.chapters_path, *encoded.values()) if p is not None]
     mux_inputs += [s.source.external_path for s in plan.subs if s.source.external_path is not None]
     mux_inputs += list(dict.fromkeys(a.source.external_path for a in plan.audio if a.source.external_path is not None))
