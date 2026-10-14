@@ -96,6 +96,16 @@
   #app {
     height: 100%;
   }
+  /* A select's open list takes the select's own (see-through) background, which reads light grey
+     with light text in dark mode: give the options the popover colours. */
+  select option,
+  select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+  select option:disabled {
+    color: var(--muted-foreground);
+  }
   body {
     @apply bg-background text-foreground;
     margin: 0;
