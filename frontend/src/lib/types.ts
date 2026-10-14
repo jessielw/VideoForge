@@ -338,8 +338,9 @@ export interface Presets {
   video: Preset<VideoPresetData>[]
   encoder: Preset<EncoderSettings>[]
   template: Preset<Template>[]
+  template_defaults: Record<string, string> // profile id -> its default template's name
 }
-export type PresetKind = keyof Presets
+export type PresetKind = 'video' | 'encoder' | 'template'
 
 export interface QueueState {
   running: boolean

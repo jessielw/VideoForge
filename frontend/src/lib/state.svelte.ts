@@ -31,7 +31,7 @@ class AppState {
   runStarts = $state<Record<string, number>>({}) // logSeq when each job's latest run began
   logSeq = 0
   encodes = $state<AudioEncodeInfo[]>([])
-  presets = $state<Presets>({ video: [], encoder: [], template: [] })
+  presets = $state<Presets>({ video: [], encoder: [], template: [], template_defaults: {} })
 
   #socket: WebSocket | null = null
   #refreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -59,6 +59,12 @@ class AppState {
     const p = this.profiles.find(x => x.id === profileId)
     const own = p ? [{ name: `${p.name} defaults`, data: p.defaults[kind] as unknown as PresetData<K>, builtin: true }] : []
     return [...own, ...(this.presets[kind] as Preset<PresetData<K>>[]).map(x => ({ ...x, builtin: false }))]
+  }
+
+  // The name of the template New jobs starts on: the user's starred one, else the profile's own.
+  defaultTemplate(profileId: string): string {
+    const p = this.profiles.find(x => x.id === profileId)
+    return this.presets.template_defaults[profileId] ?? (p ? `${p.name} defaults` : '')
   }
 
   get defaultProfile(): Profile | undefined {

@@ -1,7 +1,7 @@
-// Hash routes: #/new, #/queue, #/queue/<job id>, #/log, #/settings.
-export type Page = 'new' | 'queue' | 'log' | 'settings'
+// Hash routes: #/new, #/queue, #/queue/<job id>, #/templates, #/log, #/settings.
+export type Page = 'new' | 'queue' | 'templates' | 'log' | 'settings'
 
-const PAGES: Page[] = ['new', 'queue', 'log', 'settings']
+const PAGES: Page[] = ['new', 'queue', 'templates', 'log', 'settings']
 
 class Router {
   page = $state<Page>('new')

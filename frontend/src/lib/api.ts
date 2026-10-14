@@ -84,6 +84,10 @@ export const api = {
   savePreset: (kind: PresetKind, name: string, data: unknown) =>
     request<Presets>('PUT', `/api/presets/${kind}/${encodeURIComponent(name)}`, data),
   deletePreset: (kind: PresetKind, name: string) => request<Presets>('DELETE', `/api/presets/${kind}/${encodeURIComponent(name)}`),
+  renamePreset: (kind: PresetKind, name: string, to: string) =>
+    post<Presets>(`/api/presets/${kind}/${encodeURIComponent(name)}/rename`, { to }),
+  setTemplateDefault: (profile: string, name: string | null) =>
+    request<Presets>('PUT', `/api/presets/template-default/${encodeURIComponent(profile)}`, { name }),
   config: () => get<ConfigState>('/api/config'),
   saveConfig: (changes: { tools?: Record<string, string | null>; roots?: string[] | null; profile?: string | null }) =>
     request<ConfigState>('PUT', '/api/config', changes),

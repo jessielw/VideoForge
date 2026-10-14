@@ -24,38 +24,22 @@
   let matching = $state(false)
   let error = $state('')
   let adding = $state(false)
-  // The template (by name; the profile's defaults come first) and the container it sets, which can
-  // be changed here. The last template used per profile is picked again.
+  // The template (by name; the profile's starred one first) and the container it sets, which can
+  // be changed here.
   let templateName = $state('')
   let container = $state('')
   const templateChoices = $derived(app.presetChoices('template', profile))
   const template = $derived(templateChoices.find(c => c.name === templateName) ?? templateChoices[0])
   const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
-  const LAST_TEMPLATE = 'videoforge.newjobs.template.'
 
   $effect(() => {
-    // a profile switch (or the presets loading) picks that profile's last template
-    if (!profile || !templateChoices.length) return
-    let last: string | null = null
-    try {
-      last = localStorage.getItem(LAST_TEMPLATE + profile)
-    } catch {
-      /* no storage: the profile's defaults */
-    }
-    templateName = templateChoices.some(c => c.name === last) ? last! : templateChoices[0].name
+    // a profile switch (or the presets loading) starts on that profile's default template
+    templateName = app.defaultTemplate(profile)
   })
   $effect(() => {
     const own = template?.data.mux.container
     container = containers.some(c => c.id === own) ? own! : (containers[0]?.id ?? '')
   })
-  function pickTemplate(name: string) {
-    templateName = name
-    try {
-      localStorage.setItem(LAST_TEMPLATE + profile, name)
-    } catch {
-      /* remembered for this page only */
-    }
-  }
 
   const takesSubs = $derived(app.profiles.find(p => p.id === profile)?.external_subtitles ?? true)
 
@@ -148,9 +132,12 @@
       </div>
       <div class="text-sm text-muted-foreground">Template</div>
       <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-        <NativeSelect aria-label="Template" value={template?.name ?? ''} onchange={e => pickTemplate(e.currentTarget.value)}>
-          {#each templateChoices as c (`${c.builtin}:${c.name}`)}<option value={c.name}>{c.name}</option>{/each}
+        <NativeSelect aria-label="Template" value={template?.name ?? ''} onchange={e => (templateName = e.currentTarget.value)}>
+          {#each templateChoices as c (`${c.builtin}:${c.name}`)}
+            <option value={c.name}>{c.name}{c.name === app.defaultTemplate(profile) ? ' (default)' : ''}</option>
+          {/each}
         </NativeSelect>
+        <button class="underline underline-offset-2" onclick={() => router.go('templates')}>Edit templates…</button>
         {#if containers.length > 1}
           <label class="flex items-center gap-2">
             Container

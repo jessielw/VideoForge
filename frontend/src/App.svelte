@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { ModeWatcher } from 'mode-watcher'
+  import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
   import ListVideoIcon from '@lucide/svelte/icons/list-video'
   import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close'
   import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open'
@@ -19,10 +20,12 @@
   import Queue from './pages/Queue.svelte'
   import Log from './pages/Log.svelte'
   import Settings from './pages/Settings.svelte'
+  import Templates from './pages/Templates.svelte'
 
   const NAV: { page: Page; label: string; icon: typeof PlusIcon }[] = [
     { page: 'new', label: 'New jobs', icon: PlusIcon },
     { page: 'queue', label: 'Queue', icon: ListVideoIcon },
+    { page: 'templates', label: 'Templates', icon: LayoutTemplateIcon },
     { page: 'log', label: 'Log', icon: TerminalIcon },
     { page: 'settings', label: 'Settings', icon: SettingsIcon },
   ]
@@ -127,6 +130,8 @@
       <NewJobs />
     {:else if router.page === 'queue'}
       <Queue />
+    {:else if router.page === 'templates'}
+      <Templates />
     {:else if router.page === 'settings'}
       <Settings />
     {:else}

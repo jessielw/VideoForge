@@ -3,6 +3,7 @@
   // the crop). The profile's defaults are built in; click one to apply it; save this job's settings
   // as one; delete your own. The button names the template the job's settings match, if any.
   import { api } from '../lib/api'
+  import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
   import type { CropMode, JobSpec, Template } from '../lib/types'
   import CheckIcon from '@lucide/svelte/icons/check'
@@ -136,7 +137,10 @@
         <option value="auto">Crop: detect it for each job</option>
       </NativeSelect>
     </form>
-    <p class="text-xs text-muted-foreground">Holds video, encoder, container and AutoQPF; audio and subtitles stay per job.</p>
+    <p class="text-xs text-muted-foreground">
+      Holds video, encoder, container and AutoQPF; audio and subtitles stay per job.
+      <button class="underline underline-offset-2" onclick={() => router.go('templates')}>Edit templates…</button>
+    </p>
     {#if error}<p class="text-xs text-destructive">{error}</p>{/if}
   </Popover.Content>
 </Popover.Root>
