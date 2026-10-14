@@ -135,12 +135,20 @@ async def events(ws: WebSocket) -> None:
     hub: EventHub = ws.app.state.events
     await ws.accept()
     q = hub.subscribe()
-    try:
+
+    async def send() -> None:
         await ws.send_json({"type": "hello", **ws.app.state.queue.queue_state()})
         while True:
-            event = await q.get()
-            await ws.send_json(event)
+            await ws.send_json(await q.get())
+
+    # Also read, or a closed connection (the page gone, or the server shutting down) would only be noticed
+    # at the next event, and the server's shutdown would wait for this handler until its timeout.
+    sender = asyncio.create_task(send())
+    try:
+        while (await ws.receive())["type"] != "websocket.disconnect":
+            pass
     except (WebSocketDisconnect, asyncio.CancelledError, RuntimeError):
         pass
     finally:
+        sender.cancel()
         hub.unsubscribe(q)

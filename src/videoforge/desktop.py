@@ -39,6 +39,34 @@ def app_icon(size: int = 256) -> Image.Image:
     return img
 
 
+def _ask_in_front(window: Any, title: str, message: str) -> bool:
+    """An OK/Cancel question owned by the app's window and brought to the front. pywebview's
+    create_confirmation_dialog shows an unowned box from the calling thread (here the tray's), which
+    opens behind the window."""
+    if sys.platform != "win32":
+        return bool(window.create_confirmation_dialog(title, message))
+    import ctypes
+    import ctypes.wintypes as wt
+    import os
+
+    user32 = ctypes.windll.user32
+    found: list[int] = []
+
+    @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+    def visit(hwnd: int, _: int) -> bool:
+        pid, text = wt.DWORD(), ctypes.create_unicode_buffer(64)
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        user32.GetWindowTextW(hwnd, text, 64)
+        if pid.value == os.getpid() and text.value == window.title and user32.IsWindowVisible(hwnd):
+            found.append(hwnd)
+        return True
+
+    user32.EnumWindows(visit, 0)
+    mb_okcancel, mb_iconwarning, mb_setforeground, idok = 0x1, 0x30, 0x10000, 1
+    return user32.MessageBoxW(found[0] if found else None, message, title,
+                              mb_okcancel | mb_iconwarning | mb_setforeground) == idok
+
+
 def _on_console_stop(callback: Any) -> Any:
     """Calls `callback` on Ctrl+C / Ctrl+Break / console close (Windows), before Python's own handling runs;
     returns the handler, which must be kept alive."""
@@ -101,8 +129,8 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
     def quit_app() -> None:
         if app.state.queue.queue_state()["running"]:
             show()
-            if not window.create_confirmation_dialog(
-                "Quit VideoForge", "A job is running. Stop it and quit?\n\nStarted again, it skips the steps it finished."
+            if not _ask_in_front(
+                window, "Quit VideoForge","A job is running. Stop it and quit?\n\nStarted again, it skips the steps it finished."
             ):
                 return
         quitting.set()
