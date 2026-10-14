@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from videoforge.core.config import AppConfig, Tools
 from videoforge.core.execute.mux import MuxSettings, mux_issues
 from videoforge.core.jobs import ProbedInputs, plan_job, probe_inputs
-from videoforge.core.models import Issue, JobInputs, Overrides, Plan, SourceInfo, VideoInfo
+from videoforge.core.models import Issue, JobInputs, Overrides, Plan, SourceInfo, TemplateAudio, VideoInfo
 from videoforge.core.tools import tool_issues
 from videoforge.core.video.encoders import output_name
 from videoforge.core.video.qpf import qpf_paths
@@ -66,6 +66,8 @@ class JobSpec:
     mux: MuxSettings = field(default_factory=MuxSettings)
     # Detect the crop once the source can be read, then clear (a template's auto crop).
     autocrop: bool = False
+    # A template's audio, waiting for the source's tracks: then it becomes the job's audio overrides.
+    audio_template: TemplateAudio | None = None
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
     @property

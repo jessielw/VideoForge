@@ -40,7 +40,7 @@ from videoforge.core.pipeline.run import run_job
 from videoforge.core.pipeline.steps import StepProgress
 from videoforge.core.plan_io import to_json
 from videoforge.core.profile import Profile
-from videoforge.core.template import Template
+from videoforge.core.template import Template, apply_audio
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.server.events import EventHub
 from videoforge.server.store import Store
@@ -280,11 +280,22 @@ class JobQueue:
         else:
             with self._lock:
                 e.probing, e.probed = False, probed
+                if self._apply_audio(e):
+                    self._save(e)
                 self._replan(e)
                 crop = self._claim_crop(e)
         self._changed(e)
         if crop:
             self._probes.submit(self._detect_crop, e)
+
+    def _apply_audio(self, e: Entry) -> bool:
+        """Under the lock: a template's pending audio becomes the job's overrides once its tracks are known."""
+        s = e.spec
+        if s.audio_template is None or e.probed is None:
+            return False
+        s.overrides = apply_audio(s.overrides, s.audio_template, e.probed.source.audio)
+        s.audio_template = None
+        return True
 
     def _claim_crop(self, e: Entry) -> bool:
         """Under the lock: mark a pending auto crop as started, once the job is probed. The caller then
@@ -390,6 +401,8 @@ class JobQueue:
             if container is not None:
                 s.mux = replace(s.mux, container=container)
             e.state.status, e.state.error, e.state.issues = None, "", []
+            if not reprobe:
+                self._apply_audio(e)
             self._replan(e)
             self._save(e)
             crop = not reprobe and self._claim_crop(e)

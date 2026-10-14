@@ -276,6 +276,30 @@ class Overrides:
     copies: list[str] = field(default_factory=list)
 
 
+class OtherAudio(StrEnum):
+    """What a template does with the audio tracks past its slots."""
+
+    KEEP = "keep"  # as the profile decides
+    EXCLUDE = "exclude"  # left out
+
+
+@dataclass(slots=True)
+class AudioSlot:
+    """A template's settings for one source audio track (by position), and more outputs made from it."""
+
+    track: TrackOverride = field(default_factory=TrackOverride)
+    extra: list[TrackOverride] = field(default_factory=list)  # like Overrides.copies, in order
+
+
+@dataclass(slots=True)
+class TemplateAudio:
+    """A template's audio: slot n is for the source's nth audio track. Slots past the source's
+    tracks are ignored; added audio files aren't counted (they keep their own settings)."""
+
+    slots: list[AudioSlot] = field(default_factory=list)
+    others: OtherAudio = OtherAudio.KEEP
+
+
 def track_key(track: AudioTrack | SubTrack) -> str:
     """"id:<mkvmerge id>" for a source track, "ext:<file name>" for an added file (an added audio
     file's second track on is "ext:<file name>#<n>"); a copy of an audio track adds "+<n>"."""

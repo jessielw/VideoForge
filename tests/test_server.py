@@ -481,6 +481,30 @@ def test_templates(tmp_path):
         assert client.delete("/api/presets/template/Show 1080p").json()["template_defaults"] == {}
 
 
+def test_template_audio(tmp_path):
+    """A template's audio slots become each job's track overrides once its tracks are known: when added
+    (after the probe) and on a batch (at once). The job's earlier audio choices are replaced."""
+    make_files(tmp_path, "S01E01")
+    template = {"audio": {"slots": [
+        {"track": {"title": "Japanese"}},
+        {"track": {}, "extra": [{"action": "ddp", "layout": "5.1", "bitrate_kbps": 640, "title": "DDP 5.1"}]},
+        {"track": {"action": "aac"}},  # no third track: ignored
+    ]}}
+    with make_client(tmp_path) as client:
+        (job_id,) = add(client, tmp_path, template=template)
+        job = wait_for(client, job_id, "ready", "warn")
+        assert [(a["action"], a["title"]) for a in job["plan"]["audio"]] == [
+            ("copy", "Japanese"), ("copy", ""), ("ddp", "DDP 5.1")]
+        assert job["spec"]["audio_template"] is None and job["spec"]["overrides"]["copies"] == ["id:2+1"]
+
+        overrides = job["spec"]["overrides"] | {"tracks": {"id:1": {"title": "Mine"}}}
+        client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides})
+        others = {"audio": {"slots": [{"track": {"action": "flac"}}], "others": "exclude"}}
+        client.post("/api/jobs/apply", json={"ids": [job_id], "template": others})
+        job = client.get(f"/api/jobs/{job_id}").json()
+        assert [(a["action"], a["title"]) for a in job["plan"]["audio"]] == [("flac", "")]  # "Mine" replaced
+
+
 def test_folder_browser(tmp_path):
     make_files(tmp_path)
     with make_client(tmp_path) as client:
