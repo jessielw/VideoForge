@@ -37,8 +37,12 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
             return 1
         thread.join(0.05)
 
-    window = webview.create_window("VideoForge", url, width=1500, height=950, min_size=(900, 600),
-                                   background_color="#1b1a18")
+    # Without a screen, Windows centers it across two monitors: open maximized on the primary one (at 0,0),
+    # with a restore size that fits it.
+    screen = next((s for s in webview.screens if s.x == 0 and s.y == 0), None)
+    width, height = (1500, 950) if screen is None else (min(1500, screen.width * 9 // 10), min(950, screen.height * 9 // 10))
+    window = webview.create_window("VideoForge", url, width=width, height=height, min_size=(900, 600), screen=screen,
+                                   maximized=True, background_color="#1b1a18")
 
     def on_drop(event: dict[str, Any]) -> None:
         window.evaluate_js(f"window.videoforgeDropped?.({json.dumps(dropped_paths(event))})")
