@@ -77,6 +77,11 @@ index ─► qpf/chapters ─► video (vspipe | x264/x265, 1 or 2 passes) ─�
   the server and the job resumes after its last finished step) and cheap reruns
   (change a subtitle flag and only the mux runs again).
 - An imported encode (e.g. from StaxRip) replaces the video steps.
+- The plan is container-neutral: tracks carry plain flags (default, forced, hearing impaired,
+  commentary, original, visual impaired), languages and titles. The muxer the profile picks
+  (`execute/mux.py` `MUXERS`, by `Profile.container`) maps them to its tool: mkvmerge track flags
+  today; an MP4Box muxer would map them to its options (e.g. `:lang=`, `:name=`, `:kind=` roles
+  such as commentary or description) and set the output extension.
 
 ## VapourSynth
 
@@ -90,7 +95,7 @@ index ─► qpf/chapters ─► video (vspipe | x264/x265, 1 or 2 passes) ─�
 
 ## Frontend
 
-Pages: New jobs | Queue (job list + job editor tabs: Video, Encoder, Tracks, Output) |
+Pages: New jobs | Queue (job list + job editor tabs: Video, Encoder, Audio, Subtitles, Output, Log) |
 Fix release | Log | Settings. The frame preview (zoom, pan, crop overlay,
 auto-crop), the folder browser and the encoder option panels are ported from the
 user's video-forge React app. Live updates come over one WebSocket.

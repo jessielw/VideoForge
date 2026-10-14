@@ -118,6 +118,7 @@ def simulate_output(plan: Plan, name: str = "Movie.2020.1080p.BluRay.x264.mkv") 
             hearing_impaired=a.hearing_impaired,
             commentary=a.commentary,
             original=a.original,
+            visual_impaired=a.visual_impaired,
             atmos=a.out_atmos,
             bitrate_kbps=a.bitrate_kbps,
         )
@@ -135,6 +136,7 @@ def simulate_output(plan: Plan, name: str = "Movie.2020.1080p.BluRay.x264.mkv") 
             hearing_impaired=s.hearing_impaired,
             commentary=s.commentary,
             original=s.original,
+            visual_impaired=s.visual_impaired,
         )
         for i, s in enumerate(plan.subs)
     ]

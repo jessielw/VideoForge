@@ -116,6 +116,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                     hearing_impaired=bool(props.get("flag_hearing_impaired")),
                     commentary=bool(props.get("flag_commentary")),
                     original=bool(props.get("flag_original")),
+                    visual_impaired=bool(props.get("flag_visual_impaired")),
                     atmos=fmt.atmos,
                     dtsx=fmt.dtsx,
                     bitrate_kbps=round(bit_rate / 1000) if isinstance(bit_rate, int) else None,
@@ -141,6 +142,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                     hearing_impaired=bool(props.get("flag_hearing_impaired")),
                     commentary=bool(props.get("flag_commentary")),
                     original=bool(props.get("flag_original")),
+                    visual_impaired=bool(props.get("flag_visual_impaired")),
                     element_count=int(count) if count else None,
                     number=props.get("number"),
                 )

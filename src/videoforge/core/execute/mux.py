@@ -67,6 +67,7 @@ def _track_args(tid: int, t: PlannedAudio | PlannedSub) -> list[str]:
         "--hearing-impaired-flag", f"{tid}:{_flag(t.hearing_impaired)}",
         "--commentary-flag", f"{tid}:{_flag(t.commentary)}",
         "--original-flag", f"{tid}:{_flag(t.original)}",
+        "--visual-impaired-flag", f"{tid}:{_flag(t.visual_impaired)}",
     ]
 
 

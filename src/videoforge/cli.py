@@ -67,7 +67,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 
 _FLAG_NAMES = (("default", "default"), ("forced", "forced"), ("hearing_impaired", "sdh"), ("commentary", "commentary"),
-               ("original", "original"))
+               ("original", "original"), ("visual_impaired", "AD"))
 
 
 def _flags(track) -> str:

@@ -82,6 +82,7 @@ class AudioTrack:
     hearing_impaired: bool = False
     commentary: bool = False
     original: bool = False  # in the content's original language
+    visual_impaired: bool = False  # audio description: narration for the blind and partially sighted
     atmos: bool = False  # TrueHD Atmos or E-AC-3 JOC
     dtsx: bool = False
     bitrate_kbps: int | None = None
@@ -115,6 +116,7 @@ class SubTrack:
     hearing_impaired: bool = False  # container HI flag
     commentary: bool = False
     original: bool = False
+    visual_impaired: bool = False
     element_count: int | None = None
     number: int | None = None  # MKV track number (mkvmerge id + 1, gMKVExtract "trackN")
     external_path: Path | None = None
@@ -204,6 +206,7 @@ class PlannedAudio:
     hearing_impaired: bool = False
     commentary: bool = False
     original: bool = False
+    visual_impaired: bool = False
     options: dict[str, str] = field(default_factory=dict)  # the encode's settings, defaults filled in
 
 
@@ -218,6 +221,7 @@ class PlannedSub:
     hearing_impaired: bool = False
     commentary: bool = False
     original: bool = False
+    visual_impaired: bool = False
 
 
 class TrackKind(StrEnum):

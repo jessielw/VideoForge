@@ -220,7 +220,7 @@
                 {#if out}
                   {out.pos + 1}. {out.s.title}
                   <span class="text-xs text-muted">
-                    {[out.s.default && 'default', out.s.forced && 'forced', out.s.hearing_impaired && 'SDH'].filter(Boolean).join(', ')}
+                    {[out.s.default && 'default', out.s.forced && 'forced', out.s.hearing_impaired && 'SDH', out.s.visual_impaired && 'AD'].filter(Boolean).join(', ')}
                   </span>
                 {:else}—{/if}
               </td>

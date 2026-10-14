@@ -47,6 +47,7 @@ _FLAGS = {
         ("hearing_impaired", "Hearing impaired", "Made for the hard of hearing (e.g. clearer dialogue)"),
         ("commentary", "Commentary", "A commentary track"),
         ("original", "Original", "In the content's original language"),
+        ("visual_impaired", "Audio description", "Narration of what's on screen, for the blind and partially sighted"),
     ),
     TrackKind.SUB: (
         ("default", "Default", "Shown when no subtitle is chosen"),
@@ -56,7 +57,8 @@ _FLAGS = {
         ("original", "Original", "In the content's original language"),
     ),
 }
-FLAG_KEYS = tuple(key for key, _, _ in _FLAGS[TrackKind.AUDIO])
+FLAG_KEYS = tuple(dict.fromkeys(key for flags in _FLAGS.values() for key, _, _ in flags))  # every kind's
+_KIND_FLAGS = {kind: tuple(key for key, _, _ in flags) for kind, flags in _FLAGS.items()}
 
 
 def ordered[T: (AudioTrack, SubTrack)](tracks: Sequence[T], order: list[str] | None) -> list[T]:
@@ -200,7 +202,8 @@ class ManualProfile(Profile):
         return output_matches_plan(plan, output)
 
     def detected_flags(self, track: AudioTrack | SubTrack) -> dict[str, bool]:
-        return {k: getattr(track, k) for k in FLAG_KEYS}
+        kind = TrackKind.AUDIO if isinstance(track, AudioTrack) else TrackKind.SUB
+        return {k: getattr(track, k) for k in _KIND_FLAGS[kind]}
 
 
 def _describe(language: str, title: str, flags: dict[str, bool]) -> str:

@@ -161,6 +161,7 @@ export interface AudioTrack {
   default: boolean
   forced: boolean
   hearing_impaired: boolean
+  visual_impaired: boolean // audio description
   commentary: boolean
   original: boolean
   atmos: boolean
@@ -187,6 +188,7 @@ export interface SubTrack {
   default: boolean
   forced: boolean
   hearing_impaired: boolean
+  visual_impaired: boolean // audio description
   commentary: boolean
   original: boolean
   element_count: number | null
@@ -207,6 +209,7 @@ export interface PlannedAudio {
   default: boolean
   forced: boolean
   hearing_impaired: boolean
+  visual_impaired: boolean // audio description
   commentary: boolean
   original: boolean
   options: Record<string, string> // the encode's settings, defaults filled in
@@ -220,6 +223,7 @@ export interface PlannedSub {
   default: boolean
   forced: boolean
   hearing_impaired: boolean
+  visual_impaired: boolean // audio description
   commentary: boolean
   original: boolean
 }

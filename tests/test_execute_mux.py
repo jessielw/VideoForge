@@ -217,3 +217,15 @@ def test_copies_of_a_track():
     second = argv[argv.index("Movie.mkv") + 1 : len(argv) - argv[::-1].index("Movie.mkv")]
     assert value(second, "--sync") == ["1:-40"]  # shifted like the source's other tracks
     assert value(argv, "--track-order") == ["0:0,2:0,1:1,1:2,3:1"]
+
+
+def test_audio_description_flag():
+    src = source([audio(C.AC3, "2.0", "en", index=0), audio(C.AC3, "2.0", "en", index=1, title="Audio Description")],
+                 name="Movie.mkv")
+    src.audio[1].visual_impaired = True
+    plan = plan_for(src, source(name="enc.mkv"), Overrides(tracks={"id:1": TrackOverride(flags={"visual_impaired": True}),
+                                                                   "id:2": TrackOverride(flags={"visual_impaired": False})}))
+    plan.encode_path = Path("enc.mkv")
+    assert [a.visual_impaired for a in plan.audio] == [True, False]  # the user's choice over the file's
+    argv = mux_command(plan, {}, OUT, "mkvmerge", RAW)
+    assert value(argv, "--visual-impaired-flag") == ["1:1", "2:0"]

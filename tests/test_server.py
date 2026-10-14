@@ -128,7 +128,7 @@ def test_add_inspect_and_edit(tmp_path):
         assert [s["key"] for s in job["tracks"]["subs"]][:2] == ["id:10", "id:11"]
         flags = {"default": False, "forced": False, "hearing_impaired": False, "commentary": False, "original": False}
         assert job["tracks"]["subs"][0]["detected"] == flags
-        assert job["tracks"]["audio"][0]["detected"] == flags
+        assert job["tracks"]["audio"][0]["detected"] == flags | {"visual_impaired": False}  # audio description
 
         # Crop the video: the planned encode shrinks, the plan follows (no re-probe).
         video = job["spec"]["video"] | {"crop": {"left": 0, "top": 140, "right": 0, "bottom": 140}}
