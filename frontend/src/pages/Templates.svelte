@@ -16,6 +16,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import EncoderPanel from '../components/EncoderPanel.svelte'
+  import TemplateAudioEditor from '../components/TemplateAudioEditor.svelte'
   import { api } from '../lib/api'
   import { app } from '../lib/state.svelte'
   import type { CropMode, SourceFilter, Template } from '../lib/types'
@@ -44,6 +45,7 @@
   const starred = $derived(app.defaultTemplate(profile))
   const userNames = $derived(new Set(app.presets.template.map(t => t.name)))
   const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
+  const audioFlags = $derived((app.profiles.find(p => p.id === profile)?.track_properties ?? []).filter(f => f.kind === 'audio'))
   const readOnly = $derived(!!opened?.builtin)
   const dirty = $derived(
     !!opened && !!draft && !opened.builtin && (opened.name === null || draftName.trim() !== opened.name || canon(draft) !== canon(opened.data)),
@@ -345,7 +347,11 @@
             </Card.Root>
           </div>
         </fieldset>
-        <p class="text-xs text-muted-foreground">Audio and subtitle choices aren't part of a template: they depend on each source's tracks.</p>
+        <Card.Root class="gap-3 p-4">
+          <span class="section-label">Audio</span>
+          <TemplateAudioEditor value={draft.audio ?? null} flags={audioFlags} disabled={readOnly} onchange={v => (draft!.audio = v)} />
+        </Card.Root>
+        <p class="text-xs text-muted-foreground">Subtitle choices aren't part of a template: they stay per job.</p>
       </div>
     {:else}
       <div class="flex h-full items-center justify-center text-muted-foreground">Loading…</div>

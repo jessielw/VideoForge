@@ -5,7 +5,8 @@
   import { api } from '../lib/api'
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
-  import type { CropMode, JobSpec, Template } from '../lib/types'
+  import { Checkbox } from '$lib/components/ui/checkbox'
+  import type { CropMode, JobSpec, Template, TemplateAudio, TrackOverride } from '../lib/types'
   import CheckIcon from '@lucide/svelte/icons/check'
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down'
   import Trash2Icon from '@lucide/svelte/icons/trash-2'
@@ -17,11 +18,13 @@
   let {
     profile,
     spec,
+    audioKeys,
     apply,
     disabled = false,
   }: {
     profile: string
     spec: JobSpec
+    audioKeys: string[] // the source's audio tracks, in source order (not added files or copies)
     apply: (template: Template) => void | Promise<void>
     disabled?: boolean
   } = $props()
@@ -29,20 +32,40 @@
   let open = $state(false)
   let name = $state('')
   let cropMode = $state<CropMode>('keep')
+  let withAudio = $state(true)
   let error = $state('')
   let busy = $state(false)
 
   const choices = $derived(app.presetChoices('template', profile))
   const userNames = $derived(new Set(app.presets.template.map(p => p.name)))
-  const current = $derived<Template>({ video: spec.video, encoder: spec.encoder, mux: spec.mux, qpf: spec.qpf, crop_mode: cropMode })
+  const current = $derived<Template>({
+    video: spec.video,
+    encoder: spec.encoder,
+    mux: spec.mux,
+    qpf: spec.qpf,
+    crop_mode: cropMode,
+    audio: withAudio ? jobAudio() : null,
+  })
+
+  // The job's audio choices as slots: track n's settings and the outputs copied from it, by position.
+  function jobAudio(): TemplateAudio | null {
+    if (!audioKeys.length) return null
+    const o = spec.overrides
+    const strip = (ov: TrackOverride | undefined): TrackOverride => ({
+      exclude: null, title: null, flags: {}, action: null, bitrate_kbps: null, layout: null, options: {}, ...ov, language: null,
+    })
+    const copiesOf = (key: string) =>
+      o.copies.filter(c => c.startsWith(`${key}+`)).sort((a, b) => +a.split('+').pop()! - +b.split('+').pop()!)
+    return { slots: audioKeys.map(k => ({ track: strip(o.tracks[k]), extra: copiesOf(k).map(c => strip(o.tracks[c])) })), others: 'keep' }
+  }
   const matched = $derived(choices.find(c => same(c.data, current))?.name ?? null)
   const crop = $derived(spec.video.crop)
   const cropText = (c: Template['video']['crop']) => `${c.left}/${c.top}/${c.right}/${c.bottom}`
 
-  // The job's settings match a template when all but the crop does (the crop is per source).
+  // The job's settings match a template when all but the crop and audio do (both are per source).
   function canon(v: unknown): string {
     return JSON.stringify(v, (key, val) =>
-      key === 'crop' || key === 'crop_mode'
+      key === 'crop' || key === 'crop_mode' || key === 'audio'
         ? undefined
         : val && typeof val === 'object' && !Array.isArray(val)
           ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b)))
@@ -136,9 +159,15 @@
         <option value="fixed">Crop: this job's ({cropText(crop)}) on every job</option>
         <option value="auto">Crop: detect it for each job</option>
       </NativeSelect>
+      {#if audioKeys.length}
+        <label class="flex items-center gap-2 text-xs text-muted-foreground">
+          <Checkbox bind:checked={withAudio} />
+          This job's audio too ({audioKeys.length} track{audioKeys.length === 1 ? '' : 's'}, by position)
+        </label>
+      {/if}
     </form>
     <p class="text-xs text-muted-foreground">
-      Holds video, encoder, container and AutoQPF; audio and subtitles stay per job.
+      Holds video, encoder, audio, container and AutoQPF; subtitles stay per job.
       <button class="underline underline-offset-2" onclick={() => router.go('templates')}>Edit templates…</button>
     </p>
     {#if error}<p class="text-xs text-destructive">{error}</p>{/if}

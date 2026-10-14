@@ -256,7 +256,7 @@
               <Button class="ml-auto" onclick={applyTemplate} disabled={!picked}><LayoutTemplateIcon />Apply to {selected.length} jobs</Button>
             </div>
             <p class="text-xs text-muted-foreground">
-              Sets video, encoder, container and AutoQPF{picked?.data.crop_mode === 'auto'
+              Sets video, encoder, container, AutoQPF{picked?.data.audio ? ', audio' : ''}{picked?.data.crop_mode === 'auto'
                 ? '; the crop is detected for each job'
                 : picked?.data.crop_mode === 'fixed'
                   ? `; crop ${picked.data.video.crop.left}/${picked.data.video.crop.top}/${picked.data.video.crop.right}/${picked.data.video.crop.bottom} on every job`

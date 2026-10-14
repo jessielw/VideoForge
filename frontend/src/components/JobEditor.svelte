@@ -116,7 +116,13 @@
         <span class="text-sm {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
         <span class="text-sm text-muted-foreground">· {job.profile} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span>
         {#if !editable}<Badge variant="outline" class="border-info/40 bg-info/10 text-info">locked while {job.status}</Badge>{/if}
-        <TemplateMenu profile={job.profile} spec={job.spec} disabled={!editable} apply={template => save({ template })} />
+        <TemplateMenu
+          profile={job.profile}
+          spec={job.spec}
+          audioKeys={(job.tracks?.audio ?? []).filter(t => !t.external_path && !t.key.includes('+')).map(t => t.key)}
+          disabled={!editable}
+          apply={template => save({ template })}
+        />
       </div>
       {#if job.progress && job.status === 'running'}
         <div class="flex items-center gap-3 text-xs text-muted-foreground">

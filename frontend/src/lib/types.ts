@@ -150,6 +150,7 @@ export interface JobSpec {
   output_dir: string | null
   mux: MuxSettings
   autocrop: boolean // the crop is detected once the source can be read (a template's auto crop)
+  audio_template: TemplateAudio | null // a template's audio, waiting for the source's tracks
   id: string
 }
 
@@ -333,6 +334,17 @@ export interface Template {
   mux: MuxSettings
   qpf: boolean
   crop_mode: CropMode
+  audio: TemplateAudio | null // null: the template leaves each job's audio alone
+}
+// A template's audio: slot n is for the source's nth audio track (extra slots are ignored); tracks
+// past the slots are kept as the profile decides or left out. `extra` = more outputs from the track.
+export interface AudioSlot {
+  track: TrackOverride
+  extra: TrackOverride[]
+}
+export interface TemplateAudio {
+  slots: AudioSlot[]
+  others: 'keep' | 'exclude'
 }
 export interface Presets {
   video: Preset<VideoPresetData>[]
