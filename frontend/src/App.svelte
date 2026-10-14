@@ -40,6 +40,16 @@
 <ModeWatcher defaultMode="system" modeStorageKey="videoforge.mode" />
 <Toaster richColors closeButton position="bottom-right" />
 
+{#if app.stopped}
+  <div class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background p-6 text-center" role="alert">
+    <img src="/favicon.svg" alt="" class="size-12" />
+    <h1 class="text-xl font-semibold">VideoForge has stopped</h1>
+    <p class="text-sm text-muted-foreground">
+      Start it again with <code>videoforge serve</code>, then reload this page.
+    </p>
+  </div>
+{/if}
+
 <div class="flex h-full">
   <nav class="flex {layout.navCollapsed ? 'w-14' : 'w-48'} shrink-0 flex-col border-r bg-card">
     <div class="flex items-center gap-2 py-4 {layout.navCollapsed ? 'justify-center' : 'px-4'}">

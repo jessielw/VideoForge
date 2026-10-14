@@ -221,7 +221,12 @@ def cmd_serve(args: argparse.Namespace) -> int:
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, (url,)).start()
     console.print(f"VideoForge on [bold]{url}[/] (Ctrl+C to stop)")
-    uvicorn.run(create_app(settings), host=args.host, port=args.port, log_level="warning")
+    app = create_app(settings)
+    # Open connections get 5 s to close before the app's shutdown runs (it cancels a running job: up to 10 s).
+    server = uvicorn.Server(uvicorn.Config(app, host=args.host, port=args.port, log_level="warning",
+                                           timeout_graceful_shutdown=5))
+    app.state.shutdown = lambda: setattr(server, "should_exit", True)  # the page's Shut down
+    server.run()
     return 0
 
 

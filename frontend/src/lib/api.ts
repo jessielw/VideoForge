@@ -90,6 +90,8 @@ export const api = {
   settings: () => get<{ output_dir: string; last_dir: string }>('/api/settings'),
   saveSettings: (s: { output_dir?: string; last_dir?: string }) => request('PUT', '/api/settings', s),
 
+  shutdown: () => post<{ ok: boolean }>('/api/shutdown'),
+
   roots: () => get<string[]>('/api/fs/roots'),
   list: (path: string, extensions: string[] = []) =>
     get<DirListing>(`/api/fs/list?path=${encodeURIComponent(path)}&extensions=${encodeURIComponent(extensions.join(','))}`),

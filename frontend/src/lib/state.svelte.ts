@@ -22,6 +22,8 @@ class AppState {
   profiles = $state<Profile[]>([])
   log = $state<LogLine[]>([])
   connected = $state(false)
+  /** Shut down from the page: no reconnecting, the app shows that it stopped. */
+  stopped = $state(false)
   // Bumped per job whenever the server says it changed; open editors refetch on it.
   versions = $state<Record<string, number>>({})
   // Each job's last run, step by step, kept current by `step` events.
@@ -124,6 +126,7 @@ class AppState {
     ws.onclose = () => {
       this.connected = false
       this.#socket = null
+      if (this.stopped) return
       setTimeout(() => this.connect(), this.#retry)
       this.#retry = Math.min(this.#retry * 2, 8000)
     }

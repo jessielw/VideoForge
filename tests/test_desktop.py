@@ -32,3 +32,11 @@ def test_window_show_route(tmp_path):
         shown = []
         client.app.state.show_window = lambda: shown.append(True)
         assert client.post("/api/window/show").json() == {"ok": True} and shown == [True]
+
+
+def test_shutdown_route(tmp_path):
+    with make_client(tmp_path) as client:
+        assert client.post("/api/shutdown").status_code == 404  # nothing set up to stop
+        stopped = []
+        client.app.state.shutdown = lambda: stopped.append(True)
+        assert client.post("/api/shutdown").json() == {"ok": True} and stopped == [True]

@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 from videoforge.core.execute.mux import MUXERS
 from videoforge.core.plan_io import to_json
@@ -80,6 +80,17 @@ def _under(path: Path, root: Path) -> bool:
     # No resolve(): a mapped network drive would turn into its UNC path.
     p, r = (os.path.normcase(os.path.abspath(x)) for x in (path, root))
     return p == r or p.startswith(r.rstrip("\\/") + os.sep)
+
+
+@router.post("/shutdown")
+def shutdown(request: Request, tasks: BackgroundTasks) -> dict[str, Any]:
+    """Stop VideoForge (a running job is cancelled). How depends on how it runs: `serve` and the window
+    each set `app.state.shutdown`. It runs once this reply has gone out."""
+    stop = getattr(request.app.state, "shutdown", None)
+    if stop is None:
+        raise HTTPException(404, "This server can't be stopped from the page")
+    tasks.add_task(stop)
+    return {"ok": True}
 
 
 @router.post("/window/show")

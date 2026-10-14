@@ -172,6 +172,12 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
         tray = None
     app.state.show_window = show  # a second `serve --window` brings this one up
 
+    def shut_down() -> None:  # the page's Shut down (it asked already)
+        quitting.set()
+        window.destroy()
+
+    app.state.shutdown = shut_down
+
     try:
         # Not private: the theme and layout live in the page's localStorage.
         webview.start(private_mode=False, storage_path=str(data_dir / "webview"), icon=str(icon_path))

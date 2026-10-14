@@ -6,14 +6,17 @@
   import FileBrowser from '../components/FileBrowser.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
+  import PowerIcon from '@lucide/svelte/icons/power'
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
   import XIcon from '@lucide/svelte/icons/x'
   import { toast } from 'svelte-sonner'
   import { Button } from '$lib/components/ui/button'
+  import * as Dialog from '$lib/components/ui/dialog'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import { api } from '../lib/api'
+  import { drops } from '../lib/dropPaths.svelte'
   import { app } from '../lib/state.svelte'
   import type { ConfigState, ToolCheck, ToolSetting, ToolStatus } from '../lib/types'
 
@@ -94,6 +97,23 @@
     unknown: { icon: TriangleAlertIcon, tone: 'text-warning', text: 'found, no version' },
     missing: { icon: XIcon, tone: 'text-destructive', text: 'missing' },
     broken: { icon: XIcon, tone: 'text-destructive', text: "won't start" },
+  }
+
+  // --- shutting down from the page ---
+  let confirmStop = $state(false)
+  let stopping = $state(false)
+
+  async function shutDown() {
+    stopping = true
+    try {
+      await api.shutdown()
+      app.stopped = true
+      confirmStop = false
+    } catch (e) {
+      toast.error("Couldn't shut down", { description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      stopping = false
+    }
   }
 </script>
 
@@ -213,8 +233,41 @@
         </label>
       </section>
     {/if}
+
+    <section class="space-y-3">
+      <h2 class="font-medium">VideoForge</h2>
+      <div class="flex flex-wrap items-center gap-3 text-sm">
+        <Button variant="outline" class="text-destructive hover:text-destructive" onclick={() => (confirmStop = true)}>
+          <PowerIcon />Shut down…
+        </Button>
+        <span class="text-muted-foreground">
+          Stops the server{drops.desktop ? ' and closes this window' : ''}; start it again with
+          <code class="text-xs">videoforge serve{drops.desktop ? ' --window' : ''}</code>.
+        </span>
+      </div>
+    </section>
   </div>
 </div>
+
+<Dialog.Root bind:open={confirmStop}>
+  <Dialog.Content class="sm:max-w-md">
+    <Dialog.Header>
+      <Dialog.Title>Shut down VideoForge?</Dialog.Title>
+      <Dialog.Description>
+        {#if app.queue.running}
+          A job is running: it is cancelled. Started again, it skips the steps it finished.
+        {:else}
+          No job is running.
+        {/if}
+        {#if app.queue.queued}{app.queue.queued} queued job(s) stay in the queue.{/if}
+      </Dialog.Description>
+    </Dialog.Header>
+    <Dialog.Footer>
+      <Button variant="outline" onclick={() => (confirmStop = false)}>Cancel</Button>
+      <Button variant="destructive" disabled={stopping} onclick={shutDown}><PowerIcon />Shut down</Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
 
 {#if browse}
   <FileBrowser
