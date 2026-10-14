@@ -70,7 +70,7 @@ export interface InputChanges {
   encode?: string | null
 }
 
-export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides' | 'output_dir' | 'qpf' | 'profile'>> & {
+export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides' | 'output_dir' | 'qpf' | 'profile' | 'mux'>> & {
   inputs?: InputChanges
 }
 

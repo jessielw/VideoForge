@@ -16,6 +16,7 @@
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as Tabs from '$lib/components/ui/tabs'
+  import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import PresetMenu from './PresetMenu.svelte'
   import FileBrowser from './FileBrowser.svelte'
   import TrackEditor from './TrackEditor.svelte'
@@ -60,8 +61,7 @@
 
   let commandsSeq = 0
   $effect(() => {
-    if (tab === 'encoder' && job?.plan && !pending) {
-      void job.spec.encoder
+    if ((tab === 'encoder' || tab === 'output') && job?.plan && !pending) {
       const seq = ++commandsSeq
       api.commands(jobId).then(c => seq === commandsSeq && (commands = c)).catch(() => seq === commandsSeq && (commands = []))
     }
@@ -97,6 +97,10 @@
     { id: 'log', label: 'Log' },
   ]
   const problems = $derived((job?.issues ?? []).filter(i => i.severity !== 'info'))
+  const profile = $derived(app.profiles.find(p => p.id === job?.profile))
+  const containers = $derived(profile?.containers ?? [])
+  const container = $derived(containers.find(c => c.id === job?.spec.mux.container) ?? containers[0])
+  const muxCommands = $derived(commands.filter(c => c.id === 'mux' || c.id === 'chapters.mp4'))
 </script>
 
 {#if !job}
@@ -185,6 +189,32 @@
               />
               <Button variant="outline" disabled={!editable} onclick={() => (browsing = 'output')}><FolderOpenIcon />Browse…</Button>
             </div>
+            <span class="text-muted-foreground">Container</span>
+            {#if containers.length > 1}
+              <ToggleGroup.Root
+                type="single"
+                variant="outline"
+                class="w-fit"
+                disabled={!editable}
+                value={container?.id}
+                onValueChange={v => v && save({ mux: { ...job!.spec.mux, container: v } })}
+              >
+                {#each containers as c (c.id)}
+                  <ToggleGroup.Item value={c.id} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">{c.label}</ToggleGroup.Item>
+                {/each}
+              </ToggleGroup.Root>
+            {:else}
+              <span>{container?.label ?? job.spec.mux.container}</span>
+            {/if}
+            <span class="text-muted-foreground">Extra arguments</span>
+            <Input
+              class="font-mono text-xs"
+              aria-label="Extra muxer arguments"
+              placeholder="added to the {container?.tool ?? 'muxer'} command as typed"
+              value={job.spec.mux.extra}
+              disabled={!editable}
+              onchange={e => save({ mux: { ...job!.spec.mux, extra: (e.target as HTMLInputElement).value.trim() } })}
+            />
             <span class="text-muted-foreground">Chapters</span>
             <div class="flex flex-wrap items-center gap-2">
               <span>
@@ -219,6 +249,17 @@
             <span class="text-muted-foreground">Output</span>
             <code class="text-xs break-all text-muted-foreground">{job.output ?? '(after the run)'}</code>
           </div>
+          {#if muxCommands.length}
+            <div class="space-y-2">
+              <span class="section-label">Mux command</span>
+              {#each muxCommands as c (c.id)}
+                <div class="rounded-lg border bg-muted/50 p-2">
+                  <div class="text-xs text-primary">{c.label}</div>
+                  <code class="block text-[11px] break-all text-muted-foreground">{c.command}</code>
+                </div>
+              {/each}
+            </div>
+          {/if}
           {#if Object.keys(job.steps).length}
             <div>
               <span class="section-label">Finished steps (reused on the next run if nothing they depend on changed)</span>

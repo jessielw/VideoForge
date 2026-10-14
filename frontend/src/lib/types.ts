@@ -147,7 +147,14 @@ export interface JobSpec {
   encoder: EncoderSettings
   qpf: boolean
   output_dir: string | null
+  mux: MuxSettings
   id: string
+}
+
+// The job's muxer: container ('' = the profile's) and extra arguments for its tool, as typed.
+export interface MuxSettings {
+  container: string
+  extra: string
 }
 
 export interface AudioTrack {
@@ -295,11 +302,19 @@ export interface Profile {
   id: string
   name: string
   container: string
+  containers: ContainerInfo[] // the profile's own first; a job may pick any of them
   external_subtitles: boolean
   track_properties: TrackProperty[]
   track_editor: boolean // follows the user's track order, titles and audio encodes
   defaults: { video: VideoSettings; encoder: EncoderSettings }
   default: boolean
+}
+
+export interface ContainerInfo {
+  id: string
+  label: string
+  extension: string
+  tool: string
 }
 
 // A user preset (the built-in ones are each profile's defaults). Video presets have no crop.
