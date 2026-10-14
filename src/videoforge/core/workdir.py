@@ -2,8 +2,7 @@
 
 StaxRip's folder is `<source>_temp/`; ours has its own name so neither tool
 touches the other's files. It holds the encoded audio and the encoders' scratch
-files, and is kept after the job (fix mode can remux from the encodes) until the
-user removes it.
+files, and is kept after the job until the user removes it.
 """
 
 from __future__ import annotations

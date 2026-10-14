@@ -43,7 +43,6 @@ TOOLS: tuple[ToolInfo, ...] = (
     ToolInfo("x264", "x264", "H.264 video encoder"),
     ToolInfo("x265", "x265", "HEVC video encoder"),
     ToolInfo("mkvmerge", "mkvmerge", "Reads sources and muxes the output (MKVToolNix)"),
-    ToolInfo("mkvpropedit", "mkvpropedit", "Edits track flags in place (Fix release)"),
     ToolInfo("mp4box", "MP4Box", "Muxes MP4 output (GPAC)", (("-version",),)),
     ToolInfo("ffmpeg", "ffmpeg", "Decodes audio for the other encoders; its own FLAC, Opus, AAC, AC-3, E-AC-3",
              (("-version",),)),

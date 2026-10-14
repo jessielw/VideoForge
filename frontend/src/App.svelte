@@ -7,7 +7,6 @@
   import PlusIcon from '@lucide/svelte/icons/plus'
   import SettingsIcon from '@lucide/svelte/icons/settings'
   import TerminalIcon from '@lucide/svelte/icons/terminal'
-  import WrenchIcon from '@lucide/svelte/icons/wrench'
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
   import { Toaster } from '$lib/components/ui/sonner'
@@ -17,14 +16,12 @@
   import { app } from './lib/state.svelte'
   import NewJobs from './pages/NewJobs.svelte'
   import Queue from './pages/Queue.svelte'
-  import Fix from './pages/Fix.svelte'
   import Log from './pages/Log.svelte'
   import Settings from './pages/Settings.svelte'
 
   const NAV: { page: Page; label: string; icon: typeof PlusIcon }[] = [
     { page: 'new', label: 'New jobs', icon: PlusIcon },
     { page: 'queue', label: 'Queue', icon: ListVideoIcon },
-    { page: 'fix', label: 'Fix release', icon: WrenchIcon },
     { page: 'log', label: 'Log', icon: TerminalIcon },
     { page: 'settings', label: 'Settings', icon: SettingsIcon },
   ]
@@ -118,8 +115,6 @@
       <NewJobs />
     {:else if router.page === 'queue'}
       <Queue />
-    {:else if router.page === 'fix'}
-      <Fix />
     {:else if router.page === 'settings'}
       <Settings />
     {:else}

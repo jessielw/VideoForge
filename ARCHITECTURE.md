@@ -20,7 +20,7 @@ src/videoforge/
     job.py               JobSpec (what to build, persisted) + JobState (runtime, persisted)
     plan_io.py           Type-driven JSON codec for every model
     workdir.py           <source>_tmp/ per job: indexes, script, encodes, stats, logs
-    history.py, fix.py   Finished-output records; fix mode
+    history.py           Finished-output records
     video/
       settings.py        VideoSettings (source filter, crop, resize, filters, custom script), EncoderSettings
       script.py          VideoSettings -> .vpy text (one generator for preview and encode)
@@ -46,7 +46,7 @@ src/videoforge/
     queue.py             The queue: one worker thread runs jobs in order; start/stop/cancel
     events.py            Progress, log lines and job changes -> WebSocket /api/events
     routes/              fs (folder browser), jobs, media (probe), video (frames, crop, script),
-                         profiles, presets, fix
+                         profiles, presets
   cli.py                 `videoforge serve` (opens the browser), plus validate/plan/run
 frontend/                Svelte 5 + Vite + TypeScript + Tailwind -> frontend/dist (served by FastAPI)
 legacy/qt_gui/           The archived PySide6 GUI and its tests. Reference only; not packaged.
@@ -102,7 +102,7 @@ index ─► qpf/chapters ─► video (vspipe | x264/x265, 1 or 2 passes) ─�
 ## Frontend
 
 Pages: New jobs | Queue (job list + job editor tabs: Video, Encoder, Audio, Subtitles, Output, Log) |
-Fix release | Log | Settings. The frame preview (zoom, pan, crop overlay,
+Log | Settings. The frame preview (zoom, pan, crop overlay,
 auto-crop), the folder browser and the encoder option panels are ported from the
 user's video-forge React app. Live updates come over one WebSocket. The video editor's view
 (preview/output/script, frame, zoom, scroll, edges, unsaved script text) is kept per job in memory
