@@ -40,7 +40,8 @@ from videoforge.core.pipeline.run import run_job
 from videoforge.core.pipeline.steps import StepProgress
 from videoforge.core.plan_io import to_json
 from videoforge.core.profile import Profile
-from videoforge.core.video.settings import EncoderSettings, VideoSettings
+from videoforge.core.template import Template
+from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.server.events import EventHub
 from videoforge.server.store import Store
 
@@ -54,6 +55,7 @@ class JobView(StrEnum):
 
     PROBING = "probing"
     ERROR = "error"  # the probe failed
+    CROPPING = "cropping"  # detecting the crop (a template's auto crop)
     READY = "ready"
     WARN = "warn"
     BLOCKED = "blocked"
@@ -78,6 +80,7 @@ class Entry:
     plan: Plan | None = None
     probe_error: str = ""
     probing: bool = False
+    cropping: bool = False
     queued: bool = False
     running: bool = False
     progress: dict[str, Any] | None = None
@@ -96,7 +99,7 @@ class Entry:
 
     @property
     def runnable(self) -> bool:
-        return self.plan is not None and not self.plan.blocked and not self.busy
+        return self.plan is not None and not self.plan.blocked and not self.busy and not self.cropping
 
     @property
     def status(self) -> JobView:
@@ -108,6 +111,8 @@ class Entry:
             return JobView(self.state.status.value)
         if self.probe_error:
             return JobView.ERROR
+        if self.cropping:
+            return JobView.CROPPING
         if self.plan is None:
             return JobView.PROBING
         if self.plan.blocked:
@@ -124,6 +129,7 @@ class Services:
     probe: Callable[[JobSpec, AppConfig], ProbedInputs] = probe_spec
     run: Callable[..., JobResult] = run_job
     record: Callable[[JobResult], object] | None = None  # JobHistory.record
+    detect_crop: Callable[[JobSpec], Crop] | None = None  # reads the source (VapourSynth)
 
 
 class JobQueue:
@@ -209,9 +215,10 @@ class JobQueue:
         output_dir: Path | None = None,
         video: VideoSettings | None = None,
         encoder: EncoderSettings | None = None,
+        template: Template | None = None,
     ) -> tuple[list[Entry], list[str]]:
-        """One job per matched source, starting from the profile's video defaults (or the given
-        settings). A source already in the queue is set up again unless it is queued or running.
+        """One job per matched source, starting from the profile's video defaults, or the template,
+        then the given settings. A source already in the queue is set up again unless it is queued or running.
         Returns (new jobs, names skipped because they are busy)."""
         profile = self.profiles(profile_id)
         added, skipped = [], []
@@ -227,10 +234,16 @@ class JobQueue:
                 inputs=inputs,
                 profile=profile_id,
                 overrides=Overrides(original_language=original_language),
-                video=_copy(video) if video else v,
-                encoder=_copy(encoder) if encoder else enc,
+                video=v,
+                encoder=enc,
                 output_dir=output_dir,
             )
+            if template is not None:
+                template.apply(spec)
+            if video:
+                spec.video = _copy(video)
+            if encoder:
+                spec.encoder = _copy(encoder)
             e = Entry(spec, JobState())
             with self._lock:
                 self._entries[e.id] = e
@@ -257,6 +270,7 @@ class JobQueue:
             self._probes.submit(self._probe, e)
 
     def _probe(self, e: Entry) -> None:
+        crop = False
         try:
             probed = self.services.probe(e.spec, self.app)
         except Exception as ex:  # noqa: BLE001 - shown on the job
@@ -267,6 +281,38 @@ class JobQueue:
             with self._lock:
                 e.probing, e.probed = False, probed
                 self._replan(e)
+                crop = self._claim_crop(e)
+        self._changed(e)
+        if crop:
+            self._probes.submit(self._detect_crop, e)
+
+    def _claim_crop(self, e: Entry) -> bool:
+        """Under the lock: mark a pending auto crop as started, once the job is probed. The caller then
+        submits _detect_crop (to the probe pool: indexing the source takes a while)."""
+        if (not e.spec.autocrop or e.cropping or e.probed is None or e.busy
+                or self.services.detect_crop is None):
+            return False
+        e.cropping = True
+        return True
+
+    def _detect_crop(self, e: Entry) -> None:
+        try:
+            crop = self.services.detect_crop(e.spec)
+        except Exception as ex:  # noqa: BLE001 - shown in the job's log; the crop stays as it was
+            self._log(e, f"Auto-crop failed: {type(ex).__name__}: {ex}")
+            crop = None
+        with self._lock:
+            e.cropping = False
+            if self._entries.get(e.id) is not e:  # removed meanwhile
+                return
+            if e.spec.autocrop:  # an edit since didn't set a crop or another template
+                e.spec.autocrop = False
+                if crop is not None:
+                    e.spec.video.crop = crop
+                    self._replan(e)
+                self._save(e)
+        if crop is not None:
+            self._log(e, f"Auto-crop: left {crop.left}, top {crop.top}, right {crop.right}, bottom {crop.bottom}")
         self._changed(e)
 
     def _replan(self, e: Entry) -> None:
@@ -302,9 +348,12 @@ class JobQueue:
         profile: str | None = None,
         inputs: JobInputs | None = None,
         mux: MuxSettings | None = None,
+        container: str | None = None,
+        template: Template | None = None,
     ) -> Entry:
-        """Change a job's settings and replan. New inputs (added subtitle files, chapters) are read
-        at once; a different encode means probing again."""
+        """Change a job's settings and replan: the template first, then the given settings (container
+        alone keeps the job's extra muxer arguments). New inputs (added subtitle files, chapters) are
+        read at once; a different encode means probing again."""
         e = self.get(job_id)
         reprobe = False
         with self._lock:
@@ -322,7 +371,11 @@ class JobQueue:
             if profile is not None and profile != s.profile:
                 self.profiles(profile)  # unknown -> KeyError
                 s.profile = profile
+            if template is not None:
+                template.apply(s)
             if video is not None:
+                if video.crop != s.video.crop:
+                    s.autocrop = False  # a crop set by hand wins over a pending detection
                 s.video = video
             if encoder is not None:
                 s.encoder = encoder
@@ -334,12 +387,17 @@ class JobQueue:
                 s.qpf = qpf
             if mux is not None:
                 s.mux = mux
+            if container is not None:
+                s.mux = replace(s.mux, container=container)
             e.state.status, e.state.error, e.state.issues = None, "", []
             self._replan(e)
             self._save(e)
+            crop = not reprobe and self._claim_crop(e)
         self._changed(e)
         if reprobe:
             self.probe([e.id])
+        if crop:
+            self._probes.submit(self._detect_crop, e)
         return e
 
     def remove(self, ids: Iterable[str]) -> list[str]:

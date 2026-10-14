@@ -1,8 +1,9 @@
-"""User presets for a job's video processing and its encoder, saved in the store.
+"""User presets for a job's video processing and its encoder, and templates (core.template: the
+whole run's settings), saved in the store.
 
 Each profile's own defaults are the built-in presets (the UI has them from /api/profiles);
 these are the user's, on top. A video preset holds the source filter, resize, filters
-and custom body, not the crop: that belongs to each source.
+and custom body, not the crop: that belongs to each source (a template says what to do with it).
 """
 
 from __future__ import annotations
@@ -12,10 +13,11 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Request
 
 from videoforge.core.plan_io import from_json, to_json
+from videoforge.core.template import Template
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
 
 router = APIRouter(prefix="/api/presets")
-KINDS: dict[str, type] = {"video": VideoSettings, "encoder": EncoderSettings}
+KINDS: dict[str, type] = {"video": VideoSettings, "encoder": EncoderSettings, "template": Template}
 MAX_NAME = 80
 
 

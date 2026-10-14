@@ -12,10 +12,12 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
+from videoforge.core.job import JobSpec
 from videoforge.core.plan_io import to_json
 from videoforge.core.video import crop as autocrop
 from videoforge.core.video import vs as vsx
 from videoforge.core.video.script import build_script, script_parts
+from videoforge.core.video.settings import Crop
 from videoforge.server.queue import Entry, JobQueue
 
 router = APIRouter(prefix="/api/jobs/{job_id}/video")
@@ -31,9 +33,17 @@ def _entry(request: Request, job_id: str) -> Entry:
 
 
 def script_for(e: Entry, stage: Stage) -> str:
-    spec = e.spec
+    return _script(e.spec, stage)
+
+
+def _script(spec: JobSpec, stage: Stage) -> str:
     spec.work_dir.mkdir(parents=True, exist_ok=True)  # the index lives there
     return build_script(spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage)
+
+
+def source_crop(clips: vsx.ClipCache, spec: JobSpec, samples: int = 20) -> Crop:
+    """Auto-crop's suggestion for a job's source (a template's auto crop; indexes the source first)."""
+    return autocrop.detect(clips.get(_script(spec, "source")), samples=samples)
 
 
 def _clip(request: Request, e: Entry, stage: Stage):

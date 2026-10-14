@@ -64,6 +64,8 @@ class JobSpec:
     qpf: bool = True  # chapters from AutoQPF (keyframes on chapter starts) unless chapters are given
     output_dir: Path | None = None
     mux: MuxSettings = field(default_factory=MuxSettings)
+    # Detect the crop once the source can be read, then clear (a template's auto crop).
+    autocrop: bool = False
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
     @property

@@ -13,6 +13,7 @@ from videoforge.core.models import JobInputs, Overrides
 from videoforge.core.pairing import AUDIO_EXTENSIONS, SUB_FORMATS, match_files, slot_files
 from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.plan_io import from_json, to_json
+from videoforge.core.template import Template
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
 from videoforge.server.queue import Busy, JobQueue
 from videoforge.server.views import detail, summary
@@ -71,6 +72,7 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         output_dir=out_dir,
         video=from_json(VideoSettings, body["video"]) if body.get("video") else None,
         encoder=from_json(EncoderSettings, body["encoder"]) if body.get("encoder") else None,
+        template=_template(body),
     )
     left = result.unmatched
     return {"added": [e.id for e in added], "skipped": skipped,
@@ -88,8 +90,15 @@ def get_job(request: Request, job_id: str) -> dict[str, Any]:
     return detail(_entry(q, job_id), q)
 
 
+def _template(body: dict[str, Any]) -> Template | None:
+    """A template's settings, sent whole (the UI has the user's and each profile's defaults)."""
+    return from_json(Template, body["template"]) if body.get("template") else None
+
+
 def _changes(body: dict[str, Any]) -> dict[str, Any]:
     changes: dict[str, Any] = {}
+    if body.get("template"):
+        changes["template"] = _template(body)
     if "video" in body:
         changes["video"] = from_json(VideoSettings, body["video"])
     if "encoder" in body:
@@ -102,6 +111,8 @@ def _changes(body: dict[str, Any]) -> dict[str, Any]:
         changes["qpf"] = bool(body["qpf"])
     if "mux" in body:
         changes["mux"] = from_json(MuxSettings, body["mux"])
+    if body.get("container") is not None:
+        changes["container"] = str(body["container"])
     if body.get("profile"):
         changes["profile"] = body["profile"]
     return changes
@@ -140,7 +151,7 @@ def _inputs(current: JobInputs, body: dict[str, Any]) -> JobInputs:
 
 @router.patch("/jobs/{job_id}")
 def update_job(request: Request, job_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    """Change a job: any of video, encoder, overrides, output_dir, qpf, profile, mux, and inputs
+    """Change a job: any of template, video, encoder, overrides, output_dir, qpf, profile, mux, container, and inputs
     ({subtitles?, audio?: [paths or folders], chapters?: path | null, encode?: path | null})."""
     q = queue_of(request)
     e = _entry(q, job_id)
@@ -158,7 +169,8 @@ def update_job(request: Request, job_id: str, body: dict[str, Any] = Body(...)) 
 
 @router.post("/jobs/apply")
 def apply_to_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    """The same settings on several jobs (a batch): {ids, video?, encoder?, output_dir?, qpf?, mux?}."""
+    """The same settings on several jobs (a batch): {ids, template?, video?, encoder?, output_dir?, qpf?, mux?,
+    container?}. A template's auto crop is detected per job afterwards."""
     q = queue_of(request)
     body = {k: v for k, v in body.items() if k != "overrides"}  # track overrides are per job
     updated, skipped = [], []

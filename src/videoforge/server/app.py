@@ -11,6 +11,7 @@ import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -55,6 +56,9 @@ def create_app(
     if saved.roots:
         settings.roots = [Path(r) for r in saved.roots]
     events = EventHub()
+    clips = vsx.ClipCache()
+    if services.detect_crop is None:
+        services.detect_crop = partial(video.source_crop, clips)
     job_queue = JobQueue(cfg, profiles or get_profile, store, events, services, settings.probe_workers)
 
     @asynccontextmanager
@@ -80,7 +84,7 @@ def create_app(
     app.state.store = store
     app.state.events = events
     app.state.queue = job_queue
-    app.state.clips = vsx.ClipCache()
+    app.state.clips = clips
     app.state.profile_ids = ids
     app.state.default_profile = default
     for module in (jobs, queue, video, system, config, presets):

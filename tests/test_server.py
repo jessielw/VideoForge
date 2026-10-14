@@ -24,6 +24,7 @@ from videoforge.core.models import AudioCodec as C
 from videoforge.core.models import SubFormat as F
 from videoforge.core.models import VideoInfo
 from videoforge.core.pipeline.steps import Step, StepProgress
+from videoforge.core.video.settings import Crop
 from videoforge.server.app import create_app
 from videoforge.server.queue import Services
 from videoforge.server.settings import ServerSettings
@@ -87,9 +88,9 @@ class FakeRun:
         return JobResult(plan, JobStatus.DONE, out)
 
 
-def make_client(tmp_path: Path, run=None, records=None) -> TestClient:
+def make_client(tmp_path: Path, run=None, records=None, detect_crop=None) -> TestClient:
     services = Services(probe=fake_probe, run=run or FakeRun(),
-                        record=(records.append if records is not None else None))
+                        record=(records.append if records is not None else None), detect_crop=detect_crop)
     app = create_app(ServerSettings(data_dir=tmp_path / "data", roots=[tmp_path], frontend_dir=tmp_path / "none"),
                      APP, services=services, setup_vapoursynth=False)
     return TestClient(app)
@@ -392,7 +393,7 @@ def test_settings_page_config(tmp_path):
 
 def test_presets(tmp_path):
     with make_client(tmp_path) as client:
-        assert client.get("/api/presets").json() == {"video": [], "encoder": []}
+        assert client.get("/api/presets").json() == {"video": [], "encoder": [], "template": []}
         saved = client.put("/api/presets/encoder/Fast x265", json={"encoder": "x265", "crf": 20, "preset": "fast"}).json()
         (enc,) = saved["encoder"]
         assert enc["name"] == "Fast x265" and enc["data"]["crf"] == 20 and enc["data"]["depth"] == 8  # filled in
@@ -408,6 +409,57 @@ def test_presets(tmp_path):
     with make_client(tmp_path) as client:  # kept across a restart
         assert [p["name"] for p in client.get("/api/presets").json()["encoder"]] == ["Fast x265"]
         assert client.delete("/api/presets/encoder/Fast x265").json()["encoder"] == []
+
+
+def test_templates(tmp_path):
+    """A template sets the whole run when jobs are added or on a batch; its auto crop is detected per
+    job afterwards (the job can't be queued meanwhile), and a crop set by hand meanwhile wins."""
+    make_files(tmp_path, "S01E01", "S01E02")
+    gate = threading.Event()
+    gate.set()
+
+    def detect_crop(spec):
+        assert gate.wait(5)
+        return Crop(0, 20, 0, 22)
+
+    template = {"video": {"filters": "clip = clip", "crop": {"left": 4, "top": 0, "right": 4, "bottom": 0}},
+                "encoder": {"encoder": "x265", "crf": 16}, "mux": {"container": "mkv", "extra": "-x"},
+                "qpf": False, "crop_mode": "auto"}
+    with make_client(tmp_path, detect_crop=detect_crop) as client:
+        ids = add(client, tmp_path, template=template)
+        for job_id in ids:
+            job = wait_for(client, job_id, "ready", "warn", "blocked")
+            assert job["status"] != "blocked", job["issues"] if "issues" in job else job["plan"]["issues"]
+            spec = job["spec"]
+            assert spec["encoder"]["encoder"] == "x265" and spec["encoder"]["crf"] == 16
+            assert spec["mux"] == {"container": "mkv", "extra": "-x"} and spec["qpf"] is False
+            assert spec["video"]["filters"] == "clip = clip"
+            assert spec["video"]["crop"] == {"left": 0, "top": 20, "right": 0, "bottom": 22} and not spec["autocrop"]
+
+        # A batch: fixed crop on both; then the container alone keeps each job's extra arguments.
+        fixed = template | {"crop_mode": "fixed"}
+        assert client.post("/api/jobs/apply", json={"ids": ids, "template": fixed}).json()["updated"] == ids
+        assert {client.get(f"/api/jobs/{i}").json()["spec"]["video"]["crop"]["left"] for i in ids} == {4}
+        client.patch(f"/api/jobs/{ids[0]}", json={"mux": {"container": "mp4", "extra": "-y"}})
+        client.post("/api/jobs/apply", json={"ids": ids, "container": "mkv"})
+        assert [client.get(f"/api/jobs/{i}").json()["spec"]["mux"] for i in ids] == [
+            {"container": "mkv", "extra": "-y"}, {"container": "mkv", "extra": "-x"}]
+
+        # Auto again, held: the job shows it, can't be queued, and a hand crop meanwhile wins.
+        gate.clear()
+        client.patch(f"/api/jobs/{ids[0]}", json={"template": template})
+        job = wait_for(client, ids[0], "cropping")
+        client.post("/api/queue/enqueue", json={"ids": [ids[0]]})
+        assert client.get(f"/api/jobs/{ids[0]}").json()["status"] == "cropping"  # not queued
+        hand = job["spec"]["video"] | {"crop": {"left": 0, "top": 8, "right": 0, "bottom": 8}}
+        client.patch(f"/api/jobs/{ids[0]}", json={"video": hand})
+        gate.set()
+        job = wait_for(client, ids[0], "ready", "warn")
+        assert job["spec"]["video"]["crop"]["top"] == 8 and not job["spec"]["autocrop"]
+
+        saved = client.put("/api/presets/template/Show", json=fixed).json()["template"]
+        assert saved[0]["data"]["video"]["crop"]["left"] == 4  # a template keeps its crop
+        assert client.get("/api/profiles").json()[0]["defaults"]["template"]["crop_mode"] == "keep"
 
 
 def test_folder_browser(tmp_path):

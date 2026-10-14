@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Request, We
 
 from videoforge.core.execute.mux import MUXERS
 from videoforge.core.plan_io import to_json
+from videoforge.core.template import Template
 from videoforge.server.events import EventHub
 
 router = APIRouter(prefix="/api")
@@ -117,7 +118,8 @@ def profiles(request: Request) -> list[dict[str, Any]]:
             "containers": [{"id": c, "label": MUXERS[c].label, "extension": MUXERS[c].extension, "tool": MUXERS[c].tool}
                            for c in dict.fromkeys((p.container, *p.containers))],
             "track_properties": [to_json(t) for t in p.track_properties], "track_editor": p.track_editor,
-            "defaults": {"video": to_json(video), "encoder": to_json(encoder)},
+            "defaults": {"video": to_json(video), "encoder": to_json(encoder),
+                         "template": to_json(Template.defaults(p))},
             "default": pid == request.app.state.default_profile,
         })
     return out
