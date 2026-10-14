@@ -20,6 +20,7 @@ import type {
   ToolCheck,
   ScriptCheck,
   ScriptParts,
+  Template,
   VideoSettings,
 } from './types'
 
@@ -73,6 +74,8 @@ export interface InputChanges {
 
 export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides' | 'output_dir' | 'qpf' | 'profile' | 'mux'>> & {
   inputs?: InputChanges
+  template?: Template // applied first: the whole run's settings
+  container?: string // the container alone; the job keeps its extra muxer arguments
 }
 
 export const api = {
@@ -104,6 +107,7 @@ export const api = {
       output_dir: string | null
       video?: Partial<VideoSettings>
       encoder?: EncoderSettings
+      template?: Template
     },
   ) =>
     post<{ added: string[]; skipped: string[]; unmatched: string[] }>('/api/jobs', body),

@@ -2,7 +2,7 @@
 import { toast } from 'svelte-sonner'
 import { api } from './api'
 import { STATUS_LABEL } from './format'
-import type { AudioEncodeInfo, EncoderSettings, JobSummary, Preset, PresetKind, Presets, Profile, QueueState, StepRun, VideoPresetData } from './types'
+import type { AudioEncodeInfo, EncoderSettings, JobSummary, Preset, PresetKind, Presets, Profile, QueueState, StepRun, Template, VideoPresetData } from './types'
 import { keepVideoViews } from './videoView.svelte'
 
 const MAX_LOG = 20000
@@ -14,7 +14,7 @@ export interface LogLine {
   line: string
 }
 
-export type PresetData<K extends PresetKind> = K extends 'video' ? VideoPresetData : EncoderSettings
+export type PresetData<K extends PresetKind> = K extends 'video' ? VideoPresetData : K extends 'template' ? Template : EncoderSettings
 
 class AppState {
   jobs = $state<JobSummary[]>([])
@@ -31,7 +31,7 @@ class AppState {
   runStarts = $state<Record<string, number>>({}) // logSeq when each job's latest run began
   logSeq = 0
   encodes = $state<AudioEncodeInfo[]>([])
-  presets = $state<Presets>({ video: [], encoder: [] })
+  presets = $state<Presets>({ video: [], encoder: [], template: [] })
 
   #socket: WebSocket | null = null
   #refreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -57,7 +57,7 @@ class AppState {
   // A kind's presets for a profile: its defaults first (built in), then the user's.
   presetChoices<K extends PresetKind>(kind: K, profileId: string): (Preset<PresetData<K>> & { builtin: boolean })[] {
     const p = this.profiles.find(x => x.id === profileId)
-    const own = p ? [{ name: `${p.name} defaults`, data: p.defaults[kind] as PresetData<K>, builtin: true }] : []
+    const own = p ? [{ name: `${p.name} defaults`, data: p.defaults[kind] as unknown as PresetData<K>, builtin: true }] : []
     return [...own, ...(this.presets[kind] as Preset<PresetData<K>>[]).map(x => ({ ...x, builtin: false }))]
   }
 

@@ -5,6 +5,7 @@
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import CropIcon from '@lucide/svelte/icons/crop'
+  import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
   import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close'
   import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open'
   import PauseIcon from '@lucide/svelte/icons/pause'
@@ -15,6 +16,8 @@
   import { toast } from 'svelte-sonner'
   import { Button } from '$lib/components/ui/button'
   import * as Card from '$lib/components/ui/card'
+  import { NativeSelect } from '$lib/components/ui/native-select'
+  import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import JobEditor from '../components/JobEditor.svelte'
   import { api } from '../lib/api'
   import { percent, STATUS_LABEL, STATUS_TONE } from '../lib/format'
@@ -96,6 +99,32 @@
     await act(async () => {
       const r = await api.apply(selected, { encoder })
       toast.success(`Encoder applied to ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''))
+    })
+  }
+
+  // A template (by name) for the whole batch, from the first job's profile's choices.
+  let batchTemplate = $state('')
+  const batchTemplates = $derived(batchSource ? app.presetChoices('template', batchSource.profile) : [])
+  const picked = $derived(batchTemplates.find(c => c.name === batchTemplate) ?? batchTemplates[0])
+  const batchContainers = $derived(app.profiles.find(p => p.id === batchSource?.profile)?.containers ?? [])
+
+  async function applyTemplate() {
+    if (!picked) return
+    const name = picked.name
+    await act(async () => {
+      const r = await api.apply(selected, { template: $state.snapshot(picked.data) })
+      toast.success(`Template ${name} applied to ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''))
+      batchSource = await api.job(selected[0])
+    })
+  }
+
+  async function applyContainer(container: string) {
+    if (!batchSource) return
+    batchSource.spec.mux.container = container
+    await act(async () => {
+      const r = await api.apply(selected, { container })
+      const label = batchContainers.find(c => c.id === container)?.label ?? container
+      toast.success(`${label} for ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''))
     })
   }
 
@@ -218,6 +247,39 @@
           job's. Audio and subtitle choices stay per job.
         </p>
         {#if batchSource}
+          <Card.Root class="gap-2 p-4">
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="text-sm">Template</span>
+              <NativeSelect aria-label="Template for the selected jobs" value={picked?.name ?? ''} onchange={e => (batchTemplate = e.currentTarget.value)}>
+                {#each batchTemplates as c (`${c.builtin}:${c.name}`)}<option value={c.name}>{c.name}</option>{/each}
+              </NativeSelect>
+              <Button class="ml-auto" onclick={applyTemplate} disabled={!picked}><LayoutTemplateIcon />Apply to {selected.length} jobs</Button>
+            </div>
+            <p class="text-xs text-muted-foreground">
+              Sets video, encoder, container and AutoQPF{picked?.data.crop_mode === 'auto'
+                ? '; the crop is detected for each job'
+                : picked?.data.crop_mode === 'fixed'
+                  ? `; crop ${picked.data.video.crop.left}/${picked.data.video.crop.top}/${picked.data.video.crop.right}/${picked.data.video.crop.bottom} on every job`
+                  : '; each job keeps its crop'}. Save templates from a job's Template menu.
+            </p>
+          </Card.Root>
+          {#if batchContainers.length > 1}
+            <Card.Root class="flex-row items-center gap-3 p-4">
+              <span class="text-sm">Container</span>
+              <ToggleGroup.Root
+                type="single"
+                variant="outline"
+                class="w-fit"
+                value={batchSource.spec.mux.container || batchContainers[0].id}
+                onValueChange={v => v && applyContainer(v)}
+              >
+                {#each batchContainers as c (c.id)}
+                  <ToggleGroup.Item value={c.id} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">{c.label}</ToggleGroup.Item>
+                {/each}
+              </ToggleGroup.Root>
+              <span class="text-xs text-muted-foreground">Each job keeps its extra muxer arguments.</span>
+            </Card.Root>
+          {/if}
           <Card.Root class="p-4">
             <EncoderPanel value={batchSource.spec.encoder} onchange={applyEncoder} />
           </Card.Root>

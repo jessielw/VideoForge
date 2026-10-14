@@ -18,6 +18,7 @@
   import * as Tabs from '$lib/components/ui/tabs'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import PresetMenu from './PresetMenu.svelte'
+  import TemplateMenu from './TemplateMenu.svelte'
   import FileBrowser from './FileBrowser.svelte'
   import { pastedPaths, pathDrop } from '../lib/dropPaths.svelte'
   import TrackEditor from './TrackEditor.svelte'
@@ -70,7 +71,8 @@
 
   function save(changes: SpecChanges): Promise<void> {
     if (job) {
-      const { inputs, ...rest } = changes
+      // A template or a container alone isn't a spec field: the reply brings what they changed.
+      const { inputs, template: _t, container: _c, ...rest } = changes
       job = { ...job, spec: { ...job.spec, ...rest, inputs: { ...job.spec.inputs, ...inputs } } }
     }
     edits++
@@ -114,6 +116,7 @@
         <span class="text-sm {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
         <span class="text-sm text-muted-foreground">· {job.profile} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span>
         {#if !editable}<Badge variant="outline" class="border-info/40 bg-info/10 text-info">locked while {job.status}</Badge>{/if}
+        <TemplateMenu profile={job.profile} spec={job.spec} disabled={!editable} apply={template => save({ template })} />
       </div>
       {#if job.progress && job.status === 'running'}
         <div class="flex items-center gap-3 text-xs text-muted-foreground">

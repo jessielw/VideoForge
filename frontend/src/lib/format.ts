@@ -3,6 +3,7 @@ import type { Severity, Status, TrackOverride } from './types'
 export const STATUS_LABEL: Record<Status, string> = {
   probing: 'Probing',
   error: 'Error',
+  cropping: 'Detecting crop',
   ready: 'Ready',
   warn: 'Warn',
   blocked: 'Blocked',
@@ -19,6 +20,7 @@ export const STATUS_LABEL: Record<Status, string> = {
 export const STATUS_TONE: Record<Status, string> = {
   probing: 'text-muted-foreground',
   error: 'text-destructive',
+  cropping: 'text-muted-foreground',
   ready: 'text-success',
   warn: 'text-warning',
   blocked: 'text-destructive',

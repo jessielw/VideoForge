@@ -24,11 +24,38 @@
   let matching = $state(false)
   let error = $state('')
   let adding = $state(false)
-  // Indexes into the preset choices; 0 is the profile's defaults (sent as nothing).
-  let videoPreset = $state(0)
-  let encoderPreset = $state(0)
-  const videoChoices = $derived(app.presetChoices('video', profile))
-  const encoderChoices = $derived(app.presetChoices('encoder', profile))
+  // The template (by name; the profile's defaults come first) and the container it sets, which can
+  // be changed here. The last template used per profile is picked again.
+  let templateName = $state('')
+  let container = $state('')
+  const templateChoices = $derived(app.presetChoices('template', profile))
+  const template = $derived(templateChoices.find(c => c.name === templateName) ?? templateChoices[0])
+  const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
+  const LAST_TEMPLATE = 'videoforge.newjobs.template.'
+
+  $effect(() => {
+    // a profile switch (or the presets loading) picks that profile's last template
+    if (!profile || !templateChoices.length) return
+    let last: string | null = null
+    try {
+      last = localStorage.getItem(LAST_TEMPLATE + profile)
+    } catch {
+      /* no storage: the profile's defaults */
+    }
+    templateName = templateChoices.some(c => c.name === last) ? last! : templateChoices[0].name
+  })
+  $effect(() => {
+    const own = template?.data.mux.container
+    container = containers.some(c => c.id === own) ? own! : (containers[0]?.id ?? '')
+  })
+  function pickTemplate(name: string) {
+    templateName = name
+    try {
+      localStorage.setItem(LAST_TEMPLATE + profile, name)
+    } catch {
+      /* remembered for this page only */
+    }
+  }
 
   const takesSubs = $derived(app.profiles.find(p => p.id === profile)?.external_subtitles ?? true)
 
@@ -82,8 +109,7 @@
         ...slots(),
         original_language: language || null,
         output_dir: output[0] ?? null,
-        video: videoPreset ? $state.snapshot(videoChoices[videoPreset]?.data) : undefined,
-        encoder: encoderPreset ? $state.snapshot(encoderChoices[encoderPreset]?.data) : undefined,
+        template: template && { ...$state.snapshot(template.data), mux: { ...template.data.mux, container } },
       })
       for (const name of r.skipped) app.addLog(`Skipped ${name}: it is queued or running`)
       for (const p of r.unmatched) app.addLog(`Not matched to any source: ${p}`)
@@ -120,20 +146,25 @@
           {#each LANGUAGES as [tag, name] (tag)}<option value={tag}>{name}</option>{/each}
         </datalist>
       </div>
-      <div class="text-sm text-muted-foreground">Presets</div>
+      <div class="text-sm text-muted-foreground">Template</div>
       <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-        <label class="flex items-center gap-2">
-          Video
-          <NativeSelect bind:value={videoPreset}>
-            {#each videoChoices as c, i (i)}<option value={i}>{c.name}</option>{/each}
-          </NativeSelect>
-        </label>
-        <label class="flex items-center gap-2">
-          Encoder
-          <NativeSelect bind:value={encoderPreset}>
-            {#each encoderChoices as c, i (i)}<option value={i}>{c.name}</option>{/each}
-          </NativeSelect>
-        </label>
+        <NativeSelect aria-label="Template" value={template?.name ?? ''} onchange={e => pickTemplate(e.currentTarget.value)}>
+          {#each templateChoices as c (`${c.builtin}:${c.name}`)}<option value={c.name}>{c.name}</option>{/each}
+        </NativeSelect>
+        {#if containers.length > 1}
+          <label class="flex items-center gap-2">
+            Container
+            <NativeSelect bind:value={container}>
+              {#each containers as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
+            </NativeSelect>
+          </label>
+        {/if}
+        {#if template?.data.crop_mode === 'auto'}
+          <span>Crop detected per job after adding</span>
+        {:else if template?.data.crop_mode === 'fixed'}
+          {@const c = template.data.video.crop}
+          <span>Crop {c.left}/{c.top}/{c.right}/{c.bottom} on every job</span>
+        {/if}
       </div>
     </div>
     <PathSlot label="Sources" hint="Remux MKVs, or a folder of them" bind:paths={sources} extensions={['.mkv']} />

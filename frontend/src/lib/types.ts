@@ -3,6 +3,7 @@
 export type Status =
   | 'probing'
   | 'error'
+  | 'cropping'
   | 'ready'
   | 'warn'
   | 'blocked'
@@ -148,6 +149,7 @@ export interface JobSpec {
   qpf: boolean
   output_dir: string | null
   mux: MuxSettings
+  autocrop: boolean // the crop is detected once the source can be read (a template's auto crop)
   id: string
 }
 
@@ -306,7 +308,7 @@ export interface Profile {
   external_subtitles: boolean
   track_properties: TrackProperty[]
   track_editor: boolean // follows the user's track order, titles and audio encodes
-  defaults: { video: VideoSettings; encoder: EncoderSettings }
+  defaults: { video: VideoSettings; encoder: EncoderSettings; template: Template }
   default: boolean
 }
 
@@ -323,9 +325,19 @@ export interface Preset<T> {
   name: string
   data: T
 }
+// A job's whole run (src/videoforge/core/template.py). video.crop is used when crop_mode is 'fixed'.
+export type CropMode = 'keep' | 'fixed' | 'auto'
+export interface Template {
+  video: VideoSettings
+  encoder: EncoderSettings
+  mux: MuxSettings
+  qpf: boolean
+  crop_mode: CropMode
+}
 export interface Presets {
   video: Preset<VideoPresetData>[]
   encoder: Preset<EncoderSettings>[]
+  template: Preset<Template>[]
 }
 export type PresetKind = keyof Presets
 
