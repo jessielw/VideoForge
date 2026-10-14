@@ -30,6 +30,7 @@ manual = "videoforge.profiles.manual:ManualProfile"
 
 [project.optional-dependencies]
 desktop = [
+    "pystray>=0.19.5",
     "pywebview>=6.2.1",
 ]
 

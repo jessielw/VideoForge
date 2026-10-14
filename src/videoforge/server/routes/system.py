@@ -82,6 +82,16 @@ def _under(path: Path, root: Path) -> bool:
     return p == r or p.startswith(r.rstrip("\\/") + os.sep)
 
 
+@router.post("/window/show")
+def show_window(request: Request) -> dict[str, Any]:
+    """Bring up the app's window (`serve --window`), e.g. when it is started a second time."""
+    show = getattr(request.app.state, "show_window", None)
+    if show is None:
+        raise HTTPException(404, "No window: this server runs in the browser")
+    show()
+    return {"ok": True}
+
+
 # --- profiles and settings -----------------------------------------------------------
 
 
