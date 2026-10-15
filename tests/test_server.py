@@ -740,6 +740,78 @@ def test_index_lane_waits_for_the_preview(tmp_path):
         second.source_lock.release()
 
 
+def test_index_lane_survives_a_restart(tmp_path):
+    """The lane's jobs and order are kept: after a restart the job stopped mid-index goes again first, then the
+    rest in order. Stopping the lane by hand empties it for good; a shutdown doesn't."""
+    make_files(tmp_path, "S01E01", "S01E02", "S01E03")
+    indexer = FakeIndexer(hold=["Show.S01E03.mkv"])
+    with make_client(tmp_path, runner=indexer) as client:
+        ids = add(client, tmp_path)
+        for i in ids:
+            wait_for(client, i, "ready", "warn")
+        client.post("/api/queue/index", json={"ids": [ids[2]]})
+        indexer.wait(1)
+        wait_for(client, ids[2], "indexing")
+        client.post("/api/queue/index", json={"ids": ids[:2]})
+    assert not (tmp_path / "src" / "Show.S01E03.mkv_tmp" / "Show.S01E03.mkv.ffindex").exists()  # cancelled
+
+    indexer = FakeIndexer()
+    with make_client(tmp_path, runner=indexer) as client:
+        store = client.app.state.store
+        indexer.wait(3)  # (jobs still probing let the others go first, so the order isn't checked)
+        for i in ids:
+            assert wait_for(client, i, "ready", "warn")["indexed"]
+        assert store.get_setting("index_lane") == []
+
+        indexer.gates["Show.S01E01.mkv"] = threading.Event()
+        (tmp_path / "src" / "Show.S01E01.mkv_tmp" / "Show.S01E01.mkv.ffindex").unlink()
+        client.post("/api/queue/index", json={"ids": [ids[0]]})
+        wait_for(client, ids[0], "indexing")
+        assert store.get_setting("index_lane") == [ids[0]]
+        client.post("/api/queue/index/stop")
+        wait_for(client, ids[0], "ready", "warn")
+        assert store.get_setting("index_lane") == []
+
+
+def test_index_lane_waits_for_an_encode_on_its_disk(tmp_path, monkeypatch):
+    """While an encode runs, a job whose source is on the encode's disk is held back (a job on another disk goes
+    ahead); Index now doesn't wait; the setting turns it off; the encode ending lets the job go."""
+    make_files(tmp_path, "S01E01", "S01E02", "S01E03", "S01E04")
+    monkeypatch.setattr("videoforge.server.queue.disks",
+                        lambda p: frozenset({"y" if "S01E03" in str(p) else "x"}))
+    indexer = FakeIndexer()
+    with make_client(tmp_path, run=FakeRun(block=True), runner=indexer) as client:
+        ids = add(client, tmp_path)
+        for i in ids:
+            wait_for(client, i, "ready", "warn")
+        client.post("/api/queue/start", json={"ids": [ids[0]]})
+        wait_for(client, ids[0], "running")
+        client.post("/api/queue/index", json={"ids": ids[1:3]})
+        indexer.wait(1)
+        assert "S01E03" in indexer.calls[0][-1]  # another disk: it goes first
+        wait_for(client, ids[1], "index-queued")
+        time.sleep(0.3)
+        assert client.get(f"/api/jobs/{ids[1]}").json()["index_held"] and len(indexer.calls) == 1
+
+        client.post("/api/queue/index", json={"ids": [ids[3]], "first": True})  # Index now: no wait
+        indexer.wait(2)
+        assert "S01E04" in indexer.calls[1][-1]
+        assert client.get(f"/api/jobs/{ids[1]}").json()["index_held"]
+
+        assert client.put("/api/config", json={"index_waits_for_disk": False}).json()["index_waits_for_disk"] is False
+        indexer.wait(3)
+        assert not wait_for(client, ids[1], "ready", "warn")["index_held"]
+
+        client.put("/api/config", json={"index_waits_for_disk": True})
+        (tmp_path / "src" / "Show.S01E02.mkv_tmp" / "Show.S01E02.mkv.ffindex").unlink()
+        client.post("/api/queue/index", json={"ids": [ids[1]]})
+        time.sleep(0.3)
+        assert client.get(f"/api/jobs/{ids[1]}").json()["index_held"] and len(indexer.calls) == 3
+        client.post("/api/queue/cancel")
+        indexer.wait(4)
+        assert not wait_for(client, ids[1], "ready", "warn")["index_held"]
+
+
 def test_folder_browser(tmp_path):
     make_files(tmp_path)
     with make_client(tmp_path) as client:

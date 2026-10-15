@@ -1,5 +1,5 @@
 """The Settings page: tool paths (with each tool found and its version), folder-browser roots,
-and the default profile.
+the default profile, and whether batch indexing waits for an encode on the same disk.
 
 Changes are saved in the store (layered over videoforge.toml) and applied at once: new
 jobs, probes and runs use them. Only the preview's VapourSynth plugin folder needs a restart.
@@ -44,6 +44,7 @@ def _state(request: Request) -> dict[str, Any]:
         "profile_default": default_profile_id(s.base_config.profile, ids),
         "profiles": [{"id": pid, "name": profiles(pid).name} for pid in ids],
         "restart": [RESTART_FOR[n] for n in sorted(s.restart_for)],
+        "index_waits_for_disk": saved.index_waits_for_disk,
     }
 
 
@@ -55,7 +56,7 @@ def get_config(request: Request) -> dict[str, Any]:
 @router.put("")
 def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     """Change any of: tools ({name: path, or "" / null for the default}), roots (a list, or null
-    for every drive), profile (an id, or null for videoforge.toml's)."""
+    for every drive), profile (an id, or null for videoforge.toml's), index_waits_for_disk (bool)."""
     s = request.app.state
     saved: SavedSettings = s.saved
     tools = dict(saved.tools)
@@ -78,11 +79,13 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         profile = body["profile"] or None
         if profile is not None and profile not in s.profile_ids:
             raise HTTPException(422, f"No profile {profile!r} is installed")
+    waits = bool(body["index_waits_for_disk"]) if "index_waits_for_disk" in body else saved.index_waits_for_disk
 
     before = s.config.tools
-    new = SavedSettings(tools, roots, profile)
+    new = SavedSettings(tools, roots, profile, waits)
     new.save(s.store)
     s.saved = new
+    s.queue.set_index_waits_for_disk(waits)
     s.default_profile = default_profile_id(profile or s.base_config.profile, s.profile_ids)
     cfg = replace(with_tools(s.base_config, tools), profile=s.default_profile)
     s.config = cfg

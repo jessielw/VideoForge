@@ -9,6 +9,7 @@
   import DatabaseXIcon from '@lucide/svelte/icons/database-x'
   import DatabaseZapIcon from '@lucide/svelte/icons/database-zap'
   import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
+  import ListChecksIcon from '@lucide/svelte/icons/list-checks'
   import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close'
   import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open'
   import PauseIcon from '@lucide/svelte/icons/pause'
@@ -172,17 +173,35 @@
   }
 
   // The index lane: each job's work folder, script and source index, one job at a time, nothing else.
+  // Jobs already indexed are skipped.
+  const unindexed = (ids: string[]) => {
+    const want = new Set(ids)
+    return app.jobs.filter(j => want.has(j.id) && !j.indexed).map(j => j.id)
+  }
+
   async function index(ids: string[]) {
+    const todo = unindexed(ids)
+    const done = ids.length - todo.length
+    const already = done ? `${done} already indexed.` : ''
+    if (!todo.length) {
+      toast.info('Nothing to index', { description: already })
+      return
+    }
     await act(async () => {
-      const r = await api.index(ids)
-      const left = ids.length - r.taken.length
-      if (!r.taken.length) toast.info('Nothing to index', { description: 'Queued or running jobs, ones already indexing and ones reusing an encode are left out.' })
+      const r = await api.index(todo)
+      const left = todo.length - r.taken.length
+      const out = left ? `${left} left out (queued, running, already indexing, or reusing an encode).` : ''
+      if (!r.taken.length) toast.info('Nothing to index', { description: [already, out].join(' ').trim() })
       else toast.info(`Indexing ${r.taken.length} job${r.taken.length > 1 ? 's' : ''}`, {
-        description: left ? `${left} left out (queued, running, already indexing, or reusing an encode).` : undefined,
+        description: [already, out].join(' ').trim() || undefined,
       })
     })
   }
   const indexing = $derived(!!app.queue.indexing || app.queue.index_queued > 0)
+  // The toolbar's Index: the selected jobs, or every job when none is selected.
+  const indexTarget = $derived(selected.length ? selected : app.jobs.map(j => j.id))
+  const toIndex = $derived(unindexed(indexTarget).length)
+  const batchToIndex = $derived(unindexed(selected).length)
 
   const single = $derived(selected.length === 1 ? selected[0] : null)
 
@@ -346,9 +365,11 @@
         </Button>
       {/if}
       <span class="flex-1"></span>
-      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => index(selected)}
-        title="Index the selected jobs: one at a time, each gets its work folder, script and source index, and nothing else, so its video opens at once (runs next to the queue)"
-        aria-label="Index the selected jobs"><DatabaseZapIcon /></Button>
+      <Button variant="ghost" size="icon" disabled={!app.jobs.length} onclick={() => select(app.jobs.map(j => j.id))}
+        title="Select all (Ctrl+A)" aria-label="Select all"><ListChecksIcon /></Button>
+      <Button variant="ghost" size="icon" disabled={!toIndex} onclick={() => index(indexTarget)}
+        title="Index {selected.length ? 'the selected jobs' : 'every job'} not indexed yet ({toIndex}): one at a time, each gets its work folder, script and source index, and nothing else, so its video opens at once (runs next to the queue)"
+        aria-label={selected.length ? 'Index the selected jobs' : 'Index every job not indexed yet'}><DatabaseZapIcon /></Button>
       <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => move(-1)} title="Move up"><ArrowUpIcon /></Button>
       <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => move(1)} title="Move down"><ArrowDownIcon /></Button>
       <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => act(() => api.reprobe(selected))} title="Probe again">
@@ -398,6 +419,11 @@
               {job.issue}
             </div>
           {/if}
+          {#if job.index_held && job.status === 'index-queued'}
+            <div class="mt-0.5 truncate text-xs text-muted-foreground" title="Settings, Batch indexing">
+              Waits: an encode is reading this disk
+            </div>
+          {/if}
           {#if job.index_error && job.status !== 'indexing'}
             <div class="mt-0.5 truncate text-xs text-warning" title={job.index_error}>Index failed: {job.index_error}</div>
           {/if}
@@ -422,8 +448,13 @@
           job's. Audio and subtitle choices stay per job unless the template sets them.
         </p>
         <div class="flex flex-wrap items-center gap-3">
-          <Button variant="outline" onclick={() => index(selected)}><DatabaseZapIcon />Index {selected.length} jobs</Button>
-          <span class="text-sm text-muted-foreground">One at a time: the work folder, script and source index, nothing else. Their video then opens at once, and the encode reuses the index.</span>
+          <Button variant="outline" disabled={!batchToIndex} onclick={() => index(selected)}>
+            <DatabaseZapIcon />{batchToIndex ? `Index ${batchToIndex} job${batchToIndex > 1 ? 's' : ''}` : 'All indexed'}
+          </Button>
+          <span class="text-sm text-muted-foreground">
+            One at a time: the work folder, script and source index, nothing else. Their video then opens at once, and the
+            encode reuses the index.{batchToIndex && batchToIndex < selected.length ? ` ${selected.length - batchToIndex} already indexed.` : ''}
+          </span>
         </div>
         {#if batchSource}
           <Card.Root class="gap-2 p-4">

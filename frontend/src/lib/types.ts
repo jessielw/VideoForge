@@ -84,6 +84,7 @@ export interface JobSummary {
   custom_script: boolean
   indexed: boolean // the source index is in the work folder: the video opens at once
   index_error: string // the last batch index failed: why
+  index_held: boolean // waiting in the index lane while an encode reads its disk
   audio: string[]
   subs: number
 }
@@ -451,6 +452,7 @@ export interface ConfigState {
   profile_default: string
   profiles: { id: string; name: string }[]
   restart: string[]
+  index_waits_for_disk: boolean // batch indexing holds a job back while an encode reads its disk
 }
 
 export type ToolStatus = 'ok' | 'unknown' | 'missing' | 'broken'

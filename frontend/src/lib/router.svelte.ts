@@ -19,6 +19,9 @@ class Router {
   }
 
   go(page: Page, jobId: string | null = null): void {
+    // At once, not on hashchange: until then effects would see the old job (e.g. re-select it).
+    this.page = page
+    this.jobId = page === 'queue' ? jobId : null
     location.hash = `#/${page}${jobId ? `/${encodeURIComponent(jobId)}` : ''}`
   }
 }

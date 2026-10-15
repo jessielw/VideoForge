@@ -5,7 +5,8 @@ Next to it, the index lane: jobs asked to be indexed get their work folder, scri
 index, one at a time by a thread of its own (alongside a running encode), and nothing else. The
 steps are recorded like a run's, so the encode reuses them. Nothing else indexes: the preview opens
 only indexed sources, and a template's auto crop waits in the lane and runs after the index. A job
-can't be edited while it is being indexed.
+can't be edited while it is being indexed. The lane is kept across restarts, and (a setting) a job
+waits while an encode reads its disk, unless it was asked for by itself (Index now).
 
 Every change is saved and announced on the event hub. An edit replans from the
 cached probe (no file access) and clears the last run's outcome, but keeps the
@@ -26,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from videoforge.core.config import AppConfig
+from videoforge.core.disks import disks
 from videoforge.core.execute import process
 from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import Cancelled, CancelToken, ToolError
@@ -56,6 +58,7 @@ from videoforge.server.store import Store
 LOG_LINES = 5000
 STEP_LINES = 3000  # per step, in memory
 _PROGRESS_INTERVAL = 0.25  # seconds between progress events per job
+LANE_SETTING = "index_lane"  # the store's record of the lane: job ids in order, the one being indexed first
 
 
 class JobView(StrEnum):
@@ -96,6 +99,8 @@ class Entry:
     index_queued: bool = False
     indexing: bool = False
     crop_pending: bool = False  # the lane detects the crop after indexing (a template's auto crop)
+    index_now: bool = False  # asked for by itself (Index now): doesn't wait for an encode on its disk
+    index_held: bool = False  # waiting in the lane while an encode reads its disk
     index_error: str = ""
     # Held by whatever may build the source's index: the index lane, auto-crop, and a preview request
     # for a clip the preview worker doesn't hold yet. Two processes never index one source at once.
@@ -181,6 +186,7 @@ class JobQueue:
         self._index_order: list[str] = []  # the lane's jobs, in the order they're indexed
         self._index_cancel: CancelToken | None = None
         self._index_wake = threading.Event()
+        self.index_waits_for_disk = True  # the lane holds a job back while an encode reads its disk
 
     # --- state ---------------------------------------------------------------------
 
@@ -224,7 +230,8 @@ class JobQueue:
     # --- loading and adding ----------------------------------------------------------
 
     def load(self) -> None:
-        """Jobs from the store; a job the server stopped in the middle of is queued again."""
+        """Jobs from the store; a job the server stopped in the middle of is queued again, and the index
+        lane goes on where it stopped (a job stopped mid-index is indexed again)."""
         for stored in self.store.load_jobs():
             e = Entry(stored.spec, stored.state, queued=stored.queued or stored.running)
             if stored.running:
@@ -234,7 +241,14 @@ class JobQueue:
                 self._entries[e.id] = e
                 self._order.append(e.id)
             self._save(e)
-        self.probe([e.id for e in self.entries()])
+        lane = [i for i in self.store.get_setting(LANE_SETTING) or [] if i in self._entries]
+        with self._lock:  # every job is probing until this returns, so the lane takes none before its order is set
+            self.probe([e.id for e in self.entries()])
+            if lane:
+                self.index(lane)
+                self._index_order = [i for i in lane if i in self._index_order] + [
+                    i for i in self._index_order if i not in lane]
+                self._save_lane()
 
     def add(
         self,
@@ -490,10 +504,11 @@ class JobQueue:
             for e in self.entries():
                 if (wanted is None or e.id in wanted) and e.runnable:
                     e.queued = True
-                    e.index_queued = False  # the run indexes it first anyway
+                    e.index_queued = e.index_now = e.index_held = False  # the run indexes it first anyway
                     e.state.status, e.state.error = None, ""
                     self._save(e)
                     queued.append(e.id)
+            self._save_lane()
         for job_id in queued:
             self._changed(self.get(job_id))
         self._queue_changed()
@@ -629,13 +644,14 @@ class JobQueue:
             e.running, e.progress, e.current_step = False, None, None
             self._save(e)
         self._changed(e)
+        self._index_wake.set()  # a job held back for this one's disk may go
 
     # --- the index lane ------------------------------------------------------------------
 
     def index(self, ids: Iterable[str], *, first: bool = False) -> list[str]:
         """Put jobs in the index lane, in queue order, after the ones there (`first`: before them, e.g. the
-        job open in the editor; one already waiting moves up). Jobs that reuse an encode, are queued, running
-        or being indexed are left out. Returns the ids it took."""
+        job open in the editor; one already waiting moves up, and neither waits for an encode on its disk).
+        Jobs that reuse an encode, are queued, running or being indexed are left out. Returns the ids it took."""
         wanted = set(ids)
         taken = []
         with self._lock:
@@ -644,9 +660,11 @@ class JobQueue:
                     continue
                 if not e.index_queued or first:
                     e.index_queued, e.index_error = True, ""
+                    e.index_now = e.index_now or first
                     taken.append(e.id)
             rest = [i for i in self._index_order if i not in taken]
             self._index_order = taken + rest if first else rest + taken
+            self._save_lane()
             if taken and not self._index_active and not self._closing:
                 self._index_active = True
                 self._indexer = threading.Thread(target=self._index_work, name="indexer", daemon=True)
@@ -657,45 +675,83 @@ class JobQueue:
         self._queue_changed()
         return taken
 
+    def set_index_waits_for_disk(self, on: bool) -> None:
+        self.index_waits_for_disk = on
+        self._index_wake.set()  # jobs held back go now (or wait from now)
+
     def stop_indexing(self, ids: Iterable[str] | None = None) -> None:
         """Take jobs (default: all) out of the index lane; the one being indexed is cancelled."""
         wanted = set(ids) if ids is not None else None
         with self._lock:
             dropped = [e for e in self.entries() if e.index_queued and (wanted is None or e.id in wanted)]
             for e in dropped:
-                e.index_queued = False
+                e.index_queued = e.index_now = e.index_held = False
             current = next((e for e in self.entries() if e.indexing), None)
             if current is not None and (wanted is None or current.id in wanted) and self._index_cancel is not None:
                 self._index_cancel.cancel()
+            self._save_lane()
         self._index_wake.set()
         for e in dropped:
             self._changed(e)
         self._queue_changed()
 
-    def _take_index(self) -> tuple[Entry | None, bool]:
-        """(the next job to index, whether any are left). A job still probing waits."""
+    def _save_lane(self) -> None:
+        """Under the lock: the lane's order in the store, so a restart goes on with it. Not once shutting
+        down: stopping the lane then keeps it for the next start."""
+        if self._closing:
+            return
+        ids = [e.id for e in self.entries() if e.indexing] + [
+            i for i in self._index_order if i in self._entries and self._entries[i].index_queued]
+        self.store.set_setting(LANE_SETTING, ids)
+
+    def _encode_disks(self) -> frozenset[str]:
+        """Under the lock: the disks the encode queue reads now, or is about to (between two jobs)."""
+        e = next((x for x in self.entries() if x.running), None)
+        if e is None and self._active and not self._stop_after_current:
+            e = self._next()
+        if e is None:
+            return frozenset()
+        s = e.spec
+        paths = [s.inputs.source, s.work_dir, *([s.output_dir] if s.output_dir else []),
+                 *([s.inputs.encode] if s.inputs.encode else [])]
+        return frozenset().union(*(disks(p) for p in paths))
+
+    def _take_index(self) -> tuple[Entry | None, bool, list[Entry]]:
+        """(the next job to index, whether any are left, jobs held back or let go). A job still probing
+        waits; so does one on a disk an encode reads (`index_waits_for_disk`) unless it was asked for by
+        itself, and a job on another disk goes ahead of it."""
         with self._lock:
             waiting = [self._entries[i] for i in self._index_order
                        if i in self._entries and self._entries[i].index_queued]
             self._index_order = [e.id for e in waiting]
+            busy = self._encode_disks() if self.index_waits_for_disk else frozenset()
+            taken, changed = None, []
             for e in waiting:
-                if e.probing:
-                    continue
-                self._index_order.remove(e.id)
-                e.index_queued, e.indexing, e.progress = False, True, None
+                held = not e.probing and not e.index_now and bool(busy and busy & disks(e.spec.inputs.source))
+                if held != e.index_held:
+                    e.index_held = held
+                    changed.append(e)
+                if taken is None and not e.probing and not held:
+                    taken = e
+            if taken is not None:
+                self._index_order.remove(taken.id)
+                taken.index_queued, taken.index_now, taken.indexing, taken.progress = False, False, True, None
                 self._index_cancel = CancelToken()
                 if self._closing:
                     self._index_cancel.cancel()
-                return e, True
+                return taken, True, changed
             if not waiting or self._closing:
                 self._index_active = False
-                return None, False
-            return None, True
+                return None, False, changed
+            return None, True, changed
 
     def _index_work(self) -> None:
         while True:
             self._index_wake.clear()
-            e, left = self._take_index()
+            e, left, changed = self._take_index()
+            for c in changed:
+                if c is not e:
+                    self._changed(c)
             if e is not None:
                 self._changed(e)
                 self._queue_changed()
@@ -765,6 +821,7 @@ class JobQueue:
             e.crop_pending = False
             self._index_cancel = None
             self._save(e)
+            self._save_lane()
         self._changed(e)
         self._queue_changed()
 

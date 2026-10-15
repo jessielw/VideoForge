@@ -1,6 +1,6 @@
 <script lang="ts">
   // Settings: where each tool is (found or not, and its version), what the folder browser
-  // may show, and the profile new jobs start with. Each change saves at once and is used by
+  // may show, the profile new jobs start with, and whether batch indexing waits for an encode's disk. Each change saves at once and is used by
   // new jobs and runs; videoforge.toml stays the default underneath ("Reset" goes back to it).
   import { onMount } from 'svelte'
   import FileBrowser from '../components/FileBrowser.svelte'
@@ -12,6 +12,7 @@
   import XIcon from '@lucide/svelte/icons/x'
   import { toast } from 'svelte-sonner'
   import { Button } from '$lib/components/ui/button'
+  import { Checkbox } from '$lib/components/ui/checkbox'
   import * as Dialog from '$lib/components/ui/dialog'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
@@ -230,6 +231,24 @@
             {#each config.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
           </NativeSelect>
           <span class="text-xs text-muted-foreground">videoforge.toml says: {config.profile_default}</span>
+        </label>
+      </section>
+
+      <section class="space-y-3">
+        <h2 class="font-medium">Batch indexing</h2>
+        <label class="flex items-start gap-3 text-sm">
+          <Checkbox
+            class="mt-0.5"
+            checked={config.index_waits_for_disk}
+            onCheckedChange={v => change({ index_waits_for_disk: v })}
+          />
+          <span>
+            Wait while an encode reads the same disk
+            <span class="block text-xs text-muted-foreground">
+              A job in the index lane whose source is on the disk the running encode reads waits for it to finish; jobs on
+              other disks go first. Index now on a job never waits.
+            </span>
+          </span>
         </label>
       </section>
     {/if}

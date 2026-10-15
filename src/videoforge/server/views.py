@@ -52,6 +52,7 @@ def summary(e: Entry) -> dict[str, Any]:
         # The source index is in the work folder (the video opens at once); a failed batch index says why.
         "indexed": s.encodes_video and not e.indexing and index_exists(s.inputs.source, s.video.source_filter, s.work_dir),
         "index_error": e.index_error,
+        "index_held": e.index_held,  # waiting in the lane while an encode reads its disk
         "audio": [f"{a.title} ({a.language})" for a in e.plan.audio] if e.plan else [],
         "subs": len(e.plan.subs) if e.plan else 0,
     }

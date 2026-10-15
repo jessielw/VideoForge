@@ -288,7 +288,14 @@
           <Button variant="outline" onclick={() => api.stopIndex([jobId])}><SquareIcon />Stop</Button>
         {:else if indexStatus === 'index-queued'}
           <div class="text-base font-medium">Waiting to be indexed</div>
-          <p class="max-w-md text-sm text-muted-foreground">Sources are indexed one at a time. The preview opens by itself after.</p>
+          <p class="max-w-md text-sm text-muted-foreground">
+            {#if live?.index_held}
+              An encode is reading this source's disk: it waits until that's done (Settings, Batch indexing). Index this one
+              next doesn't wait.
+            {:else}
+              Sources are indexed one at a time. The preview opens by itself after.
+            {/if}
+          </p>
           <div class="flex gap-2">
             <Button onclick={indexNow}><DatabaseZapIcon />Index this one next</Button>
             <Button variant="outline" onclick={() => api.stopIndex([jobId])}>Don't index</Button>

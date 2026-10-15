@@ -61,6 +61,7 @@ def create_app(
     if services.detect_crop is None:
         services.detect_crop = partial(video.source_crop, preview)
     job_queue = JobQueue(cfg, profiles or get_profile, store, events, services, settings.probe_workers)
+    job_queue.index_waits_for_disk = saved.index_waits_for_disk
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

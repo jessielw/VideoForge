@@ -89,7 +89,12 @@ export const api = {
   setTemplateDefault: (profile: string, name: string | null) =>
     request<Presets>('PUT', `/api/presets/template-default/${encodeURIComponent(profile)}`, { name }),
   config: () => get<ConfigState>('/api/config'),
-  saveConfig: (changes: { tools?: Record<string, string | null>; roots?: string[] | null; profile?: string | null }) =>
+  saveConfig: (changes: {
+    tools?: Record<string, string | null>
+    roots?: string[] | null
+    profile?: string | null
+    index_waits_for_disk?: boolean
+  }) =>
     request<ConfigState>('PUT', '/api/config', changes),
   toolChecks: () => get<ToolCheck[]>('/api/config/tools'),
   encoders: () => get<AudioEncodeInfo[]>('/api/config/encoders'),

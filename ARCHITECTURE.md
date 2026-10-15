@@ -22,6 +22,7 @@ src/videoforge/
                          rules, container, AutoQPF); apply() to a spec, apply_audio() / apply_subs() once the
                          source's tracks are known
     plan_io.py           Type-driven JSON codec for every model
+    disks.py             Which physical disk a path is on (the index lane waits for an encode on its disk)
     workdir.py           <source>_tmp/ per job: indexes, script, encodes, stats, logs
     history.py           Finished-output records
     video/
@@ -217,7 +218,14 @@ defaults, audio encoder settings, and the checks on the finished file.
   panel; its Index now puts the job first in the lane (`index(first=True)`), with progress there and in the
   header, and the job is locked (no edits) while it's being indexed. A template's auto crop waits in the
   lane too and runs after the index (`crop_pending`: not runnable meanwhile). `Entry.source_lock` is held
-  by the lane (index and crop) and a preview request for a clip the worker doesn't hold yet. Not kept
-  across restarts.
+  by the lane (index and crop) and a preview request for a clip the worker doesn't hold yet. The lane's
+  order is kept in the store (`index_lane` setting: the job being indexed first), so a restart goes on
+  with it; a job stopped mid-index is indexed again (the indexers replace a broken index). Stopping the
+  lane by hand empties it; a shutdown doesn't. Disks (Settings, on by default): a job whose source is on
+  a disk the running encode reads (its source, work folder, output folder, reused encode) waits, and
+  jobs on other disks go first; Index now on a job doesn't wait. `core/disks.py` finds the physical disk
+  (Windows: the volume's disk numbers, so two partitions of one drive are one disk; a network path by
+  its server; elsewhere `st_dev`). Queue toolbar: Select all, and Index (the selected jobs, or every job
+  when none is selected) skips jobs already indexed.
 - The CLI isn't kept in step with new features (the server and core are the product).
 - Docker later: Linux binaries for the toolchain; qaac needs a decision (Windows-only).
