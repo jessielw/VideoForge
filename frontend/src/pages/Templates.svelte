@@ -45,6 +45,8 @@
   const starred = $derived(app.defaultTemplate(profile))
   const userNames = $derived(new Set(app.presets.template.map(t => t.name)))
   const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
+  // templates are shared; a profile without a track editor ignores their audio
+  const trackEditor = $derived(app.profiles.find(p => p.id === profile)?.track_editor ?? false)
   const audioFlags = $derived((app.profiles.find(p => p.id === profile)?.track_properties ?? []).filter(f => f.kind === 'audio'))
   const readOnly = $derived(!!opened?.builtin)
   const dirty = $derived(
@@ -349,6 +351,11 @@
         </fieldset>
         <Card.Root class="gap-3 p-4">
           <span class="section-label">Audio</span>
+          {#if !trackEditor}
+            <p class="text-xs text-muted-foreground">
+              {app.profiles.find(p => p.id === profile)?.name}'s rules choose its jobs' audio: these settings apply to other profiles' jobs.
+            </p>
+          {/if}
           <TemplateAudioEditor value={draft.audio ?? null} flags={audioFlags} disabled={readOnly} onchange={v => (draft!.audio = v)} />
         </Card.Root>
         <p class="text-xs text-muted-foreground">Subtitle choices aren't part of a template: they stay per job.</p>

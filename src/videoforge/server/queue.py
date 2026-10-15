@@ -289,11 +289,13 @@ class JobQueue:
             self._probes.submit(self._detect_crop, e)
 
     def _apply_audio(self, e: Entry) -> bool:
-        """Under the lock: a template's pending audio becomes the job's overrides once its tracks are known."""
+        """Under the lock: a template's pending audio becomes the job's overrides once its tracks are known.
+        A profile without a track editor chooses the audio by its own rules, so there it's dropped."""
         s = e.spec
         if s.audio_template is None or e.probed is None:
             return False
-        s.overrides = apply_audio(s.overrides, s.audio_template, e.probed.source.audio)
+        if self.profile(e).track_editor:
+            s.overrides = apply_audio(s.overrides, s.audio_template, e.probed.source.audio)
         s.audio_template = None
         return True
 

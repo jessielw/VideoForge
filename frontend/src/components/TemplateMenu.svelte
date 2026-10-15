@@ -37,6 +37,8 @@
   let busy = $state(false)
 
   const choices = $derived(app.presetChoices('template', profile))
+  // a profile without a track editor chooses the audio by its own rules, so there's none to save
+  const trackEditor = $derived(app.profiles.find(p => p.id === profile)?.track_editor ?? false)
   const userNames = $derived(new Set(app.presets.template.map(p => p.name)))
   const current = $derived<Template>({
     video: spec.video,
@@ -44,7 +46,7 @@
     mux: spec.mux,
     qpf: spec.qpf,
     crop_mode: cropMode,
-    audio: withAudio ? jobAudio() : null,
+    audio: withAudio && trackEditor ? jobAudio() : null,
   })
 
   // The job's audio choices as slots: track n's settings and the outputs copied from it, by position.
@@ -159,7 +161,7 @@
         <option value="fixed">Crop: this job's ({cropText(crop)}) on every job</option>
         <option value="auto">Crop: detect it for each job</option>
       </NativeSelect>
-      {#if audioKeys.length}
+      {#if audioKeys.length && trackEditor}
         <label class="flex items-center gap-2 text-xs text-muted-foreground">
           <Checkbox bind:checked={withAudio} />
           This job's audio too ({audioKeys.length} track{audioKeys.length === 1 ? '' : 's'}, by position)

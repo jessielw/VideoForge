@@ -25,6 +25,7 @@ from videoforge.core.models import SubFormat as F
 from videoforge.core.models import VideoInfo
 from videoforge.core.pipeline.steps import Step, StepProgress
 from videoforge.core.video.settings import Crop
+from videoforge.profiles.manual import ManualProfile
 from videoforge.server.app import create_app
 from videoforge.server.queue import Services
 from videoforge.server.settings import ServerSettings
@@ -521,6 +522,17 @@ def test_template_audio_fits_each_track(tmp_path):
         overrides = job["spec"]["overrides"] | {"tracks": {"id:1": ddp51}}
         job = client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides}).json()
         assert job["status"] == "blocked" and any(i["code"] == "audio.upmix" for i in job["issues"])
+
+
+def test_template_audio_is_dropped_without_a_track_editor(tmp_path, monkeypatch):
+    """A profile whose rules choose the audio keeps its own picks: the template's audio is dropped."""
+    monkeypatch.setattr(ManualProfile, "track_editor", False)
+    make_files(tmp_path, "S01E01")
+    template = {"audio": {"slots": [{"track": {"exclude": True}}], "others": "exclude"}}
+    with make_client(tmp_path) as client:
+        (job_id,) = add(client, tmp_path, template=template)
+        job = wait_for(client, job_id, "ready", "warn")
+        assert job["spec"]["audio_template"] is None and job["spec"]["overrides"]["tracks"] == {}
 
 
 def test_folder_browser(tmp_path):

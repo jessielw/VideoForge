@@ -87,8 +87,9 @@ added, to one job, or to a batch; a template applied after a job's own edits rep
   then becomes the job's track overrides (added audio files and subtitles keep theirs). Each slot is
   fitted to its track (`fit_audio`): more channels than the track has -> the encode's default layout,
   DDP Atmos without an Atmos track -> DDP, and the bitrate goes back to the default with a changed layout
-  or when the encode won't take it; the same settings set by hand still block. Only profiles
-  with the track editor follow audio overrides; a group's rules may ignore them.
+  or when the encode won't take it; the same settings set by hand still block. A profile
+  without the track editor chooses the audio by its own rules: a template's audio is dropped for its
+  jobs (the queue's `_apply_audio`), and the UI says so (Templates page note, no "This job's audio too").
 
 ## Pipeline
 
