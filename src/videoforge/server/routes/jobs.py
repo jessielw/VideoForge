@@ -131,6 +131,8 @@ def _changes(body: dict[str, Any]) -> dict[str, Any]:
         changes["container"] = str(body["container"])
     if body.get("profile"):
         changes["profile"] = body["profile"]
+    if body.get("label") is not None:
+        changes["label"] = str(body["label"])
     return changes
 
 
@@ -248,7 +250,11 @@ def job_commands(request: Request, job_id: str) -> list[dict[str, Any]]:
     out_dir = e.spec.output_dir or Path("<output folder>")
     try:
         built = build_steps(
-            e.spec, e.plan, profile, q.app, output_path(e.plan, out_dir, profile, e.spec.container(profile))
+            e.spec,
+            e.plan,
+            profile,
+            q.app,
+            output_path(e.plan, out_dir, profile, e.spec.container(profile), e.spec.label),
         )
     except (ToolError, ValueError) as ex:
         raise HTTPException(422, str(ex)) from None

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from videoforge.core.models import Issue, Severity, track_key, with_copies
+from videoforge.core.pipeline.build import output_path
 from videoforge.core.plan_io import to_json
 from videoforge.core.video.script import index_exists
 from videoforge.core.video.settings import EncoderSettings, RateControl
@@ -68,12 +70,14 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     out["issues"] = [to_json(i) for i in issues(e)]
     out["steps"] = to_json(e.state.steps)
     out["plan"] = None
+    out["output_name"] = None
     out["tracks"] = None
     if e.plan is not None:
         plan = to_json(e.plan)
         for key in ("source", "inputs", "overrides"):  # sent elsewhere
             plan.pop(key, None)
         out["plan"] = plan
+        out["output_name"] = output_path(e.plan, Path(), profile, e.spec.container(profile), e.spec.label).name
     if e.probed is not None:
         src = e.probed.source
         tracks = [*src.audio, *e.probed.external_audio, *src.subs, *e.probed.external_subs]

@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING
 import uuid
 
@@ -83,6 +84,8 @@ class JobSpec:
     # What the last template set for the audio / the subtitles (template.template_choice).
     audio_from_template: TemplateChoice | None = None
     subs_from_template: TemplateChoice | None = None
+    # Tells runs of one source apart (e.g. "dubbed"): added to the output name, and in the job record.
+    label: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
     @property
@@ -108,6 +111,11 @@ class JobSpec:
     def container(self, profile: Profile) -> str:
         """The job's container: its own pick when the profile offers it, else the profile's."""
         return self.mux.container if self.mux.container in profile.containers else profile.container
+
+
+def clean_label(text: str) -> str:
+    """A label as it can go into a file name: characters Windows refuses dropped, no dots or spaces at the ends."""
+    return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", text).strip(" .")
 
 
 @dataclass(slots=True)

@@ -81,7 +81,7 @@ def _run(spec, plan, profile, app, state, log, cancel, progress, on_record, on_s
         return JobResult(plan, JobStatus.FAILED, error="; ".join(i.message for i in no_tools))
     if spec.output_dir is None:
         return JobResult(plan, JobStatus.FAILED, error="No output folder set")
-    output = output_path(plan, spec.output_dir, profile, spec.container(profile))
+    output = output_path(plan, spec.output_dir, profile, spec.container(profile), spec.label)
     if output.resolve() == spec.inputs.source.resolve():
         return JobResult(plan, JobStatus.FAILED, error=f"Output would overwrite the source: {output}")
 

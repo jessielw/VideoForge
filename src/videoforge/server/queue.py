@@ -41,6 +41,7 @@ from videoforge.core.job import (
     StepRecord,
     StepRun,
     StepStatus,
+    clean_label,
     plan_spec,
     probe_spec,
 )
@@ -453,6 +454,7 @@ class JobQueue:
         mux: MuxSettings | None = None,
         container: str | None = None,
         template: Template | None = None,
+        label: str | None = None,
     ) -> Entry:
         """Change a job's settings and replan: the template first, then the given settings (container
         alone keeps the job's extra muxer arguments). New inputs (added subtitle files, chapters) are
@@ -494,6 +496,8 @@ class JobQueue:
                 s.mux = mux
             if container is not None:
                 s.mux = replace(s.mux, container=container)
+            if label is not None:
+                s.label = clean_label(label)
             e.state.status, e.state.error, e.state.issues = None, "", []
             if not reprobe:
                 self._apply_tracks(e)

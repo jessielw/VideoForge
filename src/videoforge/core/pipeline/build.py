@@ -39,8 +39,10 @@ class JobSteps:
     encoded_audio: dict[int, Path] = field(default_factory=dict)  # plan.audio position -> file
 
 
-def output_path(plan: Plan, out_dir: Path, profile: Profile, container: str | None = None) -> Path:
-    return out_dir / (profile.output_stem(plan) + MUXERS[container or profile.container].extension)
+def output_path(plan: Plan, out_dir: Path, profile: Profile, container: str | None = None, label: str = "") -> Path:
+    """The profile's name for the output, with the job's label (if any) after it: `<stem>.<label>.mkv`."""
+    stem = profile.output_stem(plan) + (f".{label}" if label else "")
+    return out_dir / (stem + MUXERS[container or profile.container].extension)
 
 
 def mp4_chapters_step(plan: Plan, work: Path) -> Step | None:

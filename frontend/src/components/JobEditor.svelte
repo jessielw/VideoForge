@@ -211,6 +211,21 @@
               />
               <Button variant="outline" disabled={!editable} onclick={() => (browsing = 'output')}><FolderOpenIcon />Browse…</Button>
             </div>
+            <span class="text-muted-foreground">Label</span>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <Input
+                class="w-48"
+                aria-label="Label"
+                placeholder="e.g. dubbed"
+                title="Tells runs of one source apart: added to the output name, and kept in the job record"
+                value={job.spec.label}
+                disabled={!editable}
+                onchange={e => save({ label: (e.target as HTMLInputElement).value.trim() })}
+              />
+              {#if job.output_name}
+                <span class="font-mono text-xs break-all text-muted-foreground" title="The file this job writes">{job.output_name}</span>
+              {/if}
+            </div>
             <span class="text-muted-foreground">Container</span>
             {#if containers.length > 1}
               <ToggleGroup.Root

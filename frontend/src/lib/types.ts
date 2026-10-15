@@ -173,6 +173,7 @@ export interface JobSpec {
   subs_template: TemplateSubs | null // ... and its subtitle rules
   audio_from_template: TemplateChoice | null // what the last template set for the audio
   subs_from_template: TemplateChoice | null // ... and for the subtitles
+  label: string // tells runs of one source apart (e.g. "dubbed"): added to the output name, in the job record
   id: string
 }
 
@@ -292,6 +293,7 @@ export interface JobDetail extends JobSummary {
   steps: Record<string, StepRecord>
   plan: Plan | null
   tracks: Tracks | null
+  output_name: string | null // the file the run will write (null until planned)
 }
 
 export interface ClipInfo {

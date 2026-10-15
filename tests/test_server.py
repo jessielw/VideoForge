@@ -181,6 +181,12 @@ def test_add_inspect_and_edit(tmp_path):
         assert [c["id"] for c in commands] == ["script", "index", "chapters", "video", "mux"]  # audio is copied
         assert "--crf 17" in commands[3]["command"] and " | " in commands[3]["command"]
         assert client.patch(f"/api/jobs/{ids[0]}", json={"encoder": {"rate_control": "nope"}}).status_code == 422
+        assert edited["output_name"] == "Show.S01E01.mkv"
+        labelled = client.patch(f"/api/jobs/{ids[0]}", json={"label": ' dubbed? "JA" '}).json()
+        assert labelled["spec"]["label"] == "dubbed JA"  # what a file name can't hold is dropped
+        assert labelled["output_name"] == "Show.S01E01.dubbed JA.mkv"
+        mux = client.get(f"/api/jobs/{ids[0]}/commands").json()[-1]["command"]
+        assert "Show.S01E01.dubbed JA.mkv.partial" in mux
         assert client.get("/api/jobs/nope").status_code == 404
         (manual,) = client.get("/api/profiles").json()
         assert manual["id"] == "manual" and manual["default"] and manual["defaults"]["encoder"]["crf"] == 18
@@ -260,7 +266,9 @@ def test_queue_runs_jobs_and_streams_events(tmp_path):
         (step,) = client.get(f"/api/jobs/{ids[0]}/steps").json()
         assert (step["status"], step["command"], step["exit_code"]) == ("done", "x264 --crf 18", 0)
         assert step["lines"] == ["[x264] [ 50.0%] 1/2 frames"] and not step["partial"]  # not the header
-        assert (tmp_path / "src" / "Show.S01E01.mkv_tmp" / "videoforge.log").is_file()
+        text_log = (tmp_path / "src" / "Show.S01E01.mkv_tmp" / "videoforge.log").read_text(encoding="utf-8")
+        last = text_log.splitlines()[-1]
+        assert last[:9].count(":") == 2 and last[9:] == f"Job complete: {tmp_path / 'out' / 'Show.S01E01.mkv'}"
 
         # Editing a finished job clears its outcome (but keeps its finished steps).
         job = client.get(f"/api/jobs/{ids[0]}").json()
