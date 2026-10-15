@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
-import string
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
+import string
 
 from videoforge.core.config import PROJECT_ROOT
 from videoforge.core.history import app_data_dir
@@ -45,8 +45,12 @@ class SavedSettings:
     @classmethod
     def load(cls, store) -> SavedSettings:
         tools = store.get_setting("tools") or {}
-        return cls({k: v for k, v in tools.items() if isinstance(v, str) and v}, store.get_setting("roots"),
-                   store.get_setting("profile"), bool(store.get_setting("index_waits_for_disk", True)))
+        return cls(
+            {k: v for k, v in tools.items() if isinstance(v, str) and v},
+            store.get_setting("roots"),
+            store.get_setting("profile"),
+            bool(store.get_setting("index_waits_for_disk", True)),
+        )
 
     def save(self, store) -> None:
         store.set_setting("tools", self.tools)

@@ -258,8 +258,16 @@ class TrackOverride:
 
     @property
     def empty(self) -> bool:
-        return (self.exclude is None and self.language is None and self.title is None and not self.flags
-                and self.action is None and self.bitrate_kbps is None and self.layout is None and not self.options)
+        return (
+            self.exclude is None
+            and self.language is None
+            and self.title is None
+            and not self.flags
+            and self.action is None
+            and self.bitrate_kbps is None
+            and self.layout is None
+            and not self.options
+        )
 
 
 @dataclass(slots=True)
@@ -363,7 +371,7 @@ class TemplateChoice:
 
 
 def track_key(track: AudioTrack | SubTrack) -> str:
-    """"id:<mkvmerge id>" for a source track, "ext:<file name>" for an added file (an added audio
+    """ "id:<mkvmerge id>" for a source track, "ext:<file name>" for an added file (an added audio
     file's second track on is "ext:<file name>#<n>"); a copy of an audio track adds "+<n>"."""
     external = track.external_path
     copy = f"+{track.copy}" if isinstance(track, AudioTrack) and track.copy else ""

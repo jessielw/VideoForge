@@ -38,13 +38,18 @@ from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 
 
 def spec(encode: Path | None = None) -> JobSpec:
-    return JobSpec(JobInputs(Path("Show.S01E01.mkv"), encode=encode), "manual",
-                   video=VideoSettings(crop=Crop(0, 140, 0, 140)))
+    return JobSpec(
+        JobInputs(Path("Show.S01E01.mkv"), encode=encode), "manual", video=VideoSettings(crop=Crop(0, 140, 0, 140))
+    )
 
 
 def test_keep_fixed_and_auto_crop():
-    t = Template(VideoSettings(filters="clip = clip", crop=Crop(8, 0, 8, 0)), EncoderSettings(crf=16),
-                 MuxSettings("mp4", "-x"), qpf=False)
+    t = Template(
+        VideoSettings(filters="clip = clip", crop=Crop(8, 0, 8, 0)),
+        EncoderSettings(crf=16),
+        MuxSettings("mp4", "-x"),
+        qpf=False,
+    )
     s = spec()
     t.apply(s)
     assert s.video.crop == Crop(0, 140, 0, 140) and s.video.filters == "clip = clip" and not s.autocrop
@@ -64,18 +69,33 @@ def test_keep_fixed_and_auto_crop():
 
 
 def test_audio_slots_go_to_the_source_tracks_by_position():
-    tracks = [audio(AudioCodec.TRUEHD, "7.1", "en", index=0), audio(AudioCodec.AC3, "5.1", "en", index=1),
-              audio(AudioCodec.AAC, "2.0", "en", index=2, commentary=True)]
+    tracks = [
+        audio(AudioCodec.TRUEHD, "7.1", "en", index=0),
+        audio(AudioCodec.AC3, "5.1", "en", index=1),
+        audio(AudioCodec.AAC, "2.0", "en", index=2, commentary=True),
+    ]
     ddp = TrackOverride(action=AudioAction.DDP, layout=Layout.parse("5.1"), bitrate_kbps=640, language="fr")
-    slots = TemplateAudio(slots=[AudioSlot(TrackOverride(title="TrueHD 7.1"), [ddp]), AudioSlot(TrackOverride(exclude=True))])
-    before = Overrides(tracks={"id:1": TrackOverride(bitrate_kbps=9), "id:1+1": TrackOverride(), "id:10": TrackOverride(title="Subs"),
-                               "ext:extra.ac3": TrackOverride(title="Mine")},
-                       copies=["id:1+1", "id:1+2"], order=["id:2", "id:10", "id:1"], audio_track_ids=[1])
+    slots = TemplateAudio(
+        slots=[AudioSlot(TrackOverride(title="TrueHD 7.1"), [ddp]), AudioSlot(TrackOverride(exclude=True))]
+    )
+    before = Overrides(
+        tracks={
+            "id:1": TrackOverride(bitrate_kbps=9),
+            "id:1+1": TrackOverride(),
+            "id:10": TrackOverride(title="Subs"),
+            "ext:extra.ac3": TrackOverride(title="Mine"),
+        },
+        copies=["id:1+1", "id:1+2"],
+        order=["id:2", "id:10", "id:1"],
+        audio_track_ids=[1],
+    )
 
     out = apply_audio(before, slots, tracks)
     assert out.tracks["id:1"] == TrackOverride(title="TrueHD 7.1")  # the job's earlier choice is replaced
     assert out.copies == ["id:1+1"] and out.tracks["id:1+1"].action is AudioAction.DDP
-    assert out.tracks["id:1+1"].language is None and ddp.language == "fr"  # language is per source; the slot is untouched
+    assert (
+        out.tracks["id:1+1"].language is None and ddp.language == "fr"
+    )  # language is per source; the slot is untouched
     assert out.tracks["id:2"].exclude and "id:3" not in out.tracks  # a track past the slots: as the profile decides
     assert out.tracks["id:10"].title == "Subs" and out.tracks["ext:extra.ac3"].title == "Mine"  # subs, added files kept
     assert out.order == ["id:10"] and out.audio_track_ids is None
@@ -127,17 +147,27 @@ def test_sub_rules_keep_order_and_flag_the_tracks():
     full, sdh = sub(SubFormat.PGS, "en", index=0), sub(SubFormat.PGS, "en", "SDH", index=1)
     french, forced = sub(SubFormat.PGS, "fr", index=2), sub(SubFormat.PGS, "en", index=3, forced=True)
     added = sub(SubFormat.SRT, "en", external="Show.en.forced.srt", forced=True, tags=frozenset({"forced"}))
-    rules = TemplateSubs([
-        SubRule(languages=["en"], forced=True, track=TrackOverride(flags={"default": True}, title="Forced", language="de")),
-        SubRule(languages=["en"], hearing_impaired=True, track=TrackOverride(exclude=True)),
-        SubRule(languages=["en"]),
-    ])
-    before = Overrides(tracks={"id:10": TrackOverride(title="old"), "id:1": TrackOverride(title="audio")},
-                       order=["id:2", "id:13", "id:1"])
+    rules = TemplateSubs(
+        [
+            SubRule(
+                languages=["en"],
+                forced=True,
+                track=TrackOverride(flags={"default": True}, title="Forced", language="de"),
+            ),
+            SubRule(languages=["en"], hearing_impaired=True, track=TrackOverride(exclude=True)),
+            SubRule(languages=["en"]),
+        ]
+    )
+    before = Overrides(
+        tracks={"id:10": TrackOverride(title="old"), "id:1": TrackOverride(title="audio")},
+        order=["id:2", "id:13", "id:1"],
+    )
 
     out = apply_subs(before, rules, [full, sdh, french, forced, added])
     assert out.tracks["id:13"] == TrackOverride(title="Forced", flags={"default": True})  # no language: per source
-    assert out.tracks["ext:Show.en.forced.srt"] == TrackOverride(title="Forced", flags={"default": False})  # one default
+    assert out.tracks["ext:Show.en.forced.srt"] == TrackOverride(
+        title="Forced", flags={"default": False}
+    )  # one default
     assert out.tracks["id:11"].exclude and out.tracks["id:12"].exclude  # SDH by rule; French by `others`
     assert out.tracks["id:10"] == TrackOverride(flags={"default": False})  # the earlier title is replaced
     assert out.tracks["id:1"].title == "audio"  # audio is kept
@@ -175,7 +205,9 @@ def test_audio_rules_match_language_codec_channels_and_traits():
     assert audio_matches(AudioRule(commentary=True), stereo) and not audio_matches(AudioRule(commentary=True), ad)
     assert audio_matches(AudioRule(visual_impaired=True), ad)  # "AD" in the title
     assert not audio_matches(AudioRule(visual_impaired=True), audio(AudioCodec.AC3, "2.0", title="Headroom"))
-    assert audio_matches(AudioRule(original=True), ja, "ja") and not audio_matches(AudioRule(original=True), truehd, "ja")
+    assert audio_matches(AudioRule(original=True), ja, "ja") and not audio_matches(
+        AudioRule(original=True), truehd, "ja"
+    )
     assert audio_matches(AudioRule(original=False), truehd, "ja")
     assert not audio_matches(AudioRule(original=True), ja, None)  # no original known: nothing is it
     assert audio_matches(AudioRule(), ja)  # an empty rule matches anything
@@ -189,29 +221,52 @@ def test_audio_rules_pick_tracks_whatever_their_order():
         AudioRule(languages=["en"], first_only=True, track=TrackOverride(title="English", flags={"default": True})),
         AudioRule(languages=["ja"], track=TrackOverride(action=AudioAction.FLAC, flags={"default": True})),
     )
-    a = [audio(AudioCodec.TRUEHD, "7.1", "en", index=0), audio(AudioCodec.AC3, "5.1", "en", index=1),
-         audio(AudioCodec.AAC, "2.0", "en", title="Commentary", index=2), audio(AudioCodec.FLAC, "2.0", "ja", index=3)]
+    a = [
+        audio(AudioCodec.TRUEHD, "7.1", "en", index=0),
+        audio(AudioCodec.AC3, "5.1", "en", index=1),
+        audio(AudioCodec.AAC, "2.0", "en", title="Commentary", index=2),
+        audio(AudioCodec.FLAC, "2.0", "ja", index=3),
+    ]
     out = apply_audio(Overrides(), template, a)
     assert out.tracks["id:1"] == TrackOverride(title="English", flags={"default": True})
     assert out.tracks["id:2"].exclude and out.tracks["id:3"].exclude  # the 2nd English: no rule left; commentary
     assert out.tracks["id:4"] == TrackOverride(action=AudioAction.FLAC, flags={"default": False})  # one default
     assert out.order == ["id:1", "id:4"]
 
-    b = [replace(a[3], id=1, index=0), replace(a[2], id=2, index=1), replace(a[0], id=3, index=2), replace(a[1], id=4, index=3)]
+    b = [
+        replace(a[3], id=1, index=0),
+        replace(a[2], id=2, index=1),
+        replace(a[0], id=3, index=2),
+        replace(a[1], id=4, index=3),
+    ]
     out = apply_audio(Overrides(), template, b)
     assert out.order == ["id:3", "id:1"] and out.tracks["id:3"].title == "English" and out.tracks["id:4"].exclude
 
 
 def test_audio_rules_extras_others_and_earlier_choices():
     template = rules(
-        AudioRule(languages=["en"], track=TrackOverride(title="Main"),
-                  extra=[TrackOverride(action=AudioAction.DDP, layout=Layout.parse("5.1"), bitrate_kbps=640, flags={"default": True})]),
+        AudioRule(
+            languages=["en"],
+            track=TrackOverride(title="Main"),
+            extra=[
+                TrackOverride(
+                    action=AudioAction.DDP, layout=Layout.parse("5.1"), bitrate_kbps=640, flags={"default": True}
+                )
+            ],
+        ),
         others=OtherTracks.KEEP,
     )
-    a = [audio(AudioCodec.FLAC, "2.0", "fr", index=0, default=True), audio(AudioCodec.TRUEHD, "7.1", "en", index=1),
-         audio(AudioCodec.AC3, "2.0", "en", index=2)]
-    before = Overrides(tracks={"id:1": TrackOverride(title="old"), "id:2+1": TrackOverride(), "id:10": TrackOverride(title="Subs")},
-                       copies=["id:2+1", "id:2+2"], order=["id:10", "id:3", "id:1"], audio_track_ids=[1])
+    a = [
+        audio(AudioCodec.FLAC, "2.0", "fr", index=0, default=True),
+        audio(AudioCodec.TRUEHD, "7.1", "en", index=1),
+        audio(AudioCodec.AC3, "2.0", "en", index=2),
+    ]
+    before = Overrides(
+        tracks={"id:1": TrackOverride(title="old"), "id:2+1": TrackOverride(), "id:10": TrackOverride(title="Subs")},
+        copies=["id:2+1", "id:2+2"],
+        order=["id:10", "id:3", "id:1"],
+        audio_track_ids=[1],
+    )
     out = apply_audio(before, template, a)
     assert out.copies == ["id:2+1", "id:3+1"]  # every match gets the rule (no first_only), each with its extra
     assert out.tracks["id:2+1"].layout == Layout.parse("5.1") and out.tracks["id:2+1"].bitrate_kbps == 640
@@ -224,8 +279,14 @@ def test_audio_rules_extras_others_and_earlier_choices():
 
 def test_template_audio_dispatches_on_its_mode():
     a = [audio(AudioCodec.AC3, "5.1", "en", index=0), audio(AudioCodec.AC3, "5.1", "ja", index=1)]
-    both = TemplateAudio(AudioMatch.POSITION, slots=[AudioSlot(TrackOverride(title="slot"))],
-                         rules=[AudioRule(languages=["ja"], track=TrackOverride(title="rule"))])
+    both = TemplateAudio(
+        AudioMatch.POSITION,
+        slots=[AudioSlot(TrackOverride(title="slot"))],
+        rules=[AudioRule(languages=["ja"], track=TrackOverride(title="rule"))],
+    )
     assert apply_audio(Overrides(), both, a).tracks == {"id:1": TrackOverride(title="slot")}
     both.mode, both.others = AudioMatch.RULES, OtherTracks.EXCLUDE
-    assert apply_audio(Overrides(), both, a).tracks == {"id:1": TrackOverride(exclude=True), "id:2": TrackOverride(title="rule")}
+    assert apply_audio(Overrides(), both, a).tracks == {
+        "id:1": TrackOverride(exclude=True),
+        "id:2": TrackOverride(title="rule"),
+    }

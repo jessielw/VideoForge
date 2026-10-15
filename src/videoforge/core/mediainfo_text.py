@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import PureWindowsPath
+import re
 
 from videoforge.core import lang
 from videoforge.core.classify import (
@@ -95,9 +95,7 @@ def parse_mediainfo_text(text: str, name: str | None = None) -> SourceInfo:
             has_chapters = True
         elif kind == "Audio":
             track_no = _number(f.get("ID"))
-            fmt = parse_audio_format(
-                f.get("Format"), f.get("Commercial name"), f.get("Format settings, additional")
-            )
+            fmt = parse_audio_format(f.get("Format"), f.get("Commercial name"), f.get("Format settings, additional"))
             channels = parse_channel_count(f.get("Channel(s)"))
             audio.append(
                 AudioTrack(
@@ -124,9 +122,7 @@ def parse_mediainfo_text(text: str, name: str | None = None) -> SourceInfo:
                     id=(track_no - 1) if track_no else len(audio) + len(subs) + 1,
                     index=len(subs),
                     format=parse_sub_format(f.get("Format"), f.get("Codec ID")),
-                    language=resolve_sub_language(
-                        lang.from_mediainfo_name(f.get("Language")), title
-                    ),
+                    language=resolve_sub_language(lang.from_mediainfo_name(f.get("Language")), title),
                     title=title,
                     default=_yes(f.get("Default")),
                     forced=_yes(f.get("Forced")),
@@ -136,6 +132,4 @@ def parse_mediainfo_text(text: str, name: str | None = None) -> SourceInfo:
                 )
             )
 
-    return SourceInfo(
-        path=None, name=file_name, video=video, audio=audio, subs=subs, has_chapters=has_chapters
-    )
+    return SourceInfo(path=None, name=file_name, video=video, audio=audio, subs=subs, has_chapters=has_chapters)

@@ -3,25 +3,33 @@ and process.run on real subprocesses."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import threading
-from dataclasses import replace
-from pathlib import Path
 
-import pytest
 from conftest import audio, plan_for, simulate_output, source, sub
+import pytest
 
 from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools
 from videoforge.core.execute import process
 from videoforge.core.execute.process import Cancelled, CancelToken, ToolError
 from videoforge.core.job import JobSpec, JobState, JobStatus, StepStatus
-from videoforge.core.models import AudioAction, Issue, JobInputs, Layout, Plan, Severity, VideoInfo
-from videoforge.core.models import AudioCodec as C
-from videoforge.core.models import SubFormat as F
+from videoforge.core.models import (
+    AudioAction,
+    AudioCodec as C,
+    Issue,
+    JobInputs,
+    Layout,
+    Plan,
+    Severity,
+    SubFormat as F,
+    VideoInfo,
+)
 from videoforge.core.pipeline.build import build_steps
 from videoforge.core.pipeline.run import run_job, run_plan
 from videoforge.core.video.settings import Crop, EncoderSettings, RateControl, SourceFilter
@@ -37,8 +45,18 @@ def fake_tool_files(*names: str) -> dict[str, str]:
 
 
 _AUDIO = fake_tool_files("deezy", "dee", "truehdd", "qaac64", "ffmpeg")
-APP = AppConfig(tools=Tools(mkvmerge="mkvmerge", deezy=_AUDIO["deezy"], dee=_AUDIO["dee"], truehdd=_AUDIO["truehdd"],
-                            qaac=_AUDIO["qaac64"], ffmpeg=_AUDIO["ffmpeg"], x264="x264", vspipe="vspipe"))
+APP = AppConfig(
+    tools=Tools(
+        mkvmerge="mkvmerge",
+        deezy=_AUDIO["deezy"],
+        dee=_AUDIO["dee"],
+        truehdd=_AUDIO["truehdd"],
+        qaac=_AUDIO["qaac64"],
+        ffmpeg=_AUDIO["ffmpeg"],
+        x264="x264",
+        vspipe="vspipe",
+    )
+)
 
 
 def encode_audio(plan: Plan) -> None:
@@ -95,8 +113,16 @@ def test_run_plan_happy_path(profile, tmp_path):
     plan = make_plan(tmp_path)
     runner = FakeRunner()
     events, lines = [], []
-    result = run_plan(plan, tmp_path / "out", profile, APP, runner=runner,
-                      prober=lambda path, _mkv: simulate_output(plan), progress=events.append, log=lines.append)
+    result = run_plan(
+        plan,
+        tmp_path / "out",
+        profile,
+        APP,
+        runner=runner,
+        prober=lambda path, _mkv: simulate_output(plan),
+        progress=events.append,
+        log=lines.append,
+    )
     assert result.status is JobStatus.DONE, (result.error, result.issues)
     assert result.output == tmp_path / "out" / "Show.S01E01.mkv" and result.output.is_file()
     assert tools_called(runner) == ["qaac64", "deezy", "mkvmerge"]  # a reused encode: no video steps
@@ -115,11 +141,17 @@ def test_rerun_reuses_finished_steps(profile, tmp_path):
     state = JobState()
     prober = lambda *_: simulate_output(plan)
     first = FakeRunner()
-    assert run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=first, prober=prober).status is JobStatus.DONE
+    assert (
+        run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=first, prober=prober).status
+        is JobStatus.DONE
+    )
     assert set(state.steps) == {"audio.1", "audio.2", "mux"} and state.status is JobStatus.DONE
 
     again = FakeRunner()
-    assert run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=again, prober=prober).status is JobStatus.DONE
+    assert (
+        run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=again, prober=prober).status
+        is JobStatus.DONE
+    )
     assert again.calls == []  # nothing changed: every step reused
 
     srt = tmp_path / "Show.S01E01.en.srt"
@@ -246,8 +278,10 @@ def test_failed_validation_is_the_last_step(profile, tmp_path):
 def test_video_steps_two_pass(profile, tmp_path):
     plan = make_plan(tmp_path)
     job = JobSpec(
-        inputs=JobInputs(plan.source.path, subtitles=plan.inputs.subtitles), profile="manual",
-        encoder=EncoderSettings(rate_control=RateControl.TWO_PASS, bitrate_kbps=9000), qpf=False,
+        inputs=JobInputs(plan.source.path, subtitles=plan.inputs.subtitles),
+        profile="manual",
+        encoder=EncoderSettings(rate_control=RateControl.TWO_PASS, bitrate_kbps=9000),
+        qpf=False,
         output_dir=tmp_path / "out",
     )
     job.video.crop = Crop(0, 140, 0, 140)
@@ -286,8 +320,10 @@ def test_video_steps_two_pass(profile, tmp_path):
 TOOLS = PROJECT_ROOT / "tools"
 FFMPEG = shutil.which("ffmpeg")
 needs_tools = pytest.mark.skipif(
-    FFMPEG is None or not (TOOLS / "vs-plugins" / "ffms2.dll").exists()
-    or not (TOOLS / "x264" / "x264.exe").exists() or not (TOOLS / "MKVToolNix" / "mkvmerge.exe").exists(),
+    FFMPEG is None
+    or not (TOOLS / "vs-plugins" / "ffms2.dll").exists()
+    or not (TOOLS / "x264" / "x264.exe").exists()
+    or not (TOOLS / "MKVToolNix" / "mkvmerge.exe").exists(),
     reason="needs ffmpeg and tools/ (vs-plugins, x264, MKVToolNix)",
 )
 
@@ -306,8 +342,11 @@ def test_real_job_end_to_end(tmp_path):
     vsx.ensure_vspipe(app.tools.vspipe)
     src = tmp_path / "Movie.2020.mkv"
     meta = tmp_path / "chapters.txt"
-    meta.write_text(";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1500\ntitle=Chapter 01\n"
-                    "[CHAPTER]\nTIMEBASE=1/1000\nSTART=1500\nEND=3000\ntitle=Chapter 02\n", encoding="utf-8")
+    meta.write_text(
+        ";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1500\ntitle=Chapter 01\n"
+        "[CHAPTER]\nTIMEBASE=1/1000\nSTART=1500\nEND=3000\ntitle=Chapter 02\n",
+        encoding="utf-8",
+    )
     subprocess.run(
         [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=3:size=320x136:rate=24",
          "-f", "lavfi", "-i", "sine=duration=3", "-i", str(meta), "-map", "0:v", "-map", "1:a", "-map_chapters", "2",
@@ -318,8 +357,12 @@ def test_real_job_end_to_end(tmp_path):
     srt = tmp_path / "Movie.2020.en.srt"
     srt.write_text("1\n00:00:00,500 --> 00:00:02,000\nHello\n", encoding="utf-8")
 
-    job = JobSpec(inputs=JobInputs(src, subtitles=[srt]), profile="manual", output_dir=tmp_path / "out",
-                  encoder=EncoderSettings(preset="ultrafast", crf=30))
+    job = JobSpec(
+        inputs=JobInputs(src, subtitles=[srt]),
+        profile="manual",
+        output_dir=tmp_path / "out",
+        encoder=EncoderSettings(preset="ultrafast", crf=30),
+    )
     job.video.crop = Crop(0, 22, 0, 22)
     profile = get_profile("manual")
     plan = plan_spec(job, probe_spec(job, app), profile)
@@ -353,8 +396,11 @@ def test_real_mp4_job_end_to_end(tmp_path):
     vsx.ensure_vspipe(app.tools.vspipe)
     src = tmp_path / "Clip.mkv"
     meta = tmp_path / "chapters.txt"
-    meta.write_text(";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1500\ntitle=Start\n"
-                    "[CHAPTER]\nTIMEBASE=1/1000\nSTART=1500\nEND=3000\ntitle=Middle\n", encoding="utf-8")
+    meta.write_text(
+        ";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1500\ntitle=Start\n"
+        "[CHAPTER]\nTIMEBASE=1/1000\nSTART=1500\nEND=3000\ntitle=Middle\n",
+        encoding="utf-8",
+    )
     subprocess.run(
         [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=3:size=320x180:rate=24",
          "-f", "lavfi", "-i", "sine=duration=3", "-i", str(meta), "-map", "0:v", "-map", "1:a", "-map_chapters", "2",
@@ -365,8 +411,14 @@ def test_real_mp4_job_end_to_end(tmp_path):
     srt = tmp_path / "Clip.en.srt"
     srt.write_text("1\n00:00:00,500 --> 00:00:02,000\nHello\n", encoding="utf-8")
 
-    job = JobSpec(inputs=JobInputs(src, subtitles=[srt]), profile="manual", output_dir=tmp_path / "out", qpf=False,
-                  encoder=EncoderSettings(preset="ultrafast", crf=30), mux=MuxSettings(container="mp4"))
+    job = JobSpec(
+        inputs=JobInputs(src, subtitles=[srt]),
+        profile="manual",
+        output_dir=tmp_path / "out",
+        qpf=False,
+        encoder=EncoderSettings(preset="ultrafast", crf=30),
+        mux=MuxSettings(container="mp4"),
+    )
     profile = get_profile("manual")
     plan = plan_spec(job, probe_spec(job, app), profile, app.tools)
     assert not plan.blocked, plan.issues
@@ -378,7 +430,9 @@ def test_real_mp4_job_end_to_end(tmp_path):
     out = probe(result.output, app.tools.mkvmerge)
     assert [a.language for a in out.audio] == ["en"] and [s.format for s in out.subs] == [SubFormat.TX3G]
     assert (job.work_dir / "chapters_mp4.txt").read_text().splitlines()[2:4] == [
-        "CHAPTER02=00:00:01.500", "CHAPTER02NAME=Middle"]
+        "CHAPTER02=00:00:01.500",
+        "CHAPTER02NAME=Middle",
+    ]
     assert out.has_chapters
 
 
@@ -437,12 +491,16 @@ def test_process_run_tools_die_with_a_hard_killed_server():
     """TerminateProcess on the process running run() ends the tool and the child it started."""
     import ctypes
 
-    tool = ("import os, subprocess, sys, time\n"
-            "c = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
-            "print(os.getpid(), c.pid, flush=True)\n"
-            "time.sleep(60)")
-    server = py("import sys\nfrom videoforge.core.execute import process\n"
-                f"process.run([[sys.executable, '-c', {tool!r}]], lambda line: print(line, flush=True))")
+    tool = (
+        "import os, subprocess, sys, time\n"
+        "c = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+        "print(os.getpid(), c.pid, flush=True)\n"
+        "time.sleep(60)"
+    )
+    server = py(
+        "import sys\nfrom videoforge.core.execute import process\n"
+        f"process.run([[sys.executable, '-c', {tool!r}]], lambda line: print(line, flush=True))"
+    )
     helper = subprocess.Popen(server, stdout=subprocess.PIPE, text=True)
     kernel32 = ctypes.WinDLL("kernel32")
     kernel32.OpenProcess.restype = ctypes.c_void_p

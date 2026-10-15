@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import codecs
+from collections.abc import Callable, Sequence
 import os
 import re
 import subprocess
 import threading
-from collections.abc import Callable, Sequence
 from typing import IO
 
 from videoforge.core.execute import jobobject
@@ -137,12 +137,17 @@ def run(argvs: Sequence[Sequence[str]], log: LogFn, cancel: CancelToken | None =
         for t in pumps:
             t.join(timeout=5)
 
-    failed = [(tool_name(argv), _signed(proc.returncode), tail) for argv, proc, tail in zip(argvs, procs, tails)
-              if proc.returncode not in _OK_CODES.get(tool_name(argv), {0})]
+    failed = [
+        (tool_name(argv), _signed(proc.returncode), tail)
+        for argv, proc, tail in zip(argvs, procs, tails)
+        if proc.returncode not in _OK_CODES.get(tool_name(argv), {0})
+    ]
     if failed:
         # A consumer that fails (e.g. x264 on a bad option) makes the producer fail writing into the
         # pipe: lead with the tool that didn't just lose its pipe.
         failed.sort(key=lambda f: bool(_BROKEN_PIPE.search("\n".join(f[2]))))
-        message = "\n".join(f"{name} exited with code {code}" + (":\n" + "\n".join(tail[-5:]) if tail else "")
-                            for name, code, tail in failed)
+        message = "\n".join(
+            f"{name} exited with code {code}" + (":\n" + "\n".join(tail[-5:]) if tail else "")
+            for name, code, tail in failed
+        )
         raise ToolError(message, failed[0][1])

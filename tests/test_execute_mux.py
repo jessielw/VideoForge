@@ -4,13 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from conftest import audio, plan_for, source, sub
+import pytest
 
 from videoforge.core.execute.mux import MuxError, _frame_rate, mux_command
-from videoforge.core.models import AudioAction, Layout, Overrides, TrackOverride, VideoInfo
-from videoforge.core.models import AudioCodec as C
-from videoforge.core.models import SubFormat as F
+from videoforge.core.models import (
+    AudioAction,
+    AudioCodec as C,
+    Layout,
+    Overrides,
+    SubFormat as F,
+    TrackOverride,
+    VideoInfo,
+)
 
 RAW = (".h264", ".hevc")
 OUT = Path("out.mkv")
@@ -36,8 +42,9 @@ def aot_plan(*, encode="Show.S01E01_job.h264", start_ms=0, chapters=True):
     src.subs[3].extracted_from = 4
     external = src.subs[2:]
     src.subs[2:] = []  # external files aren't tracks of the source
-    plan = plan_for(src, source(name=encode), external_subs=external,
-                    chapters=Path("qpf_chapters.txt") if chapters else None)
+    plan = plan_for(
+        src, source(name=encode), external_subs=external, chapters=Path("qpf_chapters.txt") if chapters else None
+    )
     plan.encode_path = Path(encode)
     # Encode both audio tracks: Japanese to AAC, English to DDP.
     a0, a1 = plan.audio
@@ -134,7 +141,9 @@ def test_every_flag_is_written_explicitly():
         [sub(F.SRT, "en", index=0, hi=True)],
         name="Movie.mkv",
     )
-    ov = Overrides(tracks={"id:1": TrackOverride(flags={"original": True}), "id:10": TrackOverride(title="English SDH")})
+    ov = Overrides(
+        tracks={"id:1": TrackOverride(flags={"original": True}), "id:10": TrackOverride(title="English SDH")}
+    )
     plan = plan_for(src, source(name="Movie_job.mkv"), ov)
     argv = mux_command(plan, {}, OUT, "mkvmerge", RAW)
     assert value(argv, "--default-track-flag", "1:") == ["1:1"]
@@ -147,8 +156,14 @@ def test_every_flag_is_written_explicitly():
 
 @pytest.mark.parametrize(
     ("ns", "rate"),
-    [(41708333, "24000/1001p"), (41708334, "24000/1001p"), (40000000, "25p"), (16683333, "60000/1001p"),
-     (41666667, "24p"), (12345678, "12345678ns")],
+    [
+        (41708333, "24000/1001p"),
+        (41708334, "24000/1001p"),
+        (40000000, "25p"),
+        (16683333, "60000/1001p"),
+        (41666667, "24p"),
+        (12345678, "12345678ns"),
+    ],
 )
 def test_frame_rate(ns, rate):
     assert _frame_rate(ns) == rate
@@ -197,21 +212,28 @@ def test_copies_of_a_track():
 
     assert copy_base("id:1+2") == ("id:1", 2) and copy_base("ext:a+b.flac") == ("ext:a+b.flac", 0)
     assert copy_base("ext:a+b.flac+1") == ("ext:a+b.flac", 1) and copy_base("id:1+0") == ("id:1+0", 0)
-    src = source([audio(C.TRUEHD, "7.1", "en", index=0, default=True), audio(C.AC3, "2.0", "en", index=1)],
-                 name="Movie.mkv")
+    src = source(
+        [audio(C.TRUEHD, "7.1", "en", index=0, default=True), audio(C.AC3, "2.0", "en", index=1)], name="Movie.mkv"
+    )
     src.video = VideoInfo(1920, 1080, start_ms=40, default_duration_ns=41708333)
     copies = with_copies(src.audio, ["id:1+1", "id:1+2", "id:9+1"])  # id:9 isn't there
     assert [track_key(t) for t in copies] == ["id:1", "id:2", "id:1+1", "id:1+2"]
     assert copies[2].default is False and copies[2].id == 1  # the same source track
 
     # One copy encoded, one copied as is (its own input: mkvmerge takes a track once per input).
-    ov = Overrides(copies=["id:1+1", "id:1+2"], order=["id:1+1", "id:1", "id:2", "id:1+2"],
-                   tracks={"id:1+1": TrackOverride(action=AudioAction.AAC_FFMPEG, layout=Layout(2, 0))})
+    ov = Overrides(
+        copies=["id:1+1", "id:1+2"],
+        order=["id:1+1", "id:1", "id:2", "id:1+2"],
+        tracks={"id:1+1": TrackOverride(action=AudioAction.AAC_FFMPEG, layout=Layout(2, 0))},
+    )
     plan = plan_for(src, source(name="enc.h264"), ov)
     plan.encode_path = Path("enc.h264")
     assert [(track_key(a.source), a.action) for a in plan.audio] == [
-        ("id:1+1", AudioAction.AAC_FFMPEG), ("id:1", AudioAction.COPY), ("id:2", AudioAction.COPY),
-        ("id:1+2", AudioAction.COPY)]
+        ("id:1+1", AudioAction.AAC_FFMPEG),
+        ("id:1", AudioAction.COPY),
+        ("id:2", AudioAction.COPY),
+        ("id:1+2", AudioAction.COPY),
+    ]
     argv = mux_command(plan, {0: Path("tmp/audio0_en.m4a")}, OUT, "mkvmerge", RAW)
     assert value(argv, "--audio-tracks") == ["1,2", "1"]
     assert argv.count("Movie.mkv") == 2
@@ -221,11 +243,21 @@ def test_copies_of_a_track():
 
 
 def test_audio_description_flag():
-    src = source([audio(C.AC3, "2.0", "en", index=0), audio(C.AC3, "2.0", "en", index=1, title="Audio Description")],
-                 name="Movie.mkv")
+    src = source(
+        [audio(C.AC3, "2.0", "en", index=0), audio(C.AC3, "2.0", "en", index=1, title="Audio Description")],
+        name="Movie.mkv",
+    )
     src.audio[1].visual_impaired = True
-    plan = plan_for(src, source(name="enc.mkv"), Overrides(tracks={"id:1": TrackOverride(flags={"visual_impaired": True}),
-                                                                   "id:2": TrackOverride(flags={"visual_impaired": False})}))
+    plan = plan_for(
+        src,
+        source(name="enc.mkv"),
+        Overrides(
+            tracks={
+                "id:1": TrackOverride(flags={"visual_impaired": True}),
+                "id:2": TrackOverride(flags={"visual_impaired": False}),
+            }
+        ),
+    )
     plan.encode_path = Path("enc.mkv")
     assert [a.visual_impaired for a in plan.audio] == [True, False]  # the user's choice over the file's
     argv = mux_command(plan, {}, OUT, "mkvmerge", RAW)

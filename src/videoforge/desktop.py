@@ -12,13 +12,13 @@ thread, so the server runs in a thread and the tray detached, the way Reclaimerr
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import sys
 import threading
-from pathlib import Path
 from typing import Any
 
-import uvicorn
 from PIL import Image, ImageDraw
+import uvicorn
 
 APP_ID = "VideoForge.VideoForge"
 
@@ -63,8 +63,10 @@ def _ask_in_front(window: Any, title: str, message: str) -> bool:
 
     user32.EnumWindows(visit, 0)
     mb_okcancel, mb_iconwarning, mb_setforeground, idok = 0x1, 0x30, 0x10000, 1
-    return user32.MessageBoxW(found[0] if found else None, message, title,
-                              mb_okcancel | mb_iconwarning | mb_setforeground) == idok
+    return (
+        user32.MessageBoxW(found[0] if found else None, message, title, mb_okcancel | mb_iconwarning | mb_setforeground)
+        == idok
+    )
 
 
 def _on_console_stop(callback: Any) -> Any:
@@ -113,9 +115,19 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
     # Without a screen, Windows centers it across two monitors: open maximized on the primary one (at 0,0),
     # with a restore size that fits it.
     screen = next((s for s in webview.screens if s.x == 0 and s.y == 0), None)
-    width, height = (1500, 950) if screen is None else (min(1500, screen.width * 9 // 10), min(950, screen.height * 9 // 10))
-    window = webview.create_window("VideoForge", url, width=width, height=height, min_size=(900, 600), screen=screen,
-                                   maximized=True, background_color="#1b1a18")
+    width, height = (
+        (1500, 950) if screen is None else (min(1500, screen.width * 9 // 10), min(950, screen.height * 9 // 10))
+    )
+    window = webview.create_window(
+        "VideoForge",
+        url,
+        width=width,
+        height=height,
+        min_size=(900, 600),
+        screen=screen,
+        maximized=True,
+        background_color="#1b1a18",
+    )
 
     quitting = threading.Event()
     state = {"minimized": False, "maximized": True, "told": False}
@@ -130,7 +142,9 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
         if app.state.queue.queue_state()["running"]:
             show()
             if not _ask_in_front(
-                window, "Quit VideoForge","A job is running. Stop it and quit?\n\nStarted again, it skips the steps it finished."
+                window,
+                "Quit VideoForge",
+                "A job is running. Stop it and quit?\n\nStarted again, it skips the steps it finished.",
             ):
                 return
         quitting.set()
@@ -160,11 +174,16 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
     window.events.restored += lambda: state.update(minimized=False, maximized=False)
     console_handler = _on_console_stop(quitting.set)  # noqa: F841  Ctrl+C quits instead of hiding; kept alive
 
-    tray = pystray.Icon("VideoForge", app_icon(64), "VideoForge", pystray.Menu(
-        pystray.MenuItem("Open VideoForge", show, default=True),
-        pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Quit", quit_app),
-    ))
+    tray = pystray.Icon(
+        "VideoForge",
+        app_icon(64),
+        "VideoForge",
+        pystray.Menu(
+            pystray.MenuItem("Open VideoForge", show, default=True),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Quit", quit_app),
+        ),
+    )
     try:
         tray.run_detached()
     except Exception as ex:  # noqa: BLE001  no tray (e.g. some Linux desktops): closing the window quits

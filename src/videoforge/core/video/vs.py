@@ -7,15 +7,15 @@ stage): the preview asks for many frames of the same script.
 
 from __future__ import annotations
 
-import io
-import os
-import subprocess
-import sys
-import threading
 from collections import OrderedDict
 from dataclasses import dataclass
 from fractions import Fraction
+import io
+import os
 from pathlib import Path
+import subprocess
+import sys
+import threading
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -65,8 +65,9 @@ def ensure_vspipe(vspipe: str) -> None:
     """pip's vapoursynth needs `vapoursynth config` once before vspipe can start its Python."""
     ok = subprocess.run([vspipe, "--version"], capture_output=True, creationflags=_NO_WINDOW, check=False)
     if ok.returncode != 0:
-        subprocess.run([sys.executable, "-m", "vapoursynth", "config"], capture_output=True,
-                       creationflags=_NO_WINDOW, check=True)
+        subprocess.run(
+            [sys.executable, "-m", "vapoursynth", "config"], capture_output=True, creationflags=_NO_WINDOW, check=True
+        )
 
 
 def load_clip(script: str) -> vs.VideoNode:
@@ -107,8 +108,15 @@ class ClipInfo:
 def clip_info(clip: vs.VideoNode) -> ClipInfo:
     fps = Fraction(clip.fps.numerator, clip.fps.denominator) if clip.fps.denominator else Fraction(0)
     fmt = clip.format
-    return ClipInfo(clip.num_frames, clip.width, clip.height, fps.numerator, fps.denominator or 1,
-                    fmt.name if fmt else "variable", fmt.bits_per_sample if fmt else 0)
+    return ClipInfo(
+        clip.num_frames,
+        clip.width,
+        clip.height,
+        fps.numerator,
+        fps.denominator or 1,
+        fmt.name if fmt else "variable",
+        fmt.bits_per_sample if fmt else 0,
+    )
 
 
 def matrix(frame_props, height: int) -> int:

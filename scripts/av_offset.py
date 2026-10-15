@@ -32,7 +32,8 @@ def pcm(path: str, stream: str, start: float, dur: float) -> np.ndarray:
     if key not in _cache:
         out = subprocess.run(
             ["ffmpeg", "-v", "error", "-i", path, "-map", stream, "-ac", "1", "-ar", str(RATE), "-f", "f32le", "-"],
-            capture_output=True, check=True,
+            capture_output=True,
+            check=True,
         ).stdout
         _cache[key] = np.frombuffer(out, dtype=np.float32)
     i = round(start * RATE)

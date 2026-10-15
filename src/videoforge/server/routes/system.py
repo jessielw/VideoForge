@@ -49,8 +49,7 @@ def list_dir(request: Request, path: str, extensions: str = "") -> dict[str, Any
                         dirs.append({"name": entry.name, "path": entry.path})
                     elif not wanted or Path(entry.name).suffix.lower() in wanted:
                         st = entry.stat()
-                        files.append({"name": entry.name, "path": entry.path, "size": st.st_size,
-                                      "mtime": st.st_mtime})
+                        files.append({"name": entry.name, "path": entry.path, "size": st.st_size, "mtime": st.st_mtime})
                 except OSError:
                     continue
     except OSError as ex:
@@ -113,15 +112,26 @@ def profiles(request: Request) -> list[dict[str, Any]]:
     for pid in request.app.state.profile_ids:
         p = request.app.state.queue.profiles(pid)
         video, encoder = p.video_defaults()
-        out.append({
-            "id": pid, "name": p.name, "container": p.container, "external_subtitles": p.external_subtitles,
-            "containers": [{"id": c, "label": MUXERS[c].label, "extension": MUXERS[c].extension, "tool": MUXERS[c].tool}
-                           for c in dict.fromkeys((p.container, *p.containers))],
-            "track_properties": [to_json(t) for t in p.track_properties], "track_editor": p.track_editor,
-            "defaults": {"video": to_json(video), "encoder": to_json(encoder),
-                         "template": to_json(Template.defaults(p))},
-            "default": pid == request.app.state.default_profile,
-        })
+        out.append(
+            {
+                "id": pid,
+                "name": p.name,
+                "container": p.container,
+                "external_subtitles": p.external_subtitles,
+                "containers": [
+                    {"id": c, "label": MUXERS[c].label, "extension": MUXERS[c].extension, "tool": MUXERS[c].tool}
+                    for c in dict.fromkeys((p.container, *p.containers))
+                ],
+                "track_properties": [to_json(t) for t in p.track_properties],
+                "track_editor": p.track_editor,
+                "defaults": {
+                    "video": to_json(video),
+                    "encoder": to_json(encoder),
+                    "template": to_json(Template.defaults(p)),
+                },
+                "default": pid == request.app.state.default_profile,
+            }
+        )
     return out
 
 

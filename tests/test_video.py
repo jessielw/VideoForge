@@ -6,16 +6,15 @@ in tools/vs-plugins and the encoders in tools/; they skip when those are missing
 
 from __future__ import annotations
 
+from pathlib import Path
 import shutil
 import subprocess
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from videoforge.core.config import PROJECT_ROOT
-from videoforge.core.video import crop as autocrop
-from videoforge.core.video import vs as vsx
+from videoforge.core.video import crop as autocrop, vs as vsx
 from videoforge.core.video.encoders import encoder_command, output_name, progress, vspipe_command
 from videoforge.core.video.script import build_script, script_parts
 from videoforge.core.video.settings import (
@@ -41,8 +40,9 @@ def test_script_layout():
     s = VideoSettings(crop=Crop(0, 22, 0, 22), resize=Resize(1280, 544), filters="clip = clip.std.Invert()")
     text = build_script(s, Path(r"D:\Show\E01.mkv"), Path(r"D:\Show\E01.mkv_tmp"), depth=10)
     lines = text.splitlines()
-    assert lines[2] == ("src = core.ffms2.Source('D:\\\\Show\\\\E01.mkv', "
-                        "cachefile='D:\\\\Show\\\\E01.mkv_tmp\\\\E01.mkv.ffindex')")  # FFMS2 is the default
+    assert lines[2] == (
+        "src = core.ffms2.Source('D:\\\\Show\\\\E01.mkv', cachefile='D:\\\\Show\\\\E01.mkv_tmp\\\\E01.mkv.ffindex')"
+    )  # FFMS2 is the default
     assert "clip = core.std.Crop(clip, left=0, right=0, top=22, bottom=22)" in lines
     assert "clip = core.resize.Spline36(clip, width=1280, height=544)" in lines
     assert "clip = clip.std.Invert()" in lines
@@ -51,8 +51,9 @@ def test_script_layout():
 
     source_only = build_script(s, Path("a.mkv"), Path("w"), stage="source")
     assert "Crop" not in source_only and source_only.endswith("clip = src\nclip.set_output()\n")
-    custom = build_script(VideoSettings(source_filter=SourceFilter.LSMASH, custom="clip = src[10:20]"),
-                          Path("a.mkv"), Path("w"))
+    custom = build_script(
+        VideoSettings(source_filter=SourceFilter.LSMASH, custom="clip = src[10:20]"), Path("a.mkv"), Path("w")
+    )
     assert "lsmas.LWLibavSource" in custom and "clip = src[10:20]" in custom and "Crop" not in custom
 
 
@@ -87,13 +88,21 @@ def test_script_errors_carry_the_line(script, line, message):
 
 
 def test_x264_two_pass_and_options():
-    s = EncoderSettings(rate_control=RateControl.TWO_PASS, bitrate_kbps=10000, preset="veryslow",
-                        options={"ref": "4", "no-fast-pskip": "", "--aq-mode": "3"}, extra='--aq-strength 0.9')
-    argv = encoder_command("x264", s, frames=100, output=Path("v.264"), pass_number=2, stats=Path("s.log"),
-                           qpfile=Path("c.qpf"))
+    s = EncoderSettings(
+        rate_control=RateControl.TWO_PASS,
+        bitrate_kbps=10000,
+        preset="veryslow",
+        options={"ref": "4", "no-fast-pskip": "", "--aq-mode": "3"},
+        extra="--aq-strength 0.9",
+    )
+    argv = encoder_command(
+        "x264", s, frames=100, output=Path("v.264"), pass_number=2, stats=Path("s.log"), qpfile=Path("c.qpf")
+    )
     assert argv[:5] == ["x264", "--demuxer", "y4m", "--frames", "100"]
     assert argv[argv.index("--bitrate") + 1] == "10000" and argv[argv.index("--pass") + 1] == "2"
-    assert ["--ref", "4", "--no-fast-pskip", "--aq-mode", "3"] == argv[argv.index("--ref"):argv.index("--aq-mode") + 2]
+    assert ["--ref", "4", "--no-fast-pskip", "--aq-mode", "3"] == argv[
+        argv.index("--ref") : argv.index("--aq-mode") + 2
+    ]
     assert argv[-5:] == ["--aq-strength", "0.9", "--output", "v.264", "-"]
     assert argv[argv.index("--qpfile") + 1] == "c.qpf"
     with pytest.raises(ValueError):
@@ -122,10 +131,10 @@ def test_progress_lines():
 
 def letterboxed(h=180, w=320, top=22, bottom=22, left=0, right=0) -> np.ndarray:
     rgb = np.full((h, w, 3), 128, np.uint8)
-    rgb[:top] = rgb[h - bottom:] = 0
+    rgb[:top] = rgb[h - bottom :] = 0
     rgb[:, :left] = 0
     if right:
-        rgb[:, w - right:] = 0
+        rgb[:, w - right :] = 0
     return rgb
 
 
@@ -159,11 +168,15 @@ def test_yuv_borders_judge_like_rgb(bits, matrix, full):
     for picture in ((0, 0, 40), (45, 0, 0), (128, 128, 128)):
         rgb = letterboxed(left=10, right=6)
         rgb[22:158, 10:314] = picture
-        assert autocrop.yuv_borders(*to_yuv420(rgb, bits, matrix, full), bits=bits, matrix=matrix,
-                                    full_range=full) == autocrop.frame_borders(rgb) == Crop(10, 22, 6, 22), picture
+        assert (
+            autocrop.yuv_borders(*to_yuv420(rgb, bits, matrix, full), bits=bits, matrix=matrix, full_range=full)
+            == autocrop.frame_borders(rgb)
+            == Crop(10, 22, 6, 22)
+        ), picture
     dark = np.zeros((180, 320, 3), np.uint8)
-    assert autocrop.yuv_borders(*to_yuv420(dark, bits, matrix, full), bits=bits, matrix=matrix,
-                                full_range=full) == Crop(80, 45, 80, 45)
+    assert autocrop.yuv_borders(
+        *to_yuv420(dark, bits, matrix, full), bits=bits, matrix=matrix, full_range=full
+    ) == Crop(80, 45, 80, 45)
 
 
 def test_detect_reads_the_frames_range():

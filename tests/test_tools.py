@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
+import sys
 
 from conftest import audio, plan_for, source
 
 from videoforge.core.config import AppConfig, Tools, with_tools
-from videoforge.core.models import AudioAction, Severity
-from videoforge.core.models import AudioCodec as C
+from videoforge.core.models import AudioAction, AudioCodec as C, Severity
 from videoforge.core.tools import (
     TOOL_NAMES,
     TOOLS,
@@ -26,7 +25,8 @@ INFO = {t.name: t for t in TOOLS}
 
 def test_version_lines_from_real_tool_output():
     assert version_line("mkvmerge v100.0 ('Do Hot Girls Like Chords') 64-bit\n") == (
-        "mkvmerge v100.0 ('Do Hot Girls Like Chords') 64-bit")
+        "mkvmerge v100.0 ('Do Hot Girls Like Chords') 64-bit"
+    )
     assert version_line("x264 0.165.3222 b35605a\nbuilt on ...") == "x264 0.165.3222 b35605a"
     assert version_line("\nx265 [info]: HEVC encoder version 3.6+35\n") == "HEVC encoder version 3.6+35"
     assert version_line("qaac 2.82, CoreAudioToolbox 7.10.9.0\n") == "qaac 2.82, CoreAudioToolbox 7.10.9.0"
@@ -65,8 +65,13 @@ def test_missing_broken_and_unknown(tmp_path):
 
 
 def test_a_real_program_on_path():
-    c = check(INFO["ffmpeg"], sys.executable, runner=lambda argv, t: __import__("subprocess").run(
-        [argv[0], "--version"], capture_output=True, text=True, timeout=t).stdout)
+    c = check(
+        INFO["ffmpeg"],
+        sys.executable,
+        runner=lambda argv, t: (
+            __import__("subprocess").run([argv[0], "--version"], capture_output=True, text=True, timeout=t).stdout
+        ),
+    )
     assert c.status is ToolStatus.OK and c.version.startswith("Python 3.")
 
 
@@ -90,13 +95,26 @@ def test_detect_covers_every_tool_in_order(tmp_path):
 def test_encodes_need_their_tools(tmp_path):
     for exe in ("deezy.exe", "ffmpeg.exe", "qaac.exe", "truehdd.exe"):
         (tmp_path / exe).write_bytes(b"")
-    tools = Tools(mkvmerge="mkvmerge", deezy=str(tmp_path / "deezy.exe"), dee=str(tmp_path / "no-dee.exe"),
-                  truehdd=str(tmp_path / "truehdd.exe"), qaac=str(tmp_path / "qaac.exe"), ffmpeg=str(tmp_path / "ffmpeg.exe"))
+    tools = Tools(
+        mkvmerge="mkvmerge",
+        deezy=str(tmp_path / "deezy.exe"),
+        dee=str(tmp_path / "no-dee.exe"),
+        truehdd=str(tmp_path / "truehdd.exe"),
+        qaac=str(tmp_path / "qaac.exe"),
+        ffmpeg=str(tmp_path / "ffmpeg.exe"),
+    )
     missing = missing_for_encodes(tools)
-    assert missing == {AudioAction.DDP: ["Dolby Encoding Engine"], AudioAction.ATMOS: ["Dolby Encoding Engine"],
-                       AudioAction.AAC: [], AudioAction.FLAC: [], AudioAction.OPUS: [], AudioAction.OPUSENC: ["opusenc"],
-                       AudioAction.AAC_FFMPEG: [],
-                       AudioAction.AC3: [], AudioAction.EAC3: []}  # a fake ffmpeg can't be asked for its encoders
+    assert missing == {
+        AudioAction.DDP: ["Dolby Encoding Engine"],
+        AudioAction.ATMOS: ["Dolby Encoding Engine"],
+        AudioAction.AAC: [],
+        AudioAction.FLAC: [],
+        AudioAction.OPUS: [],
+        AudioAction.OPUSENC: ["opusenc"],
+        AudioAction.AAC_FFMPEG: [],
+        AudioAction.AC3: [],
+        AudioAction.EAC3: [],
+    }  # a fake ffmpeg can't be asked for its encoders
 
     plan = plan_for(source([audio(C.FLAC, "2.0", index=0), audio(C.TRUEHD, "5.1", index=1)]), source(name="E.mkv"))
     plan.audio[0].action, plan.audio[1].action = AudioAction.AAC, AudioAction.DDP
@@ -111,8 +129,9 @@ def test_with_tools_layers_paths_and_brings_mkvpropedit(tmp_path):
     (tmp_path / "mkv").mkdir()
     for exe in ("mkvmerge.exe", "mkvpropedit.exe"):
         (tmp_path / "mkv" / exe).write_bytes(b"")
-    base = AppConfig(tools=Tools(mkvmerge="mkvmerge", deezy="deezy", dee="dee", truehdd="truehdd", qaac="qaac",
-                                 ffmpeg="ffmpeg"))
+    base = AppConfig(
+        tools=Tools(mkvmerge="mkvmerge", deezy="deezy", dee="dee", truehdd="truehdd", qaac="qaac", ffmpeg="ffmpeg")
+    )
     cfg = with_tools(base, {"mkvmerge": "mkv/mkvmerge.exe", "x264": "", "qaac": str(tmp_path / "q.exe")}, tmp_path)
     assert cfg.tools.mkvmerge == str(tmp_path / "mkv" / "mkvmerge.exe")
     assert cfg.tools.mkvpropedit == str(tmp_path / "mkv" / "mkvpropedit.exe")  # came along

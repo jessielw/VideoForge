@@ -27,8 +27,15 @@ if TYPE_CHECKING:
 THRESHOLD = 0.06
 _POSITIONS = 21
 # Kr, Kb per matrix (the _Matrix frame property): BT.709, FCC, BT.601 (470BG, 170M), SMPTE 240M, BT.2020
-_KR_KB = {1: (0.2126, 0.0722), 4: (0.30, 0.11), 5: (0.299, 0.114), 6: (0.299, 0.114), 7: (0.212, 0.087),
-          9: (0.2627, 0.0593), 10: (0.2627, 0.0593)}
+_KR_KB = {
+    1: (0.2126, 0.0722),
+    4: (0.30, 0.11),
+    5: (0.299, 0.114),
+    6: (0.299, 0.114),
+    7: (0.212, 0.087),
+    9: (0.2627, 0.0593),
+    10: (0.2627, 0.0593),
+}
 
 
 def _run(dark: np.ndarray) -> np.ndarray:
@@ -65,8 +72,16 @@ def frame_borders(rgb: np.ndarray, threshold: float = THRESHOLD) -> Crop:
     return _borders(dark(rgb[:, xs]), dark(rgb[ys, :]).T, h, w)  # rows.T: one column per sampled row
 
 
-def yuv_borders(y: np.ndarray, u: np.ndarray, v: np.ndarray, *, bits: int = 8, matrix: int = 1,
-                full_range: bool = False, threshold: float = THRESHOLD) -> Crop:
+def yuv_borders(
+    y: np.ndarray,
+    u: np.ndarray,
+    v: np.ndarray,
+    *,
+    bits: int = 8,
+    matrix: int = 1,
+    full_range: bool = False,
+    threshold: float = THRESHOLD,
+) -> Crop:
     """The black border of one YUV frame given as its planes (chroma may be subsampled), judged by the
     same RGB lightness as frame_borders on just the sampled lines."""
     h, w = y.shape
@@ -135,8 +150,15 @@ def _frame_crop(clip: vs.VideoNode, n: int, threshold: float) -> Crop:
     # _Range (older VapourSynth: _ColorRange); compare with the enum, whose values changed in R6x
     rng = f.props["_Range"] if "_Range" in f.props else f.props.get("_ColorRange")
     full = rng is not None and int(rng) == int(vs.RANGE_FULL)  # unset: limited, like nearly all video
-    return yuv_borders(np.asarray(f[0]), np.asarray(f[1]), np.asarray(f[2]), bits=fmt.bits_per_sample,
-                       matrix=matrix(f.props, clip.height), full_range=full, threshold=threshold)
+    return yuv_borders(
+        np.asarray(f[0]),
+        np.asarray(f[1]),
+        np.asarray(f[2]),
+        bits=fmt.bits_per_sample,
+        matrix=matrix(f.props, clip.height),
+        full_range=full,
+        threshold=threshold,
+    )
 
 
 def detect(clip: vs.VideoNode, samples: int = 20, threshold: float = THRESHOLD, mod: int = 2) -> Crop:

@@ -41,8 +41,13 @@ def _match(request: Request, body: dict[str, Any]):
     q = queue_of(request)
     profile = q.profiles(body.get("profile") or request.app.state.default_profile)
     rules = q.app.matching
-    sets = slot_files(_paths(body, "sources"), _paths(body, "encodes"),
-                      _paths(body, "subtitles") if profile.external_subtitles else [], _paths(body, "chapters"), rules)
+    sets = slot_files(
+        _paths(body, "sources"),
+        _paths(body, "encodes"),
+        _paths(body, "subtitles") if profile.external_subtitles else [],
+        _paths(body, "chapters"),
+        rules,
+    )
     return match_files(sets, rules)
 
 
@@ -76,8 +81,11 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         template=_template(body) or _default_template(request, body),
     )
     left = result.unmatched
-    return {"added": [e.id for e in added], "skipped": skipped,
-            "unmatched": [str(p) for p in left.encodes + left.subtitles + left.chapters]}
+    return {
+        "added": [e.id for e in added],
+        "skipped": skipped,
+        "unmatched": [str(p) for p in left.encodes + left.subtitles + left.chapters],
+    }
 
 
 @router.get("/jobs")
@@ -131,7 +139,9 @@ def _files(paths: list[str], suffixes: set[str]) -> list[Path]:
     out: list[Path] = []
     for p in map(Path, paths):
         if p.is_dir():
-            out += sorted((f for f in p.iterdir() if f.is_file() and f.suffix.lower() in suffixes), key=lambda f: f.name.lower())
+            out += sorted(
+                (f for f in p.iterdir() if f.is_file() and f.suffix.lower() in suffixes), key=lambda f: f.name.lower()
+            )
         elif p.is_file():
             out.append(p)
         else:
@@ -141,6 +151,7 @@ def _files(paths: list[str], suffixes: set[str]) -> list[Path]:
 
 def _inputs(current: JobInputs, body: dict[str, Any]) -> JobInputs:
     """The job's inputs with any of subtitles (the whole list), chapters, encode (a path or null) replaced."""
+
     def one(key: str, old: Path | None) -> Path | None:
         if key not in body:
             return old
@@ -153,8 +164,14 @@ def _inputs(current: JobInputs, body: dict[str, Any]) -> JobInputs:
 
     subs = _files(body["subtitles"], set(SUB_FORMATS)) if "subtitles" in body else current.subtitles
     audio = _files(body["audio"], set(AUDIO_EXTENSIONS)) if "audio" in body else current.audio
-    return JobInputs(current.source, encode=one("encode", current.encode), subtitles=subs,
-                     chapters=one("chapters", current.chapters), encode_state=current.encode_state, audio=audio)
+    return JobInputs(
+        current.source,
+        encode=one("encode", current.encode),
+        subtitles=subs,
+        chapters=one("chapters", current.chapters),
+        encode_state=current.encode_state,
+        audio=audio,
+    )
 
 
 @router.patch("/jobs/{job_id}")
@@ -230,7 +247,9 @@ def job_commands(request: Request, job_id: str) -> list[dict[str, Any]]:
     profile = q.profile(e)
     out_dir = e.spec.output_dir or Path("<output folder>")
     try:
-        built = build_steps(e.spec, e.plan, profile, q.app, output_path(e.plan, out_dir, profile, e.spec.container(profile)))
+        built = build_steps(
+            e.spec, e.plan, profile, q.app, output_path(e.plan, out_dir, profile, e.spec.container(profile))
+        )
     except (ToolError, ValueError) as ex:
         raise HTTPException(422, str(ex)) from None
     return [{"id": s.id, "label": s.label, "command": s.command_line or "(runs in VideoForge)"} for s in built.steps]

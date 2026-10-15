@@ -5,9 +5,9 @@ From a Matroska chapter XML file, or from a source's own chapters (MediaInfo's m
 
 from __future__ import annotations
 
+from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 from pymediainfo import MediaInfo
 
@@ -57,5 +57,8 @@ def ogm_text(chapters: list[Chapter]) -> str:
         h, rest = divmod(ms, 3_600_000)
         m, rest = divmod(rest, 60_000)
         s, ms_ = divmod(rest, 1000)
-        lines += [f"CHAPTER{n:02d}={h:02d}:{m:02d}:{s:02d}.{ms_:03d}", f"CHAPTER{n:02d}NAME={name or f'Chapter {n:02d}'}"]
+        lines += [
+            f"CHAPTER{n:02d}={h:02d}:{m:02d}:{s:02d}.{ms_:03d}",
+            f"CHAPTER{n:02d}NAME={name or f'Chapter {n:02d}'}",
+        ]
     return "\n".join(lines) + "\n"

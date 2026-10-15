@@ -6,9 +6,9 @@ server's queue worker and the CLI drive the same code.
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from pathlib import Path
+import time
 from typing import TYPE_CHECKING
 
 from videoforge.core.config import AppConfig
@@ -100,8 +100,17 @@ def _run(spec, plan, profile, app, state, log, cancel, progress, on_record, on_s
             on_step(r)
         work.mkdir(parents=True, exist_ok=True)
         output.parent.mkdir(parents=True, exist_ok=True)
-        run_steps(built.steps, state.steps, log=log, cancel=cancel, progress=progress, on_record=on_record,
-                  runner=runner, runs=state.run[:-1], on_step=on_step)
+        run_steps(
+            built.steps,
+            state.steps,
+            log=log,
+            cancel=cancel,
+            progress=progress,
+            on_record=on_record,
+            runner=runner,
+            runs=state.run[:-1],
+            on_step=on_step,
+        )
         validate.status = StepStatus.RUNNING
         on_step(validate)
         log("== Validate")
@@ -132,8 +141,12 @@ def spec_from_plan(plan: Plan, out_dir: Path) -> JobSpec:
     if inputs is None:
         if plan.source.path is None:
             raise ValueError("The plan has no source file")
-        inputs = JobInputs(plan.source.path, plan.encode_path,
-                           [s.source.external_path for s in plan.subs if s.source.external_path], plan.chapters_path)
+        inputs = JobInputs(
+            plan.source.path,
+            plan.encode_path,
+            [s.source.external_path for s in plan.subs if s.source.external_path],
+            plan.chapters_path,
+        )
     return JobSpec(inputs=inputs, profile=plan.profile, overrides=plan.overrides, output_dir=out_dir)
 
 

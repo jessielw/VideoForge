@@ -8,9 +8,9 @@ timestamps. A qpfile (from the chapters) forces keyframes at chapter starts.
 
 from __future__ import annotations
 
+from pathlib import Path
 import re
 import shlex
-from pathlib import Path
 
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
 

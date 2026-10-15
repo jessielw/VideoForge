@@ -15,8 +15,6 @@ finished steps, so a rerun only redoes what the edit touched.
 
 from __future__ import annotations
 
-import sqlite3
-import threading
 from collections import deque
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -24,6 +22,8 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+import sqlite3
+import threading
 from typing import Any
 
 from videoforge.core.config import AppConfig
@@ -121,8 +121,14 @@ class Entry:
 
     @property
     def runnable(self) -> bool:
-        return (self.plan is not None and not self.plan.blocked and not self.busy and not self.cropping
-                and not self.indexing and not self.crop_pending)
+        return (
+            self.plan is not None
+            and not self.plan.blocked
+            and not self.busy
+            and not self.cropping
+            and not self.indexing
+            and not self.crop_pending
+        )
 
     @property
     def status(self) -> JobView:
@@ -204,10 +210,14 @@ class JobQueue:
 
     def queue_state(self) -> dict[str, Any]:
         current = next((e.id for e in self.entries() if e.running), None)
-        return {"running": self.running, "current": current, "stop_after_current": self._stop_after_current,
-                "queued": sum(e.queued for e in self.entries()),
-                "indexing": next((e.id for e in self.entries() if e.indexing), None),
-                "index_queued": sum(e.index_queued for e in self.entries())}
+        return {
+            "running": self.running,
+            "current": current,
+            "stop_after_current": self._stop_after_current,
+            "queued": sum(e.queued for e in self.entries()),
+            "indexing": next((e.id for e in self.entries() if e.indexing), None),
+            "index_queued": sum(e.index_queued for e in self.entries()),
+        }
 
     def _save(self, e: Entry) -> None:
         try:
@@ -236,7 +246,9 @@ class JobQueue:
             e = Entry(stored.spec, stored.state, queued=stored.queued or stored.running)
             if stored.running:
                 e.state.status = None
-                e.state.error = "Interrupted: the server stopped during this job; it resumes after its last finished step"
+                e.state.error = (
+                    "Interrupted: the server stopped during this job; it resumes after its last finished step"
+                )
             with self._lock:
                 self._entries[e.id] = e
                 self._order.append(e.id)
@@ -247,7 +259,8 @@ class JobQueue:
             if lane:
                 self.index(lane)
                 self._index_order = [i for i in lane if i in self._index_order] + [
-                    i for i in self._index_order if i not in lane]
+                    i for i in self._index_order if i not in lane
+                ]
                 self._save_lane()
 
     def add(
@@ -355,8 +368,14 @@ class JobQueue:
     def _claim_crop(self, e: Entry) -> bool:
         """Under the lock: once the job is probed, a pending auto crop waits for the index lane (it reads
         the source, so it's indexed first, one job at a time). The caller then puts the job in the lane."""
-        if (not e.spec.autocrop or e.cropping or e.crop_pending or e.probed is None or e.busy
-                or self.services.detect_crop is None):
+        if (
+            not e.spec.autocrop
+            or e.cropping
+            or e.crop_pending
+            or e.probed is None
+            or e.busy
+            or self.services.detect_crop is None
+        ):
             return False
         e.crop_pending = True
         return True
@@ -601,8 +620,14 @@ class JobQueue:
             self._log(e, line, log_file)
 
         def progress(p: StepProgress) -> None:
-            e.progress = {"step": p.step.label, "index": p.index, "total": p.total, "fraction": round(p.fraction, 4),
-                          "overall": round(p.overall, 4), "reused": p.reused}
+            e.progress = {
+                "step": p.step.label,
+                "index": p.index,
+                "total": p.total,
+                "fraction": round(p.fraction, 4),
+                "overall": round(p.overall, 4),
+                "reused": p.reused,
+            }
             now = _now()
             if p.fraction in (0.0, 1.0) or now - last[0] >= _PROGRESS_INTERVAL:
                 last[0] = now
@@ -621,20 +646,34 @@ class JobQueue:
                 self._save(e)
             index = next((i for i, r in enumerate(e.state.run) if r is run), -1)
             # index 0 pending = a new run's list starts (the browser drops the last run's)
-            self.events.publish("step", id=e.id, index=index, total=len(e.state.run),
-                                step=step_json(run, with_tail=False))
+            self.events.publish(
+                "step", id=e.id, index=index, total=len(e.state.run), step=step_json(run, with_tail=False)
+            )
 
         with self._lock:
             e.step_lines, e.current_step = {}, None
         log(f"### {e.spec.name} ({datetime.now().isoformat(timespec='seconds')})")
         try:
-            result = self.services.run(e.spec, e.plan, self.profile(e), self.app, state=e.state, log=log,
-                                       cancel=self._cancel, progress=progress, on_record=on_record, on_step=on_step)
+            result = self.services.run(
+                e.spec,
+                e.plan,
+                self.profile(e),
+                self.app,
+                state=e.state,
+                log=log,
+                cancel=self._cancel,
+                progress=progress,
+                on_record=on_record,
+                on_step=on_step,
+            )
         except Exception as ex:  # noqa: BLE001 - a bug must not kill the queue
             result = JobResult(e.plan, JobStatus.FAILED, error=f"{type(ex).__name__}: {ex}")
             e.state.status, e.state.error = result.status, result.error
-        log(f"{e.spec.name}: {result.status.value}" + (f" -> {result.output}" if result.output else "")
-            + (f" ({result.error})" if result.error else ""))
+        log(
+            f"{e.spec.name}: {result.status.value}"
+            + (f" -> {result.output}" if result.output else "")
+            + (f" ({result.error})" if result.error else "")
+        )
         if self.services.record is not None:
             try:
                 self.services.record(result)
@@ -703,7 +742,8 @@ class JobQueue:
         if self._closing:
             return
         ids = [e.id for e in self.entries() if e.indexing] + [
-            i for i in self._index_order if i in self._entries and self._entries[i].index_queued]
+            i for i in self._index_order if i in self._entries and self._entries[i].index_queued
+        ]
         self.store.set_setting(LANE_SETTING, ids)
 
     def _encode_disks(self) -> frozenset[str]:
@@ -714,8 +754,12 @@ class JobQueue:
         if e is None:
             return frozenset()
         s = e.spec
-        paths = [s.inputs.source, s.work_dir, *([s.output_dir] if s.output_dir else []),
-                 *([s.inputs.encode] if s.inputs.encode else [])]
+        paths = [
+            s.inputs.source,
+            s.work_dir,
+            *([s.output_dir] if s.output_dir else []),
+            *([s.inputs.encode] if s.inputs.encode else []),
+        ]
         return frozenset().union(*(disks(p) for p in paths))
 
     def _take_index(self) -> tuple[Entry | None, bool, list[Entry]]:
@@ -723,8 +767,9 @@ class JobQueue:
         waits; so does one on a disk an encode reads (`index_waits_for_disk`) unless it was asked for by
         itself, and a job on another disk goes ahead of it."""
         with self._lock:
-            waiting = [self._entries[i] for i in self._index_order
-                       if i in self._entries and self._entries[i].index_queued]
+            waiting = [
+                self._entries[i] for i in self._index_order if i in self._entries and self._entries[i].index_queued
+            ]
             self._index_order = [e.id for e in waiting]
             busy = self._encode_disks() if self.index_waits_for_disk else frozenset()
             taken, changed = None, []
@@ -772,8 +817,14 @@ class JobQueue:
             self._log(e, line, log_file)
 
         def progress(p: StepProgress) -> None:
-            e.progress = {"step": p.step.label, "index": p.index, "total": p.total, "fraction": round(p.fraction, 4),
-                          "overall": round(p.overall, 4), "reused": p.reused}
+            e.progress = {
+                "step": p.step.label,
+                "index": p.index,
+                "total": p.total,
+                "fraction": round(p.fraction, 4),
+                "overall": round(p.overall, 4),
+                "reused": p.reused,
+            }
             now = _now()
             if p.fraction in (0.0, 1.0) or now - last[0] >= _PROGRESS_INTERVAL:
                 last[0] = now
@@ -801,8 +852,15 @@ class JobQueue:
                         raise Cancelled()
             try:
                 # The job's records (no run of it can start while it's in the lane), so its encode reuses these steps.
-                run_steps(steps, e.state.steps, log=log, cancel=cancel, progress=progress,
-                          on_record=on_record, runner=self.services.runner)
+                run_steps(
+                    steps,
+                    e.state.steps,
+                    log=log,
+                    cancel=cancel,
+                    progress=progress,
+                    on_record=on_record,
+                    runner=self.services.runner,
+                )
                 if e.spec.autocrop and self.services.detect_crop is not None:  # a template's auto crop
                     with self._lock:
                         e.indexing, e.progress = False, None  # it can be edited again (a hand crop wins)

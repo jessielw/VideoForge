@@ -6,12 +6,12 @@ interrupted and queued again; its finished steps are kept, so it resumes.
 
 from __future__ import annotations
 
-import json
-import sqlite3
-import threading
 from dataclasses import dataclass
 from datetime import datetime
+import json
 from pathlib import Path
+import sqlite3
+import threading
 from typing import Any
 
 from videoforge.core.job import JobSpec, JobState
@@ -72,13 +72,21 @@ class Store:
         now = datetime.now().isoformat(timespec="seconds")
         with self._lock:
             row = self._db.execute("SELECT position FROM jobs WHERE id = ?", (spec.id,)).fetchone()
-            position = row[0] if row else (self._db.execute("SELECT COALESCE(MAX(position), 0) + 1 FROM jobs")
-                                           .fetchone()[0])
+            position = (
+                row[0] if row else (self._db.execute("SELECT COALESCE(MAX(position), 0) + 1 FROM jobs").fetchone()[0])
+            )
             self._db.execute(
                 "INSERT OR REPLACE INTO jobs (id, position, spec, state, queued, running, updated)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (spec.id, position, json.dumps(to_json(spec)), json.dumps(to_json(state)), int(queued), int(running),
-                 now),
+                (
+                    spec.id,
+                    position,
+                    json.dumps(to_json(spec)),
+                    json.dumps(to_json(state)),
+                    int(queued),
+                    int(running),
+                    now,
+                ),
             )
 
     def delete_job(self, job_id: str) -> None:
@@ -110,8 +118,9 @@ class Store:
 
     def save_preset(self, kind: str, name: str, data: Any) -> None:
         with self._lock:
-            self._db.execute("INSERT OR REPLACE INTO presets (kind, name, data) VALUES (?, ?, ?)",
-                             (kind, name, json.dumps(data)))
+            self._db.execute(
+                "INSERT OR REPLACE INTO presets (kind, name, data) VALUES (?, ?, ?)", (kind, name, json.dumps(data))
+            )
 
     def delete_preset(self, kind: str, name: str) -> None:
         with self._lock:

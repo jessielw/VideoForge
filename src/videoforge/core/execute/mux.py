@@ -1,6 +1,6 @@
 """The single mux pass that builds a release from a plan: mkvmerge (MKV) or MP4Box (MP4).
 
-mkvmerge: 
+mkvmerge:
 Inputs, in order: the encode (video only), the source (copied audio and
 subtitles), then one file per encoded audio track, per copied track of an added
 audio file or copy of a track (Overrides.copies: mkvmerge takes a track once per
@@ -22,11 +22,11 @@ the timed-text forced flags, and the other flags are left out (a WARN says so).
 
 from __future__ import annotations
 
-import re
-import shlex
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
+import re
+import shlex
 from typing import Protocol
 
 from videoforge.core.config import AppConfig
@@ -79,14 +79,22 @@ def _flag(on: bool) -> str:
 def _track_args(tid: int, t: PlannedAudio | PlannedSub) -> list[str]:
     """Language, name and every flag, set explicitly so nothing is inherited from the input file."""
     return [
-        "--language", f"{tid}:{t.language}",
-        "--track-name", f"{tid}:{t.title}",
-        "--default-track-flag", f"{tid}:{_flag(t.default)}",
-        "--forced-display-flag", f"{tid}:{_flag(t.forced)}",
-        "--hearing-impaired-flag", f"{tid}:{_flag(t.hearing_impaired)}",
-        "--commentary-flag", f"{tid}:{_flag(t.commentary)}",
-        "--original-flag", f"{tid}:{_flag(t.original)}",
-        "--visual-impaired-flag", f"{tid}:{_flag(t.visual_impaired)}",
+        "--language",
+        f"{tid}:{t.language}",
+        "--track-name",
+        f"{tid}:{t.title}",
+        "--default-track-flag",
+        f"{tid}:{_flag(t.default)}",
+        "--forced-display-flag",
+        f"{tid}:{_flag(t.forced)}",
+        "--hearing-impaired-flag",
+        f"{tid}:{_flag(t.hearing_impaired)}",
+        "--commentary-flag",
+        f"{tid}:{_flag(t.commentary)}",
+        "--original-flag",
+        f"{tid}:{_flag(t.original)}",
+        "--visual-impaired-flag",
+        f"{tid}:{_flag(t.visual_impaired)}",
     ]
 
 
@@ -120,8 +128,22 @@ def mux_command(
         argv += ["--default-duration", f"0:{_frame_rate(video.default_duration_ns)}"]
     else:
         # Chapters come from the qpf file or the source, never the encode.
-        argv += ["--video-tracks", "0", "--no-audio", "--no-subtitles", "--no-chapters", "--no-attachments", "--no-global-tags"]
-    argv += ["--language", f"0:{video.language if video else 'und'}", "--default-track-flag", "0:1", str(plan.encode_path)]
+        argv += [
+            "--video-tracks",
+            "0",
+            "--no-audio",
+            "--no-subtitles",
+            "--no-chapters",
+            "--no-attachments",
+            "--no-global-tags",
+        ]
+    argv += [
+        "--language",
+        f"0:{video.language if video else 'und'}",
+        "--default-track-flag",
+        "0:1",
+        str(plan.encode_path),
+    ]
 
     # 1: the source, copied audio and subtitles only.
     copied = [a for a in plan.audio if a.action is AudioAction.COPY and not a.source.is_external and not a.source.copy]
@@ -130,7 +152,11 @@ def mux_command(
     if external_chapters:
         argv += ["--no-chapters"]
     argv += ["--audio-tracks", ",".join(str(a.source.id) for a in copied)] if copied else ["--no-audio"]
-    argv += ["--subtitle-tracks", ",".join(str(s.source.id) for s in internal_subs)] if internal_subs else ["--no-subtitles"]
+    argv += (
+        ["--subtitle-tracks", ",".join(str(s.source.id) for s in internal_subs)]
+        if internal_subs
+        else ["--no-subtitles"]
+    )
     for a in copied:
         argv += _track_args(a.source.id, a) + _sync(a.source.id, -start_ms)
     for s in internal_subs:
@@ -143,8 +169,15 @@ def mux_command(
     for pos, a in enumerate(plan.audio):
         if a.action is AudioAction.COPY and (a.source.is_external or a.source.copy):
             tid = a.source.id
-            argv += ["--no-video", "--no-subtitles", "--no-chapters", "--no-attachments", "--no-global-tags",
-                     "--audio-tracks", str(tid)]
+            argv += [
+                "--no-video",
+                "--no-subtitles",
+                "--no-chapters",
+                "--no-attachments",
+                "--no-global-tags",
+                "--audio-tracks",
+                str(tid),
+            ]
             shift = a.source.delay_ms if a.source.is_external else -start_ms
             argv += _track_args(tid, a) + _sync(tid, shift)
             argv.append(str(a.source.external_path or plan.source.path))
@@ -285,8 +318,9 @@ class Muxer(Protocol):
     tool: str  # the Tools field it runs
     carries_titles: bool  # titles and every flag can be read back by the output check
 
-    def command(self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig,
-                extra: list[str] | None = None) -> list[str]: ...
+    def command(
+        self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig, extra: list[str] | None = None
+    ) -> list[str]: ...
 
     def issues(self, plan: Plan) -> list[Issue]:
         """What this container can't hold as planned: BLOCK (can't mux) or WARN (left out)."""
@@ -303,8 +337,9 @@ class MkvMerge:
     tool = "mkvmerge"
     carries_titles = True
 
-    def command(self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig,
-                extra: list[str] | None = None) -> list[str]:
+    def command(
+        self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig, extra: list[str] | None = None
+    ) -> list[str]:
         return mux_command(plan, encoded_audio, output, app.tools.mkvmerge, app.matching.encode_extensions, extra)
 
     def issues(self, plan: Plan) -> list[Issue]:
@@ -322,35 +357,61 @@ class Mp4Box:
 
     SUBS = (SubFormat.SRT, SubFormat.TX3G, SubFormat.VOBSUB)
 
-    def command(self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig,
-                extra: list[str] | None = None) -> list[str]:
+    def command(
+        self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig, extra: list[str] | None = None
+    ) -> list[str]:
         return mp4box_command(plan, encoded_audio, output, app.tools.mp4box, app.matching.encode_extensions, extra)
 
     def issues(self, plan: Plan) -> list[Issue]:
         issues: list[Issue] = []
         for i, a in enumerate(plan.audio, 1):
             if a.out_codec in (AudioCodec.LPCM, AudioCodec.OTHER):
-                issues.append(Issue(Severity.BLOCK, "mux.mp4_audio",
-                                    f"Audio {i} ({a.out_codec.value}) can't go into MP4: encode it (e.g. FLAC) or use MKV"))
+                issues.append(
+                    Issue(
+                        Severity.BLOCK,
+                        "mux.mp4_audio",
+                        f"Audio {i} ({a.out_codec.value}) can't go into MP4: encode it (e.g. FLAC) or use MKV",
+                    )
+                )
         for i, s in enumerate(plan.subs, 1):
             if s.source.format not in self.SUBS:
-                issues.append(Issue(Severity.BLOCK, "mux.mp4_subs",
-                                    f"Subtitle {i} ({s.source.format.value}) can't go into MP4 (SRT and VobSub can): "
-                                    "leave it out or use MKV"))
-        kinds: tuple[tuple[str, list[PlannedAudio] | list[PlannedSub]], ...] = (("Audio", plan.audio), ("Subtitle", plan.subs))
+                issues.append(
+                    Issue(
+                        Severity.BLOCK,
+                        "mux.mp4_subs",
+                        f"Subtitle {i} ({s.source.format.value}) can't go into MP4 (SRT and VobSub can): "
+                        "leave it out or use MKV",
+                    )
+                )
+        kinds: tuple[tuple[str, list[PlannedAudio] | list[PlannedSub]], ...] = (
+            ("Audio", plan.audio),
+            ("Subtitle", plan.subs),
+        )
         for label, tracks in kinds:
             for i, t in enumerate(tracks, 1):
-                dropped = [k.replace("_", " ") for k in _MP4_DROPPED if getattr(t, k)
-                           and (k != "original" or _set_by_hand(plan, t, k))]
+                dropped = [
+                    k.replace("_", " ")
+                    for k in _MP4_DROPPED
+                    if getattr(t, k) and (k != "original" or _set_by_hand(plan, t, k))
+                ]
                 if t.forced and not (isinstance(t, PlannedSub) and t.source.format is SubFormat.SRT):
                     dropped.insert(0, "forced")
                 if dropped:
-                    issues.append(Issue(Severity.WARN, "mux.mp4_flags",
-                                        f"{label} {i}: MP4 has no {', '.join(dropped)} flag; left out"))
+                    issues.append(
+                        Issue(
+                            Severity.WARN,
+                            "mux.mp4_flags",
+                            f"{label} {i}: MP4 has no {', '.join(dropped)} flag; left out",
+                        )
+                    )
                 if t.title and _mp4_title(t.title) != t.title:
-                    issues.append(Issue(Severity.WARN, "mux.mp4_title",
-                                        f"{label} {i}: MP4Box can't write ':' in a title; written as "
-                                        f"'{_mp4_title(t.title)}'"))
+                    issues.append(
+                        Issue(
+                            Severity.WARN,
+                            "mux.mp4_title",
+                            f"{label} {i}: MP4Box can't write ':' in a title; written as '{_mp4_title(t.title)}'",
+                        )
+                    )
         return issues
 
     def written_format(self, fmt: SubFormat) -> SubFormat:

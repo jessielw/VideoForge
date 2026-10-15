@@ -12,8 +12,25 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from videoforge.core.config import AppConfig
-from videoforge.core.models import AudioTrack, EncodeState, Issue, JobInputs, Overrides, Plan, Severity, SourceInfo, SubTrack
-from videoforge.core.pairing import MatchResult, discover, external_sub_track, name_delay_ms, name_language, name_without_delay
+from videoforge.core.models import (
+    AudioTrack,
+    EncodeState,
+    Issue,
+    JobInputs,
+    Overrides,
+    Plan,
+    Severity,
+    SourceInfo,
+    SubTrack,
+)
+from videoforge.core.pairing import (
+    MatchResult,
+    discover,
+    external_sub_track,
+    name_delay_ms,
+    name_language,
+    name_without_delay,
+)
 from videoforge.core.probe import mkvmerge_identify, probe
 
 if TYPE_CHECKING:
@@ -62,7 +79,11 @@ def external_tracks(source: SourceInfo, paths: list[Path]) -> tuple[list[SubTrac
             continue
         if track.language == "und":
             issues.append(
-                Issue(Severity.WARN, "subs.external_name", f"Ignored {path.name}: no language in the file name (e.g. .en.srt)")
+                Issue(
+                    Severity.WARN,
+                    "subs.external_name",
+                    f"Ignored {path.name}: no language in the file name (e.g. .en.srt)",
+                )
             )
         origin = by_number.get(track.extracted_from) if track.extracted_from else None
         if origin is not None:
@@ -88,8 +109,9 @@ def external_audio_tracks(paths: list[Path], mkvmerge: str) -> tuple[list[AudioT
         delay = name_delay_ms(path.stem)
         for t in info.audio:
             language = t.language if t.language != "und" else (name_language(name_without_delay(path.stem)) or "und")
-            tracks.append(replace(t, external_path=path, language=language,
-                                  delay_ms=t.delay_ms if delay is None else delay))
+            tracks.append(
+                replace(t, external_path=path, language=language, delay_ms=t.delay_ms if delay is None else delay)
+            )
     return tracks, issues
 
 

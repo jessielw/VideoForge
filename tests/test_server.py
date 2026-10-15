@@ -6,24 +6,22 @@ VapourSynth on an ffmpeg-made clip and skip without the tools.
 
 from __future__ import annotations
 
+from pathlib import Path
 import shutil
 import subprocess
 import sys
 import threading
 import time
-from pathlib import Path
 
-import pytest
 from conftest import audio, source, sub
 from fastapi.testclient import TestClient
+import pytest
 
 from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools
 from videoforge.core.execute.process import Cancelled, ToolError
 from videoforge.core.job import JobResult, JobSpec, JobStatus, StepRecord, StepStatus, planned_encode
 from videoforge.core.jobs import ProbedInputs, external_tracks
-from videoforge.core.models import AudioCodec as C
-from videoforge.core.models import SubFormat as F
-from videoforge.core.models import VideoInfo
+from videoforge.core.models import AudioCodec as C, SubFormat as F, VideoInfo
 from videoforge.core.pipeline.steps import Step, StepProgress
 from videoforge.core.video.settings import Crop
 from videoforge.profiles.manual import ManualProfile
@@ -31,8 +29,18 @@ from videoforge.server.app import create_app
 from videoforge.server.queue import Services
 from videoforge.server.settings import ServerSettings
 
-APP = AppConfig(tools=Tools(mkvmerge="mkvmerge", deezy="deezy", dee="dee", truehdd="truehdd", qaac="qaac64",
-                            ffmpeg="ffmpeg", vs_plugins=str(PROJECT_ROOT / "tools" / "vs-plugins")), profile="manual")
+APP = AppConfig(
+    tools=Tools(
+        mkvmerge="mkvmerge",
+        deezy="deezy",
+        dee="dee",
+        truehdd="truehdd",
+        qaac="qaac64",
+        ffmpeg="ffmpeg",
+        vs_plugins=str(PROJECT_ROOT / "tools" / "vs-plugins"),
+    ),
+    profile="manual",
+)
 
 
 def make_files(root: Path, *episodes: str) -> None:
@@ -91,12 +99,20 @@ class FakeRun:
 
 
 def make_client(tmp_path: Path, run=None, records=None, detect_crop=None, runner=None) -> TestClient:
-    services = Services(probe=fake_probe, run=run or FakeRun(),
-                        record=(records.append if records is not None else None), detect_crop=detect_crop)
+    services = Services(
+        probe=fake_probe,
+        run=run or FakeRun(),
+        record=(records.append if records is not None else None),
+        detect_crop=detect_crop,
+    )
     if runner is not None:
         services.runner = runner
-    app = create_app(ServerSettings(data_dir=tmp_path / "data", roots=[tmp_path], frontend_dir=tmp_path / "none"),
-                     APP, services=services, setup_vapoursynth=False)
+    app = create_app(
+        ServerSettings(data_dir=tmp_path / "data", roots=[tmp_path], frontend_dir=tmp_path / "none"),
+        APP,
+        services=services,
+        setup_vapoursynth=False,
+    )
     return TestClient(app)
 
 
@@ -111,8 +127,13 @@ def wait_for(client: TestClient, job_id: str, *statuses: str, timeout: float = 5
 
 
 def add(client: TestClient, root: Path, **extra) -> list[str]:
-    body = {"sources": [str(root / "src")], "subtitles": [str(root / "src")], "profile": "manual",
-            "original_language": "ja", "output_dir": str(root / "out")} | extra
+    body = {
+        "sources": [str(root / "src")],
+        "subtitles": [str(root / "src")],
+        "profile": "manual",
+        "original_language": "ja",
+        "output_dir": str(root / "out"),
+    } | extra
     r = client.post("/api/jobs", json=body)
     assert r.status_code == 200, r.text
     return r.json()["added"]
@@ -180,11 +201,16 @@ def test_files_added_to_a_job(tmp_path):
         en = job["spec"]["inputs"]["subtitles"]
         subs = en + [str(extra)]  # a folder adds its subtitle files
 
-        job = client.patch(f"/api/jobs/{job_id}", json={"inputs": {"subtitles": subs, "chapters": str(chapters)}}).json()
+        job = client.patch(
+            f"/api/jobs/{job_id}", json={"inputs": {"subtitles": subs, "chapters": str(chapters)}}
+        ).json()
         assert job["status"] in ("ready", "warn")  # read at once, no re-probe
         added = [s for s in job["tracks"]["subs"] if s["external_path"]]
         assert [(Path(s["external_path"]).name, s["format"], s["language"]) for s in added] == [
-            ("Show.S01E01.en.srt", "srt", "en"), ("Show.fr.srt", "srt", "fr"), ("Signs.ass", "ass", "und")]
+            ("Show.S01E01.en.srt", "srt", "en"),
+            ("Show.fr.srt", "srt", "fr"),
+            ("Signs.ass", "ass", "und"),
+        ]
         assert job["plan"]["chapters_path"] == str(chapters)
         assert [i["code"] for i in job["issues"]] == ["subs.language"]  # the manual profile asks for a language
 
@@ -402,12 +428,23 @@ def test_settings_page_config(tmp_path):
 
 def test_presets(tmp_path):
     with make_client(tmp_path) as client:
-        assert client.get("/api/presets").json() == {"video": [], "encoder": [], "template": [], "template_defaults": {}}
-        saved = client.put("/api/presets/encoder/Fast x265", json={"encoder": "x265", "crf": 20, "preset": "fast"}).json()
+        assert client.get("/api/presets").json() == {
+            "video": [],
+            "encoder": [],
+            "template": [],
+            "template_defaults": {},
+        }
+        saved = client.put(
+            "/api/presets/encoder/Fast x265", json={"encoder": "x265", "crf": 20, "preset": "fast"}
+        ).json()
         (enc,) = saved["encoder"]
         assert enc["name"] == "Fast x265" and enc["data"]["crf"] == 20 and enc["data"]["depth"] == 8  # filled in
-        video = {"source_filter": "lsmash", "crop": {"left": 2, "top": 0, "right": 0, "bottom": 0},
-                 "resize": {"width": 1280, "height": 720}, "filters": "clip = clip"}
+        video = {
+            "source_filter": "lsmash",
+            "crop": {"left": 2, "top": 0, "right": 0, "bottom": 0},
+            "resize": {"width": 1280, "height": 720},
+            "filters": "clip = clip",
+        }
         (vid,) = client.put("/api/presets/video/720p", json=video).json()["video"]
         assert "crop" not in vid["data"] and vid["data"]["resize"]["kernel"] == "Spline36"
 
@@ -433,9 +470,13 @@ def test_templates(tmp_path):
         assert gate.wait(5)
         return Crop(0, 20, 0, 22)
 
-    template = {"video": {"filters": "clip = clip", "crop": {"left": 4, "top": 0, "right": 4, "bottom": 0}},
-                "encoder": {"encoder": "x265", "crf": 16}, "mux": {"container": "mkv", "extra": "-x"},
-                "qpf": False, "crop_mode": "auto"}
+    template = {
+        "video": {"filters": "clip = clip", "crop": {"left": 4, "top": 0, "right": 4, "bottom": 0}},
+        "encoder": {"encoder": "x265", "crf": 16},
+        "mux": {"container": "mkv", "extra": "-x"},
+        "qpf": False,
+        "crop_mode": "auto",
+    }
     with make_client(tmp_path, detect_crop=detect_crop, runner=indexer) as client:
         ids = add(client, tmp_path, template=template)
         for job_id in ids:
@@ -456,7 +497,9 @@ def test_templates(tmp_path):
         client.patch(f"/api/jobs/{ids[0]}", json={"mux": {"container": "mp4", "extra": "-y"}})
         client.post("/api/jobs/apply", json={"ids": ids, "container": "mkv"})
         assert [client.get(f"/api/jobs/{i}").json()["spec"]["mux"] for i in ids] == [
-            {"container": "mkv", "extra": "-y"}, {"container": "mkv", "extra": "-x"}]
+            {"container": "mkv", "extra": "-y"},
+            {"container": "mkv", "extra": "-x"},
+        ]
 
         # Auto again, held: the job shows it, can't be queued, and a hand crop meanwhile wins.
         gate.clear()
@@ -484,7 +527,9 @@ def test_templates(tmp_path):
         listed = client.put("/api/presets/template-default/manual", json={"name": "Show"}).json()
         assert listed["template_defaults"] == {"manual": "Show"}
         listed = client.post("/api/presets/template/Show/rename", json={"to": "Show 1080p"}).json()
-        assert [t["name"] for t in listed["template"]] == ["Show 1080p"] and listed["template_defaults"] == {"manual": "Show 1080p"}
+        assert [t["name"] for t in listed["template"]] == ["Show 1080p"] and listed["template_defaults"] == {
+            "manual": "Show 1080p"
+        }
         client.post("/api/jobs/remove", json={"ids": ids})
         (new,) = add(client, tmp_path, sources=[str(tmp_path / "src" / "Show.S01E01.mkv")])
         spec = client.get(f"/api/jobs/{new}").json()["spec"]
@@ -498,16 +543,23 @@ def test_template_audio(tmp_path):
     """A template's audio slots become each job's track overrides once its tracks are known: when added
     (after the probe) and on a batch (at once). The job's earlier audio choices are replaced."""
     make_files(tmp_path, "S01E01")
-    template = {"audio": {"slots": [
-        {"track": {"title": "Japanese"}},
-        {"track": {}, "extra": [{"action": "ddp", "layout": "5.1", "bitrate_kbps": 640, "title": "DDP 5.1"}]},
-        {"track": {"action": "aac"}},  # no third track: ignored
-    ]}}
+    template = {
+        "audio": {
+            "slots": [
+                {"track": {"title": "Japanese"}},
+                {"track": {}, "extra": [{"action": "ddp", "layout": "5.1", "bitrate_kbps": 640, "title": "DDP 5.1"}]},
+                {"track": {"action": "aac"}},  # no third track: ignored
+            ]
+        }
+    }
     with make_client(tmp_path) as client:
         (job_id,) = add(client, tmp_path, template=template)
         job = wait_for(client, job_id, "ready", "warn")
         assert [(a["action"], a["title"]) for a in job["plan"]["audio"]] == [
-            ("copy", "Japanese"), ("copy", ""), ("ddp", "DDP 5.1")]
+            ("copy", "Japanese"),
+            ("copy", ""),
+            ("ddp", "DDP 5.1"),
+        ]
         assert job["spec"]["audio_template"] is None and job["spec"]["overrides"]["copies"] == ["id:2+1"]
         # What the template set stays on the job, for the track editor (both source tracks and the copy).
         chosen = job["spec"]["audio_from_template"]
@@ -522,25 +574,44 @@ def test_template_audio(tmp_path):
         job = client.get(f"/api/jobs/{job_id}").json()
         assert [(a["action"], a["title"]) for a in job["plan"]["audio"]] == [("flac", "")]  # "Mine" replaced
         chosen = job["spec"]["audio_from_template"]
-        assert chosen["copies"] == [] and chosen["tracks"]["id:2"]["exclude"] and chosen["tracks"]["id:1"]["action"] == "flac"
+        assert (
+            chosen["copies"] == []
+            and chosen["tracks"]["id:2"]["exclude"]
+            and chosen["tracks"]["id:1"]["action"] == "flac"
+        )
 
 
 def test_template_audio_rules(tmp_path):
     """Audio by rules once the tracks are known: "original" is the profile's guess (the first track's
     language, ja), pinned before the rules run; output in rule order, one default."""
     make_files(tmp_path, "S01E01")  # ja FLAC 2.0, en TrueHD 5.1
-    template = {"audio": {"mode": "rules", "others": "exclude", "rules": [
-        {"original": False, "min_channels": 6, "track": {"action": "ddp", "title": "English", "flags": {"default": True}}},
-        {"original": True, "first_only": True, "track": {"title": "Japanese", "flags": {"default": True}}},
-    ]}}
+    template = {
+        "audio": {
+            "mode": "rules",
+            "others": "exclude",
+            "rules": [
+                {
+                    "original": False,
+                    "min_channels": 6,
+                    "track": {"action": "ddp", "title": "English", "flags": {"default": True}},
+                },
+                {"original": True, "first_only": True, "track": {"title": "Japanese", "flags": {"default": True}}},
+            ],
+        }
+    }
     with make_client(tmp_path) as client:
         (job_id,) = add(client, tmp_path, template=template, original_language=None)
         job = wait_for(client, job_id, "ready", "warn")
         assert [(a["action"], a["title"], a["default"]) for a in job["plan"]["audio"]] == [
-            ("ddp", "English", True), ("copy", "Japanese", False)]
+            ("ddp", "English", True),
+            ("copy", "Japanese", False),
+        ]
         spec = job["spec"]
         assert spec["overrides"]["original_language"] == "ja" and spec["audio_template"] is None
-        assert spec["overrides"]["order"] == ["id:2", "id:1"] and sorted(spec["audio_from_template"]["tracks"]) == ["id:1", "id:2"]
+        assert spec["overrides"]["order"] == ["id:2", "id:1"] and sorted(spec["audio_from_template"]["tracks"]) == [
+            "id:1",
+            "id:2",
+        ]
 
 
 def test_template_audio_fits_each_track(tmp_path):
@@ -554,7 +625,9 @@ def test_template_audio_fits_each_track(tmp_path):
         job = wait_for(client, job_id, "ready", "warn", "blocked")
         assert job["status"] != "blocked", job["issues"]
         assert [(a["action"], a["out_layout"], a["bitrate_kbps"]) for a in job["plan"]["audio"]] == [
-            ("ddp", "2.0", 256), ("ddp", "5.1", 640)]
+            ("ddp", "2.0", 256),
+            ("ddp", "5.1", 640),
+        ]
 
         overrides = job["spec"]["overrides"] | {"tracks": {"id:1": ddp51}}
         job = client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides}).json()
@@ -565,16 +638,23 @@ def test_template_subs(tmp_path):
     """A template's subtitle rules set each job's subtitles once its tracks are known, added files too:
     first matching rule wins, rule order, one default. A batch apply replaces the earlier choices."""
     make_files(tmp_path, "S01E01")  # en PGS, de PGS, and an added Show.S01E01.en.srt
-    template = {"subs": {"rules": [
-        {"languages": ["en"], "formats": ["srt"], "track": {"title": "Added", "flags": {"default": True}}},
-        {"languages": ["en"], "track": {"flags": {"default": True}}},
-    ], "others": "exclude"}}
+    template = {
+        "subs": {
+            "rules": [
+                {"languages": ["en"], "formats": ["srt"], "track": {"title": "Added", "flags": {"default": True}}},
+                {"languages": ["en"], "track": {"flags": {"default": True}}},
+            ],
+            "others": "exclude",
+        }
+    }
     with make_client(tmp_path) as client:
         (job_id,) = add(client, tmp_path, template=template)
         job = wait_for(client, job_id, "ready", "warn")
         assert job["spec"]["subs_template"] is None
         assert [(s["language"], s["title"], s["default"]) for s in job["plan"]["subs"]] == [
-            ("en", "Added", True), ("en", "English", False)]  # German left out
+            ("en", "Added", True),
+            ("en", "English", False),
+        ]  # German left out
         chosen = job["spec"]["subs_from_template"]
         assert chosen["order"] == ["ext:Show.S01E01.en.srt", "id:10"] and chosen["tracks"]["id:11"]["exclude"]
 
@@ -584,15 +664,20 @@ def test_template_subs(tmp_path):
         client.post("/api/jobs/apply", json={"ids": [job_id], "template": keep})
         job = client.get(f"/api/jobs/{job_id}").json()
         assert [(s["language"], s["title"]) for s in job["plan"]["subs"]] == [
-            ("de", "German"), ("en", "English"), ("en", "")]  # "Mine" replaced; German first by rule
+            ("de", "German"),
+            ("en", "English"),
+            ("en", ""),
+        ]  # "Mine" replaced; German first by rule
 
 
 def test_template_audio_is_dropped_without_a_track_editor(tmp_path, monkeypatch):
     """A profile whose rules choose the tracks keeps its own picks: the template's audio and subtitles are dropped."""
     monkeypatch.setattr(ManualProfile, "track_editor", False)
     make_files(tmp_path, "S01E01")
-    template = {"audio": {"slots": [{"track": {"exclude": True}}], "others": "exclude"},
-                "subs": {"rules": [], "others": "exclude"}}
+    template = {
+        "audio": {"slots": [{"track": {"exclude": True}}], "others": "exclude"},
+        "subs": {"rules": [], "others": "exclude"},
+    }
     with make_client(tmp_path) as client:
         (job_id,) = add(client, tmp_path, template=template)
         job = wait_for(client, job_id, "ready", "warn")
@@ -678,8 +763,14 @@ def test_index_lane(tmp_path):
         assert set(e.state.steps) == {"script", "index"} and e.state.status is None  # no run, no outcome
         assert (e.spec.work_dir / "video.vpy").is_file() and (e.spec.work_dir / "videoforge.log").is_file()
         assert [c[1:] for c in indexer.calls] == [
-            ("-m", "videoforge.core.video.ffindex", str(q.get(i).spec.inputs.source),
-             str(q.get(i).spec.work_dir / (q.get(i).spec.inputs.source.name + ".ffindex"))) for i in (ids[0], ids[2])]
+            (
+                "-m",
+                "videoforge.core.video.ffindex",
+                str(q.get(i).spec.inputs.source),
+                str(q.get(i).spec.work_dir / (q.get(i).spec.inputs.source.name + ".ffindex")),
+            )
+            for i in (ids[0], ids[2])
+        ]
         assert any("index done" in line for line in e.log)
 
         # Indexing again reuses the steps while the index is there, and builds it again once it's gone.
@@ -710,8 +801,13 @@ def test_index_lane_stop(tmp_path):
             assert not job["indexed"] and not job["index_error"]  # cancelled: nothing to report
         assert len(indexer.calls) == 1
         assert client.get("/api/queue").json() | {"running": False} == {
-            "running": False, "current": None, "stop_after_current": False, "queued": 0, "indexing": None,
-            "index_queued": 0}
+            "running": False,
+            "current": None,
+            "stop_after_current": False,
+            "queued": 0,
+            "indexing": None,
+            "index_queued": 0,
+        }
 
 
 def test_index_now_goes_first(tmp_path):
@@ -795,8 +891,7 @@ def test_index_lane_waits_for_an_encode_on_its_disk(tmp_path, monkeypatch):
     """While an encode runs, a job whose source is on the encode's disk is held back (a job on another disk goes
     ahead); Index now doesn't wait; the setting turns it off; the encode ending lets the job go."""
     make_files(tmp_path, "S01E01", "S01E02", "S01E03", "S01E04")
-    monkeypatch.setattr("videoforge.server.queue.disks",
-                        lambda p: frozenset({"y" if "S01E03" in str(p) else "x"}))
+    monkeypatch.setattr("videoforge.server.queue.disks", lambda p: frozenset({"y" if "S01E03" in str(p) else "x"}))
     indexer = FakeIndexer()
     with make_client(tmp_path, run=FakeRun(block=True), runner=indexer) as client:
         ids = add(client, tmp_path)
@@ -838,8 +933,13 @@ def test_folder_browser(tmp_path):
         assert listing["parent"] == str(tmp_path)
         assert client.get("/api/fs/list", params={"path": "C:\\Windows"}).status_code == 403
         assert client.get("/api/fs/roots").json() == [str(tmp_path)]
-        paths = [str(tmp_path / "src"), str(tmp_path / "src" / "Show.S01E01.mkv"), str(tmp_path / "nope.mkv"),
-                 "C:\\Windows", "relative.mkv"]
+        paths = [
+            str(tmp_path / "src"),
+            str(tmp_path / "src" / "Show.S01E01.mkv"),
+            str(tmp_path / "nope.mkv"),
+            "C:\\Windows",
+            "relative.mkv",
+        ]
         kinds = client.post("/api/fs/kinds", json={"paths": paths}).json()
         assert [k["kind"] for k in kinds] == ["folder", "file", "missing", "outside", "missing"]
 
@@ -849,8 +949,10 @@ def test_folder_browser(tmp_path):
 FFMPEG = shutil.which("ffmpeg")
 
 
-@pytest.mark.skipif(FFMPEG is None or not (PROJECT_ROOT / "tools" / "vs-plugins" / "ffms2.dll").exists(),
-                    reason="needs ffmpeg and tools/vs-plugins")
+@pytest.mark.skipif(
+    FFMPEG is None or not (PROJECT_ROOT / "tools" / "vs-plugins" / "ffms2.dll").exists(),
+    reason="needs ffmpeg and tools/vs-plugins",
+)
 def test_video_preview_endpoints(tmp_path):
     (tmp_path / "src").mkdir()
     clip = tmp_path / "src" / "Movie.mkv"
@@ -881,7 +983,9 @@ def test_video_preview_endpoints(tmp_path):
         assert frame.headers["x-frame-count"] == "48"
         parts = client.get(f"{base}/script").json()
         assert "core.std.Crop" in parts["script"] and parts["body"][0].startswith("clip = core.std.Crop")
-        assert not parts["custom"] and parts["script"] == "\n".join(parts["head"] + parts["body"] + parts["tail"]) + "\n"
+        assert (
+            not parts["custom"] and parts["script"] == "\n".join(parts["head"] + parts["body"] + parts["tail"]) + "\n"
+        )
         checked = client.get(f"{base}/check").json()
         assert checked["ok"] and checked["info"]["frames"] == 48 and checked["info"]["format"] == "YUV420P8"
 

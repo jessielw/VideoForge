@@ -81,25 +81,41 @@ def _settings(track: AudioTrack | SubTrack, ov: TrackOverride | None) -> tuple[s
     return language, track.title if ov.title is None else ov.title, flags
 
 
-def audio_output(t: AudioTrack, ov: TrackOverride | None, issues: list[Issue], settings: AudioSettings | None = None
-                 ) -> dict:
+def audio_output(
+    t: AudioTrack, ov: TrackOverride | None, issues: list[Issue], settings: AudioSettings | None = None
+) -> dict:
     """PlannedAudio's action/format fields for a track: copied, or encoded as the override asks.
     Adds a BLOCK for an encode that can't be done (Atmos from a non-Atmos source, an upmix)."""
     action = (ov.action if ov else None) or AudioAction.COPY
     if action is AudioAction.COPY:
-        return {"action": action, "out_codec": t.codec, "out_layout": t.layout, "out_atmos": t.atmos,
-                "bitrate_kbps": None, "upmix_50": False}
+        return {
+            "action": action,
+            "out_codec": t.codec,
+            "out_layout": t.layout,
+            "out_atmos": t.atmos,
+            "bitrate_kbps": None,
+            "upmix_50": False,
+        }
     enc = ENCODES[action]
-    options, problems = enc.resolve_options(ov.options if ov else {}, (settings or AudioSettings()).option_defaults(action))
+    options, problems = enc.resolve_options(
+        ov.options if ov else {}, (settings or AudioSettings()).option_defaults(action)
+    )
     issues += [Issue(Severity.BLOCK, "audio.option", f"Audio #{t.id}: {p}") for p in problems]
     if action is AudioAction.ATMOS:
         if not (t.atmos and t.codec is AudioCodec.TRUEHD):
-            issues.append(Issue(Severity.BLOCK, "audio.atmos_source",
-                                f"Audio #{t.id}: DDP Atmos needs a TrueHD Atmos source"))
+            issues.append(
+                Issue(Severity.BLOCK, "audio.atmos_source", f"Audio #{t.id}: DDP Atmos needs a TrueHD Atmos source")
+            )
         layout = Layout(5, 1)
-        return {"action": action, "out_codec": enc.codec, "out_layout": layout, "out_atmos": True,
-                "bitrate_kbps": (ov.bitrate_kbps if ov else None) or enc.default_bitrate(layout), "upmix_50": False,
-                "options": options}
+        return {
+            "action": action,
+            "out_codec": enc.codec,
+            "out_layout": layout,
+            "out_atmos": True,
+            "bitrate_kbps": (ov.bitrate_kbps if ov else None) or enc.default_bitrate(layout),
+            "upmix_50": False,
+            "options": options,
+        }
     layout = (ov.layout if ov else None) or enc.default_layout(t.layout)
     upmix_50 = enc.upmix_50(t.layout, layout)
     if layout not in enc.layouts:
@@ -112,8 +128,15 @@ def audio_output(t: AudioTrack, ov: TrackOverride | None, issues: list[Issue], s
         problem = enc.bitrate_problem(bitrate, layout) if bitrate else ""
         if problem:
             issues.append(Issue(Severity.BLOCK, "audio.bitrate", f"Audio #{t.id}: {problem}"))
-    return {"action": action, "out_codec": enc.codec, "out_layout": layout, "out_atmos": False,
-            "bitrate_kbps": bitrate, "upmix_50": upmix_50, "options": options}
+    return {
+        "action": action,
+        "out_codec": enc.codec,
+        "out_layout": layout,
+        "out_atmos": False,
+        "bitrate_kbps": bitrate,
+        "upmix_50": upmix_50,
+        "options": options,
+    }
 
 
 def _excluded(track: AudioTrack | SubTrack, overrides: Overrides) -> bool:
@@ -139,13 +162,17 @@ class ManualProfile(Profile):
     external_subtitles = True
     external_audio = True
     track_editor = True
-    track_properties = tuple(TrackProperty(key, label, kind, help) for kind in TrackKind for key, label, help in _FLAGS[kind])
+    track_properties = tuple(
+        TrackProperty(key, label, kind, help) for kind in TrackKind for key, label, help in _FLAGS[kind]
+    )
 
     def plan(self, probed: ProbedInputs, original_language: str | None, overrides: Overrides) -> Plan:
         source, encode = probed.source, probed.encode
         issues: list[Issue] = []
         if encode is None:
-            issues.append(Issue(Severity.BLOCK, "input.no_video", "No video for this source: add an encode or encode it here"))
+            issues.append(
+                Issue(Severity.BLOCK, "input.no_video", "No video for this source: add an encode or encode it here")
+            )
         if source.video and source.video.start_ms:
             issues.append(
                 Issue(
@@ -164,26 +191,50 @@ class ManualProfile(Profile):
         audio_tracks = [t for t in audio_tracks if not _excluded(t, overrides)]
         if source.audio and not audio_tracks:
             issues.append(Issue(Severity.WARN, "audio.none", "No audio tracks selected"))
-        sub_tracks = [t for t in ordered(source.subs + probed.external_subs, overrides.order) if not _excluded(t, overrides)]
+        sub_tracks = [
+            t for t in ordered(source.subs + probed.external_subs, overrides.order) if not _excluded(t, overrides)
+        ]
 
         audio: list[PlannedAudio] = []
         for t in audio_tracks:
             ov = overrides.tracks.get(track_key(t))
             language, title, flags = _settings(t, ov)
             if t.external_path is not None and language == "und":
-                issues.append(Issue(Severity.WARN, "audio.language",
-                                    f"{t.external_path.name} has no language: set it in the track editor"))
-            audio.append(PlannedAudio(source=t, **audio_output(t, ov, issues, self.audio_settings()), language=language, title=title, **flags))
+                issues.append(
+                    Issue(
+                        Severity.WARN,
+                        "audio.language",
+                        f"{t.external_path.name} has no language: set it in the track editor",
+                    )
+                )
+            audio.append(
+                PlannedAudio(
+                    source=t,
+                    **audio_output(t, ov, issues, self.audio_settings()),
+                    language=language,
+                    title=title,
+                    **flags,
+                )
+            )
         subs: list[PlannedSub] = []
         for t in sub_tracks:
             language, title, flags = _settings(t, overrides.tracks.get(track_key(t)))
             if t.external_path is not None and language == "und":
-                issues.append(Issue(Severity.WARN, "subs.language",
-                                    f"{t.external_path.name} has no language: set it in the track editor"))
+                issues.append(
+                    Issue(
+                        Severity.WARN,
+                        "subs.language",
+                        f"{t.external_path.name} has no language: set it in the track editor",
+                    )
+                )
             subs.append(PlannedSub(source=t, slot="", language=language, title=title, **flags))
 
-        orig = overrides.original_language or original_language or _guess_original(source.audio) or (
-            audio[0].language if audio else "und")
+        orig = (
+            overrides.original_language
+            or original_language
+            or _guess_original(source.audio)
+            or (audio[0].language if audio else "und")
+        )
         return Plan(
             source=source,
             encode_path=encode.path if encode else None,
@@ -198,7 +249,9 @@ class ManualProfile(Profile):
         )
 
     def video_defaults(self) -> tuple[VideoSettings, EncoderSettings]:
-        return VideoSettings(), EncoderSettings(encoder=Encoder.X264, rate_control=RateControl.CRF, crf=18.0, preset="slow")
+        return VideoSettings(), EncoderSettings(
+            encoder=Encoder.X264, rate_control=RateControl.CRF, crf=18.0, preset="slow"
+        )
 
     def validate_output(self, plan: Plan, output: SourceInfo) -> list[Issue]:
         return output_matches_plan(plan, output)
@@ -223,7 +276,9 @@ def output_matches_plan(plan: Plan, output: SourceInfo) -> list[Issue]:
     def compare(code: str, label: str, wanted: list, found: list, same_format) -> None:
         if len(found) != len(wanted):
             issues.append(
-                Issue(Severity.BLOCK, f"plan.{code}_count", f"Expected {len(wanted)} {label} track(s), found {len(found)}")
+                Issue(
+                    Severity.BLOCK, f"plan.{code}_count", f"Expected {len(wanted)} {label} track(s), found {len(found)}"
+                )
             )
         for i, (want, got) in enumerate(zip(wanted, found), 1):
             titles = muxer.carries_titles
@@ -231,15 +286,25 @@ def output_matches_plan(plan: Plan, output: SourceInfo) -> list[Issue]:
             g = (lang.normalize(got.language), got.title if titles else "", {k: getattr(got, k) for k in keys})
             if w != g:
                 issues.append(
-                    Issue(Severity.BLOCK, f"plan.{code}", f"{label} {i}: expected {_describe(*w)}, found {_describe(*g)}")
+                    Issue(
+                        Severity.BLOCK, f"plan.{code}", f"{label} {i}: expected {_describe(*w)}, found {_describe(*g)}"
+                    )
                 )
             if not same_format(want, got):
                 issues.append(Issue(Severity.BLOCK, f"plan.{code}_format", f"{label} {i} is not in the planned format"))
 
     compare(
-        "audio", "Audio", plan.audio, output.audio,
+        "audio",
+        "Audio",
+        plan.audio,
+        output.audio,
         lambda want, got: (got.codec, got.layout) == (want.out_codec, want.out_layout),
     )
-    compare("subs", "Subtitle", plan.subs, output.subs,
-            lambda want, got: got.format is muxer.written_format(want.source.format))
+    compare(
+        "subs",
+        "Subtitle",
+        plan.subs,
+        output.subs,
+        lambda want, got: got.format is muxer.written_format(want.source.format),
+    )
     return issues

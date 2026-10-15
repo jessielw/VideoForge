@@ -9,9 +9,17 @@ from conftest import audio, plan_for, simulate_output, source, sub
 from videoforge.core.execute import chapters as ogm
 from videoforge.core.execute.mux import MUXERS, MuxSettings, mp4box_command, mux_issues, muxer_for, split_args
 from videoforge.core.job import JobSpec
-from videoforge.core.models import AudioAction, JobInputs, Layout, Overrides, Severity, TrackOverride, VideoInfo
-from videoforge.core.models import AudioCodec as C
-from videoforge.core.models import SubFormat as F
+from videoforge.core.models import (
+    AudioAction,
+    AudioCodec as C,
+    JobInputs,
+    Layout,
+    Overrides,
+    Severity,
+    SubFormat as F,
+    TrackOverride,
+    VideoInfo,
+)
 from videoforge.core.pipeline.build import output_path
 from videoforge.profiles.manual import ManualProfile, output_matches_plan
 
@@ -20,8 +28,10 @@ RAW = (".h264", ".hevc")
 
 def mp4_plan(subs=None, overrides=None):
     src = source(
-        [audio(C.AC3, "5.1", "en", index=0, default=True, title="Main: 5.1"),
-         audio(C.FLAC, "2.0", "ja", index=1, commentary=True)],
+        [
+            audio(C.AC3, "5.1", "en", index=0, default=True, title="Main: 5.1"),
+            audio(C.FLAC, "2.0", "ja", index=1, commentary=True),
+        ],
         subs if subs is not None else [sub(F.SRT, "en", "English", index=0, forced=True)],
         name="Movie.mkv",
     )
@@ -41,8 +51,9 @@ def test_mp4box_command():
     ov = Overrides(tracks={"id:2": TrackOverride(action=AudioAction.AAC_FFMPEG, layout=Layout(2, 0))})
     plan = mp4_plan(overrides=ov)
     plan.chapters_path = Path("work/chapters_chapters.txt")
-    argv = mp4box_command(plan, {1: Path("tmp/audio1_ja.m4a")}, Path("out.mp4.partial"), "MP4Box", RAW,
-                          split_args('-tmp "D:\\tmp dir"'))
+    argv = mp4box_command(
+        plan, {1: Path("tmp/audio1_ja.m4a")}, Path("out.mp4.partial"), "MP4Box", RAW, split_args('-tmp "D:\\tmp dir"')
+    )
     assert argv[:2] == ["MP4Box", "-noprog"]
     assert adds(argv) == [
         "enc.h264:fps=24000/1001:lang=en-US:name=",  # the source's exact rate and language; no GPAC handler name
@@ -105,8 +116,11 @@ def test_chapters_as_ogm(tmp_path):
         "<ChapterDisplay><ChapterString>Opening</ChapterString></ChapterDisplay></ChapterAtom>"
         "<ChapterAtom><ChapterFlagHidden>1</ChapterFlagHidden><ChapterTimeStart>00:01:00.000</ChapterTimeStart></ChapterAtom>"
         "<ChapterAtom><ChapterTimeStart>01:02:03.456789</ChapterTimeStart></ChapterAtom>"
-        "</EditionEntry></Chapters>", encoding="utf-8")
+        "</EditionEntry></Chapters>",
+        encoding="utf-8",
+    )
     found = ogm.from_xml(xml)
     assert found == [(0, "Opening"), (3723457, "")]
-    assert ogm.ogm_text(found) == ("CHAPTER01=00:00:00.000\nCHAPTER01NAME=Opening\n"
-                                   "CHAPTER02=01:02:03.457\nCHAPTER02NAME=Chapter 02\n")
+    assert ogm.ogm_text(found) == (
+        "CHAPTER01=00:00:00.000\nCHAPTER01NAME=Opening\nCHAPTER02=01:02:03.457\nCHAPTER02NAME=Chapter 02\n"
+    )

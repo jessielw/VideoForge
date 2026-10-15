@@ -9,11 +9,11 @@ Elsewhere this is a no-op (in Docker the container stopping ends everything anyw
 from __future__ import annotations
 
 import ctypes
+from ctypes import wintypes
 import logging
 import os
 import subprocess
 import threading
-from ctypes import wintypes
 
 log = logging.getLogger(__name__)
 
@@ -43,9 +43,17 @@ class _BasicLimits(ctypes.Structure):
 
 
 class _IoCounters(ctypes.Structure):
-    _fields_ = [(name, ctypes.c_uint64) for name in (
-        "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
-        "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+    _fields_ = [
+        (name, ctypes.c_uint64)
+        for name in (
+            "ReadOperationCount",
+            "WriteOperationCount",
+            "OtherOperationCount",
+            "ReadTransferCount",
+            "WriteTransferCount",
+            "OtherTransferCount",
+        )
+    ]
 
 
 class _ExtendedLimits(ctypes.Structure):
@@ -83,11 +91,13 @@ def _get_job() -> int | None:
             limits = _ExtendedLimits()
             limits.BasicLimitInformation.LimitFlags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
             if job and _kernel32.SetInformationJobObject(
-                    job, _JobObjectExtendedLimitInformation, ctypes.byref(limits), ctypes.sizeof(limits)):
+                job, _JobObjectExtendedLimitInformation, ctypes.byref(limits), ctypes.sizeof(limits)
+            ):
                 _job = job
             else:
-                log.warning("Couldn't create a job object (error %d); tools may outlive VideoForge",
-                            ctypes.get_last_error())
+                log.warning(
+                    "Couldn't create a job object (error %d); tools may outlive VideoForge", ctypes.get_last_error()
+                )
                 if job:
                     _kernel32.CloseHandle(job)
                 _failed = True
@@ -102,8 +112,11 @@ def adopt(proc: subprocess.Popen) -> None:
     try:
         job = _get_job()
         if job is not None and not _kernel32.AssignProcessToJobObject(job, handle):
-            log.warning("Couldn't add %s to the job object (error %d); it may outlive VideoForge",
-                        proc.args[0] if isinstance(proc.args, list) else proc.args, ctypes.get_last_error())
+            log.warning(
+                "Couldn't add %s to the job object (error %d); it may outlive VideoForge",
+                proc.args[0] if isinstance(proc.args, list) else proc.args,
+                ctypes.get_last_error(),
+            )
     finally:
         status = _ntdll.NtResumeProcess(handle)
         if status < 0:

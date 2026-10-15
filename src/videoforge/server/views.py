@@ -24,8 +24,9 @@ def issues(e: Entry) -> list[Issue]:
     if e.probe_error:
         out.append(Issue(Severity.BLOCK, "probe", e.probe_error))
     if e.state.error:
-        out.append(Issue(Severity.BLOCK, f"run.{e.state.status.value if e.state.status else 'interrupted'}",
-                         e.state.error))
+        out.append(
+            Issue(Severity.BLOCK, f"run.{e.state.status.value if e.state.status else 'interrupted'}", e.state.error)
+        )
     out += [Issue(i.severity, "output." + i.code, i.message) for i in e.state.issues]
     if e.plan is not None:
         out += e.plan.issues
@@ -50,7 +51,9 @@ def summary(e: Entry) -> dict[str, Any]:
         "crop": to_json(s.video.crop) if s.encodes_video and s.video.custom is None else None,
         "custom_script": s.encodes_video and s.video.custom is not None,
         # The source index is in the work folder (the video opens at once); a failed batch index says why.
-        "indexed": s.encodes_video and not e.indexing and index_exists(s.inputs.source, s.video.source_filter, s.work_dir),
+        "indexed": s.encodes_video
+        and not e.indexing
+        and index_exists(s.inputs.source, s.video.source_filter, s.work_dir),
         "index_error": e.index_error,
         "index_held": e.index_held,  # waiting in the lane while an encode reads its disk
         "audio": [f"{a.title} ({a.language})" for a in e.plan.audio] if e.plan else [],
@@ -80,8 +83,10 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
         out["tracks"] = {
             "video": to_json(src.video) if src.video else None,
             "audio": [to_json(t) | {"key": track_key(t), "detected": profile.detected_flags(t)} for t in audio],
-            "subs": [to_json(t) | {"key": track_key(t), "detected": profile.detected_flags(t)}
-                     for t in [*src.subs, *e.probed.external_subs]],
+            "subs": [
+                to_json(t) | {"key": track_key(t), "detected": profile.detected_flags(t)}
+                for t in [*src.subs, *e.probed.external_subs]
+            ],
             "has_chapters": src.has_chapters,
             "count": len(tracks),
         }

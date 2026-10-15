@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from collections import Counter
 from pathlib import Path
+import sys
 
 from rich.console import Console
 from rich.markup import escape
@@ -25,7 +25,9 @@ def _print_issues(issues: list[Issue], min_sev: Severity = Severity.INFO) -> Non
     order = [Severity.INFO, Severity.WARN, Severity.BLOCK]
     for i in issues:
         if order.index(i.severity) >= order.index(min_sev):
-            console.print(f"  [{_SEV_STYLE[i.severity]}]{i.severity.value:>5}[/] {i.code}: {escape(i.message)}", highlight=False)
+            console.print(
+                f"  [{_SEV_STYLE[i.severity]}]{i.severity.value:>5}[/] {i.code}: {escape(i.message)}", highlight=False
+            )
 
 
 def report_validation(profile: Profile, targets: list[tuple[str, SourceInfo]], min_sev: Severity, summary: bool) -> int:
@@ -34,7 +36,11 @@ def report_validation(profile: Profile, targets: list[tuple[str, SourceInfo]], m
     failed = 0
     for name, info in targets:
         issues = profile.validate_release(info)
-        shown = [i for i in issues if i.severity is Severity.BLOCK or (min_sev is not Severity.BLOCK and i.severity is Severity.WARN)]
+        shown = [
+            i
+            for i in issues
+            if i.severity is Severity.BLOCK or (min_sev is not Severity.BLOCK and i.severity is Severity.WARN)
+        ]
         codes.update(i.code for i in issues if i.severity is not Severity.INFO)
         if any(i.severity is Severity.BLOCK for i in issues):
             failed += 1
@@ -66,8 +72,14 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return report_validation(profile, targets, Severity(args.min_severity), args.summary)
 
 
-_FLAG_NAMES = (("default", "default"), ("forced", "forced"), ("hearing_impaired", "sdh"), ("commentary", "commentary"),
-               ("original", "original"), ("visual_impaired", "AD"))
+_FLAG_NAMES = (
+    ("default", "default"),
+    ("forced", "forced"),
+    ("hearing_impaired", "sdh"),
+    ("commentary", "commentary"),
+    ("original", "original"),
+    ("visual_impaired", "AD"),
+)
 
 
 def _flags(track) -> str:
@@ -75,14 +87,23 @@ def _flags(track) -> str:
 
 
 def print_plan(plan: Plan) -> None:
-    status = {Severity.BLOCK: "[bold red]BLOCKED[/]", Severity.WARN: "[yellow]WARN[/]", None: "[green]READY[/]"}[plan.status]
+    status = {Severity.BLOCK: "[bold red]BLOCKED[/]", Severity.WARN: "[yellow]WARN[/]", None: "[green]READY[/]"}[
+        plan.status
+    ]
     console.print(f"\n[bold]{escape(plan.source.name)}[/]  {status}  {plan.resolution}  orig={plan.original_language}")
     table = Table("#", "type", "action", "title", "lang", "flags", "from", show_lines=False)
     for i, a in enumerate(plan.audio, 1):
         src = a.source
         action = a.action.value + (f" {a.bitrate_kbps}k" if a.bitrate_kbps else "") + (" +upmix" if a.upmix_50 else "")
-        table.add_row(str(i), "audio", action, a.title, a.language, _flags(a),
-                      escape(f"#{src.index + 1} {src.format_name} {src.layout} {src.title}"))
+        table.add_row(
+            str(i),
+            "audio",
+            action,
+            a.title,
+            a.language,
+            _flags(a),
+            escape(f"#{src.index + 1} {src.format_name} {src.layout} {src.title}"),
+        )
     for i, s in enumerate(plan.subs, 1):
         src = s.source
         where = src.external_path.name if src.external_path else f"#{src.index + 1} {src.format.value} {src.title}"
@@ -110,7 +131,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
         plans.append(plan)
         print_plan(plan)
         if job.subtitles:
-            console.print("  [dim]external: " + escape(", ".join(p.name for p in job.subtitles)) + "[/]", highlight=False)
+            console.print(
+                "  [dim]external: " + escape(", ".join(p.name for p in job.subtitles)) + "[/]", highlight=False
+            )
         if plan.chapters_path:
             console.print(f"  [dim]chapters: {escape(str(plan.chapters_path))}[/]", highlight=False)
         blocked += plan.blocked
@@ -158,8 +181,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         console.print(f"\n[bold]({n}/{len(plans)}) {escape(plan.source.name)}[/]")
         try:
             result = run_plan(
-                plan, args.out_dir, get_profile(plan.profile or default_profile_id(app.profile)), app,
-                progress=progress, log=log, cancel=cancel,
+                plan,
+                args.out_dir,
+                get_profile(plan.profile or default_profile_id(app.profile)),
+                app,
+                progress=progress,
+                log=log,
+                cancel=cancel,
             )
         except KeyboardInterrupt:
             console.print("[yellow]Interrupted[/]")
@@ -215,23 +243,28 @@ def cmd_serve(args: argparse.Namespace) -> int:
     if args.window:
         from videoforge.desktop import run_window
 
-        console.print(f"VideoForge on [bold]{url}[/], in its own window (closing it keeps VideoForge in the tray;"
-                      " Quit there or Ctrl+C here to stop)")
+        console.print(
+            f"VideoForge on [bold]{url}[/], in its own window (closing it keeps VideoForge in the tray;"
+            " Quit there or Ctrl+C here to stop)"
+        )
         return run_window(create_app(settings), args.host, args.port, url, settings.data_dir)
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, (url,)).start()
     console.print(f"VideoForge on [bold]{url}[/] (Ctrl+C to stop)")
     app = create_app(settings)
     # Open connections get 5 s to close before the app's shutdown runs (it cancels a running job: up to 10 s).
-    server = uvicorn.Server(uvicorn.Config(app, host=args.host, port=args.port, log_level="warning",
-                                           timeout_graceful_shutdown=5))
+    server = uvicorn.Server(
+        uvicorn.Config(app, host=args.host, port=args.port, log_level="warning", timeout_graceful_shutdown=5)
+    )
     app.state.shutdown = lambda: setattr(server, "should_exit", True)  # the page's Shut down
     server.run()
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="videoforge", description="VideoForge: encode and mux job queue (`videoforge serve` for the web app)")
+    parser = argparse.ArgumentParser(
+        prog="videoforge", description="VideoForge: encode and mux job queue (`videoforge serve` for the web app)"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("validate", help="check finished releases with a profile's checks (MKV or MediaInfo .txt)")
@@ -260,9 +293,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--host", default="127.0.0.1", help="interface to listen on (default: this machine only)")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--no-browser", action="store_true", help="don't open the browser")
-    p.add_argument("--window", action="store_true",
-                   help="open the app in its own window (dropped files fill path fields; closing it keeps VideoForge in the "
-                        "tray); needs the desktop extra")
+    p.add_argument(
+        "--window",
+        action="store_true",
+        help="open the app in its own window (dropped files fill path fields; closing it keeps VideoForge in the "
+        "tray); needs the desktop extra",
+    )
     p.add_argument("--data-dir", type=Path, help="where the queue database lives (default: %%APPDATA%%/VideoForge)")
     p.set_defaults(func=cmd_serve)
 

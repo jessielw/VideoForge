@@ -26,8 +26,10 @@ def test_preview_runs_scripts_in_a_worker(preview):
     image, _pict, frames = preview.frame(BLANK.format(n=10), 3, "png")
     assert image[:4] == b"\x89PNG" and frames == 10
     assert preview.check(BLANK.format(n=10)).format == "RGB24"
-    boxed = ("import vapoursynth as vs\nclip = vs.core.std.BlankClip(format=vs.YUV420P8, width=60, height=40, length=5,"
-             " color=[128, 128, 128]).std.AddBorders(left=2, right=2, top=4, bottom=4)\n")
+    boxed = (
+        "import vapoursynth as vs\nclip = vs.core.std.BlankClip(format=vs.YUV420P8, width=60, height=40, length=5,"
+        " color=[128, 128, 128]).std.AddBorders(left=2, right=2, top=4, bottom=4)\n"
+    )
     crop = preview.autocrop(boxed, 3)
     assert (crop.left, crop.top, crop.right, crop.bottom) == (2, 4, 2, 4)
 

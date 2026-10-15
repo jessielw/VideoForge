@@ -7,8 +7,7 @@ from pathlib import Path
 from conftest import source, sub
 
 from videoforge.core.jobs import external_tracks
-from videoforge.core.models import EncodeState
-from videoforge.core.models import SubFormat as F
+from videoforge.core.models import EncodeState, SubFormat as F
 from videoforge.core.pairing import FileSets, MatchRules, discover, external_sub_track, match_files, slot_files
 
 EXTS = (".h264", ".hevc")

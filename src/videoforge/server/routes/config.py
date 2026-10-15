@@ -7,9 +7,9 @@ jobs, probes and runs use them. Only the preview's VapourSynth plugin folder nee
 
 from __future__ import annotations
 
-import os
 from contextlib import suppress
 from dataclasses import asdict, replace
+import os
 from pathlib import Path
 from typing import Any
 
@@ -34,9 +34,18 @@ def _state(request: Request) -> dict[str, Any]:
     ids = s.profile_ids
     profiles = s.queue.profiles
     return {
-        "tools": [{"name": t.name, "label": t.label, "purpose": t.purpose, "folder": t.folder,
-                   "path": tools[t.name], "default": base_tools[t.name], "custom": saved.tools.get(t.name)}
-                  for t in TOOLS],
+        "tools": [
+            {
+                "name": t.name,
+                "label": t.label,
+                "purpose": t.purpose,
+                "folder": t.folder,
+                "path": tools[t.name],
+                "default": base_tools[t.name],
+                "custom": saved.tools.get(t.name),
+            }
+            for t in TOOLS
+        ],
         "roots": [str(r) for r in s.settings.roots],
         "roots_custom": saved.roots is not None,
         "default_roots": [str(r) for r in s.default_roots],
@@ -107,14 +116,31 @@ def encoders(request: Request) -> list[dict[str, Any]]:
     """The audio encodes (execute.audio.ENCODES) for the track editor: layouts, bitrates, and the
     tools each one is missing ([] = it can run)."""
     missing = missing_for_encodes(request.app.state.config.tools)
-    return [{"id": e.action.value, "label": e.label, "codec": e.codec.value, "layouts": [str(x) for x in e.layouts],
-             "bitrates": None if e.bitrates is None else {str(c): k for c, k in e.bitrates.items()},
-             "bitrate_choices": list(e.bitrate_choices), "vbr_default": e.vbr_default,
-             "default_max": str(e.default_max) if e.default_max else None, "missing": missing[e.action],
-             "options": [{"key": o.key, "label": o.label, "default": o.default, "help": o.help,
-                          "choices": [{"value": v, "label": lab} for v, lab in o.choices],
-                          "range": list(o.int_range) if o.int_range else None} for o in e.options]}
-            for e in ENCODES.values()]
+    return [
+        {
+            "id": e.action.value,
+            "label": e.label,
+            "codec": e.codec.value,
+            "layouts": [str(x) for x in e.layouts],
+            "bitrates": None if e.bitrates is None else {str(c): k for c, k in e.bitrates.items()},
+            "bitrate_choices": list(e.bitrate_choices),
+            "vbr_default": e.vbr_default,
+            "default_max": str(e.default_max) if e.default_max else None,
+            "missing": missing[e.action],
+            "options": [
+                {
+                    "key": o.key,
+                    "label": o.label,
+                    "default": o.default,
+                    "help": o.help,
+                    "choices": [{"value": v, "label": lab} for v, lab in o.choices],
+                    "range": list(o.int_range) if o.int_range else None,
+                }
+                for o in e.options
+            ],
+        }
+        for e in ENCODES.values()
+    ]
 
 
 @router.get("/tools")

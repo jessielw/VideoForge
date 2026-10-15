@@ -39,8 +39,7 @@ def create_app(
     services: Services | None = None,
     setup_vapoursynth: bool = True,
 ) -> FastAPI:
-    from videoforge.profiles import default_profile_id, get_profile
-    from videoforge.profiles import profile_ids as registered
+    from videoforge.profiles import default_profile_id, get_profile, profile_ids as registered
 
     settings = settings or ServerSettings()
     base = app_config or load_app_config()  # videoforge.toml (+ .local); the Settings page layers over it

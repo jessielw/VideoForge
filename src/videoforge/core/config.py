@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass, field, replace
+from pathlib import Path
 import shutil
 import sys
 import tomllib
-from dataclasses import asdict, dataclass, field, replace
-from pathlib import Path
 
 from videoforge.core.pairing import MatchRules
 

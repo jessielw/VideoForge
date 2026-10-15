@@ -15,11 +15,11 @@ Extras, each switchable in MatchRules:
 
 from __future__ import annotations
 
-import os
-import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
+import re
 
 from videoforge.core import lang
 from videoforge.core.models import EncodeState, JobInputs, SubFormat, SubTrack
@@ -272,8 +272,24 @@ def srt_entry_count(path: Path) -> int | None:
         return None
 
 
-AUDIO_EXTENSIONS = (".ac3", ".eac3", ".ec3", ".dts", ".dtshd", ".thd", ".truehd", ".mlp", ".flac", ".wav", ".w64",
-                    ".m4a", ".aac", ".mka", ".opus", ".ogg")
+AUDIO_EXTENSIONS = (
+    ".ac3",
+    ".eac3",
+    ".ec3",
+    ".dts",
+    ".dtshd",
+    ".thd",
+    ".truehd",
+    ".mlp",
+    ".flac",
+    ".wav",
+    ".w64",
+    ".m4a",
+    ".aac",
+    ".mka",
+    ".opus",
+    ".ogg",
+)
 _DELAY_RE = re.compile(r"\bdelay\s*(-?\d+)\s*ms\b", re.IGNORECASE)
 
 
@@ -293,8 +309,13 @@ def name_delay_ms(stem: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
-SUB_FORMATS = {".srt": SubFormat.SRT, ".ass": SubFormat.ASS, ".ssa": SubFormat.ASS, ".sup": SubFormat.PGS,
-               ".idx": SubFormat.VOBSUB}
+SUB_FORMATS = {
+    ".srt": SubFormat.SRT,
+    ".ass": SubFormat.ASS,
+    ".ssa": SubFormat.ASS,
+    ".sup": SubFormat.PGS,
+    ".idx": SubFormat.VOBSUB,
+}
 
 
 def external_sub_track(path: Path, source_stem: str, index: int, *, keep_unknown: bool = False) -> SubTrack | None:

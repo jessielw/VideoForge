@@ -10,14 +10,14 @@ only redoes the mux.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 import hashlib
 import json
+from pathlib import Path
 import re
 import subprocess
 import time
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from pathlib import Path
 
 from videoforge.core.execute import process
 from videoforge.core.execute.process import CancelToken, LogFn, ToolError

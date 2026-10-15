@@ -9,10 +9,10 @@ an existing encode has no script/index/chapters/video steps.
 
 from __future__ import annotations
 
-import os
-import sys
 from dataclasses import dataclass, field, replace
+import os
 from pathlib import Path
+import sys
 from typing import TYPE_CHECKING
 
 from videoforge.core.config import AppConfig
@@ -86,8 +86,15 @@ def index_steps(spec: JobSpec, app: AppConfig) -> list[Step]:
     return [
         Step("script", "Write the VapourSynth script", call=write_script, outputs=(script,), key=text, weight=0.01),
         # Reused while the index is there (BestSource names its file after the track).
-        Step("index", "Index the source", argvs=(argv,), inputs=inputs, key=source_filter.value, weight=2,
-             present=lambda: index_exists(source, source_filter, work)),
+        Step(
+            "index",
+            "Index the source",
+            argvs=(argv,),
+            inputs=inputs,
+            key=source_filter.value,
+            weight=2,
+            present=lambda: index_exists(source, source_filter, work),
+        ),
     ]
 
 
@@ -109,8 +116,17 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
                 raise ToolError("AutoQPF could not read or generate chapters for the source")
             log(f"Chapters and qpfile written ({fps} fps)")
 
-        steps.append(Step("chapters", "Chapters and qpfile (AutoQPF)", call=make_chapters,
-                          outputs=(files.qpfile, files.chapters), inputs=(source,), key=str(fps), weight=0.1))
+        steps.append(
+            Step(
+                "chapters",
+                "Chapters and qpfile (AutoQPF)",
+                call=make_chapters,
+                outputs=(files.qpfile, files.chapters),
+                inputs=(source,),
+                key=str(fps),
+                weight=0.1,
+            )
+        )
         qpfile = files.qpfile
 
     exe = app.tools.x265 if enc.encoder is Encoder.X265 else app.tools.x264
@@ -123,15 +139,38 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
         first = encoder_command(exe, enc, output=Path(os.devnull), pass_number=1, stats=stats, qpfile=qpfile)
         second = encoder_command(exe, enc, output=out, pass_number=2, stats=stats, qpfile=qpfile)
         steps += [
-            Step("video.pass1", f"Video pass 1/2 ({name})", argvs=(pipe, tuple(first)), outputs=(stats,),
-                 inputs=shared, key=text, weight=40),
-            Step("video.pass2", f"Video pass 2/2 ({name})", argvs=(pipe, tuple(second)), outputs=(out,),
-                 inputs=(*shared, stats), key=text, weight=60),
+            Step(
+                "video.pass1",
+                f"Video pass 1/2 ({name})",
+                argvs=(pipe, tuple(first)),
+                outputs=(stats,),
+                inputs=shared,
+                key=text,
+                weight=40,
+            ),
+            Step(
+                "video.pass2",
+                f"Video pass 2/2 ({name})",
+                argvs=(pipe, tuple(second)),
+                outputs=(out,),
+                inputs=(*shared, stats),
+                key=text,
+                weight=60,
+            ),
         ]
     else:
         argv = encoder_command(exe, enc, output=out, qpfile=qpfile)
-        steps.append(Step("video", f"Video ({name})", argvs=(pipe, tuple(argv)), outputs=(out,), inputs=shared,
-                          key=text, weight=60))
+        steps.append(
+            Step(
+                "video",
+                f"Video ({name})",
+                argvs=(pipe, tuple(argv)),
+                outputs=(out,),
+                inputs=shared,
+                key=text,
+                weight=60,
+            )
+        )
     return steps
 
 
@@ -149,8 +188,16 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
         if cmd is None:
             continue
         encoded[pos] = cmd.output
-        steps.append(Step(f"audio.{pos + 1}", f"Encode audio {pos + 1}: {a.title}", argvs=cmd.argvs,
-                          outputs=(cmd.output,), inputs=(src,), weight=4))
+        steps.append(
+            Step(
+                f"audio.{pos + 1}",
+                f"Encode audio {pos + 1}: {a.title}",
+                argvs=cmd.argvs,
+                outputs=(cmd.output,),
+                inputs=(src,),
+                weight=4,
+            )
+        )
 
     container = spec.container(profile)
     if container == "mp4" and (chapters := mp4_chapters_step(plan, work)) is not None:
@@ -161,6 +208,16 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
     mux_inputs = [p for p in (plan.encode_path, plan.chapters_path, *encoded.values()) if p is not None]
     mux_inputs += [s.source.external_path for s in plan.subs if s.source.external_path is not None]
     mux_inputs += list(dict.fromkeys(a.source.external_path for a in plan.audio if a.source.external_path is not None))
-    steps.append(Step("mux", "Mux", argvs=(tuple(mux),), outputs=(output,), writes=(partial,),
-                      inputs=(plan.source.path, *mux_inputs), finalize=lambda: partial.replace(output), weight=3))
+    steps.append(
+        Step(
+            "mux",
+            "Mux",
+            argvs=(tuple(mux),),
+            outputs=(output,),
+            writes=(partial,),
+            inputs=(plan.source.path, *mux_inputs),
+            finalize=lambda: partial.replace(output),
+            weight=3,
+        )
+    )
     return JobSteps(steps, output, encoded)

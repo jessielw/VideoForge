@@ -9,8 +9,8 @@ volume.
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
+import os
 from pathlib import Path
 
 
@@ -71,10 +71,25 @@ def _disk_numbers(volume: str) -> list[int]:
 
     k32 = ctypes.WinDLL("kernel32")  # its own function objects: the argtypes don't leak to other users
     k32.CreateFileW.restype = wintypes.HANDLE
-    k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
-                                wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
-    k32.DeviceIoControl.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPVOID, wintypes.DWORD,
-                                    wintypes.LPVOID, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+    k32.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    k32.DeviceIoControl.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+        wintypes.LPVOID,
+    ]
     k32.CloseHandle.argtypes = [wintypes.HANDLE]
     # No access rights needed for this query; share read/write, open existing.
     handle = k32.CreateFileW(volume, 0, 0x1 | 0x2, None, 3, 0, None)
@@ -87,6 +102,6 @@ def _disk_numbers(volume: str) -> list[int]:
         if not k32.DeviceIoControl(handle, 0x00560000, None, 0, out, len(out), ctypes.byref(got), None):
             return []
         count = int.from_bytes(out.raw[:4], "little")
-        return sorted({int.from_bytes(out.raw[8 + 24 * i: 12 + 24 * i], "little") for i in range(min(count, 32))})
+        return sorted({int.from_bytes(out.raw[8 + 24 * i : 12 + 24 * i], "little") for i in range(min(count, 32))})
     finally:
         k32.CloseHandle(handle)

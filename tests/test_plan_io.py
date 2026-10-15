@@ -5,25 +5,33 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 from conftest import audio, plan_for, source, sub
+import pytest
 
-from videoforge.core.models import AudioCodec as C
-from videoforge.core.models import Overrides, TrackOverride, VideoInfo
-from videoforge.core.models import SubFormat as F
+from videoforge.core.models import AudioCodec as C, Overrides, SubFormat as F, TrackOverride, VideoInfo
 from videoforge.core.plan_io import PlanFormatError, dump_plans, load_plans, plan_from_dict, plan_to_dict
 
 
 def aot_plan():
     src = source(
-        [audio(C.FLAC, "2.0", "ja", index=0), audio(C.TRUEHD, "5.1", "en", index=1), audio(C.AC3, "5.1", "en", index=2)],
+        [
+            audio(C.FLAC, "2.0", "ja", index=0),
+            audio(C.TRUEHD, "5.1", "en", index=1),
+            audio(C.AC3, "5.1", "en", index=2),
+        ],
         [
             sub(F.PGS, "en", "English", index=0, elements=604),
             sub(F.ASS, "en", "English (ASS SDH Dub)", index=1),
             sub(F.ASS, "fr", "French", index=2),
             sub(F.SRT, "en", external=r"D:\media\subs\Show.S01E01.NF.en.synced.srt"),
-            sub(F.SRT, "en", "English (ASS Foreign)", external=r"D:\media\subs\Show_track3_[eng].srt", forced=True,
-                tags=frozenset({"forced", "sdh"})),
+            sub(
+                F.SRT,
+                "en",
+                "English (ASS Foreign)",
+                external=r"D:\media\subs\Show_track3_[eng].srt",
+                forced=True,
+                tags=frozenset({"forced", "sdh"}),
+            ),
         ],
         name="Show.S01E01.mkv",
     )

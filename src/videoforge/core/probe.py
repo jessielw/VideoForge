@@ -7,8 +7,8 @@ MediaInfo ``track_id``).
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
+import subprocess
 from typing import Any
 
 from pymediainfo import MediaInfo
@@ -70,11 +70,7 @@ def _int(value: Any) -> int | None:
 def probe(path: Path, mkvmerge: str) -> SourceInfo:
     ident = mkvmerge_identify(path, mkvmerge)
     mi_all = MediaInfo.parse(str(path)).tracks
-    mi_tracks = {
-        t.track_id: t
-        for t in mi_all
-        if t.track_type in ("Video", "Audio", "Text") and t.track_id is not None
-    }
+    mi_tracks = {t.track_id: t for t in mi_all if t.track_type in ("Video", "Audio", "Text") and t.track_id is not None}
     # A raw stream (.ac3, .flac, ...) has no track ids in MediaInfo: pair its audio tracks by order.
     mi_audio = [t for t in mi_all if t.track_type == "Audio"]
 
@@ -129,7 +125,9 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                     delay_ms=int(getattr(mi, "delay_relative_to_video", None) or 0),
                     format_name=getattr(mi, "format", "") or track.get("codec", ""),
                     sample_rate=_int(getattr(mi, "sampling_rate", None)) or props.get("audio_sampling_frequency"),
-                    bit_depth=(_int(getattr(mi, "bit_depth", None)) or props.get("audio_bits_per_sample")) if lossless else None,
+                    bit_depth=(_int(getattr(mi, "bit_depth", None)) or props.get("audio_bits_per_sample"))
+                    if lossless
+                    else None,
                     size_bytes=_int(getattr(mi, "stream_size", None)),
                     duration_ms=_int(getattr(mi, "duration", None)),
                 )

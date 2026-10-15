@@ -8,8 +8,7 @@ from conftest import audio, plan_for, source
 
 from videoforge import cli
 from videoforge.core.job import JobResult, JobStatus
-from videoforge.core.models import AudioCodec as C
-from videoforge.core.models import Issue, Severity
+from videoforge.core.models import AudioCodec as C, Issue, Severity
 from videoforge.core.plan_io import dump_plans
 
 

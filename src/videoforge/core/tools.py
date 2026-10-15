@@ -7,16 +7,16 @@ the first output line that looks like a version, so the Settings page can show
 
 from __future__ import annotations
 
-import functools
-import os
-import re
-import shutil
-import subprocess
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from enum import StrEnum
+import functools
+import os
 from pathlib import Path
+import re
+import shutil
+import subprocess
 
 from videoforge.core.config import Tools
 from videoforge.core.execute.audio import ENCODES
@@ -39,17 +39,25 @@ class ToolInfo:
 
 TOOLS: tuple[ToolInfo, ...] = (
     ToolInfo("vspipe", "vspipe", "Runs the VapourSynth script into the video encoder"),
-    ToolInfo("vs_plugins", "VapourSynth plugins", "Source filters (BestSource, L-SMASH, FFMS2) and filters", folder=True),
+    ToolInfo(
+        "vs_plugins", "VapourSynth plugins", "Source filters (BestSource, L-SMASH, FFMS2) and filters", folder=True
+    ),
     ToolInfo("x264", "x264", "H.264 video encoder"),
     ToolInfo("x265", "x265", "HEVC video encoder"),
     ToolInfo("mkvmerge", "mkvmerge", "Reads sources and muxes the output (MKVToolNix)"),
     ToolInfo("mp4box", "MP4Box", "Muxes MP4 output (GPAC)", (("-version",),)),
-    ToolInfo("ffmpeg", "ffmpeg", "Decodes audio for the other encoders; its own FLAC, Opus, AAC, AC-3, E-AC-3",
-             (("-version",),)),
+    ToolInfo(
+        "ffmpeg",
+        "ffmpeg",
+        "Decodes audio for the other encoders; its own FLAC, Opus, AAC, AC-3, E-AC-3",
+        (("-version",),),
+    ),
     ToolInfo("qaac", "qaac", "AAC encoder (needs Apple's CoreAudioToolbox)", (("--check",),)),
     ToolInfo("opusenc", "opusenc", "Opus encoder (opus-tools)"),
     ToolInfo("deezy", "DeeZy", "Drives DEE for DDP and DDP Atmos encodes"),
-    ToolInfo("dee", "Dolby Encoding Engine", "DDP / Atmos encoder used by DeeZy (not redistributable)", (("--help",), ())),
+    ToolInfo(
+        "dee", "Dolby Encoding Engine", "DDP / Atmos encoder used by DeeZy (not redistributable)", (("--help",), ())
+    ),
     ToolInfo("truehdd", "truehdd", "Decodes TrueHD Atmos for DDP Atmos encodes"),
 )
 TOOL_NAMES = tuple(t.name for t in TOOLS)
@@ -93,13 +101,17 @@ def ffmpeg_encoders(path: str) -> frozenset[str] | None:
 @functools.lru_cache(maxsize=8)
 def _encoders(found: str, _stamp: int) -> frozenset[str] | None:
     try:
-        out = subprocess.run([found, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=15,
-                             creationflags=_NO_WINDOW).stdout
+        out = subprocess.run(
+            [found, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=15, creationflags=_NO_WINDOW
+        ).stdout
     except (OSError, subprocess.SubprocessError, ValueError):
         return None
     # " A....D flac   FLAC (Free Lossless Audio Codec)": six flag columns, then the name.
-    names = {parts[1] for parts in (line.split() for line in out.splitlines())
-             if len(parts) >= 2 and len(parts[0]) == 6 and parts[0][0] in "VAS"}
+    names = {
+        parts[1]
+        for parts in (line.split() for line in out.splitlines())
+        if len(parts) >= 2 and len(parts[0]) == 6 and parts[0][0] in "VAS"
+    }
     return frozenset(names) or None
 
 
@@ -125,11 +137,18 @@ def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]
     issues = []
     muxer = MUXERS[container]
     if not locate(getattr(tools, muxer.tool)):
-        issues.append(Issue(Severity.BLOCK, "tools.missing", f"{muxer.label} needs {_LABEL[muxer.tool]}: set it in Settings"))
+        issues.append(
+            Issue(Severity.BLOCK, "tools.missing", f"{muxer.label} needs {_LABEL[muxer.tool]}: set it in Settings")
+        )
     for action in dict.fromkeys(a.action for a in plan.audio):
         if missing.get(action):
-            issues.append(Issue(Severity.BLOCK, "tools.missing",
-                                f"{ENCODES[action].label} needs {', '.join(missing[action])}: set it in Settings"))
+            issues.append(
+                Issue(
+                    Severity.BLOCK,
+                    "tools.missing",
+                    f"{ENCODES[action].label} needs {', '.join(missing[action])}: set it in Settings",
+                )
+            )
     return issues
 
 
@@ -138,8 +157,14 @@ Runner = Callable[[Sequence[str], float], str]
 
 def _run(argv: Sequence[str], timeout: float) -> str:
     """stdout + stderr of a version command (exit code ignored: some tools exit 1 on --version)."""
-    r = subprocess.run(list(argv), capture_output=True, timeout=timeout, creationflags=_NO_WINDOW,
-                       stdin=subprocess.DEVNULL, check=False)
+    r = subprocess.run(
+        list(argv),
+        capture_output=True,
+        timeout=timeout,
+        creationflags=_NO_WINDOW,
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
     return (r.stdout + b"\n" + r.stderr).decode("utf-8", "replace")
 
 
@@ -167,15 +192,32 @@ def _plugins(path: str) -> ToolCheck:
     info = next(t for t in TOOLS if t.name == "vs_plugins")
     folder = Path(path) if path else None
     if folder is None or not folder.is_dir():
-        return ToolCheck(info.name, info.label, info.purpose, path, "", ToolStatus.MISSING,
-                         detail="Not set" if folder is None else "No such folder")
+        return ToolCheck(
+            info.name,
+            info.label,
+            info.purpose,
+            path,
+            "",
+            ToolStatus.MISSING,
+            detail="Not set" if folder is None else "No such folder",
+        )
     names = sorted(p.stem for p in folder.iterdir() if p.suffix.lower() in (".dll", ".so", ".dylib"))
-    sources = [label for stem, label in (("bestsource", "BestSource"), ("lsmashsource", "L-SMASH"),
-                                         ("libvslsmashsource", "L-SMASH"), ("ffms2", "FFMS2"))
-               if stem in (n.lower() for n in names)]
+    sources = [
+        label
+        for stem, label in (
+            ("bestsource", "BestSource"),
+            ("lsmashsource", "L-SMASH"),
+            ("libvslsmashsource", "L-SMASH"),
+            ("ffms2", "FFMS2"),
+        )
+        if stem in (n.lower() for n in names)
+    ]
     status = ToolStatus.OK if sources else ToolStatus.UNKNOWN
-    detail = f"{len(names)} plugins" + (f"; source filters: {', '.join(dict.fromkeys(sources))}" if sources
-                                       else "; no source filter (BestSource, L-SMASH or FFMS2)")
+    detail = f"{len(names)} plugins" + (
+        f"; source filters: {', '.join(dict.fromkeys(sources))}"
+        if sources
+        else "; no source filter (BestSource, L-SMASH or FFMS2)"
+    )
     return ToolCheck(info.name, info.label, info.purpose, path, str(folder), status, detail=detail)
 
 

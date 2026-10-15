@@ -9,8 +9,8 @@ separate package that registers its own entry in its pyproject.toml:
 
 from __future__ import annotations
 
-import importlib
 from functools import cache
+import importlib
 from importlib.metadata import entry_points
 
 from videoforge.core.profile import Profile

@@ -6,8 +6,8 @@ MediaInfo text reports are judged identically.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
+import re
 
 from videoforge.core import lang
 from videoforge.core.models import AudioCodec, Layout, SubFormat

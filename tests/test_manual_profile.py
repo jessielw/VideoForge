@@ -7,9 +7,16 @@ from pathlib import Path
 from conftest import audio, plan_for, simulate_output, source, sub
 
 from videoforge.core.jobs import ProbedInputs
-from videoforge.core.models import AudioAction, JobInputs, Layout, Overrides, Severity, TrackOverride
-from videoforge.core.models import AudioCodec as C
-from videoforge.core.models import SubFormat as F
+from videoforge.core.models import (
+    AudioAction,
+    AudioCodec as C,
+    JobInputs,
+    Layout,
+    Overrides,
+    Severity,
+    SubFormat as F,
+    TrackOverride,
+)
 from videoforge.profiles import default_profile_id, get_profile, profile_ids
 from videoforge.profiles.manual import ManualProfile
 
@@ -80,8 +87,12 @@ def encoded(tracks: list, **overrides: TrackOverride):
 
 
 def test_audio_encodes_with_default_layouts_and_bitrates():
-    tracks = [audio(C.TRUEHD, "7.1", index=0, atmos=True), audio(C.DTS_HD_MA, "5.0", index=1),
-              audio(C.FLAC, "5.1", index=2), audio(C.AC3, "2.0", index=3)]
+    tracks = [
+        audio(C.TRUEHD, "7.1", index=0, atmos=True),
+        audio(C.DTS_HD_MA, "5.0", index=1),
+        audio(C.FLAC, "5.1", index=2),
+        audio(C.AC3, "2.0", index=3),
+    ]
     plan = encoded(
         tracks,
         id_1=TrackOverride(action=AudioAction.ATMOS),
@@ -100,16 +111,23 @@ def test_audio_encodes_with_default_layouts_and_bitrates():
 
 
 def test_audio_encode_overrides_layout_and_bitrate():
-    plan = encoded([audio(C.TRUEHD, "7.1", index=0)],
-                   id_1=TrackOverride(action=AudioAction.DDP, layout=Layout.parse("2.0"), bitrate_kbps=224))
+    plan = encoded(
+        [audio(C.TRUEHD, "7.1", index=0)],
+        id_1=TrackOverride(action=AudioAction.DDP, layout=Layout.parse("2.0"), bitrate_kbps=224),
+    )
     a = plan.audio[0]
     assert (str(a.out_layout), a.bitrate_kbps) == ("2.0", 224)
-    assert str(encoded([audio(C.TRUEHD, "7.1", index=0)], id_1=TrackOverride(action=AudioAction.DDP)).audio[0].out_layout) == "7.1"
+    assert (
+        str(encoded([audio(C.TRUEHD, "7.1", index=0)], id_1=TrackOverride(action=AudioAction.DDP)).audio[0].out_layout)
+        == "7.1"
+    )
 
 
 def test_impossible_audio_encodes_block():
     stereo = [audio(C.AC3, "2.0", index=0)]
-    assert [i.code for i in encoded(stereo, id_1=TrackOverride(action=AudioAction.ATMOS)).issues] == ["audio.atmos_source"]
+    assert [i.code for i in encoded(stereo, id_1=TrackOverride(action=AudioAction.ATMOS)).issues] == [
+        "audio.atmos_source"
+    ]
     upmix = encoded(stereo, id_1=TrackOverride(action=AudioAction.DDP, layout=Layout.parse("5.1")))
     assert [i.code for i in upmix.issues] == ["audio.upmix"] and upmix.blocked
     bad = encoded(stereo, id_1=TrackOverride(action=AudioAction.AAC, layout=Layout.parse("7.1")))
@@ -138,8 +156,13 @@ def test_output_is_checked_against_the_plan():
 
 
 def test_ffmpeg_encodes_keep_the_layout_they_can_and_pick_bitrates():
-    tracks = [audio(C.TRUEHD, "7.1", index=0), audio(C.DTS_HD_MA, "5.0", index=1), audio(C.LPCM, "6.1", index=2),
-              audio(C.FLAC, "2.0", index=3), audio(C.TRUEHD, "7.1", index=4)]
+    tracks = [
+        audio(C.TRUEHD, "7.1", index=0),
+        audio(C.DTS_HD_MA, "5.0", index=1),
+        audio(C.LPCM, "6.1", index=2),
+        audio(C.FLAC, "2.0", index=3),
+        audio(C.TRUEHD, "7.1", index=4),
+    ]
     plan = encoded(
         tracks,
         id_1=TrackOverride(action=AudioAction.FLAC),
@@ -174,11 +197,15 @@ def test_added_audio_files_join_the_tracks():
     extra = audio(C.AC3, "2.0", "und", index=0, title="Commentary")
     extra.external_path = Path("Commentary.ac3")
     plan = plan_for(source([audio(C.FLAC, "2.0", "ja", index=0)]), source(name="E.mkv"), external_audio=[extra])
-    assert [(a.source.external_path, a.action) for a in plan.audio] == [(None, AudioAction.COPY),
-                                                                         (Path("Commentary.ac3"), AudioAction.COPY)]
+    assert [(a.source.external_path, a.action) for a in plan.audio] == [
+        (None, AudioAction.COPY),
+        (Path("Commentary.ac3"), AudioAction.COPY),
+    ]
     assert [i.code for i in plan.issues] == ["audio.language"]
-    ov = Overrides(order=["ext:Commentary.ac3", "id:1"],
-                   tracks={"ext:Commentary.ac3": TrackOverride(language="en", action=AudioAction.OPUS)})
+    ov = Overrides(
+        order=["ext:Commentary.ac3", "id:1"],
+        tracks={"ext:Commentary.ac3": TrackOverride(language="en", action=AudioAction.OPUS)},
+    )
     plan = plan_for(source([audio(C.FLAC, "2.0", "ja", index=0)]), source(name="E.mkv"), ov, external_audio=[extra])
     assert not plan.issues
     assert [(a.language, a.action) for a in plan.audio] == [("en", AudioAction.OPUS), ("ja", AudioAction.COPY)]
@@ -201,11 +228,16 @@ def test_encode_options_take_the_profiles_defaults():
 
         def audio_settings(self):
             from videoforge.core.execute.audio import AudioSettings
+
             return AudioSettings(atmos_mode="bluray", qaac_tvbr=91)
 
     src = source([audio(C.TRUEHD, "7.1", "en", atmos=True, index=0), audio(C.FLAC, "2.0", "en", index=1)])
-    ov = Overrides(tracks={"id:1": TrackOverride(action=AudioAction.ATMOS),
-                           "id:2": TrackOverride(action=AudioAction.AAC, options={"quality": "200"})})
+    ov = Overrides(
+        tracks={
+            "id:1": TrackOverride(action=AudioAction.ATMOS),
+            "id:2": TrackOverride(action=AudioAction.AAC, options={"quality": "200"}),
+        }
+    )
     inputs = JobInputs(source=Path(src.name), encode=Path("E.mkv"))
     plan = Bluray().plan(ProbedInputs(inputs, src, source(name="E.mkv"), []), None, ov)
     atmos, aac = plan.audio

@@ -15,6 +15,9 @@ idle minutes, which hands all of it back. The next request starts a new worker (
 
 from __future__ import annotations
 
+from collections import OrderedDict, deque
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeout
+from dataclasses import asdict
 import json
 import logging
 import os
@@ -23,10 +26,6 @@ import subprocess
 import sys
 import threading
 import time
-from collections import OrderedDict, deque
-from concurrent.futures import Future, ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FutureTimeout
-from dataclasses import asdict
 from typing import IO, Any, Literal
 
 from videoforge.core.execute import jobobject
@@ -89,8 +88,7 @@ def _recv(stream: IO[bytes]) -> tuple[dict[str, Any], bytes] | None:
 
 
 def _handle(cache: Any, req: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
-    from videoforge.core.video import crop as autocrop
-    from videoforge.core.video import vs as vsx
+    from videoforge.core.video import crop as autocrop, vs as vsx
 
     op = req["op"]
     try:
@@ -129,8 +127,10 @@ def main() -> None:
 
     # Here, before the read loop: numpy's first import on a request thread hung (Windows, while this
     # thread blocks reading stdin). The server itself doesn't import numpy.
-    from videoforge.core.video import crop  # noqa: F401 - imports numpy
-    from videoforge.core.video import vs as vsx
+    from videoforge.core.video import (
+        crop,  # noqa: F401 - imports numpy
+        vs as vsx,
+    )
 
     cache = vsx.ClipCache(_CACHED)
     lock = threading.Lock()
@@ -244,8 +244,9 @@ class _Worker:
 class Preview:
     """The server's handle on the worker: started on the first request, restarted after it dies."""
 
-    def __init__(self, frame_timeout: float = FRAME_TIMEOUT, load_timeout: float = LOAD_TIMEOUT,
-                 idle_stop: float = IDLE_STOP) -> None:
+    def __init__(
+        self, frame_timeout: float = FRAME_TIMEOUT, load_timeout: float = LOAD_TIMEOUT, idle_stop: float = IDLE_STOP
+    ) -> None:
         self.frame_timeout = frame_timeout
         self.load_timeout = load_timeout
         self.idle_stop = idle_stop
@@ -256,8 +257,9 @@ class Preview:
         with self._lock:
             if self._worker is None or self._worker.dead or self._worker.proc.poll() is not None:
                 self._worker = _Worker()
-                threading.Thread(target=self._stop_when_idle, args=(self._worker,), name="preview-idle",
-                                 daemon=True).start()
+                threading.Thread(
+                    target=self._stop_when_idle, args=(self._worker,), name="preview-idle", daemon=True
+                ).start()
             return self._worker
 
     def _stop_when_idle(self, worker: _Worker) -> None:
@@ -304,7 +306,9 @@ class Preview:
                 if self._worker is worker:
                     self._worker = None
             worker.stop(f"The preview took over {timeout:.0f} s and was restarted")
-            raise PreviewError(f"The preview took over {timeout:.0f} s (a loop in the script?) and was restarted") from None
+            raise PreviewError(
+                f"The preview took over {timeout:.0f} s (a loop in the script?) and was restarted"
+            ) from None
         worker.loaded(key, script)
         error = reply.get("error")
         if error == "script":
@@ -325,8 +329,9 @@ class Preview:
         """Run the script and render its first frame (ScriptError / FrameError when it fails)."""
         return ClipInfo(**self._call("check", script, slot)[0]["info"])
 
-    def frame(self, script: str, n: int, fmt: Literal["jpeg", "png"] = "jpeg", quality: int = 90,
-              slot: str | None = None) -> tuple[bytes, str, int]:
+    def frame(
+        self, script: str, n: int, fmt: Literal["jpeg", "png"] = "jpeg", quality: int = 90, slot: str | None = None
+    ) -> tuple[bytes, str, int]:
         """Frame n as an image, with its picture type and the clip's frame count."""
         reply, image = self._call("frame", script, slot, n=n, fmt=fmt, quality=quality)
         return image, reply["pict"], reply["frames"]

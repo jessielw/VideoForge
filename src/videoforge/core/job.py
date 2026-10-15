@@ -13,11 +13,11 @@ rules don't need to know where the encode comes from.
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
+import uuid
 
 from videoforge.core.config import AppConfig, Tools
 from videoforge.core.execute.mux import MuxSettings, mux_issues
@@ -168,8 +168,11 @@ def planned_encode(spec: JobSpec, source: SourceInfo) -> SourceInfo:
         return SourceInfo(path=path, name=path.name, video=None)
     c, r = spec.video.crop, spec.video.resize
     width, height = (r.width, r.height) if r else (v.width - c.left - c.right, v.height - c.top - c.bottom)
-    return SourceInfo(path=path, name=path.name,
-                      video=VideoInfo(width=width, height=height, default_duration_ns=v.default_duration_ns))
+    return SourceInfo(
+        path=path,
+        name=path.name,
+        video=VideoInfo(width=width, height=height, default_duration_ns=v.default_duration_ns),
+    )
 
 
 def spec_inputs(spec: JobSpec) -> JobInputs:

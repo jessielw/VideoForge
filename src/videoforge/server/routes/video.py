@@ -81,9 +81,16 @@ def script(request: Request, job_id: str, stage: Stage = "output") -> dict[str, 
     """The script, and its parts: head and tail are generated, body is what the user edits
     (the custom body, or the lines crop/resize/filters make). Line numbers count from the head."""
     spec = _entry(request, job_id).spec
-    head, body, tail = script_parts(spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage)
-    return {"script": "\n".join(head + body + tail) + "\n", "head": head, "body": body, "tail": tail,
-            "custom": spec.video.custom is not None}
+    head, body, tail = script_parts(
+        spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage
+    )
+    return {
+        "script": "\n".join(head + body + tail) + "\n",
+        "head": head,
+        "body": body,
+        "tail": tail,
+        "custom": spec.video.custom is not None,
+    }
 
 
 @router.get("/check")
@@ -97,7 +104,9 @@ def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, A
     except ScriptError as ex:
         message = ex.message
         spec = e.spec
-        head, body, _ = script_parts(spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage)
+        head, body, _ = script_parts(
+            spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage
+        )
         if ex.line and ex.line > len(head) + len(body):
             message += " (in the generated end of the script: the body must leave a video clip in `clip`)"
         return {"ok": False, "error": message, "line": ex.line}
@@ -119,8 +128,14 @@ def info(request: Request, job_id: str, stage: Stage = "output") -> dict[str, An
 
 
 @router.get("/frame")
-def frame(request: Request, job_id: str, n: int = 0, stage: Stage = "output",
-          fmt: Literal["jpeg", "png"] = "jpeg", quality: int = 90) -> Response:
+def frame(
+    request: Request,
+    job_id: str,
+    n: int = 0,
+    stage: Stage = "output",
+    fmt: Literal["jpeg", "png"] = "jpeg",
+    quality: int = 90,
+) -> Response:
     try:
         e = _entry(request, job_id)
         preview, script, slot = _preview(request), script_for(e, stage), _slot(e.spec, stage)
@@ -128,8 +143,11 @@ def frame(request: Request, job_id: str, n: int = 0, stage: Stage = "output",
             data, pict, frames = preview.frame(script, n, fmt, quality, slot=slot)
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex) from None
-    return Response(data, media_type=f"image/{fmt}",
-                    headers={"Cache-Control": "no-store", "X-Frame-Type": pict, "X-Frame-Count": str(frames)})
+    return Response(
+        data,
+        media_type=f"image/{fmt}",
+        headers={"Cache-Control": "no-store", "X-Frame-Type": pict, "X-Frame-Count": str(frames)},
+    )
 
 
 @router.post("/autocrop")

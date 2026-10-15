@@ -20,7 +20,9 @@ pytestmark = pytest.mark.skipif(not MKVMERGE.exists() or FFMPEG is None, reason=
 def test_raw_audio_files(tmp_path):
     ac3 = tmp_path / "Commentary.en DELAY 100ms.ac3"
     flac = tmp_path / "German.de.flac"
-    subprocess.run([FFMPEG, "-v", "error", "-f", "lavfi", "-i", "sine=d=1", "-ac", "2", "-c:a", "ac3", str(ac3)], check=True)
+    subprocess.run(
+        [FFMPEG, "-v", "error", "-f", "lavfi", "-i", "sine=d=1", "-ac", "2", "-c:a", "ac3", str(ac3)], check=True
+    )
     subprocess.run([FFMPEG, "-v", "error", "-f", "lavfi", "-i", "sine=d=1", "-filter_complex",
                     "[0]asplit=6[a][b][c][d][e][f];[a][b][c][d][e][f]join=inputs=6:channel_layout=5.1(side)",
                     "-c:a", "flac", str(flac)], check=True)  # fmt: skip

@@ -13,16 +13,20 @@ from __future__ import annotations
 
 import ctypes
 import os
-import sys
 from pathlib import Path
+import sys
 
 _IEH_ABORT = 0  # FFMS_IEH_ABORT: as Source() indexes
 _PROGRESS = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int64, ctypes.c_int64, ctypes.c_void_p)
 
 
 class _ErrorInfo(ctypes.Structure):
-    _fields_ = [("ErrorType", ctypes.c_int), ("SubType", ctypes.c_int), ("BufferSize", ctypes.c_int),
-                ("Buffer", ctypes.c_char_p)]
+    _fields_ = [
+        ("ErrorType", ctypes.c_int),
+        ("SubType", ctypes.c_int),
+        ("BufferSize", ctypes.c_int),
+        ("Buffer", ctypes.c_char_p),
+    ]
 
 
 def plugin_path() -> str:

@@ -163,7 +163,14 @@ def test_parse_mediainfo_text():
     assert info.video.width == 3840
     assert info.has_chapters
     (a,) = info.audio
-    assert (a.id, a.codec, a.layout, a.atmos, a.bitrate_kbps, a.delay_ms) == (1, AudioCodec.EAC3, Layout(5, 1), True, 1024, -838)
+    assert (a.id, a.codec, a.layout, a.atmos, a.bitrate_kbps, a.delay_ms) == (
+        1,
+        AudioCodec.EAC3,
+        Layout(5, 1),
+        True,
+        1024,
+        -838,
+    )
     s1, s2 = info.subs
     assert (s1.format, s1.language, s1.element_count) == (SubFormat.SRT, "en", 1234)
     assert (s2.format, s2.language) == (SubFormat.PGS, "es-419")

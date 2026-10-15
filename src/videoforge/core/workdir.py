@@ -7,8 +7,8 @@ files, and is kept after the job until the user removes it.
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
+import shutil
 
 SUFFIX = "_tmp"
 

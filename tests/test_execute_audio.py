@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import shutil
 import subprocess
-from pathlib import Path
 
-import pytest
 from conftest import audio
+import pytest
 
 from videoforge.core.config import Tools
 from videoforge.core.execute.audio import AudioSettings, audio_command
-from videoforge.core.models import AudioAction as A
-from videoforge.core.models import AudioCodec as C
-from videoforge.core.models import Layout, PlannedAudio
+from videoforge.core.models import AudioAction as A, AudioCodec as C, Layout, PlannedAudio
 
 TOOLS = Tools(mkvmerge="mkvmerge", deezy="deezy", dee="dee", truehdd="truehdd", qaac="qaac64", ffmpeg="ffmpeg")
 SRC = Path("Show.S01E01.mkv")
@@ -110,15 +108,20 @@ def test_aac_bitrate_is_constrained_vbr():
 # --- ffmpeg's own encoders ------------------------------------------------------------
 
 
-@pytest.mark.parametrize(("action", "suffix", "codec_args"), [
-    (A.FLAC, ".flac", ["-c:a", "flac", "-compression_level", "8"]),
-    (A.OPUS, ".opus", ["-c:a", "libopus", "-b:a", "384k"]),
-    (A.AAC_FFMPEG, ".m4a", ["-c:a", "aac", "-b:a", "384k"]),
-    (A.AC3, ".ac3", ["-c:a", "ac3", "-b:a", "384k"]),
-    (A.EAC3, ".eac3", ["-c:a", "eac3", "-b:a", "384k"]),
-])
+@pytest.mark.parametrize(
+    ("action", "suffix", "codec_args"),
+    [
+        (A.FLAC, ".flac", ["-c:a", "flac", "-compression_level", "8"]),
+        (A.OPUS, ".opus", ["-c:a", "libopus", "-b:a", "384k"]),
+        (A.AAC_FFMPEG, ".m4a", ["-c:a", "aac", "-b:a", "384k"]),
+        (A.AC3, ".ac3", ["-c:a", "ac3", "-b:a", "384k"]),
+        (A.EAC3, ".eac3", ["-c:a", "eac3", "-b:a", "384k"]),
+    ],
+)
 def test_ffmpeg_encodes(action, suffix, codec_args):
-    cmd = command(planned(C.TRUEHD, "7.1", action, out_layout="5.1", bitrate=None if action is A.FLAC else 384, index=2))
+    cmd = command(
+        planned(C.TRUEHD, "7.1", action, out_layout="5.1", bitrate=None if action is A.FLAC else 384, index=2)
+    )
     (argv,) = cmd.argvs
     assert argv[0] == "ffmpeg" and argv[argv.index("-map") + 1] == "0:a:2"
     assert argv[argv.index("-af") + 1] == "aformat=channel_layouts=5.1"  # exact, so libopus takes 5.1(side) sources
@@ -136,10 +139,17 @@ FFMPEG = shutil.which("ffmpeg")
 
 
 @pytest.mark.skipif(FFMPEG is None, reason="needs ffmpeg")
-@pytest.mark.parametrize(("action", "out_layout", "channels"), [
-    (A.FLAC, "5.1", 6), (A.OPUS, "5.1", 6), (A.OPUS, "2.0", 2), (A.AAC_FFMPEG, "5.1", 6), (A.AC3, "5.1", 6),
-    (A.EAC3, "2.0", 2),
-])
+@pytest.mark.parametrize(
+    ("action", "out_layout", "channels"),
+    [
+        (A.FLAC, "5.1", 6),
+        (A.OPUS, "5.1", 6),
+        (A.OPUS, "2.0", 2),
+        (A.AAC_FFMPEG, "5.1", 6),
+        (A.AC3, "5.1", 6),
+        (A.EAC3, "2.0", 2),
+    ],
+)
 def test_ffmpeg_encodes_for_real(tmp_path, action, out_layout, channels):
     """A 5.1(side) source (what TrueHD/DTS decode to) through each encode."""
     src = tmp_path / "src.mka"
@@ -177,11 +187,20 @@ def test_deezy_options():
     ddp = planned(C.TRUEHD, "5.1", A.DDP, "2.0", 256)
     (argv,) = command(ddp).argvs
     assert not any(a.startswith(("--drc", "--custom-dialnorm", "--stereo-down-mix")) for a in argv)  # DeeZy's own
-    ddp.options = {"drc_line": "film_light", "drc_rf": "speech", "dialnorm": "-27", "stereo_downmix": "dpl2",
-                   "extra": "--metering-mode 1770_3"}
+    ddp.options = {
+        "drc_line": "film_light",
+        "drc_rf": "speech",
+        "dialnorm": "-27",
+        "stereo_downmix": "dpl2",
+        "extra": "--metering-mode 1770_3",
+    }
     (argv,) = command(ddp, AudioSettings(deezy_extra_args=("--x",))).argvs
-    assert {"--drc-line-mode=film_light", "--drc-rf-mode=speech", "--custom-dialnorm=-27",
-            "--stereo-down-mix=dpl2"} <= set(argv)
+    assert {
+        "--drc-line-mode=film_light",
+        "--drc-rf-mode=speech",
+        "--custom-dialnorm=-27",
+        "--stereo-down-mix=dpl2",
+    } <= set(argv)
     assert argv[-4:] == ("--x", "--metering-mode", "1770_3", str(SRC))  # the profile's extras, then the track's
 
     atmos = planned(C.TRUEHD, "7.1", A.ATMOS, "5.1", 1024, atmos=True)
@@ -233,5 +252,7 @@ def test_opusenc_for_real(tmp_path, out_layout, channels):
     encode = subprocess.run(cmd.argvs[1], stdin=decode.stdout, capture_output=True, text=True, check=False)
     decode.wait()
     assert encode.returncode == 0 and not encode.stderr  # no warnings about the WAV
-    probe = subprocess.run([FFMPEG, "-hide_banner", "-i", str(cmd.output)], capture_output=True, text=True, check=False).stderr
+    probe = subprocess.run(
+        [FFMPEG, "-hide_banner", "-i", str(cmd.output)], capture_output=True, text=True, check=False
+    ).stderr
     assert "Audio: opus" in probe and ("5.1" if channels == 6 else "stereo") in probe

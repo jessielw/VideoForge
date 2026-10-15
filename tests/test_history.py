@@ -7,8 +7,7 @@ from test_pipeline import APP, FakeRunner, make_plan
 
 from videoforge.core.history import JobHistory
 from videoforge.core.job import JobResult, JobStatus
-from videoforge.core.models import AudioCodec as C
-from videoforge.core.models import TrackOverride
+from videoforge.core.models import AudioCodec as C, TrackOverride
 from videoforge.core.pipeline.run import run_plan
 from videoforge.core.workdir import remove_work_dir, work_dir
 
@@ -16,7 +15,9 @@ from videoforge.core.workdir import remove_work_dir, work_dir
 def test_record_round_trips_and_is_keyed_by_output(profile, tmp_path):
     plan = make_plan(tmp_path)
     plan.overrides.tracks["id:3"] = TrackOverride(flags={"forced": True})
-    result = run_plan(plan, tmp_path / "out", profile, APP, runner=FakeRunner(), prober=lambda *_: simulate_output(plan))
+    result = run_plan(
+        plan, tmp_path / "out", profile, APP, runner=FakeRunner(), prober=lambda *_: simulate_output(plan)
+    )
     history = JobHistory(tmp_path / "history")
 
     history.record(result)
@@ -42,7 +43,9 @@ def test_only_outputs_are_recorded(tmp_path):
 
 def test_unreadable_record_is_ignored(profile, tmp_path):
     plan = make_plan(tmp_path)
-    result = run_plan(plan, tmp_path / "out", profile, APP, runner=FakeRunner(), prober=lambda *_: simulate_output(plan))
+    result = run_plan(
+        plan, tmp_path / "out", profile, APP, runner=FakeRunner(), prober=lambda *_: simulate_output(plan)
+    )
     history = JobHistory(tmp_path / "history")
     history.record(result)
     (path,) = (tmp_path / "history").glob("*.json")
