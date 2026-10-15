@@ -25,8 +25,9 @@ def mp4_plan(subs=None, overrides=None):
         subs if subs is not None else [sub(F.SRT, "en", "English", index=0, forced=True)],
         name="Movie.mkv",
     )
-    src.video = VideoInfo(1920, 1080, start_ms=40, default_duration_ns=41708333)
+    src.video = VideoInfo(1920, 1080, start_ms=40, default_duration_ns=41708333, language="en-US")
     src.audio[1].delay_ms = 25
+    src.audio[0].original = True  # as most releases flag their tracks
     plan = plan_for(src, source(name="enc.h264"), overrides)
     plan.encode_path = Path("enc.h264")
     return plan
@@ -44,7 +45,7 @@ def test_mp4box_command():
                           split_args('-tmp "D:\\tmp dir"'))
     assert argv[:2] == ["MP4Box", "-noprog"]
     assert adds(argv) == [
-        "enc.h264:fps=24000/1001",  # a raw stream gets the source's exact rate
+        "enc.h264:fps=24000/1001:lang=en-US:name=",  # the source's exact rate and language; no GPAC handler name
         # copied from the source: mkvmerge id + 1, shifted by the source's start; ':' can't be in a name
         "Movie.mkv#trackID=2:lang=en:group=1:name=Main - 5.1:delay=-40",
         # encoded: ffmpeg's AAC doesn't keep the delay, so the mux applies it
@@ -64,7 +65,11 @@ def test_mp4_issues():
     assert "Audio 2: MP4 has no commentary flag; left out" in warns
     assert "Subtitle 2: MP4 has no hearing impaired flag; left out" in warns  # forced is carried on an SRT
     assert any("written as 'Main - 5.1'" in w for w in warns)
+    assert plan.audio[0].original and not any("original" in w for w in warns)  # the source's own flag: no warning
     assert mux_issues(plan, "mkv") == []
+
+    plan = mp4_plan(overrides=Overrides(tracks={"id:1": TrackOverride(flags={"original": True})}))
+    assert "Audio 1: MP4 has no original flag; left out" in [i.message for i in mux_issues(plan, "mp4")]  # set by hand
 
 
 def test_job_container_and_output_name():

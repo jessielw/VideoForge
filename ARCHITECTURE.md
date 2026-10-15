@@ -131,9 +131,12 @@ index ─► qpf/chapters ─► video (vspipe | x264/x265, 1 or 2 passes) ─�
   (`JobSpec.container()`: its `MuxSettings.container` when the profile lists it in `containers`,
   else `Profile.container`) picks the muxer (`execute/mux.py` `MUXERS`) and the output extension;
   the job's extra arguments go to that tool as typed.
+  - The video gets the source video's language (`VideoInfo.language`).
   - mkvmerge writes every flag.
-  - MP4Box: language, title (handler name; MP4Box can't take ':' in it), default = the enabled
-    track of its alternate group, forced on timed text. Other flags warn; PGS/ASS/LPCM block.
+  - MP4Box: language, title (handler name; MP4Box can't take ':' in it; the video's is empty, not
+    GPAC's own), default = the enabled track of its alternate group, forced on timed text. Other
+    flags warn, except an original flag carried from the source (most releases set it on every
+    track: left out quietly); PGS/ASS/LPCM block.
     Chapters must be OGM text, so a chapter XML or the source's chapters are converted first.
   - The output check reads an MP4 for language, enabled (default) and format only.
 

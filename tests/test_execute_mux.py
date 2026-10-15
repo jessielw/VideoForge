@@ -107,6 +107,7 @@ def test_mkv_encode_and_source_chapters():
     assert "--chapters" not in argv
     encode_args = argv[: argv.index("Show.S01E01_job.mkv")]
     assert {"--no-audio", "--no-subtitles", "--no-chapters"} <= set(encode_args)
+    assert value(encode_args, "--language") == [f"0:{plan.source.video.language}"]  # the source video's language
     source_args = argv[argv.index("Show.S01E01_job.mkv") : argv.index("Show.S01E01.mkv")]
     assert "--no-chapters" not in source_args
 

@@ -31,7 +31,17 @@ from typing import Protocol
 
 from videoforge.core.config import AppConfig
 from videoforge.core.execute.audio import delay_in_encode
-from videoforge.core.models import AudioAction, AudioCodec, Issue, Plan, PlannedAudio, PlannedSub, Severity, SubFormat
+from videoforge.core.models import (
+    AudioAction,
+    AudioCodec,
+    Issue,
+    Plan,
+    PlannedAudio,
+    PlannedSub,
+    Severity,
+    SubFormat,
+    track_key,
+)
 
 # Frame durations (ns) of common rates, so a raw stream gets an exact fraction
 # instead of a rounded nanosecond value.
@@ -111,7 +121,7 @@ def mux_command(
     else:
         # Chapters come from the qpf file or the source, never the encode.
         argv += ["--video-tracks", "0", "--no-audio", "--no-subtitles", "--no-chapters", "--no-attachments", "--no-global-tags"]
-    argv += ["--default-track-flag", "0:1", str(plan.encode_path)]
+    argv += ["--language", f"0:{video.language if video else 'und'}", "--default-track-flag", "0:1", str(plan.encode_path)]
 
     # 1: the source, copied audio and subtitles only.
     copied = [a for a in plan.audio if a.action is AudioAction.COPY and not a.source.is_external and not a.source.copy]
@@ -178,7 +188,14 @@ def _mp4_title(title: str) -> str:
     return re.sub(r"\s*:\s*", " - ", title).strip(" -")
 
 
-# Plan flags an MP4 can't carry (default is the enabled track; forced only on timed text).
+def _set_by_hand(plan: Plan, t: PlannedAudio | PlannedSub, flag: str) -> bool:
+    ov = plan.overrides.tracks.get(track_key(t.source))
+    return bool(ov and ov.flags.get(flag))
+
+
+# Plan flags an MP4 can't carry (default is the enabled track; forced only on timed text). An original
+# flag carried over from the source (most releases set it on every track) is left out without a warning;
+# one set by hand in the track editor warns like the others.
 _MP4_DROPPED = ("hearing_impaired", "commentary", "original", "visual_impaired")
 _MP4_FORCED_TEXT = "C0000000"  # tx3g display flags: some + all samples forced
 
@@ -212,13 +229,15 @@ def mp4box_command(
     start_ms = video.start_ms if video else 0
 
     argv: list[str] = [mp4box, "-noprog"]
+    # the source's language; an empty handler name (MP4Box would write its own, e.g. "264:fps=24@GPAC...")
+    opts = f":lang={video.language if video else 'und'}:name="
     if plan.encode_path.suffix.lower() in raw_extensions:
         if not (video and video.default_duration_ns):
             raise MuxError("Raw encode needs the source frame rate, and the source has none")
         rate = _known_rate(video.default_duration_ns) or f"1000000000/{video.default_duration_ns}"
-        argv += ["-add", f"{plan.encode_path}:fps={rate}"]
+        argv += ["-add", f"{plan.encode_path}:fps={rate}{opts}"]
     else:
-        argv += ["-add", f"{plan.encode_path}#video"]
+        argv += ["-add", f"{plan.encode_path}#video{opts}"]
 
     for pos, a in enumerate(plan.audio):
         if a.action is AudioAction.COPY:
@@ -321,7 +340,8 @@ class Mp4Box:
         kinds: tuple[tuple[str, list[PlannedAudio] | list[PlannedSub]], ...] = (("Audio", plan.audio), ("Subtitle", plan.subs))
         for label, tracks in kinds:
             for i, t in enumerate(tracks, 1):
-                dropped = [k.replace("_", " ") for k in _MP4_DROPPED if getattr(t, k)]
+                dropped = [k.replace("_", " ") for k in _MP4_DROPPED if getattr(t, k)
+                           and (k != "original" or _set_by_hand(plan, t, k))]
                 if t.forced and not (isinstance(t, PlannedSub) and t.source.format is SubFormat.SRT):
                     dropped.insert(0, "forced")
                 if dropped:

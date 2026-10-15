@@ -42,6 +42,17 @@ def test_keeps_every_track_in_source_order_unchanged():
     assert plan.resolution == "1920x1080" and plan.original_language == "en"
 
 
+def test_original_language_guess():
+    """The original language: the track flagged original, else the default one (a dub placed first),
+    else the first planned track."""
+    dub_first = [audio(C.FLAC, "5.1", "ja", index=0), audio(C.EAC3, "5.1", "en", index=1, default=True)]
+    assert plan_for(source(dub_first), source(name="enc.mkv")).original_language == "en"
+    dub_first[1].default, dub_first[0].original = False, True
+    assert plan_for(source(dub_first), source(name="enc.mkv")).original_language == "ja"
+    dub_first[0].original = False
+    assert plan_for(source(dub_first), source(name="enc.mkv")).original_language == "ja"  # no flags: the first
+
+
 def test_overrides_exclude_reorder_and_edit():
     ov = Overrides(
         tracks={

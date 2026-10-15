@@ -121,6 +121,16 @@ def _excluded(track: AudioTrack | SubTrack, overrides: Overrides) -> bool:
     return bool(ov and ov.exclude)
 
 
+def _guess_original(tracks: Sequence[AudioTrack]) -> str | None:
+    """The source's original language as its audio says: the track flagged original, else the default
+    one (a dub placed first is rarely the default), else none (the first planned track decides)."""
+    for wanted in ("original", "default"):
+        found = next((t.language for t in tracks if getattr(t, wanted) and t.language != "und"), None)
+        if found:
+            return found
+    return None
+
+
 class ManualProfile(Profile):
     id = "manual"
     name = "Manual"
@@ -172,7 +182,8 @@ class ManualProfile(Profile):
                                     f"{t.external_path.name} has no language: set it in the track editor"))
             subs.append(PlannedSub(source=t, slot="", language=language, title=title, **flags))
 
-        orig = overrides.original_language or original_language or (audio[0].language if audio else "und")
+        orig = overrides.original_language or original_language or _guess_original(source.audio) or (
+            audio[0].language if audio else "und")
         return Plan(
             source=source,
             encode_path=encode.path if encode else None,

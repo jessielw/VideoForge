@@ -96,6 +96,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                 height=int(dims[1]),
                 start_ms=_ms(props.get("minimum_timestamp")),
                 default_duration_ns=props.get("default_duration"),
+                language=language,
             )
         elif kind == "audio":
             if mi is None and len(audio) < len(mi_audio) and mi_audio[len(audio)].track_id is None:

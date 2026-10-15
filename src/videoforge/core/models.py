@@ -141,6 +141,7 @@ class VideoInfo:
     height: int
     start_ms: int = 0  # first video timestamp in the container
     default_duration_ns: int | None = None  # frame duration; timestamps a raw .h264/.hevc encode at mux
+    language: str = "und"  # the source's video language, written on the encode at mux
 
 
 @dataclass(slots=True)
