@@ -1,7 +1,8 @@
 <script lang="ts">
   // Templates, StaxRip-style: a job's whole run (video, encoder, container, AutoQPF, what to do with
-  // the crop). The profile's defaults are built in; click one to apply it; save this job's settings
-  // as one; delete your own. The button names the template the job's settings match, if any.
+  // the crop, audio, subtitle rules). The profile's defaults are built in; click one to apply it; save
+  // this job's settings as one (replacing one keeps its subtitle rules: they're set on the Templates
+  // page); delete your own. The button names the template the job's settings match, if any.
   import { api } from '../lib/api'
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
@@ -64,10 +65,10 @@
   const crop = $derived(spec.video.crop)
   const cropText = (c: Template['video']['crop']) => `${c.left}/${c.top}/${c.right}/${c.bottom}`
 
-  // The job's settings match a template when all but the crop and audio do (both are per source).
+  // The job's settings match a template when all but the crop and tracks do (per source, or rules).
   function canon(v: unknown): string {
     return JSON.stringify(v, (key, val) =>
-      key === 'crop' || key === 'crop_mode' || key === 'audio'
+      key === 'crop' || key === 'crop_mode' || key === 'audio' || key === 'subs'
         ? undefined
         : val && typeof val === 'object' && !Array.isArray(val)
           ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b)))
@@ -90,7 +91,8 @@
     if (!n) return
     busy = true
     try {
-      app.presets = await api.savePreset('template', n, structuredClone($state.snapshot(current)))
+      const subs = app.presets.template.find(p => p.name === n)?.data.subs ?? null
+      app.presets = await api.savePreset('template', n, { ...structuredClone($state.snapshot(current)), subs })
       name = ''
       error = ''
     } catch (e) {
@@ -169,7 +171,7 @@
       {/if}
     </form>
     <p class="text-xs text-muted-foreground">
-      Holds video, encoder, audio, container and AutoQPF; subtitles stay per job.
+      Holds video, encoder, audio, subtitle rules, container and AutoQPF.
       <button class="underline underline-offset-2" onclick={() => router.go('templates')}>Edit templates…</button>
     </p>
     {#if error}<p class="text-xs text-destructive">{error}</p>{/if}

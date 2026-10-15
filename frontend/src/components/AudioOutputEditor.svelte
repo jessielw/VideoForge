@@ -2,14 +2,12 @@
   // One audio output in a template, with no source track to look at: copy or an encode (channels,
   // bitrate, the encode's settings), a title and flags. Empty fields keep what the job would do:
   // the source's title and flags, the encode's default channels and bitrate.
-  import CheckIcon from '@lucide/svelte/icons/check'
   import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal'
-  import XIcon from '@lucide/svelte/icons/x'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
-  import { Toggle } from '$lib/components/ui/toggle'
   import { app } from '../lib/state.svelte'
+  import TrackFlags from './TrackFlags.svelte'
   import type { AudioAction, EncodeOptionInfo, TrackOverride, TrackProperty } from '../lib/types'
 
   let {
@@ -52,14 +50,6 @@
     set(ov => {
       if (v.trim() === o.default || (!v.trim() && !o.choices.length && !o.range)) delete ov.options[o.key]
       else ov.options[o.key] = v.trim()
-    })
-  // A flag cycles: the source's -> on -> off -> the source's.
-  const cycleFlag = (key: string) =>
-    set(ov => {
-      const now = ov.flags[key]
-      if (now === undefined) ov.flags[key] = true
-      else if (now) ov.flags[key] = false
-      else delete ov.flags[key]
     })
 </script>
 
@@ -142,21 +132,6 @@
       {disabled}
       onchange={e => set(ov => (ov.title = e.currentTarget.value.trim() || null))}
     />
-    <div class="flex flex-wrap gap-1" role="group" aria-label="Flags">
-      {#each flags as f (f.key)}
-        {@const state = value.flags?.[f.key]}
-        <Toggle
-          variant="outline"
-          size="sm"
-          class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
-            data-[state=on]:text-primary {state === false ? 'line-through decoration-destructive' : ''}"
-          pressed={state === true}
-          {disabled}
-          title="{f.label}: {state === undefined ? "the source's" : state ? 'on' : 'off'} (click to change). {f.help}"
-          onPressedChange={() => cycleFlag(f.key)}
-          >{#if state === true}<CheckIcon class="size-3" />{:else if state === false}<XIcon class="size-3" />{/if}{f.label}</Toggle
-        >
-      {/each}
-    </div>
+    <TrackFlags value={value.flags ?? {}} {flags} {disabled} onchange={f => set(ov => (ov.flags = f))} />
   </div>
 </div>

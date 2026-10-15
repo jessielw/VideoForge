@@ -524,15 +524,41 @@ def test_template_audio_fits_each_track(tmp_path):
         assert job["status"] == "blocked" and any(i["code"] == "audio.upmix" for i in job["issues"])
 
 
-def test_template_audio_is_dropped_without_a_track_editor(tmp_path, monkeypatch):
-    """A profile whose rules choose the audio keeps its own picks: the template's audio is dropped."""
-    monkeypatch.setattr(ManualProfile, "track_editor", False)
-    make_files(tmp_path, "S01E01")
-    template = {"audio": {"slots": [{"track": {"exclude": True}}], "others": "exclude"}}
+def test_template_subs(tmp_path):
+    """A template's subtitle rules set each job's subtitles once its tracks are known, added files too:
+    first matching rule wins, rule order, one default. A batch apply replaces the earlier choices."""
+    make_files(tmp_path, "S01E01")  # en PGS, de PGS, and an added Show.S01E01.en.srt
+    template = {"subs": {"rules": [
+        {"languages": ["en"], "formats": ["srt"], "track": {"title": "Added", "flags": {"default": True}}},
+        {"languages": ["en"], "track": {"flags": {"default": True}}},
+    ], "others": "exclude"}}
     with make_client(tmp_path) as client:
         (job_id,) = add(client, tmp_path, template=template)
         job = wait_for(client, job_id, "ready", "warn")
-        assert job["spec"]["audio_template"] is None and job["spec"]["overrides"]["tracks"] == {}
+        assert job["spec"]["subs_template"] is None
+        assert [(s["language"], s["title"], s["default"]) for s in job["plan"]["subs"]] == [
+            ("en", "Added", True), ("en", "English", False)]  # German left out
+
+        overrides = job["spec"]["overrides"] | {"tracks": {"id:11": {"title": "Mine"}}}
+        client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides})
+        keep = {"subs": {"rules": [{"languages": ["de"]}], "others": "keep"}}
+        client.post("/api/jobs/apply", json={"ids": [job_id], "template": keep})
+        job = client.get(f"/api/jobs/{job_id}").json()
+        assert [(s["language"], s["title"]) for s in job["plan"]["subs"]] == [
+            ("de", "German"), ("en", "English"), ("en", "")]  # "Mine" replaced; German first by rule
+
+
+def test_template_audio_is_dropped_without_a_track_editor(tmp_path, monkeypatch):
+    """A profile whose rules choose the tracks keeps its own picks: the template's audio and subtitles are dropped."""
+    monkeypatch.setattr(ManualProfile, "track_editor", False)
+    make_files(tmp_path, "S01E01")
+    template = {"audio": {"slots": [{"track": {"exclude": True}}], "others": "exclude"},
+                "subs": {"rules": [], "others": "exclude"}}
+    with make_client(tmp_path) as client:
+        (job_id,) = add(client, tmp_path, template=template)
+        job = wait_for(client, job_id, "ready", "warn")
+        assert job["spec"]["audio_template"] is None and job["spec"]["subs_template"] is None
+        assert job["spec"]["overrides"]["tracks"] == {}
 
 
 def test_folder_browser(tmp_path):

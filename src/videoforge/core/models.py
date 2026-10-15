@@ -276,8 +276,8 @@ class Overrides:
     copies: list[str] = field(default_factory=list)
 
 
-class OtherAudio(StrEnum):
-    """What a template does with the audio tracks past its slots."""
+class OtherTracks(StrEnum):
+    """What a template does with the tracks it doesn't set: audio past its slots, subtitles no rule matches."""
 
     KEEP = "keep"  # as the profile decides
     EXCLUDE = "exclude"  # left out
@@ -297,7 +297,29 @@ class TemplateAudio:
     tracks are ignored; added audio files aren't counted (they keep their own settings)."""
 
     slots: list[AudioSlot] = field(default_factory=list)
-    others: OtherAudio = OtherAudio.KEEP
+    others: OtherTracks = OtherTracks.KEEP
+
+
+@dataclass(slots=True)
+class SubRule:
+    """One rule of a template's subtitles: the tracks it matches (an empty list or None = any) and what
+    they get. A track counts as forced / SDH / commentary by its flag or its title (template.sub_traits)."""
+
+    languages: list[str] = field(default_factory=list)  # "en" matches en-US too; "es-419" only itself
+    formats: list[SubFormat] = field(default_factory=list)
+    forced: bool | None = None
+    hearing_impaired: bool | None = None
+    commentary: bool | None = None
+    track: TrackOverride = field(default_factory=TrackOverride)  # exclude = leave out; title and flags
+
+
+@dataclass(slots=True)
+class TemplateSubs:
+    """A template's subtitles: each track (source tracks and added files) takes the first rule it
+    matches; the output lists them in rule order, then the kept ones no rule matched."""
+
+    rules: list[SubRule] = field(default_factory=list)
+    others: OtherTracks = OtherTracks.EXCLUDE
 
 
 def track_key(track: AudioTrack | SubTrack) -> str:

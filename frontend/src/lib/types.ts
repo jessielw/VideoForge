@@ -151,6 +151,7 @@ export interface JobSpec {
   mux: MuxSettings
   autocrop: boolean // the crop is detected once the source can be read (a template's auto crop)
   audio_template: TemplateAudio | null // a template's audio, waiting for the source's tracks
+  subs_template: TemplateSubs | null // ... and its subtitle rules
   id: string
 }
 
@@ -335,6 +336,7 @@ export interface Template {
   qpf: boolean
   crop_mode: CropMode
   audio: TemplateAudio | null // null: the template leaves each job's audio alone
+  subs?: TemplateSubs | null // null (or missing, from before subtitle rules): ... and its subtitles
 }
 // A template's audio: slot n is for the source's nth audio track (extra slots are ignored); tracks
 // past the slots are kept as the profile decides or left out. `extra` = more outputs from the track.
@@ -345,6 +347,21 @@ export interface AudioSlot {
 export interface TemplateAudio {
   slots: AudioSlot[]
   others: 'keep' | 'exclude'
+}
+export type SubFormat = 'srt' | 'pgs' | 'ass' | 'vobsub' | 'tx3g' | 'other'
+// A template's subtitles: each track (added files too) takes the first rule it matches (empty
+// lists and null = any; forced/SDH/commentary by flag or title); kept tracks go in rule order.
+export interface SubRule {
+  languages: string[]
+  formats: SubFormat[]
+  forced: boolean | null
+  hearing_impaired: boolean | null
+  commentary: boolean | null
+  track: TrackOverride // exclude = leave out; title and flags (a default goes to the first track only)
+}
+export interface TemplateSubs {
+  rules: SubRule[]
+  others: 'keep' | 'exclude' // tracks no rule matches
 }
 export interface Presets {
   video: Preset<VideoPresetData>[]

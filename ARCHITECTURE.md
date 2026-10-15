@@ -18,8 +18,9 @@ src/videoforge/
     profile.py           Profile ABC: plan rules, checks, track properties, video defaults
     jobs.py              probe_inputs / plan_job
     job.py               JobSpec (what to build, persisted) + JobState (runtime, persisted)
-    template.py          Template: a job's whole run (video, crop mode, encoder, audio by position, container,
-                         AutoQPF); apply() to a spec, apply_audio() once the source's tracks are known
+    template.py          Template: a job's whole run (video, crop mode, encoder, audio by position, subtitle
+                         rules, container, AutoQPF); apply() to a spec, apply_audio() / apply_subs() once the
+                         source's tracks are known
     plan_io.py           Type-driven JSON codec for every model
     workdir.py           <source>_tmp/ per job: indexes, script, encodes, stats, logs
     history.py           Finished-output records
@@ -74,7 +75,8 @@ settings, and edits can be applied to several selected jobs at once.
 
 A template (`core/template.py`, StaxRip's idea) is the settings for a job's whole run, set up on the
 Templates page without a file or saved from a job: VideoSettings, a crop mode (keep each job's / the
-template's crop / detect it per job), EncoderSettings, MuxSettings, AutoQPF, and optionally audio. Each
+template's crop / detect it per job), EncoderSettings, MuxSettings, AutoQPF, and optionally audio and
+subtitles. Each
 profile's own defaults are a built-in template; the user can star one of theirs as a profile's default
 (New jobs starts on it; `POST /api/jobs` with no settings gets it). Templates are applied when jobs are
 added, to one job, or to a batch; a template applied after a job's own edits replaces them.
@@ -87,9 +89,17 @@ added, to one job, or to a batch; a template applied after a job's own edits rep
   then becomes the job's track overrides (added audio files and subtitles keep theirs). Each slot is
   fitted to its track (`fit_audio`): more channels than the track has -> the encode's default layout,
   DDP Atmos without an Atmos track -> DDP, and the bitrate goes back to the default with a changed layout
-  or when the encode won't take it; the same settings set by hand still block. A profile
-  without the track editor chooses the audio by its own rules: a template's audio is dropped for its
-  jobs (the queue's `_apply_audio`), and the UI says so (Templates page note, no "This job's audio too").
+  or when the encode won't take it; the same settings set by hand still block.
+- **Subtitles, by rules:** position doesn't carry across sources, so subtitles are an ordered rule list
+  (`TemplateSubs`): each track, source and added files alike, takes the first rule matching its language
+  ("en" matches en-US, "es-419" only itself), format and traits (forced / SDH / commentary by flag or
+  title, `sub_traits`), and is kept (title, flags) or left out; tracks no rule matches are kept or left
+  out. Kept tracks go in rule order, and a default set by a rule goes to the first track it reaches
+  (every other subtitle has it off). It waits in `JobSpec.subs_template` like the audio. Rules are made on
+  the Templates page only; replacing a template from a job's menu keeps its rules.
+- **Profiles without the track editor** choose tracks by their own rules: a template's audio and subtitles
+  are dropped for their jobs (the queue's `_apply_tracks`), and the UI says so (Templates page notes, no
+  "This job's audio too").
 
 ## Pipeline
 

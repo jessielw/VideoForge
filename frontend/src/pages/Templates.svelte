@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Templates without a file: a job's whole run (video, crop, encoder, container, AutoQPF), set up
+  // Templates without a file: a job's whole run (video, crop, encoder, container, AutoQPF, audio, subtitles), set up
   // once and picked when adding jobs. Each profile's own defaults are built in; star a template to
   // make it the profile's default (New jobs starts on it). A job's Template menu saves one from a job.
   import { toast } from 'svelte-sonner'
@@ -17,6 +17,7 @@
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import EncoderPanel from '../components/EncoderPanel.svelte'
   import TemplateAudioEditor from '../components/TemplateAudioEditor.svelte'
+  import TemplateSubsEditor from '../components/TemplateSubsEditor.svelte'
   import { api } from '../lib/api'
   import { app } from '../lib/state.svelte'
   import type { CropMode, SourceFilter, Template } from '../lib/types'
@@ -45,9 +46,11 @@
   const starred = $derived(app.defaultTemplate(profile))
   const userNames = $derived(new Set(app.presets.template.map(t => t.name)))
   const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
-  // templates are shared; a profile without a track editor ignores their audio
+  // templates are shared; a profile without a track editor ignores their audio and subtitles
   const trackEditor = $derived(app.profiles.find(p => p.id === profile)?.track_editor ?? false)
-  const audioFlags = $derived((app.profiles.find(p => p.id === profile)?.track_properties ?? []).filter(f => f.kind === 'audio'))
+  const trackFlags = $derived(app.profiles.find(p => p.id === profile)?.track_properties ?? [])
+  const audioFlags = $derived(trackFlags.filter(f => f.kind === 'audio'))
+  const subFlags = $derived(trackFlags.filter(f => f.kind === 'sub'))
   const readOnly = $derived(!!opened?.builtin)
   const dirty = $derived(
     !!opened && !!draft && !opened.builtin && (opened.name === null || draftName.trim() !== opened.name || canon(draft) !== canon(opened.data)),
@@ -358,7 +361,15 @@
           {/if}
           <TemplateAudioEditor value={draft.audio ?? null} flags={audioFlags} disabled={readOnly} onchange={v => (draft!.audio = v)} />
         </Card.Root>
-        <p class="text-xs text-muted-foreground">Subtitle choices aren't part of a template: they stay per job.</p>
+        <Card.Root class="gap-3 p-4">
+          <span class="section-label">Subtitles</span>
+          {#if !trackEditor}
+            <p class="text-xs text-muted-foreground">
+              {app.profiles.find(p => p.id === profile)?.name}'s rules choose its jobs' subtitles: these settings apply to other profiles' jobs.
+            </p>
+          {/if}
+          <TemplateSubsEditor value={draft.subs ?? null} flags={subFlags} disabled={readOnly} onchange={v => (draft!.subs = v)} />
+        </Card.Root>
       </div>
     {:else}
       <div class="flex h-full items-center justify-center text-muted-foreground">Loading…</div>

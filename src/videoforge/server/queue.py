@@ -40,7 +40,7 @@ from videoforge.core.pipeline.run import run_job
 from videoforge.core.pipeline.steps import StepProgress
 from videoforge.core.plan_io import to_json
 from videoforge.core.profile import Profile
-from videoforge.core.template import Template, apply_audio
+from videoforge.core.template import Template, apply_audio, apply_subs
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.server.events import EventHub
 from videoforge.server.store import Store
@@ -280,7 +280,7 @@ class JobQueue:
         else:
             with self._lock:
                 e.probing, e.probed = False, probed
-                if self._apply_audio(e):
+                if self._apply_tracks(e):
                     self._save(e)
                 self._replan(e)
                 crop = self._claim_crop(e)
@@ -288,15 +288,19 @@ class JobQueue:
         if crop:
             self._probes.submit(self._detect_crop, e)
 
-    def _apply_audio(self, e: Entry) -> bool:
-        """Under the lock: a template's pending audio becomes the job's overrides once its tracks are known.
-        A profile without a track editor chooses the audio by its own rules, so there it's dropped."""
+    def _apply_tracks(self, e: Entry) -> bool:
+        """Under the lock: a template's pending audio and subtitles become the job's overrides once its
+        tracks are known. A profile without a track editor chooses tracks by its own rules, so there
+        they're dropped."""
         s = e.spec
-        if s.audio_template is None or e.probed is None:
+        if (s.audio_template is None and s.subs_template is None) or e.probed is None:
             return False
         if self.profile(e).track_editor:
-            s.overrides = apply_audio(s.overrides, s.audio_template, e.probed.source.audio)
-        s.audio_template = None
+            if s.audio_template is not None:
+                s.overrides = apply_audio(s.overrides, s.audio_template, e.probed.source.audio)
+            if s.subs_template is not None:
+                s.overrides = apply_subs(s.overrides, s.subs_template, e.probed.source.subs + e.probed.external_subs)
+        s.audio_template = s.subs_template = None
         return True
 
     def _claim_crop(self, e: Entry) -> bool:
@@ -404,7 +408,7 @@ class JobQueue:
                 s.mux = replace(s.mux, container=container)
             e.state.status, e.state.error, e.state.issues = None, "", []
             if not reprobe:
-                self._apply_audio(e)
+                self._apply_tracks(e)
             self._replan(e)
             self._save(e)
             crop = not reprobe and self._claim_crop(e)

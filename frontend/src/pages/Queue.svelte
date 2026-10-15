@@ -244,7 +244,7 @@
         <h2 class="text-lg font-semibold">{selected.length} jobs selected</h2>
         <p class="text-sm text-muted-foreground">
           Settings here apply to every selected job (queued or running ones are skipped). Starting values are the first
-          job's. Audio and subtitle choices stay per job.
+          job's. Audio and subtitle choices stay per job unless the template sets them.
         </p>
         {#if batchSource}
           <Card.Root class="gap-2 p-4">
