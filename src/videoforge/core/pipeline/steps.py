@@ -26,6 +26,8 @@ from videoforge.core.video.encoders import progress as encoder_progress
 
 Runner = Callable[[Sequence[Sequence[str]], LogFn, CancelToken | None], None]
 _MKV_PROGRESS = re.compile(r"Progress:\s*(\d+)%")
+# Source filters indexing: L-SMASH "Creating lwi index file 45%", BestSource "track #0 index progress 45%"
+_INDEX_PROGRESS = re.compile(r"index (?:file|progress) (\d+)%")
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +42,7 @@ class Step:
     key: str = ""  # anything else the result depends on
     weight: float = 1.0  # share of the job's progress bar
     finalize: Callable[[], None] | None = None  # after success, e.g. move a .partial into place
+    present: Callable[[], bool] | None = None  # reuse needs it true too: a result whose file name the tool picks
 
     @property
     def written(self) -> tuple[Path, ...]:
@@ -81,7 +84,7 @@ ProgressFn = Callable[[StepProgress], None]
 def line_progress(line: str) -> float | None:
     """Fraction done from one tool output line: encoders, vspipe, mkvmerge, qaac."""
     frac = encoder_progress(line)
-    if frac is None and (m := _MKV_PROGRESS.search(line)):
+    if frac is None and (m := _MKV_PROGRESS.search(line) or _INDEX_PROGRESS.search(line)):
         frac = int(m.group(1)) / 100
     return frac
 
@@ -91,6 +94,7 @@ def _reusable(step: Step, record: StepRecord | None) -> bool:
         record is not None
         and record.fingerprint == step.fingerprint()
         and all(p.exists() for p in step.outputs)
+        and (step.present is None or step.present())
     )
 
 

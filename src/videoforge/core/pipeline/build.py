@@ -24,7 +24,7 @@ from videoforge.core.models import Plan
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.video.encoders import encoder_command, vspipe_command
 from videoforge.core.video.qpf import make_qpf, qpf_paths
-from videoforge.core.video.script import build_script
+from videoforge.core.video.script import build_script, index_exists
 from videoforge.core.video.settings import Encoder
 
 if TYPE_CHECKING:
@@ -64,20 +64,31 @@ def mp4_chapters_step(plan: Plan, work: Path) -> Step | None:
     return Step("chapters.mp4", "Chapters for MP4", call=convert, outputs=(out,), inputs=(src,), weight=0.05)
 
 
-def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
-    work, source, enc = spec.work_dir, spec.inputs.source, spec.encoder
-    text = build_script(spec.video, source, work, depth=enc.depth)
+def index_steps(spec: JobSpec, app: AppConfig) -> list[Step]:
+    """Write the script and index the source: a job's first steps, and all a batch index runs."""
+    work, source = spec.work_dir, spec.inputs.source
+    text = build_script(spec.video, source, work, depth=spec.encoder.depth)
     script = work / "video.vpy"
+    source_filter = spec.video.source_filter
 
     def write_script(_log: LogFn) -> None:
         script.write_text(text, encoding="utf-8")
 
-    steps = [
+    return [
         Step("script", "Write the VapourSynth script", call=write_script, outputs=(script,), key=text, weight=0.01),
-        # Opening the script makes the source filter build its index (minutes on a big remux).
+        # Opening the script makes the source filter build its index (minutes on a big remux). Reused
+        # while the index is there (BestSource names its file after the track).
         Step("index", "Index the source", argvs=((app.tools.vspipe, "--info", str(script), "-"),),
-             inputs=(source, script), weight=2),
+             inputs=(source, script), weight=2,
+             present=lambda: index_exists(source, source_filter, work)),
     ]
+
+
+def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
+    work, source, enc = spec.work_dir, spec.inputs.source, spec.encoder
+    script = work / "video.vpy"
+    text = build_script(spec.video, source, work, depth=enc.depth)
+    steps = index_steps(spec, app)
     qpfile = None
     if spec.makes_chapters:
         files = qpf_paths(work)

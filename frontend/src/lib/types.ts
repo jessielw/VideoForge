@@ -4,6 +4,8 @@ export type Status =
   | 'probing'
   | 'error'
   | 'cropping'
+  | 'indexing' // the index lane is on it
+  | 'index-queued' // waiting in the index lane
   | 'ready'
   | 'warn'
   | 'blocked'
@@ -80,6 +82,8 @@ export interface JobSummary {
   encoder: string
   crop: Crop | null // null with a custom script body or a reused encode
   custom_script: boolean
+  indexed: boolean // the source index is in the work folder: the video opens at once
+  index_error: string // the last batch index failed: why
   audio: string[]
   subs: number
 }
@@ -392,6 +396,8 @@ export interface QueueState {
   current: string | null
   stop_after_current: boolean
   queued: number
+  indexing: string | null // the job the index lane is on
+  index_queued: number
 }
 
 export interface MatchedJob {

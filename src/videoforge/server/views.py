@@ -6,6 +6,7 @@ from typing import Any
 
 from videoforge.core.models import Issue, Severity, track_key, with_copies
 from videoforge.core.plan_io import to_json
+from videoforge.core.video.script import index_exists
 from videoforge.core.video.settings import EncoderSettings, RateControl
 from videoforge.server.queue import Entry, JobQueue
 
@@ -48,6 +49,9 @@ def summary(e: Entry) -> dict[str, Any]:
         # A custom script body ignores the crop fields; a reused encode has no script at all.
         "crop": to_json(s.video.crop) if s.encodes_video and s.video.custom is None else None,
         "custom_script": s.encodes_video and s.video.custom is not None,
+        # The source index is in the work folder (the video opens at once); a failed batch index says why.
+        "indexed": s.encodes_video and index_exists(s.inputs.source, s.video.source_filter, s.work_dir),
+        "index_error": e.index_error,
         "audio": [f"{a.title} ({a.language})" for a in e.plan.audio] if e.plan else [],
         "subs": len(e.plan.subs) if e.plan else 0,
     }

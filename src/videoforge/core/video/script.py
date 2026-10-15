@@ -15,6 +15,7 @@ Layout of every script:
 
 from __future__ import annotations
 
+import glob
 from pathlib import Path
 from typing import Literal
 
@@ -35,6 +36,14 @@ def source_line(source: Path, source_filter: SourceFilter, index_dir: Path) -> s
     if source_filter is SourceFilter.LSMASH:
         return f"src = core.lsmas.LWLibavSource({_q(source)}, cachefile={_q(index_dir / (source.name + '.lwi'))})"
     return f"src = core.ffms2.Source({_q(source)}, cachefile={_q(index_dir / (source.name + '.ffindex'))})"
+
+
+def index_exists(source: Path, source_filter: SourceFilter, index_dir: Path) -> bool:
+    """Whether the source filter's index is in the work folder (opening the job's video is quick)."""
+    if source_filter is SourceFilter.BESTSOURCE:
+        return any(index_dir.glob(f"{glob.escape(source.name)}.*.bsindex"))  # + the track number
+    ext = ".lwi" if source_filter is SourceFilter.LSMASH else ".ffindex"
+    return (index_dir / (source.name + ext)).is_file()
 
 
 def processing_lines(settings: VideoSettings) -> list[str]:

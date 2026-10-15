@@ -32,6 +32,14 @@ def _entry(request: Request, job_id: str) -> Entry:
         raise HTTPException(404, f"No job {job_id}") from None
 
 
+def _clip_entry(request: Request, job_id: str) -> Entry:
+    """The job, once the index lane is done with it: two processes never build one index at once,
+    and the preview reads the finished index (as long as the index takes; the editor shows its spinner)."""
+    e = _entry(request, job_id)
+    e.index_idle.wait()
+    return e
+
+
 def script_for(e: Entry, stage: Stage) -> str:
     return _script(e.spec, stage)
 
@@ -72,7 +80,7 @@ def script(request: Request, job_id: str, stage: Stage = "output") -> dict[str, 
 @router.get("/check")
 def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
     """Run the script and render its first frame: the clip's info, or the error and its script line."""
-    e = _entry(request, job_id)
+    e = _clip_entry(request, job_id)
     try:
         i = _preview(request).check(script_for(e, stage), slot=_slot(e.spec, stage))
     except ScriptError as ex:
@@ -90,7 +98,7 @@ def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, A
 @router.get("/info")
 def info(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
     try:
-        e = _entry(request, job_id)
+        e = _clip_entry(request, job_id)
         i = _preview(request).info(script_for(e, stage), slot=_slot(e.spec, stage))
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex) from None
@@ -101,7 +109,7 @@ def info(request: Request, job_id: str, stage: Stage = "output") -> dict[str, An
 def frame(request: Request, job_id: str, n: int = 0, stage: Stage = "output",
           fmt: Literal["jpeg", "png"] = "jpeg", quality: int = 90) -> Response:
     try:
-        e = _entry(request, job_id)
+        e = _clip_entry(request, job_id)
         data, pict, frames = _preview(request).frame(script_for(e, stage), n, fmt, quality, slot=_slot(e.spec, stage))
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex) from None
@@ -113,7 +121,7 @@ def frame(request: Request, job_id: str, n: int = 0, stage: Stage = "output",
 def detect_crop(request: Request, job_id: str, samples: int = 20) -> dict[str, Any]:
     """Suggest a crop from the uncropped source (the job isn't changed)."""
     try:
-        crop = source_crop(_preview(request), _entry(request, job_id).spec, max(3, min(samples, 60)))
+        crop = source_crop(_preview(request), _clip_entry(request, job_id).spec, max(3, min(samples, 60)))
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex) from None
     return to_json(crop)

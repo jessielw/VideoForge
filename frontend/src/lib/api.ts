@@ -134,6 +134,8 @@ export const api = {
   dequeue: (ids: string[]) => post<QueueState>('/api/queue/dequeue', { ids }),
   stop: () => post<QueueState>('/api/queue/stop'),
   cancel: () => post<QueueState>('/api/queue/cancel'),
+  index: (ids: string[]) => post<QueueState & { taken: string[] }>('/api/queue/index', { ids }),
+  stopIndex: (ids?: string[]) => post<QueueState>('/api/queue/index/stop', ids ? { ids } : {}),
 
   clipInfo: (id: string, stage: 'source' | 'output') => get<ClipInfo>(`/api/jobs/${id}/video/info?stage=${stage}`),
   frameUrl: (id: string, n: number, stage: 'source' | 'output', version: number, fmt: 'jpeg' | 'png' = 'jpeg') =>

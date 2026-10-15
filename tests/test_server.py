@@ -18,6 +18,7 @@ from conftest import audio, source, sub
 from fastapi.testclient import TestClient
 
 from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools
+from videoforge.core.execute.process import Cancelled, ToolError
 from videoforge.core.job import JobResult, JobSpec, JobStatus, StepRecord, StepStatus, planned_encode
 from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioCodec as C
@@ -89,9 +90,11 @@ class FakeRun:
         return JobResult(plan, JobStatus.DONE, out)
 
 
-def make_client(tmp_path: Path, run=None, records=None, detect_crop=None) -> TestClient:
+def make_client(tmp_path: Path, run=None, records=None, detect_crop=None, runner=None) -> TestClient:
     services = Services(probe=fake_probe, run=run or FakeRun(),
                         record=(records.append if records is not None else None), detect_crop=detect_crop)
+    if runner is not None:
+        services.runner = runner
     app = create_app(ServerSettings(data_dir=tmp_path / "data", roots=[tmp_path], frontend_dir=tmp_path / "none"),
                      APP, services=services, setup_vapoursynth=False)
     return TestClient(app)
@@ -574,6 +577,119 @@ def test_template_audio_is_dropped_without_a_track_editor(tmp_path, monkeypatch)
         assert job["spec"]["audio_template"] is None and job["spec"]["subs_template"] is None
         assert job["spec"]["overrides"]["tracks"] == {}
         assert job["spec"]["audio_from_template"] is None and job["spec"]["subs_from_template"] is None
+
+
+class FakeIndexer:
+    """The index lane's tool runner: logs vspipe's progress and writes the FFMS2 index. A job named in
+    `hold` waits for its gate (or a cancel); one in `fail` fails."""
+
+    def __init__(self, hold=(), fail=()):
+        self.calls: list[tuple[str, ...]] = []
+        self.gates = {name: threading.Event() for name in hold}
+        self.fail = set(fail)
+
+    def __call__(self, argvs, log, cancel=None):
+        argv = argvs[0]
+        self.calls.append(tuple(argv))
+        script = Path(argv[2])
+        name = script.parent.name.removesuffix("_tmp")
+        log("[vspipe] Creating lwi index file 50%")
+        gate = self.gates.get(name)
+        while gate is not None and not gate.is_set():
+            if cancel is not None and cancel.cancelled:
+                raise Cancelled()
+            time.sleep(0.01)
+        if name in self.fail:
+            raise ToolError("vspipe exited with code 1")
+        (script.parent / (name + ".ffindex")).write_bytes(b"index")
+
+    def wait(self, calls: int, timeout: float = 5) -> None:
+        end = time.monotonic() + timeout
+        while len(self.calls) < calls:
+            assert time.monotonic() < end, f"{len(self.calls)} index runs, wanted {calls}"
+            time.sleep(0.01)
+
+
+def test_index_lane(tmp_path):
+    """Index runs the script and index steps only, one job at a time, next to the encode queue; the job's
+    encode then reuses them. Its video opens at once afterwards (the summary's `indexed`)."""
+    make_files(tmp_path, "S01E01", "S01E02", "S01E03")
+    indexer = FakeIndexer(hold=["Show.S01E01.mkv"], fail=["Show.S01E03.mkv"])
+    with make_client(tmp_path, runner=indexer) as client:
+        ids = add(client, tmp_path)
+        for i in ids:
+            assert not wait_for(client, i, "ready", "warn")["indexed"]
+        r = client.post("/api/queue/index", json={"ids": ids}).json()
+        assert r["taken"] == ids
+        indexer.wait(1)
+        first = wait_for(client, ids[0], "indexing")
+        assert first["progress"]["step"] == "Index the source"
+        assert client.get(f"/api/jobs/{ids[1]}").json()["status"] == "index-queued"
+        state = client.get("/api/queue").json()
+        assert state["indexing"] == ids[0] and state["index_queued"] == 2
+        assert client.post("/api/queue/index", json={"ids": ids}).json()["taken"] == []  # in the lane already
+
+        # The encode queue runs meanwhile: a job waiting in the lane leaves it (its run indexes first);
+        # the one being indexed can't be queued until it's done.
+        client.post("/api/queue/start", json={"ids": [ids[1], ids[0]]})
+        client.app.state.queue.wait(5)
+        assert wait_for(client, ids[1], "done")
+        assert client.get(f"/api/jobs/{ids[0]}").json()["status"] == "indexing"
+
+        # Its video waits for the index (the preview never builds a second copy of it at once); the script doesn't.
+        assert client.get(f"/api/jobs/{ids[0]}/video/script").status_code == 200
+        script = []
+        t = threading.Thread(target=lambda: script.append(client.get(f"/api/jobs/{ids[0]}/video/check")))
+        t.start()
+        time.sleep(0.3)
+        assert not script
+        indexer.gates["Show.S01E01.mkv"].set()
+        t.join(30)
+        assert script[0].status_code == 200 and not script[0].json()["ok"]  # the test's source isn't a video
+        done = wait_for(client, ids[0], "ready", "warn")
+        assert done["indexed"] and not done["index_error"]
+        third = wait_for(client, ids[2], "ready", "warn")
+        assert not third["indexed"] and "vspipe exited with code 1" in third["index_error"]
+        assert client.get("/api/queue").json()["indexing"] is None
+
+        q = client.app.state.queue
+        e = q.get(ids[0])
+        assert set(e.state.steps) == {"script", "index"} and e.state.status is None  # no run, no outcome
+        assert (e.spec.work_dir / "video.vpy").is_file() and (e.spec.work_dir / "videoforge.log").is_file()
+        assert [c[1:3] for c in indexer.calls] == [("--info", str(q.get(i).spec.work_dir / "video.vpy"))
+                                                   for i in (ids[0], ids[2])]
+        assert any("index done" in line for line in e.log)
+
+        # Indexing again reuses the steps while the index is there, and builds it again once it's gone.
+        client.post("/api/queue/index", json={"ids": [ids[0]]})
+        wait_for(client, ids[0], "ready", "warn")
+        assert len(indexer.calls) == 2 and sum("index done" in line for line in e.log) == 2
+        (e.spec.work_dir / "Show.S01E01.mkv.ffindex").unlink()
+        assert not client.get(f"/api/jobs/{ids[0]}").json()["indexed"]
+        client.post("/api/queue/index", json={"ids": [ids[0]]})
+        indexer.wait(3)
+        assert wait_for(client, ids[0], "ready", "warn")["indexed"]
+
+
+def test_index_lane_stop(tmp_path):
+    make_files(tmp_path, "S01E01", "S01E02")
+    indexer = FakeIndexer(hold=["Show.S01E01.mkv"])
+    with make_client(tmp_path, runner=indexer) as client:
+        ids = add(client, tmp_path)
+        for i in ids:
+            wait_for(client, i, "ready", "warn")
+        client.post("/api/queue/index", json={"ids": ids})
+        indexer.wait(1)
+        wait_for(client, ids[0], "indexing")
+        assert client.post("/api/jobs/remove", json={"ids": [ids[0]]}).json()["removed"] == []  # busy indexing
+        client.post("/api/queue/index/stop")
+        for i in ids:
+            job = wait_for(client, i, "ready", "warn")
+            assert not job["indexed"] and not job["index_error"]  # cancelled: nothing to report
+        assert len(indexer.calls) == 1
+        assert client.get("/api/queue").json() | {"running": False} == {
+            "running": False, "current": None, "stop_after_current": False, "queued": 0, "indexing": None,
+            "index_queued": 0}
 
 
 def test_folder_browser(tmp_path):

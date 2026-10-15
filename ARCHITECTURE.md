@@ -47,7 +47,8 @@ src/videoforge/
     app.py               create_app(): /api routers + the built frontend (SPA fallback)
     settings.py          Port, data folder, browsable roots
     store.py             SQLite (app data): jobs (spec + state JSON, order), presets (video, encoder, template)
-    queue.py             The queue: one worker thread runs jobs in order; start/stop/cancel
+    queue.py             The queue: one worker thread runs jobs in order; start/stop/cancel;
+                         the index lane (its own thread: work folder, script, source index; nothing else)
     events.py            Progress, log lines and job changes -> WebSocket /api/events
     routes/              fs (folder browser), jobs, media (probe), video (frames, crop, script),
                          profiles, presets
@@ -202,5 +203,11 @@ defaults, audio encoder settings, and the checks on the finished file.
 
 - One user, one machine. No auth (binds to 127.0.0.1 by default).
 - Jobs run one at a time; the queue survives restarts.
+- Batch index (Queue toolbar / batch panel): the index lane runs each job's `script` and `index` steps
+  (`build.index_steps`, vspipe `--info` in its own process), one job at a time, next to the encode
+  queue. They're recorded in the job's steps, so the encode reuses them; the index step counts as done
+  only while its index file is there (`script.index_exists`). Jobs waiting for a probe or an auto-crop
+  wait their turn; a queued encode takes a job out of the lane; the preview's clip routes and auto-crop
+  wait while a job is being indexed (never two indexers on one source). Not kept across restarts.
 - The CLI isn't kept in step with new features (the server and core are the product).
 - Docker later: Linux binaries for the toolchain; qaac needs a decision (Windows-only).

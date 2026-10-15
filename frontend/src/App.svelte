@@ -116,6 +116,10 @@
         {:else}
           <div>{app.queue.queued ? `${app.queue.queued} queued` : 'Idle'}</div>
         {/if}
+        {#if app.queue.indexing || app.queue.index_queued}
+          {@const left = (app.queue.indexing ? 1 : 0) + app.queue.index_queued}
+          <div class="truncate text-info">Indexing {left} job{left > 1 ? 's' : ''}</div>
+        {/if}
         <div class={app.connected ? 'text-success' : 'text-destructive'}>{app.connected ? '● connected' : '● reconnecting…'}</div>
       </div>
     {/if}

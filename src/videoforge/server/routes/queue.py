@@ -1,4 +1,4 @@
-"""Queue control: queue jobs, start the worker, stop after the current job, cancel it."""
+"""Queue control: queue jobs, start the worker, stop after the current job, cancel it; the index lane."""
 
 from __future__ import annotations
 
@@ -58,4 +58,21 @@ def cancel(request: Request) -> dict[str, Any]:
     q = queue_of(request)
     q.stop_after_current()
     q.cancel_current()
+    return q.queue_state()
+
+
+@router.post("/index")
+def index(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """Index the given jobs one at a time (work folder, script, source index; nothing else): the queue's
+    state, plus the ids taken (`taken`; jobs that are queued, running or reuse an encode are left out)."""
+    q = queue_of(request)
+    taken = q.index(body.get("ids") or [])
+    return {**q.queue_state(), "taken": taken}
+
+
+@router.post("/index/stop")
+def stop_index(request: Request, body: dict[str, Any] | None = Body(None)) -> dict[str, Any]:  # noqa: B008
+    """Take the given jobs (default: all) out of the index lane, cancelling the one being indexed."""
+    q = queue_of(request)
+    q.stop_indexing((body or {}).get("ids"))
     return q.queue_state()

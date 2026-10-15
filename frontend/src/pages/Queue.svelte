@@ -5,6 +5,9 @@
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import CropIcon from '@lucide/svelte/icons/crop'
+  import DatabaseCheckIcon from '@lucide/svelte/icons/database-check'
+  import DatabaseXIcon from '@lucide/svelte/icons/database-x'
+  import DatabaseZapIcon from '@lucide/svelte/icons/database-zap'
   import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
   import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close'
   import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open'
@@ -83,6 +86,19 @@
       router.go('queue')
     })
   }
+
+  // The index lane: each job's work folder, script and source index, one job at a time, nothing else.
+  async function index(ids: string[]) {
+    await act(async () => {
+      const r = await api.index(ids)
+      const left = ids.length - r.taken.length
+      if (!r.taken.length) toast.info('Nothing to index', { description: 'Queued or running jobs, ones already indexing and ones reusing an encode are left out.' })
+      else toast.info(`Indexing ${r.taken.length} job${r.taken.length > 1 ? 's' : ''}`, {
+        description: left ? `${left} left out (queued, running, already indexing, or reusing an encode).` : undefined,
+      })
+    })
+  }
+  const indexing = $derived(!!app.queue.indexing || app.queue.index_queued > 0)
 
   const single = $derived(selected.length === 1 ? selected[0] : null)
 
@@ -201,7 +217,7 @@
             title="{job.name}: {STATUS_LABEL[job.status]}{job.issue ? ` (${job.issue})` : ''}"
           >
             {i + 1}
-            {#if job.status === 'running' && job.progress}
+            {#if (job.status === 'running' || job.status === 'indexing') && job.progress}
               <span class="absolute inset-x-0 bottom-0 h-1 bg-muted">
                 <span class="block h-full bg-info" style="width:{job.progress.overall * 100}%"></span>
               </span>
@@ -234,7 +250,15 @@
       <Button variant="outline" disabled={!selected.length} onclick={() => act(() => api.start(selected))} title="Queue the selected jobs and start">
         <PlayIcon />Run selected
       </Button>
+      {#if indexing}
+        <Button variant="outline" onclick={() => act(() => app.stopIndexing())} title="Stop indexing: cancel the job being indexed and the ones waiting">
+          <DatabaseXIcon />Stop indexing
+        </Button>
+      {/if}
       <span class="flex-1"></span>
+      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => index(selected)}
+        title="Index the selected jobs: one at a time, each gets its work folder, script and source index, and nothing else, so its video opens at once (runs next to the queue)"
+        aria-label="Index the selected jobs"><DatabaseZapIcon /></Button>
       <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => move(-1)} title="Move up"><ArrowUpIcon /></Button>
       <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => move(1)} title="Move down"><ArrowDownIcon /></Button>
       <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => act(() => api.reprobe(selected))} title="Probe again">
@@ -264,8 +288,11 @@
               <span>· crop {job.crop.left}/{job.crop.top}/{job.crop.right}/{job.crop.bottom}</span>
             {/if}
             <span>· {job.audio.length} audio · {job.subs} subs</span>
+            {#if job.indexed}
+              <span class="ml-auto flex shrink-0 items-center" title="Indexed: the video opens at once"><DatabaseCheckIcon class="size-3.5" /></span>
+            {/if}
           </div>
-          {#if job.status === 'running' && job.progress}
+          {#if (job.status === 'running' || job.status === 'indexing') && job.progress}
             <div class="mt-1.5 flex items-center gap-2 text-xs text-info">
               <div class="h-1 flex-1 overflow-hidden rounded bg-muted">
                 <div class="h-full bg-info" style="width:{job.progress.overall * 100}%"></div>
@@ -277,6 +304,9 @@
             <div class="mt-0.5 truncate text-xs {['blocked', 'error', 'failed', 'invalid'].includes(job.status) ? 'text-destructive' : 'text-warning'}">
               {job.issue}
             </div>
+          {/if}
+          {#if job.index_error && job.status !== 'indexing'}
+            <div class="mt-0.5 truncate text-xs text-warning" title={job.index_error}>Index failed: {job.index_error}</div>
           {/if}
         </button>
       {:else}
@@ -298,6 +328,10 @@
           Settings here apply to every selected job (queued or running ones are skipped). Starting values are the first
           job's. Audio and subtitle choices stay per job unless the template sets them.
         </p>
+        <div class="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onclick={() => index(selected)}><DatabaseZapIcon />Index {selected.length} jobs</Button>
+          <span class="text-sm text-muted-foreground">One at a time: the work folder, script and source index, nothing else. Their video then opens at once, and the encode reuses the index.</span>
+        </div>
         {#if batchSource}
           <Card.Root class="gap-2 p-4">
             <div class="flex flex-wrap items-center gap-3">

@@ -18,7 +18,7 @@ export type PresetData<K extends PresetKind> = K extends 'video' ? VideoPresetDa
 
 class AppState {
   jobs = $state<JobSummary[]>([])
-  queue = $state<QueueState>({ running: false, current: null, stop_after_current: false, queued: 0 })
+  queue = $state<QueueState>({ running: false, current: null, stop_after_current: false, queued: 0, indexing: null, index_queued: 0 })
   profiles = $state<Profile[]>([])
   log = $state<LogLine[]>([])
   connected = $state(false)
@@ -88,7 +88,11 @@ class AppState {
     const before = new Map(this.jobs.map(j => [j.id, j.status]))
     this.jobs = await api.jobs()
     keepVideoViews(this.jobs.map(j => j.id))
-    for (const j of this.jobs) if (before.get(j.id) === 'running' && j.status !== 'running') this.#finished(j)
+    for (const j of this.jobs) {
+      if (before.get(j.id) === 'running' && j.status !== 'running') this.#finished(j)
+      if (before.get(j.id) === 'indexing' && j.status !== 'indexing' && j.index_error)
+        toast.error(`${j.name}: indexing failed`, { description: j.index_error })
+    }
   }
 
   // A toast when a run ends: done, or failed / invalid / cancelled with its first issue.
@@ -109,6 +113,14 @@ class AppState {
         /* the socket reconnect will retry */
       }
     }, 120)
+  }
+
+  #indexStopped = false
+
+  /** Stop the index lane (the job being indexed is cancelled, the waiting ones dropped). */
+  async stopIndexing(): Promise<void> {
+    this.#indexStopped = true
+    await api.stopIndex()
   }
 
   #bump(id: string): void {
@@ -144,7 +156,13 @@ class AppState {
       case 'hello':
       case 'queue': {
         const { type: _t, ...q } = event
+        const was = this.queue
         this.queue = q as unknown as QueueState
+        if (event.type === 'queue' && was.indexing && !this.queue.indexing && !this.queue.index_queued) {
+          if (this.#indexStopped) toast.info('Indexing stopped')
+          else toast.success('Indexing finished', { description: 'The indexed jobs open at once.' })
+          this.#indexStopped = false
+        }
         break
       }
       case 'job':
@@ -161,7 +179,8 @@ class AppState {
         if (job) {
           const { type: _t, id: _i, ...p } = event
           job.progress = p as unknown as JobSummary['progress']
-          if (job.status !== 'running') job.status = 'running'
+          const status = event.id === this.queue.indexing ? 'indexing' : 'running'
+          if (job.status !== status) job.status = status
         }
         break
       }

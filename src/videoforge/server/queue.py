@@ -1,6 +1,10 @@
 """The job queue: jobs in memory (spec, state, cached probe and plan), persisted in the
 store, probed in a small thread pool, and run one at a time by a worker thread.
 
+Next to it, the index lane: jobs asked to be indexed get their work folder, script and source
+index, one at a time by a thread of its own (alongside a running encode), and nothing else. The
+steps are recorded like a run's, so the encode reuses them, and opening the job's video is quick.
+
 Every change is saved and announced on the event hub. An edit replans from the
 cached probe (no file access) and clears the last run's outcome, but keeps the
 finished steps, so a rerun only redoes what the edit touched.
@@ -20,8 +24,9 @@ from pathlib import Path
 from typing import Any
 
 from videoforge.core.config import AppConfig
+from videoforge.core.execute import process
 from videoforge.core.execute.mux import MuxSettings
-from videoforge.core.execute.process import CancelToken
+from videoforge.core.execute.process import Cancelled, CancelToken, ToolError
 from videoforge.core.job import (
     STEP_TAIL,
     JobResult,
@@ -36,8 +41,9 @@ from videoforge.core.job import (
 )
 from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import JobInputs, Overrides, Plan, Severity, track_key
-from videoforge.core.pipeline.run import run_job
-from videoforge.core.pipeline.steps import StepProgress
+from videoforge.core.pipeline.build import index_steps
+from videoforge.core.pipeline.run import missing_inputs, run_job
+from videoforge.core.pipeline.steps import StepProgress, run_steps
 from videoforge.core.plan_io import to_json
 from videoforge.core.profile import Profile
 from videoforge.core.template import Template, apply_audio, apply_subs, template_choice
@@ -56,6 +62,8 @@ class JobView(StrEnum):
     PROBING = "probing"
     ERROR = "error"  # the probe failed
     CROPPING = "cropping"  # detecting the crop (a template's auto crop)
+    INDEXING = "indexing"  # the index lane is on it
+    INDEX_QUEUED = "index-queued"  # waiting in the index lane
     READY = "ready"
     WARN = "warn"
     BLOCKED = "blocked"
@@ -83,6 +91,12 @@ class Entry:
     cropping: bool = False
     queued: bool = False
     running: bool = False
+    index_queued: bool = False
+    indexing: bool = False
+    index_error: str = ""
+    # Set while the index lane isn't on this job: the preview and auto-crop wait on it, so two
+    # processes never build the same index at once.
+    index_idle: threading.Event = field(default_factory=lambda: _set(threading.Event()))
     progress: dict[str, Any] | None = None
     log: deque[str] = field(default_factory=lambda: deque(maxlen=LOG_LINES))
     # The last run's output per step (in memory; state.run keeps only each step's tail).
@@ -99,7 +113,8 @@ class Entry:
 
     @property
     def runnable(self) -> bool:
-        return self.plan is not None and not self.plan.blocked and not self.busy and not self.cropping
+        return (self.plan is not None and not self.plan.blocked and not self.busy and not self.cropping
+                and not self.indexing)
 
     @property
     def status(self) -> JobView:
@@ -107,6 +122,10 @@ class Entry:
             return JobView.RUNNING
         if self.queued:
             return JobView.QUEUED
+        if self.indexing:
+            return JobView.INDEXING
+        if self.index_queued:
+            return JobView.INDEX_QUEUED
         if self.state.status is not None:
             return JobView(self.state.status.value)
         if self.probe_error:
@@ -130,6 +149,7 @@ class Services:
     run: Callable[..., JobResult] = run_job
     record: Callable[[JobResult], object] | None = None  # JobHistory.record
     detect_crop: Callable[[JobSpec], Crop] | None = None  # reads the source (VapourSynth)
+    runner: Callable[..., None] = process.run  # the index lane's tool runner
 
 
 class JobQueue:
@@ -153,6 +173,10 @@ class JobQueue:
         self._cancel: CancelToken | None = None
         self._stop_after_current = False
         self._closing = False  # shutdown() began: a job starting now is cancelled at once
+        self._indexer: threading.Thread | None = None
+        self._index_active = False  # the lane's thread is working; cleared (under the lock) when it decides to stop
+        self._index_cancel: CancelToken | None = None
+        self._index_wake = threading.Event()
 
     # --- state ---------------------------------------------------------------------
 
@@ -171,7 +195,9 @@ class JobQueue:
     def queue_state(self) -> dict[str, Any]:
         current = next((e.id for e in self.entries() if e.running), None)
         return {"running": self.running, "current": current, "stop_after_current": self._stop_after_current,
-                "queued": sum(e.queued for e in self.entries())}
+                "queued": sum(e.queued for e in self.entries()),
+                "indexing": next((e.id for e in self.entries() if e.indexing), None),
+                "index_queued": sum(e.index_queued for e in self.entries())}
 
     def _save(self, e: Entry) -> None:
         try:
@@ -285,6 +311,7 @@ class JobQueue:
                 self._replan(e)
                 crop = self._claim_crop(e)
         self._changed(e)
+        self._index_wake.set()
         if crop:
             self._probes.submit(self._detect_crop, e)
 
@@ -317,6 +344,7 @@ class JobQueue:
         return True
 
     def _detect_crop(self, e: Entry) -> None:
+        e.index_idle.wait()  # the index lane is building this source's index: use it once it's there
         try:
             crop = self.services.detect_crop(e.spec)
         except Exception as ex:  # noqa: BLE001 - shown in the job's log; the crop stays as it was
@@ -335,6 +363,7 @@ class JobQueue:
         if crop is not None:
             self._log(e, f"Auto-crop: left {crop.left}, top {crop.top}, right {crop.right}, bottom {crop.bottom}")
         self._changed(e)
+        self._index_wake.set()
 
     def _replan(self, e: Entry) -> None:
         if e.probed is None:
@@ -428,7 +457,7 @@ class JobQueue:
         with self._lock:
             for job_id in ids:
                 e = self._entries.get(job_id)
-                if e is None or e.busy:
+                if e is None or e.busy or e.indexing:
                     continue
                 del self._entries[job_id]
                 self._order.remove(job_id)
@@ -455,6 +484,7 @@ class JobQueue:
             for e in self.entries():
                 if (wanted is None or e.id in wanted) and e.runnable:
                     e.queued = True
+                    e.index_queued = False  # the run indexes it first anyway
                     e.state.status, e.state.error = None, ""
                     self._save(e)
                     queued.append(e.id)
@@ -501,7 +531,10 @@ class JobQueue:
             self._closing = True
             self._stop_after_current = True
         self.cancel_current()
+        self.stop_indexing()
         self.wait(timeout)
+        if self._indexer is not None:
+            self._indexer.join(timeout)
         self._probes.shutdown(wait=False, cancel_futures=True)
 
     def _next(self) -> Entry | None:
@@ -591,6 +624,123 @@ class JobQueue:
             self._save(e)
         self._changed(e)
 
+    # --- the index lane ------------------------------------------------------------------
+
+    def index(self, ids: Iterable[str]) -> list[str]:
+        """Put jobs in the index lane (in queue order): ones that encode video and aren't queued, running,
+        or in the lane already. Returns the ids it took."""
+        wanted = set(ids)
+        taken = []
+        with self._lock:
+            for e in self.entries():
+                if e.id in wanted and e.spec.encodes_video and not e.busy and not e.indexing and not e.index_queued:
+                    e.index_queued, e.index_error = True, ""
+                    taken.append(e.id)
+            if taken and not self._index_active and not self._closing:
+                self._index_active = True
+                self._indexer = threading.Thread(target=self._index_work, name="indexer", daemon=True)
+                self._indexer.start()
+        self._index_wake.set()
+        for job_id in taken:
+            self._changed(self.get(job_id))
+        self._queue_changed()
+        return taken
+
+    def stop_indexing(self, ids: Iterable[str] | None = None) -> None:
+        """Take jobs (default: all) out of the index lane; the one being indexed is cancelled."""
+        wanted = set(ids) if ids is not None else None
+        with self._lock:
+            dropped = [e for e in self.entries() if e.index_queued and (wanted is None or e.id in wanted)]
+            for e in dropped:
+                e.index_queued = False
+            current = next((e for e in self.entries() if e.indexing), None)
+            if current is not None and (wanted is None or current.id in wanted) and self._index_cancel is not None:
+                self._index_cancel.cancel()
+        self._index_wake.set()
+        for e in dropped:
+            self._changed(e)
+        self._queue_changed()
+
+    def _take_index(self) -> tuple[Entry | None, bool]:
+        """(the next job to index, whether any are left). A job still probing or detecting its crop waits."""
+        with self._lock:
+            waiting = [e for e in self.entries() if e.index_queued]
+            for e in waiting:
+                if e.probing or e.cropping:
+                    continue
+                e.index_queued, e.indexing, e.progress = False, True, None
+                e.index_idle.clear()
+                self._index_cancel = CancelToken()
+                if self._closing:
+                    self._index_cancel.cancel()
+                return e, True
+            if not waiting or self._closing:
+                self._index_active = False
+                return None, False
+            return None, True
+
+    def _index_work(self) -> None:
+        while True:
+            self._index_wake.clear()
+            e, left = self._take_index()
+            if e is not None:
+                self._changed(e)
+                self._queue_changed()
+                self._index(e)
+            elif left:
+                self._index_wake.wait(1.0)
+            else:
+                break
+        self._queue_changed()
+
+    def _index(self, e: Entry) -> None:
+        log_file = _open_log(e)  # makes the work folder too
+        last = [0.0]
+
+        def log(line: str) -> None:
+            self._log(e, line, log_file)
+
+        def progress(p: StepProgress) -> None:
+            e.progress = {"step": p.step.label, "index": p.index, "total": p.total, "fraction": round(p.fraction, 4),
+                          "overall": round(p.overall, 4), "reused": p.reused}
+            now = _now()
+            if p.fraction in (0.0, 1.0) or now - last[0] >= _PROGRESS_INTERVAL:
+                last[0] = now
+                self.events.publish("progress", id=e.id, **e.progress)
+
+        def on_record(_r: StepRecord) -> None:
+            with self._lock:
+                self._save(e)
+
+        error = ""
+        log(f"### {e.spec.name}: index ({datetime.now().isoformat(timespec='seconds')})")
+        try:
+            if e.probe_error:
+                raise ToolError(f"The job couldn't be probed: {e.probe_error}")
+            if missing := missing_inputs(e.spec):
+                raise ToolError("Missing input: " + ", ".join(str(p) for p in missing))
+            with self._lock:
+                steps = index_steps(e.spec, self.app)
+            # The job's records (no run of it can start while it's in the lane), so its encode reuses these steps.
+            run_steps(steps, e.state.steps, log=log, cancel=self._index_cancel, progress=progress,
+                      on_record=on_record, runner=self.services.runner)
+        except Cancelled:
+            error = "Cancelled"
+        except (ToolError, OSError, ValueError) as ex:
+            error = str(ex)
+        except Exception as ex:  # noqa: BLE001 - a bug must not stop the lane
+            error = f"{type(ex).__name__}: {ex}"
+        log(f"{e.spec.name}: index " + (f"failed ({error})" if error else "done"))
+        if log_file is not None:
+            log_file.close()
+        with self._lock:
+            e.indexing, e.progress, e.index_error = False, None, "" if error == "Cancelled" else error
+            self._index_cancel = None
+            self._save(e)
+        e.index_idle.set()
+        self._changed(e)
+        self._queue_changed()
+
     def _log(self, e: Entry, line: str, file=None) -> None:
         e.log.append(line)
         if file is not None:
@@ -622,6 +772,11 @@ def step_json(run: StepRun, *, with_tail: bool = True) -> dict[str, Any]:
     if not with_tail:
         data.pop("tail")
     return data
+
+
+def _set(event: threading.Event) -> threading.Event:
+    event.set()
+    return event
 
 
 def _copy(obj):
