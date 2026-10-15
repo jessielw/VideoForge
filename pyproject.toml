@@ -1,7 +1,7 @@
 [project]
 name = "videoforge"
 version = "0.1.0"
-description = "Encode and mux job queue in the browser: VapourSynth, x264/x265, audio, subtitles, MKV"
+description = "Encode and mux job queue in the browser: VapourSynth, x264/x265, audio, subtitles, MKV / MP4"
 authors = [
     { name = "jessielw", email = "jessielw4049@gmail.com" }
 ]
