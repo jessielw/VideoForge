@@ -2,6 +2,9 @@
   // A job's frames from the server (VapourSynth, lossless PNG): zoom (fit .. 800%, Ctrl+wheel and
   // double-click zoom at the pointer), drag to pan with a minimap, an edge-detect view for spotting
   // borders, a crop overlay, and frame stepping (←/→ 1, Shift 10, PgUp/PgDn 1 s, Home/End).
+  // With `oncrop` the crop is edited on the Source frame: the wheel moves the crop line nearest the
+  // pointer 2 px a notch (that side is marked), a drag on a line moves it (snapped to 2); then
+  // Shift+wheel scrolls a zoomed view and a drag anywhere else still pans.
   // The frame sits on a matte (gray, black or white) with a margin all round, so every edge pixel
   // can be scrolled into view clear of the scrollbars and told apart from the background.
   // A new frame replaces the old one only once it has decoded, so zoom, scroll and the picture
@@ -39,6 +42,7 @@
     scroll = $bindable({ left: 0, top: 0 }),
     notice = null,
     onstage,
+    oncrop,
   }: {
     jobId: string
     stage: 'source' | 'output'
@@ -54,6 +58,7 @@
     scroll?: { left: number; top: number }
     notice?: { text: string; tone: 'muted' | 'bad' } | null
     onstage?: (stage: 'source' | 'output') => void // keys 1 and 2, at the same frame
+    oncrop?: (crop: Crop) => void // set: the wheel and the crop lines edit the crop (Source only)
   } = $props()
 
   const ZOOMS = [25, 50, 75, 100, 150, 200, 300, 400, 600, 800]
@@ -224,6 +229,14 @@
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault()
       zoomBy(e.deltaY > 0 ? -1 : 1, e.clientX, e.clientY)
+    } else if (cropping && e.shiftKey) {
+      // Chromium turns Shift+wheel sideways; here it scrolls the way the wheel turns.
+      e.preventDefault()
+      if (viewport) viewport.scrollTop += (e.deltaY || e.deltaX) * (e.deltaMode === 1 ? 40 : 1)
+      if (pannable) flashMap()
+    } else if (cropping && e.deltaY) {
+      e.preventDefault()
+      wheelCrop(e)
     } else if (pannable) flashMap()
   }
 
@@ -253,11 +266,83 @@
     }
   }
 
+  // --- crop editing ---
+  const MIN_OUT = 16 // the smallest picture a crop may leave, px
+  const HIT = 6 // how close to a crop line (screen px) a press grabs it
+  const OPPOSITE = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' } as const
+  const cropping = $derived(!!oncrop && !!crop && stage === 'source')
+  let armed = $state<keyof Crop | null>(null) // the side the wheel moves: the line nearest the pointer
+  let onLine = $state(false) // the pointer is on that line, so a press drags it
+  let cropDrag = $state<{ side: keyof Crop; id: number } | null>(null)
+  let wheelRest = 0 // touchpads scroll in small steps; they add up to a notch
+
+  // The pointer in source pixels (off the frame on the matte too) and one screen px in source px.
+  function framePoint(e: MouseEvent) {
+    const r = frameEl!.getBoundingClientRect()
+    return { x: ((e.clientX - r.left) / r.width) * width, y: ((e.clientY - r.top) / r.height) * height, px: width / r.width }
+  }
+
+  function nearestLine(e: MouseEvent) {
+    const { x, y, px } = framePoint(e)
+    const c = crop!
+    const d = { left: x - c.left, right: width - c.right - x, top: y - c.top, bottom: height - c.bottom - y }
+    const side = (Object.keys(d) as (keyof Crop)[]).reduce((a, b) => (Math.abs(d[b]) < Math.abs(d[a]) ? b : a))
+    return { side, near: Math.abs(d[side]) / px <= HIT }
+  }
+
+  // Even, and never past the opposite side (MIN_OUT left between them).
+  function setSide(side: keyof Crop, v: number) {
+    const c = crop!
+    const max = Math.floor(((side === 'left' || side === 'right' ? width : height) - c[OPPOSITE[side]] - MIN_OUT) / 2) * 2
+    v = Math.max(0, Math.min(max, Math.round(v / 2) * 2))
+    if (v !== c[side]) oncrop!({ ...c, [side]: v })
+  }
+
+  // The top and bottom lines follow the wheel (down moves them down); down crops the left and right in.
+  function wheelCrop(e: WheelEvent) {
+    const { side } = nearestLine(e)
+    armed = side
+    let d = e.deltaY * (e.deltaMode === 1 ? 40 : 1)
+    if (Math.abs(d) < 50) {
+      wheelRest += d
+      if (Math.abs(wheelRest) < 50) return
+      d = wheelRest
+    }
+    wheelRest = 0
+    setSide(side, crop![side] + 2 * Math.sign(d) * (side === 'bottom' ? -1 : 1))
+  }
+
+  function trackLine(e: PointerEvent) {
+    if (!cropping || !frameEl) return
+    if (cropDrag) {
+      const { x, y } = framePoint(e)
+      const s = cropDrag.side
+      setSide(s, s === 'left' ? x : s === 'right' ? width - x : s === 'top' ? y : height - y)
+    } else if (!panning) {
+      const n = nearestLine(e)
+      armed = n.side
+      onLine = n.near
+    }
+  }
+
+  function onpointerleave() {
+    if (!cropDrag) {
+      armed = null
+      onLine = false
+    }
+  }
+
+  const cursor = $derived.by(() => {
+    const side = cropDrag?.side ?? (cropping && onLine ? armed : null)
+    if (side) return side === 'left' || side === 'right' ? 'cursor-ew-resize' : 'cursor-ns-resize'
+    return pannable ? (panning ? 'cursor-grabbing' : 'cursor-grab') : ''
+  })
+
   // --- panning + minimap ---
   let drag = { x: 0, y: 0, left: 0, top: 0, id: -1 }
 
   function onpointerdown(e: PointerEvent) {
-    if (!pannable || !viewport || e.button !== 0) return
+    if (!viewport || e.button !== 0) return
     // Leave the scrollbars to the browser. Classic ones sit outside the client area and
     // their presses target the viewport itself; overlay ones (Firefox on Windows 11, macOS)
     // sit over the picture, so the strip along each scrolling edge is theirs too.
@@ -268,12 +353,19 @@
     const BAR = 16
     if (x >= viewport.clientWidth - (viewport.scrollHeight > viewport.clientHeight ? BAR : 0)) return
     if (y >= viewport.clientHeight - (viewport.scrollWidth > viewport.clientWidth ? BAR : 0)) return
+    if (cropping && onLine && armed) {
+      viewport.setPointerCapture(e.pointerId)
+      cropDrag = { side: armed, id: e.pointerId }
+      return
+    }
+    if (!pannable) return
     viewport.setPointerCapture(e.pointerId)
     drag = { x: e.clientX, y: e.clientY, left: viewport.scrollLeft, top: viewport.scrollTop, id: e.pointerId }
     panning = true
   }
 
   function onpointermove(e: PointerEvent) {
+    trackLine(e)
     if (!panning || !viewport || e.pointerId !== drag.id) return
     viewport.scrollLeft = drag.left + drag.x - e.clientX
     viewport.scrollTop = drag.top + drag.y - e.clientY
@@ -281,6 +373,10 @@
   }
 
   function onpointerup(e: PointerEvent) {
+    if (cropDrag && e.pointerId === cropDrag.id) {
+      cropDrag = null
+      viewport?.releasePointerCapture(e.pointerId)
+    }
     if (e.pointerId === drag.id) {
       panning = false
       viewport?.releasePointerCapture(e.pointerId)
@@ -383,12 +479,13 @@
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
     <div
       bind:this={viewport}
-      class="absolute inset-0 overflow-auto border border-border outline-none focus:border-primary/60
-        {pannable ? (panning ? 'cursor-grabbing' : 'cursor-grab') : ''}"
+      class="absolute inset-0 overflow-auto border border-border outline-none focus:border-primary/60 {cursor}"
       style="background:{MATTES[matte]}"
       tabindex="0"
       role="application"
-      aria-label="Frame {frame}: arrow keys step, Ctrl+wheel zooms, drag pans"
+      aria-label="Frame {frame}: arrow keys step, Ctrl+wheel zooms, {cropping
+        ? 'the wheel crops the nearest side, a drag on a crop line moves it, Shift+wheel scrolls'
+        : 'drag pans'}"
       onkeydown={onkey}
       {onwheel}
       {ondblclick}
@@ -396,6 +493,7 @@
       {onpointermove}
       {onpointerup}
       onpointercancel={onpointerup}
+      {onpointerleave}
       {onscroll}
     >
       <!-- At least the viewport's size, centring the frame; bigger when the frame (plus its margin) is. -->
@@ -410,18 +508,27 @@
               style="image-rendering: {scale >= 2 ? 'pixelated' : 'auto'}"
             />
             {#if crop && stage === 'source'}
+              {@const band = (side: keyof Crop) => (armed === side ? 'bg-destructive/60' : 'bg-destructive/40')}
               <div class="pointer-events-none absolute inset-0">
-                <div class="absolute inset-x-0 top-0 bg-destructive/40" style="height:{pct(crop.top, height)}"></div>
-                <div class="absolute inset-x-0 bottom-0 bg-destructive/40" style="height:{pct(crop.bottom, height)}"></div>
+                <div class="absolute inset-x-0 top-0 {band('top')}" style="height:{pct(crop.top, height)}"></div>
+                <div class="absolute inset-x-0 bottom-0 {band('bottom')}" style="height:{pct(crop.bottom, height)}"></div>
                 <div
-                  class="absolute left-0 bg-destructive/40"
+                  class="absolute left-0 {band('left')}"
                   style="top:{pct(crop.top, height)};bottom:{pct(crop.bottom, height)};width:{pct(crop.left, width)}"
                 ></div>
                 <div
-                  class="absolute right-0 bg-destructive/40"
+                  class="absolute right-0 {band('right')}"
                   style="top:{pct(crop.top, height)};bottom:{pct(crop.bottom, height)};width:{pct(crop.right, width)}"
                 ></div>
-                <!-- No outline round the kept picture: it would cover the edge rows a crop is judged by. -->
+                <!-- No outline round the kept picture: it would cover the edge rows a crop is judged by.
+                     The side the wheel moves is marked on the matte, just outside the frame. -->
+                {#if cropping && armed}
+                  <div
+                    class="absolute bg-primary {armed === 'top' || armed === 'bottom' ? 'inset-x-0 h-1' : 'inset-y-0 w-1'}"
+                    style="{armed}:-8px"
+                    data-armed={armed}
+                  ></div>
+                {/if}
               </div>
             {/if}
           {/if}

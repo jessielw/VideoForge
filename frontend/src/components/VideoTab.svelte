@@ -55,12 +55,17 @@
   // Expanded is for this tab only: leaving it (another tab, job or page) puts the layout back.
   $effect(() => () => (layout.videoExpanded = false))
 
-  // A new job (or a change made elsewhere) resets the local copy.
+  // A new job (or a change made elsewhere) resets the local copy. Not while an edit waits to be
+  // saved: a save landing mid-wheel would put back the crop it sent, and the next save would keep it.
   let lastJob = ''
+  let lastId = ''
+  let queued = false
   $effect(() => {
     const key = job.id + JSON.stringify(job.spec.video)
     if (key !== lastJob) {
       lastJob = key
+      if (queued && job.id === lastId) return
+      lastId = job.id
       video = structuredClone($state.snapshot(job.spec.video)) as VideoSettings
     }
   })
@@ -162,7 +167,9 @@
   let timer: ReturnType<typeof setTimeout> | undefined
   function commit(delay = 350) {
     clearTimeout(timer)
+    queued = true
     timer = setTimeout(async () => {
+      queued = false
       saving = true
       try {
         await save($state.snapshot(video) as VideoSettings)
@@ -250,6 +257,12 @@
         bind:scroll={vv.scroll}
         {notice}
         onstage={s => (vv.stage = s)}
+        oncrop={editable && vv.panel === 'settings' && !video.custom
+          ? c => {
+              video.crop = c
+              commit()
+            }
+          : undefined}
       />
     {:else if scripting}
       <div class="flex flex-1 items-center justify-center border text-muted-foreground">
@@ -354,9 +367,6 @@
               }}>Reset</Button
             >
           </div>
-          {#if outW % 4 || outH % 4}
-            <p class="text-xs text-warning">The output isn't mod 4 ({outW}×{outH}).</p>
-          {/if}
         </section>
 
         <section class="space-y-2">
