@@ -24,7 +24,8 @@ src/videoforge/
     plan_io.py           Type-driven JSON codec for every model
     disks.py             Which physical disk a path is on (the index lane waits for an encode on its disk)
     workdir.py           <source>_tmp/ per job: indexes, script, encodes, stats, logs
-    history.py           Finished-output records
+    history.py           Finished-output records (data dir; for the parked Fix release page)
+    record.py            What a run did, for other tools: <output>.videoforge.json + .jsonl events (docs/job-record.md)
     video/
       settings.py        VideoSettings (source filter, crop, resize, filters, custom script), EncoderSettings
       script.py          VideoSettings -> .vpy text (one generator for preview and encode)
@@ -54,6 +55,7 @@ src/videoforge/
     events.py            Progress, log lines and job changes -> WebSocket /api/events
     routes/              fs (folder browser), jobs, media (probe), video (frames, crop, script),
                          profiles, presets
+  applog.py              The app log (stdlib logging under "videoforge"): <data dir>/logs, a file per session
   cli.py                 `videoforge serve` (opens the browser), plus validate/plan/run
   desktop.py             `serve --window`: the app in a pywebview window with a tray icon (pystray; the `desktop`
                          extra), drops carry paths
@@ -139,6 +141,27 @@ index ─► qpf/chapters ─► video (vspipe | x264/x265, 1 or 2 passes) ─�
     track: left out quietly); PGS/ASS/LPCM block.
     Chapters must be OGM text, so a chapter XML or the source's chapters are converted first.
   - The output check reads an MP4 for language, enabled (default) and format only.
+
+## Logs and job records
+
+- **App log** (`applog.py`): modules log through `logging.getLogger(__name__)`; `serve` calls `applog.setup()`:
+  `<data dir>/logs/videoforge_<YYYY-mm-dd_HH-MM-SS>.log` (newest 50 kept, 10 MB per part) and the console,
+  behind a QueueHandler/QueueListener. uvicorn runs with `log_config=None`, so its loggers land there too.
+  Never fatal: an unwritable data folder means console only. Job tool output doesn't go here.
+- **Work-folder text log** (`<source>_tmp/videoforge.log`, the queue's `_open_log`/`_log`): every run and
+  index of the source, a time on each line, tool output prefixed `[x264]` etc., progress-only lines
+  (indexers, mkvmerge) at every 10% (`steps._THIN_PROGRESS`; the progress bar still sees each one), and
+  `Job record: ...` / `Job complete: <output>` at the end of a finished run.
+- **Job record and events** (`core/record.py`, the public format in `docs/job-record.md`): the queue makes a
+  `RunRecorder` per run (output from `build.job_output`): `<output name>.videoforge.jsonl` in the work folder
+  gets run.started, step.started/finished (from on_step), run.finished; a run that writes the output writes
+  `<output name>.videoforge.json` (source, output, video settings and script, each audio/subtitle output
+  with the source track it came from, chapters, steps, issues, tool versions via `tools.versions`, cached
+  per file and mtime). A failed run leaves the last record. The same events (and the index lane's
+  index.started/finished) go to `<data dir>/logs/events.jsonl` (`JsonLines`, rolls at 10 MB). Writing them
+  never fails a job.
+- **Job label** (`JobSpec.label`, Output tab): `<stem>.<label>.<ext>` (`build.output_path`), so runs of one
+  source (dubbed / subbed) are separate outputs with separate records.
 
 ## VapourSynth
 

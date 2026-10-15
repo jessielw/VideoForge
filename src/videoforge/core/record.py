@@ -252,7 +252,8 @@ def _audio(plan: Plan, result: JobResult, commands: dict[str, str]) -> list[dict
     return out
 
 
-def _subs(plan: Plan) -> list[dict[str, Any]]:
+def _subs(plan: Plan, container: str) -> list[dict[str, Any]]:
+    muxer = MUXERS[container]
     first = 1 + len(plan.audio)
     out = []
     for pos, s in enumerate(plan.subs):
@@ -267,7 +268,7 @@ def _subs(plan: Plan) -> list[dict[str, Any]]:
                 "index": pos,
                 "track": first + pos,
                 "source": ref,
-                "format": src.format.value,
+                "format": muxer.written_format(src.format).value,  # as the output holds it (MP4: SRT -> tx3g)
                 "language": s.language,
                 "title": s.title,
                 **_flags(s),
@@ -353,7 +354,7 @@ def build_record(
         "events": str(events_path(work, output)),
         "video": _video(spec, plan, commands),
         "audio": _audio(plan, result, commands),
-        "subtitles": _subs(plan),
+        "subtitles": _subs(plan, container),
         "chapters": _chapters(spec, plan),
         "original_language": plan.original_language,
         "steps": [_step(r) for r in state.run],
