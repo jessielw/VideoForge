@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import NotRequired, TypedDict
 
 from videoforge.core import lang
 from videoforge.core.execute.audio import ENCODES, AudioSettings
@@ -81,9 +82,21 @@ def _settings(track: AudioTrack | SubTrack, ov: TrackOverride | None) -> tuple[s
     return language, track.title if ov.title is None else ov.title, flags
 
 
+class AudioOutput(TypedDict):
+    """PlannedAudio's action/format fields."""
+
+    action: AudioAction
+    out_codec: AudioCodec
+    out_layout: Layout
+    out_atmos: bool
+    bitrate_kbps: int | None
+    upmix_50: bool
+    options: NotRequired[dict[str, str]]
+
+
 def audio_output(
     t: AudioTrack, ov: TrackOverride | None, issues: list[Issue], settings: AudioSettings | None = None
-) -> dict:
+) -> AudioOutput:
     """PlannedAudio's action/format fields for a track: copied, or encoded as the override asks.
     Adds a BLOCK for an encode that can't be done (Atmos from a non-Atmos source, an upmix)."""
     action = (ov.action if ov else None) or AudioAction.COPY

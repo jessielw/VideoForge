@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import codecs
 from collections.abc import Callable, Sequence
+import io
 import os
 import re
 import subprocess
 import threading
-from typing import IO
+from typing import IO, cast
 
 from videoforge.core.execute import jobobject
 
@@ -67,7 +68,8 @@ def _pump(stream: IO[bytes], name: str, log: LogFn, tail: list[str]) -> None:
             del tail[:-_TAIL]
             log(f"[{name}] {line}")
 
-    while chunk := stream.read1(65536):
+    reader = cast(io.BufferedReader, stream)  # Popen's pipes are buffered readers
+    while chunk := reader.read1(65536):
         *lines, pending = _LINE_SPLIT.split(pending + decoder.decode(chunk))
         for line in lines:
             emit(line)
@@ -114,7 +116,7 @@ def run(argvs: Sequence[Sequence[str]], log: LogFn, cancel: CancelToken | None =
             )
             procs.append(proc)
             jobobject.adopt(proc)  # ends with VideoForge, even on a crash
-            if i == 1:
+            if i == 1 and procs[0].stdout is not None:
                 procs[0].stdout.close()  # the producer sees a broken pipe if the consumer dies
             tail: list[str] = []
             tails.append(tail)

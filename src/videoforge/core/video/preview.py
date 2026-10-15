@@ -210,7 +210,7 @@ class _Worker:
     def _read_replies(self) -> None:
         while (msg := _recv(self.proc.stdout)) is not None:  # type: ignore[arg-type]
             with self._lock:
-                fut = self._pending.pop(msg[0].get("id"), None)
+                fut = self._pending.pop(msg[0].get("id", -1), None)
                 self.last_used = time.monotonic()
             if fut is not None:
                 fut.set_result(msg)

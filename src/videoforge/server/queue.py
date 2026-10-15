@@ -386,7 +386,10 @@ class JobQueue:
             e.cropping = True
         self._changed(e)
         try:
-            crop = self.services.detect_crop(e.spec)
+            detect = self.services.detect_crop
+            if detect is None:  # _crop_due checked it
+                raise RuntimeError("No crop detection")
+            crop = detect(e.spec)
         except Exception as ex:  # shown in the job's log; the crop stays as it was
             self._log(e, f"Auto-crop failed: {type(ex).__name__}: {ex}")
             crop = None
@@ -457,7 +460,7 @@ class JobQueue:
                     raise ValueError("A job's source can't change")
                 reprobe = e.probed is None or inputs.encode != s.inputs.encode or inputs.audio != s.inputs.audio
                 s.inputs = inputs
-                if not reprobe:
+                if not reprobe and e.probed is not None:
                     ext, issues = external_tracks(e.probed.source, inputs.subtitles)
                     e.probed = replace(e.probed, external_subs=ext, issues=issues)
             if profile is not None and profile != s.profile:

@@ -41,7 +41,7 @@ class Step:
     inputs: tuple[Path, ...] = ()  # their size and mtime go into the fingerprint
     key: str = ""  # anything else the result depends on
     weight: float = 1.0  # share of the job's progress bar
-    finalize: Callable[[], None] | None = None  # after success, e.g. move a .partial into place
+    finalize: Callable[[], object] | None = None  # after success, e.g. move a .partial into place
     present: Callable[[], bool] | None = None  # reuse needs it true too: a result whose file name the tool picks
 
     @property
@@ -128,7 +128,7 @@ def run_steps(
 
     for i, step in enumerate(steps):
         run = runs[i]
-        if _reusable(step, prior := records.get(step.id)):
+        if (prior := records.get(step.id)) is not None and _reusable(step, prior):
             log(f"== {i + 1}/{len(steps)} {step.label}: done in an earlier run, reused")
             run.status, run.seconds = StepStatus.REUSED, prior.seconds
             changed(run)

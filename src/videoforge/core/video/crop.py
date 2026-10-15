@@ -149,7 +149,7 @@ def _frame_crop(clip: vs.VideoNode, n: int, threshold: float) -> Crop:
     f = clip.get_frame(max(0, min(n, clip.num_frames - 1)))
     # _Range (older VapourSynth: _ColorRange); compare with the enum, whose values changed in R6x
     rng = f.props["_Range"] if "_Range" in f.props else f.props.get("_ColorRange")
-    full = rng is not None and int(rng) == int(vs.RANGE_FULL)  # unset: limited, like nearly all video
+    full = isinstance(rng, int) and rng == int(vs.RANGE_FULL)  # unset: limited, like nearly all video
     return yuv_borders(
         np.asarray(f[0]),
         np.asarray(f[1]),

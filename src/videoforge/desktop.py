@@ -128,6 +128,8 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
         maximized=True,
         background_color="#1b1a18",
     )
+    if window is None:
+        raise RuntimeError("pywebview made no window")
 
     quitting = threading.Event()
     state = {"minimized": False, "maximized": True, "told": False}
@@ -164,7 +166,9 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
 
     def on_loaded() -> None:
         # Each page load gets a fresh document, so the handler is added again.
-        window.dom.document.events.drop += DOMEventHandler(on_drop, prevent_default=True)
+        window.dom.document.events.drop += DOMEventHandler(  # pyright: ignore[reportOperatorIssue]
+            on_drop, prevent_default=True
+        )
         window.evaluate_js("window.videoforgeDesktop = true; window.dispatchEvent(new Event('videoforge:desktop'))")
 
     window.events.closing += on_closing

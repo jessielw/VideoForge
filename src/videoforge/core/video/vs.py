@@ -135,9 +135,9 @@ def frame_rgb(clip: vs.VideoNode, n: int) -> np.ndarray:
     n = max(0, min(n, clip.num_frames - 1))
     if clip.format.color_family is not vs.RGB:
         props = clip.get_frame(n).props
-        clip = clip.resize.Bicubic(format=vs.RGB24, matrix_in=matrix(props, clip.height))
+        clip = clip.resize.Bicubic(format=vs.RGB24, matrix_in=matrix(props, clip.height))  # pyright: ignore[reportAttributeAccessIssue]
     elif clip.format.id != vs.RGB24:
-        clip = clip.resize.Bicubic(format=vs.RGB24)
+        clip = clip.resize.Bicubic(format=vs.RGB24)  # pyright: ignore[reportAttributeAccessIssue]
     f = clip.get_frame(n)
     return np.stack([np.asarray(f[i]) for i in range(3)], axis=-1)
 

@@ -206,7 +206,9 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
         plan = replace(plan, chapters_path=chapters.outputs[0])
     partial = output.with_name(output.name + ".partial")
     mux = MUXERS[container].command(plan, encoded, partial, app, split_args(spec.mux.extra))
-    mux_inputs = [p for p in (plan.encode_path, plan.chapters_path, *encoded.values()) if p is not None]
+    mux_inputs = [
+        p for p in (plan.source.path, plan.encode_path, plan.chapters_path, *encoded.values()) if p is not None
+    ]
     mux_inputs += [s.source.external_path for s in plan.subs if s.source.external_path is not None]
     mux_inputs += list(dict.fromkeys(a.source.external_path for a in plan.audio if a.source.external_path is not None))
     steps.append(
@@ -216,7 +218,7 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
             argvs=(tuple(mux),),
             outputs=(output,),
             writes=(partial,),
-            inputs=(plan.source.path, *mux_inputs),
+            inputs=tuple(mux_inputs),
             finalize=lambda: partial.replace(output),
             weight=3,
         )

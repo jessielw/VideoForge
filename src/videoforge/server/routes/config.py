@@ -156,5 +156,5 @@ def check_path(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     info = next((t for t in TOOLS if t.name == name), None)
     if info is None:
         raise HTTPException(422, f"Unknown tool {name!r}")
-    resolved = getattr(with_tools(request.app.state.base_config, {name: path}).tools, name) if path else ""
+    resolved = getattr(with_tools(request.app.state.base_config, {info.name: path}).tools, info.name) if path else ""
     return to_json(check(info, resolved))

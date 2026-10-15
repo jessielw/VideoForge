@@ -33,7 +33,7 @@ def plugin_path() -> str:
     """ffms2.dll as VapourSynth finds it (its plugin folders, VAPOURSYNTH_EXTRA_PLUGIN_PATH)."""
     import vapoursynth as vs
 
-    return vs.core.ffms2.plugin_path
+    return vs.core.ffms2.plugin_path  # pyright: ignore[reportAttributeAccessIssue]  (plugins aren't in the stubs)
 
 
 def _path(p: Path) -> bytes:
