@@ -209,6 +209,29 @@ def test_source_filters_index_into_the_work_dir(clip_file, tmp_path, source_filt
 
 
 @needs_vs
+def test_ffms2_index_with_progress(clip_file, tmp_path):
+    """The index step's FFMS2 index (core/video/ffindex.py): progress lines, read by Source() as it is, kept when valid."""
+    import io
+
+    from videoforge.core.pipeline.steps import line_progress
+    from videoforge.core.video.ffindex import make_index
+    from videoforge.core.video.script import ffms2_index, index_exists
+
+    index = ffms2_index(clip_file, tmp_path)
+    out = io.StringIO()
+    make_index(clip_file, index, str(PLUGINS / "ffms2.dll"), out)
+    lines = out.getvalue().splitlines()
+    assert lines[-1] == "ffms2 index progress 100%" and line_progress(lines[0]) is not None
+    assert index_exists(clip_file, SourceFilter.FFMS2, tmp_path) and not list(tmp_path.glob("*.partial"))
+    written = index.stat().st_mtime_ns
+    clip = vsx.load_clip(build_script(VideoSettings(source_filter=SourceFilter.FFMS2), clip_file, tmp_path))
+    assert clip.num_frames == 48 and index.stat().st_mtime_ns == written  # Source() took it, didn't index again
+    again = io.StringIO()
+    make_index(clip_file, index, str(PLUGINS / "ffms2.dll"), again)
+    assert again.getvalue() == "ffms2 index: already there\n" and index.stat().st_mtime_ns == written
+
+
+@needs_vs
 def test_autocrop_preview_and_output(clip_file, tmp_path):
     settings = VideoSettings()
     cache = vsx.ClipCache()

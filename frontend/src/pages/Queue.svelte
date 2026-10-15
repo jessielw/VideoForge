@@ -1,6 +1,6 @@
 <script lang="ts">
-  // The queue: jobs on the left (click, Ctrl/Shift-click to select several), the selected
-  // job's editor on the right, or a batch panel when several are selected.
+  // The queue: jobs on the left (click, Ctrl/Shift-click, drag across rows, Shift+arrows or Ctrl+A to
+  // select several), the selected job's editor on the right, or a batch panel when several are selected.
   import EncoderPanel from '../components/EncoderPanel.svelte'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
@@ -44,7 +44,91 @@
     if (selected.some(id => !ids.has(id))) selected = selected.filter(id => ids.has(id))
   })
 
+  let cursor = $state<string | null>(null) // the moving end of a Shift+arrow range
+
+  function select(ids: string[]) {
+    selected = ids
+    router.go('queue', ids.length === 1 ? ids[0] : null)
+  }
+
+  function between(from: string, to: string): string[] {
+    const ids = app.jobs.map(j => j.id)
+    const [a, b] = [ids.indexOf(from), ids.indexOf(to)].sort((x, y) => x - y)
+    return ids.slice(a, b + 1)
+  }
+
+  // Drag across rows (or rail chips) to select them; Ctrl adds them to the selection. The list scrolls
+  // while the pointer is near its top or bottom edge.
+  let drag: { from: string; base: string[]; moved: boolean; scroller: HTMLElement; x: number; y: number } | null = null
+  let dragged = false // the click that ends a drag doesn't select its row alone
+
+  function dragStart(e: PointerEvent, id: string) {
+    const scroller = (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-scroller]')
+    if (e.button !== 0 || e.shiftKey || !scroller) return
+    drag = { from: id, base: e.ctrlKey || e.metaKey ? [...selected] : [], moved: false, scroller, x: e.clientX, y: e.clientY }
+    requestAnimationFrame(dragTick)
+  }
+
+  function dragTick() {
+    if (!drag) return
+    const r = drag.scroller.getBoundingClientRect()
+    const edge = 32
+    if (drag.y < r.top + edge) drag.scroller.scrollTop -= Math.ceil((r.top + edge - drag.y) / 3)
+    else if (drag.y > r.bottom - edge) drag.scroller.scrollTop += Math.ceil((drag.y - r.bottom + edge) / 3)
+    const x = Math.min(Math.max(drag.x, r.left + 2), r.right - 2)
+    const y = Math.min(Math.max(drag.y, r.top + 2), r.bottom - 2)
+    const id = document.elementFromPoint(x, y)?.closest('[data-job]')?.getAttribute('data-job')
+    if (id && (drag.moved || id !== drag.from)) {
+      drag.moved = true
+      const range = new Set([...drag.base, ...between(drag.from, id)])
+      const ids = app.jobs.map(j => j.id).filter(j => range.has(j))
+      if (ids.length !== selected.length || ids.some((j, i) => j !== selected[i])) select(ids)
+      anchor = drag.from
+      cursor = id
+    }
+    requestAnimationFrame(dragTick)
+  }
+
+  function dragMove(e: PointerEvent) {
+    if (drag) [drag.x, drag.y] = [e.clientX, e.clientY]
+  }
+
+  function dragEnd() {
+    if (drag?.moved) {
+      dragged = true
+      setTimeout(() => (dragged = false))
+    }
+    drag = null
+  }
+
+  // Up/Down (Home/End) move the selection, with Shift they stretch it from the anchor; Ctrl+A selects all.
+  function keys(e: KeyboardEvent) {
+    const ids = app.jobs.map(j => j.id)
+    if (!ids.length) return
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+      e.preventDefault()
+      select(ids)
+      return
+    }
+    const at = ids.indexOf(cursor ?? anchor ?? selected.at(-1) ?? ids[0])
+    const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: ids.length - 1 }[e.key]
+    if (to === undefined || e.ctrlKey || e.altKey || e.metaKey) return
+    e.preventDefault()
+    const id = ids[Math.min(Math.max(to, 0), ids.length - 1)]
+    cursor = id
+    if (e.shiftKey && anchor) select(between(anchor, id))
+    else {
+      anchor = id
+      select([id])
+    }
+    const row = (e.currentTarget as HTMLElement).querySelector<HTMLElement>(`[data-job="${id}"]`)
+    row?.focus()
+    row?.scrollIntoView({ block: 'nearest' })
+  }
+
   function click(e: MouseEvent, id: string) {
+    if (dragged) return
+    cursor = id
     if (e.shiftKey && anchor) {
       const ids = app.jobs.map(j => j.id)
       const [a, b] = [ids.indexOf(anchor), ids.indexOf(id)].sort((x, y) => x - y)
@@ -184,6 +268,9 @@
 
 <svelte:window
   onpointerdown={outside}
+  onpointermove={dragMove}
+  onpointerup={dragEnd}
+  onpointercancel={dragEnd}
   onkeydown={e => {
     if (peek && e.key === 'Escape') {
       peek = false
@@ -207,12 +294,15 @@
       >
         <PanelLeftOpenIcon />
       </Button>
-      <div class="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-auto border-t border-border py-2">
+      <!-- svelte-ignore a11y_no_static_element_interactions (the arrow keys of the chips inside) -->
+      <div data-scroller class="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-auto border-t border-border py-2 select-none" onkeydown={keys}>
         {#each app.jobs as job, i (job.id)}
           <button
+            data-job={job.id}
             class="relative flex h-9 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border text-xs
               {selected.includes(job.id) ? 'border-primary bg-primary/15' : 'hover:bg-accent'}
               {STATUS_TONE[job.status]}"
+            onpointerdown={e => dragStart(e, job.id)}
             onclick={e => click(e, job.id)}
             title="{job.name}: {STATUS_LABEL[job.status]}{job.issue ? ` (${job.issue})` : ''}"
           >
@@ -269,11 +359,14 @@
       >
     </div>
 
-    <div class="min-h-0 flex-1 overflow-auto">
+    <!-- svelte-ignore a11y_no_static_element_interactions (the arrow keys of the rows inside) -->
+    <div data-scroller class="min-h-0 flex-1 overflow-auto select-none" onkeydown={keys}>
       {#each app.jobs as job (job.id)}
         <button
+          data-job={job.id}
           class="block w-full border-b border-border/60 px-3 py-2 text-left
             {selected.includes(job.id) ? 'bg-primary/15' : 'hover:bg-accent'}"
+          onpointerdown={e => dragStart(e, job.id)}
           onclick={e => click(e, job.id)}
         >
           <div class="flex items-center gap-2">

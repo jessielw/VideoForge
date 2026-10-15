@@ -8,6 +8,7 @@ source builds its index in the job's work folder (minutes for a large remux; lat
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager, nullcontext
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -32,12 +33,11 @@ def _entry(request: Request, job_id: str) -> Entry:
         raise HTTPException(404, f"No job {job_id}") from None
 
 
-def _clip_entry(request: Request, job_id: str) -> Entry:
-    """The job, once the index lane is done with it: two processes never build one index at once,
-    and the preview reads the finished index (as long as the index takes; the editor shows its spinner)."""
-    e = _entry(request, job_id)
-    e.index_idle.wait()
-    return e
+def _loading(e: Entry, preview: Preview, script: str, slot: str) -> AbstractContextManager[object]:
+    """The job's source lock when the preview has to load the clip (which may index the source): two processes
+    never build one index at once. A request waiting on the index lane takes as long as the index (the editor
+    shows its spinner), then reads the finished index."""
+    return nullcontext() if preview.has(script, slot) else e.source_lock
 
 
 def script_for(e: Entry, stage: Stage) -> str:
@@ -80,9 +80,11 @@ def script(request: Request, job_id: str, stage: Stage = "output") -> dict[str, 
 @router.get("/check")
 def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
     """Run the script and render its first frame: the clip's info, or the error and its script line."""
-    e = _clip_entry(request, job_id)
+    e = _entry(request, job_id)
+    preview, script, slot = _preview(request), script_for(e, stage), _slot(e.spec, stage)
     try:
-        i = _preview(request).check(script_for(e, stage), slot=_slot(e.spec, stage))
+        with _loading(e, preview, script, slot):
+            i = preview.check(script, slot=slot)
     except ScriptError as ex:
         message = ex.message
         spec = e.spec
@@ -98,8 +100,10 @@ def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, A
 @router.get("/info")
 def info(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
     try:
-        e = _clip_entry(request, job_id)
-        i = _preview(request).info(script_for(e, stage), slot=_slot(e.spec, stage))
+        e = _entry(request, job_id)
+        preview, script, slot = _preview(request), script_for(e, stage), _slot(e.spec, stage)
+        with _loading(e, preview, script, slot):
+            i = preview.info(script, slot=slot)
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex) from None
     return to_json(i) | {"fps": i.fps}
@@ -109,8 +113,10 @@ def info(request: Request, job_id: str, stage: Stage = "output") -> dict[str, An
 def frame(request: Request, job_id: str, n: int = 0, stage: Stage = "output",
           fmt: Literal["jpeg", "png"] = "jpeg", quality: int = 90) -> Response:
     try:
-        e = _clip_entry(request, job_id)
-        data, pict, frames = _preview(request).frame(script_for(e, stage), n, fmt, quality, slot=_slot(e.spec, stage))
+        e = _entry(request, job_id)
+        preview, script, slot = _preview(request), script_for(e, stage), _slot(e.spec, stage)
+        with _loading(e, preview, script, slot):
+            data, pict, frames = preview.frame(script, n, fmt, quality, slot=slot)
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex) from None
     return Response(data, media_type=f"image/{fmt}",
@@ -121,7 +127,9 @@ def frame(request: Request, job_id: str, n: int = 0, stage: Stage = "output",
 def detect_crop(request: Request, job_id: str, samples: int = 20) -> dict[str, Any]:
     """Suggest a crop from the uncropped source (the job isn't changed)."""
     try:
-        crop = source_crop(_preview(request), _clip_entry(request, job_id).spec, max(3, min(samples, 60)))
+        e = _entry(request, job_id)
+        with e.source_lock:
+            crop = source_crop(_preview(request), e.spec, max(3, min(samples, 60)))
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex) from None
     return to_json(crop)

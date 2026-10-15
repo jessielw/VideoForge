@@ -24,7 +24,7 @@ from videoforge.core.models import AudioCodec as C
 from videoforge.core.models import SubFormat as F
 from videoforge.core.pipeline.build import build_steps
 from videoforge.core.pipeline.run import run_job, run_plan
-from videoforge.core.video.settings import Crop, EncoderSettings, RateControl
+from videoforge.core.video.settings import Crop, EncoderSettings, RateControl, SourceFilter
 
 
 def fake_tool_files(*names: str) -> dict[str, str]:
@@ -265,12 +265,20 @@ def test_video_steps_two_pass(profile, tmp_path):
     result = run_job(job, plan, profile, APP, state=state, runner=runner, prober=lambda *_: simulate_output(plan))
     assert result.status is JobStatus.DONE, result.error
     assert "core.std.Crop(clip, left=0, right=0, top=140, bottom=140)" in (job.work_dir / "video.vpy").read_text()
-    assert tools_called(runner) == ["vspipe", "x264", "x264", "qaac64", "deezy", "mkvmerge"]
+    # FFMS2 (the default) is indexed by core/video/ffindex.py, with progress
+    assert tools_called(runner) == ["python", "x264", "x264", "qaac64", "deezy", "mkvmerge"]
+    assert runner.calls[0][0][1:3] == ["-m", "videoforge.core.video.ffindex"]
 
-    job.video.crop = Crop(0, 138, 0, 138)  # a new crop: script, index and video again; audio reused
+    (job.work_dir / "Show.S01E01.mkv.ffindex").write_bytes(b"index")  # what the real one leaves
+    job.video.crop = Crop(0, 138, 0, 138)  # a new crop: script and video again; the index and audio reused
     again = FakeRunner()
     run_job(job, plan, profile, APP, state=state, runner=again, prober=lambda *_: simulate_output(plan))
-    assert tools_called(again) == ["vspipe", "x264", "x264", "mkvmerge"]
+    assert tools_called(again) == ["x264", "x264", "mkvmerge"]
+
+    job.video.source_filter = SourceFilter.LSMASH  # another filter: its own index, by opening the script
+    third = FakeRunner()
+    run_job(job, plan, profile, APP, state=state, runner=third, prober=lambda *_: simulate_output(plan))
+    assert tools_called(third) == ["vspipe", "x264", "x264", "mkvmerge"]
 
 
 # --- a real job end to end -----------------------------------------------------------

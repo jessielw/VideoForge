@@ -10,6 +10,7 @@ an existing encode has no script/index/chapters/video steps.
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -24,8 +25,8 @@ from videoforge.core.models import Plan
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.video.encoders import encoder_command, vspipe_command
 from videoforge.core.video.qpf import make_qpf, qpf_paths
-from videoforge.core.video.script import build_script, index_exists
-from videoforge.core.video.settings import Encoder
+from videoforge.core.video.script import build_script, ffms2_index, index_exists
+from videoforge.core.video.settings import Encoder, SourceFilter
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -74,12 +75,18 @@ def index_steps(spec: JobSpec, app: AppConfig) -> list[Step]:
     def write_script(_log: LogFn) -> None:
         script.write_text(text, encoding="utf-8")
 
+    if source_filter is SourceFilter.FFMS2:
+        # FFMS2's Source() indexes silently: build its index first, with progress (core/video/ffindex.py).
+        # It depends on the source alone, so a crop edit doesn't index again.
+        argv = (sys.executable, "-m", "videoforge.core.video.ffindex", str(source), str(ffms2_index(source, work)))
+        inputs: tuple[Path, ...] = (source,)
+    else:
+        # Opening the script makes the source filter build its index (minutes on a big remux).
+        argv, inputs = (app.tools.vspipe, "--info", str(script), "-"), (source, script)
     return [
         Step("script", "Write the VapourSynth script", call=write_script, outputs=(script,), key=text, weight=0.01),
-        # Opening the script makes the source filter build its index (minutes on a big remux). Reused
-        # while the index is there (BestSource names its file after the track).
-        Step("index", "Index the source", argvs=((app.tools.vspipe, "--info", str(script), "-"),),
-             inputs=(source, script), weight=2,
+        # Reused while the index is there (BestSource names its file after the track).
+        Step("index", "Index the source", argvs=(argv,), inputs=inputs, key=source_filter.value, weight=2,
              present=lambda: index_exists(source, source_filter, work)),
     ]
 

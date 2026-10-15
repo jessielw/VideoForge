@@ -591,8 +591,8 @@ class FakeIndexer:
     def __call__(self, argvs, log, cancel=None):
         argv = argvs[0]
         self.calls.append(tuple(argv))
-        script = Path(argv[2])
-        name = script.parent.name.removesuffix("_tmp")
+        work = Path(argv[-1]).parent  # FFMS2 (the default): ffindex <source> <cachefile>
+        name = work.name.removesuffix("_tmp")
         log("[vspipe] Creating lwi index file 50%")
         gate = self.gates.get(name)
         while gate is not None and not gate.is_set():
@@ -601,7 +601,7 @@ class FakeIndexer:
             time.sleep(0.01)
         if name in self.fail:
             raise ToolError("vspipe exited with code 1")
-        (script.parent / (name + ".ffindex")).write_bytes(b"index")
+        Path(argv[-1]).write_bytes(b"index")
 
     def wait(self, calls: int, timeout: float = 5) -> None:
         end = time.monotonic() + timeout
@@ -656,8 +656,9 @@ def test_index_lane(tmp_path):
         e = q.get(ids[0])
         assert set(e.state.steps) == {"script", "index"} and e.state.status is None  # no run, no outcome
         assert (e.spec.work_dir / "video.vpy").is_file() and (e.spec.work_dir / "videoforge.log").is_file()
-        assert [c[1:3] for c in indexer.calls] == [("--info", str(q.get(i).spec.work_dir / "video.vpy"))
-                                                   for i in (ids[0], ids[2])]
+        assert [c[1:] for c in indexer.calls] == [
+            ("-m", "videoforge.core.video.ffindex", str(q.get(i).spec.inputs.source),
+             str(q.get(i).spec.work_dir / (q.get(i).spec.inputs.source.name + ".ffindex"))) for i in (ids[0], ids[2])]
         assert any("index done" in line for line in e.log)
 
         # Indexing again reuses the steps while the index is there, and builds it again once it's gone.
@@ -690,6 +691,32 @@ def test_index_lane_stop(tmp_path):
         assert client.get("/api/queue").json() | {"running": False} == {
             "running": False, "current": None, "stop_after_current": False, "queued": 0, "indexing": None,
             "index_queued": 0}
+
+
+def test_index_lane_waits_for_the_preview(tmp_path):
+    """A job opened in the editor while it waits in the lane: the preview loading its clip holds the job's source
+    lock, so the lane waits (it can still be stopped) and then finds the index there."""
+    make_files(tmp_path, "S01E01", "S01E02")
+    indexer = FakeIndexer()
+    with make_client(tmp_path, runner=indexer) as client:
+        ids = add(client, tmp_path)
+        for i in ids:
+            wait_for(client, i, "ready", "warn")
+        q = client.app.state.queue
+        first, second = q.get(ids[0]), q.get(ids[1])
+        first.source_lock.acquire()  # the preview is indexing both
+        second.source_lock.acquire()
+        client.post("/api/queue/index", json={"ids": ids})
+        wait_for(client, ids[0], "indexing")
+        time.sleep(0.3)
+        assert indexer.calls == [] and any("Waiting for the preview" in line for line in first.log)
+        first.source_lock.release()
+        indexer.wait(1)
+        wait_for(client, ids[1], "indexing")
+        client.post("/api/queue/index/stop")  # stops the wait
+        assert not wait_for(client, ids[1], "ready", "warn")["index_error"]
+        assert len(indexer.calls) == 1 and wait_for(client, ids[0], "ready", "warn")["indexed"]
+        second.source_lock.release()
 
 
 def test_folder_browser(tmp_path):

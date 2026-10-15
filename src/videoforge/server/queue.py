@@ -94,9 +94,9 @@ class Entry:
     index_queued: bool = False
     indexing: bool = False
     index_error: str = ""
-    # Set while the index lane isn't on this job: the preview and auto-crop wait on it, so two
-    # processes never build the same index at once.
-    index_idle: threading.Event = field(default_factory=lambda: _set(threading.Event()))
+    # Held by whatever may build the source's index: the index lane, auto-crop, and a preview request
+    # for a clip the preview worker doesn't hold yet. Two processes never index one source at once.
+    source_lock: threading.Lock = field(default_factory=threading.Lock)
     progress: dict[str, Any] | None = None
     log: deque[str] = field(default_factory=lambda: deque(maxlen=LOG_LINES))
     # The last run's output per step (in memory; state.run keeps only each step's tail).
@@ -344,9 +344,9 @@ class JobQueue:
         return True
 
     def _detect_crop(self, e: Entry) -> None:
-        e.index_idle.wait()  # the index lane is building this source's index: use it once it's there
         try:
-            crop = self.services.detect_crop(e.spec)
+            with e.source_lock:
+                crop = self.services.detect_crop(e.spec)
         except Exception as ex:  # noqa: BLE001 - shown in the job's log; the crop stays as it was
             self._log(e, f"Auto-crop failed: {type(ex).__name__}: {ex}")
             crop = None
@@ -669,7 +669,6 @@ class JobQueue:
                 if e.probing or e.cropping:
                     continue
                 e.index_queued, e.indexing, e.progress = False, True, None
-                e.index_idle.clear()
                 self._index_cancel = CancelToken()
                 if self._closing:
                     self._index_cancel.cancel()
@@ -721,9 +720,19 @@ class JobQueue:
                 raise ToolError("Missing input: " + ", ".join(str(p) for p in missing))
             with self._lock:
                 steps = index_steps(e.spec, self.app)
-            # The job's records (no run of it can start while it's in the lane), so its encode reuses these steps.
-            run_steps(steps, e.state.steps, log=log, cancel=self._index_cancel, progress=progress,
-                      on_record=on_record, runner=self.services.runner)
+                cancel = self._index_cancel
+            assert cancel is not None
+            if not e.source_lock.acquire(blocking=False):
+                log("Waiting for the preview, which is indexing this source")
+                while not e.source_lock.acquire(timeout=0.2):
+                    if cancel.cancelled:
+                        raise Cancelled()
+            try:
+                # The job's records (no run of it can start while it's in the lane), so its encode reuses these steps.
+                run_steps(steps, e.state.steps, log=log, cancel=cancel, progress=progress,
+                          on_record=on_record, runner=self.services.runner)
+            finally:
+                e.source_lock.release()
         except Cancelled:
             error = "Cancelled"
         except (ToolError, OSError, ValueError) as ex:
@@ -737,7 +746,6 @@ class JobQueue:
             e.indexing, e.progress, e.index_error = False, None, "" if error == "Cancelled" else error
             self._index_cancel = None
             self._save(e)
-        e.index_idle.set()
         self._changed(e)
         self._queue_changed()
 
@@ -772,11 +780,6 @@ def step_json(run: StepRun, *, with_tail: bool = True) -> dict[str, Any]:
     if not with_tail:
         data.pop("tail")
     return data
-
-
-def _set(event: threading.Event) -> threading.Event:
-    event.set()
-    return event
 
 
 def _copy(obj):

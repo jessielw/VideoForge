@@ -35,15 +35,20 @@ def source_line(source: Path, source_filter: SourceFilter, index_dir: Path) -> s
         return f"src = core.bs.VideoSource({_q(source)}, cachemode=4, cachepath={_q(index)})"
     if source_filter is SourceFilter.LSMASH:
         return f"src = core.lsmas.LWLibavSource({_q(source)}, cachefile={_q(index_dir / (source.name + '.lwi'))})"
-    return f"src = core.ffms2.Source({_q(source)}, cachefile={_q(index_dir / (source.name + '.ffindex'))})"
+    return f"src = core.ffms2.Source({_q(source)}, cachefile={_q(ffms2_index(source, index_dir))})"
+
+
+def ffms2_index(source: Path, index_dir: Path) -> Path:
+    return index_dir / (source.name + ".ffindex")
 
 
 def index_exists(source: Path, source_filter: SourceFilter, index_dir: Path) -> bool:
     """Whether the source filter's index is in the work folder (opening the job's video is quick)."""
     if source_filter is SourceFilter.BESTSOURCE:
         return any(index_dir.glob(f"{glob.escape(source.name)}.*.bsindex"))  # + the track number
-    ext = ".lwi" if source_filter is SourceFilter.LSMASH else ".ffindex"
-    return (index_dir / (source.name + ext)).is_file()
+    if source_filter is SourceFilter.LSMASH:
+        return (index_dir / (source.name + ".lwi")).is_file()
+    return ffms2_index(source, index_dir).is_file()
 
 
 def processing_lines(settings: VideoSettings) -> list[str]:

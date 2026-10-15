@@ -29,6 +29,7 @@ src/videoforge/
       script.py          VideoSettings -> .vpy text (one generator for preview and encode)
       vs.py              VapourSynth: plugin path, clip cache, info, RGB frames (run in the preview worker)
       preview.py         The preview worker: a child process holding the clips; JSON over stdin/stdout
+      ffindex.py         FFMS2's index with progress, through the plugin's own ffms2.dll (ctypes)
       crop.py            Auto-crop detection (RGB lightness on sampled lines, read straight from YUV)
       encoders.py        x264 / x265: settings -> argv (1 or 2 pass), progress parsing
       qpf.py             AutoQPF: chapters -> qpf + chapter file
@@ -204,10 +205,14 @@ defaults, audio encoder settings, and the checks on the finished file.
 - One user, one machine. No auth (binds to 127.0.0.1 by default).
 - Jobs run one at a time; the queue survives restarts.
 - Batch index (Queue toolbar / batch panel): the index lane runs each job's `script` and `index` steps
-  (`build.index_steps`, vspipe `--info` in its own process), one job at a time, next to the encode
-  queue. They're recorded in the job's steps, so the encode reuses them; the index step counts as done
-  only while its index file is there (`script.index_exists`). Jobs waiting for a probe or an auto-crop
-  wait their turn; a queued encode takes a job out of the lane; the preview's clip routes and auto-crop
-  wait while a job is being indexed (never two indexers on one source). Not kept across restarts.
+  (`build.index_steps`), one job at a time, next to the encode queue. The index step is vspipe `--info`
+  (L-SMASH, BestSource: their progress lines are read), or `core/video/ffindex.py` for FFMS2, whose
+  Source() indexes silently: it builds the index through the plugin's ffms2.dll with a progress callback,
+  keeps a valid one, and depends on the source alone (a crop edit doesn't index again). The steps are
+  recorded in the job's steps, so the encode reuses them; the index step counts as done only while its
+  index file is there (`script.index_exists`). Jobs waiting for a probe or an auto-crop wait their turn; a
+  queued encode takes a job out of the lane. `Entry.source_lock` is held by the lane, auto-crop and a
+  preview request for a clip the worker doesn't hold yet: never two indexers on one source. Opening one
+  job shows its Video tab, which indexes it if needed (as before). Not kept across restarts.
 - The CLI isn't kept in step with new features (the server and core are the product).
 - Docker later: Linux binaries for the toolchain; qaac needs a decision (Windows-only).

@@ -52,6 +52,8 @@ class CancelToken:
 
 
 def tool_name(argv: Sequence[str]) -> str:
+    if len(argv) > 2 and argv[1] == "-m":  # one of ours, run as `python -m videoforge...ffindex`
+        return argv[2].rsplit(".", 1)[-1]
     return os.path.splitext(os.path.basename(argv[0]))[0].lower()
 
 

@@ -281,6 +281,12 @@ class Preview:
 
     close = restart
 
+    def has(self, script: str, slot: str | None = None) -> bool:
+        """Whether the worker holds this clip now: a request for it won't load (or index) the source."""
+        with self._lock:
+            worker = self._worker
+        return worker is not None and not worker.dead and worker.has(slot or script, script)
+
     def _call(self, op: str, script: str, slot: str | None, **args: Any) -> tuple[dict[str, Any], bytes]:
         key = slot or script
         worker = self._get()
