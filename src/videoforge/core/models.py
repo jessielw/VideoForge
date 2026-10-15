@@ -292,11 +292,39 @@ class AudioSlot:
 
 
 @dataclass(slots=True)
-class TemplateAudio:
-    """A template's audio: slot n is for the source's nth audio track. Slots past the source's
-    tracks are ignored; added audio files aren't counted (they keep their own settings)."""
+class AudioRule:
+    """One rule of a template's audio (by rules): the source tracks it matches (an empty list or None
+    = any) and what they get, as a slot gives. A track counts as commentary / audio description by its
+    flag or its title (template.audio_traits). first_only: only the first matching track (source order)
+    takes the rule; the others go on to the next rules."""
 
+    languages: list[str] = field(default_factory=list)  # "en" matches en-US too; "es-419" only itself
+    original: bool | None = None  # in the job's original language (or not)
+    codecs: list[AudioCodec] = field(default_factory=list)
+    min_channels: int | None = None  # compared with the track's channel count (5.1 = 6)
+    max_channels: int | None = None
+    commentary: bool | None = None
+    visual_impaired: bool | None = None
+    first_only: bool = False
+    track: TrackOverride = field(default_factory=TrackOverride)  # exclude = leave out
+    extra: list[TrackOverride] = field(default_factory=list)  # more outputs from each matched track
+
+
+class AudioMatch(StrEnum):
+    POSITION = "position"  # slot n is for the source's nth audio track
+    RULES = "rules"  # each track takes the first rule it matches
+
+
+@dataclass(slots=True)
+class TemplateAudio:
+    """A template's audio, for the source's audio tracks (added audio files keep their own settings).
+    By position: slot n is for the source's nth audio track; slots past the source's tracks are
+    ignored. By rules: each track takes the first rule it matches. `others`: the tracks past the slots,
+    or no rule matches (the Templates page sets it to leave out for rules)."""
+
+    mode: AudioMatch = AudioMatch.POSITION
     slots: list[AudioSlot] = field(default_factory=list)
+    rules: list[AudioRule] = field(default_factory=list)
     others: OtherTracks = OtherTracks.KEEP
 
 

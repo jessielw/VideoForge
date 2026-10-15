@@ -359,14 +359,31 @@ export interface Template {
   audio: TemplateAudio | null // null: the template leaves each job's audio alone
   subs?: TemplateSubs | null // null (or missing, from before subtitle rules): ... and its subtitles
 }
-// A template's audio: slot n is for the source's nth audio track (extra slots are ignored); tracks
-// past the slots are kept as the profile decides or left out. `extra` = more outputs from the track.
+// A template's audio (source tracks only), by position or by rules. Position: slot n is for the
+// source's nth audio track (extra slots are ignored). Rules: each track takes the first rule it
+// matches (empty lists and null = any; commentary/AD by flag or title); a first_only rule goes to the
+// first match only. `others`: tracks past the slots / no rule matches. `extra` = more outputs.
 export interface AudioSlot {
   track: TrackOverride
   extra: TrackOverride[]
 }
+export type AudioCodec = 'aac' | 'ac3' | 'eac3' | 'truehd' | 'dts' | 'dts_hd_ma' | 'dts_hd_hra' | 'lpcm' | 'flac' | 'opus' | 'other'
+export interface AudioRule {
+  languages: string[]
+  original: boolean | null // in the job's original language
+  codecs: AudioCodec[]
+  min_channels: number | null // channel count: 5.1 = 6
+  max_channels: number | null
+  commentary: boolean | null
+  visual_impaired: boolean | null // audio description
+  first_only: boolean
+  track: TrackOverride // exclude = leave out
+  extra: TrackOverride[]
+}
 export interface TemplateAudio {
+  mode: 'position' | 'rules'
   slots: AudioSlot[]
+  rules: AudioRule[]
   others: 'keep' | 'exclude'
 }
 export type SubFormat = 'srt' | 'pgs' | 'ass' | 'vobsub' | 'tx3g' | 'other'

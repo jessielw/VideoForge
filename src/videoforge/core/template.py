@@ -2,9 +2,11 @@
 StaxRip's templates hold a project's settings. Applied when jobs are added, or to a batch.
 
 The crop is per source, so a template says what to do with it instead (CropMode). Its audio is by
-position (TemplateAudio): settings for the source's 1st, 2nd, ... audio track, which become the
-job's track overrides once the source's tracks are known (apply_audio), each made to fit its track
-(fit_audio), so one template suits a season's 5.1 and stereo episodes. Its subtitles are rules
+position (TemplateAudio.slots: settings for the source's 1st, 2nd, ... audio track) or by rules
+(TemplateAudio.rules: each track takes the first rule matching its language, codec, channels and
+traits), and becomes the job's track overrides once the source's tracks are known (apply_audio),
+each made to fit its track (fit_audio), so one template suits a season's 5.1 and stereo episodes
+and, with rules, a season whose track order shifts. Its subtitles are rules
 (TemplateSubs): each track, added files too, takes the first rule matching its language, format and
 traits (apply_subs), so "forced English first and default, then full English, nothing else" fits
 every episode whatever its track list.
@@ -24,6 +26,8 @@ from videoforge.core.job import JobSpec
 from videoforge.core.models import (
     AudioAction,
     AudioCodec,
+    AudioMatch,
+    AudioRule,
     AudioTrack,
     OtherTracks,
     Overrides,
@@ -76,10 +80,20 @@ class Template:
             spec.subs_template = copy.deepcopy(self.subs)
 
 
-def apply_audio(overrides: Overrides, audio: TemplateAudio, source_audio: list[AudioTrack]) -> Overrides:
-    """The job's overrides with its source audio set from the template: the earlier choices for those
-    tracks (settings, copies, order) are replaced; slot n goes to the nth track, extra slots are ignored.
-    Each slot is fitted to its track (fit_audio). Added audio files and subtitles keep theirs."""
+def apply_audio(overrides: Overrides, audio: TemplateAudio, source_audio: list[AudioTrack],
+                original_language: str | None = None) -> Overrides:
+    """The job's overrides with its source audio set from the template, by position or by rules: the
+    earlier choices for those tracks (settings, copies, order) are replaced. Each output is fitted to
+    its track (fit_audio). Added audio files and subtitles keep theirs. original_language is the job's
+    (rules can ask for it)."""
+    if audio.mode is AudioMatch.RULES:
+        return apply_audio_rules(overrides, audio, source_audio, original_language)
+    return apply_audio_slots(overrides, audio, source_audio)
+
+
+def apply_audio_slots(overrides: Overrides, audio: TemplateAudio, source_audio: list[AudioTrack]) -> Overrides:
+    """By position: slot n goes to the nth track, extra slots are ignored; tracks past the slots are
+    kept as they are or left out."""
     keys = [track_key(t) for t in source_audio]
     ours = set(keys)
     copies = [c for c in overrides.copies if copy_base(c)[0] not in ours]
@@ -131,12 +145,17 @@ def sub_traits(track: SubTrack) -> dict[str, bool]:
             "commentary": track.commentary or bool(_COMMENTARY_RE.search(track.title))}
 
 
+def language_matches(language: str, wanted: str) -> bool:
+    """A rule's language ("en", "eng", "English") against a track's: a base language matches its
+    regions too (en matches en-US), a region only itself (es-419)."""
+    w = lang.from_mediainfo_name(wanted.strip())
+    return language == w if "-" in w else lang.base_of(language) == lang.base_of(w)
+
+
 def sub_matches(rule: SubRule, track: SubTrack) -> bool:
-    if rule.languages:
-        wanted = [lang.from_mediainfo_name(x) for x in rule.languages if x.strip()]  # "en", "eng", "English"
-        if wanted and not any(track.language == w if "-" in w else lang.base_of(track.language) == lang.base_of(w)
-                              for w in wanted):
-            return False
+    wanted = [x for x in rule.languages if x.strip()]
+    if wanted and not any(language_matches(track.language, w) for w in wanted):
+        return False
     if rule.formats and track.format not in rule.formats:
         return False
     traits = sub_traits(track)
@@ -176,6 +195,82 @@ def apply_subs(overrides: Overrides, subs: TemplateSubs, tracks: list[SubTrack])
                 ov.flags = {**ov.flags, "default": False}
     order = [k for k in overrides.order or [] if k not in ours] + kept
     return replace(overrides, tracks=out, order=order or None)
+
+
+_AD_RE = re.compile(r"(?i)audio.description|\bdescri(ptive|bed)\b")
+_AD_SHORT_RE = re.compile(r"\bAD\b")  # case-sensitive: "AD", not "ad" in a word or a name
+
+
+def audio_traits(track: AudioTrack) -> dict[str, bool]:
+    """Commentary / audio description as a template's rules see them: the track's flag, or its title
+    saying so ("Director's Commentary", "English AD", "Descriptive Audio")."""
+    described = bool(_AD_RE.search(track.title) or _AD_SHORT_RE.search(track.title))
+    return {"commentary": track.commentary or bool(_COMMENTARY_RE.search(track.title)),
+            "visual_impaired": track.visual_impaired or described}
+
+
+def audio_matches(rule: AudioRule, track: AudioTrack, original_language: str | None = None) -> bool:
+    wanted = [x for x in rule.languages if x.strip()]
+    if wanted and not any(language_matches(track.language, w) for w in wanted):
+        return False
+    if rule.original is not None:  # an unknown language is never the original
+        known = original_language not in (None, "", "und") and track.language != "und"
+        if (known and language_matches(track.language, original_language or "")) != rule.original:
+            return False
+    if rule.codecs and track.codec not in rule.codecs:
+        return False
+    channels = track.layout.channels
+    if (rule.min_channels and channels < rule.min_channels) or (rule.max_channels and channels > rule.max_channels):
+        return False
+    traits = audio_traits(track)
+    return all(want is None or traits[key] == want for key, want in
+               (("commentary", rule.commentary), ("visual_impaired", rule.visual_impaired)))
+
+
+def apply_audio_rules(overrides: Overrides, audio: TemplateAudio, source_audio: list[AudioTrack],
+                      original_language: str | None) -> Overrides:
+    """By rules: each track (source order) takes the first rule it matches, skipping a first_only rule
+    an earlier track took, and gets its settings and more outputs (each fitted to it); one no rule
+    matches is kept as it is or left out (audio.others). Kept tracks are ordered by rule, then source
+    order, each followed by its more outputs; unmatched kept ones last. One default at most: when a
+    rule sets it, the first kept output to get it keeps it and every other one has it off."""
+    keys = [track_key(t) for t in source_audio]
+    ours = set(keys)
+    copies = [c for c in overrides.copies if copy_base(c)[0] not in ours]
+    out = {k: v for k, v in overrides.tracks.items() if copy_base(k)[0] not in ours}
+    taken: set[int] = set()  # the rules a track took
+    ranked: list[tuple[int, int, list[str]]] = []  # (rule, source position, its output keys) of the kept tracks
+    for pos, (key, track) in enumerate(zip(keys, source_audio, strict=True)):
+        rule = next((i for i, r in enumerate(audio.rules)
+                     if not (r.first_only and i in taken) and audio_matches(r, track, original_language)), None)
+        if rule is None:
+            if audio.others is OtherTracks.EXCLUDE:
+                out[key] = TrackOverride(exclude=True)
+            else:
+                ranked.append((len(audio.rules), pos, [key]))
+            continue
+        taken.add(rule)
+        r = audio.rules[rule]
+        ov = fit_audio(r.track, track)
+        if not ov.empty:
+            out[key] = ov
+        if ov.exclude:
+            continue
+        made = [key]
+        for n, extra in enumerate(r.extra, 1):
+            made.append(f"{key}+{n}")
+            out[made[-1]] = fit_audio(extra, track)
+        copies += made[1:]
+        ranked.append((rule, pos, made))
+    kept = [key for _, _, made in sorted(ranked) for key in made]
+    first = next((key for key in kept if key in out and out[key].flags.get("default")), None)
+    if first is not None:
+        for key in kept:
+            if key != first:
+                ov = out.setdefault(key, TrackOverride())
+                ov.flags = {**ov.flags, "default": False}
+    order = [k for k in overrides.order or [] if copy_base(k)[0] not in ours] + kept
+    return replace(overrides, tracks=out, copies=copies, order=order or None, audio_track_ids=None)
 
 
 def template_choice(overrides: Overrides, keys: list[str]) -> TemplateChoice:

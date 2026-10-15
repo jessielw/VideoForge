@@ -1,8 +1,8 @@
 <script lang="ts">
   // Templates, StaxRip-style: a job's whole run (video, encoder, container, AutoQPF, what to do with
   // the crop, audio, subtitle rules). The profile's defaults are built in; click one to apply it; save
-  // this job's settings as one (replacing one keeps its subtitle rules: they're set on the Templates
-  // page); delete your own. The button names the template the job's settings match, if any.
+  // this job's settings as one (its audio by position; replacing one keeps its subtitle rules and audio
+  // rules: they're set on the Templates page); delete your own. The button names the template the job's settings match, if any.
   import { api } from '../lib/api'
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
@@ -41,6 +41,9 @@
   // a profile without a track editor chooses the audio by its own rules, so there's none to save
   const trackEditor = $derived(app.profiles.find(p => p.id === profile)?.track_editor ?? false)
   const userNames = $derived(new Set(app.presets.template.map(p => p.name)))
+  // replacing a template whose audio is by rules keeps them (rules can't be made from a job)
+  const replaced = $derived(app.presets.template.find(p => p.name === name.trim())?.data ?? null)
+  const keepsRules = $derived(replaced?.audio?.mode === 'rules')
   const current = $derived<Template>({
     video: spec.video,
     encoder: spec.encoder,
@@ -59,7 +62,8 @@
     })
     const copiesOf = (key: string) =>
       o.copies.filter(c => c.startsWith(`${key}+`)).sort((a, b) => +a.split('+').pop()! - +b.split('+').pop()!)
-    return { slots: audioKeys.map(k => ({ track: strip(o.tracks[k]), extra: copiesOf(k).map(c => strip(o.tracks[c])) })), others: 'keep' }
+    const slots = audioKeys.map(k => ({ track: strip(o.tracks[k]), extra: copiesOf(k).map(c => strip(o.tracks[c])) }))
+    return { mode: 'position', slots, rules: [], others: 'keep' }
   }
   const matched = $derived(choices.find(c => same(c.data, current))?.name ?? null)
   const crop = $derived(spec.video.crop)
@@ -91,8 +95,9 @@
     if (!n) return
     busy = true
     try {
-      const subs = app.presets.template.find(p => p.name === n)?.data.subs ?? null
-      app.presets = await api.savePreset('template', n, { ...structuredClone($state.snapshot(current)), subs })
+      const old = app.presets.template.find(p => p.name === n)?.data
+      const audio = old?.audio?.mode === 'rules' ? old.audio : current.audio
+      app.presets = await api.savePreset('template', n, { ...structuredClone($state.snapshot(current)), audio, subs: old?.subs ?? null })
       name = ''
       error = ''
     } catch (e) {
@@ -163,7 +168,9 @@
         <option value="fixed">Crop: this job's ({cropText(crop)}) on every job</option>
         <option value="auto">Crop: detect it for each job</option>
       </NativeSelect>
-      {#if audioKeys.length && trackEditor}
+      {#if keepsRules}
+        <p class="text-xs text-muted-foreground">Audio: {name.trim()}'s rules are kept.</p>
+      {:else if audioKeys.length && trackEditor}
         <label class="flex items-center gap-2 text-xs text-muted-foreground">
           <Checkbox bind:checked={withAudio} />
           This job's audio too ({audioKeys.length} track{audioKeys.length === 1 ? '' : 's'}, by position)

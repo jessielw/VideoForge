@@ -44,7 +44,7 @@ from videoforge.core.job import (
     probe_spec,
 )
 from videoforge.core.jobs import ProbedInputs, external_tracks
-from videoforge.core.models import JobInputs, Overrides, Plan, Severity, track_key
+from videoforge.core.models import AudioMatch, JobInputs, Overrides, Plan, Severity, track_key
 from videoforge.core.pipeline.build import index_steps
 from videoforge.core.pipeline.run import missing_inputs, run_job
 from videoforge.core.pipeline.steps import StepProgress, run_steps
@@ -340,8 +340,10 @@ class JobQueue:
             return False
         if self.profile(e).track_editor:
             if s.audio_template is not None:
+                if s.audio_template.mode is AudioMatch.RULES and s.overrides.original_language is None:
+                    self._replan(e)  # rules can ask for the original language: pin the profile's guess first
                 audio = e.probed.source.audio
-                s.overrides = apply_audio(s.overrides, s.audio_template, audio)
+                s.overrides = apply_audio(s.overrides, s.audio_template, audio, s.overrides.original_language)
                 s.audio_from_template = template_choice(s.overrides, [track_key(t) for t in audio])
             if s.subs_template is not None:
                 subs = e.probed.source.subs + e.probed.external_subs

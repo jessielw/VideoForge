@@ -525,6 +525,24 @@ def test_template_audio(tmp_path):
         assert chosen["copies"] == [] and chosen["tracks"]["id:2"]["exclude"] and chosen["tracks"]["id:1"]["action"] == "flac"
 
 
+def test_template_audio_rules(tmp_path):
+    """Audio by rules once the tracks are known: "original" is the profile's guess (the first track's
+    language, ja), pinned before the rules run; output in rule order, one default."""
+    make_files(tmp_path, "S01E01")  # ja FLAC 2.0, en TrueHD 5.1
+    template = {"audio": {"mode": "rules", "others": "exclude", "rules": [
+        {"original": False, "min_channels": 6, "track": {"action": "ddp", "title": "English", "flags": {"default": True}}},
+        {"original": True, "first_only": True, "track": {"title": "Japanese", "flags": {"default": True}}},
+    ]}}
+    with make_client(tmp_path) as client:
+        (job_id,) = add(client, tmp_path, template=template, original_language=None)
+        job = wait_for(client, job_id, "ready", "warn")
+        assert [(a["action"], a["title"], a["default"]) for a in job["plan"]["audio"]] == [
+            ("ddp", "English", True), ("copy", "Japanese", False)]
+        spec = job["spec"]
+        assert spec["overrides"]["original_language"] == "ja" and spec["audio_template"] is None
+        assert spec["overrides"]["order"] == ["id:2", "id:1"] and sorted(spec["audio_from_template"]["tracks"]) == ["id:1", "id:2"]
+
+
 def test_template_audio_fits_each_track(tmp_path):
     """One template suits sources with less audio: a slot asking for more than its track has is fitted
     to it instead of blocking the job. The same settings set by hand still block."""

@@ -18,8 +18,8 @@ src/videoforge/
     profile.py           Profile ABC: plan rules, checks, track properties, video defaults
     jobs.py              probe_inputs / plan_job
     job.py               JobSpec (what to build, persisted) + JobState (runtime, persisted)
-    template.py          Template: a job's whole run (video, crop mode, encoder, audio by position, subtitle
-                         rules, container, AutoQPF); apply() to a spec, apply_audio() / apply_subs() once the
+    template.py          Template: a job's whole run (video, crop mode, encoder, audio by position or rules,
+                         subtitle rules, container, AutoQPF); apply() to a spec, apply_audio() / apply_subs() once the
                          source's tracks are known
     plan_io.py           Type-driven JSON codec for every model
     disks.py             Which physical disk a path is on (the index lane waits for an encode on its disk)
@@ -88,13 +88,21 @@ added, to one job, or to a batch; a template applied after a job's own edits rep
 - **Auto crop:** `JobSpec.autocrop` is set; once the job is probed it waits in the index lane, which
   indexes the source and then runs the preview's auto-crop (status "cropping", not runnable meanwhile).
   A crop set by hand wins.
-- **Audio, by position:** slot n is for the source's nth audio track (copy or an encode, title, flags,
-  leave out, more outputs from the same track); slots past a source's tracks are ignored and tracks
-  past the slots are kept or left out. It waits in `JobSpec.audio_template` until the tracks are known,
-  then becomes the job's track overrides (added audio files and subtitles keep theirs). Each slot is
-  fitted to its track (`fit_audio`): more channels than the track has -> the encode's default layout,
-  DDP Atmos without an Atmos track -> DDP, and the bitrate goes back to the default with a changed layout
-  or when the encode won't take it; the same settings set by hand still block.
+- **Audio, by position or by rules** (`TemplateAudio.mode`, source tracks only). By position: slot n
+  is for the source's nth audio track (copy or an encode, title, flags, leave out, more outputs from
+  the same track); slots past a source's tracks are ignored and tracks past the slots are kept or left
+  out. By rules (`AudioRule`), for a season whose track order shifts: each track takes the first rule
+  matching its language (as subtitles), the job's original language (or not), codec, channels (at
+  least / at most) and traits (commentary / audio description by flag or title, `audio_traits`), and
+  gets what a slot gives; an "only the first" rule goes to the first matching track and the others go
+  on to the next rules. Kept tracks go in rule order (each followed by its more outputs), unmatched
+  kept ones last, and one default at most (as subtitles). It waits in `JobSpec.audio_template` until
+  the tracks are known, then becomes the job's track overrides (added audio files and subtitles keep
+  theirs); for rules the profile's original-language guess is pinned first. Each output is fitted to
+  its track (`fit_audio`): more channels than the track has -> the encode's default layout, DDP Atmos
+  without an Atmos track -> DDP, and the bitrate goes back to the default with a changed layout or
+  when the encode won't take it; the same settings set by hand still block. A job's Template menu
+  saves its audio by position; replacing a template whose audio is by rules keeps them.
 - **Subtitles, by rules:** position doesn't carry across sources, so subtitles are an ordered rule list
   (`TemplateSubs`): each track, source and added files alike, takes the first rule matching its language
   ("en" matches en-US, "es-419" only itself), format and traits (forced / SDH / commentary by flag or
