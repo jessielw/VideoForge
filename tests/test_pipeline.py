@@ -521,3 +521,32 @@ def test_process_run_tools_die_with_a_hard_killed_server():
         helper.kill()
         for pid in pids:
             subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, check=False)
+
+
+def test_progress_only_lines_are_logged_every_tenth(tmp_path: Path):
+    from videoforge.core.pipeline.steps import Step, run_steps
+
+    out = tmp_path / "index.ffindex"
+
+    def runner(argvs, log, cancel):
+        for pct in range(101):
+            log(f"[ffindex] ffms2 index progress {pct}%")
+        log("[ffindex] ffms2 index progress 100%")
+        for pct in (0, 5, 50, 100):
+            log(f"[mkvmerge] Progress: {pct}%")
+        log("[x264] [50.0%] 120/240 frames, 30.00 fps")  # an encoder's line says more: always kept
+        out.write_text("idx", encoding="utf-8")
+
+    lines: list[str] = []
+    fractions: list[float] = []
+    step = Step("index", "Index", argvs=(("ffindex",),), outputs=(out,))
+    run_steps([step], {}, log=lines.append, runner=runner, progress=lambda p: fractions.append(p.fraction))
+    index_lines = [line for line in lines if "index progress" in line]
+    assert [line.rsplit(" ", 1)[1] for line in index_lines] == [f"{n}%" for n in range(0, 101, 10)]
+    assert [line for line in lines if "Progress:" in line] == [
+        "[mkvmerge] Progress: 0%",
+        "[mkvmerge] Progress: 50%",
+        "[mkvmerge] Progress: 100%",
+    ]
+    assert any("[x264]" in line for line in lines)
+    assert len(fractions) > 50  # the progress bar still sees every line

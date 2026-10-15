@@ -28,6 +28,8 @@ Runner = Callable[[Sequence[Sequence[str]], LogFn, CancelToken | None], None]
 _MKV_PROGRESS = re.compile(r"Progress:\s*(\d+)%")
 # Source filters indexing: L-SMASH "Creating lwi index file 45%", BestSource "track #0 index progress 45%"
 _INDEX_PROGRESS = re.compile(r"index (?:file|progress) (\d+)%")
+# Lines that only say how far a step is (indexers, mkvmerge): logged at every 10% (the progress bar sees them all)
+_THIN_PROGRESS = re.compile(r"(?:index (?:file|progress)|(?:^|\] )Progress:)\s*(\d+)%")
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,9 +157,17 @@ def run_steps(
                 step.call(step_log)
             else:
                 last = [-1.0]
+                shown: dict[str, int] = {}  # per tool: the last tenth of a thinned progress line logged
 
-                def tool_log(line: str, i: int = i, step: Step = step, last: list[float] = last) -> None:
-                    step_log(line)
+                def tool_log(
+                    line: str, i: int = i, step: Step = step, last: list[float] = last, shown: dict[str, int] = shown
+                ) -> None:
+                    m = _THIN_PROGRESS.search(line)
+                    tool = line.partition("]")[0]
+                    if m is None or int(m.group(1)) // 10 > shown.get(tool, -1):
+                        step_log(line)
+                        if m is not None:
+                            shown[tool] = int(m.group(1)) // 10
                     frac = line_progress(line)
                     if frac is not None and frac - last[0] >= 0.002:  # throttle progress events
                         last[0] = frac

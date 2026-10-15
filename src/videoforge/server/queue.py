@@ -685,11 +685,14 @@ class JobQueue:
             logger.exception("%s: the run raised", e.spec.name)
             result = JobResult(e.plan, JobStatus.FAILED, error=f"{type(ex).__name__}: {ex}")
             e.state.status, e.state.error = result.status, result.error
-        log(
-            f"{e.spec.name}: {result.status.value}"
-            + (f" -> {result.output}" if result.output else "")
-            + (f" ({result.error})" if result.error else "")
-        )
+        if result.status is JobStatus.DONE:
+            log(f"Job complete: {result.output}")
+        else:
+            log(
+                f"{e.spec.name}: {result.status.value}"
+                + (f" -> {result.output}" if result.output else "")
+                + (f" ({result.error})" if result.error else "")
+            )
         logger.log(
             logging.INFO if result.status is JobStatus.DONE else logging.WARNING,
             "Job %s: %s%s%s",
@@ -919,7 +922,7 @@ class JobQueue:
         e.log.append(line)
         if file is not None:
             try:
-                file.write(line + "\n")
+                file.write(f"{datetime.now():%H:%M:%S} {line}\n")
             except OSError:
                 pass
         step = e.current_step
