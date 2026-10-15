@@ -108,7 +108,7 @@ def _handle(cache: Any, req: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
             return {"pict": str(pict), "frames": clip.num_frames}, image
         if op == "autocrop":
             return {"crop": asdict(autocrop.detect(clip, samples=int(req.get("samples", 20))))}, b""
-    except Exception as e:  # noqa: BLE001 - a filter failing on a frame; the script itself loaded
+    except Exception as e:  # a filter failing on a frame; the script itself loaded
         return {"error": "frame", "message": f"Frame {n}: {type(e).__name__}: {e}"}, b""
     return {"error": "internal", "message": f"Unknown request {op!r}"}, b""
 
@@ -138,7 +138,7 @@ def main() -> None:
     def run(req: dict[str, Any]) -> None:
         try:
             reply, payload = _handle(cache, req)
-        except Exception as e:  # noqa: BLE001 - reported to the server, the worker carries on
+        except Exception as e:  # reported to the server, the worker carries on
             reply, payload = {"error": "internal", "message": f"{type(e).__name__}: {e}"}, b""
         with lock:
             _send(out, {"id": req["id"], **reply}, payload)

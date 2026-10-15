@@ -24,7 +24,7 @@ def _ms(timestamp: str) -> int:
 
 def from_xml(path: Path) -> list[Chapter]:
     """The first edition's chapter atoms (hidden ones skipped)."""
-    root = ET.parse(path).getroot()
+    root = ET.parse(path).getroot()  # noqa: S314 (a chapter file the user picked)
     edition = root.find("EditionEntry")
     out: list[Chapter] = []
     for atom in edition.findall("ChapterAtom") if edition is not None else []:

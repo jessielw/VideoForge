@@ -280,7 +280,7 @@ def output_matches_plan(plan: Plan, output: SourceInfo) -> list[Issue]:
                     Severity.BLOCK, f"plan.{code}_count", f"Expected {len(wanted)} {label} track(s), found {len(found)}"
                 )
             )
-        for i, (want, got) in enumerate(zip(wanted, found), 1):
+        for i, (want, got) in enumerate(zip(wanted, found, strict=False), 1):
             titles = muxer.carries_titles
             w = (lang.normalize(want.language), want.title if titles else "", {k: getattr(want, k) for k in keys})
             g = (lang.normalize(got.language), got.title if titles else "", {k: getattr(got, k) for k in keys})

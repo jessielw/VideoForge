@@ -157,7 +157,7 @@ def to_yuv420(rgb: np.ndarray, bits: int, matrix: int, full: bool) -> tuple[np.n
     peak, s = (1 << bits) - 1, 1 << (bits - 8)
     ys, cs, yo = (peak, peak, 0) if full else (219 * s, 224 * s, 16 * s)
     dtype = np.uint8 if bits == 8 else np.uint16
-    to = lambda a, scale, off: np.round(a * scale + off).astype(dtype)  # noqa: E731
+    to = lambda a, scale, off: np.round(a * scale + off).astype(dtype)
     return to(y, ys, yo), to(cb[::2, ::2], cs, 1 << (bits - 1)), to(cr[::2, ::2], cs, 1 << (bits - 1))
 
 

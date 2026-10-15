@@ -100,7 +100,7 @@ def main() -> None:
         sys.exit("usage: python -m videoforge.core.video.ffindex <source> <cachefile>")
     try:
         make_index(Path(sys.argv[1]), Path(sys.argv[2]))
-    except Exception as e:  # noqa: BLE001 - the message is the step's error
+    except Exception as e:  # the message is the step's error
         print(e, file=sys.stderr)
         sys.exit(1)
 

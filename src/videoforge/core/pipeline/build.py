@@ -52,7 +52,8 @@ def mp4_chapters_step(plan: Plan, work: Path) -> Step | None:
     if given is None and not plan.source.has_chapters:
         return None
     src = given or plan.source.path
-    assert src is not None
+    if src is None:  # has_chapters says the source has a path
+        raise ValueError("No chapters to convert")
     out = work / "chapters_mp4.txt"
 
     def convert(log: LogFn) -> None:

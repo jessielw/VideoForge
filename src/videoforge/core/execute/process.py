@@ -139,7 +139,7 @@ def run(argvs: Sequence[Sequence[str]], log: LogFn, cancel: CancelToken | None =
 
     failed = [
         (tool_name(argv), _signed(proc.returncode), tail)
-        for argv, proc, tail in zip(argvs, procs, tails)
+        for argv, proc, tail in zip(argvs, procs, tails, strict=True)
         if proc.returncode not in _OK_CODES.get(tool_name(argv), {0})
     ]
     if failed:

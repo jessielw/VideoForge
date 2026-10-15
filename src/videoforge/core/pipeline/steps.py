@@ -65,7 +65,7 @@ class Step:
             except OSError:
                 stats.append([str(p), None, None])
         doc = json.dumps([self.id, self.argvs, self.key, stats], default=str)
-        return hashlib.sha1(doc.encode("utf-8")).hexdigest()
+        return hashlib.sha1(doc.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)

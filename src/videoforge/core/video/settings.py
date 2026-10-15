@@ -54,7 +54,7 @@ class Encoder(StrEnum):
 class RateControl(StrEnum):
     CRF = "crf"  # one pass, constant quality
     ABR = "abr"  # one pass, average bitrate
-    TWO_PASS = "2pass"  # two passes, average bitrate
+    TWO_PASS = "2pass"  # noqa: S105 (two passes, average bitrate)
 
 
 @dataclass(slots=True)

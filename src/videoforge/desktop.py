@@ -186,7 +186,7 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
     )
     try:
         tray.run_detached()
-    except Exception as ex:  # noqa: BLE001  no tray (e.g. some Linux desktops): closing the window quits
+    except Exception as ex:  # no tray (e.g. some Linux desktops): closing the window quits
         print(f"No tray icon ({ex}); closing the window quits")
         tray = None
     app.state.show_window = show  # a second `serve --window` brings this one up

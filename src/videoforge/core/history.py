@@ -44,7 +44,7 @@ class JobHistory:
 
     def _path(self, output: Path) -> Path:
         key = os.path.normcase(str(output.resolve()))
-        return self.root / (hashlib.sha1(key.encode("utf-8")).hexdigest()[:16] + ".json")
+        return self.root / (hashlib.sha1(key.encode("utf-8"), usedforsecurity=False).hexdigest()[:16] + ".json")
 
     def record(self, result: JobResult) -> JobRecord | None:
         """Save a finished job; only jobs that wrote an output (done or invalid) are kept."""

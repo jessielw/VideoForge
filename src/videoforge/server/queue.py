@@ -329,7 +329,7 @@ class JobQueue:
     def _probe(self, e: Entry) -> None:
         try:
             probed = self.services.probe(e.spec, self.app)
-        except Exception as ex:  # noqa: BLE001 - shown on the job
+        except Exception as ex:  # shown on the job
             with self._lock:
                 e.probing, e.probe_error = False, f"{type(ex).__name__}: {ex}"
             self._log(e, f"Probe failed: {e.probe_error}")
@@ -387,7 +387,7 @@ class JobQueue:
         self._changed(e)
         try:
             crop = self.services.detect_crop(e.spec)
-        except Exception as ex:  # noqa: BLE001 - shown in the job's log; the crop stays as it was
+        except Exception as ex:  # shown in the job's log; the crop stays as it was
             self._log(e, f"Auto-crop failed: {type(ex).__name__}: {ex}")
             crop = None
         with self._lock:
@@ -412,7 +412,7 @@ class JobQueue:
             e.plan = plan_spec(e.spec, e.probed, self.profile(e), self.app.tools)
             if e.spec.overrides.original_language is None:  # pin the guess so it survives edits
                 e.spec.overrides.original_language = e.plan.original_language
-        except Exception as ex:  # noqa: BLE001 - a profile bug shouldn't take the queue down
+        except Exception as ex:  # a profile bug shouldn't take the queue down
             e.plan, e.probe_error = None, f"Planning failed: {type(ex).__name__}: {ex}"
 
     def replan_all(self) -> None:
@@ -604,7 +604,8 @@ class JobQueue:
             self._queue_changed()
 
     def _run(self, e: Entry) -> None:
-        assert e.plan is not None
+        if e.plan is None:
+            raise RuntimeError(f"{e.spec.name}: run without a plan")
         with self._lock:
             e.queued, e.running, e.progress = False, True, None
             self._cancel = CancelToken()
@@ -666,7 +667,7 @@ class JobQueue:
                 on_record=on_record,
                 on_step=on_step,
             )
-        except Exception as ex:  # noqa: BLE001 - a bug must not kill the queue
+        except Exception as ex:  # a bug must not kill the queue
             result = JobResult(e.plan, JobStatus.FAILED, error=f"{type(ex).__name__}: {ex}")
             e.state.status, e.state.error = result.status, result.error
         log(
@@ -844,7 +845,8 @@ class JobQueue:
             with self._lock:
                 steps = index_steps(e.spec, self.app)
                 cancel = self._index_cancel
-            assert cancel is not None
+            if cancel is None:
+                raise RuntimeError("index lane: no cancel event")
             if not e.source_lock.acquire(blocking=False):
                 log("Waiting for the preview, which is indexing this source")
                 while not e.source_lock.acquire(timeout=0.2):
@@ -871,7 +873,7 @@ class JobQueue:
             error = "Cancelled"
         except (ToolError, OSError, ValueError) as ex:
             error = str(ex)
-        except Exception as ex:  # noqa: BLE001 - a bug must not stop the lane
+        except Exception as ex:  # a bug must not stop the lane
             error = f"{type(ex).__name__}: {ex}"
         log(f"{e.spec.name}: index " + (f"failed ({error})" if error else "done"))
         if log_file is not None:

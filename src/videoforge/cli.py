@@ -210,13 +210,14 @@ def _bring_up_running(url: str, open_browser: bool) -> bool:
     import webbrowser
 
     try:
-        with urllib.request.urlopen(url + "/api/health", timeout=1) as r:
+        with urllib.request.urlopen(url + "/api/health", timeout=1) as r:  # noqa: S310 (our own http URL)
             if not json.load(r).get("ok"):
                 return False
     except (OSError, ValueError):
         return False
     try:
-        urllib.request.urlopen(urllib.request.Request(url + "/api/window/show", data=b"", method="POST"), timeout=5)
+        show = urllib.request.Request(url + "/api/window/show", data=b"", method="POST")  # noqa: S310 (http)
+        urllib.request.urlopen(show, timeout=5)  # noqa: S310
         console.print("VideoForge is already running: its window is up")
     except OSError:  # it runs in the browser
         console.print(f"VideoForge is already running on [bold]{url}[/]")
@@ -237,7 +238,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     settings = ServerSettings(host=args.host, port=args.port)
     if args.data_dir:
         settings.data_dir = args.data_dir
-    url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"
+    url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"  # noqa: S104 (a comparison)
     if _bring_up_running(url, open_browser=args.window or not args.no_browser):
         return 0
     if args.window:
