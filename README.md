@@ -3,25 +3,40 @@
 An encode and mux job queue that runs in your browser, in the spirit of StaxRip. Queue a job or a
 batch of episodes, and each runs end to end:
 
-index → VapourSynth (crop, resize, filters) → x264 / x265 → audio → subtitles → MKV mux → validate
+index → VapourSynth (crop, resize, filters) → x264 / x265 → audio → subtitles → mux (MKV or MP4) → validate
 
 It runs as one local process (FastAPI + a Svelte app) on Windows, for one user. Jobs survive restarts,
 and finished steps are skipped on a rerun.
 
-> **Status:** pre-release (working towards 0.1.0 beta). Expect changes.
+> **Status:** 0.1.0 beta. It works end to end, but expect changes. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Requirements
 
-- Python 3.12+ and [uv](https://docs.astral.sh/uv/)
+- Windows, Python 3.12+ and [uv](https://docs.astral.sh/uv/)
 - Node.js (to build the web app)
-- Tools, set in `videoforge.toml` (paths relative to it, or on `PATH`):
-  - [MKVToolNix](https://mkvtoolnix.download/) (`mkvmerge`, `mkvpropedit`)
-  - x264 and/or x265
-  - VapourSynth plugins in `tools/vs-plugins` (bestsource, lsmas or ffms2, plus any filters).
-    VapourSynth itself and `vspipe` come with the `vapoursynth` Python package.
-  - ffmpeg and MediaInfo
-  - Optional, for audio encodes: [DeeZy](https://github.com/jessielw/DeeZy) with Dolby Encoding Engine
-    and truehdd (DDP / Atmos), qaac (AAC), and opusenc (Opus)
+- The tools below. VapourSynth itself and `vspipe` come with the `vapoursynth` Python package, and
+  MediaInfo with `pymediainfo`; nothing to install for those.
+
+## Tools
+
+Put the tools in `tools/` (git-ignored) as below, or point to them elsewhere: in `videoforge.toml` /
+`videoforge.local.toml`, or on the **Settings** page, which shows each path, checks it and reports what's
+missing. A bare name (`ffmpeg`, `MP4Box`) is looked up on `PATH`.
+
+| Tool | Default path | Needed for |
+| --- | --- | --- |
+| [MKVToolNix](https://mkvtoolnix.download/) | `tools/MKVToolNix/mkvmerge.exe` | reading sources, MKV output |
+| x264, x265 | `tools/x264/x264.exe`, `tools/x265/x265.exe` | the video encode |
+| VapourSynth plugins | `tools/vs-plugins/` | source filters (FFMS2, the default; L-SMASH; BestSource) and any filters your scripts use |
+| [MP4Box](https://gpac.io/) (GPAC) | `MP4Box` on `PATH` | MP4 output |
+| ffmpeg | `ffmpeg` on `PATH` | FLAC / Opus / AAC / AC-3 / E-AC-3 encodes, and decoding for the other audio encoders |
+| [DeeZy](https://github.com/jessielw/DeeZy) + Dolby Encoding Engine | `tools/DeeZy/deezy.exe`, `tools/DEE/dee.exe` | DDP / DDP Atmos |
+| truehdd | `tools/truehdd/truehdd.exe` | DDP Atmos from TrueHD Atmos |
+| qaac | `tools/qaac/qaac64.exe` | AAC (Apple) |
+| opus-tools | `tools/opus-tools/opusenc.exe` | Opus (opusenc) |
+
+Only MKVToolNix, an encoder and the source filter plugin are needed to start; the audio tools are only
+needed for the encodes that use them (copying a track needs none).
 
 ## Quick start
 
@@ -40,21 +55,58 @@ a page where a dropped file lives): `uv sync --extra desktop`, then `uv run vide
 one. Pasting paths (Explorer: Ctrl+Shift+C, then Ctrl+V on a field) works in the browser too.
 
 Machine-specific settings (tool paths, default profile) go in `videoforge.local.toml` next to
-`videoforge.toml`. Its tables are merged over the defaults.
+`videoforge.toml`. Its tables are merged over the defaults. The Settings page's changes are kept in the
+app's database and win over both.
 
-Development: `uv run videoforge serve --no-browser`, then `cd frontend && npm run dev`
-(http://localhost:5173, proxies `/api`). Tests: `uv run pytest -q` and `cd frontend && npm run check`.
-Checks: `uv run poe typecheck` (basedpyright, standard, `src`), `uv run poe lint` (ruff), and
-`uv run poe format` (ruff fixes, then `ruff format`); `poe lint-fix`, `poe format-check` too.
+## A short tour
+
+- **New jobs:** add a source MKV (or a folder of episodes for a batch), plus subtitle files, chapters, or an
+  existing encode to reuse. Each job starts on a template.
+- **Queue:** the job list and each job's editor: **Video** (frame preview with zoom and crop overlay, auto
+  crop, resize, filters, the generated VapourSynth script, which you can edit), **Encoder** (x264 / x265,
+  1 or 2 passes), **Audio** and **Subtitles** (keep, leave out, reorder, retitle, flag; copy or encode
+  each audio track, more than one output from one track), **Output** (folder, container, chapters, AutoQPF,
+  label) and **Log**. Select several jobs to apply an edit or a template to all of them.
+- **Templates:** a job's whole setup without a file: video, crop mode (keep, the template's crop, or detect
+  per job), encoder, container, AutoQPF, and optionally audio and subtitles. Audio goes by position
+  (slot n is the source's nth track) or by rules (language, original language, codec, channels,
+  commentary / audio description), for a season whose track order shifts; subtitles go by rules
+  (language, format, forced / SDH / commentary). Star one as the default for new jobs.
+- **Batch index:** Index on the Queue toolbar indexes the selected jobs (or all) in the background while
+  encodes run; a job whose source is on the disk an encode is reading waits, and jobs on other disks go
+  first (Settings). The preview only opens indexed sources, so opening a job never reads a whole remux.
+- **Job label** (Output tab): added to the output name, `<name>.<label>.mkv`, to tell runs of one source
+  apart (dubbed / subbed).
+- **Log:** everything the jobs printed since the page opened, all jobs or one.
+- **Settings:** tool paths with a check for each, folder browser roots, the disk wait, and Shut down.
+
+## Where things are written
+
+- **Next to the source, `<source>_tmp/`:** the job's work folder: the index, `video.vpy`, the encodes,
+  `videoforge.log` (every run and index of this source, with times and tool output), and per output
+  `<output name>.videoforge.json` (how it was made: settings, script, each track and the source track it
+  came from, commands, tool versions) and `<output name>.videoforge.jsonl` (live events). The format is in
+  [docs/job-record.md](docs/job-record.md), for tools that read it.
+- **The output folder:** the finished file (written as `<output>.partial`, renamed when the mux is done).
+- **The data folder, `%APPDATA%\VideoForge`** (or `--data-dir`): `videoforge.db` (the queue, templates,
+  settings) and `logs/` (an app log per session, the newest 50 kept, and `events.jsonl` with every job's
+  events).
 
 ## Profiles
 
 A profile decides what goes into the output: which tracks, copy or encode, titles, flags, and the checks
 on the finished file. VideoForge ships one, `manual`: every source track in source order, copied, and
-you exclude, reorder, retitle and flag tracks yourself.
+you exclude, reorder, retitle and flag tracks yourself (or let a template's rules do it).
 
 Other profiles (for example a release group's rules) are separate Python packages that register
 under the `videoforge.profiles` entry point group. See [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Development
+
+`uv run videoforge serve --no-browser`, then `cd frontend && npm run dev` (http://localhost:5173, proxies
+`/api`). Tests: `uv run pytest -q` and `cd frontend && npm run check`. Checks: `uv run poe typecheck`
+(basedpyright, standard, `src`), `uv run poe lint` (ruff), and `uv run poe format` (ruff fixes, then
+`ruff format`); `poe lint-fix`, `poe format-check` too. How it's built: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## License
 

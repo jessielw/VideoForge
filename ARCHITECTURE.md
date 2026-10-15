@@ -62,6 +62,7 @@ src/videoforge/
 frontend/                Svelte 5 + Vite + TypeScript + Tailwind -> frontend/dist (served by FastAPI)
 legacy/qt_gui/           The archived PySide6 GUI and its tests. Reference only; not packaged.
 tools/                   Binaries (gitignored): MKVToolNix, DEE, DeeZy, qaac, opus-tools, truehdd, x264, x265, vs-plugins
+                         (MP4Box and ffmpeg default to PATH; see README "Tools")
 ```
 
 ## The unit of work: a job
