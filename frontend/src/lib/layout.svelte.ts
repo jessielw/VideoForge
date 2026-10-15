@@ -1,5 +1,6 @@
 // Room for the editor: the nav and the queue list collapse to slim rails (remembered in this
-// browser), and the Video tab can fill the whole window for a while (Esc puts it back).
+// browser; a narrow window rails the queue list on its own), and the Video tab can fill the whole
+// window for a while (Esc puts it back).
 
 function read(key: string): boolean {
   try {
@@ -17,10 +18,21 @@ function write(key: string, on: boolean): void {
   }
 }
 
+// Below this width an open job gets the room: the queue list shows as a rail and opens over the editor.
+const NARROW = '(max-width: 1439px)'
+
 class Layout {
   #nav = $state(read('videoforge.navCollapsed'))
   #queue = $state(read('videoforge.queueCollapsed'))
   videoExpanded = $state(false)
+  narrow = $state(false)
+
+  constructor() {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia(NARROW)
+    this.narrow = mq.matches
+    mq.addEventListener('change', e => (this.narrow = e.matches))
+  }
 
   get navCollapsed(): boolean {
     return this.#nav

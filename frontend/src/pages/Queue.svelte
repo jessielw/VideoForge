@@ -52,6 +52,7 @@
     } else {
       selected = [id]
       anchor = id
+      peek = false
     }
     router.go('queue', selected.length === 1 ? selected[0] : null)
   }
@@ -84,6 +85,32 @@
   }
 
   const single = $derived(selected.length === 1 ? selected[0] : null)
+
+  // A narrow window gives an open job the room: the list is a rail, and opens over the editor (peek)
+  // until a job is picked, Esc or a click elsewhere.
+  let peek = $state(false)
+  let railEl = $state<HTMLElement>()
+  let listEl = $state<HTMLElement>()
+  const rail = $derived(layout.queueCollapsed || (layout.narrow && single !== null))
+  $effect(() => {
+    if (!rail) peek = false
+  })
+
+  function showList() {
+    layout.queueCollapsed = false
+    if (layout.narrow && single !== null) peek = true
+  }
+
+  function hideList() {
+    if (peek) peek = false
+    else layout.queueCollapsed = true
+  }
+
+  function outside(e: PointerEvent) {
+    const t = e.target as Node
+    if (peek && !listEl?.contains(t) && !railEl?.contains(t)) peek = false
+  }
+
   const runnable = $derived(app.jobs.some(j => ['ready', 'warn', 'queued'].includes(j.status)))
 
   // --- batch panel ---
@@ -139,11 +166,29 @@
   }
 </script>
 
-<div class="flex h-full">
-  {#if layout.queueCollapsed}
+<svelte:window
+  onpointerdown={outside}
+  onkeydown={e => {
+    if (peek && e.key === 'Escape') {
+      peek = false
+      e.stopPropagation()
+    }
+  }}
+/>
+
+<div class="relative flex h-full">
+  {#if rail}
     <!-- The list as a rail: one chip per job (its place, coloured by status). -->
-    <section class="flex w-14 shrink-0 flex-col items-center border-r border-border">
-      <Button variant="ghost" size="icon" class="my-2" onclick={() => (layout.queueCollapsed = false)} title="Show the queue list">
+    <section bind:this={railEl} class="flex w-14 shrink-0 flex-col items-center border-r border-border">
+      <Button
+        variant="ghost"
+        size="icon"
+        class="my-2"
+        onclick={() => (peek ? (peek = false) : showList())}
+        title={layout.narrow && single !== null ? 'Show the queue list (over the editor: the window is narrow)' : 'Show the queue list'}
+        aria-label="Show the queue list"
+        aria-expanded={peek}
+      >
         <PanelLeftOpenIcon />
       </Button>
       <div class="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-auto border-t border-border py-2">
@@ -165,10 +210,15 @@
         {/each}
       </div>
     </section>
+    {#if peek}{@render list('absolute inset-y-0 left-14 z-30 w-[28rem] max-w-[calc(100%-3.5rem)] bg-background shadow-xl')}{/if}
   {:else}
-  <section class="flex w-[28rem] shrink-0 flex-col border-r border-border">
+    {@render list('w-[28rem] shrink-0')}
+  {/if}
+
+{#snippet list(cls: string)}
+  <section bind:this={listEl} class="flex flex-col border-r border-border {cls}" aria-label="Queue list">
     <div class="flex flex-wrap items-center gap-1 border-b border-border p-2">
-      <Button variant="ghost" size="icon" onclick={() => (layout.queueCollapsed = true)} title="Collapse the list, for more room">
+      <Button variant="ghost" size="icon" onclick={hideList} title={peek ? 'Hide the list (Esc)' : 'Collapse the list, for more room'}>
         <PanelLeftCloseIcon />
       </Button>
       {#if app.queue.running}
@@ -236,7 +286,7 @@
       {/each}
     </div>
   </section>
-  {/if}
+{/snippet}
 
   <section class="min-w-0 flex-1">
     {#if single}
