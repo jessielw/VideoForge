@@ -577,12 +577,12 @@
     {/if}
   </div>
 
-  <div class="flex flex-wrap items-center gap-2">
-    <Button variant="ghost" size="icon" onclick={() => seek(0)} title="First (Home)" aria-label="First frame"><ChevronsLeftIcon /></Button>
+  <div class="@container flex items-center gap-1 @lg:gap-2">
+    <Button variant="ghost" size="icon" class="hidden @md:inline-flex" onclick={() => seek(0)} title="First (Home)" aria-label="First frame"><ChevronsLeftIcon /></Button>
     <Button variant="ghost" size="icon" onclick={() => seek(frame - 1)} title="Previous (←)" aria-label="Previous frame"><ChevronLeftIcon /></Button>
     <Slider
       type="single"
-      class="mx-2 min-w-16 flex-1"
+      class="mx-2 min-w-10 flex-1"
       min={0}
       max={Math.max(0, frames - 1)}
       step={1}
@@ -591,14 +591,14 @@
       aria-label="Frame"
     />
     <Button variant="ghost" size="icon" onclick={() => seek(frame + 1)} title="Next (→)" aria-label="Next frame"><ChevronRightIcon /></Button>
-    <Button variant="ghost" size="icon" onclick={() => seek(frames - 1)} title="Last (End)" aria-label="Last frame"><ChevronsRightIcon /></Button>
+    <Button variant="ghost" size="icon" class="hidden @md:inline-flex" onclick={() => seek(frames - 1)} title="Last (End)" aria-label="Last frame"><ChevronsRightIcon /></Button>
     <Input
-      class="w-24 text-right font-mono"
+      class="w-20 shrink-0 text-right font-mono"
       aria-label="Frame number"
       bind:value={frameInput}
       onkeydown={e => e.key === 'Enter' && seek(+frameInput || 0)}
       onblur={() => seek(+frameInput || 0)}
     />
-    <span class="min-w-28 text-xs whitespace-nowrap text-muted-foreground tabular-nums">/ {frames - 1} · {(frame / (fps || 24)).toFixed(2)} s</span>
+    <span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground tabular-nums">/ {frames - 1} · {(frame / (fps || 24)).toFixed(2)} s</span>
   </div>
 </div>

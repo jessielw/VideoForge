@@ -208,7 +208,9 @@
           </div>
           <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
             <span>{job.encoder}</span>
-            {#if job.crop.top || job.crop.bottom || job.crop.left || job.crop.right}
+            {#if job.custom_script}
+              <span>· custom script</span>
+            {:else if job.crop && (job.crop.top || job.crop.bottom || job.crop.left || job.crop.right)}
               <span>· crop {job.crop.left}/{job.crop.top}/{job.crop.right}/{job.crop.bottom}</span>
             {/if}
             <span>· {job.audio.length} audio · {job.subs} subs</span>

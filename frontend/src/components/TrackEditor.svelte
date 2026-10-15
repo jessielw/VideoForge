@@ -417,7 +417,7 @@
               class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
                 data-[state=on]:text-primary {flagSet(t, f.key) ? 'underline decoration-dotted underline-offset-2' : ''}"
               pressed={on}
-              title="{f.help}{flagSet(t, f.key) ? ' (set by you)' : ''}"
+              title="{f.help}{flagSet(t, f.key) ? ' (changed for this job)' : ''}"
               onPressedChange={() => toggleFlag(t, f.key)}
               >{#if on}<CheckIcon class="size-3" />{/if}{f.label}</Toggle
             >

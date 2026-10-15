@@ -78,7 +78,8 @@ export interface JobSummary {
   issue: string
   output: string | null
   encoder: string
-  crop: Crop
+  crop: Crop | null // null with a custom script body or a reused encode
+  custom_script: boolean
   audio: string[]
   subs: number
 }

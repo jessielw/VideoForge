@@ -136,6 +136,11 @@ def test_add_inspect_and_edit(tmp_path):
         # Crop the video: the planned encode shrinks, the plan follows (no re-probe).
         video = job["spec"]["video"] | {"crop": {"left": 0, "top": 140, "right": 0, "bottom": 140}}
         edited = client.patch(f"/api/jobs/{ids[0]}", json={"video": video}).json()
+        assert edited["crop"] == {"left": 0, "top": 140, "right": 0, "bottom": 140} and not edited["custom_script"]
+        # A custom body ignores the crop fields, so the summary names the script instead.
+        custom = client.patch(f"/api/jobs/{ids[0]}", json={"video": video | {"custom": "clip = src"}}).json()
+        assert custom["crop"] is None and custom["custom_script"]
+        edited = client.patch(f"/api/jobs/{ids[0]}", json={"video": video}).json()
         assert edited["crop"] == {"left": 0, "top": 140, "right": 0, "bottom": 140}
 
         # Track overrides: drop German.

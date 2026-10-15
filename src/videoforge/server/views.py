@@ -45,7 +45,9 @@ def summary(e: Entry) -> dict[str, Any]:
         "issue": first.message if first else "",
         "output": str(e.state.output) if e.state.output else None,
         "encoder": encoder_label(s.encoder) if s.encodes_video else "reuses encode",
-        "crop": to_json(s.video.crop),
+        # A custom script body ignores the crop fields; a reused encode has no script at all.
+        "crop": to_json(s.video.crop) if s.encodes_video and s.video.custom is None else None,
+        "custom_script": s.encodes_video and s.video.custom is not None,
         "audio": [f"{a.title} ({a.language})" for a in e.plan.audio] if e.plan else [],
         "subs": len(e.plan.subs) if e.plan else 0,
     }
