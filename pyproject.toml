@@ -40,7 +40,9 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.40.2",
     "httpx>=0.28.1",  # fastapi.testclient
+    "poethepoet>=0.49.0",
     "pytest>=9.1.1",
     "ruff>=0.17.0",
 ]
@@ -52,3 +54,32 @@ pythonpath = ["tests"]
 [tool.ruff]
 line-length = 120
 extend-exclude = ["legacy", "frontend"]
+
+[tool.ruff.lint]
+# `select` replaces ruff's defaults rather than extending them, so "F"
+# (pyflakes) is listed explicitly.
+select = ["F", "I", "UP", "B", "S", "RUF100"]
+# Running external tools (mkvmerge, x264, vspipe, ...) from argv lists is the
+# app's job: S603/S607 would flag every one of them.
+ignore = ["S603", "S607"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+force-sort-within-sections = true
+
+[tool.ruff.lint.per-file-ignores]
+# pytest is built on `assert`.
+"tests/**" = ["S101"]
+
+[tool.basedpyright]
+include = ["src"]
+typeCheckingMode = "standard"
+pythonVersion = "3.12"
+
+[tool.poe.tasks]
+typecheck = "basedpyright"
+lint = "ruff check ."
+lint-fix = "ruff check . --fix"
+format-check = "ruff format . --check"
+format-code = "ruff format ."
+format.sequence = ["lint-fix", "format-code"]
