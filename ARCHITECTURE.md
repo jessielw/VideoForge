@@ -131,8 +131,13 @@ index ─► qpf/chapters ─► video (vspipe | x264/x265, 1 or 2 passes) ─�
   come with the Python package. Plugins live in `tools/vs-plugins` and load through
   `VAPOURSYNTH_EXTRA_PLUGIN_PATH` (set for the server process, the preview worker and every vspipe run).
 - One script generator serves both the preview (executed in the preview worker, a child process
-  started on first use, the clip cached by script text; a crash or a request past its timeout costs
-  only the worker, the next request starts a new one; it is in the tool Job Object) and the encode (written to `<source>_tmp/video.vpy`, run by vspipe).
+  started on first use, one clip cached per job stage so a crop edit frees the old one; a crash or a
+  request past its timeout costs only the worker, the next request starts a new one; it stops after
+  5 idle minutes, handing its memory back; it is in the tool Job Object) and the encode (written to
+  `<source>_tmp/video.vpy`, run by vspipe).
+- Memory: the server process doesn't import numpy or VapourSynth (numpy's import alone commits
+  ~30 MB per CPU thread for OpenBLAS; the worker runs with one BLAS thread). MediaInfo probes and
+  AutoQPF run in the server; they measured flat over repeated probes and runs.
 - Indexes go into the work folder (bestsource `cachepath`, lsmas/ffms2 `cachefile`),
   so preview and encode share them.
 

@@ -1,8 +1,8 @@
 """In-process VapourSynth for the preview: load a script's clip, read its info, render frames.
 
 The plugin folder must be known before the VapourSynth core starts, so call
-configure() first (the server does at startup). Clips are cached by script text:
-the preview asks for many frames of the same script.
+configure() first (the preview worker does at startup). Clips are cached per slot (a job's
+stage): the preview asks for many frames of the same script.
 """
 
 from __future__ import annotations
@@ -18,9 +18,8 @@ from fractions import Fraction
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-import numpy as np
-
 if TYPE_CHECKING:
+    import numpy as np
     import vapoursynth as vs
 
 PLUGIN_ENV = "VAPOURSYNTH_EXTRA_PLUGIN_PATH"
@@ -122,6 +121,7 @@ def matrix(frame_props, height: int) -> int:
 
 def frame_rgb(clip: vs.VideoNode, n: int) -> np.ndarray:
     """Frame n as an (H, W, 3) uint8 RGB array."""
+    import numpy as np  # here, not at the top: numpy's import alone commits ~30 MB per CPU thread
     import vapoursynth as vs
 
     n = max(0, min(n, clip.num_frames - 1))
@@ -159,22 +159,29 @@ def frame_props(clip: vs.VideoNode, n: int) -> dict[str, object]:
 
 
 class ClipCache:
-    """The last few scripts' clips, so seeking through a preview doesn't reload the source."""
+    """The last few clips, so seeking through a preview doesn't reload the source. One clip per slot
+    (a job's stage): a new script for a slot (a crop edit) drops the slot's old clip first, since
+    each clip has its own source filter and its caches (hundreds of MB at 1080p)."""
 
     def __init__(self, size: int = 6) -> None:
         self.size = size
-        self._clips: OrderedDict[str, vs.VideoNode] = OrderedDict()
+        self._clips: OrderedDict[str, tuple[str, vs.VideoNode]] = OrderedDict()  # slot -> (script, clip)
         self._lock = threading.Lock()
 
-    def get(self, script: str) -> vs.VideoNode:
+    def get(self, script: str, slot: str | None = None) -> vs.VideoNode:
+        key = slot or script
         with self._lock:
-            clip = self._clips.get(script)
-            if clip is not None:
-                self._clips.move_to_end(script)
-                return clip
+            held = self._clips.get(key)
+            if held is not None and held[0] == script:
+                self._clips.move_to_end(key)
+                return held[1]
+            if held is not None:  # free the old clip (this reference too) before the new one loads
+                del self._clips[key]
+                held = None
         clip = load_clip(script)  # outside the lock: indexing a source can take minutes
         with self._lock:
-            self._clips[script] = clip
+            self._clips[key] = (script, clip)
+            self._clips.move_to_end(key)
             while len(self._clips) > self.size:
                 self._clips.popitem(last=False)
         return clip

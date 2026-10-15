@@ -1,8 +1,8 @@
 """A job's video in the browser: clip info, frames (source = uncropped, output = processed),
 auto-crop, the generated script, and a check that runs it (the script editor's Run).
 
-Clips come from the same script generator the encode uses and are loaded and cached by
-script text in the preview worker (core/video/preview.py, a child process). The first request for a
+Clips come from the same script generator the encode uses and are loaded and cached per job
+and stage in the preview worker (core/video/preview.py, a child process). The first request for a
 source builds its index in the job's work folder (minutes for a large remux; later requests are instant).
 """
 
@@ -41,9 +41,13 @@ def _script(spec: JobSpec, stage: Stage) -> str:
     return build_script(spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage)
 
 
+def _slot(spec: JobSpec, stage: Stage) -> str:
+    return f"{spec.id}:{stage}"
+
+
 def source_crop(preview: Preview, spec: JobSpec, samples: int = 20) -> Crop:
     """Auto-crop's suggestion for a job's source (a template's auto crop; indexes the source first)."""
-    return preview.autocrop(_script(spec, "source"), samples=samples)
+    return preview.autocrop(_script(spec, "source"), samples=samples, slot=_slot(spec, "source"))
 
 
 def _preview(request: Request) -> Preview:
@@ -70,7 +74,7 @@ def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, A
     """Run the script and render its first frame: the clip's info, or the error and its script line."""
     e = _entry(request, job_id)
     try:
-        i = _preview(request).check(script_for(e, stage))
+        i = _preview(request).check(script_for(e, stage), slot=_slot(e.spec, stage))
     except ScriptError as ex:
         message = ex.message
         spec = e.spec
@@ -86,7 +90,8 @@ def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, A
 @router.get("/info")
 def info(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
     try:
-        i = _preview(request).info(script_for(_entry(request, job_id), stage))
+        e = _entry(request, job_id)
+        i = _preview(request).info(script_for(e, stage), slot=_slot(e.spec, stage))
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex) from None
     return to_json(i) | {"fps": i.fps}
@@ -96,7 +101,8 @@ def info(request: Request, job_id: str, stage: Stage = "output") -> dict[str, An
 def frame(request: Request, job_id: str, n: int = 0, stage: Stage = "output",
           fmt: Literal["jpeg", "png"] = "jpeg", quality: int = 90) -> Response:
     try:
-        data, pict, frames = _preview(request).frame(script_for(_entry(request, job_id), stage), n, fmt, quality)
+        e = _entry(request, job_id)
+        data, pict, frames = _preview(request).frame(script_for(e, stage), n, fmt, quality, slot=_slot(e.spec, stage))
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex) from None
     return Response(data, media_type=f"image/{fmt}",

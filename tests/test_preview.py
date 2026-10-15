@@ -86,6 +86,39 @@ def test_requests_run_side_by_side(preview):
     t.join()
 
 
+def test_a_slot_keeps_one_clip():
+    """A crop edit (a new script for the same job stage) replaces the slot's clip: the old one's
+    source filter and caches are freed at once, not kept until five newer scripts push it out."""
+    from videoforge.core.video import vs as vsx
+
+    cache = vsx.ClipCache()
+    first = cache.get(BLANK.format(n=4), "job:output")
+    assert cache.get(BLANK.format(n=4), "job:output") is first
+    second = cache.get(BLANK.format(n=5), "job:output")
+    cache.get(BLANK.format(n=4), "job:source")
+    assert len(cache._clips) == 2 and second.num_frames == 5
+    assert cache.get(BLANK.format(n=4), "job:output") is not first  # loaded again
+
+
+def test_slots_through_the_worker(preview):
+    assert preview.frame(BLANK.format(n=6), 1, slot="a:output")[2] == 6
+    assert preview.frame(BLANK.format(n=7), 1, slot="a:output")[2] == 7  # the slot's new script
+    worker = preview._worker
+    assert worker.has("a:output", BLANK.format(n=7)) and not worker.has("a:output", BLANK.format(n=6))
+
+
+def test_an_idle_worker_stops_and_the_next_request_starts_one():
+    p = Preview(idle_stop=1)
+    try:
+        assert p.info(BLANK.format(n=3)).frames == 3
+        proc = p._worker.proc
+        proc.wait(timeout=10)  # stopped by itself after a second idle
+        assert p._worker is None
+        assert p.frame(BLANK.format(n=3), 1)[2] == 3
+    finally:
+        p.close()
+
+
 def test_close_ends_the_worker():
     p = Preview()
     p.info(BLANK.format(n=2))
