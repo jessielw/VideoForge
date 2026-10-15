@@ -64,9 +64,10 @@ def cancel(request: Request) -> dict[str, Any]:
 @router.post("/index")
 def index(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     """Index the given jobs one at a time (work folder, script, source index; nothing else): the queue's
-    state, plus the ids taken (`taken`; jobs that are queued, running or reuse an encode are left out)."""
+    state, plus the ids taken (`taken`; jobs that are queued, running or reuse an encode are left out).
+    `first`: ahead of the jobs waiting (the job open in the editor)."""
     q = queue_of(request)
-    taken = q.index(body.get("ids") or [])
+    taken = q.index(body.get("ids") or [], first=bool(body.get("first")))
     return {**q.queue_state(), "taken": taken}
 
 

@@ -3,7 +3,9 @@ store, probed in a small thread pool, and run one at a time by a worker thread.
 
 Next to it, the index lane: jobs asked to be indexed get their work folder, script and source
 index, one at a time by a thread of its own (alongside a running encode), and nothing else. The
-steps are recorded like a run's, so the encode reuses them, and opening the job's video is quick.
+steps are recorded like a run's, so the encode reuses them. Nothing else indexes: the preview opens
+only indexed sources, and a template's auto crop waits in the lane and runs after the index. A job
+can't be edited while it is being indexed.
 
 Every change is saved and announced on the event hub. An edit replans from the
 cached probe (no file access) and clears the last run's outcome, but keeps the
@@ -93,6 +95,7 @@ class Entry:
     running: bool = False
     index_queued: bool = False
     indexing: bool = False
+    crop_pending: bool = False  # the lane detects the crop after indexing (a template's auto crop)
     index_error: str = ""
     # Held by whatever may build the source's index: the index lane, auto-crop, and a preview request
     # for a clip the preview worker doesn't hold yet. Two processes never index one source at once.
@@ -114,7 +117,7 @@ class Entry:
     @property
     def runnable(self) -> bool:
         return (self.plan is not None and not self.plan.blocked and not self.busy and not self.cropping
-                and not self.indexing)
+                and not self.indexing and not self.crop_pending)
 
     @property
     def status(self) -> JobView:
@@ -175,6 +178,7 @@ class JobQueue:
         self._closing = False  # shutdown() began: a job starting now is cancelled at once
         self._indexer: threading.Thread | None = None
         self._index_active = False  # the lane's thread is working; cleared (under the lock) when it decides to stop
+        self._index_order: list[str] = []  # the lane's jobs, in the order they're indexed
         self._index_cancel: CancelToken | None = None
         self._index_wake = threading.Event()
 
@@ -296,7 +300,6 @@ class JobQueue:
             self._probes.submit(self._probe, e)
 
     def _probe(self, e: Entry) -> None:
-        crop = False
         try:
             probed = self.services.probe(e.spec, self.app)
         except Exception as ex:  # noqa: BLE001 - shown on the job
@@ -309,11 +312,10 @@ class JobQueue:
                 if self._apply_tracks(e):
                     self._save(e)
                 self._replan(e)
-                crop = self._claim_crop(e)
+                if self._claim_crop(e):
+                    self.index([e.id])  # under the lock: the job never shows ready in between
         self._changed(e)
         self._index_wake.set()
-        if crop:
-            self._probes.submit(self._detect_crop, e)
 
     def _apply_tracks(self, e: Entry) -> bool:
         """Under the lock: a template's pending audio and subtitles become the job's overrides once its
@@ -335,18 +337,21 @@ class JobQueue:
         return True
 
     def _claim_crop(self, e: Entry) -> bool:
-        """Under the lock: mark a pending auto crop as started, once the job is probed. The caller then
-        submits _detect_crop (to the probe pool: indexing the source takes a while)."""
-        if (not e.spec.autocrop or e.cropping or e.probed is None or e.busy
+        """Under the lock: once the job is probed, a pending auto crop waits for the index lane (it reads
+        the source, so it's indexed first, one job at a time). The caller then puts the job in the lane."""
+        if (not e.spec.autocrop or e.cropping or e.crop_pending or e.probed is None or e.busy
                 or self.services.detect_crop is None):
             return False
-        e.cropping = True
+        e.crop_pending = True
         return True
 
     def _detect_crop(self, e: Entry) -> None:
+        """On the index lane, holding the job's source lock, after its index."""
+        with self._lock:
+            e.cropping = True
+        self._changed(e)
         try:
-            with e.source_lock:
-                crop = self.services.detect_crop(e.spec)
+            crop = self.services.detect_crop(e.spec)
         except Exception as ex:  # noqa: BLE001 - shown in the job's log; the crop stays as it was
             self._log(e, f"Auto-crop failed: {type(ex).__name__}: {ex}")
             crop = None
@@ -409,6 +414,8 @@ class JobQueue:
         with self._lock:
             if e.busy:
                 raise Busy(f"{e.spec.name} is queued or running")
+            if e.indexing:
+                raise Busy(f"{e.spec.name} is being indexed")
             s = e.spec
             if inputs is not None and inputs != s.inputs:
                 if inputs.source != s.inputs.source:
@@ -444,12 +451,11 @@ class JobQueue:
                 self._apply_tracks(e)
             self._replan(e)
             self._save(e)
-            crop = not reprobe and self._claim_crop(e)
+            if not reprobe and self._claim_crop(e):
+                self.index([e.id])
         self._changed(e)
         if reprobe:
             self.probe([e.id])
-        if crop:
-            self._probes.submit(self._detect_crop, e)
         return e
 
     def remove(self, ids: Iterable[str]) -> list[str]:
@@ -626,16 +632,21 @@ class JobQueue:
 
     # --- the index lane ------------------------------------------------------------------
 
-    def index(self, ids: Iterable[str]) -> list[str]:
-        """Put jobs in the index lane (in queue order): ones that encode video and aren't queued, running,
-        or in the lane already. Returns the ids it took."""
+    def index(self, ids: Iterable[str], *, first: bool = False) -> list[str]:
+        """Put jobs in the index lane, in queue order, after the ones there (`first`: before them, e.g. the
+        job open in the editor; one already waiting moves up). Jobs that reuse an encode, are queued, running
+        or being indexed are left out. Returns the ids it took."""
         wanted = set(ids)
         taken = []
         with self._lock:
             for e in self.entries():
-                if e.id in wanted and e.spec.encodes_video and not e.busy and not e.indexing and not e.index_queued:
+                if e.id not in wanted or not e.spec.encodes_video or e.busy or e.indexing:
+                    continue
+                if not e.index_queued or first:
                     e.index_queued, e.index_error = True, ""
                     taken.append(e.id)
+            rest = [i for i in self._index_order if i not in taken]
+            self._index_order = taken + rest if first else rest + taken
             if taken and not self._index_active and not self._closing:
                 self._index_active = True
                 self._indexer = threading.Thread(target=self._index_work, name="indexer", daemon=True)
@@ -662,12 +673,15 @@ class JobQueue:
         self._queue_changed()
 
     def _take_index(self) -> tuple[Entry | None, bool]:
-        """(the next job to index, whether any are left). A job still probing or detecting its crop waits."""
+        """(the next job to index, whether any are left). A job still probing waits."""
         with self._lock:
-            waiting = [e for e in self.entries() if e.index_queued]
+            waiting = [self._entries[i] for i in self._index_order
+                       if i in self._entries and self._entries[i].index_queued]
+            self._index_order = [e.id for e in waiting]
             for e in waiting:
-                if e.probing or e.cropping:
+                if e.probing:
                     continue
+                self._index_order.remove(e.id)
                 e.index_queued, e.indexing, e.progress = False, True, None
                 self._index_cancel = CancelToken()
                 if self._closing:
@@ -731,6 +745,10 @@ class JobQueue:
                 # The job's records (no run of it can start while it's in the lane), so its encode reuses these steps.
                 run_steps(steps, e.state.steps, log=log, cancel=cancel, progress=progress,
                           on_record=on_record, runner=self.services.runner)
+                if e.spec.autocrop and self.services.detect_crop is not None:  # a template's auto crop
+                    with self._lock:
+                        e.indexing, e.progress = False, None  # it can be edited again (a hand crop wins)
+                    self._detect_crop(e)
             finally:
                 e.source_lock.release()
         except Cancelled:
@@ -744,6 +762,7 @@ class JobQueue:
             log_file.close()
         with self._lock:
             e.indexing, e.progress, e.index_error = False, None, "" if error == "Cancelled" else error
+            e.crop_pending = False
             self._index_cancel = None
             self._save(e)
         self._changed(e)

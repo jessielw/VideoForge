@@ -50,7 +50,7 @@ def summary(e: Entry) -> dict[str, Any]:
         "crop": to_json(s.video.crop) if s.encodes_video and s.video.custom is None else None,
         "custom_script": s.encodes_video and s.video.custom is not None,
         # The source index is in the work folder (the video opens at once); a failed batch index says why.
-        "indexed": s.encodes_video and index_exists(s.inputs.source, s.video.source_filter, s.work_dir),
+        "indexed": s.encodes_video and not e.indexing and index_exists(s.inputs.source, s.video.source_filter, s.work_dir),
         "index_error": e.index_error,
         "audio": [f"{a.title} ({a.language})" for a in e.plan.audio] if e.plan else [],
         "subs": len(e.plan.subs) if e.plan else 0,

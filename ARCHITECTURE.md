@@ -84,8 +84,9 @@ profile's own defaults are a built-in template; the user can star one of theirs 
 (New jobs starts on it; `POST /api/jobs` with no settings gets it). Templates are applied when jobs are
 added, to one job, or to a batch; a template applied after a job's own edits replaces them.
 
-- **Auto crop:** `JobSpec.autocrop` is set; once the job is probed the queue runs the preview's
-  auto-crop in its probe pool (status "cropping", not runnable meanwhile). A crop set by hand wins.
+- **Auto crop:** `JobSpec.autocrop` is set; once the job is probed it waits in the index lane, which
+  indexes the source and then runs the preview's auto-crop (status "cropping", not runnable meanwhile).
+  A crop set by hand wins.
 - **Audio, by position:** slot n is for the source's nth audio track (copy or an encode, title, flags,
   leave out, more outputs from the same track); slots past a source's tracks are ignored and tracks
   past the slots are kept or left out. It waits in `JobSpec.audio_template` until the tracks are known,
@@ -211,8 +212,12 @@ defaults, audio encoder settings, and the checks on the finished file.
   keeps a valid one, and depends on the source alone (a crop edit doesn't index again). The steps are
   recorded in the job's steps, so the encode reuses them; the index step counts as done only while its
   index file is there (`script.index_exists`). Jobs waiting for a probe or an auto-crop wait their turn; a
-  queued encode takes a job out of the lane. `Entry.source_lock` is held by the lane, auto-crop and a
-  preview request for a clip the worker doesn't hold yet: never two indexers on one source. Opening one
-  job shows its Video tab, which indexes it if needed (as before). Not kept across restarts.
+  queued encode takes a job out of the lane. Only the lane indexes: the preview opens indexed sources only
+  (409 otherwise), so opening a job never reads a whole remux. An unindexed job's Video tab is an index
+  panel; its Index now puts the job first in the lane (`index(first=True)`), with progress there and in the
+  header, and the job is locked (no edits) while it's being indexed. A template's auto crop waits in the
+  lane too and runs after the index (`crop_pending`: not runnable meanwhile). `Entry.source_lock` is held
+  by the lane (index and crop) and a preview request for a clip the worker doesn't hold yet. Not kept
+  across restarts.
 - The CLI isn't kept in step with new features (the server and core are the product).
 - Docker later: Linux binaries for the toolchain; qaac needs a decision (Windows-only).

@@ -5,14 +5,20 @@
   // info and frames or the error).
   // Every save hands us a new `job` object, so effects key on derived values (jobId, scriptKey)
   // that only change when the content does; otherwise each save would remount the preview.
+  // Opening a job never indexes its source: until it's indexed the preview is an index panel (Index
+  // now puts the job first in the queue's index lane, one job at a time; it's locked meanwhile).
   import { untrack } from 'svelte'
+  import { toast } from 'svelte-sonner'
   import { api } from '../lib/api'
+  import { app } from '../lib/state.svelte'
   import { layout } from '../lib/layout.svelte'
   import { videoView } from '../lib/videoView.svelte'
   import { clipLength } from '../lib/format'
   import { SOURCE_FILTERS, type ClipInfo, type Crop, type JobDetail, type SourceFilter, type VideoSettings } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
+  import DatabaseZapIcon from '@lucide/svelte/icons/database-zap'
+  import SquareIcon from '@lucide/svelte/icons/square'
   import MaximizeIcon from '@lucide/svelte/icons/maximize'
   import MinimizeIcon from '@lucide/svelte/icons/minimize'
   import PlayIcon from '@lucide/svelte/icons/play'
@@ -61,6 +67,19 @@
   const dirty = $derived(!!vv.parts && vv.body !== vv.parts.body.join('\n'))
   const jobId = $derived(job.id)
   const scriptKey = $derived(job.id + JSON.stringify(job.spec.video) + job.spec.encoder.depth)
+  // The source's index is there (for the job's source filter): only then is the clip opened.
+  const ready = $derived(job.indexed)
+  const live = $derived(app.jobs.find(j => j.id === job.id)) // live status and progress
+  const indexStatus = $derived(live?.status ?? job.status)
+
+  async function indexNow() {
+    try {
+      const r = await api.index([jobId], true)
+      if (!r.taken.length) toast.info('Not indexed', { description: 'A queued or running job is indexed by its run.' })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   // Expanded is for this tab only: leaving it (another tab, job or page) puts the layout back.
   $effect(() => () => (layout.videoExpanded = false))
@@ -97,6 +116,8 @@
 
   $effect(() => {
     void jobId
+    void job.spec.video.source_filter // another filter: its own clip (and index)
+    if (!ready) return
     // A script view left with a good run shows its output again at once (the rerun refreshes it).
     const ran = untrack(() => vv.checked)
     info = { source: null, output: ran?.ok ? ran.info : null }
@@ -105,7 +126,7 @@
 
   // The script panel runs the script itself (refresh), which brings the output info with it.
   $effect(() => {
-    if (vv.stage === 'output' && vv.panel === 'settings') {
+    if (ready && vv.stage === 'output' && vv.panel === 'settings') {
       void version
       loadInfo('output')
     }
@@ -118,7 +139,7 @@
     const id = jobId
     const adopt = adoptNext
     adoptNext = false
-    refreshedKey = scriptKey
+    refreshedKey = scriptKey + ready
     const seq = ++refreshSeq
     running = true
     try {
@@ -127,6 +148,7 @@
       const keep = dirty && !adopt
       vv.parts = p
       if (!keep) vv.body = p.body.join('\n')
+      if (!ready) return // shown, not run: running opens the source
       const c = await api.checkScript(id).catch(e => ({ ok: false as const, error: String(e.message ?? e), line: null }))
       if (seq !== refreshSeq) return
       vv.checked = c
@@ -142,7 +164,7 @@
   // Script panel: run whenever the script's inputs change (once per change, not per job event).
   $effect(() => {
     if (vv.panel === 'script') {
-      const key = scriptKey
+      const key = scriptKey + ready
       untrack(() => key !== refreshedKey && refresh())
     }
   })
@@ -251,7 +273,38 @@
         {#if layout.videoExpanded}<MinimizeIcon />Restore{:else}<MaximizeIcon />Expand{/if}
       </Button>
     </div>
-    {#if current}
+    {#if !ready}
+      <div class="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border p-6 text-center" aria-label="Index">
+        {#if indexStatus === 'indexing'}
+          {@const p = live?.progress}
+          <div class="text-base font-medium">Indexing the source…</div>
+          <div class="flex w-full max-w-md items-center gap-3 text-sm text-info">
+            <div class="h-2 flex-1 overflow-hidden rounded bg-muted">
+              <div class="h-full bg-info transition-[width]" style="width:{(p?.fraction ?? 0) * 100}%"></div>
+            </div>
+            <span class="w-14 text-right tabular-nums">{p ? `${(p.fraction * 100).toFixed(0)}%` : '…'}</span>
+          </div>
+          <p class="max-w-md text-sm text-muted-foreground">The job is locked until it's done; the preview opens by itself after.</p>
+          <Button variant="outline" onclick={() => api.stopIndex([jobId])}><SquareIcon />Stop</Button>
+        {:else if indexStatus === 'index-queued'}
+          <div class="text-base font-medium">Waiting to be indexed</div>
+          <p class="max-w-md text-sm text-muted-foreground">Sources are indexed one at a time. The preview opens by itself after.</p>
+          <div class="flex gap-2">
+            <Button onclick={indexNow}><DatabaseZapIcon />Index this one next</Button>
+            <Button variant="outline" onclick={() => api.stopIndex([jobId])}>Don't index</Button>
+          </div>
+        {:else}
+          <div class="text-base font-medium">The source isn't indexed yet</div>
+          <p class="max-w-md text-sm text-muted-foreground">
+            The preview, auto-crop and the script's Run need the source's index ({SOURCE_FILTERS.find(f => f.id === job.spec.video.source_filter)?.label}).
+            Indexing reads the whole file once (minutes on a large remux), one source at a time; the job is locked while it runs.
+            Crop, resize and filters can be set meanwhile.
+          </p>
+          {#if live?.index_error}<p class="max-w-md text-sm text-destructive">The last index failed: {live.index_error}</p>{/if}
+          <Button onclick={indexNow} disabled={!editable}><DatabaseZapIcon />Index now</Button>
+        {/if}
+      </div>
+    {:else if current}
       <FramePreview
         {jobId}
         {stage}
@@ -276,11 +329,11 @@
       />
     {:else if scripting}
       <div class="flex flex-1 items-center justify-center border text-muted-foreground">
-        {running ? 'Running the script (the first run indexes the source)…' : 'No frames: the script failed.'}
+        {running ? 'Running the script…' : 'No frames: the script failed.'}
       </div>
     {:else}
       <div class="flex flex-1 items-center justify-center border text-muted-foreground">
-        {infoError ? 'No preview' : 'Opening the source (the first time indexes it, which can take minutes on a large remux)…'}
+        {infoError ? 'No preview' : 'Opening the source…'}
       </div>
     {/if}
   </div>
@@ -295,7 +348,7 @@
   {#if vv.panel === 'script'}
     <section class="flex min-h-0 flex-1 flex-col gap-2">
       <div class="flex items-center gap-2">
-        <Button onclick={run} disabled={running || saving} title="Save the body and run the script (Ctrl+Enter)">
+        <Button onclick={run} disabled={running || saving || !ready} title={ready ? 'Save the body and run the script (Ctrl+Enter)' : 'Index the source first (the preview side)'}>
           <PlayIcon />{running ? 'Running…' : dirty && editable ? 'Save & run' : 'Run'}
         </Button>
         {#if vv.parts?.custom}
@@ -348,7 +401,7 @@
         <section class="space-y-2">
           <div class="flex items-center justify-between">
             <span class="section-label">Crop</span>
-            <span class="text-xs text-muted-foreground">{outW}×{outH}</span>
+            <span class="text-xs text-muted-foreground">{src ? `${outW}×${outH}` : ""}</span>
           </div>
           <!-- Label, box, label, box: the labels get their own columns, so every box is the same width. -->
           <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">
@@ -366,7 +419,7 @@
             {/each}
           </div>
           <div class="flex gap-2">
-            <Button variant="outline" class="flex-1" onclick={autoCrop} disabled={detecting}>
+            <Button variant="outline" class="flex-1" onclick={autoCrop} disabled={detecting || !ready} title={ready ? undefined : 'Index the source first'}>
               <WandSparklesIcon />{detecting ? 'Detecting…' : 'Auto-crop'}
             </Button>
             <Button
@@ -388,8 +441,7 @@
             onchange={e => {
               video.source_filter = (e.target as HTMLSelectElement).value as SourceFilter
               info = { source: null, output: null }
-              commit(0)
-              setTimeout(() => loadInfo('source'), 400)
+              commit(0) // the saved job brings the new filter (and whether it's indexed): the preview follows
             }}
           >
             {#each SOURCE_FILTERS as f (f.id)}<option value={f.id} title={f.title}>{f.label}</option>{/each}

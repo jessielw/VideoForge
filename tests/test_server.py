@@ -422,8 +422,10 @@ def test_presets(tmp_path):
 
 def test_templates(tmp_path):
     """A template sets the whole run when jobs are added or on a batch; its auto crop is detected per
-    job afterwards (the job can't be queued meanwhile), and a crop set by hand meanwhile wins."""
+    job afterwards, on the index lane after the index (the job can't be queued meanwhile), and a crop set
+    by hand meanwhile wins."""
     make_files(tmp_path, "S01E01", "S01E02")
+    indexer = FakeIndexer()
     gate = threading.Event()
     gate.set()
 
@@ -434,7 +436,7 @@ def test_templates(tmp_path):
     template = {"video": {"filters": "clip = clip", "crop": {"left": 4, "top": 0, "right": 4, "bottom": 0}},
                 "encoder": {"encoder": "x265", "crf": 16}, "mux": {"container": "mkv", "extra": "-x"},
                 "qpf": False, "crop_mode": "auto"}
-    with make_client(tmp_path, detect_crop=detect_crop) as client:
+    with make_client(tmp_path, detect_crop=detect_crop, runner=indexer) as client:
         ids = add(client, tmp_path, template=template)
         for job_id in ids:
             job = wait_for(client, job_id, "ready", "warn", "blocked")
@@ -444,6 +446,8 @@ def test_templates(tmp_path):
             assert spec["mux"] == {"container": "mkv", "extra": "-x"} and spec["qpf"] is False
             assert spec["video"]["filters"] == "clip = clip"
             assert spec["video"]["crop"] == {"left": 0, "top": 20, "right": 0, "bottom": 22} and not spec["autocrop"]
+            assert job["indexed"]  # the lane indexed it first, one job at a time
+        assert len(indexer.calls) == 2
 
         # A batch: fixed crop on both; then the container alone keeps each job's extra arguments.
         fixed = template | {"crop_mode": "fixed"}
@@ -636,17 +640,16 @@ def test_index_lane(tmp_path):
         assert wait_for(client, ids[1], "done")
         assert client.get(f"/api/jobs/{ids[0]}").json()["status"] == "indexing"
 
-        # Its video waits for the index (the preview never builds a second copy of it at once); the script doesn't.
+        # Its video opens once it's indexed (only the lane indexes); its script shows meanwhile. It's locked.
         assert client.get(f"/api/jobs/{ids[0]}/video/script").status_code == 200
-        script = []
-        t = threading.Thread(target=lambda: script.append(client.get(f"/api/jobs/{ids[0]}/video/check")))
-        t.start()
-        time.sleep(0.3)
-        assert not script
+        assert client.get(f"/api/jobs/{ids[0]}/video/check").status_code == 409
+        assert client.get(f"/api/jobs/{ids[2]}/video/frame").status_code == 409  # not indexed yet
+        r = client.patch(f"/api/jobs/{ids[0]}", json={"qpf": False})
+        assert r.status_code == 409 and "being indexed" in r.text
         indexer.gates["Show.S01E01.mkv"].set()
-        t.join(30)
-        assert script[0].status_code == 200 and not script[0].json()["ok"]  # the test's source isn't a video
         done = wait_for(client, ids[0], "ready", "warn")
+        checked = client.get(f"/api/jobs/{ids[0]}/video/check")
+        assert checked.status_code == 200 and not checked.json()["ok"]  # opened (the test's source isn't a video)
         assert done["indexed"] and not done["index_error"]
         third = wait_for(client, ids[2], "ready", "warn")
         assert not third["indexed"] and "vspipe exited with code 1" in third["index_error"]
@@ -691,6 +694,24 @@ def test_index_lane_stop(tmp_path):
         assert client.get("/api/queue").json() | {"running": False} == {
             "running": False, "current": None, "stop_after_current": False, "queued": 0, "indexing": None,
             "index_queued": 0}
+
+
+def test_index_now_goes_first(tmp_path):
+    """The editor's Index (first): ahead of the jobs waiting in the lane, also one already waiting."""
+    make_files(tmp_path, "S01E01", "S01E02", "S01E03", "S01E04")
+    indexer = FakeIndexer(hold=["Show.S01E01.mkv"])
+    with make_client(tmp_path, runner=indexer) as client:
+        ids = add(client, tmp_path)
+        for i in ids:
+            wait_for(client, i, "ready", "warn")
+        client.post("/api/queue/index", json={"ids": ids[:3]})
+        indexer.wait(1)
+        assert client.post("/api/queue/index", json={"ids": [ids[3]], "first": True}).json()["taken"] == [ids[3]]
+        assert client.post("/api/queue/index", json={"ids": [ids[2]], "first": True}).json()["taken"] == [ids[2]]
+        indexer.gates["Show.S01E01.mkv"].set()
+        indexer.wait(4)
+        order = [Path(c[-1]).name.removesuffix(".mkv.ffindex") for c in indexer.calls]
+        assert order == ["Show.S01E01", "Show.S01E03", "Show.S01E04", "Show.S01E02"]
 
 
 def test_index_lane_waits_for_the_preview(tmp_path):
@@ -754,6 +775,10 @@ def test_video_preview_endpoints(tmp_path):
     with make_client(tmp_path) as client:
         (job_id,) = add(client, tmp_path, sources=[str(clip)], subtitles=[])
         base = f"/api/jobs/{job_id}/video"
+        wait_for(client, job_id, "ready", "warn")
+        assert client.get(f"{base}/info", params={"stage": "source"}).status_code == 409  # not indexed
+        client.post("/api/queue/index", json={"ids": [job_id], "first": True})  # FFMS2, through ffindex
+        assert wait_for(client, job_id, "ready", "warn", timeout=60)["indexed"]
         assert client.get(f"{base}/info", params={"stage": "source"}).json()["height"] == 180
         crop = client.post(f"{base}/autocrop", params={"samples": 5}).json()
         assert crop["top"] in (20, 22) and crop["left"] == 0
