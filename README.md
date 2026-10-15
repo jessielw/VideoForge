@@ -44,6 +44,8 @@ Machine-specific settings (tool paths, default profile) go in `videoforge.local.
 
 Development: `uv run videoforge serve --no-browser`, then `cd frontend && npm run dev`
 (http://localhost:5173, proxies `/api`). Tests: `uv run pytest -q` and `cd frontend && npm run check`.
+Checks: `uv run poe typecheck` (basedpyright, standard, `src`), `uv run poe lint` (ruff), and
+`uv run poe format` (ruff fixes, then `ruff format`); `poe lint-fix`, `poe format-check` too.
 
 ## Profiles
 
