@@ -1,7 +1,8 @@
 <script lang="ts">
-  // The job's VapourSynth processing: preview (source with the crop drawn, or the output),
-  // crop (auto-crop, mod 2), source filter, resize, extra filter lines, and the script editor
-  // (Run saves an edited body as the job's custom script, then shows its info and frames or the error).
+  // The job's VapourSynth processing: the preview (Source with the crop drawn, or Output; keys 1 and 2
+  // flip at the same frame) and a side panel: Settings (crop, auto-crop, mod 2, source filter, resize,
+  // extra filter lines) or Script (Run saves an edited body as the job's custom script, then shows its
+  // info and frames or the error).
   // Every save hands us a new `job` object, so effects key on derived values (jobId, scriptKey)
   // that only change when the content does; otherwise each save would remount the preview.
   import { untrack } from 'svelte'
@@ -31,10 +32,10 @@
     editable,
   }: { job: JobDetail; save: (v: VideoSettings) => Promise<void>; editable: boolean } = $props()
 
-  type View = 'source' | 'output' | 'script'
-  // View, frame, zoom, scroll and the script editor's text, kept per job (JobEditor remounts this per job).
+  // Preview, panel, frame, zoom, scroll and the script editor's text, kept per job (JobEditor remounts this per job).
   const vv = videoView(untrack(() => job.id))
-  const stage = $derived(vv.view === 'source' ? 'source' : 'output')
+  const stage = $derived(vv.stage)
+  const scripting = $derived(vv.panel === 'script' && vv.stage === 'output') // the preview shows the script's runs
   let info = $state<Record<string, ClipInfo | null>>({ source: null, output: null })
   let infoError = $state('')
   let version = $state(0)
@@ -87,8 +88,9 @@
     loadInfo('source')
   })
 
+  // The script panel runs the script itself (refresh), which brings the output info with it.
   $effect(() => {
-    if (vv.view === 'output') {
+    if (vv.stage === 'output' && vv.panel === 'settings') {
       void version
       loadInfo('output')
     }
@@ -122,9 +124,9 @@
     }
   }
 
-  // Script view: run whenever the script's inputs change (once per change, not per job event).
+  // Script panel: run whenever the script's inputs change (once per change, not per job event).
   $effect(() => {
-    if (vv.view === 'script') {
+    if (vv.panel === 'script') {
       const key = scriptKey
       untrack(() => key !== refreshedKey && refresh())
     }
@@ -187,9 +189,15 @@
     }
   }
 
+  // The script editor shows what it makes, so opening it switches the preview to Output.
+  function openScript() {
+    vv.panel = 'script'
+    vv.stage = 'output'
+  }
+
   const current = $derived(info[stage])
   const notice = $derived.by(() => {
-    if (vv.view !== 'script') return null
+    if (!scripting) return null
     if (running) return { text: 'Running the script…', tone: 'muted' as const }
     if (vv.checked && !vv.checked.ok)
       return { text: `The script failed${vv.checked.line ? ` (line ${vv.checked.line})` : ''}: this is the last good frame.`, tone: 'bad' as const }
@@ -199,11 +207,10 @@
   const outW = $derived(src ? src.width - video.crop.left - video.crop.right : 0)
   const outH = $derived(src ? src.height - video.crop.top - video.crop.bottom : 0)
   const SIDES: (keyof Crop)[] = ['left', 'top', 'right', 'bottom']
-  const VIEWS: { id: View; label: string }[] = [
-    { id: 'source', label: 'Source + crop' },
-    { id: 'output', label: 'Output' },
-    { id: 'script', label: 'Script' },
-  ]
+  const STAGES = [
+    { id: 'source', label: 'Source', title: 'The source, with the crop drawn on it (key 1)' },
+    { id: 'output', label: 'Output', title: 'What the script makes: cropped, resized, filtered (key 2)' },
+  ] as const
 </script>
 
 <svelte:window onkeydown={e => e.key === 'Escape' && !e.defaultPrevented && layout.videoExpanded && (layout.videoExpanded = false)} />
@@ -211,13 +218,13 @@
 <div class="flex min-h-0 gap-4 {layout.videoExpanded ? 'fixed inset-0 z-40 bg-background p-4' : 'h-full'}">
   <div class="flex min-w-0 flex-1 flex-col gap-2">
     <div class="flex items-center gap-2">
-      <Tabs.Root value={vv.view} onValueChange={v => (vv.view = v as View)}>
-        <Tabs.List>
-          {#each VIEWS as v (v.id)}<Tabs.Trigger value={v.id} class="px-3">{v.label}</Tabs.Trigger>{/each}
+      <Tabs.Root value={vv.stage} onValueChange={v => (vv.stage = v as typeof vv.stage)}>
+        <Tabs.List aria-label="Preview">
+          {#each STAGES as v (v.id)}<Tabs.Trigger value={v.id} class="px-3" title={v.title}>{v.label}</Tabs.Trigger>{/each}
         </Tabs.List>
       </Tabs.Root>
       {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
-      {#if infoError && vv.view !== 'script'}<span class="truncate text-xs text-destructive" title={infoError}>{infoError}</span>{/if}
+      {#if infoError && !scripting}<span class="truncate text-xs text-destructive" title={infoError}>{infoError}</span>{/if}
       <Button
         variant="ghost"
         class="ml-auto"
@@ -242,8 +249,9 @@
         bind:edges={vv.edges}
         bind:scroll={vv.scroll}
         {notice}
+        onstage={s => (vv.stage = s)}
       />
-    {:else if vv.view === 'script'}
+    {:else if scripting}
       <div class="flex flex-1 items-center justify-center border text-muted-foreground">
         {running ? 'Running the script (the first run indexes the source)…' : 'No frames: the script failed.'}
       </div>
@@ -254,8 +262,15 @@
     {/if}
   </div>
 
-  {#if vv.view === 'script'}
-    <section class="flex w-[45%] shrink-0 flex-col gap-2">
+  <div class="flex shrink-0 flex-col gap-2 {vv.panel === 'script' ? 'w-[45%]' : 'w-72'}">
+    <Tabs.Root value={vv.panel} onValueChange={v => (v === 'script' ? openScript() : (vv.panel = 'settings'))}>
+      <Tabs.List aria-label="Side panel">
+        <Tabs.Trigger value="settings" class="px-3">Settings</Tabs.Trigger>
+        <Tabs.Trigger value="script" class="px-3">Script</Tabs.Trigger>
+      </Tabs.List>
+    </Tabs.Root>
+  {#if vv.panel === 'script'}
+    <section class="flex min-h-0 flex-1 flex-col gap-2">
       <div class="flex items-center gap-2">
         <Button onclick={run} disabled={running || saving} title="Save the body and run the script (Ctrl+Enter)">
           <PlayIcon />{running ? 'Running…' : dirty && editable ? 'Save & run' : 'Run'}
@@ -295,7 +310,7 @@
       {/if}
     </section>
   {:else}
-    <aside class="w-72 shrink-0 space-y-5 overflow-auto pr-1">
+    <aside class="min-h-0 flex-1 space-y-5 overflow-auto pr-1">
       <PresetMenu
         kind="video"
         profile={job.profile}
@@ -398,14 +413,15 @@
           {#if video.custom !== null}
             <p class="text-xs text-warning">
               A custom script body is in use, so crop, resize and filters don't apply.
-              <button class="underline underline-offset-2" onclick={() => (vv.view = 'script')}>Edit it</button> ·
+              <button class="underline underline-offset-2" onclick={openScript}>Edit it</button> ·
               <button class="underline underline-offset-2" onclick={useGenerated}>Back to generated</button>
             </p>
           {:else}
-            <Button variant="ghost" size="sm" onclick={() => (vv.view = 'script')}>Edit the whole script…</Button>
+            <Button variant="ghost" size="sm" onclick={openScript}>Edit the whole script…</Button>
           {/if}
         </section>
       </fieldset>
     </aside>
   {/if}
+  </div>
 </div>

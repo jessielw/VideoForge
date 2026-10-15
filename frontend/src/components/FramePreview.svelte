@@ -38,6 +38,7 @@
     edges = $bindable(false),
     scroll = $bindable({ left: 0, top: 0 }),
     notice = null,
+    onstage,
   }: {
     jobId: string
     stage: 'source' | 'output'
@@ -52,6 +53,7 @@
     edges?: boolean
     scroll?: { left: number; top: number }
     notice?: { text: string; tone: 'muted' | 'bad' } | null
+    onstage?: (stage: 'source' | 'output') => void // keys 1 and 2, at the same frame
   } = $props()
 
   const ZOOMS = [25, 50, 75, 100, 150, 200, 300, 400, 600, 800]
@@ -143,6 +145,7 @@
     else if (e.key === 'End') seek(frames - 1)
     else if (e.key === '+' || e.key === '=') zoomBy(1)
     else if (e.key === '-') zoomBy(-1)
+    else if (onstage && (e.key === '1' || e.key === '2')) onstage(e.key === '1' ? 'source' : 'output')
     else return
     e.preventDefault()
   }
