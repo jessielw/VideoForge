@@ -45,6 +45,13 @@ def output_path(plan: Plan, out_dir: Path, profile: Profile, container: str | No
     return out_dir / (stem + MUXERS[container or profile.container].extension)
 
 
+def job_output(spec: JobSpec, plan: Plan, profile: Profile) -> Path | None:
+    """The file a job writes; None without an output folder."""
+    if spec.output_dir is None:
+        return None
+    return output_path(plan, spec.output_dir, profile, spec.container(profile), spec.label)
+
+
 def mp4_chapters_step(plan: Plan, work: Path) -> Step | None:
     """MP4Box takes OGM text only: a chapter XML, or the source's own chapters (mkvmerge carries
     those by itself), become chapters_mp4.txt in the work folder. None when there's nothing to convert."""

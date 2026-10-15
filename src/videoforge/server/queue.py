@@ -16,7 +16,7 @@ finished steps, so a rerun only redoes what the edit touched.
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -27,7 +27,7 @@ import sqlite3
 import threading
 from typing import Any
 
-from videoforge.core.config import AppConfig
+from videoforge.core.config import AppConfig, Tools
 from videoforge.core.disks import disks
 from videoforge.core.execute import process
 from videoforge.core.execute.mux import MuxSettings
@@ -47,12 +47,14 @@ from videoforge.core.job import (
 )
 from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioMatch, JobInputs, Overrides, Plan, Severity, track_key
-from videoforge.core.pipeline.build import index_steps
+from videoforge.core.pipeline.build import index_steps, job_output
 from videoforge.core.pipeline.run import missing_inputs, run_job
 from videoforge.core.pipeline.steps import StepProgress, run_steps
 from videoforge.core.plan_io import to_json
 from videoforge.core.profile import Profile
+from videoforge.core.record import JsonLines, RunRecorder, event
 from videoforge.core.template import Template, apply_audio, apply_subs, template_choice
+from videoforge.core.tools import versions as tool_versions
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.server.events import EventHub
 from videoforge.server.store import Store
@@ -167,6 +169,7 @@ class Services:
     record: Callable[[JobResult], object] | None = None  # JobHistory.record
     detect_crop: Callable[[JobSpec], Crop] | None = None  # reads the source (VapourSynth)
     runner: Callable[..., None] = process.run  # the index lane's tool runner
+    versions: Callable[[Tools, Sequence[str]], dict[str, str]] | None = tool_versions  # for job records
 
 
 class JobQueue:
@@ -178,9 +181,11 @@ class JobQueue:
         events: EventHub,
         services: Services | None = None,
         probe_workers: int = 2,
+        queue_events: JsonLines | None = None,
     ) -> None:
         self.app, self.profiles, self.store, self.events = app, profiles, store, events
         self.services = services or Services()
+        self.queue_events = queue_events  # every job's events in one stream (core/record.py)
         self._entries: dict[str, Entry] = {}
         self._order: list[str] = []
         self._lock = threading.RLock()
@@ -633,6 +638,15 @@ class JobQueue:
         self._queue_changed()
         log_file = _open_log(e)
         logger.info("Job %s started (%s)", e.spec.name, e.id)
+        recorder = RunRecorder(
+            e.spec,
+            e.plan,
+            self.profile(e),
+            job_output(e.spec, e.plan, self.profile(e)),
+            queue_events=self.queue_events,
+            versions=self._versions,
+        )
+        recorder.started_run()
         last = [0.0]
 
         def log(line: str) -> None:
@@ -664,6 +678,7 @@ class JobQueue:
             if run.status is not StepStatus.PENDING:
                 self._save(e)
             index = next((i for i, r in enumerate(e.state.run) if r is run), -1)
+            recorder.step(run, index, len(e.state.run))
             # index 0 pending = a new run's list starts (the browser drops the last run's)
             self.events.publish(
                 "step", id=e.id, index=index, total=len(e.state.run), step=step_json(run, with_tail=False)
@@ -689,6 +704,8 @@ class JobQueue:
             logger.exception("%s: the run raised", e.spec.name)
             result = JobResult(e.plan, JobStatus.FAILED, error=f"{type(ex).__name__}: {ex}")
             e.state.status, e.state.error = result.status, result.error
+        if record := recorder.finished(result, e.state):
+            log(f"Job record: {record}")
         if result.status is JobStatus.DONE:
             log(f"Job complete: {result.output}")
         else:
@@ -866,6 +883,7 @@ class JobQueue:
                 self._save(e)
 
         error = ""
+        self._queue_event("index.started", e)
         log(f"### {e.spec.name}: index ({datetime.now().isoformat(timespec='seconds')})")
         try:
             if e.probe_error:
@@ -911,6 +929,7 @@ class JobQueue:
             logger.warning("%s: index failed: %s", e.spec.name, error)
         else:
             logger.info("%s: index %s", e.spec.name, "cancelled" if error else "done")
+        self._queue_event("index.finished", e, error=error or None)
         if log_file is not None:
             log_file.close()
         with self._lock:
@@ -921,6 +940,13 @@ class JobQueue:
             self._save_lane()
         self._changed(e)
         self._queue_changed()
+
+    def _versions(self, names: Sequence[str]) -> dict[str, str]:
+        return self.services.versions(self.app.tools, names) if self.services.versions else {}
+
+    def _queue_event(self, kind: str, e: Entry, **fields: Any) -> None:
+        if self.queue_events is not None:
+            self.queue_events.write(event(kind, job=e.id, name=e.spec.name, **fields))
 
     def _log(self, e: Entry, line: str, file=None) -> None:
         e.log.append(line)

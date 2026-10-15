@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from videoforge.core.config import AppConfig, load_app_config, with_tools
 from videoforge.core.history import JobHistory
 from videoforge.core.profile import Profile
+from videoforge.core.record import QUEUE_EVENTS, QUEUE_EVENTS_MAX, JsonLines
 from videoforge.core.video import vs as vsx
 from videoforge.core.video.preview import Preview
 from videoforge.server.events import EventHub
@@ -62,7 +63,10 @@ def create_app(
     preview = Preview()  # VapourSynth for the preview, in a child process started on first use
     if services.detect_crop is None:
         services.detect_crop = partial(video.source_crop, preview)
-    job_queue = JobQueue(cfg, profiles or get_profile, store, events, services, settings.probe_workers)
+    queue_events = JsonLines(settings.data_dir / "logs" / QUEUE_EVENTS, max_bytes=QUEUE_EVENTS_MAX)
+    job_queue = JobQueue(
+        cfg, profiles or get_profile, store, events, services, settings.probe_workers, queue_events=queue_events
+    )
     job_queue.index_waits_for_disk = saved.index_waits_for_disk
 
     @asynccontextmanager
@@ -80,6 +84,7 @@ def create_app(
             job_queue.shutdown()
             preview.close()
             store.close()
+            queue_events.close()
 
     app = FastAPI(title="VideoForge", lifespan=lifespan)
     app.state.settings = settings

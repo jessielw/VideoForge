@@ -24,6 +24,8 @@ import queue
 import sys
 from typing import TextIO
 
+from videoforge import version
+
 KEEP = 50  # log files kept in the folder, newest first
 MAX_BYTES = 10 * 1024 * 1024  # one session's file rolls over at this size (2 more parts kept)
 FILE_FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
@@ -46,15 +48,6 @@ class _ConsoleHandler(logging.StreamHandler):
             self.flush()
         except Exception:
             self.handleError(record)
-
-
-def version() -> str:
-    try:
-        from importlib.metadata import version as dist_version
-
-        return dist_version("videoforge")
-    except Exception:
-        return "unknown"
 
 
 def _prune(folder: Path, keep: int) -> None:

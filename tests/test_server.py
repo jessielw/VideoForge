@@ -6,6 +6,7 @@ VapourSynth on an ffmpeg-made clip and skip without the tools.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -269,6 +270,15 @@ def test_queue_runs_jobs_and_streams_events(tmp_path):
         text_log = (tmp_path / "src" / "Show.S01E01.mkv_tmp" / "videoforge.log").read_text(encoding="utf-8")
         last = text_log.splitlines()[-1]
         assert last[:9].count(":") == 2 and last[9:] == f"Job complete: {tmp_path / 'out' / 'Show.S01E01.mkv'}"
+        work = tmp_path / "src" / "Show.S01E01.mkv_tmp"
+        record = json.loads((work / "Show.S01E01.mkv.videoforge.json").read_text(encoding="utf-8"))
+        assert record["run"]["status"] == "done" and record["job"]["id"] == ids[0]
+        assert [s["id"] for s in record["steps"]] == ["video"]
+        assert f"Job record: {work / 'Show.S01E01.mkv.videoforge.json'}" in text_log
+        stream = (tmp_path / "data" / "logs" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        kinds = [(e["job"], e["event"]) for e in map(json.loads, stream)]
+        for i in ids:
+            assert [k for j, k in kinds if j == i] == ["run.started", "step.started", "step.finished", "run.finished"]
 
         # Editing a finished job clears its outcome (but keeps its finished steps).
         job = client.get(f"/api/jobs/{ids[0]}").json()
@@ -780,6 +790,12 @@ def test_index_lane(tmp_path):
             for i in (ids[0], ids[2])
         ]
         assert any("index done" in line for line in e.log)
+        stream = (tmp_path / "data" / "logs" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        indexed = [
+            (e["event"], e["job"], e.get("error")) for e in map(json.loads, stream) if e["event"].startswith("index.")
+        ]
+        assert indexed[:2] == [("index.started", ids[0], None), ("index.finished", ids[0], None)]
+        assert indexed[-1][1] == ids[2] and "vspipe exited with code 1" in indexed[-1][2]
 
         # Indexing again reuses the steps while the index is there, and builds it again once it's gone.
         client.post("/api/queue/index", json={"ids": [ids[0]]})

@@ -248,3 +248,29 @@ def detect(tools: Tools, *, runner: Runner = _run, timeout: float = 8.0) -> list
     paths = asdict(tools)
     with ThreadPoolExecutor(max_workers=min(len(TOOLS), (os.cpu_count() or 4) + 2)) as pool:
         return list(pool.map(lambda info: check(info, paths[info.name], runner=runner, timeout=timeout), TOOLS))
+
+
+_VERSIONS: dict[tuple[str, str, int], str] = {}  # (tool, file, mtime ns) -> version line
+
+
+def versions(tools: Tools, names: Sequence[str], *, runner: Runner = _run, timeout: float = 8.0) -> dict[str, str]:
+    """The version line of each named tool ("" when it printed none or is missing), cached per file
+    and mtime so a queue of jobs asks each tool once."""
+    paths = asdict(tools)
+    infos = {t.name: t for t in TOOLS if not t.folder}
+    out: dict[str, str] = {}
+    for name in names:
+        info = infos.get(name)
+        found = locate(paths.get(name, "")) if info else ""
+        if info is None or not found:
+            out[name] = ""
+            continue
+        try:
+            key = (name, os.path.normcase(os.path.abspath(found)), Path(found).stat().st_mtime_ns)
+        except OSError:
+            out[name] = ""
+            continue
+        if key not in _VERSIONS:
+            _VERSIONS[key] = check(info, found, runner=runner, timeout=timeout).version
+        out[name] = _VERSIONS[key]
+    return out
