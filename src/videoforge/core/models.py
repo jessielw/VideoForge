@@ -322,6 +322,17 @@ class TemplateSubs:
     others: OtherTracks = OtherTracks.EXCLUDE
 
 
+@dataclass(slots=True)
+class TemplateChoice:
+    """What a template set for one kind of track once the job's tracks were known: each track it
+    decided (an empty override: as the profile has it), the copies it made and its output order for
+    them (None: source order). The track editor tells these from hand edits and can go back to them."""
+
+    tracks: dict[str, TrackOverride] = field(default_factory=dict)
+    copies: list[str] = field(default_factory=list)
+    order: list[str] | None = None
+
+
 def track_key(track: AudioTrack | SubTrack) -> str:
     """"id:<mkvmerge id>" for a source track, "ext:<file name>" for an added file (an added audio
     file's second track on is "ext:<file name>#<n>"); a copy of an audio track adds "+<n>"."""

@@ -502,6 +502,11 @@ def test_template_audio(tmp_path):
         assert [(a["action"], a["title"]) for a in job["plan"]["audio"]] == [
             ("copy", "Japanese"), ("copy", ""), ("ddp", "DDP 5.1")]
         assert job["spec"]["audio_template"] is None and job["spec"]["overrides"]["copies"] == ["id:2+1"]
+        # What the template set stays on the job, for the track editor (both source tracks and the copy).
+        chosen = job["spec"]["audio_from_template"]
+        assert sorted(chosen["tracks"]) == ["id:1", "id:2", "id:2+1"] and chosen["copies"] == ["id:2+1"]
+        assert chosen["tracks"]["id:1"]["title"] == "Japanese" and chosen["tracks"]["id:2"]["action"] is None
+        assert chosen["tracks"]["id:2+1"]["action"] == "ddp" and job["spec"]["subs_from_template"] is None
 
         overrides = job["spec"]["overrides"] | {"tracks": {"id:1": {"title": "Mine"}}}
         client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides})
@@ -509,6 +514,8 @@ def test_template_audio(tmp_path):
         client.post("/api/jobs/apply", json={"ids": [job_id], "template": others})
         job = client.get(f"/api/jobs/{job_id}").json()
         assert [(a["action"], a["title"]) for a in job["plan"]["audio"]] == [("flac", "")]  # "Mine" replaced
+        chosen = job["spec"]["audio_from_template"]
+        assert chosen["copies"] == [] and chosen["tracks"]["id:2"]["exclude"] and chosen["tracks"]["id:1"]["action"] == "flac"
 
 
 def test_template_audio_fits_each_track(tmp_path):
@@ -543,6 +550,8 @@ def test_template_subs(tmp_path):
         assert job["spec"]["subs_template"] is None
         assert [(s["language"], s["title"], s["default"]) for s in job["plan"]["subs"]] == [
             ("en", "Added", True), ("en", "English", False)]  # German left out
+        chosen = job["spec"]["subs_from_template"]
+        assert chosen["order"] == ["ext:Show.S01E01.en.srt", "id:10"] and chosen["tracks"]["id:11"]["exclude"]
 
         overrides = job["spec"]["overrides"] | {"tracks": {"id:11": {"title": "Mine"}}}
         client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides})
@@ -564,6 +573,7 @@ def test_template_audio_is_dropped_without_a_track_editor(tmp_path, monkeypatch)
         job = wait_for(client, job_id, "ready", "warn")
         assert job["spec"]["audio_template"] is None and job["spec"]["subs_template"] is None
         assert job["spec"]["overrides"]["tracks"] == {}
+        assert job["spec"]["audio_from_template"] is None and job["spec"]["subs_from_template"] is None
 
 
 def test_folder_browser(tmp_path):

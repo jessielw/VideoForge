@@ -138,6 +138,13 @@ export interface Overrides {
   copies: string[] // more output tracks from an audio track: "<track key>+<n>"
 }
 
+// What a template set for one kind of track (src/videoforge/core/models.py TemplateChoice).
+export interface TemplateChoice {
+  tracks: Record<string, TrackOverride> // each track it decided; an empty one = as the profile has it
+  copies: string[]
+  order: string[] | null
+}
+
 export interface JobInputs {
   source: string
   encode: string | null
@@ -159,6 +166,8 @@ export interface JobSpec {
   autocrop: boolean // the crop is detected once the source can be read (a template's auto crop)
   audio_template: TemplateAudio | null // a template's audio, waiting for the source's tracks
   subs_template: TemplateSubs | null // ... and its subtitle rules
+  audio_from_template: TemplateChoice | null // what the last template set for the audio
+  subs_from_template: TemplateChoice | null // ... and for the subtitles
   id: string
 }
 

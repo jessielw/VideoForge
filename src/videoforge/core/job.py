@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from videoforge.core.config import AppConfig, Tools
 from videoforge.core.execute.mux import MuxSettings, mux_issues
 from videoforge.core.jobs import ProbedInputs, plan_job, probe_inputs
-from videoforge.core.models import Issue, JobInputs, Overrides, Plan, SourceInfo, TemplateAudio, TemplateSubs, VideoInfo
+from videoforge.core.models import Issue, JobInputs, Overrides, Plan, SourceInfo, TemplateAudio, TemplateChoice, TemplateSubs, VideoInfo
 from videoforge.core.tools import tool_issues
 from videoforge.core.video.encoders import output_name
 from videoforge.core.video.qpf import qpf_paths
@@ -70,6 +70,9 @@ class JobSpec:
     audio_template: TemplateAudio | None = None
     # ... and its subtitle rules, waiting for the source's (and added files') subtitle tracks.
     subs_template: TemplateSubs | None = None
+    # What the last template set for the audio / the subtitles (template.template_choice).
+    audio_from_template: TemplateChoice | None = None
+    subs_from_template: TemplateChoice | None = None
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
     @property

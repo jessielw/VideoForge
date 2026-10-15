@@ -30,6 +30,7 @@ from videoforge.core.models import (
     SubRule,
     SubTrack,
     TemplateAudio,
+    TemplateChoice,
     TemplateSubs,
     TrackOverride,
     copy_base,
@@ -175,3 +176,14 @@ def apply_subs(overrides: Overrides, subs: TemplateSubs, tracks: list[SubTrack])
                 ov.flags = {**ov.flags, "default": False}
     order = [k for k in overrides.order or [] if k not in ours] + kept
     return replace(overrides, tracks=out, order=order or None)
+
+
+def template_choice(overrides: Overrides, keys: list[str]) -> TemplateChoice:
+    """What a template just set (apply_audio / apply_subs) for the tracks it decided (keys; their
+    copies count too), kept on the job so the track editor can tell it from later hand edits."""
+    ours = set(keys)
+    copies = [c for c in overrides.copies if copy_base(c)[0] in ours and c not in ours]
+    decided = [*keys, *copies]
+    tracks = {k: copy.deepcopy(overrides.tracks.get(k) or TrackOverride()) for k in decided}
+    order = [k for k in overrides.order or [] if k in tracks]
+    return TemplateChoice(tracks, copies, order or None)

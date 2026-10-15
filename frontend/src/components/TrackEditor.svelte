@@ -20,6 +20,7 @@
   import CopyPlusIcon from '@lucide/svelte/icons/copy-plus'
   import FilePlusIcon from '@lucide/svelte/icons/file-plus'
   import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical'
+  import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
   import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal'
   import XIcon from '@lucide/svelte/icons/x'
@@ -142,8 +143,27 @@
   const setTitle = (t: Track, v: string) => editTrack(t, ov => (ov.title = v === t.title ? null : v))
   const setLanguage = (t: Track, v: string) => editTrack(t, ov => (ov.language = !v || v === t.language ? null : v))
 
+  // Where a set value comes from: the last template set it for this track, or a hand edit
+  // (a template's value changed counts as one). Unset: as the profile has it, no mark.
+  type Mark = 'template' | 'hand' | null
+  const chosen = $derived(kind === 'audio' ? job.spec.audio_from_template : job.spec.subs_from_template)
+  function mark(t: Track, get: (ov: TrackOverride | undefined) => unknown): Mark {
+    const now = get(ovOf(t))
+    if (now === null || now === undefined) return null
+    const tpl = chosen?.tracks[t.key]
+    return tpl && get(tpl) === now ? 'template' : 'hand'
+  }
+  const NOTE = { template: ' (from the template)', hand: ' (changed by you)' }
+  const note = (m: Mark) => (m ? NOTE[m] : '')
+  const INPUT_MARK = { template: 'border-info/60', hand: 'border-warning/60' }
+  const SELECT_MARK = { template: '[&>select]:border-info/60', hand: '[&>select]:border-warning/60' }
+  const FLAG_MARK = {
+    template: 'underline decoration-info decoration-dotted underline-offset-2',
+    hand: 'underline decoration-warning decoration-dotted underline-offset-2',
+  }
+
   const flagOn = (t: Track, key: string) => ovOf(t)?.flags[key] ?? t.detected[key] ?? false
-  const flagSet = (t: Track, key: string) => key in (ovOf(t)?.flags ?? {})
+  const flagMark = (t: Track, key: string) => mark(t, ov => ov?.flags[key])
   function toggleFlag(t: Track, key: string) {
     const on = !flagOn(t, key)
     editTrack(t, ov => {
@@ -312,6 +332,20 @@
     save(o)
   }
 
+  // Back to what the last template set for this kind: its tracks, copies and order; tracks it
+  // didn't decide (e.g. added files) go back to the profile's choices.
+  function backToTemplate() {
+    if (!chosen) return
+    const tpl = $state.snapshot(chosen) as typeof chosen
+    const o = draft()
+    const mine = new Set([...rows.map(t => t.key), ...Object.keys(tpl.tracks)])
+    for (const key of Object.keys(o.tracks)) if (mine.has(key)) delete o.tracks[key]
+    for (const [key, ov] of Object.entries(tpl.tracks)) if (!isEmpty(ov)) o.tracks[key] = ov
+    if (kind === 'audio') o.copies = [...tpl.copies]
+    o.order = [...(o.order ?? []).filter(key => !mine.has(key)), ...(tpl.order ?? [])]
+    save(o)
+  }
+
   function setOriginal(tag: string) {
     const o = draft()
     o.original_language = tag || null
@@ -344,7 +378,12 @@
         role="button"
         tabindex="-1"><GripVerticalIcon class="size-4" /></span
       >
-      <Checkbox checked={!off} title="In the output" aria-label="In the output" onCheckedChange={v => setIncluded(t, v)} />
+      <Checkbox
+        checked={!off}
+        title="In the output{note(mark(t, o => o?.exclude))}"
+        aria-label="In the output"
+        onCheckedChange={v => setIncluded(t, v)}
+      />
       <span class="w-5 text-center text-xs {off ? 'text-muted-foreground' : 'text-primary'}">{pos === undefined ? '–' : pos + 1}</span>
       <div class="min-w-0 flex-1">
         <div class="truncate text-sm {off ? 'text-muted-foreground line-through' : ''}" title={t.title}>
@@ -393,31 +432,36 @@
       </Button>
     </div>
     {#if !off}
+      {@const titleMark = mark(t, o => o?.title)}
+      {@const langMark = mark(t, o => o?.language)}
       <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-3 py-2 text-sm">
         <Input
-          class="w-64 {ov?.title !== null && ov?.title !== undefined ? 'border-warning/60' : ''}"
+          class="w-64 {titleMark ? INPUT_MARK[titleMark] : ''}"
           placeholder="No title"
           value={ov?.title ?? t.title}
+          title={titleMark ? `Title${note(titleMark)}` : undefined}
           aria-label="Title"
           onchange={e => setTitle(t, e.currentTarget.value)}
         />
         <Input
-          class="w-24 {ov?.language ? 'border-warning/60' : ''}"
+          class="w-24 {langMark ? INPUT_MARK[langMark] : ''}"
           list="track-languages"
           value={ov?.language ?? t.language}
+          title={langMark ? `Language${note(langMark)}` : undefined}
           aria-label="Language"
           onchange={e => setLanguage(t, e.currentTarget.value.trim())}
         />
         <div class="flex flex-wrap gap-1" role="group" aria-label="Track flags">
           {#each properties as f (f.key)}
             {@const on = flagOn(t, f.key)}
+            {@const fm = flagMark(t, f.key)}
             <Toggle
               variant="outline"
               size="sm"
               class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
-                data-[state=on]:text-primary {flagSet(t, f.key) ? 'underline decoration-dotted underline-offset-2' : ''}"
+                data-[state=on]:text-primary {fm ? FLAG_MARK[fm] : ''}"
               pressed={on}
-              title="{f.help}{flagSet(t, f.key) ? ' (changed for this job)' : ''}"
+              title="{f.help}{note(fm)}"
               onPressedChange={() => toggleFlag(t, f.key)}
               >{#if on}<CheckIcon class="size-3" />{/if}{f.label}</Toggle
             >
@@ -428,15 +472,30 @@
         {@const action = actionOf(t)}
         {@const planned = plannedAudio.get(t.key)?.a}
         {@const enc = encodeOf(action)}
+        {@const actionMark = mark(t, o => o?.action)}
+        {@const layoutMark = mark(t, o => o?.layout)}
+        {@const bitrateMark = mark(t, o => o?.bitrate_kbps)}
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-3 py-2 text-sm">
-          <NativeSelect value={action} aria-label="Copy or encode" onchange={e => setAction(t, e.currentTarget.value as AudioAction)}>
+          <NativeSelect
+            value={action}
+            class={actionMark ? SELECT_MARK[actionMark] : ''}
+            title={actionMark ? `Copy or encode${note(actionMark)}` : undefined}
+            aria-label="Copy or encode"
+            onchange={e => setAction(t, e.currentTarget.value as AudioAction)}
+          >
             <option value="copy">Copy</option>
             {#each offered(t, action) as e (e.id)}
               <option value={e.id} disabled={!!e.missing.length && action !== e.id}>Encode: {e.label}{needs(e)}</option>
             {/each}
           </NativeSelect>
           {#if enc && enc.layouts.length > 1}
-            <NativeSelect value={ov?.layout ?? ''} aria-label="Channels" onchange={e => setLayout(t, e.currentTarget.value)}>
+            <NativeSelect
+              value={ov?.layout ?? ''}
+              class={layoutMark ? SELECT_MARK[layoutMark] : ''}
+              title={layoutMark ? `Channels${note(layoutMark)}` : undefined}
+              aria-label="Channels"
+              onchange={e => setLayout(t, e.currentTarget.value)}
+            >
               <option value="">Channels: auto{planned && !ov?.layout ? ` (${planned.out_layout})` : ''}</option>
               {#each layoutChoices(t, enc) as l (l)}<option value={l}>{l}</option>{/each}
             </NativeSelect>
@@ -444,13 +503,20 @@
           {#if enc && enc.bitrates !== null}
             <label class="flex items-center gap-1.5 text-muted-foreground">
               {#if enc.bitrate_choices.length}
-                <NativeSelect value={ov?.bitrate_kbps ?? ''} aria-label="Bitrate" onchange={e => setBitrate(t, e.currentTarget.value)}>
+                <NativeSelect
+                  value={ov?.bitrate_kbps ?? ''}
+                  class={bitrateMark ? SELECT_MARK[bitrateMark] : ''}
+                  title={bitrateMark ? `Bitrate${note(bitrateMark)}` : undefined}
+                  aria-label="Bitrate"
+                  onchange={e => setBitrate(t, e.currentTarget.value)}
+                >
                   <option value="">auto{planned?.bitrate_kbps && !ov?.bitrate_kbps ? ` (${planned.bitrate_kbps})` : ''}</option>
                   {#each enc.bitrate_choices as b (b)}<option value={b}>{b}</option>{/each}
                 </NativeSelect>
               {:else}
                 <Input
-                  class="w-24"
+                  class="w-24 {bitrateMark ? INPUT_MARK[bitrateMark] : ''}"
+                  title={bitrateMark ? `Bitrate${note(bitrateMark)}` : undefined}
                   type="number"
                   min="6"
                   step="8"
@@ -542,6 +608,11 @@
         <Button variant="outline" onclick={() => (browsing = true)} title="Add {kind === 'audio' ? 'audio' : 'subtitle'} files to this job">
           <FilePlusIcon />Add files…
         </Button>
+        {#if chosen}
+          <Button variant="outline" onclick={backToTemplate} title="Back to what the template set for these tracks">
+            <LayoutTemplateIcon />Back to template
+          </Button>
+        {/if}
         <Button variant="outline" onclick={reset} title="Back to the profile's choices for these tracks"><RefreshCwIcon />Reset</Button>
       </div>
     </div>

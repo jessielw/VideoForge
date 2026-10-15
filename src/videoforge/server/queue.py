@@ -35,12 +35,12 @@ from videoforge.core.job import (
     probe_spec,
 )
 from videoforge.core.jobs import ProbedInputs, external_tracks
-from videoforge.core.models import JobInputs, Overrides, Plan, Severity
+from videoforge.core.models import JobInputs, Overrides, Plan, Severity, track_key
 from videoforge.core.pipeline.run import run_job
 from videoforge.core.pipeline.steps import StepProgress
 from videoforge.core.plan_io import to_json
 from videoforge.core.profile import Profile
-from videoforge.core.template import Template, apply_audio, apply_subs
+from videoforge.core.template import Template, apply_audio, apply_subs, template_choice
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.server.events import EventHub
 from videoforge.server.store import Store
@@ -297,9 +297,13 @@ class JobQueue:
             return False
         if self.profile(e).track_editor:
             if s.audio_template is not None:
-                s.overrides = apply_audio(s.overrides, s.audio_template, e.probed.source.audio)
+                audio = e.probed.source.audio
+                s.overrides = apply_audio(s.overrides, s.audio_template, audio)
+                s.audio_from_template = template_choice(s.overrides, [track_key(t) for t in audio])
             if s.subs_template is not None:
-                s.overrides = apply_subs(s.overrides, s.subs_template, e.probed.source.subs + e.probed.external_subs)
+                subs = e.probed.source.subs + e.probed.external_subs
+                s.overrides = apply_subs(s.overrides, s.subs_template, subs)
+                s.subs_from_template = template_choice(s.overrides, [track_key(t) for t in subs])
         s.audio_template = s.subs_template = None
         return True
 
