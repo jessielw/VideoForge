@@ -24,7 +24,7 @@ from videoforge.profiles import default_profile_id
 from videoforge.server.settings import SavedSettings
 
 router = APIRouter(prefix="/api/config")
-RESTART_FOR = {"vs_plugins": "The preview loads VapourSynth plugins once: restart VideoForge to use the new folder there"}
+RESTART_FOR: dict[str, str] = {}  # setting -> why VideoForge needs a restart for it (none today)
 
 
 def _state(request: Request) -> dict[str, Any]:
@@ -92,7 +92,7 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         s.queue.replan_all()  # an encode whose tool went missing (or came back) blocks (or unblocks)
     if cfg.tools.vs_plugins != before.vs_plugins:
         vsx.configure(cfg.tools.vs_plugins)  # vspipe runs inherit it from now on
-        s.restart_for.add("vs_plugins")
+        request.app.state.preview.restart("The VapourSynth plugin folder changed")  # ... and the next preview worker
     if cfg.tools.vspipe != before.vspipe:
         with suppress(Exception):  # a broken vspipe shows in the tools check
             vsx.ensure_vspipe(cfg.tools.vspipe)

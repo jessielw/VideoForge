@@ -27,7 +27,8 @@ src/videoforge/
     video/
       settings.py        VideoSettings (source filter, crop, resize, filters, custom script), EncoderSettings
       script.py          VideoSettings -> .vpy text (one generator for preview and encode)
-      vs.py              In-process VapourSynth: plugin path, clip cache, info, RGB frames
+      vs.py              VapourSynth: plugin path, clip cache, info, RGB frames (run in the preview worker)
+      preview.py         The preview worker: a child process holding the clips; JSON over stdin/stdout
       crop.py            Auto-crop detection (RGB lightness on sampled lines, read straight from YUV)
       encoders.py        x264 / x265: settings -> argv (1 or 2 pass), progress parsing
       qpf.py             AutoQPF: chapters -> qpf + chapter file
@@ -128,9 +129,10 @@ index ─► qpf/chapters ─► video (vspipe | x264/x265, 1 or 2 passes) ─�
 
 - `vapoursynth` from PyPI (R81+) is self-contained: the core, `vspipe` and `vsrepo`
   come with the Python package. Plugins live in `tools/vs-plugins` and load through
-  `VAPOURSYNTH_EXTRA_PLUGIN_PATH` (set for the server process and every vspipe run).
-- One script generator serves both the preview (executed in-process, the clip
-  cached by script text) and the encode (written to `<source>_tmp/video.vpy`, run by vspipe).
+  `VAPOURSYNTH_EXTRA_PLUGIN_PATH` (set for the server process, the preview worker and every vspipe run).
+- One script generator serves both the preview (executed in the preview worker, a child process
+  started on first use, the clip cached by script text; a crash or a request past its timeout costs
+  only the worker, the next request starts a new one; it is in the tool Job Object) and the encode (written to `<source>_tmp/video.vpy`, run by vspipe).
 - Indexes go into the work folder (bestsource `cachepath`, lsmas/ffms2 `cachefile`),
   so preview and encode share them.
 

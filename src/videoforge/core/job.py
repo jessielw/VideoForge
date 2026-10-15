@@ -22,7 +22,17 @@ from typing import TYPE_CHECKING
 from videoforge.core.config import AppConfig, Tools
 from videoforge.core.execute.mux import MuxSettings, mux_issues
 from videoforge.core.jobs import ProbedInputs, plan_job, probe_inputs
-from videoforge.core.models import Issue, JobInputs, Overrides, Plan, SourceInfo, TemplateAudio, TemplateChoice, TemplateSubs, VideoInfo
+from videoforge.core.models import (
+    Issue,
+    JobInputs,
+    Overrides,
+    Plan,
+    SourceInfo,
+    TemplateAudio,
+    TemplateChoice,
+    TemplateSubs,
+    VideoInfo,
+)
 from videoforge.core.tools import tool_issues
 from videoforge.core.video.encoders import output_name
 from videoforge.core.video.qpf import qpf_paths

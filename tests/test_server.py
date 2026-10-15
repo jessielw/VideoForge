@@ -387,7 +387,7 @@ def test_settings_page_config(tmp_path):
         assert client.put("/api/config", json={"roots": [str(tmp_path / "missing")]}).status_code == 422
         assert client.put("/api/config", json={"profile": "not-installed"}).status_code == 422
         changed = client.put("/api/config", json={"tools": {"vs_plugins": str(folder)}}).json()
-        assert changed["restart"] and "preview" in changed["restart"][0]
+        assert not changed["restart"]  # the preview worker restarts with the new folder
 
     with make_client(tmp_path) as client:  # kept across a restart
         cfg = client.get("/api/config").json()

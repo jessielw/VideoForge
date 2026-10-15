@@ -1,9 +1,9 @@
 """A job's video in the browser: clip info, frames (source = uncropped, output = processed),
 auto-crop, the generated script, and a check that runs it (the script editor's Run).
 
-Clips come from the same script generator the encode uses and are cached by
-script text. The first request for a source builds its index in the job's work
-folder (minutes for a large remux; later requests are instant).
+Clips come from the same script generator the encode uses and are loaded and cached by
+script text in the preview worker (core/video/preview.py, a child process). The first request for a
+source builds its index in the job's work folder (minutes for a large remux; later requests are instant).
 """
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ from fastapi import APIRouter, HTTPException, Request, Response
 
 from videoforge.core.job import JobSpec
 from videoforge.core.plan_io import to_json
-from videoforge.core.video import crop as autocrop
-from videoforge.core.video import vs as vsx
+from videoforge.core.video.preview import FrameError, Preview, PreviewError
 from videoforge.core.video.script import build_script, script_parts
 from videoforge.core.video.settings import Crop
+from videoforge.core.video.vs import ScriptError
 from videoforge.server.queue import Entry, JobQueue
 
 router = APIRouter(prefix="/api/jobs/{job_id}/video")
@@ -41,17 +41,18 @@ def _script(spec: JobSpec, stage: Stage) -> str:
     return build_script(spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage)
 
 
-def source_crop(clips: vsx.ClipCache, spec: JobSpec, samples: int = 20) -> Crop:
+def source_crop(preview: Preview, spec: JobSpec, samples: int = 20) -> Crop:
     """Auto-crop's suggestion for a job's source (a template's auto crop; indexes the source first)."""
-    return autocrop.detect(clips.get(_script(spec, "source")), samples=samples)
+    return preview.autocrop(_script(spec, "source"), samples=samples)
 
 
-def _clip(request: Request, e: Entry, stage: Stage):
-    cache: vsx.ClipCache = request.app.state.clips
-    try:
-        return cache.get(script_for(e, stage))
-    except vsx.ScriptError as ex:
-        raise HTTPException(422, str(ex)) from None
+def _preview(request: Request) -> Preview:
+    return request.app.state.preview
+
+
+def _failed(ex: Exception) -> HTTPException:
+    """A script that fails (422, the editor shows it) or a preview that stopped (503)."""
+    return HTTPException(503 if isinstance(ex, PreviewError) else 422, str(ex))
 
 
 @router.get("/script")
@@ -68,47 +69,45 @@ def script(request: Request, job_id: str, stage: Stage = "output") -> dict[str, 
 def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
     """Run the script and render its first frame: the clip's info, or the error and its script line."""
     e = _entry(request, job_id)
-    cache: vsx.ClipCache = request.app.state.clips
     try:
-        clip = cache.get(script_for(e, stage))
-    except vsx.ScriptError as ex:
+        i = _preview(request).check(script_for(e, stage))
+    except ScriptError as ex:
         message = ex.message
         spec = e.spec
         head, body, _ = script_parts(spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage)
         if ex.line and ex.line > len(head) + len(body):
             message += " (in the generated end of the script: the body must leave a video clip in `clip`)"
         return {"ok": False, "error": message, "line": ex.line}
-    try:
-        clip.get_frame(0)
-    except Exception as ex:  # noqa: BLE001 - a filter failing on a frame; report it, don't 500
-        return {"ok": False, "error": f"Frame 0: {type(ex).__name__}: {ex}", "line": None}
-    i = vsx.clip_info(clip)
+    except (FrameError, PreviewError) as ex:  # a filter failing on frame 0, or the preview stopped
+        return {"ok": False, "error": str(ex), "line": None}
     return {"ok": True, "info": to_json(i) | {"fps": i.fps}}
 
 
 @router.get("/info")
 def info(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
-    clip = _clip(request, _entry(request, job_id), stage)
-    i = vsx.clip_info(clip)
+    try:
+        i = _preview(request).info(script_for(_entry(request, job_id), stage))
+    except (ScriptError, FrameError, PreviewError) as ex:
+        raise _failed(ex) from None
     return to_json(i) | {"fps": i.fps}
 
 
 @router.get("/frame")
 def frame(request: Request, job_id: str, n: int = 0, stage: Stage = "output",
           fmt: Literal["jpeg", "png"] = "jpeg", quality: int = 90) -> Response:
-    clip = _clip(request, _entry(request, job_id), stage)
     try:
-        data = vsx.frame_image(clip, n, fmt, quality)
-        props = vsx.frame_props(clip, n)
-    except Exception as ex:  # noqa: BLE001 - a filter failing on this frame
-        raise HTTPException(422, f"Frame {n}: {type(ex).__name__}: {ex}") from None
-    pict = props.get("_PictType", "")
+        data, pict, frames = _preview(request).frame(script_for(_entry(request, job_id), stage), n, fmt, quality)
+    except (ScriptError, FrameError, PreviewError) as ex:
+        raise _failed(ex) from None
     return Response(data, media_type=f"image/{fmt}",
-                    headers={"Cache-Control": "no-store", "X-Frame-Type": str(pict), "X-Frame-Count": str(clip.num_frames)})
+                    headers={"Cache-Control": "no-store", "X-Frame-Type": pict, "X-Frame-Count": str(frames)})
 
 
 @router.post("/autocrop")
 def detect_crop(request: Request, job_id: str, samples: int = 20) -> dict[str, Any]:
     """Suggest a crop from the uncropped source (the job isn't changed)."""
-    clip = _clip(request, _entry(request, job_id), "source")
-    return to_json(autocrop.detect(clip, samples=max(3, min(samples, 60))))
+    try:
+        crop = source_crop(_preview(request), _entry(request, job_id).spec, max(3, min(samples, 60)))
+    except (ScriptError, FrameError, PreviewError) as ex:
+        raise _failed(ex) from None
+    return to_json(crop)
