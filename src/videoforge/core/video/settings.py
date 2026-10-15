@@ -11,9 +11,9 @@ from enum import StrEnum
 
 
 class SourceFilter(StrEnum):
-    BESTSOURCE = "bestsource"  # core.bs.VideoSource: exact seeking, slow first index
+    FFMS2 = "ffms2"  # core.ffms2.Source: quick index (the default)
+    BESTSOURCE = "bestsource"  # core.bs.VideoSource: exact seeking, slow first index (decodes the whole video)
     LSMASH = "lsmash"  # core.lsmas.LWLibavSource
-    FFMS2 = "ffms2"  # core.ffms2.Source
 
 
 @dataclass(slots=True)
@@ -37,7 +37,7 @@ class Resize:
 
 @dataclass(slots=True)
 class VideoSettings:
-    source_filter: SourceFilter = SourceFilter.BESTSOURCE
+    source_filter: SourceFilter = SourceFilter.FFMS2
     crop: Crop = field(default_factory=Crop)
     resize: Resize | None = None
     # Extra script lines after crop/resize: they read and reassign `clip`.

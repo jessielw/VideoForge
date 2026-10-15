@@ -10,7 +10,7 @@
   import { layout } from '../lib/layout.svelte'
   import { videoView } from '../lib/videoView.svelte'
   import { clipLength } from '../lib/format'
-  import type { ClipInfo, Crop, JobDetail, SourceFilter, VideoSettings } from '../lib/types'
+  import { SOURCE_FILTERS, type ClipInfo, type Crop, type JobDetail, type SourceFilter, type VideoSettings } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import MaximizeIcon from '@lucide/svelte/icons/maximize'
@@ -39,6 +39,16 @@
   let info = $state<Record<string, ClipInfo | null>>({ source: null, output: null })
   let infoError = $state('')
   let version = $state(0)
+  // The source frame changes only with the source filter: crop and filter saves don't reload it.
+  let sourceVersion = $state(0)
+  let lastFilter = untrack(() => job.spec.video.source_filter)
+  $effect(() => {
+    const f = job.spec.video.source_filter
+    if (f !== lastFilter) {
+      lastFilter = f
+      sourceVersion++
+    }
+  })
   let detecting = $state(false)
   // The editable copy; the effect below resets it when the job changes on the server.
   let video = $state<VideoSettings>(untrack(() => structuredClone($state.snapshot(job.spec.video)) as VideoSettings))
@@ -249,7 +259,7 @@
         fps={current.fps}
         width={current.width}
         height={current.height}
-        {version}
+        version={stage === 'source' ? sourceVersion : version}
         crop={stage === 'source' ? video.crop : null}
         bind:frame={vv.frame}
         bind:zoom={vv.zoom}
@@ -382,9 +392,7 @@
               setTimeout(() => loadInfo('source'), 400)
             }}
           >
-            <option value="bestsource">BestSource (exact seeking)</option>
-            <option value="lsmash">L-SMASH Works</option>
-            <option value="ffms2">FFMS2</option>
+            {#each SOURCE_FILTERS as f (f.id)}<option value={f.id} title={f.title}>{f.label}</option>{/each}
           </NativeSelect>
         </section>
 

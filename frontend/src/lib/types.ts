@@ -29,6 +29,12 @@ export interface Resize {
 }
 
 export type SourceFilter = 'bestsource' | 'lsmash' | 'ffms2'
+// The source filter menu: FFMS2 (the default) first.
+export const SOURCE_FILTERS: { id: SourceFilter; label: string; title: string }[] = [
+  { id: 'ffms2', label: 'FFMS2', title: 'Quick to index; the default' },
+  { id: 'bestsource', label: 'BestSource (exact seeking)', title: 'Frame-exact seeking; the first index decodes the whole video' },
+  { id: 'lsmash', label: 'L-SMASH Works', title: 'Quick to index' },
+]
 
 export interface VideoSettings {
   source_filter: SourceFilter

@@ -580,7 +580,7 @@ def test_folder_browser(tmp_path):
 FFMPEG = shutil.which("ffmpeg")
 
 
-@pytest.mark.skipif(FFMPEG is None or not (PROJECT_ROOT / "tools" / "vs-plugins" / "bestsource.dll").exists(),
+@pytest.mark.skipif(FFMPEG is None or not (PROJECT_ROOT / "tools" / "vs-plugins" / "ffms2.dll").exists(),
                     reason="needs ffmpeg and tools/vs-plugins")
 def test_video_preview_endpoints(tmp_path):
     (tmp_path / "src").mkdir()

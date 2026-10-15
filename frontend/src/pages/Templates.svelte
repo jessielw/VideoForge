@@ -20,7 +20,7 @@
   import TemplateSubsEditor from '../components/TemplateSubsEditor.svelte'
   import { api } from '../lib/api'
   import { app } from '../lib/state.svelte'
-  import type { CropMode, SourceFilter, Template } from '../lib/types'
+  import { SOURCE_FILTERS, type CropMode, type SourceFilter, type Template } from '../lib/types'
 
   type Choice = { name: string; data: Template; builtin: boolean }
   // What the editor holds: the saved template it started from (name null = not saved yet).
@@ -235,9 +235,7 @@
                 value={draft.video.source_filter}
                 onchange={e => (draft!.video.source_filter = e.currentTarget.value as SourceFilter)}
               >
-                <option value="bestsource">BestSource (exact seeking)</option>
-                <option value="lsmash">L-SMASH Works</option>
-                <option value="ffms2">FFMS2</option>
+                {#each SOURCE_FILTERS as f (f.id)}<option value={f.id} title={f.title}>{f.label}</option>{/each}
               </NativeSelect>
             </label>
             <div class="space-y-2">

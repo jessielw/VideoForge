@@ -33,12 +33,14 @@ def _run(dark: np.ndarray) -> np.ndarray:
 def frame_borders(rgb: np.ndarray, threshold: float = THRESHOLD) -> Crop:
     """The black border of one (H, W, 3) frame, each side limited to a quarter of the frame."""
     h, w = rgb.shape[:2]
-    lum = (rgb.max(axis=2).astype(np.uint16) + rgb.min(axis=2)) / 510.0
-    dark = lum < threshold
     xs = [int(w * i / _POSITIONS) for i in range(_POSITIONS)]
     ys = [int(h * i / _POSITIONS) for i in range(_POSITIONS)]
     qh, qw = max(1, h // 4), max(1, w // 4)
-    cols, rows = dark[:, xs], dark[ys, :].T  # rows.T: one column per sampled row
+
+    def dark(px: np.ndarray) -> np.ndarray:  # only the sampled lines: the whole frame costs ~70 ms at 1080p
+        return (px.max(axis=-1).astype(np.uint16) + px.min(axis=-1)) / 510.0 < threshold
+
+    cols, rows = dark(rgb[:, xs]), dark(rgb[ys, :]).T  # rows.T: one column per sampled row
     return Crop(
         left=int(_run(rows[:qw]).min()),
         top=int(_run(cols[:qh]).min()),

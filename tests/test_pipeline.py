@@ -278,7 +278,7 @@ def test_video_steps_two_pass(profile, tmp_path):
 TOOLS = PROJECT_ROOT / "tools"
 FFMPEG = shutil.which("ffmpeg")
 needs_tools = pytest.mark.skipif(
-    FFMPEG is None or not (TOOLS / "vs-plugins" / "bestsource.dll").exists()
+    FFMPEG is None or not (TOOLS / "vs-plugins" / "ffms2.dll").exists()
     or not (TOOLS / "x264" / "x264.exe").exists() or not (TOOLS / "MKVToolNix" / "mkvmerge.exe").exists(),
     reason="needs ffmpeg and tools/ (vs-plugins, x264, MKVToolNix)",
 )
