@@ -241,6 +241,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
     url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"  # noqa: S104 (a comparison)
     if _bring_up_running(url, open_browser=args.window or not args.no_browser):
         return 0
+    from videoforge import applog
+
+    applog.setup(settings.data_dir)
     if args.window:
         from videoforge.desktop import run_window
 
@@ -255,7 +258,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
     app = create_app(settings)
     # Open connections get 5 s to close before the app's shutdown runs (it cancels a running job: up to 10 s).
     server = uvicorn.Server(
-        uvicorn.Config(app, host=args.host, port=args.port, log_level="warning", timeout_graceful_shutdown=5)
+        uvicorn.Config(
+            app, host=args.host, port=args.port, log_level="warning", log_config=None, timeout_graceful_shutdown=5
+        )
     )
     app.state.shutdown = lambda: setattr(server, "should_exit", True)  # the page's Shut down
     server.run()

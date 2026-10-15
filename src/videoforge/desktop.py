@@ -95,7 +95,10 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
         return 1
 
     # Open connections get 5 s to close before the app's shutdown runs (it cancels a running job: up to 10 s).
-    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="warning", timeout_graceful_shutdown=5))
+    config = uvicorn.Config(
+        app, host=host, port=port, log_level="warning", log_config=None, timeout_graceful_shutdown=5
+    )
+    server = uvicorn.Server(config)  # log_config=None: its loggers go to the app log (applog)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     while not server.started:

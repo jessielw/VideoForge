@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from functools import partial
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -28,6 +29,8 @@ from videoforge.server.queue import JobQueue, Services
 from videoforge.server.routes import config, jobs, presets, queue, system, video
 from videoforge.server.settings import SavedSettings, ServerSettings
 from videoforge.server.store import Store
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(
@@ -69,9 +72,11 @@ def create_app(
             vsx.configure(cfg.tools.vs_plugins)
             await asyncio.to_thread(vsx.ensure_vspipe, cfg.tools.vspipe)
         job_queue.load()
+        logger.info("Data folder %s, default profile %s", settings.data_dir, default)
         try:
             yield
         finally:
+            logger.info("Shutting down")
             job_queue.shutdown()
             preview.close()
             store.close()

@@ -21,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
+import logging
 from pathlib import Path
 import sqlite3
 import threading
@@ -58,6 +59,7 @@ from videoforge.server.store import Store
 LOG_LINES = 5000
 STEP_LINES = 3000  # per step, in memory
 _PROGRESS_INTERVAL = 0.25  # seconds between progress events per job
+logger = logging.getLogger(__name__)
 LANE_SETTING = "index_lane"  # the store's record of the lane: job ids in order, the one being indexed first
 
 
@@ -254,6 +256,12 @@ class JobQueue:
                 self._order.append(e.id)
             self._save(e)
         lane = [i for i in self.store.get_setting(LANE_SETTING) or [] if i in self._entries]
+        logger.info(
+            "%d job(s) loaded, %d queued, %d to index",
+            len(self._entries),
+            sum(e.queued for e in self._entries.values()),
+            len(lane),
+        )
         with self._lock:  # every job is probing until this returns, so the lane takes none before its order is set
             self.probe([e.id for e in self.entries()])
             if lane:
@@ -333,6 +341,7 @@ class JobQueue:
             with self._lock:
                 e.probing, e.probe_error = False, f"{type(ex).__name__}: {ex}"
             self._log(e, f"Probe failed: {e.probe_error}")
+            logger.warning("%s: probe failed: %s", e.spec.name, e.probe_error)
         else:
             with self._lock:
                 e.probing, e.probed = False, probed
@@ -392,6 +401,7 @@ class JobQueue:
             crop = detect(e.spec)
         except Exception as ex:  # shown in the job's log; the crop stays as it was
             self._log(e, f"Auto-crop failed: {type(ex).__name__}: {ex}")
+            logger.warning("%s: auto-crop failed: %s: %s", e.spec.name, type(ex).__name__, ex)
             crop = None
         with self._lock:
             e.cropping = False
@@ -618,6 +628,7 @@ class JobQueue:
         self._changed(e)
         self._queue_changed()
         log_file = _open_log(e)
+        logger.info("Job %s started (%s)", e.spec.name, e.id)
         last = [0.0]
 
         def log(line: str) -> None:
@@ -671,12 +682,21 @@ class JobQueue:
                 on_step=on_step,
             )
         except Exception as ex:  # a bug must not kill the queue
+            logger.exception("%s: the run raised", e.spec.name)
             result = JobResult(e.plan, JobStatus.FAILED, error=f"{type(ex).__name__}: {ex}")
             e.state.status, e.state.error = result.status, result.error
         log(
             f"{e.spec.name}: {result.status.value}"
             + (f" -> {result.output}" if result.output else "")
             + (f" ({result.error})" if result.error else "")
+        )
+        logger.log(
+            logging.INFO if result.status is JobStatus.DONE else logging.WARNING,
+            "Job %s: %s%s%s",
+            e.spec.name,
+            result.status.value,
+            f" -> {result.output}" if result.output else "",
+            f" ({result.error})" if result.error else "",
         )
         if self.services.record is not None:
             try:
@@ -877,8 +897,13 @@ class JobQueue:
         except (ToolError, OSError, ValueError) as ex:
             error = str(ex)
         except Exception as ex:  # a bug must not stop the lane
+            logger.exception("%s: indexing raised", e.spec.name)
             error = f"{type(ex).__name__}: {ex}"
         log(f"{e.spec.name}: index " + (f"failed ({error})" if error else "done"))
+        if error and error != "Cancelled":
+            logger.warning("%s: index failed: %s", e.spec.name, error)
+        else:
+            logger.info("%s: index %s", e.spec.name, "cancelled" if error else "done")
         if log_file is not None:
             log_file.close()
         with self._lock:
