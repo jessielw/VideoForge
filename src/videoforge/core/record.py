@@ -1,4 +1,4 @@
-"""What a job's run did, for other tools (NfoForge, uploaders): an event stream and a record.
+"""What a job's run did, for other tools (NFO generators, uploaders): an event stream and a record.
 
 Both go in the job's work folder (`<source>_tmp/`), named after the output file, so runs of one
 source that make different outputs (another label or container) keep their own:
