@@ -112,7 +112,8 @@ def clip_info(clip: vs.VideoNode) -> ClipInfo:
                     fmt.name if fmt else "variable", fmt.bits_per_sample if fmt else 0)
 
 
-def _matrix(frame_props, height: int) -> int:
+def matrix(frame_props, height: int) -> int:
+    """The frame's YUV matrix (_Matrix), or the usual one for its size when unspecified."""
     m = frame_props.get("_Matrix")
     if isinstance(m, int) and m not in (2, 3):  # 2 = unspecified, 3 = reserved
         return m
@@ -126,7 +127,7 @@ def frame_rgb(clip: vs.VideoNode, n: int) -> np.ndarray:
     n = max(0, min(n, clip.num_frames - 1))
     if clip.format.color_family is not vs.RGB:
         props = clip.get_frame(n).props
-        clip = clip.resize.Bicubic(format=vs.RGB24, matrix_in=_matrix(props, clip.height))
+        clip = clip.resize.Bicubic(format=vs.RGB24, matrix_in=matrix(props, clip.height))
     elif clip.format.id != vs.RGB24:
         clip = clip.resize.Bicubic(format=vs.RGB24)
     f = clip.get_frame(n)

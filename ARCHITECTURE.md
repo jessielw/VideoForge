@@ -28,7 +28,7 @@ src/videoforge/
       settings.py        VideoSettings (source filter, crop, resize, filters, custom script), EncoderSettings
       script.py          VideoSettings -> .vpy text (one generator for preview and encode)
       vs.py              In-process VapourSynth: plugin path, clip cache, info, RGB frames
-      crop.py            Auto-crop detection
+      crop.py            Auto-crop detection (RGB lightness on sampled lines, read straight from YUV)
       encoders.py        x264 / x265: settings -> argv (1 or 2 pass), progress parsing
       qpf.py             AutoQPF: chapters -> qpf + chapter file
     execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel), jobobject.py (tools end with the server, Windows)
