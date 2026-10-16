@@ -103,7 +103,7 @@ class FakeRun:
         return JobResult(plan, JobStatus.DONE, out)
 
 
-def make_client(tmp_path: Path, run=None, records=None, detect_crop=None, runner=None) -> TestClient:
+def make_client(tmp_path: Path, run=None, records=None, detect_crop=None, runner=None, send=None) -> TestClient:
     services = Services(
         probe=fake_probe,
         run=run or FakeRun(),
@@ -112,6 +112,8 @@ def make_client(tmp_path: Path, run=None, records=None, detect_crop=None, runner
     )
     if runner is not None:
         services.runner = runner
+    if send is not None:
+        services.send_notification = send
     app = create_app(
         ServerSettings(data_dir=tmp_path / "data", roots=[tmp_path], frontend_dir=tmp_path / "none"),
         APP,
@@ -314,6 +316,67 @@ def test_busy_jobs_cant_change_and_cancel_stops(tmp_path):
         wait_for(client, job_id, "cancelled")
         client.app.state.queue.wait(5)
         assert client.get("/api/queue").json()["running"] is False
+
+
+def test_notifications(tmp_path):
+    """Destinations are saved with the events they want; a run tells the ones that want its job's end and
+    the queue's; a failed send is retried; the Test button reports Apprise's reason."""
+    make_files(tmp_path, "S01E01", "S01E02")
+    sent: list[tuple[str, str, str]] = []
+    failing = {"json://down"}
+
+    def send(url, message):
+        sent.append((url, message.event.value, message.title))
+        return "Connection refused" if url in failing else None
+
+    with make_client(tmp_path, send=send) as client:
+        assert client.get("/api/config").json()["notifications"] == []
+        assert {e["id"] for e in client.get("/api/config").json()["notification_events"]} >= {"job_done"}
+        destinations = [
+            {"name": "Phone", "url": "ntfy://videoforge", "events": ["queue_finished"]},
+            {"url": "discord://1/abc"},  # no name, no events: its scheme, and the default events
+            {"name": "Off", "url": "json://localhost", "enabled": False},
+            {"name": "Down", "url": "json://down", "events": ["job_done"]},
+        ]
+        saved = client.put("/api/config", json={"notifications": destinations}).json()["notifications"]
+        assert [d["name"] for d in saved] == ["Phone", "discord", "Off", "Down"]
+        assert saved[1]["events"] == ["job_done", "job_failed", "queue_finished"]
+        bad = client.put("/api/config", json={"notifications": [{"url": "nope"}]})
+        assert bad.status_code == 422 and "recognise" in bad.json()["detail"]
+        assert (
+            client.put("/api/config", json={"notifications": [{"url": "json://x", "events": ["x"]}]}).status_code == 422
+        )
+
+        client.app.state.notifier.retry_wait = 0
+        ids = add(client, tmp_path)
+        for i in ids:
+            wait_for(client, i, "ready", "warn")
+        client.post("/api/queue/start")
+        for i in ids:
+            wait_for(client, i, "done")
+        client.app.state.queue.wait(5)
+        client.app.state.notifier.wait()
+        assert sorted(sent) == sorted(
+            [
+                ("discord://1/abc", "job_done", "Done: Show.S01E01.mkv"),
+                ("discord://1/abc", "job_done", "Done: Show.S01E02.mkv"),
+            ]
+            + [("json://down", "job_done", f"Done: Show.S01E0{n}.mkv") for n in (1, 2) for _ in range(3)]
+            + [(u, "queue_finished", "Queue finished") for u in ("ntfy://videoforge", "discord://1/abc")]
+        )
+
+        sent.clear()
+        assert client.post("/api/config/notifications/test", json={"url": "ntfy://videoforge"}).json() == {"ok": True}
+        down = client.post("/api/config/notifications/test", json={"url": "json://down"})
+        assert down.status_code == 400 and down.json()["detail"] == "Connection refused"
+        assert [s[0] for s in sent] == ["ntfy://videoforge", "json://down"]  # no retry for a test
+    with make_client(tmp_path) as client:  # kept across a restart
+        assert [d["name"] for d in client.get("/api/config").json()["notifications"]] == [
+            "Phone",
+            "discord",
+            "Off",
+            "Down",
+        ]
 
 
 def test_restart_requeues_an_interrupted_job(tmp_path):

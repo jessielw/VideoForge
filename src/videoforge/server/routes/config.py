@@ -1,5 +1,6 @@
 """The Settings page: tool paths (with each tool found and its version), folder-browser roots,
-the default profile, and whether batch indexing waits for an encode on the same disk.
+the default profile, whether batch indexing waits for an encode on the same disk, and where
+notifications go (Apprise URLs, each with the events it wants).
 
 Changes are saved in the store (layered over videoforge.toml) and applied at once: new
 jobs, probes and runs use them. Only the preview's VapourSynth plugin folder needs a restart.
@@ -17,6 +18,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 
 from videoforge.core.config import with_tools
 from videoforge.core.execute.audio import ENCODES
+from videoforge.core.notify import DEFAULT_EVENTS, EVENT_LABELS, Destination
 from videoforge.core.plan_io import to_json
 from videoforge.core.tools import TOOL_NAMES, TOOLS, check, detect, missing_for_encodes
 from videoforge.core.video import vs as vsx
@@ -54,6 +56,10 @@ def _state(request: Request) -> dict[str, Any]:
         "profiles": [{"id": pid, "name": profiles(pid).name} for pid in ids],
         "restart": [RESTART_FOR[n] for n in sorted(s.restart_for)],
         "index_waits_for_disk": saved.index_waits_for_disk,
+        "notifications": [d.to_json() for d in saved.notifications],
+        "notification_events": [
+            {"id": e.value, "label": label, "default": e in DEFAULT_EVENTS} for e, label in EVENT_LABELS.items()
+        ],
     }
 
 
@@ -65,7 +71,8 @@ def get_config(request: Request) -> dict[str, Any]:
 @router.put("")
 def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     """Change any of: tools ({name: path, or "" / null for the default}), roots (a list, or null
-    for every drive), profile (an id, or null for videoforge.toml's), index_waits_for_disk (bool)."""
+    for every drive), profile (an id, or null for videoforge.toml's), index_waits_for_disk (bool),
+    notifications (the whole list: [{name, url, enabled, events}])."""
     s = request.app.state
     saved: SavedSettings = s.saved
     tools = dict(saved.tools)
@@ -89,12 +96,19 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         if profile is not None and profile not in s.profile_ids:
             raise HTTPException(422, f"No profile {profile!r} is installed")
     waits = bool(body["index_waits_for_disk"]) if "index_waits_for_disk" in body else saved.index_waits_for_disk
+    destinations = saved.notifications
+    if "notifications" in body:
+        try:
+            destinations = [Destination.from_json(d) for d in body["notifications"] or []]
+        except (ValueError, TypeError, AttributeError) as ex:
+            raise HTTPException(422, str(ex)) from None
 
     before = s.config.tools
-    new = SavedSettings(tools, roots, profile, waits)
+    new = SavedSettings(tools, roots, profile, waits, destinations)
     new.save(s.store)
     s.saved = new
     s.queue.set_index_waits_for_disk(waits)
+    s.notifier.destinations = destinations
     s.default_profile = default_profile_id(profile or s.base_config.profile, s.profile_ids)
     cfg = replace(with_tools(s.base_config, tools), profile=s.default_profile)
     s.config = cfg
@@ -109,6 +123,18 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         with suppress(Exception):  # a broken vspipe shows in the tools check
             vsx.ensure_vspipe(cfg.tools.vspipe)
     return _state(request)
+
+
+@router.post("/notifications/test")
+def test_notification(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """Send a test message to an Apprise URL (saved or not): {ok}, or 400 with why it didn't go."""
+    url = str(body.get("url") or "").strip()
+    if not url:
+        raise HTTPException(422, "No Apprise URL to test")
+    error = request.app.state.notifier.test(url)
+    if error:
+        raise HTTPException(400, error)
+    return {"ok": True}
 
 
 @router.get("/encoders")

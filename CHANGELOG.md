@@ -18,6 +18,9 @@ The first beta: an encode and mux job queue in the browser, for one user on Wind
 - **Video.** Frame preview with zoom, pan and a crop overlay; auto crop; resize; filters; the generated
   VapourSynth script, editable. Source filters: FFMS2 (the default, with index progress), L-SMASH, BestSource.
 - **Encoder.** x264 and x265 option panels, 1 or 2 passes; AutoQPF chapters to a qpf file.
+- **Notifications.** Settings → Notifications sends to any service Apprise supports (Discord, Telegram, ntfy,
+  Pushover, email, ...): each destination picks its events (job done, failed, cancelled, queue finished), can be
+  switched off, and has a Test button that shows the service's own error.
 - **Audio.** Copy or encode each track, more than one output from one track: DDP and DDP Atmos (DeeZy + DEE,
   truehdd), AAC (qaac or ffmpeg), Opus (opusenc or ffmpeg), FLAC, AC-3, E-AC-3 (ffmpeg). Each encode lists
   its layouts and bitrates, and a setting the track can't take is fitted or blocked.

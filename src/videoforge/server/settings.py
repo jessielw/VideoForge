@@ -9,6 +9,7 @@ import string
 
 from videoforge.core.config import PROJECT_ROOT
 from videoforge.core.history import app_data_dir
+from videoforge.core.notify import Destination, load_destinations
 
 
 def default_roots() -> list[Path]:
@@ -41,6 +42,7 @@ class SavedSettings:
     roots: list[str] | None = None  # folder-browser roots; None = every drive
     profile: str | None = None  # default profile for new jobs
     index_waits_for_disk: bool = True  # batch indexing holds a job back while an encode reads its disk
+    notifications: list[Destination] = field(default_factory=list)  # where job and queue news goes
 
     @classmethod
     def load(cls, store) -> SavedSettings:
@@ -50,6 +52,7 @@ class SavedSettings:
             store.get_setting("roots"),
             store.get_setting("profile"),
             bool(store.get_setting("index_waits_for_disk", True)),
+            load_destinations(store.get_setting("notifications") or []),
         )
 
     def save(self, store) -> None:
@@ -57,3 +60,4 @@ class SavedSettings:
         store.set_setting("roots", self.roots)
         store.set_setting("profile", self.profile)
         store.set_setting("index_waits_for_disk", self.index_waits_for_disk)
+        store.set_setting("notifications", [d.to_json() for d in self.notifications])

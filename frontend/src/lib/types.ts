@@ -480,6 +480,18 @@ export interface ConfigState {
   profiles: { id: string; name: string }[]
   restart: string[]
   index_waits_for_disk: boolean // batch indexing holds a job back while an encode reads its disk
+  notifications: NotificationDestination[]
+  notification_events: { id: NotificationEvent; label: string; default: boolean }[]
+}
+
+export type NotificationEvent = 'job_done' | 'job_failed' | 'job_cancelled' | 'queue_finished'
+
+// Where job and queue news goes: an Apprise URL and the events it wants.
+export interface NotificationDestination {
+  name: string
+  url: string
+  enabled: boolean
+  events: NotificationEvent[]
 }
 
 export type ToolStatus = 'ok' | 'unknown' | 'missing' | 'broken'

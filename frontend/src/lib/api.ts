@@ -12,6 +12,7 @@ import type {
   JobSpec,
   JobSummary,
   MatchResult,
+  NotificationDestination,
   PathKind,
   PresetKind,
   Presets,
@@ -95,8 +96,10 @@ export const api = {
     roots?: string[] | null
     profile?: string | null
     index_waits_for_disk?: boolean
+    notifications?: NotificationDestination[]
   }) =>
     request<ConfigState>('PUT', '/api/config', changes),
+  testNotification: (url: string) => post<{ ok: boolean }>('/api/config/notifications/test', { url }),
   toolChecks: () => get<ToolCheck[]>('/api/config/tools'),
   encoders: () => get<AudioEncodeInfo[]>('/api/config/encoders'),
   checkTool: (name: string, path: string) => post<ToolCheck>('/api/config/tools/check', { name, path }),

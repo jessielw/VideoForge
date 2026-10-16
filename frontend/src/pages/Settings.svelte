@@ -1,13 +1,16 @@
 <script lang="ts">
   // Settings: where each tool is (found or not, and its version), what the folder browser
-  // may show, the profile new jobs start with, and whether batch indexing waits for an encode's disk. Each change saves at once and is used by
+  // may show, the profile new jobs start with, whether batch indexing waits for an encode's disk, and where
+  // notifications go (Apprise URLs). Each change saves at once and is used by
   // new jobs and runs; videoforge.toml stays the default underneath ("Reset" goes back to it).
   import { onMount } from 'svelte'
   import FileBrowser from '../components/FileBrowser.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
+  import PlusIcon from '@lucide/svelte/icons/plus'
   import PowerIcon from '@lucide/svelte/icons/power'
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
+  import SendIcon from '@lucide/svelte/icons/send'
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
   import XIcon from '@lucide/svelte/icons/x'
   import { toast } from 'svelte-sonner'
@@ -19,7 +22,14 @@
   import { api } from '../lib/api'
   import { drops } from '../lib/dropPaths.svelte'
   import { app } from '../lib/state.svelte'
-  import type { ConfigState, ToolCheck, ToolSetting, ToolStatus } from '../lib/types'
+  import type {
+    ConfigState,
+    NotificationDestination,
+    NotificationEvent,
+    ToolCheck,
+    ToolSetting,
+    ToolStatus,
+  } from '../lib/types'
 
   let config = $state<ConfigState | null>(null)
   let checks = $state<Record<string, ToolCheck>>({})
@@ -46,6 +56,7 @@
       error = e instanceof Error ? e.message : String(e)
       return
     }
+    draft.events = defaultEvents()
     checkAll()
   })
 
@@ -98,6 +109,53 @@
     unknown: { icon: TriangleAlertIcon, tone: 'text-warning', text: 'found, no version' },
     missing: { icon: XIcon, tone: 'text-destructive', text: 'missing' },
     broken: { icon: XIcon, tone: 'text-destructive', text: "won't start" },
+  }
+
+  // --- notifications: Apprise URLs, each with the events it wants; the whole list is saved on each change ---
+  let draft = $state<NotificationDestination>({ name: '', url: '', enabled: true, events: [] })
+  let testing = $state<Record<string, boolean>>({})
+
+  function defaultEvents(): NotificationEvent[] {
+    return config?.notification_events.filter(e => e.default).map(e => e.id) ?? []
+  }
+
+  function setNotifications(list: NotificationDestination[]): Promise<boolean> {
+    return change({ notifications: list })
+  }
+
+  function editNotification(i: number, changes: Partial<NotificationDestination>) {
+    if (!config) return
+    setNotifications(config.notifications.map((d, j) => (j === i ? { ...d, ...changes } : d)))
+  }
+
+  function toggleEvent(events: NotificationEvent[], id: NotificationEvent, on: boolean): NotificationEvent[] {
+    return on ? [...events.filter(e => e !== id), id] : events.filter(e => e !== id)
+  }
+
+  async function addNotification() {
+    if (!config || !draft.url.trim()) return
+    const events = draft.events.length ? draft.events : defaultEvents()
+    if (await setNotifications([...config.notifications, { ...draft, url: draft.url.trim(), events }]))
+      draft = { name: '', url: '', enabled: true, events: defaultEvents() }
+  }
+
+  async function removeNotification(i: number) {
+    if (!config) return
+    const before = config.notifications
+    if (await setNotifications(before.filter((_, j) => j !== i)))
+      toast(`Removed ${before[i].name}`, { action: { label: 'Undo', onClick: () => setNotifications(before) } })
+  }
+
+  async function testNotification(key: string, url: string) {
+    testing = { ...testing, [key]: true }
+    try {
+      await api.testNotification(url.trim())
+      toast.success('Test notification sent')
+    } catch (e) {
+      toast.error("The test notification didn't go", { description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      testing = { ...testing, [key]: false }
+    }
   }
 
   // --- shutting down from the page ---
@@ -250,6 +308,77 @@
             </span>
           </span>
         </label>
+      </section>
+
+      <section class="space-y-3">
+        <div class="flex items-center gap-3">
+          <h2 class="font-medium">Notifications</h2>
+          <span class="text-xs text-muted-foreground">
+            Tell Discord, Telegram, ntfy, Pushover, email or
+            <a class="underline hover:text-foreground" href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noreferrer"
+              >any service Apprise supports</a
+            > when jobs end.
+          </span>
+        </div>
+        {#snippet eventChoices(events: NotificationEvent[], onchange: (events: NotificationEvent[]) => void)}
+          <div class="flex flex-wrap gap-x-4 gap-y-1.5">
+            {#each config!.notification_events as ev (ev.id)}
+              <label class="flex items-center gap-1.5 text-xs">
+                <Checkbox checked={events.includes(ev.id)} onCheckedChange={v => onchange(toggleEvent(events, ev.id, v))} />
+                {ev.label}
+              </label>
+            {/each}
+          </div>
+        {/snippet}
+        <div class="divide-y divide-border/60 rounded-xl border bg-card">
+          {#each config.notifications as d, i (i)}
+            <div class="space-y-2 px-4 py-3 {d.enabled ? '' : 'opacity-60'}">
+              <div class="flex min-w-0 items-center gap-2">
+                <Checkbox
+                  checked={d.enabled}
+                  aria-label="Send to {d.name}"
+                  title={d.enabled ? 'On' : 'Off: nothing is sent here'}
+                  onCheckedChange={v => editNotification(i, { enabled: v })}
+                />
+                <Input
+                  class="w-40 text-sm"
+                  value={d.name}
+                  aria-label="Name"
+                  onchange={e => editNotification(i, { name: e.currentTarget.value })}
+                />
+                <Input
+                  class="min-w-0 flex-1 font-mono text-xs"
+                  value={d.url}
+                  aria-label="{d.name} Apprise URL"
+                  onchange={e => editNotification(i, { url: e.currentTarget.value })}
+                />
+                <Button variant="outline" disabled={testing[i]} onclick={() => testNotification(String(i), d.url)}>
+                  <SendIcon />{testing[i] ? 'Sending…' : 'Test'}
+                </Button>
+                <Button variant="ghost" size="icon" aria-label="Remove {d.name}" onclick={() => removeNotification(i)}>
+                  <XIcon />
+                </Button>
+              </div>
+              {@render eventChoices(d.events, events => editNotification(i, { events }))}
+            </div>
+          {/each}
+          <div class="space-y-2 px-4 py-3">
+            <div class="flex min-w-0 items-center gap-2">
+              <Input class="w-40 text-sm" placeholder="Name (optional)" bind:value={draft.name} />
+              <Input
+                class="min-w-0 flex-1 font-mono text-xs"
+                placeholder="discord://webhook_id/webhook_token"
+                bind:value={draft.url}
+                onkeydown={e => e.key === 'Enter' && addNotification()}
+              />
+              <Button variant="outline" disabled={!draft.url.trim() || testing.draft} onclick={() => testNotification('draft', draft.url)}>
+                <SendIcon />{testing.draft ? 'Sending…' : 'Test'}
+              </Button>
+              <Button onclick={addNotification} disabled={!draft.url.trim()}><PlusIcon />Add</Button>
+            </div>
+            {@render eventChoices(draft.events, events => (draft.events = events))}
+          </div>
+        </div>
       </section>
     {/if}
 

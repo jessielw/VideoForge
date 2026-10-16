@@ -48,6 +48,7 @@ from videoforge.core.job import (
 )
 from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioMatch, JobInputs, Overrides, Plan, Severity, track_key
+from videoforge.core.notify import Message, Notifier, Sender, job_message, queue_message, send as notify_send
 from videoforge.core.pipeline.build import index_steps, job_output
 from videoforge.core.pipeline.run import missing_inputs, run_job
 from videoforge.core.pipeline.steps import StepProgress, run_steps
@@ -171,6 +172,7 @@ class Services:
     detect_crop: Callable[[JobSpec], Crop] | None = None  # reads the source (VapourSynth)
     runner: Callable[..., None] = process.run  # the index lane's tool runner
     versions: Callable[[Tools, Sequence[str]], dict[str, str]] | None = tool_versions  # for job records
+    send_notification: Sender = notify_send  # one message to one Apprise URL
 
 
 class JobQueue:
@@ -202,6 +204,7 @@ class JobQueue:
         self._index_cancel: CancelToken | None = None
         self._index_wake = threading.Event()
         self.index_waits_for_disk = True  # the lane holds a job back while an encode reads its disk
+        self.notifier: Notifier | None = None  # told when a job ends and when the queue runs out
 
     # --- state ---------------------------------------------------------------------
 
@@ -619,19 +622,25 @@ class JobQueue:
             return e
 
     def _work(self) -> None:
+        ran: list[JobStatus] = []
+        started = _now()
         try:
             while (e := self._take_next()) is not None:
-                self._run(e)
+                ran.append(self._run(e))
         finally:
             with self._lock:
                 if self._worker is threading.current_thread():
                     self._active = False
             self._cancel = None
             self._queue_changed()
+            if ran and not self._closing:
+                left = sum(e.queued for e in self.entries()) if self._stop_after_current else 0
+                self._notify(queue_message(ran, _now() - started, left=left))
 
-    def _run(self, e: Entry) -> None:
+    def _run(self, e: Entry) -> JobStatus:
         if e.plan is None:
             raise RuntimeError(f"{e.spec.name}: run without a plan")
+        started = _now()
         with self._lock:
             e.queued, e.running, e.progress = False, True, None
             self._cancel = CancelToken()
@@ -738,6 +747,9 @@ class JobQueue:
             self._save(e)
         self._changed(e)
         self._index_wake.set()  # a job held back for this one's disk may go
+        if not self._closing:  # a shutdown's cancel isn't news
+            self._notify(job_message(e.spec, result, _now() - started))
+        return result.status
 
     # --- the index lane ------------------------------------------------------------------
 
@@ -947,6 +959,10 @@ class JobQueue:
 
     def _versions(self, names: Sequence[str]) -> dict[str, str]:
         return self.services.versions(self.app.tools, names) if self.services.versions else {}
+
+    def _notify(self, message: Message) -> None:
+        if self.notifier is not None:
+            self.notifier.notify(message)
 
     def _queue_event(self, kind: str, e: Entry, **fields: Any) -> None:
         if self.queue_events is not None:

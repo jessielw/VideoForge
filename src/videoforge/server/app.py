@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from videoforge.core.config import AppConfig, load_app_config, with_tools
 from videoforge.core.history import JobHistory
+from videoforge.core.notify import Notifier
 from videoforge.core.profile import Profile
 from videoforge.core.record import QUEUE_EVENTS, QUEUE_EVENTS_MAX, JsonLines
 from videoforge.core.video import vs as vsx
@@ -68,6 +69,8 @@ def create_app(
         cfg, profiles or get_profile, store, events, services, settings.probe_workers, queue_events=queue_events
     )
     job_queue.index_waits_for_disk = saved.index_waits_for_disk
+    notifier = Notifier(services.send_notification, list(saved.notifications))
+    job_queue.notifier = notifier
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -82,6 +85,7 @@ def create_app(
         finally:
             logger.info("Shutting down")
             job_queue.shutdown()
+            notifier.close()
             preview.close()
             store.close()
             queue_events.close()
@@ -96,6 +100,7 @@ def create_app(
     app.state.store = store
     app.state.events = events
     app.state.queue = job_queue
+    app.state.notifier = notifier
     app.state.preview = preview
     app.state.profile_ids = ids
     app.state.default_profile = default
