@@ -48,8 +48,9 @@ jobs:
         shell: bash
         run: |
           version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-          if [[ "$GITHUB_REF_NAME" != "$version" ]]; then
-            echo "::error::tag $GITHUB_REF_NAME doesn't match pyproject.toml's version $version"
+          # The version itself, or the version with a suffix (0.1.0-beta, 0.1.0-test).
+          if [[ "$GITHUB_REF_NAME" != "$version" && "$GITHUB_REF_NAME" != "$version"-* ]]; then
+            echo "::error::tag $GITHUB_REF_NAME isn't pyproject.toml's version $version (or $version-<suffix>)"
             exit 1
           fi
 
@@ -80,13 +81,18 @@ jobs:
       - name: Release notes from CHANGELOG.md
         shell: bash
         run: |
-          # The "## [<tag>]" section, up to the next "## [" heading, without the link lines at the end.
-          awk -v tag="$TAG" '
-            /^## \[/ { keep = index($0, "## [" tag "]") == 1; next }
-            keep && !/^\[[^]]+\]: / { print }
-          ' CHANGELOG.md > notes.md
+          # The "## [<tag>]" section, up to the next "## [" heading, without the link lines at the end;
+          # a suffixed tag (0.1.0-beta) without its own section takes its version's.
+          section() {
+            awk -v tag="$1" '
+              /^## \[/ { keep = index($0, "## [" tag "]") == 1; next }
+              keep && !/^\[[^]]+\]: / { print }
+            ' CHANGELOG.md
+          }
+          section "$TAG" > notes.md
+          [[ -s notes.md ]] || section "${TAG%%-*}" > notes.md
           if [[ ! -s notes.md ]]; then
-            echo "::error::CHANGELOG.md has no section for $TAG"
+            echo "::error::CHANGELOG.md has no section for $TAG or ${TAG%%-*}"
             exit 1
           fi
           cat notes.md
