@@ -1,0 +1,26 @@
+# The Docker image's settings: tools on PATH (installed in the image), your own tools in /tools.
+# Change paths on the Settings page (kept in /data), or mount a videoforge.local.toml next to this file
+# (/app/videoforge.local.toml) to merge over it.
+profile = "manual"
+
+[tools]
+mkvmerge = "mkvmerge"
+x264 = "x264"
+x265 = "x265"
+ffmpeg = "ffmpeg"
+opusenc = "opusenc"
+mp4box = "MP4Box"
+deezy = "deezy"
+truehdd = "truehdd"
+# Dolby Encoding Engine isn't free to ship: put it in /tools/dee (or set its path in Settings).
+dee = "/tools/dee/dee"
+# qaac is Windows only: its AAC encode shows as unavailable (ffmpeg's AAC is there).
+qaac = "qaac"
+# More VapourSynth plugins (.so): FFMS2 is built in; BestSource, L-SMASH, filters go here.
+vs_plugins = "/tools/vs-plugins"
+
+[pairing]
+encode_suffixes = ["_job", "_out", "_new", ""]
+encode_extensions = [".h264", ".264", ".avc", ".hevc", ".265", ".h265"]
+scan_source_folder = true
+staxrip_temp = true

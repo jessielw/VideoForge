@@ -5,7 +5,8 @@ batch of episodes, and each runs end to end:
 
 index → VapourSynth (crop, resize, filters) → x264 / x265 → audio → subtitles → mux (MKV or MP4) → validate
 
-It runs as one local process (FastAPI + a Svelte app) on Windows, for one user. Jobs survive restarts,
+It runs as one local process (FastAPI + a Svelte app) for one user: on Windows (portable zip or from
+source), or in Docker on Linux. Jobs survive restarts,
 and finished steps are skipped on a rerun.
 
 > **Status:** 0.1.0 beta. It works end to end, but expect changes. See [CHANGELOG.md](CHANGELOG.md).
@@ -45,6 +46,21 @@ the Settings page), and run `VideoForge.exe`: VideoForge in its own window, with
 own Python, so nothing else is installed. `videoforge.cmd` is the console way in (`videoforge.cmd serve` shows
 the log; `videoforge.cmd --help`). Build it yourself with `uv run python scripts/build_portable.py` (writes
 `build/portable/`).
+
+## Docker (Linux)
+
+The image (`ghcr.io/jessielw/videoforge`, amd64) carries the free tools: MKVToolNix, x264, x265, ffmpeg,
+MP4Box, opus-tools, FFMS2, DeeZy and truehdd. Start from [compose.yaml](compose.yaml): set your media folder,
+then `docker compose up -d` and open http://127.0.0.1:8765.
+
+- `/data`: the queue, templates, settings and logs. `/media` (or any folder you mount): sources and outputs;
+  each job's work folder goes next to its source, so the mount must be writable.
+- `/tools`: what the image can't ship. Dolby Encoding Engine (Linux build) as `/tools/dee/dee` for DDP /
+  Atmos, and more VapourSynth plugins (`.so`, e.g. BestSource, L-SMASH) in `/tools/vs-plugins`. qaac is
+  Windows only (ffmpeg's AAC is there instead).
+- There's no login: publish the port on `127.0.0.1` as the compose file does, or put it behind your own
+  proxy with authentication.
+- Build it yourself with `docker build -t videoforge .`.
 
 ## Quick start (from source)
 

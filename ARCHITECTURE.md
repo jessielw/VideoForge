@@ -286,4 +286,10 @@ defaults, audio encoder settings, and the checks on the finished file.
   its server; elsewhere `st_dev`). Queue toolbar: Select all, and Index (the selected jobs, or every job
   when none is selected) skips jobs already indexed.
 - The CLI isn't kept in step with new features (the server and core are the product).
-- Docker later: Linux binaries for the toolchain; qaac needs a decision (Windows-only).
+- Docker (Linux, amd64): the `Dockerfile` (`docker.yml` pushes it to GHCR on a version tag). Debian trixie's
+  MKVToolNix, x264, x265, ffmpeg, opus-tools and FFMS2 (`libffms2.so` linked into the vapoursynth package's
+  autoloaded `plugins/`); MP4Box built from source against that ffmpeg (GPAC reads MKV through it; trixie has
+  no gpac); DeeZy and truehdd release binaries. `docker/videoforge.toml` is its config (`VIDEOFORGE_ROOT=/app`),
+  data in `/data`, the user's tools in `/tools` (DEE, more plugins). BestSource / L-SMASH aren't built (they
+  need FFmpeg 9). qaac stays Windows only. On POSIX each tool runs in its own process group, so a cancel
+  kills its children too (`process._kill_tree`).

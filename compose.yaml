@@ -1,0 +1,14 @@
+# docker compose up -d, then open http://127.0.0.1:8765
+services:
+  videoforge:
+    image: ghcr.io/jessielw/videoforge:latest
+    # build: .
+    container_name: videoforge
+    user: "1000:1000"  # who owns the files it writes; any id works
+    ports:
+      - "127.0.0.1:8765:8765"  # there's no login: keep it on this machine (or behind your own proxy and auth)
+    volumes:
+      - ./data:/data    # the queue, templates, settings, logs
+      - ./tools:/tools  # your own tools: dee/dee (Dolby Encoding Engine), vs-plugins/*.so
+      - /path/to/media:/media  # sources and outputs (work folders go next to the sources)
+    restart: unless-stopped

@@ -1,0 +1,11 @@
+.git
+.venv
+**/__pycache__
+**/node_modules
+frontend/dist
+build
+dist
+tools
+legacy
+videoforge.local.toml
+*.log
