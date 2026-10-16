@@ -17,8 +17,6 @@ jobs:
   python:
     name: Python (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # Linux isn't a target yet (Docker later): its run shows what breaks there, without failing the build.
-    continue-on-error: ${{ matrix.os != 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
