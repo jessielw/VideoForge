@@ -155,7 +155,7 @@ def test_add_inspect_and_edit(tmp_path):
         assert job["encoder"] == "x264 crf 18"  # the manual profile's default encode
         assert job["spec"]["encoder"]["preset"] == "slow"
         assert [a["action"] for a in job["plan"]["audio"]] == ["copy", "copy"]
-        assert job["plan"]["encode_path"].endswith(r"Show.S01E01.mkv_tmp\video.264")
+        assert Path(job["plan"]["encode_path"]).parts[-2:] == ("Show.S01E01.mkv_tmp", "video.264")
         assert [s["key"] for s in job["tracks"]["subs"]][:2] == ["id:10", "id:11"]
         flags = {"default": False, "forced": False, "hearing_impaired": False, "commentary": False, "original": False}
         assert job["tracks"]["subs"][0]["detected"] == flags
@@ -958,13 +958,14 @@ def test_folder_browser(tmp_path):
         listing = client.get("/api/fs/list", params={"path": str(tmp_path / "src"), "extensions": ".mkv"}).json()
         assert [f["name"] for f in listing["files"]] == ["Show.S01E01.mkv"]
         assert listing["parent"] == str(tmp_path)
-        assert client.get("/api/fs/list", params={"path": "C:\\Windows"}).status_code == 403
+        outside = str(tmp_path.parent)  # a real folder, outside the one root
+        assert client.get("/api/fs/list", params={"path": outside}).status_code == 403
         assert client.get("/api/fs/roots").json() == [str(tmp_path)]
         paths = [
             str(tmp_path / "src"),
             str(tmp_path / "src" / "Show.S01E01.mkv"),
             str(tmp_path / "nope.mkv"),
-            "C:\\Windows",
+            outside,
             "relative.mkv",
         ]
         kinds = client.post("/api/fs/kinds", json={"paths": paths}).json()

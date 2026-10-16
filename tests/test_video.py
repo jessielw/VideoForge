@@ -38,11 +38,11 @@ vsx.configure(PLUGINS)  # before any clip loads in this test process
 
 def test_script_layout():
     s = VideoSettings(crop=Crop(0, 22, 0, 22), resize=Resize(1280, 544), filters="clip = clip.std.Invert()")
-    text = build_script(s, Path(r"D:\Show\E01.mkv"), Path(r"D:\Show\E01.mkv_tmp"), depth=10)
+    src, work = Path("D:/Show/E01.mkv"), Path("D:/Show/E01.mkv_tmp")
+    text = build_script(s, src, work, depth=10)
     lines = text.splitlines()
-    assert lines[2] == (
-        "src = core.ffms2.Source('D:\\\\Show\\\\E01.mkv', cachefile='D:\\\\Show\\\\E01.mkv_tmp\\\\E01.mkv.ffindex')"
-    )  # FFMS2 is the default
+    index = work / "E01.mkv.ffindex"
+    assert lines[2] == f"src = core.ffms2.Source({str(src)!r}, cachefile={str(index)!r})"  # FFMS2 is the default
     assert "clip = core.std.Crop(clip, left=0, right=0, top=22, bottom=22)" in lines
     assert "clip = core.resize.Spline36(clip, width=1280, height=544)" in lines
     assert "clip = clip.std.Invert()" in lines

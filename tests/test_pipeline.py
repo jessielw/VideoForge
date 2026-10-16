@@ -473,6 +473,7 @@ def test_process_run_pipe_blames_the_consumer():
     assert "\n" + Path(producer[0]).stem + " exited with code" in str(e.value)  # the producer's failure follows
 
 
+@pytest.mark.skipif(os.name != "nt", reason="exit codes are 0-255 on POSIX")
 def test_process_run_negative_exit_code():
     with pytest.raises(ToolError) as e:
         process.run([py("import os; os._exit(-1)")], lambda _l: None)
