@@ -93,10 +93,10 @@ def test_detect_covers_every_tool_in_order(tmp_path):
 
 
 def test_encodes_need_their_tools(tmp_path):
-    for exe in ("deezy.exe", "ffmpeg.exe", "qaac.exe", "truehdd.exe"):
+    for exe in ("mkvmerge.exe", "deezy.exe", "ffmpeg.exe", "qaac.exe", "truehdd.exe"):
         (tmp_path / exe).write_bytes(b"")
     tools = Tools(
-        mkvmerge="mkvmerge",
+        mkvmerge=str(tmp_path / "mkvmerge.exe"),
         deezy=str(tmp_path / "deezy.exe"),
         dee=str(tmp_path / "no-dee.exe"),
         truehdd=str(tmp_path / "truehdd.exe"),

@@ -44,15 +44,15 @@ def fake_tool_files(*names: str) -> dict[str, str]:
     return {name: str(folder / f"{name}.exe") for name in names}
 
 
-_AUDIO = fake_tool_files("deezy", "dee", "truehdd", "qaac64", "ffmpeg")
+_TOOLS = fake_tool_files("mkvmerge", "deezy", "dee", "truehdd", "qaac64", "ffmpeg")
 APP = AppConfig(
     tools=Tools(
-        mkvmerge="mkvmerge",
-        deezy=_AUDIO["deezy"],
-        dee=_AUDIO["dee"],
-        truehdd=_AUDIO["truehdd"],
-        qaac=_AUDIO["qaac64"],
-        ffmpeg=_AUDIO["ffmpeg"],
+        mkvmerge=_TOOLS["mkvmerge"],
+        deezy=_TOOLS["deezy"],
+        dee=_TOOLS["dee"],
+        truehdd=_TOOLS["truehdd"],
+        qaac=_TOOLS["qaac64"],
+        ffmpeg=_TOOLS["ffmpeg"],
         x264="x264",
         vspipe="vspipe",
     )
@@ -239,7 +239,7 @@ def test_step_runs_record_each_step(profile, tmp_path):
     assert seen[4:6] == [("audio.1", StepStatus.RUNNING), ("audio.1", StepStatus.DONE)]
     assert all(r.status is StepStatus.DONE for r in state.run)
     mux = state.run[2]
-    assert mux.command.startswith("mkvmerge") and " --output " in mux.command and mux.exit_code == 0
+    assert APP.tools.mkvmerge in mux.command and " --output " in mux.command and mux.exit_code == 0
     assert mux.tail == ["[mkvmerge] [ 50.0%] 1/2 frames"]  # its own lines, not the step header
     assert state.run[-1].command == "" and state.run[-1].exit_code is None
 

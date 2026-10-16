@@ -17,6 +17,7 @@ import time
 from conftest import audio, source, sub
 from fastapi.testclient import TestClient
 import pytest
+from test_pipeline import fake_tool_files
 
 from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools
 from videoforge.core.execute.process import Cancelled, ToolError
@@ -30,14 +31,16 @@ from videoforge.server.app import create_app
 from videoforge.server.queue import Services
 from videoforge.server.settings import ServerSettings
 
+# Empty files for the muxer and the DDP / ffmpeg encodes (the faked runs never start them); qaac stays missing.
+_TOOLS = fake_tool_files("mkvmerge", "deezy", "dee", "truehdd", "ffmpeg")
 APP = AppConfig(
     tools=Tools(
-        mkvmerge="mkvmerge",
-        deezy="deezy",
-        dee="dee",
-        truehdd="truehdd",
+        mkvmerge=_TOOLS["mkvmerge"],
+        deezy=_TOOLS["deezy"],
+        dee=_TOOLS["dee"],
+        truehdd=_TOOLS["truehdd"],
         qaac="qaac64",
-        ffmpeg="ffmpeg",
+        ffmpeg=_TOOLS["ffmpeg"],
         vs_plugins=str(PROJECT_ROOT / "tools" / "vs-plugins"),
     ),
     profile="manual",
@@ -393,7 +396,7 @@ def test_a_job_that_wont_stop_is_requeued_after_shutdown(tmp_path):
 
 def test_missing_encoder_tools_block_until_set(tmp_path):
     make_files(tmp_path)
-    with make_client(tmp_path) as client:  # APP's qaac64/ffmpeg/dee... don't exist here
+    with make_client(tmp_path) as client:  # APP's qaac64 doesn't exist
         (job_id,) = add(client, tmp_path)
         wait_for(client, job_id, "ready", "warn")
         missing = {e["id"]: e["missing"] for e in client.get("/api/config/encoders").json()}
