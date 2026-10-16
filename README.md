@@ -82,8 +82,10 @@ http://127.0.0.1:8765.
 - `/tools`: what the image can't ship. Dolby Encoding Engine (Linux build) as `/tools/dee/dee` for DDP /
   Atmos, and more VapourSynth plugins (`.so`) in `/tools/vs-plugins`. qaac is Windows only (ffmpeg's AAC is
   there instead).
+- The server listens on port 8765 in the container: publish it (`-p 127.0.0.1:8765:8765`; on Unraid, add a
+  Port to the template, container port 8765). Without that, nothing outside the container reaches it.
 - There's no login: publish the port on `127.0.0.1` as the compose file does, or put it behind your own
-  proxy with authentication.
+  proxy with authentication. Publishing it on the LAN (`-p 8765:8765`) lets anyone on it run jobs.
 - Build it yourself with `docker build -t videoforge .` (on the published plugins image), or the plugins
   image too (FFmpeg, MP4Box, x264 and the plugins: half an hour or more): `docker build -t videoforge-plugins
   vsplugins`, then `docker build --build-arg PLUGINS_IMAGE=videoforge-plugins -t videoforge .`.

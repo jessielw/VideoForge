@@ -254,7 +254,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         return run_window(create_app(settings), args.host, args.port, url, settings.data_dir)
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, (url,)).start()
-    console.print(f"VideoForge on [bold]{url}[/] (Ctrl+C to stop)")
+    everywhere = ", listening on all addresses" if args.host in ("0.0.0.0", "::") else ""  # noqa: S104 (a comparison)
+    console.print(f"VideoForge on [bold]{url}[/]{everywhere} (Ctrl+C to stop)")
     app = create_app(settings)
     # Open connections get 5 s to close before the app's shutdown runs (it cancels a running job: up to 10 s).
     server = uvicorn.Server(
