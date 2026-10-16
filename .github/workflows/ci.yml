@@ -35,8 +35,9 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
 
+      # The desktop extra too: the type check reads desktop.py's pywebview and pystray imports.
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --extra desktop
 
       # Tests that need tools/ (MKVToolNix, x264, ffmpeg, VapourSynth plugins) skip without them.
       - name: Tests
