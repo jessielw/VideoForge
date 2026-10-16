@@ -35,3 +35,8 @@ scan_source_folder = true
 # Read <source>_temp (StaxRip): the job log for "still encoding", and
 # a_qpf/qpf_chapters.txt for chapters when no chapter file was added.
 staxrip_temp = true
+
+[actions]
+# Let the Settings page's command actions run (a program after a job ends or the queue finishes).
+# The web page has no login, so turn this off if anyone else can reach VideoForge.
+commands = true

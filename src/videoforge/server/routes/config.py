@@ -1,9 +1,10 @@
 """The Settings page: tool paths (with each tool found and its version), folder-browser roots,
-the default profile, whether batch indexing waits for an encode on the same disk, and where
-notifications go (Apprise URLs, each with the events it wants).
+the default profile, whether batch indexing waits for an encode on the same disk, where
+notifications go (Apprise URLs, each with the events it wants), the actions run after a job or the
+queue ends, and which plugins load.
 
 Changes are saved in the store (layered over videoforge.toml) and applied at once: new
-jobs, probes and runs use them. Only the preview's VapourSynth plugin folder needs a restart.
+jobs, probes and runs use them. Switching a plugin on or off takes effect on the next start.
 """
 
 from __future__ import annotations
@@ -16,17 +17,21 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Request
 
+from videoforge.core.actions import ACTION_LABELS, JOB_TOKENS, QUEUE_TOKENS, Action
 from videoforge.core.config import with_tools
 from videoforge.core.execute.audio import ENCODES
 from videoforge.core.notify import DEFAULT_EVENTS, EVENT_LABELS, Destination
 from videoforge.core.plan_io import to_json
 from videoforge.core.tools import TOOL_NAMES, TOOLS, check, detect, missing_for_encodes
 from videoforge.core.video import vs as vsx
+from videoforge.plugins.loader import describe as describe_plugins
 from videoforge.profiles import default_profile_id
 from videoforge.server.settings import SavedSettings
 
 router = APIRouter(prefix="/api/config")
-RESTART_FOR: dict[str, str] = {}  # setting -> why VideoForge needs a restart for it (none today)
+RESTART_FOR: dict[str, str] = {  # setting -> why VideoForge needs a restart for it
+    "plugins": "Plugins switched on or off load (or stop loading) when VideoForge starts again.",
+}
 
 
 def _state(request: Request) -> dict[str, Any]:
@@ -60,6 +65,11 @@ def _state(request: Request) -> dict[str, Any]:
         "notification_events": [
             {"id": e.value, "label": label, "default": e in DEFAULT_EVENTS} for e, label in EVENT_LABELS.items()
         ],
+        "actions": [a.to_json() for a in saved.actions],
+        "action_kinds": [{"id": k.value, "label": label} for k, label in ACTION_LABELS.items()],
+        "action_tokens": {"job": JOB_TOKENS, "queue": QUEUE_TOKENS},
+        "allow_commands": s.base_config.allow_commands,
+        "plugins": describe_plugins(s.plugins.report, saved.disabled_plugins) | {"folder": str(s.settings.plugins_dir)},
     }
 
 
@@ -72,7 +82,8 @@ def get_config(request: Request) -> dict[str, Any]:
 def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     """Change any of: tools ({name: path, or "" / null for the default}), roots (a list, or null
     for every drive), profile (an id, or null for videoforge.toml's), index_waits_for_disk (bool),
-    notifications (the whole list: [{name, url, enabled, events}])."""
+    notifications (the whole list: [{name, url, enabled, events}]), actions (the whole list:
+    [{name, kind, target, enabled, events, overwrite}]), disabled_plugins (plugin ids)."""
     s = request.app.state
     saved: SavedSettings = s.saved
     tools = dict(saved.tools)
@@ -103,12 +114,27 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         except (ValueError, TypeError, AttributeError) as ex:
             raise HTTPException(422, str(ex)) from None
 
+    actions = saved.actions
+    if "actions" in body:
+        try:
+            actions = [Action.from_json(a) for a in body["actions"] or []]
+        except (ValueError, TypeError, AttributeError) as ex:
+            raise HTTPException(422, str(ex)) from None
+    disabled = saved.disabled_plugins
+    if "disabled_plugins" in body:
+        disabled = sorted({str(i) for i in body["disabled_plugins"] or []})
+
     before = s.config.tools
-    new = SavedSettings(tools, roots, profile, waits, destinations)
+    new = SavedSettings(tools, roots, profile, waits, destinations, actions, disabled)
     new.save(s.store)
     s.saved = new
     s.queue.set_index_waits_for_disk(waits)
     s.notifier.destinations = destinations
+    s.actions.actions = actions
+    if frozenset(disabled) != s.plugins_off_at_start:
+        s.restart_for.add("plugins")
+    else:
+        s.restart_for.discard("plugins")
     s.default_profile = default_profile_id(profile or s.base_config.profile, s.profile_ids)
     cfg = replace(with_tools(s.base_config, tools), profile=s.default_profile)
     s.config = cfg

@@ -26,6 +26,10 @@ src/videoforge/
     workdir.py           <source>_tmp/ per job: indexes, script, encodes, stats, logs
     history.py           Finished-output records (data dir; for the parked Fix release page)
     record.py            What a run did, for other tools: <output>.videoforge.json + .jsonl events (docs/job-record.md)
+    events.py            EventBus: JobStarted / JobFinished / QueueFinished / IndexFinished, emitted by the queue,
+                         for notifications, actions and plugins (each subscriber hands slow work to its own thread)
+    notify.py            Notifications (Apprise), a bus subscriber
+    actions.py           Actions (docs/actions.md): command / move / copy / webhook after a job or the queue, a bus subscriber
     video/
       settings.py        VideoSettings (source filter, crop, resize, filters, custom script), EncoderSettings
       script.py          VideoSettings -> .vpy text (one generator for preview and encode)
@@ -43,6 +47,9 @@ src/videoforge/
       steps.py           Step (command(s) or Python call), outputs, fingerprint
       build.py           JobSpec + Plan -> [index, qpf, video pass(es), audio, mux, validate]
       run.py             Run steps; skip a step whose fingerprint and outputs match (resume)
+  plugins/               The plugin API (__init__: Plugin, PluginContext, the events; docs/plugins.md) and loader.py:
+                         <data dir>/plugins/<id>/videoforge-plugin.toml + `videoforge.plugins` entry points, each
+                         plugin run on its own thread off the bus
   profiles/              Registry: the `videoforge.profiles` entry points (id = "module:Class")
     manual.py            The built-in profile: every track in source order, copied; the user's
                          overrides exclude, reorder, retitle and flag tracks; output checked against the plan

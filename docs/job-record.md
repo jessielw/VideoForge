@@ -177,6 +177,7 @@ Each line of a `.videoforge.jsonl` (and of the queue-wide `events.jsonl`) is one
 | `run.finished` | `status` (`done`, `invalid`, `failed`, `skipped`, `cancelled`), `output`, `error`, `seconds`, `record` (its path, or null), `issues` (the output check's) |
 | `index.started` | `name` (queue-wide stream only: the index lane, which has no output yet) |
 | `index.finished` | `name`, `error` (null when it worked; `"Cancelled"` when stopped) |
+| `action.finished` | `action` (its name), `type` (`command`, `move`, `copy`, `webhook`), `error` (null when it worked), `output` (after a move: the new path), `seconds`; `job` is null for the queue's actions (queue-wide stream only; docs/actions.md) |
 
 Lines are flushed one at a time, so `tail -f` (or reading new lines as they appear) follows a run
 live. A reader should skip events it doesn't know: new ones may be added within a version.

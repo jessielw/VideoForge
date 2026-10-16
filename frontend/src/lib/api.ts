@@ -1,5 +1,6 @@
 // Thin typed client for /api. Errors carry the server's `detail` message.
 import type {
+  ActionSetting,
   AudioEncodeInfo,
   ClipInfo,
   CommandStep,
@@ -97,6 +98,8 @@ export const api = {
     profile?: string | null
     index_waits_for_disk?: boolean
     notifications?: NotificationDestination[]
+    actions?: ActionSetting[]
+    disabled_plugins?: string[]
   }) =>
     request<ConfigState>('PUT', '/api/config', changes),
   testNotification: (url: string) => post<{ ok: boolean }>('/api/config/notifications/test', { url }),

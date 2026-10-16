@@ -19,13 +19,16 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from videoforge.core.actions import ActionRunner
 from videoforge.core.config import AppConfig, load_app_config, with_tools
+from videoforge.core.events import EventBus, JobFinished, QueueFinished
 from videoforge.core.history import JobHistory
 from videoforge.core.notify import Notifier
 from videoforge.core.profile import Profile
-from videoforge.core.record import QUEUE_EVENTS, QUEUE_EVENTS_MAX, JsonLines
+from videoforge.core.record import QUEUE_EVENTS, QUEUE_EVENTS_MAX, JsonLines, event
 from videoforge.core.video import vs as vsx
 from videoforge.core.video.preview import Preview
+from videoforge.plugins.loader import PluginHost, load_plugins
 from videoforge.server.events import EventHub
 from videoforge.server.queue import JobQueue, Services
 from videoforge.server.routes import config, jobs, presets, queue, system, video
@@ -65,12 +68,31 @@ def create_app(
     if services.detect_crop is None:
         services.detect_crop = partial(video.source_crop, preview)
     queue_events = JsonLines(settings.data_dir / "logs" / QUEUE_EVENTS, max_bytes=QUEUE_EVENTS_MAX)
+    bus = EventBus()  # what runs do, for notifications, actions and plugins
     job_queue = JobQueue(
-        cfg, profiles or get_profile, store, events, services, settings.probe_workers, queue_events=queue_events
+        cfg,
+        profiles or get_profile,
+        store,
+        events,
+        services,
+        settings.probe_workers,
+        queue_events=queue_events,
+        bus=bus,
     )
     job_queue.index_waits_for_disk = saved.index_waits_for_disk
     notifier = Notifier(services.send_notification, list(saved.notifications))
-    job_queue.notifier = notifier
+    bus.subscribe(notifier.on_event, JobFinished, QueueFinished, name="notifications")
+    actions = ActionRunner(
+        list(saved.actions),
+        allow_commands=base.allow_commands,
+        job_log=job_queue.job_log,
+        report=lambda kind, **fields: queue_events.write(event(kind, **fields)),
+    )
+    bus.subscribe(actions.on_event, JobFinished, QueueFinished, name="actions")
+    plugin_report = load_plugins(settings.plugins_dir, saved.disabled_plugins)
+    plugins = PluginHost(
+        plugin_report, bus, data_dir=settings.plugin_data_dir, settings=base.plugins, job_log=job_queue.job_log
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -86,6 +108,8 @@ def create_app(
             logger.info("Shutting down")
             job_queue.shutdown()
             notifier.close()
+            actions.close()
+            plugins.close()
             preview.close()
             store.close()
             queue_events.close()
@@ -101,6 +125,9 @@ def create_app(
     app.state.events = events
     app.state.queue = job_queue
     app.state.notifier = notifier
+    app.state.actions = actions
+    app.state.plugins = plugins
+    app.state.plugins_off_at_start = frozenset(saved.disabled_plugins)
     app.state.preview = preview
     app.state.profile_ids = ids
     app.state.default_profile = default

@@ -1,0 +1,4 @@
+# A VideoForge plugin: copy this folder into <data dir>/plugins/ (%APPDATA%\VideoForge\plugins on Windows).
+id = "library_scan"
+module = "library_scan"
+# object = "plugin"  # the name of the Plugin in the module (this is the default)

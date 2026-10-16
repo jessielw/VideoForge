@@ -13,6 +13,7 @@ dependencies = [
     "apprise>=1.9.0",
     "autoqpf>=0.2.5",
     "fastapi>=0.143.0",
+    "niquests>=3.21.2",
     "numpy>=2.5.4",
     "pillow>=12.3.0",
     "pymediainfo>=7.0.1",

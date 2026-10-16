@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import string
 
+from videoforge.core.actions import Action, load_actions
 from videoforge.core.config import PROJECT_ROOT
 from videoforge.core.history import app_data_dir
 from videoforge.core.notify import Destination, load_destinations
@@ -32,6 +33,16 @@ class ServerSettings:
     def db_path(self) -> Path:
         return self.data_dir / "videoforge.db"
 
+    @property
+    def plugins_dir(self) -> Path:
+        """A folder per plugin (plugins/loader.py)."""
+        return self.data_dir / "plugins"
+
+    @property
+    def plugin_data_dir(self) -> Path:
+        """A folder per plugin for its own files (PluginContext.data_dir)."""
+        return self.data_dir / "plugin-data"
+
 
 @dataclass(slots=True)
 class SavedSettings:
@@ -43,6 +54,8 @@ class SavedSettings:
     profile: str | None = None  # default profile for new jobs
     index_waits_for_disk: bool = True  # batch indexing holds a job back while an encode reads its disk
     notifications: list[Destination] = field(default_factory=list)  # where job and queue news goes
+    actions: list[Action] = field(default_factory=list)  # what runs after a job ends or the queue finishes
+    disabled_plugins: list[str] = field(default_factory=list)  # plugin ids not loaded on the next start
 
     @classmethod
     def load(cls, store) -> SavedSettings:
@@ -53,6 +66,8 @@ class SavedSettings:
             store.get_setting("profile"),
             bool(store.get_setting("index_waits_for_disk", True)),
             load_destinations(store.get_setting("notifications") or []),
+            load_actions(store.get_setting("actions") or []),
+            [str(i) for i in store.get_setting("disabled_plugins") or []],
         )
 
     def save(self, store) -> None:
@@ -61,3 +76,5 @@ class SavedSettings:
         store.set_setting("profile", self.profile)
         store.set_setting("index_waits_for_disk", self.index_waits_for_disk)
         store.set_setting("notifications", [d.to_json() for d in self.notifications])
+        store.set_setting("actions", [a.to_json() for a in self.actions])
+        store.set_setting("disabled_plugins", self.disabled_plugins)

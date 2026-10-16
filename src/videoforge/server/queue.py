@@ -29,6 +29,7 @@ from typing import Any
 
 from videoforge.core.config import AppConfig, Tools
 from videoforge.core.disks import disks
+from videoforge.core.events import EventBus, IndexFinished, JobFinished, JobStarted, QueueFinished
 from videoforge.core.execute import process
 from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import Cancelled, CancelToken, ToolError
@@ -48,7 +49,7 @@ from videoforge.core.job import (
 )
 from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioMatch, JobInputs, Overrides, Plan, Severity, track_key
-from videoforge.core.notify import Message, Notifier, Sender, job_message, queue_message, send as notify_send
+from videoforge.core.notify import Sender, send as notify_send
 from videoforge.core.pipeline.build import index_steps, job_output
 from videoforge.core.pipeline.run import missing_inputs, run_job
 from videoforge.core.pipeline.steps import StepProgress, run_steps
@@ -185,10 +186,13 @@ class JobQueue:
         services: Services | None = None,
         probe_workers: int = 2,
         queue_events: JsonLines | None = None,
+        bus: EventBus | None = None,
     ) -> None:
         self.app, self.profiles, self.store, self.events = app, profiles, store, events
         self.services = services or Services()
         self.queue_events = queue_events  # every job's events in one stream (core/record.py)
+        # What a run did, for notifications, actions and plugins (core/events.py); the hub above is the browser's.
+        self.bus = bus or EventBus()
         self._entries: dict[str, Entry] = {}
         self._order: list[str] = []
         self._lock = threading.RLock()
@@ -204,7 +208,6 @@ class JobQueue:
         self._index_cancel: CancelToken | None = None
         self._index_wake = threading.Event()
         self.index_waits_for_disk = True  # the lane holds a job back while an encode reads its disk
-        self.notifier: Notifier | None = None  # told when a job ends and when the queue runs out
 
     # --- state ---------------------------------------------------------------------
 
@@ -635,7 +638,7 @@ class JobQueue:
             self._queue_changed()
             if ran and not self._closing:
                 left = sum(e.queued for e in self.entries()) if self._stop_after_current else 0
-                self._notify(queue_message(ran, _now() - started, left=left))
+                self.bus.emit(QueueFinished(tuple(ran), _now() - started, left))
 
     def _run(self, e: Entry) -> JobStatus:
         if e.plan is None:
@@ -660,6 +663,7 @@ class JobQueue:
             versions=self._versions,
         )
         recorder.started_run()
+        self.bus.emit(JobStarted(_copy(e.spec), recorder.output))
         last = [0.0]
 
         def log(line: str) -> None:
@@ -747,8 +751,8 @@ class JobQueue:
             self._save(e)
         self._changed(e)
         self._index_wake.set()  # a job held back for this one's disk may go
-        if not self._closing:  # a shutdown's cancel isn't news
-            self._notify(job_message(e.spec, result, _now() - started))
+        if not self._closing:  # a shutdown's cancel isn't news: the job resumes on the next start
+            self.bus.emit(JobFinished(_copy(e.spec), result, _now() - started, record))
         return result.status
 
     # --- the index lane ------------------------------------------------------------------
@@ -946,6 +950,8 @@ class JobQueue:
         else:
             logger.info("%s: index %s", e.spec.name, "cancelled" if error else "done")
         self._queue_event("index.finished", e, error=error or None)
+        if not self._closing:
+            self.bus.emit(IndexFinished(_copy(e.spec), error or None))
         if log_file is not None:
             log_file.close()
         with self._lock:
@@ -960,9 +966,19 @@ class JobQueue:
     def _versions(self, names: Sequence[str]) -> dict[str, str]:
         return self.services.versions(self.app.tools, names) if self.services.versions else {}
 
-    def _notify(self, message: Message) -> None:
-        if self.notifier is not None:
-            self.notifier.notify(message)
+    def job_log(self, job_id: str, line: str) -> None:
+        """A line in a job's log from outside a run (an action or a plugin, after the job ended): shown in
+        the browser and appended to <source>_tmp/videoforge.log. A job no longer in the queue is skipped."""
+        with self._lock:
+            e = self._entries.get(job_id)
+        if e is None:
+            return
+        log_file = _open_log(e)
+        try:
+            self._log(e, line, log_file)
+        finally:
+            if log_file is not None:
+                log_file.close()
 
     def _queue_event(self, kind: str, e: Entry, **fields: Any) -> None:
         if self.queue_events is not None:

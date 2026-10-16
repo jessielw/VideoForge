@@ -28,3 +28,8 @@ encode_suffixes = ["_job", "_out", "_new", ""]
 encode_extensions = [".h264", ".264", ".avc", ".hevc", ".265", ".h265"]
 scan_source_folder = true
 staxrip_temp = true
+
+[actions]
+# Let the Settings page's command actions run. Off here: the web page has no login, so anyone who can
+# reach the container could run anything in it. Turn it on in a videoforge.local.toml if only you can.
+commands = false

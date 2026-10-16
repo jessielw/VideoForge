@@ -20,6 +20,7 @@ from typing import Any
 
 import apprise
 
+from videoforge.core.events import JobFinished, QueueFinished
 from videoforge.core.job import JobResult, JobSpec, JobStatus
 from videoforge.core.models import Severity
 
@@ -238,6 +239,13 @@ class Notifier:
 
     def __post_init__(self) -> None:
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="notify")
+
+    def on_event(self, event: JobFinished | QueueFinished) -> None:
+        """The EventBus subscriber: a job's end and the queue's."""
+        if isinstance(event, JobFinished):
+            self.notify(job_message(event.spec, event.result, event.seconds))
+        else:
+            self.notify(queue_message(event.statuses, event.seconds, left=event.left))
 
     def notify(self, message: Message) -> None:
         for d in self.destinations:

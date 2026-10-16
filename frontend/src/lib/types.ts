@@ -482,6 +482,40 @@ export interface ConfigState {
   index_waits_for_disk: boolean // batch indexing holds a job back while an encode reads its disk
   notifications: NotificationDestination[]
   notification_events: { id: NotificationEvent; label: string; default: boolean }[]
+  actions: ActionSetting[]
+  action_kinds: { id: ActionKind; label: string }[]
+  action_tokens: { job: Record<string, string>; queue: Record<string, string> } // {token}: what it stands for
+  allow_commands: boolean // videoforge.toml [actions] commands
+  plugins: PluginsState
+}
+
+export type ActionKind = 'command' | 'move' | 'copy' | 'webhook'
+
+// What runs after a job ends or the queue finishes: target is the command line, the folder or the URL.
+export interface ActionSetting {
+  name: string
+  kind: ActionKind
+  target: string
+  enabled: boolean
+  events: NotificationEvent[]
+  overwrite: boolean // move / copy: replace a file already there
+}
+
+export interface PluginInfo {
+  id: string
+  name: string
+  version: string
+  description: string
+  source: string // its folder, or the entry point
+  events: string[] // the event types it handles
+  enabled: boolean
+}
+
+export interface PluginsState {
+  folder: string
+  loaded: PluginInfo[]
+  disabled: { id: string; source: string; enabled: boolean }[] // switched off: found, not loaded
+  failures: { id: string | null; source: string; reason: string }[]
 }
 
 export type NotificationEvent = 'job_done' | 'job_failed' | 'job_cancelled' | 'queue_finished'

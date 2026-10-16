@@ -21,6 +21,16 @@ The first beta: an encode and mux job queue in the browser, for one user on Wind
 - **Notifications.** Settings → Notifications sends to any service Apprise supports (Discord, Telegram, ntfy,
   Pushover, email, ...): each destination picks its events (job done, failed, cancelled, queue finished), can be
   switched off, and has a Test button that shows the service's own error.
+- **Actions.** Settings → Actions runs things after a job ends or the queue finishes: move or copy the output
+  to a folder (through a `.partial` file; the next actions see the new path), run a command with `{tokens}`
+  (`{output}`, `{record}`, `{label}`, ...; arguments split before the tokens go in, no shell), or POST the event
+  to a webhook. Commands run only when videoforge.toml's `[actions] commands` allows them (off in Docker).
+  Outcomes go in the job's log and `events.jsonl`. See docs/actions.md.
+- **Plugins.** Python plugins in `<data dir>/plugins/` (or installed packages' `videoforge.plugins` entry
+  points) get each job's start and end, the queue's end and the index lane's, on a thread of their own, with
+  their own settings (`[plugins.<id>]`), data folder and a line in the job's log. Settings → Plugins lists them,
+  why one didn't load, and switches one off. `niquests` ships for them. See docs/plugins.md and
+  `examples/plugins/library_scan`.
 - **Audio.** Copy or encode each track, more than one output from one track: DDP and DDP Atmos (DeeZy + DEE,
   truehdd), AAC (qaac or ffmpeg), Opus (opusenc or ffmpeg), FLAC, AC-3, E-AC-3 (ffmpeg). Each encode lists
   its layouts and bitrates, and a setting the track can't take is fitted or blocked.

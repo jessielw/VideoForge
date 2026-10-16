@@ -379,6 +379,85 @@ def test_notifications(tmp_path):
         ]
 
 
+class WritingRun(FakeRun):
+    """FakeRun that also writes the output file (for actions that move it)."""
+
+    def __call__(self, spec, plan, profile, app, **kw):
+        result = super().__call__(spec, plan, profile, app, **kw)
+        if result.output is not None:
+            result.output.parent.mkdir(parents=True, exist_ok=True)
+            result.output.write_bytes(b"mkv")
+        return result
+
+
+def test_actions_and_plugins(tmp_path):
+    """Actions are saved and run after each job (a move shows in the job's log and events.jsonl); a plugin
+    in the data folder hears the run; switching one off is saved and asks for a restart."""
+    make_files(tmp_path)
+    plugin = tmp_path / "data" / "plugins" / "spy"
+    plugin.mkdir(parents=True)
+    (plugin / "videoforge-plugin.toml").write_text('id = "spy"\nmodule = "vf_spy_plugin"\n', encoding="utf-8")
+    (plugin / "vf_spy_plugin.py").write_text(
+        "from videoforge.plugins import Plugin\n"
+        "seen = []\n"
+        "def done(event, ctx):\n"
+        "    seen.append((event.status.value, event.output.name))\n"
+        "    ctx.job_log(event.spec.id, 'spy saw it')\n"
+        "plugin = Plugin(name='Spy', version='0.1', on_job_finished=done)\n",
+        encoding="utf-8",
+    )
+    with make_client(tmp_path, run=WritingRun()) as client:
+        state = client.get("/api/config").json()
+        assert state["actions"] == [] and state["allow_commands"] is False
+        assert {k["id"] for k in state["action_kinds"]} == {"command", "move", "copy", "webhook"}
+        assert [p["id"] for p in state["plugins"]["loaded"]] == ["spy"]
+        assert state["plugins"]["folder"] == str(tmp_path / "data" / "plugins")
+
+        bad = client.put("/api/config", json={"actions": [{"kind": "command", "target": "x {nope}"}]})
+        assert bad.status_code == 422 and "Unknown token {nope}" in bad.json()["detail"]
+        library = tmp_path / "library"
+        saved = client.put(
+            "/api/config", json={"actions": [{"name": "To library", "kind": "move", "target": str(library)}]}
+        ).json()["actions"]
+        assert saved == [
+            {
+                "name": "To library",
+                "kind": "move",
+                "target": str(library),
+                "enabled": True,
+                "events": ["job_done"],
+                "overwrite": False,
+            }
+        ]
+
+        [job] = add(client, tmp_path)
+        wait_for(client, job, "ready", "warn")
+        client.post("/api/queue/start")
+        wait_for(client, job, "done")
+        client.app.state.queue.wait(5)
+        client.app.state.actions.wait()
+        client.app.state.plugins.wait()
+        assert (library / "Show.S01E01.mkv").read_bytes() == b"mkv"
+        assert not (tmp_path / "out" / "Show.S01E01.mkv").exists()
+        lines = client.get(f"/api/jobs/{job}/log").json()["lines"]
+        assert f"Action 'To library': moved to {library / 'Show.S01E01.mkv'}" in lines
+        assert "spy saw it" in lines
+        assert sys.modules["vf_spy_plugin"].seen == [("done", "Show.S01E01.mkv")]
+        events = [json.loads(x) for x in (tmp_path / "data" / "logs" / "events.jsonl").read_text("utf-8").splitlines()]
+        moved = next(e for e in events if e["event"] == "action.finished")
+        assert moved["action"] == "To library" and moved["type"] == "move" and moved["error"] is None
+
+        off = client.put("/api/config", json={"disabled_plugins": ["spy"]}).json()
+        assert off["plugins"]["loaded"][0]["enabled"] is False and len(off["restart"]) == 1
+        assert client.put("/api/config", json={"disabled_plugins": []}).json()["restart"] == []
+        client.put("/api/config", json={"disabled_plugins": ["spy"]})
+    with make_client(tmp_path) as client:  # kept across a restart; the plugin is found but not loaded
+        state = client.get("/api/config").json()
+        assert [a["name"] for a in state["actions"]] == ["To library"]
+        assert state["plugins"]["loaded"] == [] and [p["id"] for p in state["plugins"]["disabled"]] == ["spy"]
+        assert state["restart"] == []
+
+
 def test_restart_requeues_an_interrupted_job(tmp_path):
     make_files(tmp_path)
     with make_client(tmp_path) as client:

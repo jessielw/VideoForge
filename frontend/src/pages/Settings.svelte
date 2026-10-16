@@ -1,12 +1,15 @@
 <script lang="ts">
   // Settings: where each tool is (found or not, and its version), what the folder browser
-  // may show, the profile new jobs start with, whether batch indexing waits for an encode's disk, and where
-  // notifications go (Apprise URLs). Each change saves at once and is used by
+  // may show, the profile new jobs start with, whether batch indexing waits for an encode's disk, where
+  // notifications go (Apprise URLs), the actions run after a job or the queue ends, and which plugins load.
+  // Each change saves at once and is used by
   // new jobs and runs; videoforge.toml stays the default underneath ("Reset" goes back to it).
   import { onMount } from 'svelte'
   import FileBrowser from '../components/FileBrowser.svelte'
+  import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import CheckIcon from '@lucide/svelte/icons/check'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
+  import PlugIcon from '@lucide/svelte/icons/plug'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import PowerIcon from '@lucide/svelte/icons/power'
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
@@ -23,6 +26,8 @@
   import { drops } from '../lib/dropPaths.svelte'
   import { app } from '../lib/state.svelte'
   import type {
+    ActionKind,
+    ActionSetting,
     ConfigState,
     NotificationDestination,
     NotificationEvent,
@@ -36,7 +41,9 @@
   let checking = $state<Record<string, boolean>>({})
   let error = $state('')
   let newRoot = $state('')
-  let browse = $state<{ kind: 'tool'; tool: ToolSetting } | { kind: 'root' } | null>(null)
+  let browse = $state<
+    { kind: 'tool'; tool: ToolSetting } | { kind: 'root' } | { kind: 'action'; index: number | 'draft' } | null
+  >(null)
 
   async function checkAll() {
     const names = config?.tools.map(t => t.name) ?? []
@@ -156,6 +163,67 @@
     } finally {
       testing = { ...testing, [key]: false }
     }
+  }
+
+  // --- actions: what runs after a job ends or the queue finishes; the whole list is saved on each change ---
+  const blankAction = (): ActionSetting => ({
+    name: '',
+    kind: 'move',
+    target: '',
+    enabled: true,
+    events: ['job_done'],
+    overwrite: false,
+  })
+  let actionDraft = $state<ActionSetting>(blankAction())
+
+  const TARGET_HINT: Record<ActionKind, string> = {
+    command: '"C:\\Tools\\scan.exe" --file "{output}"',
+    move: 'D:\\Library\\{label}',
+    copy: 'D:\\Library',
+    webhook: 'https://example.com/hook',
+  }
+  const isFileKind = (k: ActionKind) => k === 'move' || k === 'copy'
+
+  function setActions(list: ActionSetting[]): Promise<boolean> {
+    return change({ actions: list })
+  }
+
+  // A move or copy runs after a job only: switching to one drops the queue's event.
+  function withKind(a: ActionSetting, kind: ActionKind): ActionSetting {
+    const events = isFileKind(kind) ? a.events.filter(e => e !== 'queue_finished') : a.events
+    return { ...a, kind, events: events.length ? events : ['job_done'] }
+  }
+
+  function editAction(i: number, changes: Partial<ActionSetting>) {
+    if (!config) return
+    setActions(config.actions.map((a, j) => (j === i ? { ...a, ...changes } : a)))
+  }
+
+  async function addAction() {
+    if (!config || !actionDraft.target.trim()) return
+    if (await setActions([...config.actions, { ...actionDraft, target: actionDraft.target.trim() }]))
+      actionDraft = blankAction()
+  }
+
+  async function removeAction(i: number) {
+    if (!config) return
+    const before = config.actions
+    if (await setActions(before.filter((_, j) => j !== i)))
+      toast(`Removed ${before[i].name}`, { action: { label: 'Undo', onClick: () => setActions(before) } })
+  }
+
+  function moveActionUp(i: number) {
+    if (!config || i === 0) return
+    const list = [...config.actions]
+    ;[list[i - 1], list[i]] = [list[i], list[i - 1]]
+    setActions(list)
+  }
+
+  // --- plugins: switched on or off for the next start ---
+  function setPlugin(id: string, on: boolean) {
+    if (!config) return
+    const off = [...config.plugins.loaded, ...config.plugins.disabled].filter(p => !p.enabled).map(p => p.id)
+    change({ disabled_plugins: on ? off.filter(x => x !== id) : [...off.filter(x => x !== id), id] })
   }
 
   // --- shutting down from the page ---
@@ -310,6 +378,22 @@
         </label>
       </section>
 
+      <!-- the events a notification or an action wants (skip: ones it can't have) -->
+      {#snippet eventChoices(
+        events: NotificationEvent[],
+        onchange: (events: NotificationEvent[]) => void,
+        skip: NotificationEvent[] = [],
+      )}
+        <div class="flex flex-wrap gap-x-4 gap-y-1.5">
+          {#each config!.notification_events.filter(ev => !skip.includes(ev.id)) as ev (ev.id)}
+            <label class="flex items-center gap-1.5 text-xs">
+              <Checkbox checked={events.includes(ev.id)} onCheckedChange={v => onchange(toggleEvent(events, ev.id, v))} />
+              {ev.label}
+            </label>
+          {/each}
+        </div>
+      {/snippet}
+
       <section class="space-y-3">
         <div class="flex items-center gap-3">
           <h2 class="font-medium">Notifications</h2>
@@ -320,16 +404,6 @@
             > when jobs end.
           </span>
         </div>
-        {#snippet eventChoices(events: NotificationEvent[], onchange: (events: NotificationEvent[]) => void)}
-          <div class="flex flex-wrap gap-x-4 gap-y-1.5">
-            {#each config!.notification_events as ev (ev.id)}
-              <label class="flex items-center gap-1.5 text-xs">
-                <Checkbox checked={events.includes(ev.id)} onCheckedChange={v => onchange(toggleEvent(events, ev.id, v))} />
-                {ev.label}
-              </label>
-            {/each}
-          </div>
-        {/snippet}
         <div class="divide-y divide-border/60 rounded-xl border bg-card">
           {#each config.notifications as d, i (i)}
             <div class="space-y-2 px-4 py-3 {d.enabled ? '' : 'opacity-60'}">
@@ -380,6 +454,150 @@
           </div>
         </div>
       </section>
+
+      <section class="space-y-3">
+        <div class="flex items-center gap-3">
+          <h2 class="font-medium">Actions</h2>
+          <span class="text-xs text-muted-foreground">
+            After a job ends or the queue finishes: move or copy the output, run a command, or call a webhook. A job's
+            actions run in this order; after a move, the ones below it see the new path.
+          </span>
+        </div>
+        {#if !config.allow_commands}
+          <p class="text-xs text-warning">
+            Commands are off: set <code>commands = true</code> under <code>[actions]</code> in videoforge.toml to let them run
+            (the page has no login, so only if no one else can reach it).
+          </p>
+        {/if}
+        {#snippet actionRow(a: ActionSetting, set: (changes: Partial<ActionSetting>) => void, index: number | 'draft')}
+          <div class="flex min-w-0 items-center gap-2">
+            {#if index !== 'draft'}
+              <Checkbox
+                checked={a.enabled}
+                aria-label="Run {a.name}"
+                title={a.enabled ? 'On' : 'Off: it never runs'}
+                onCheckedChange={v => set({ enabled: v })}
+              />
+            {/if}
+            <Input
+              class="w-40 text-sm"
+              value={a.name}
+              placeholder="Name (optional)"
+              aria-label="Name"
+              onchange={e => set({ name: e.currentTarget.value })}
+            />
+            <NativeSelect value={a.kind} aria-label="Kind" onchange={e => set(withKind(a, e.currentTarget.value as ActionKind))}>
+              {#each config!.action_kinds as k (k.id)}<option value={k.id}>{k.label}</option>{/each}
+            </NativeSelect>
+            <Input
+              class="min-w-0 flex-1 font-mono text-xs"
+              value={a.target}
+              placeholder={TARGET_HINT[a.kind]}
+              aria-label="{a.name || 'Action'} target"
+              oninput={e => index === 'draft' && set({ target: e.currentTarget.value })}
+              onchange={e => index !== 'draft' && set({ target: e.currentTarget.value })}
+              onkeydown={e => index === 'draft' && e.key === 'Enter' && addAction()}
+            />
+            {#if isFileKind(a.kind)}
+              <Button variant="outline" onclick={() => (browse = { kind: 'action', index })}><FolderOpenIcon />Browse…</Button>
+            {/if}
+            {#if index === 'draft'}
+              <Button onclick={addAction} disabled={!a.target.trim()}><PlusIcon />Add</Button>
+            {:else}
+              <Button variant="ghost" size="icon" aria-label="Move {a.name} up" disabled={index === 0} onclick={() => moveActionUp(index)}>
+                <ArrowUpIcon />
+              </Button>
+              <Button variant="ghost" size="icon" aria-label="Remove {a.name}" onclick={() => removeAction(index)}><XIcon /></Button>
+            {/if}
+          </div>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            {@render eventChoices(a.events, events => set({ events }), isFileKind(a.kind) ? ['queue_finished'] : [])}
+            {#if isFileKind(a.kind)}
+              <label class="flex items-center gap-1.5 text-xs">
+                <Checkbox checked={a.overwrite} onCheckedChange={v => set({ overwrite: v })} />
+                Replace a file already there
+              </label>
+            {/if}
+          </div>
+        {/snippet}
+        <div class="divide-y divide-border/60 rounded-xl border bg-card">
+          {#each config.actions as a, i (i)}
+            <div class="space-y-2 px-4 py-3 {a.enabled ? '' : 'opacity-60'}">
+              {@render actionRow(a, changes => editAction(i, changes), i)}
+            </div>
+          {/each}
+          <div class="space-y-2 px-4 py-3">
+            {@render actionRow(actionDraft, changes => (actionDraft = { ...actionDraft, ...changes }), 'draft')}
+          </div>
+        </div>
+        <details class="text-xs text-muted-foreground">
+          <summary class="cursor-pointer select-none">Tokens for commands and folders</summary>
+          <div class="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5">
+            <div class="col-span-2 font-medium text-foreground">After a job</div>
+            {#each Object.entries(config.action_tokens.job) as [token, what] (token)}
+              <code>{`{${token}}`}</code><span>{what}</span>
+            {/each}
+            <div class="col-span-2 mt-2 font-medium text-foreground">When the queue finishes</div>
+            {#each Object.entries(config.action_tokens.queue) as [token, what] (token)}
+              <code>{`{${token}}`}</code><span>{what}</span>
+            {/each}
+            <p class="col-span-2 mt-2">
+              A command's arguments are split before the tokens go in, so a path with spaces stays one argument and no shell
+              reads it. For pipes or redirection, run the shell yourself (<code>cmd /c …</code>). Write <code>{'{{'}</code>
+              and <code>{'}}'}</code> for a literal brace. A webhook POSTs the event as JSON.
+            </p>
+          </div>
+        </details>
+      </section>
+
+      <section class="space-y-3">
+        <div class="flex items-center gap-3">
+          <h2 class="font-medium">Plugins</h2>
+          <span class="min-w-0 truncate text-xs text-muted-foreground">
+            Python code that acts on what VideoForge does: a folder each in <code>{config.plugins.folder}</code>, or an installed
+            package.
+          </span>
+        </div>
+        <div class="divide-y divide-border/60 rounded-xl border bg-card">
+          {#each config.plugins.loaded as p (p.id)}
+            <div class="flex min-w-0 items-start gap-3 px-4 py-3 {p.enabled ? '' : 'opacity-60'}">
+              <Checkbox class="mt-0.5" checked={p.enabled} aria-label="Load {p.name}" onCheckedChange={v => setPlugin(p.id, v)} />
+              <div class="min-w-0 flex-1 space-y-0.5">
+                <div class="flex items-baseline gap-2 text-sm">
+                  <span class="font-medium">{p.name}</span>
+                  {#if p.version}<span class="text-xs text-muted-foreground">{p.version}</span>{/if}
+                  <code class="text-xs text-muted-foreground">{p.id}</code>
+                </div>
+                {#if p.description}<div class="text-xs">{p.description}</div>{/if}
+                <div class="truncate text-xs text-muted-foreground" title={p.source}>
+                  {p.events.length ? `On ${p.events.join(', ')}` : 'No events'} · {p.source}
+                </div>
+              </div>
+            </div>
+          {/each}
+          {#each config.plugins.disabled as p (p.id)}
+            <div class="flex min-w-0 items-center gap-3 px-4 py-3 opacity-60">
+              <Checkbox checked={p.enabled} aria-label="Load {p.id}" onCheckedChange={v => setPlugin(p.id, v)} />
+              <code class="text-sm">{p.id}</code>
+              <span class="truncate text-xs text-muted-foreground" title={p.source}>switched off, not loaded · {p.source}</span>
+            </div>
+          {/each}
+          {#each config.plugins.failures as f (f.source)}
+            <div class="flex min-w-0 items-start gap-3 px-4 py-3 text-xs">
+              <XIcon class="mt-0.5 size-3.5 shrink-0 text-destructive" />
+              <div class="min-w-0">
+                <div class="text-destructive">{f.id ? `${f.id}: ` : ''}didn't load: {f.reason}</div>
+                <div class="truncate text-muted-foreground" title={f.source}>{f.source}</div>
+              </div>
+            </div>
+          {/each}
+          {#if !config.plugins.loaded.length && !config.plugins.disabled.length && !config.plugins.failures.length}
+            <div class="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
+              <PlugIcon class="size-3.5" />No plugins installed.
+            </div>
+          {/if}
+        </div>
+      </section>
     {/if}
 
     <section class="space-y-3">
@@ -419,8 +637,8 @@
 
 {#if browse}
   <FileBrowser
-    title={browse.kind === 'tool' ? browse.tool.label : 'Add a folder'}
-    mode={browse.kind === 'root' || browse.tool.folder ? 'folder' : 'files'}
+    title={browse.kind === 'tool' ? browse.tool.label : browse.kind === 'action' ? 'The folder' : 'Add a folder'}
+    mode={browse.kind !== 'tool' || browse.tool.folder ? 'folder' : 'files'}
     programs={browse.kind === 'tool' && !browse.tool.folder}
     start={browse.kind === 'tool' ? startFolder(browse.tool) : ''}
     onpick={paths => {
@@ -428,7 +646,10 @@
       browse = null
       if (!paths[0] || !b) return
       if (b.kind === 'tool') setTool(b.tool, paths[0])
-      else addRoot(paths[0])
+      else if (b.kind === 'action') {
+        if (b.index === 'draft') actionDraft = { ...actionDraft, target: paths[0] }
+        else editAction(b.index, { target: paths[0] })
+      } else addRoot(paths[0])
     }}
     onclose={() => (browse = null)}
   />
