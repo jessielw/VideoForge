@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 # VideoForge in a container: the server and its free tools. The native ones (FFmpeg, MP4Box, x264, the
 # VapourSynth plugins) come from the plugins image (vsplugins/), built rarely; MKVToolNix, x265 and opus-tools
-# from Debian; DeeZy and truehdd from their releases; Wine for qaac. DEE, qaac and other tools of your own
-# go in /tools.
+# from Debian; DeeZy and truehdd from their releases; Wine for Windows tools. DEE, qaac and other tools of
+# your own go in /tools (docker/entrypoint.sh).
 # See README "Docker".
 #   docker build -t videoforge .                      (with the published plugins image)
 #   docker build -t videoforge-plugins vsplugins && docker build --build-arg PLUGINS_IMAGE=videoforge-plugins -t videoforge .
@@ -52,8 +52,8 @@ RUN echo /opt/vf/lib > /etc/ld.so.conf.d/vf.conf && ldconfig
 COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
 COPY --from=downloads /out/deezy-bin /usr/local/bin/deezy
 COPY --from=downloads /out/truehdd-bin /usr/local/bin/truehdd
-# Wine for qaac (Windows only; mount qaac64.exe and its QTfiles64 folder at /tools/qaac). Its DLLs lose their
-# debug info (711 MB -> 237 MB), and a template prefix is made for the wrapper to copy (docker/wine-prefix.sh).
+# Wine for the Windows tools in /tools/wine (qaac, DEE's Windows build). Its DLLs lose their debug info
+# (711 MB -> 237 MB), and a template prefix is made for docker/wine-run to copy (docker/wine-prefix.sh).
 COPY docker/wine-prefix.sh /tmp/wine-prefix.sh
 RUN apt-get update \
     && apt-get install -y --no-install-recommends wine64 binutils \
@@ -61,7 +61,7 @@ RUN apt-get update \
     && apt-get purge -y --auto-remove binutils \
     && rm -rf /var/lib/apt/lists/* \
     && bash /tmp/wine-prefix.sh && rm /tmp/wine-prefix.sh
-COPY --chmod=0755 docker/qaac /opt/qaac/bin/qaac
+COPY --chmod=0755 docker/wine-run /opt/wine/bin/wine-run
 COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/videoforge-entrypoint
 
 WORKDIR /app

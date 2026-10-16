@@ -303,12 +303,14 @@ defaults, audio encoder settings, and the checks on the finished file.
   and opus-tools, DeeZy and truehdd release binaries and the filter scripts. `docker.yml` tags the plugins
   image with a hash of `vsplugins/` and builds it only when that tag is new, then the app image on it (GHCR,
   on a version tag). `docker/videoforge.toml` is its config (`VIDEOFORGE_ROOT=/app`), data in `/data`, the
-  user's tools in `/tools` (DEE, qaac, more plugins). qaac runs under Debian's Wine (64-bit only; the DLLs
-  stripped of debug info): `docker/qaac` is a wrapper that gives each user id its own prefix (Wine refuses one
-  another user owns), copied from a template whose DLLs are links into Wine (16 MB, ~2 s the first time),
-  turns `-o`'s path into a `Z:` one and turns off the display drivers. The entrypoint puts it on PATH only when
-  `/tools/qaac/qaac64.exe` is there, so AAC (qaac) shows as unavailable without it. On POSIX each tool runs in
-  its own process group, so a cancel kills its children too (`process._kill_tree`).
+  user's tools in `/tools` (DEE, qaac, more plugins). The config names DEE and qaac bare (`dee`, `qaac`):
+  `docker/entrypoint.sh` writes a launcher for each one in `/tools` to a folder on PATH (`/tools/dee/dee`,
+  else `/tools/wine/dee/dee.exe`; `/tools/wine/qaac/qaac64.exe`), so a tool that isn't there shows as
+  missing. Windows tools run under Debian's Wine (64-bit only; the DLLs stripped of debug info) through
+  `docker/wine-run`: each user id gets its own prefix (Wine refuses one another user owns), copied from a
+  template whose DLLs are links into Wine (16 MB, ~2 s the first time); the display drivers are off. Paths
+  pass unchanged: Wine maps / to Z:, the current drive. On POSIX each tool runs in its own process group, so
+  a cancel kills its children too (`process._kill_tree`).
 - VapourSynth R81 loads only API 4 plugins: the manifest leaves out the API 3 ones (TDeintMod, EEDI2, CTMF,
   DFTTest, neo_f3kdb, RemapFrames, nnedi3) for dfttest2, vszip and znedi3. R81 also takes a keyword's
   trailing underscore only (`lambda_`), so the fetch patches havsfunc r33's `_lambda` / `_global`. The

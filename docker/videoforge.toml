@@ -12,10 +12,12 @@ opusenc = "opusenc"
 mp4box = "MP4Box"
 deezy = "deezy"
 truehdd = "truehdd"
-# Dolby Encoding Engine isn't free to ship: put it in /tools/dee (or set its path in Settings).
-dee = "/tools/dee/dee"
-# qaac runs under Wine: put qaac64.exe and its QTfiles64 folder (Apple's CoreAudioToolbox) in /tools/qaac.
-# Without them its AAC encode shows as unavailable (ffmpeg's AAC is there).
+# DEE and qaac aren't free to ship: the entrypoint puts a launcher on PATH for each one in /tools.
+# Dolby Encoding Engine: the Linux build as /tools/dee/dee, or the Windows build as /tools/wine/dee/dee.exe
+# (run under Wine), each with its license next to it.
+dee = "dee"
+# qaac: qaac64.exe and its QTfiles64 folder (Apple's CoreAudioToolbox) in /tools/wine/qaac, run under Wine.
+# Without it AAC (qaac) shows as unavailable (ffmpeg's AAC is there).
 qaac = "qaac"
 # More VapourSynth plugins (.so) of your own; the image's (vsplugins/manifest.toml: BestSource, L-SMASH,
 # FFMS2 and the common filters) are always loaded.
