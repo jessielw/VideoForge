@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 import functools
+import importlib.util
 import os
 from pathlib import Path
 import re
@@ -188,10 +189,34 @@ def locate(path: str) -> str:
     return shutil.which(path) or ""
 
 
+_SOURCE_FILTERS = {"bestsource": "BestSource", "lsmashsource": "L-SMASH", "vslsmashsource": "L-SMASH", "ffms2": "FFMS2"}
+
+
+def bundled_plugin_folder() -> Path | None:
+    """The vapoursynth package's own plugins folder, which VapourSynth always loads (the Docker image's plugins
+    are there); None when it has none."""
+    spec = importlib.util.find_spec("vapoursynth")
+    folder = Path(spec.origin).parent / "plugins" if spec and spec.origin else None
+    return folder if folder is not None and folder.is_dir() else None
+
+
+def _plugin_names(folder: Path) -> list[str]:
+    """The plugins in folder: its libraries, and its subfolders with a manifest.vs (one plugin built for several
+    CPU levels), named without a "lib" prefix."""
+    names = [
+        p.stem if p.is_file() else p.name
+        for p in folder.iterdir()
+        if (p.is_file() and p.suffix.lower() in (".dll", ".so", ".dylib")) or (p / "manifest.vs").is_file()
+    ]
+    return sorted(n.lower().removeprefix("lib") for n in names)
+
+
 def _plugins(path: str) -> ToolCheck:
     info = next(t for t in TOOLS if t.name == "vs_plugins")
     folder = Path(path) if path else None
-    if folder is None or not folder.is_dir():
+    bundled_folder = bundled_plugin_folder()
+    bundled = _plugin_names(bundled_folder) if bundled_folder else []
+    if (folder is None or not folder.is_dir()) and not bundled:
         return ToolCheck(
             info.name,
             info.label,
@@ -201,24 +226,16 @@ def _plugins(path: str) -> ToolCheck:
             ToolStatus.MISSING,
             detail="Not set" if folder is None else "No such folder",
         )
-    names = sorted(p.stem for p in folder.iterdir() if p.suffix.lower() in (".dll", ".so", ".dylib"))
-    sources = [
-        label
-        for stem, label in (
-            ("bestsource", "BestSource"),
-            ("lsmashsource", "L-SMASH"),
-            ("libvslsmashsource", "L-SMASH"),
-            ("ffms2", "FFMS2"),
-        )
-        if stem in (n.lower() for n in names)
-    ]
+    names = _plugin_names(folder) if folder is not None and folder.is_dir() else []
+    found = set(names) | set(bundled)
+    sources = list(dict.fromkeys(label for stem, label in _SOURCE_FILTERS.items() if stem in found))
     status = ToolStatus.OK if sources else ToolStatus.UNKNOWN
-    detail = f"{len(names)} plugins" + (
-        f"; source filters: {', '.join(dict.fromkeys(sources))}"
-        if sources
-        else "; no source filter (BestSource, L-SMASH or FFMS2)"
+    detail = f"{len(names) + len(bundled)} plugins" + (f" ({len(bundled)} bundled)" if bundled else "")
+    detail += (
+        f"; source filters: {', '.join(sources)}" if sources else "; no source filter (BestSource, L-SMASH or FFMS2)"
     )
-    return ToolCheck(info.name, info.label, info.purpose, path, str(folder), status, detail=detail)
+    shown = str(folder) if folder is not None and folder.is_dir() else str(bundled_folder)
+    return ToolCheck(info.name, info.label, info.purpose, path, shown, status, detail=detail)
 
 
 def check(info: ToolInfo, path: str, *, runner: Runner = _run, timeout: float = 8.0) -> ToolCheck:

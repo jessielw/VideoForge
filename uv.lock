@@ -3,6 +3,12 @@ revision = 5
 requires-python = ">=3.12"
 
 [[package]]
+name = "adjust"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/c5/b1df9d3ba57436aa4ee2f849c149d82cada7d29c52a8ae8001a873e07e9d/adjust-0.1.0.tar.gz", hash = "sha256:62a82d817e16158a07c6de65e9ce1d750ae8b064180ff1a7ab4842f152504ee9", size = 3024, upload-time = "2023-07-27T16:16:29.101Z" }
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -43,6 +49,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/32/56/302de5dc57ae4e8a0d645b863c50a6fcaf2912e412b1e8fa9d232c3f0d01/autoqpf-0.2.5.tar.gz", hash = "sha256:dcfd91bd12610451d934fa5587438c53b4b8620dfb44c34fd6acb65eba9636d5", size = 11003, upload-time = "2025-11-17T01:37:18.58Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f5/47/f9e785672924896cc27a3bb8a37d737016a0847d0365f6f0785b19bd0e80/autoqpf-0.2.5-py3-none-any.whl", hash = "sha256:0798b94bb5adcea0de5834b67b3617ef1c52ceb5049ad1b3f721241e5dc34fc8", size = 10665, upload-time = "2025-11-17T01:37:17.482Z" },
+]
+
+[[package]]
+name = "awsmfunc"
+version = "1.3.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "vapoursynth" },
+    { name = "vs-rekt" },
+    { name = "vsutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/16/31/c68c24d975569300e5c51b0f78d0af241c30abace857741e69712d7311b5/awsmfunc-1.3.5.tar.gz", hash = "sha256:851b9228e2a6dcc28b3c604cb0588f06ea76e90877d2ac38a0c949ae176811b8", size = 39929, upload-time = "2026-01-02T09:31:46.315Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c8/2f/9de6237db8ec243e6cd1494b2a5b3e5b4c278fd397a8b842ae4efe8452d6/awsmfunc-1.3.5-py3-none-any.whl", hash = "sha256:74242dcde7ce111b96360927e0f0b0a8c2af08f082eaad102a0228ebe257827a", size = 42912, upload-time = "2026-01-02T09:31:45.442Z" },
 ]
 
 [[package]]
@@ -138,6 +159,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697, upload-time = "2022-10-25T02:36:22.414Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
+]
+
+[[package]]
+name = "dfttest2"
+version = "11.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "vapoursynth" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b7/55/cef42c95f146eba884488d5024fa00c05f5f2ad751b4e8b70c40f777deba/dfttest2-11.0.0.tar.gz", hash = "sha256:ef412af369d11bff79e93e93d7381f6e6447702ce2eb03a73d98cbf9f558b3a4", size = 364944, upload-time = "2026-09-14T16:21:27.06Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cc/97/861b986073c4a44d32d045878c762f13cad76609b6bef8b336faeed688de/dfttest2-11.0.0-py3-none-any.whl", hash = "sha256:869067bb309a8ffb4f5c5b8fe6a96cca164ac59879502ef4cb029505f8b7e4cc", size = 21243, upload-time = "2026-09-14T16:21:25.689Z" },
 ]
 
 [[package]]
@@ -1115,6 +1148,13 @@ desktop = [
     { name = "pystray" },
     { name = "pywebview" },
 ]
+filters = [
+    { name = "adjust" },
+    { name = "awsmfunc" },
+    { name = "dfttest2" },
+    { name = "vs-rekt" },
+    { name = "vsutil" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1127,7 +1167,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "adjust", marker = "extra == 'filters'", specifier = ">=0.1.0" },
     { name = "autoqpf", specifier = ">=0.2.5" },
+    { name = "awsmfunc", marker = "extra == 'filters'", specifier = ">=1.3.5" },
+    { name = "dfttest2", marker = "extra == 'filters'", specifier = ">=11.0.0" },
     { name = "fastapi", specifier = ">=0.143.0" },
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "pillow", specifier = ">=12.3.0" },
@@ -1137,8 +1180,10 @@ requires-dist = [
     { name = "rich", specifier = ">=15.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
     { name = "vapoursynth", specifier = ">=81" },
+    { name = "vs-rekt", marker = "extra == 'filters'", specifier = ">=1.0.0" },
+    { name = "vsutil", marker = "extra == 'filters'", specifier = ">=0.8.0" },
 ]
-provides-extras = ["desktop"]
+provides-extras = ["desktop", "filters"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1147,6 +1192,31 @@ dev = [
     { name = "poethepoet", specifier = ">=0.49.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.17.0" },
+]
+
+[[package]]
+name = "vs-rekt"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "vapoursynth" },
+    { name = "vsutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/89/9a/c6f11f016ba0d54da2c0fe16b3f742dce5801beff3d01979c5d77d45ca4b/vs-rekt-1.0.0.tar.gz", hash = "sha256:24fbc0b577074e841b80c7d02b7ab2c88c1a5c703276d37dea530d6ba109ae31", size = 4591, upload-time = "2022-07-27T13:13:31.638Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/1f/1b1dd30581f525dda48ae7bdbc8a4b94293f90fe34ae90c31d9e5c33d604/vs_rekt-1.0.0-py3-none-any.whl", hash = "sha256:e217d00c5bdb746d5124f9a10a50e90fc0f1f170bef02c89a4cb036547d2d132", size = 5407, upload-time = "2022-07-27T13:13:30.112Z" },
+]
+
+[[package]]
+name = "vsutil"
+version = "0.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "vapoursynth" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f2/dc/95df63612bd0a95d7a06a1c51dde3ca0f4ae697d9e231c2345390ff9638c/vsutil-0.8.0.tar.gz", hash = "sha256:e01831203dfb9c3af86a101fba5e7fe04e3686bddec94bb3057ca73e84c98768", size = 11380, upload-time = "2022-06-22T13:29:28.635Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/35/89/daadc3c87b3c0f1f5ca36fd900222ea4c023af6a4acefd033ef7f55df3b5/vsutil-0.8.0-py3-none-any.whl", hash = "sha256:b14751680f1aa47a8671a943932e160fc3b6029b3e60227875fd73d7a47dac86", size = 11825, upload-time = "2022-06-22T13:29:26.75Z" },
 ]
 
 [[package]]

@@ -5,7 +5,8 @@
 The folder holds a standalone Python (the python-build-standalone build uv installs) with VideoForge and its
 locked dependencies installed in it, the built frontend, videoforge.toml, an empty tools/, and VideoForge.exe,
 which runs `python -m videoforge serve --window` with VIDEOFORGE_ROOT set to the folder. A real Python is the
-point: vspipe embeds it, and the preview worker is `python -m`. Unpacked anywhere, it runs from there.
+point: vspipe embeds it, and the preview worker is `python -m`. Unpacked anywhere, it runs from there. The
+VapourSynth plugins and filter scripts of vsplugins/manifest.toml come with it (scripts/fetch_plugins.py).
 """
 
 from __future__ import annotations
@@ -23,7 +24,8 @@ CSC = Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe")
 
 TOOLS_README = """Put the tools here (or anywhere, and set their paths on the Settings page):
 
-  MKVToolNix\\mkvmerge.exe   x264\\x264.exe   x265\\x265.exe   vs-plugins\\ (ffms2.dll, ...)
+  MKVToolNix\\mkvmerge.exe   x264\\x264.exe   x265\\x265.exe
+  vs-plugins\\ already holds the VapourSynth plugins VideoForge bundles (source filters, common filters): add yours
   DeeZy\\deezy.exe   DEE\\dee.exe   truehdd\\truehdd.exe   qaac\\qaac64.exe   opus-tools\\opusenc.exe
   ffmpeg and MP4Box are looked up on PATH unless set.
 
@@ -68,11 +70,11 @@ def standalone_python(cache: Path, dest: Path) -> Path:
 
 
 def install(python: Path, work: Path) -> None:
-    """The locked dependencies (with the desktop extra), then VideoForge itself."""
+    """The locked dependencies (with the desktop and filters extras), then VideoForge itself."""
     reqs = work / "requirements.txt"
     run(
-        "uv", "export", "--frozen", "--no-dev", "--extra", "desktop", "--no-hashes", "--no-emit-project",
-        "--no-header", "--output-file", reqs,
+        "uv", "export", "--frozen", "--no-dev", "--extra", "desktop", "--extra", "filters", "--no-hashes",
+        "--no-emit-project", "--no-header", "--output-file", reqs,
     )  # fmt: skip
     run("uv", "pip", "install", "--python", python, "--link-mode", "copy", "--requirement", reqs)
     run("uv", "pip", "install", "--python", python, "--link-mode", "copy", "--no-deps", "--reinstall-package",
@@ -115,6 +117,8 @@ def main() -> int:
     for name in ("videoforge.toml", "README.md", "CHANGELOG.md", "LICENSE"):
         shutil.copy2(ROOT / name, folder / name)
     (folder / "tools").mkdir()
+    run(sys.executable, ROOT / "scripts" / "fetch_plugins.py", "--plugins", folder / "tools" / "vs-plugins",
+        "--scripts", folder / "runtime" / "Lib" / "site-packages")  # fmt: skip
     (folder / "tools" / "README.txt").write_text(TOOLS_README.replace("\n", "\r\n"), encoding="utf-8")
     launcher(python, folder, work)
 

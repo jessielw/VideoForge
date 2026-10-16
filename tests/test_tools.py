@@ -7,6 +7,7 @@ import sys
 
 from conftest import audio, plan_for, source
 
+from videoforge.core import tools
 from videoforge.core.config import AppConfig, Tools, with_tools
 from videoforge.core.models import AudioAction, AudioCodec as C, Severity
 from videoforge.core.tools import (
@@ -75,16 +76,34 @@ def test_a_real_program_on_path():
     assert c.status is ToolStatus.OK and c.version.startswith("Python 3.")
 
 
-def test_plugin_folder(tmp_path):
+def test_plugin_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "bundled_plugin_folder", lambda: None)
     assert check(INFO["vs_plugins"], str(tmp_path / "none")).status is ToolStatus.MISSING
-    (tmp_path / "BestSource.dll").write_bytes(b"")
+    (tmp_path / "libbestsource.dll").write_bytes(b"")
     (tmp_path / "ffms2.dll").write_bytes(b"")
     (tmp_path / "readme.txt").write_bytes(b"")
+    (tmp_path / "zsmooth").mkdir()  # one plugin, several CPU builds
+    (tmp_path / "zsmooth" / "manifest.vs").write_text("[VapourSynth Manifest V1]\nzsmooth\n")
+    (tmp_path / "zsmooth" / "zsmooth.dll").write_bytes(b"")
     c = check(INFO["vs_plugins"], str(tmp_path))
-    assert c.status is ToolStatus.OK and c.detail == "2 plugins; source filters: BestSource, FFMS2"
+    assert c.status is ToolStatus.OK and c.detail == "3 plugins; source filters: BestSource, FFMS2"
     empty = tmp_path / "empty"
     empty.mkdir()
     assert check(INFO["vs_plugins"], str(empty)).status is ToolStatus.UNKNOWN
+
+
+def test_plugin_folder_counts_the_bundled_plugins(tmp_path, monkeypatch):
+    bundled = tmp_path / "bundled"
+    bundled.mkdir()
+    (bundled / "libvslsmashsource.so").write_bytes(b"")
+    (bundled / "libmvtools.so").write_bytes(b"")
+    monkeypatch.setattr(tools, "bundled_plugin_folder", lambda: bundled)
+    c = check(INFO["vs_plugins"], str(tmp_path / "none"))  # the extra folder isn't there: the bundled ones are
+    assert c.status is ToolStatus.OK and c.detail == "2 plugins (2 bundled); source filters: L-SMASH"
+    assert c.found == str(bundled)
+    (tmp_path / "BestSource.dll").write_bytes(b"")
+    c = check(INFO["vs_plugins"], str(tmp_path))
+    assert c.detail == "3 plugins (2 bundled); source filters: BestSource, L-SMASH" and c.found == str(tmp_path)
 
 
 def test_detect_covers_every_tool_in_order(tmp_path):

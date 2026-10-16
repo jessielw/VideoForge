@@ -1,0 +1,353 @@
+# The VapourSynth plugins VideoForge bundles: the Docker image builds them from these sources
+# (vsplugins/Dockerfile, vsplugins/build.py) and scripts/fetch_plugins.py downloads their Windows builds.
+# All are API 4 (VapourSynth R81 no longer loads API 3 plugins, which ruled out TDeintMod, EEDI2, CTMF,
+# DFTTest, neo_f3kdb, RemapFrames and dubhater's nnedi3: dfttest2, vszip's Deband/RFS and znedi3 stand in).
+#
+# [[plugin]]
+#   name, namespace (vs.core.<namespace>), repo, ref (a tag or a commit), license
+#   build      meson | cmake | autotools (autogen.sh/autoreconf, configure, make) | make | zig
+#              | cc (compile `sources` into one library)
+#   subdir     where the build files are (default: the repo's top)
+#   submodules true for all of the repo's submodules, or a list of their paths
+#   before     shell commands run in the repo before the build (e.g. a library it links statically)
+#   env        environment variables for the build
+#   options    extra arguments for the configure step (meson setup, cmake, ./configure, make, zig build);
+#              {vs_include} is VapourSynth's include folder
+#   targets    for autotools: the make targets (default: all)
+#   zig        for zig: the Zig version (the Dockerfile installs each)
+#   variants   for zig: {suffix = cpu}, one build per CPU level in a folder with a manifest.vs, so VapourSynth
+#              loads the best one the CPU runs ("" is the baseline)
+#   sources    for cc: the files to compile (globs)
+#   library    the built library's file name (a glob), when the build makes more than one
+#   files      more files the plugin reads next to it (copied from the source tree)
+#   win64      the Windows build: {url, sha256, files = {path in the plugin folder = path in the archive}}, or
+#              a list of them; a download that isn't an archive is the file itself
+#
+# [[script]] is a Python filter script (one module: name, url, sha256, license) that scripts/fetch_plugins.py
+# puts in site-packages (for the Docker image too), with `replace` = {old = new} applied to its text; the
+# packaged ones (awsmfunc, vsutil, vs-rekt, adjust, dfttest2) are the `filters` extra in pyproject.toml.
+
+# --- source filters -----------------------------------------------------------------------------------
+
+[[plugin]]
+name = "BestSource"
+namespace = "bs"
+repo = "https://github.com/vapoursynth/bestsource"
+ref = "R22"
+license = "MIT"
+build = "meson"
+options = ["-Denable_plugin=true"]
+win64 = { url = "https://files.pythonhosted.org/packages/e1/01/8b65d43d73d6d3a5dab3aa79a65e98cf8fac33cfe24e94bdcad46ded390e/vapoursynth_bestsource-22-py3-none-win_amd64.whl", sha256 = "4dc2275d145128a2a86fa32efaab9fbab8e22582bfdf173b460f2ff33858c230", files = { "libbestsource.dll" = "vapoursynth/plugins/libbestsource.dll" } }
+
+[[plugin]]
+name = "L-SMASH-Works"
+namespace = "lsmas"
+repo = "https://github.com/HomeOfAviSynthPlusEvolution/L-SMASH-Works"
+ref = "1310.0.0.0"
+license = "ISC (L-SMASH-Works), LGPL-2.1+ (lwlibav)"
+build = "cmake"
+submodules = true
+# Its own FFmpeg (a patched one: L-SMASH-Works doesn't build against FFmpeg 9 yet), linked in statically and
+# kept to itself (-Bsymbolic, --exclude-libs) as upstream's Linux wheel does, next to the FFmpeg 9 the others use.
+before = [
+    "cd FFmpeg && ./configure --prefix=/build/lsmas-deps --disable-autodetect --disable-muxers --disable-avdevice --disable-encoders --disable-filters --disable-devices --disable-network --disable-programs --disable-doc --disable-debug --enable-gpl --enable-pic --enable-libdav1d --enable-zlib && make -j$(nproc) && make install",
+]
+env = { PKG_CONFIG_PATH = "/build/lsmas-deps/lib/pkgconfig:/usr/local/lib/pkgconfig" }
+options = [
+    "-DBUILD_AVS_PLUGIN=OFF", "-DENABLE_XML2=OFF", "-DENABLE_VPX=OFF", "-DENABLE_MFX=OFF",
+    "-Ddav1d_USE_STATIC_LIBS=OFF", "-DZLIB_USE_STATIC_LIBS=OFF", "-DCMAKE_PREFIX_PATH=/build/lsmas-deps",
+    "-DCMAKE_POSITION_INDEPENDENT_CODE=ON", "-DCMAKE_C_FLAGS=-fPIC", "-DCMAKE_CXX_FLAGS=-fPIC",
+    "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-Bsymbolic -Wl,--exclude-libs,ALL",
+    "-DCMAKE_MODULE_LINKER_FLAGS=-Wl,-Bsymbolic -Wl,--exclude-libs,ALL",
+]
+win64 = { url = "https://files.pythonhosted.org/packages/a2/4f/f5804dbeb6563486e1d72ce3e72cb9ae2c7201c6660112447f2e1c6f85ec/vapoursynth_lsmas-1310.0.0.0-py3-none-win_amd64.whl", sha256 = "8197e2c901ff7b9ac651a66819986bfd993767a0b656a8d11c8f5b53829d2f6b", files = { "LSMASHSource.dll" = "vapoursynth/plugins/LSMASHSource.dll" } }
+
+[[plugin]]
+name = "FFMS2"
+namespace = "ffms2"
+repo = "https://github.com/FFMS/ffms2"
+# master (5.1.2): the 5.0 release predates FFmpeg 8 and 9
+ref = "3af2ef2ae47bc30b64597c9e419e5b19c4bda7d8"
+license = "MIT"
+build = "autotools"
+options = ["--enable-shared", "--disable-static"]
+targets = ["src/core/libffms2.la"]
+library = "libffms2.so*"
+# Windows: 5.0 (the last release with a Windows build)
+win64 = { url = "https://github.com/FFMS/ffms2/releases/download/5.0/ffms2-5.0-msvc.7z", sha256 = "e867a3df7262865107df40f230f5b8e1455905eba9b8852e6f35b1227537caeb", files = { "ffms2.dll" = "ffms2-5.0-msvc/x64/ffms2.dll" } }
+
+[[plugin]]
+name = "d2vsource"
+namespace = "d2v"
+repo = "https://github.com/dwbuiten/d2vsource"
+ref = "v1.4"
+license = "LGPL-2.1"
+build = "meson"
+win64 = { url = "https://files.pythonhosted.org/packages/66/5f/cc9f5e01f59d59c2046fc0726c762acdcd5803fe19d07a45cf7542d53476/vapoursynth_d2vsource-1.4-py3-none-win_amd64.whl", sha256 = "f594160446d79e912b02644a8c875cd37efe054823f8cd53a4ba4e544f9fecd8", files = { "d2vsource.dll" = "vapoursynth/plugins/d2vsource.dll" } }
+
+# --- borders ------------------------------------------------------------------------------------------
+
+[[plugin]]
+name = "EdgeFixer"
+namespace = "edgefixer"
+repo = "https://github.com/sekrit-twc/EdgeFixer"
+ref = "r3"
+license = "GPL-2.0"
+build = "cc"
+sources = ["EdgeFixer/edgefixer.c", "EdgeFixer/vsplugin.c"]
+library = "libedgefixer.so"
+win64 = { url = "https://files.pythonhosted.org/packages/95/41/78b67a8a7b0f60af098c8a1e63e16435ab73808dcd2db54014ddf93a79f9/vapoursynth_edgefixer-3.0-py3-none-win_amd64.whl", sha256 = "9b2b10ccd41c6bf046f1f988c4a451a3e4c7998a5e8bc8bef2542ffd437a367e", files = { "edgefixer.dll" = "vapoursynth/plugins/edgefixer.dll" } }
+
+[[plugin]]
+name = "FillBorders"
+namespace = "fb"
+repo = "https://github.com/dubhatervapoursynth/vapoursynth-fillborders"
+ref = "v4"
+license = "WTFPL"
+build = "meson"
+win64 = { url = "https://files.pythonhosted.org/packages/69/fe/79f3108c3c50abfa3e5daf10607fe5544be6499f4b0391f50645b23ee0f4/vapoursynth_fillborders-4.0-py3-none-win_amd64.whl", sha256 = "e6a9479d9c04adb1b664e6799029f7c1cb1069e8b3507aed70e91a12ee77e8eb", files = { "fillborders.dll" = "vapoursynth/plugins/fillborders.dll" } }
+
+[[plugin]]
+name = "bore"
+namespace = "bore"
+repo = "https://github.com/OpusGang/bore"
+ref = "v1.0.0"
+license = "MIT"
+build = "meson"
+win64 = { url = "https://github.com/OpusGang/bore/releases/download/v1.0.0/libbore.dll", sha256 = "a139ecc1e89166f5fba55c34c754461a65d3351da8460efd1ab28dc320db770b", files = { "libbore.dll" = "libbore.dll" } }
+
+# --- IVTC and deinterlacing ---------------------------------------------------------------------------
+
+[[plugin]]
+name = "VIVTC"
+namespace = "vivtc"
+repo = "https://github.com/vapoursynth/vivtc"
+ref = "R2"
+license = "GPL-2.0"
+build = "meson"
+win64 = { url = "https://files.pythonhosted.org/packages/dd/87/eb23822a82a81535583b3daa7349f284792697338b387403f431754675ae/vapoursynth_vivtc-2.0-py3-none-win_amd64.whl", sha256 = "554355240ac9ceb15711b387010ec5d025877beca2d9a8e85a3f392e42a96919", files = { "vivtc.dll" = "vapoursynth/plugins/vivtc.dll" } }
+
+[[plugin]]
+name = "Bwdif"
+namespace = "bwdif"
+repo = "https://github.com/HomeOfVapourSynthEvolution/VapourSynth-Bwdif"
+ref = "r5.1"
+license = "MIT"
+build = "meson"
+win64 = { url = "https://files.pythonhosted.org/packages/ef/7a/e69a8271c254b5ec5cfcfcba2674de75263ed1e3ddaa05476df547c9fda6/vapoursynth_bwdif-5.1-py3-none-win_amd64.whl", sha256 = "4eb1fc68dd7d53f175b5522d5e435a0a48ab4bf178a20b50b9104e9db888eadd", files = { "bwdif.dll" = "vapoursynth/plugins/bwdif.dll" } }
+
+[[plugin]]
+name = "znedi3"
+namespace = "znedi3"
+repo = "https://github.com/sekrit-twc/znedi3"
+ref = "r3.3"
+license = "GPL-2.0"
+build = "make"
+submodules = true
+options = ["X86=1", "vsznedi3.so"]
+library = "vsznedi3.so"
+files = ["nnedi3_weights.bin"]
+win64 = { url = "https://files.pythonhosted.org/packages/99/8e/fb2e045b4fbeda28df0ed6773563a04345a45ca878ad8ce1cb017005fde8/vapoursynth_znedi3-3.3-py3-none-win_amd64.whl", sha256 = "28115bbef036b746f68e0b79359de8a69fe0cdcae3320bad55eabb73982bf504", files = { "znedi3.dll" = "vapoursynth/plugins/znedi3.dll", "nnedi3_weights.bin" = "vapoursynth/plugins/nnedi3_weights.bin" } }
+
+[[plugin]]
+name = "EEDI3m"
+namespace = "eedi3m"
+repo = "https://github.com/HomeOfVapourSynthEvolution/VapourSynth-EEDI3"
+ref = "r10"
+license = "GPL-2.0"
+build = "meson"
+# r10 leaves <cfloat> out (GCC 14 wants it)
+env = { CXXFLAGS = "-include cfloat" }
+win64 = { url = "https://files.pythonhosted.org/packages/6a/9d/e4c27079e97008953fc79fccaccb2ca348edf9b158bee43aed9c5493ab5d/vapoursynth_eedi3-10.0-py3-none-win_amd64.whl", sha256 = "b509f489badb3b5f10d95c9a8754a35b502a9de82b47f3521bfb6a1a3b2f6eb7", files = { "eedi3m.dll" = "vapoursynth/plugins/eedi3m.dll" } }
+
+# --- denoising ----------------------------------------------------------------------------------------
+
+[[plugin]]
+name = "MVTools"
+namespace = "mv"
+repo = "https://github.com/dubhatervapoursynth/vapoursynth-mvtools"
+ref = "v29_2"
+license = "GPL-2.0"
+build = "meson"
+# MVDepan calls isfinite unqualified (GCC 14 wants <math.h> for that)
+env = { CXXFLAGS = "-include math.h" }
+win64 = { url = "https://files.pythonhosted.org/packages/28/f5/1697a4c7238f442a24982a3e5b7b4cbc54d411b40bf3f83b955ab0ed3cc2/vapoursynth_mvtools-29-py3-none-win_amd64.whl", sha256 = "d64d6525d88ce52572f93e04598083c7cff2a92bf6bc269168130fd7a5227746", files = { "mvtools.dll" = "vapoursynth/plugins/mvtools.dll" } }
+
+[[plugin]]
+name = "dfttest2"
+namespace = "dfttest2_cpu"
+# The CPU backend of dfttest2 (Ichunjo's fork of AmusementClub's), as JET's vs-wheels builds it; scripts call
+# the `dfttest2` Python module (the filters extra).
+repo = "https://github.com/Jaded-Encoding-Thaumaturgy/vs-wheels"
+ref = "97258f9a6e997f79805d50b72c4062c30c769e86"
+license = "GPL-2.0"
+build = "cmake"
+subdir = "dfttest2/dfttest2_cpu"
+submodules = ["dfttest2/dfttest2_cpu/vs-dfttest2"]
+options = ["-DVAPOURSYNTH_INCLUDE_DIR={vs_include}", "-DCMAKE_CXX_FLAGS=-ffast-math"]
+win64 = { url = "https://files.pythonhosted.org/packages/ba/ec/098e3e902c60f8676caceffb655081672a572aa8622e2d23c11dffc34b68/vapoursynth_dfttest2_cpu-11.1.0-py3-none-win_amd64.whl", sha256 = "cc99e1154308506dc349ac69b7d54ddfab2f38cad4b4b39af84fc174c0f67095", files = { "dfttest2_cpu.dll" = "vapoursynth/plugins/dfttest2_cpu.dll" } }
+
+[[plugin]]
+name = "BM3D"
+namespace = "bm3d"
+repo = "https://github.com/HomeOfVapourSynthEvolution/VapourSynth-BM3D"
+ref = "r11"
+license = "MIT"
+build = "meson"
+win64 = { url = "https://files.pythonhosted.org/packages/20/a9/826785fb11e65e634800bf4dcf933d0cb70f1d7e8682861d404a34510210/vapoursynth_bm3d-11.0-py3-none-win_amd64.whl", sha256 = "d6b2223e2bf55df785d19fe1b347c59b6a7c78bd84cb328041ff52f2f10403a7", files = { "bm3d.dll" = "vapoursynth/plugins/bm3d.dll" } }
+
+[[plugin]]
+name = "TTempSmooth"
+namespace = "ttmpsm"
+repo = "https://github.com/HomeOfVapourSynthEvolution/VapourSynth-TTempSmooth"
+ref = "r4.1"
+license = "GPL-3.0"
+build = "meson"
+win64 = { url = "https://github.com/HomeOfVapourSynthEvolution/VapourSynth-TTempSmooth/releases/download/r4.1/TTempSmooth-r4.1-win64.7z", sha256 = "51897bb867f428244c99c775231faa3e4967a2edcfb73c058363ea07a5c9a8ba", files = { "TTempSmooth.dll" = "TTempSmooth.dll" } }
+
+[[plugin]]
+name = "FFT3DFilter"
+namespace = "fft3dfilter"
+repo = "https://github.com/myrsloik/VapourSynth-FFT3DFilter"
+ref = "R2"
+license = "GPL-2.0"
+build = "meson"
+win64 = { url = "https://github.com/myrsloik/VapourSynth-FFT3DFilter/releases/download/R2/FFT3DFilter-r2.7z", sha256 = "ebc2c2d8a437c8ecae656778221882d6fe2b5b7723404dd57b1e2b092962eb09", files = { "fft3dfilter.dll" = "x64/fft3dfilter.dll", "libfftw3f-3.dll" = "x64/libfftw3f-3.dll" } }
+
+[[plugin]]
+name = "zsmooth"
+namespace = "zsmooth"
+repo = "https://github.com/adworacz/zsmooth"
+ref = "0.20.0"
+license = "MIT"
+build = "zig"
+zig = "0.15.2"
+variants = { "" = "x86_64", avx2 = "haswell", zn4 = "znver4-sse4a-avx512bf16" }
+win64 = { url = "https://files.pythonhosted.org/packages/f1/6f/9c75346fa11c76e8350a39c65b579eb9aecc7c8a3df462f629657e45ebc2/vapoursynth_zsmooth-0.20.0-py3-none-win_amd64.whl", sha256 = "cdf00644eed5325c1916d96d0368e01572a20bf5d84dd1dc19ec2d84a45dbc5c", files = { "zsmooth/manifest.vs" = "vapoursynth/plugins/zsmooth/manifest.vs", "zsmooth/zsmooth.dll" = "vapoursynth/plugins/zsmooth/zsmooth.dll", "zsmooth/zsmooth.avx2.dll" = "vapoursynth/plugins/zsmooth/zsmooth.avx2.dll", "zsmooth/zsmooth.zn4.dll" = "vapoursynth/plugins/zsmooth/zsmooth.zn4.dll" } }
+
+[[plugin]]
+name = "RemoveGrain"
+namespace = "rgvs"
+repo = "https://github.com/vapoursynth/vs-removegrain"
+ref = "R1"
+license = "MIT"
+build = "cc"
+sources = ["src/*.cpp"]
+library = "libremovegrain.so"
+win64 = { url = "https://github.com/vapoursynth/vs-removegrain/releases/download/R1/removegrain-r1.7z", sha256 = "dc408c560de537d273e78607a776f357ba80d9a7a0074d3c10bc9f3e3376d35f", files = { "RemoveGrainVS.dll" = "win64/RemoveGrainVS.dll" } }
+
+# --- debanding, resizing, formats ---------------------------------------------------------------------
+
+[[plugin]]
+name = "vszip"
+namespace = "vszip"
+# Deband (neo_f3kdb's), RFS (replace frames), EEDI3, Bilateral, CLAHE, masks, metrics
+repo = "https://github.com/dnjulek/vapoursynth-zip"
+ref = "22.1.0"
+license = "MIT"
+build = "zig"
+zig = "0.16.0"
+variants = { "" = "x86_64", avx2 = "haswell", zn4 = "znver4-sse4a" }
+win64 = { url = "https://files.pythonhosted.org/packages/ed/6a/2657a08533f279db5e225fc0d4de81bd9d8d0504d670135001dbe8c78196/vapoursynth_vszip-22.1.0-py3-none-win_amd64.whl", sha256 = "1f5e6aa39ea72e610c1146c2d27f157bea507895555398c60347a65ee1745273", files = { "vszip/manifest.vs" = "vapoursynth/plugins/vszip/manifest.vs", "vszip/vszip.dll" = "vapoursynth/plugins/vszip/vszip.dll", "vszip/vszip.avx2.dll" = "vapoursynth/plugins/vszip/vszip.avx2.dll", "vszip/vszip.zn4.dll" = "vapoursynth/plugins/vszip/vszip.zn4.dll" } }
+
+[[plugin]]
+name = "fmtconv"
+namespace = "fmtc"
+repo = "https://gitlab.com/EleonoreMizo/fmtconv.git"
+ref = "r31"
+license = "WTFPL"
+build = "autotools"
+subdir = "build/unix"
+library = "libfmtconv.so"
+win64 = { url = "https://files.pythonhosted.org/packages/c1/df/9698d8e2f0dfed016ddd1f1dbcb3c464c5e68a09b2aefb0e5287d415955c/vapoursynth_fmtconv-31-py3-none-win_amd64.whl", sha256 = "9761744768e1ee1543acbf372092f95d37aeee985ef1bd6dc025cb1804a08293", files = { "fmtconv.dll" = "vapoursynth/plugins/fmtconv.dll" } }
+
+[[plugin]]
+name = "descale"
+namespace = "descale"
+repo = "https://github.com/Jaded-Encoding-Thaumaturgy/vapoursynth-descale"
+ref = "r12"
+license = "WTFPL"
+build = "meson"
+win64 = { url = "https://files.pythonhosted.org/packages/f8/3b/f4490aed9b49376894e84509b408a35dffeae047d326d8dca3ddae32d6e5/vapoursynth_descale-12-py3-none-win_amd64.whl", sha256 = "a0b258a281f6f110a450396194d44bc00b77d2395392f9d1fbee832dfdb5c0de", files = { "libdescale.dll" = "vapoursynth/plugins/libdescale.dll" } }
+
+# --- sharpening and anti-aliasing ---------------------------------------------------------------------
+
+[[plugin]]
+name = "CAS"
+namespace = "cas"
+repo = "https://github.com/HomeOfVapourSynthEvolution/VapourSynth-CAS"
+ref = "r3"
+license = "MIT"
+build = "meson"
+win64 = { url = "https://files.pythonhosted.org/packages/56/36/715df594c6847d58363e6b9c805cf71dd0d138a85a857a6ea628300f3f96/vapoursynth_cas-3.0-py3-none-win_amd64.whl", sha256 = "40e7948af33af6a90ea10368691d1f39bbe8aed8be6ca5515e331982b1301bd1", files = { "cas.dll" = "vapoursynth/plugins/cas.dll" } }
+
+[[plugin]]
+name = "SangNom"
+namespace = "sangnom"
+repo = "https://github.com/dubhatervapoursynth/vapoursynth-sangnom"
+ref = "r45"
+license = "MIT"
+build = "meson"
+win64 = { url = "https://files.pythonhosted.org/packages/55/fd/4b5568d7d8265df35b41ff49e79d6d87b69a332f24f6a0cbbc42c6a2835a/vapoursynth_sangnom-45.0-py3-none-win_amd64.whl", sha256 = "6bf732ee4a2495767b9bb18b0f1805ac46582d48773ebb024e6675015242b517", files = { "sangnom.dll" = "vapoursynth/plugins/sangnom.dll" } }
+
+# --- misc ---------------------------------------------------------------------------------------------
+
+[[plugin]]
+name = "MiscFilters"
+namespace = "misc"
+repo = "https://github.com/vapoursynth/vs-miscfilters-obsolete"
+ref = "R2"
+license = "LGPL-2.1"
+build = "cc"
+# It includes VapourSynth's own filtershared.h (not in the wheel): R81's.
+before = [
+    "curl -fsSL -o src/filtershared.h https://raw.githubusercontent.com/vapoursynth/vapoursynth/R81/src/core/filtershared.h && echo '032e81547aa261e06c8110a4d40ef034dffb7d3d2af38893ee4de41cf3b079b2  src/filtershared.h' | sha256sum -c -",
+]
+sources = ["src/miscfilters.cpp"]
+options = ["-DVS_USE_LATEST_API"]
+library = "libmiscfilters.so"
+win64 = { url = "https://github.com/vapoursynth/vs-miscfilters-obsolete/releases/download/R2/miscfilters-r2.7z", sha256 = "54cf54c4d66151c01c1c663ed0d47ca99c7f1b0a94927bd99b35362c02172bd2", files = { "MiscFilters.dll" = "win64/MiscFilters.dll" } }
+
+[[plugin]]
+name = "Deblock"
+namespace = "deblock"
+repo = "https://github.com/HomeOfVapourSynthEvolution/VapourSynth-Deblock"
+ref = "r9"
+license = "GPL-2.0"
+build = "meson"
+win64 = { url = "https://files.pythonhosted.org/packages/ea/9a/f9b1147ed3b8830c7098002c1def7ebdd00a21089e9412694813197372ba/vapoursynth_deblock-9.0-py3-none-win_amd64.whl", sha256 = "586ba1cb9106eb55a39f5bd6ea0c601072515093980599077489ad0b085f67ce", files = { "deblock.dll" = "vapoursynth/plugins/deblock.dll" } }
+
+[[plugin]]
+name = "AddGrain"
+namespace = "grain"
+repo = "https://github.com/HomeOfVapourSynthEvolution/VapourSynth-AddGrain"
+ref = "r10"
+license = "GPL-3.0"
+build = "meson"
+win64 = { url = "https://github.com/HomeOfVapourSynthEvolution/VapourSynth-AddGrain/releases/download/r10/AddGrain-r10-win64.7z", sha256 = "bd5bf89f0084691152334d0f67ac7880865404e2e5569db1c430291f91619de4", files = { "AddGrain.dll" = "AddGrain.dll" } }
+
+[[plugin]]
+name = "SubText"
+namespace = "sub"
+repo = "https://github.com/vapoursynth/subtext"
+ref = "R7"
+license = "MIT"
+build = "meson"
+win64 = { url = "https://files.pythonhosted.org/packages/7d/68/3884378ad99b45479cbf991aee3ab9e43d1eeee8386e50dce817e4509aa1/vapoursynth_subtext-7.0-py3-none-win_amd64.whl", sha256 = "b8fe2c024d2f5d15eeb000ee7441105826ecd66d572615dbdfb8efb0e71e6b76", files = { "subtext.dll" = "vapoursynth/plugins/subtext.dll" } }
+
+# --- Python filter scripts ----------------------------------------------------------------------------
+
+[[script]]
+name = "havsfunc"
+# r33: the last single-file havsfunc (r34 is a vsjetpack wrapper)
+url = "https://raw.githubusercontent.com/HomeOfVapourSynthEvolution/havsfunc/r33/havsfunc.py"
+sha256 = "4da2839544b1ce9382db670b069dc358228251d147dad91f740a860840e04924"
+license = "GPL-3.0"
+# VapourSynth R81 takes a Python keyword's trailing underscore (lambda_), no longer a leading one (_lambda).
+replace = { "_lambda=" = "lambda_=", "_global=" = "global_=" }
+
+[[script]]
+name = "mvsfunc"
+url = "https://raw.githubusercontent.com/HomeOfVapourSynthEvolution/mvsfunc/r10/mvsfunc.py"
+sha256 = "522b266d70c84ccd4c284db0856cb9a75beef54d09a52ac3ea2c97b458c99daa"
+license = "GPL-3.0"

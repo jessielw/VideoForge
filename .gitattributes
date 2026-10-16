@@ -1,0 +1,4 @@
+# Files that run on Linux keep LF on a Windows checkout too.
+Dockerfile text eol=lf
+*.sh text eol=lf
+vsplugins/** text eol=lf
