@@ -90,7 +90,7 @@ def test_job_container_and_output_name():
     assert spec.container(profile) == "mkv"
     spec.mux = MuxSettings(container="mp4")
     assert spec.container(profile) == "mp4"
-    assert output_path(plan, Path("out"), profile, spec.container(profile)) == Path("out/Movie.mp4")
+    assert output_path(spec, plan, profile, Path("out")) == Path("out/Movie.mp4")
     spec.mux = MuxSettings(container="avi")  # not offered: the profile's
     assert spec.container(profile) == "mkv"
     assert muxer_for(Path("x.MP4")) is MUXERS["mp4"] and muxer_for(Path("x.mkv")) is MUXERS["mkv"]

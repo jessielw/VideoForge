@@ -173,6 +173,7 @@ export interface JobSpec {
   subs_template: TemplateSubs | null // ... and its subtitle rules
   audio_from_template: TemplateChoice | null // what the last template set for the audio
   subs_from_template: TemplateChoice | null // ... and for the subtitles
+  output_name: string // the output's file name without its extension; '' = the profile's (the source's)
   label: string // tells runs of one source apart (e.g. "dubbed"): added to the output name, in the job record
   id: string
 }
@@ -438,6 +439,13 @@ export interface DirListing {
   parent: string | null
   dirs: { name: string; path: string }[]
   files: { name: string; path: string; size: number; mtime: number }[]
+}
+
+// What deleting a folder takes with it: everything inside, all the way down.
+export interface DirContents {
+  files: number
+  dirs: number
+  bytes: number
 }
 
 export interface PathKind {

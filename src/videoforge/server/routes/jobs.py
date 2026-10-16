@@ -133,6 +133,8 @@ def _changes(body: dict[str, Any]) -> dict[str, Any]:
         changes["profile"] = body["profile"]
     if body.get("label") is not None:
         changes["label"] = str(body["label"])
+    if body.get("output_name") is not None:
+        changes["output_name"] = str(body["output_name"])
     return changes
 
 
@@ -178,7 +180,8 @@ def _inputs(current: JobInputs, body: dict[str, Any]) -> JobInputs:
 
 @router.patch("/jobs/{job_id}")
 def update_job(request: Request, job_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    """Change a job: any of template, video, encoder, overrides, output_dir, qpf, profile, mux, container, and inputs
+    """Change a job: any of template, video, encoder, overrides, output_dir, output_name, label, qpf, profile, mux,
+    container, and inputs
     ({subtitles?, audio?: [paths or folders], chapters?: path | null, encode?: path | null})."""
     q = queue_of(request)
     e = _entry(q, job_id)
@@ -199,7 +202,7 @@ def apply_to_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[st
     """The same settings on several jobs (a batch): {ids, template?, video?, encoder?, output_dir?, qpf?, mux?,
     container?}. A template's auto crop is detected per job afterwards."""
     q = queue_of(request)
-    body = {k: v for k, v in body.items() if k != "overrides"}  # track overrides are per job
+    body = {k: v for k, v in body.items() if k not in ("overrides", "output_name")}  # these are per job
     updated, skipped = [], []
     for job_id in body.get("ids") or []:
         try:
@@ -254,7 +257,7 @@ def job_commands(request: Request, job_id: str) -> list[dict[str, Any]]:
             e.plan,
             profile,
             q.app,
-            output_path(e.plan, out_dir, profile, e.spec.container(profile), e.spec.label),
+            output_path(e.spec, e.plan, profile, out_dir),
         )
     except (ToolError, ValueError) as ex:
         raise HTTPException(422, str(ex)) from None

@@ -3,6 +3,7 @@ import type {
   AudioEncodeInfo,
   ClipInfo,
   CommandStep,
+  DirContents,
   ConfigState,
   Crop,
   DirListing,
@@ -72,7 +73,7 @@ export interface InputChanges {
   encode?: string | null
 }
 
-export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides' | 'output_dir' | 'qpf' | 'profile' | 'mux' | 'label'>> & {
+export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides' | 'output_dir' | 'qpf' | 'profile' | 'mux' | 'label' | 'output_name'>> & {
   inputs?: InputChanges
   template?: Template // applied first: the whole run's settings
   container?: string // the container alone; the job keeps its extra muxer arguments
@@ -110,6 +111,9 @@ export const api = {
       `/api/fs/list?path=${encodeURIComponent(path)}&extensions=${encodeURIComponent(extensions.join(','))}${programs ? '&programs=true' : ''}`,
     ),
   pathKinds: (paths: string[]) => post<PathKind[]>('/api/fs/kinds', { paths }),
+  makeDir: (path: string, name: string) => post<{ path: string }>('/api/fs/mkdir', { path, name }),
+  dirContents: (path: string) => get<DirContents>(`/api/fs/contents?path=${encodeURIComponent(path)}`),
+  removeDir: (path: string, recursive = false) => post<{ path: string }>('/api/fs/rmdir', { path, recursive }),
 
   match: (slots: InputSlots) => post<MatchResult>('/api/match', slots),
   addJobs: (

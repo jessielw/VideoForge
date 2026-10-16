@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 import uuid
 
 from videoforge.core.config import AppConfig, Tools
-from videoforge.core.execute.mux import MuxSettings, mux_issues
+from videoforge.core.execute.mux import MUXERS, MuxSettings, mux_issues
 from videoforge.core.jobs import ProbedInputs, plan_job, probe_inputs
 from videoforge.core.models import (
     Issue,
@@ -84,6 +84,8 @@ class JobSpec:
     # What the last template set for the audio / the subtitles (template.template_choice).
     audio_from_template: TemplateChoice | None = None
     subs_from_template: TemplateChoice | None = None
+    # The output's file name without its extension; "" = the profile's name for it (the source's).
+    output_name: str = ""
     # Tells runs of one source apart (e.g. "dubbed"): added to the output name, and in the job record.
     label: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
@@ -116,6 +118,16 @@ class JobSpec:
 def clean_label(text: str) -> str:
     """A label as it can go into a file name: characters Windows refuses dropped, no dots or spaces at the ends."""
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", text).strip(" .")
+
+
+def clean_output_name(text: str) -> str:
+    """An output name as typed, made a file name; a container's extension typed with it is dropped
+    (the job's container adds its own)."""
+    name = clean_label(text)
+    for ext in {m.extension for m in MUXERS.values()}:
+        if name.lower().endswith(ext):
+            return clean_label(name[: -len(ext)])
+    return name
 
 
 @dataclass(slots=True)

@@ -211,6 +211,15 @@
               />
               <Button variant="outline" disabled={!editable} onclick={() => (browsing = 'output')}><FolderOpenIcon />Browse…</Button>
             </div>
+            <span class="text-muted-foreground">Output name</span>
+            <Input
+              aria-label="Output name"
+              placeholder="Default name"
+              title="The output's file name, without its extension; empty = the profile's name for it (the source's). The label and the container's extension go after it"
+              value={job.spec.output_name}
+              disabled={!editable}
+              onchange={e => save({ output_name: (e.target as HTMLInputElement).value.trim() })}
+            />
             <span class="text-muted-foreground">Label</span>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Input

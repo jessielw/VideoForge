@@ -192,6 +192,15 @@ def test_add_inspect_and_edit(tmp_path):
         assert labelled["output_name"] == "Show.S01E01.dubbed JA.mkv"
         mux = client.get(f"/api/jobs/{ids[0]}/commands").json()[-1]["command"]
         assert "Show.S01E01.dubbed JA.mkv.partial" in mux
+        # Its own name in place of the source's; the label still goes after it, the container's extension too.
+        named = client.patch(f"/api/jobs/{ids[0]}", json={"output_name": " My Show: Pilot.MKV "}).json()
+        assert named["spec"]["output_name"] == "My Show Pilot"
+        assert named["output_name"] == "My Show Pilot.dubbed JA.mkv"
+        client.post("/api/jobs/apply", json={"ids": ids, "output_name": "Same"})  # per job: a batch leaves it
+        assert client.get(f"/api/jobs/{ids[1]}").json()["spec"]["output_name"] == ""
+        assert client.patch(f"/api/jobs/{ids[0]}", json={"output_name": ""}).json()["output_name"] == (
+            "Show.S01E01.dubbed JA.mkv"
+        )
         assert client.get("/api/jobs/nope").status_code == 404
         (manual,) = client.get("/api/profiles").json()
         assert manual["id"] == "manual" and manual["default"] and manual["defaults"]["encoder"]["crf"] == 18
@@ -980,6 +989,28 @@ def test_folder_browser(tmp_path):
         ]
         kinds = client.post("/api/fs/kinds", json={"paths": paths}).json()
         assert [k["kind"] for k in kinds] == ["folder", "file", "missing", "outside", "missing"]
+
+        # New folders, and deleting them: one with things in it only when asked to.
+        made = client.post("/api/fs/mkdir", json={"path": str(tmp_path), "name": " out "}).json()["path"]
+        assert made == str(tmp_path / "out") and (tmp_path / "out").is_dir()
+        assert client.post("/api/fs/mkdir", json={"path": str(tmp_path), "name": "out"}).status_code == 409
+        for bad in ("", "..", "a/b", "a:b"):
+            assert client.post("/api/fs/mkdir", json={"path": str(tmp_path), "name": bad}).status_code == 422
+        assert client.post("/api/fs/mkdir", json={"path": outside, "name": "x"}).status_code == 403
+        (tmp_path / "out" / "sub").mkdir()
+        (tmp_path / "out" / "sub" / "a.mkv").write_bytes(b"12345")
+        (tmp_path / "out" / "b.txt").write_bytes(b"123")
+        assert client.get("/api/fs/contents", params={"path": made}).json() == {"files": 2, "dirs": 1, "bytes": 8}
+        assert client.post("/api/fs/rmdir", json={"path": made}).status_code == 409
+        assert (tmp_path / "out" / "sub" / "a.mkv").exists()
+        assert client.post("/api/fs/rmdir", json={"path": made, "recursive": True}).status_code == 200
+        assert not (tmp_path / "out").exists()
+        (tmp_path / "empty").mkdir()
+        assert client.post("/api/fs/rmdir", json={"path": str(tmp_path / "empty")}).status_code == 200
+        # Never a browsable root (or what holds one), never outside them.
+        assert client.post("/api/fs/rmdir", json={"path": str(tmp_path), "recursive": True}).status_code == 403
+        assert client.post("/api/fs/rmdir", json={"path": outside, "recursive": True}).status_code == 403
+        assert (tmp_path / "src").is_dir()
 
 
 # --- real VapourSynth preview --------------------------------------------------------

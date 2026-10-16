@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 import os
 from pathlib import Path
+import re
+import shutil
+import stat
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -86,6 +90,80 @@ def path_kinds(request: Request, paths: list[str] = Body(..., embed=True)) -> li
             kind = "folder" if p.is_dir() else "file" if p.is_file() else "missing"
         out.append({"path": str(p) if p.is_absolute() else raw, "kind": kind})
     return out
+
+
+def _browsable(request: Request, path: str) -> Path:
+    """An absolute path inside the browsable folders (403 outside them)."""
+    p = Path(path)
+    allowed = request.app.state.settings.roots
+    if not p.is_absolute() or (allowed and not any(_under(p, r) for r in allowed)):
+        raise HTTPException(403, "Outside the browsable folders")
+    return p
+
+
+@router.post("/fs/mkdir")
+def make_dir(request: Request, path: str = Body(...), name: str = Body(...)) -> dict[str, str]:
+    """A new folder `name` in the folder `path`."""
+    clean = name.strip()
+    if not clean or clean in (".", "..") or re.search(r'[<>:"/\\|?*\x00-\x1f]', clean):
+        raise HTTPException(422, f"Not a folder name: {name}")
+    folder = _browsable(request, path) / clean
+    try:
+        folder.mkdir()
+    except FileExistsError:
+        raise HTTPException(409, f"{clean} already exists") from None
+    except OSError as ex:
+        raise HTTPException(403, str(ex)) from None
+    return {"path": str(folder)}
+
+
+@router.get("/fs/contents")
+def dir_contents(request: Request, path: str) -> dict[str, int]:
+    """What deleting a folder would take with it: its files and subfolders (all the way down), and their size."""
+    folder = _browsable(request, path)
+    if not folder.is_dir():
+        raise HTTPException(404, f"No folder {path}")
+    files = dirs = size = 0
+    for here, subdirs, names in os.walk(folder, onerror=lambda _: None):
+        dirs += len(subdirs)
+        # Links and junctions to folders are deleted, not what they point at: don't count into them.
+        subdirs[:] = [d for d in subdirs if not (os.path.islink(p := os.path.join(here, d)) or os.path.isjunction(p))]
+        for n in names:
+            files += 1
+            try:
+                size += os.lstat(os.path.join(here, n)).st_size
+            except OSError:
+                pass
+    return {"files": files, "dirs": dirs, "bytes": size}
+
+
+@router.post("/fs/rmdir")
+def remove_dir(request: Request, path: str = Body(...), recursive: bool = Body(False)) -> dict[str, str]:
+    """Delete a folder; one with anything in it only when `recursive`. Never a browsable root or a drive."""
+    folder = _browsable(request, path)
+    roots = request.app.state.settings.roots
+    if folder.parent == folder or any(_under(r, folder) for r in roots):
+        raise HTTPException(403, f"{folder} can't be deleted")
+    if folder.is_symlink() or folder.is_junction():
+        raise HTTPException(422, f"{folder.name} is a link to a folder, not one")
+    if not folder.is_dir():
+        raise HTTPException(404, f"No folder {path}")
+    try:
+        if recursive:
+            shutil.rmtree(folder, onexc=_clear_read_only)
+        else:
+            folder.rmdir()
+    except OSError as ex:
+        if not recursive and any(folder.iterdir()):
+            raise HTTPException(409, f"{folder.name} isn't empty") from None
+        raise HTTPException(403, str(ex)) from None
+    return {"path": str(folder)}
+
+
+def _clear_read_only(func: Callable[[str], object], path: str, _: BaseException) -> None:
+    # Windows won't delete a read-only file; clear the flag and try once more.
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
 
 
 def _under(path: Path, root: Path) -> bool:

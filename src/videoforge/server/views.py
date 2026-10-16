@@ -77,7 +77,7 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
         for key in ("source", "inputs", "overrides"):  # sent elsewhere
             plan.pop(key, None)
         out["plan"] = plan
-        out["output_name"] = output_path(e.plan, Path(), profile, e.spec.container(profile), e.spec.label).name
+        out["output_name"] = output_path(e.spec, e.plan, profile, Path()).name
     if e.probed is not None:
         src = e.probed.source
         tracks = [*src.audio, *e.probed.external_audio, *src.subs, *e.probed.external_subs]

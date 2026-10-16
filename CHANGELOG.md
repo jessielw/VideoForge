@@ -29,7 +29,10 @@ The first beta: an encode and mux job queue in the browser, for one user on Wind
   for new jobs; apply one to a job or a batch.
 - **Batch index.** Index jobs in the background while encodes run; a job whose source is on the disk an
   encode is reading waits, and jobs on other disks go first.
-- **Job label.** Added to the output name to tell runs of one source apart.
+- **Output name and label.** A job's own file name in place of the source's; a label added after it to
+  tell runs of one source apart.
+- **Folder browser.** Make folders, and delete them (one with anything in it only once you tick that its
+  contents go too).
 - **Logs and job records.** A text log in each job's work folder, an app log per session, and for each
   output a machine-readable record of how it was made plus a live event stream
   ([docs/job-record.md](docs/job-record.md)).
