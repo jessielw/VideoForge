@@ -28,7 +28,7 @@ missing. A bare name (`ffmpeg`, `MP4Box`) is looked up on `PATH`.
 | --- | --- | --- |
 | [MKVToolNix](https://mkvtoolnix.download/) | `tools/MKVToolNix/mkvmerge.exe` | reading sources, MKV output |
 | x264, x265 | `tools/x264/x264.exe`, `tools/x265/x265.exe` | the video encode |
-| VapourSynth plugins | `tools/vs-plugins/` | source filters (FFMS2, the default; L-SMASH; BestSource) and any filters your scripts use |
+| VapourSynth plugins | `tools/vs-plugins/` | source filters (FFMS2, the default; L-SMASH; BestSource) and any filters your scripts use: see [VapourSynth plugins](#vapoursynth-plugins) |
 | [MP4Box](https://gpac.io/) (GPAC) | `MP4Box` on `PATH` | MP4 output |
 | ffmpeg | `ffmpeg` on `PATH` | FLAC / Opus / AAC / AC-3 / E-AC-3 encodes, and decoding for the other audio encoders |
 | [DeeZy](https://github.com/jessielw/DeeZy) + Dolby Encoding Engine | `tools/DeeZy/deezy.exe`, `tools/DEE/dee.exe` | DDP / DDP Atmos |
@@ -39,28 +39,54 @@ missing. A bare name (`ffmpeg`, `MP4Box`) is looked up on `PATH`.
 Only MKVToolNix, an encoder and the source filter plugin are needed to start; the audio tools are only
 needed for the encodes that use them (copying a track needs none).
 
+## VapourSynth plugins
+
+VideoForge bundles a set of plugins and filter scripts, listed in
+[vsplugins/manifest.toml](vsplugins/manifest.toml) with the source and version of each: the portable build
+and the Docker image have them. From source, `uv run python scripts/fetch_plugins.py` downloads the Windows
+builds into `tools/vs-plugins/` and the single-file scripts into the `.venv`, and `uv sync --extra filters`
+installs the packaged scripts.
+
+| For | Plugins (`core.<namespace>`) and scripts |
+| --- | --- |
+| Source filters | BestSource (`bs`), L-SMASH-Works (`lsmas`), FFMS2 (`ffms2`), d2vsource (`d2v`) |
+| Borders | EdgeFixer (`edgefixer`), FillBorders (`fb`), bore (`bore`), `awsmfunc.bbmod` (BalanceBorders) |
+| IVTC, deinterlacing | VIVTC (`vivtc`), Bwdif (`bwdif`), znedi3 (`znedi3`), EEDI3m (`eedi3m`), `havsfunc.QTGMC` |
+| Denoising | MVTools (`mv`), dfttest2 (`dfttest2_cpu`, through the `dfttest2` module), BM3D (`bm3d`), TTempSmooth (`ttmpsm`), FFT3DFilter (`fft3dfilter`), zsmooth (`zsmooth`), RemoveGrain (`rgvs`), `havsfunc.SMDegrain` |
+| Debanding, resizing, formats | vszip (`vszip`: Deband, RFS, EEDI3, Bilateral, masks, ...), fmtconv (`fmtc`), descale (`descale`) |
+| Sharpening, anti-aliasing | CAS (`cas`), SangNom (`sangnom`) |
+| Misc | MiscFilters (`misc`), Deblock (`deblock`), AddGrain (`grain`), SubText (`sub`) |
+| Python | havsfunc (r33), mvsfunc, awsmfunc, vsutil, vs-rekt, adjust, dfttest2 |
+
+All run on the CPU (no GPU filters yet). VapourSynth R81 only loads API 4 plugins, so older ones
+(TDeintMod, EEDI2, CTMF, DFTTest, neo_f3kdb, RemapFrames, nnedi3) are left out: dfttest2, vszip's Deband
+and RFS, and znedi3 stand in. Plugins of your own go in `tools/vs-plugins/` (`/tools/vs-plugins` in Docker).
+
 ## Portable build (Windows)
 
 Unpack `VideoForge-<version>-windows-x64.zip` anywhere, put the tools in its `tools/` (or set their paths on
-the Settings page), and run `VideoForge.exe`: VideoForge in its own window, with a tray icon. It carries its
+the Settings page; the VapourSynth plugins are already in `tools/vs-plugins/`), and run `VideoForge.exe`: VideoForge in its own window, with a tray icon. It carries its
 own Python, so nothing else is installed. `videoforge.cmd` is the console way in (`videoforge.cmd serve` shows
 the log; `videoforge.cmd --help`). Build it yourself with `uv run python scripts/build_portable.py` (writes
 `build/portable/`).
 
 ## Docker (Linux)
 
-The image (`ghcr.io/jessielw/videoforge`, amd64) carries the free tools: MKVToolNix, x264, x265, ffmpeg,
-MP4Box, opus-tools, FFMS2, DeeZy and truehdd. Start from [compose.yaml](compose.yaml): set your media folder,
-then `docker compose up -d` and open http://127.0.0.1:8765.
+The image (`ghcr.io/jessielw/videoforge`, amd64) carries the free tools: MKVToolNix, x264, x265, FFmpeg 9,
+MP4Box, opus-tools, DeeZy, truehdd, and the [VapourSynth plugins](#vapoursynth-plugins), built from source.
+Start from [compose.yaml](compose.yaml): set your media folder, then `docker compose up -d` and open
+http://127.0.0.1:8765.
 
 - `/data`: the queue, templates, settings and logs. `/media` (or any folder you mount): sources and outputs;
   each job's work folder goes next to its source, so the mount must be writable.
 - `/tools`: what the image can't ship. Dolby Encoding Engine (Linux build) as `/tools/dee/dee` for DDP /
-  Atmos, and more VapourSynth plugins (`.so`, e.g. BestSource, L-SMASH) in `/tools/vs-plugins`. qaac is
-  Windows only (ffmpeg's AAC is there instead).
+  Atmos, and more VapourSynth plugins (`.so`) in `/tools/vs-plugins`. qaac is Windows only (ffmpeg's AAC is
+  there instead).
 - There's no login: publish the port on `127.0.0.1` as the compose file does, or put it behind your own
   proxy with authentication.
-- Build it yourself with `docker build -t videoforge .`.
+- Build it yourself with `docker build -t videoforge .` (on the published plugins image), or the plugins
+  image too (FFmpeg, MP4Box, x264 and the plugins: half an hour or more): `docker build -t videoforge-plugins
+  vsplugins`, then `docker build --build-arg PLUGINS_IMAGE=videoforge-plugins -t videoforge .`.
 
 ## Quick start (from source)
 

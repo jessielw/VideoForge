@@ -1,11 +1,17 @@
 # syntax=docker/dockerfile:1
-# VideoForge in a container: the server and its free tools (MKVToolNix, x264, x265, ffmpeg, MP4Box,
-# opus-tools, FFMS2, DeeZy, truehdd). DEE and other tools of your own go in /tools. See README "Docker".
+# VideoForge in a container: the server and its free tools. The native ones (FFmpeg, MP4Box, x264, the
+# VapourSynth plugins) come from the plugins image (vsplugins/), built rarely; MKVToolNix, x265 and opus-tools
+# from Debian; DeeZy and truehdd from their releases. DEE and other tools of your own go in /tools.
+# See README "Docker".
+#   docker build -t videoforge .                      (with the published plugins image)
+#   docker build -t videoforge-plugins vsplugins && docker build --build-arg PLUGINS_IMAGE=videoforge-plugins -t videoforge .
 
 ARG PYTHON_IMAGE=python:3.12-slim-trixie
-ARG GPAC_VERSION=v26.07.0
+ARG PLUGINS_IMAGE=ghcr.io/jessielw/videoforge-plugins:latest
 ARG DEEZY_VERSION=1.3.15
 ARG TRUEHDD_VERSION=0.6.2
+
+FROM ${PLUGINS_IMAGE} AS plugins
 
 # --- the frontend -------------------------------------------------------------------------------------
 FROM node:22-slim AS frontend
@@ -14,24 +20,6 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
 RUN npm run build
-
-# --- MP4Box (Debian trixie has no gpac) -------------------------------------------------------------
-# Against Debian's FFmpeg (the one the app stage installs): GPAC reads MKV sources through it.
-FROM ${PYTHON_IMAGE} AS gpac
-ARG GPAC_VERSION
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential ca-certificates git pkg-config zlib1g-dev \
-        libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev \
-    && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch "${GPAC_VERSION}" https://github.com/gpac/gpac /src/gpac
-WORKDIR /src/gpac
-RUN ./configure --prefix=/opt/gpac \
-    && make -j"$(nproc)" \
-    && make install \
-    && rm -rf /opt/gpac/include /opt/gpac/share/man \
-    && strip /opt/gpac/bin/* /opt/gpac/lib/libgpac.so.* \
-    && LD_LIBRARY_PATH=/opt/gpac/lib /opt/gpac/bin/MP4Box -version \
-    && LD_LIBRARY_PATH=/opt/gpac/lib /opt/gpac/bin/gpac -h filters 2>&1 | grep -q ffdmx
 
 # --- release binaries ---------------------------------------------------------------------------------
 FROM ${PYTHON_IMAGE} AS downloads
@@ -53,32 +41,40 @@ RUN base="truehdd-${TRUEHDD_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
 
 # --- the app ------------------------------------------------------------------------------------------
 FROM ${PYTHON_IMAGE} AS app
+# The Debian libraries the plugins image's binaries link to are listed in it.
+COPY --from=plugins /opt/vf/runtime-packages.txt /tmp/runtime-packages.txt
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg libffms2-5 mkvtoolnix opus-tools tini x264 x265 \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends mkvtoolnix opus-tools tini x265 $(cat /tmp/runtime-packages.txt) \
+    && rm -rf /var/lib/apt/lists/* /tmp/runtime-packages.txt
+COPY --from=plugins /opt/vf /opt/vf
+RUN echo /opt/vf/lib > /etc/ld.so.conf.d/vf.conf && ldconfig
 COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
-COPY --from=gpac /opt/gpac /opt/gpac
-RUN echo /opt/gpac/lib > /etc/ld.so.conf.d/gpac.conf && ldconfig && ln -s /opt/gpac/bin/MP4Box /usr/local/bin/MP4Box
 COPY --from=downloads /out/deezy-bin /usr/local/bin/deezy
 COPY --from=downloads /out/truehdd-bin /usr/local/bin/truehdd
 
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 COPY pyproject.toml uv.lock README.md LICENSE ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --extra filters --no-install-project
+COPY vsplugins/manifest.toml vsplugins/manifest.toml
+COPY scripts/fetch_plugins.py scripts/fetch_plugins.py
+# The plugins are the vapoursynth package's own plugins folder (always loaded); the filter scripts
+# (havsfunc, mvsfunc) go in site-packages. Then every plugin in the manifest has to load.
+RUN site="$(.venv/bin/python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" \
+    && rm -rf "$site/vapoursynth/plugins" && ln -s /opt/vf/vs-plugins "$site/vapoursynth/plugins" \
+    && .venv/bin/python scripts/fetch_plugins.py --no-plugins --scripts "$site" \
+    && rm -rf build \
+    && .venv/bin/python -c "import tomllib, vapoursynth as vs; m = tomllib.load(open('/opt/vf/manifest.toml', 'rb')); \
+missing = [p['namespace'] for p in m['plugin'] if not hasattr(vs.core, p['namespace'])]; \
+assert not missing, missing; import havsfunc, mvsfunc, awsmfunc, dfttest2; print(len(m['plugin']), 'plugins')"
 COPY src/ src/
-# FFMS2 as an autoloaded VapourSynth plugin (the library is the plugin).
-RUN uv sync --frozen --no-dev \
-    && plugins="$(.venv/bin/python -c 'import vapoursynth, pathlib; print(pathlib.Path(vapoursynth.__file__).parent / "plugins")')" \
-    && mkdir -p "$plugins" \
-    && ln -s /usr/lib/x86_64-linux-gnu/libffms2.so.5 "$plugins/libffms2.so" \
-    && .venv/bin/python -c 'import vapoursynth as vs; print("ffms2", vs.core.ffms2.Version())'
+RUN uv sync --frozen --no-dev --extra filters
 COPY --from=frontend /src/frontend/dist frontend/dist
 COPY docker/videoforge.toml videoforge.toml
 
 # Any user id works (docker run --user): HOME only holds VapourSynth's small config.
 RUN mkdir -p /data /tools /home/videoforge && chmod 0777 /data /tools /home/videoforge
-ENV VIDEOFORGE_ROOT=/app HOME=/home/videoforge PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1
+ENV VIDEOFORGE_ROOT=/app HOME=/home/videoforge PATH=/app/.venv/bin:/opt/vf/bin:$PATH PYTHONUNBUFFERED=1
 VOLUME ["/data"]
 EXPOSE 8765
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \

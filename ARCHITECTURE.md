@@ -61,6 +61,8 @@ src/videoforge/
                          extra), drops carry paths
 frontend/                Svelte 5 + Vite + TypeScript + Tailwind -> frontend/dist (served by FastAPI)
 scripts/build_portable.py  The portable zip (see "Portable build"); scripts/launcher/VideoForge.cs its launcher
+scripts/fetch_plugins.py   The bundled VapourSynth plugins' Windows builds and filter scripts (vsplugins/manifest.toml)
+vsplugins/               The bundled VapourSynth plugins: manifest.toml, the Docker plugins image (Dockerfile, build.py)
 legacy/qt_gui/           The archived PySide6 GUI and its tests. Reference only; not packaged.
 tools/                   Binaries (gitignored): MKVToolNix, DEE, DeeZy, qaac, opus-tools, truehdd, x264, x265, vs-plugins
                          (MP4Box and ffmpeg default to PATH; see README "Tools")
@@ -232,8 +234,12 @@ VideoForge/
   python3xx.dll, the standard library as files), and the preview worker is `python -m`. `default_vspipe` also
   looks in the Python's scripts folder (`runtime\Scripts\vspipe.exe`), and `ensure_vspipe` registers python.exe
   when running under pythonw.exe.
+- The VapourSynth plugins and filter scripts of `vsplugins/manifest.toml` are in it: `scripts/fetch_plugins.py`
+  downloads each plugin's pinned Windows build (a PyPI wheel or a release archive, checked by sha256; .7z
+  through 7-Zip's `7zr.exe`) into `tools/vs-plugins/`, and the single-file scripts (havsfunc, mvsfunc) into
+  the runtime's site-packages; the packaged scripts are the `filters` extra. Other tools aren't bundled.
 - The same layout works on macOS / Linux (standalone CPython and the vapoursynth wheel exist there) with a
-  shell launcher, once the Linux CI run's findings are fixed. No tools are bundled.
+  shell launcher.
 
 ## Profiles
 
@@ -286,10 +292,20 @@ defaults, audio encoder settings, and the checks on the finished file.
   its server; elsewhere `st_dev`). Queue toolbar: Select all, and Index (the selected jobs, or every job
   when none is selected) skips jobs already indexed.
 - The CLI isn't kept in step with new features (the server and core are the product).
-- Docker (Linux, amd64): the `Dockerfile` (`docker.yml` pushes it to GHCR on a version tag). Debian trixie's
-  MKVToolNix, x264, x265, ffmpeg, opus-tools and FFMS2 (`libffms2.so` linked into the vapoursynth package's
-  autoloaded `plugins/`); MP4Box built from source against that ffmpeg (GPAC reads MKV through it; trixie has
-  no gpac); DeeZy and truehdd release binaries. `docker/videoforge.toml` is its config (`VIDEOFORGE_ROOT=/app`),
-  data in `/data`, the user's tools in `/tools` (DEE, more plugins). BestSource / L-SMASH aren't built (they
-  need FFmpeg 9). qaac stays Windows only. On POSIX each tool runs in its own process group, so a cancel
-  kills its children too (`process._kill_tree`).
+- Docker (Linux, amd64): two images. `vsplugins/` builds the native half into `/opt/vf` (rarely: it's
+  slow): FFmpeg 9 from source, then MP4Box (GPAC master, which builds against it and reads MKV through it),
+  x264 (y4m input only) and the VapourSynth plugins of `vsplugins/manifest.toml` (`build.py`: one build recipe
+  per plugin, a load test of each and of all together, and `runtime-packages.txt`, the Debian packages the
+  binaries link to). L-SMASH-Works carries its own static FFmpeg (it doesn't build against 9 yet), kept to
+  itself with `-Bsymbolic`. Zig plugins (zsmooth, vszip) are built per CPU level in a folder with a
+  `manifest.vs`, so VapourSynth loads the best one. The `Dockerfile` (the app) copies `/opt/vf`, links its
+  `vs-plugins/` as the vapoursynth package's autoloaded `plugins/`, and adds Debian trixie's MKVToolNix, x265
+  and opus-tools, DeeZy and truehdd release binaries and the filter scripts. `docker.yml` tags the plugins
+  image with a hash of `vsplugins/` and builds it only when that tag is new, then the app image on it (GHCR,
+  on a version tag). `docker/videoforge.toml` is its config (`VIDEOFORGE_ROOT=/app`), data in `/data`, the
+  user's tools in `/tools` (DEE, more plugins). qaac stays Windows only. On POSIX each tool runs in its own
+  process group, so a cancel kills its children too (`process._kill_tree`).
+- VapourSynth R81 loads only API 4 plugins: the manifest leaves out the API 3 ones (TDeintMod, EEDI2, CTMF,
+  DFTTest, neo_f3kdb, RemapFrames, nnedi3) for dfttest2, vszip and znedi3. R81 also takes a keyword's
+  trailing underscore only (`lambda_`), so the fetch patches havsfunc r33's `_lambda` / `_global`. The
+  Settings check of the plugins folder counts the vapoursynth package's own `plugins/` (the image's) too.

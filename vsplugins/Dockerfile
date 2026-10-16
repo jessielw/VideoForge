@@ -8,8 +8,10 @@
 
 ARG PYTHON_IMAGE=python:3.12-slim-trixie
 ARG FFMPEG_VERSION=n9.0.2
-# GPAC master: v26.07.0 still reads AVCodec.pix_fmts, which FFmpeg 9 removed.
+# GPAC master: v26.07.0 still reads AVCodec.pix_fmts, which FFmpeg 9 removed. GPAC_TAG is the last tag
+# before it (its version string is `git describe` from there).
 ARG GPAC_COMMIT=39c23ed6f027741c154cd1fe4adbc087a503cc4b
+ARG GPAC_TAG=v26.07.0
 ARG X264_COMMIT=0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee
 ARG VAPOURSYNTH_VERSION=81
 ARG MESON_VERSION=1.12.1
@@ -38,18 +40,22 @@ RUN git clone -q --depth 1 --branch "${FFMPEG_VERSION}" https://github.com/FFmpe
 
 # --- MP4Box (Debian trixie has no gpac; GPAC reads MKV sources through FFmpeg) --------------------------
 ARG GPAC_COMMIT
+ARG GPAC_TAG
 RUN git init -q /src/gpac && cd /src/gpac \
-    && git fetch -q --depth 1 https://github.com/gpac/gpac "${GPAC_COMMIT}" && git checkout -q FETCH_HEAD \
+    && git fetch -q --depth 1 https://github.com/gpac/gpac "+refs/tags/${GPAC_TAG}:refs/tags/${GPAC_TAG}" \
+    && since="$(date -d "$(git log -1 --format=%cI "${GPAC_TAG}") -1 day" +%F)" \
+    && git fetch -q --shallow-since="$since" https://github.com/gpac/gpac "${GPAC_COMMIT}" \
+    && git checkout -q "${GPAC_COMMIT}" \
     && ./configure --prefix=/opt/vf --extra-cflags=-I/opt/vf/include --extra-ldflags=-L/opt/vf/lib \
     && make -j"$(nproc)" && make install && ldconfig \
     && cd / && rm -rf /src/gpac /opt/vf/share/man \
     && MP4Box -version \
     && gpac -h filters 2>&1 | grep -q ffdmx
 
-# --- x264 (reads y4m from vspipe, so no input libraries) -----------------------------------------------
+# --- x264 (reads y4m from vspipe, so no input libraries; the whole history: its version counts commits) ---
 ARG X264_COMMIT
 RUN git init -q /src/x264 && cd /src/x264 \
-    && git fetch -q --depth 1 https://code.videolan.org/videolan/x264.git "${X264_COMMIT}" && git checkout -q FETCH_HEAD \
+    && git fetch -q https://code.videolan.org/videolan/x264.git "${X264_COMMIT}" && git checkout -q FETCH_HEAD \
     && ./configure --prefix=/opt/vf --bit-depth=all --disable-lavf --disable-ffms --disable-gpac --disable-lsmash \
         --disable-swscale --enable-strip \
     && make -j"$(nproc)" && make install \
