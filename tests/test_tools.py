@@ -65,6 +65,20 @@ def test_missing_broken_and_unknown(tmp_path):
     assert (c.status, c.detail) == (ToolStatus.UNKNOWN, "hello")
 
 
+def test_a_folder_or_a_file_that_cant_run_says_why(tmp_path):
+    c = check(INFO["dee"], str(tmp_path))
+    assert (c.status, c.detail) == (ToolStatus.MISSING, "A folder: point at the program in it")
+    exe = tmp_path / "dee"
+    exe.write_bytes(b"")
+
+    def denied(_argv, _timeout):
+        raise PermissionError(13, "Permission denied")
+
+    c = check(INFO["dee"], str(exe), runner=denied)
+    assert c.status is ToolStatus.BROKEN and "Permission denied" in c.detail
+    assert ("chmod +x" in c.detail) is (sys.platform != "win32")
+
+
 def test_a_real_program_on_path():
     c = check(
         INFO["ffmpeg"],

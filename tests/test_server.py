@@ -7,6 +7,7 @@ VapourSynth on an ffmpeg-made clip and skip without the tools.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -958,6 +959,15 @@ def test_folder_browser(tmp_path):
         listing = client.get("/api/fs/list", params={"path": str(tmp_path / "src"), "extensions": ".mkv"}).json()
         assert [f["name"] for f in listing["files"]] == ["Show.S01E01.mkv"]
         assert listing["parent"] == str(tmp_path)
+        # Programs: by extension on Windows; elsewhere runnable, or without an extension (execute bit lost).
+        tools_dir = tmp_path / "tools"
+        tools_dir.mkdir()
+        for name in ("dee", "dee.exe", "lib.so", "run.sh"):
+            (tools_dir / name).write_bytes(b"")
+        (tools_dir / "run.sh").chmod(0o755)
+        listing = client.get("/api/fs/list", params={"path": str(tools_dir), "programs": "true"}).json()
+        want = ["dee.exe"] if os.name == "nt" else ["dee", "run.sh"]
+        assert [f["name"] for f in listing["files"]] == want
         outside = str(tmp_path.parent)  # a real folder, outside the one root
         assert client.get("/api/fs/list", params={"path": outside}).status_code == 403
         assert client.get("/api/fs/roots").json() == [str(tmp_path)]

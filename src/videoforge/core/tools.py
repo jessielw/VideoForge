@@ -244,13 +244,16 @@ def check(info: ToolInfo, path: str, *, runner: Runner = _run, timeout: float = 
     found = locate(path)
     base = (info.name, info.label, info.purpose, path)
     if not found:
-        return ToolCheck(*base, "", ToolStatus.MISSING, detail="Not found at this path or on PATH")
+        detail = "A folder: point at the program in it" if Path(path).is_dir() else "Not found at this path or on PATH"
+        return ToolCheck(*base, "", ToolStatus.MISSING, detail=detail)
     output, error = "", ""
     for args in info.args:
         try:
             output = runner([found, *args], timeout)
         except (OSError, subprocess.SubprocessError) as e:
             error = f"{type(e).__name__}: {e}"
+            if isinstance(e, PermissionError) and os.name != "nt":
+                error = f"Not executable (chmod +x it, and the programs next to it): {error}"
             continue
         if line := version_line(output):
             return ToolCheck(*base, found, ToolStatus.OK, version=line)

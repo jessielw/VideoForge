@@ -292,7 +292,7 @@
   <FileBrowser
     title={browse.kind === 'tool' ? browse.tool.label : 'Add a folder'}
     mode={browse.kind === 'root' || browse.tool.folder ? 'folder' : 'files'}
-    extensions={browse.kind === 'tool' && !browse.tool.folder ? ['.exe', '.bat', '.cmd'] : []}
+    programs={browse.kind === 'tool' && !browse.tool.folder}
     start={browse.kind === 'tool' ? startFolder(browse.tool) : ''}
     onpick={paths => {
       const b = browse

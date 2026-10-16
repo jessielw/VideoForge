@@ -105,8 +105,10 @@ export const api = {
   shutdown: () => post<{ ok: boolean }>('/api/shutdown'),
 
   roots: () => get<string[]>('/api/fs/roots'),
-  list: (path: string, extensions: string[] = []) =>
-    get<DirListing>(`/api/fs/list?path=${encodeURIComponent(path)}&extensions=${encodeURIComponent(extensions.join(','))}`),
+  list: (path: string, extensions: string[] = [], programs = false) =>
+    get<DirListing>(
+      `/api/fs/list?path=${encodeURIComponent(path)}&extensions=${encodeURIComponent(extensions.join(','))}${programs ? '&programs=true' : ''}`,
+    ),
   pathKinds: (paths: string[]) => post<PathKind[]>('/api/fs/kinds', { paths }),
 
   match: (slots: InputSlots) => post<MatchResult>('/api/match', slots),

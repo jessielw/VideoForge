@@ -1,6 +1,7 @@
 <script lang="ts">
   // Browses the server's file system (the browser can't hand us real paths).
   // mode "files": tick files and/or folders; mode "folder": choose one folder.
+  // programs: list only programs (the server decides what one is on its OS), and one has to be ticked.
   import { onMount } from 'svelte'
   import { api } from '../lib/api'
   import { bytes } from '../lib/format'
@@ -18,6 +19,7 @@
     title,
     mode = 'files',
     extensions = [],
+    programs = false,
     start = '',
     onpick,
     onclose,
@@ -25,6 +27,7 @@
     title: string
     mode?: 'files' | 'folder'
     extensions?: string[]
+    programs?: boolean
     start?: string
     onpick: (paths: string[]) => void
     onclose: () => void
@@ -39,7 +42,7 @@
   async function open(path: string) {
     error = ''
     try {
-      listing = await api.list(path, extensions)
+      listing = await api.list(path, extensions, programs)
       pathInput = listing.path
       api.saveSettings({ last_dir: listing.path }).catch(() => {})
     } catch (e) {
@@ -114,7 +117,9 @@
             </label>
           {/each}
           {#if !listing.dirs.length && !listing.files.length}
-            <div class="p-4 text-center text-muted-foreground">Nothing here{extensions.length ? ` (${extensions.join(' ')})` : ''}</div>
+            <div class="p-4 text-center text-muted-foreground">
+              Nothing here{programs ? ' (programs)' : extensions.length ? ` (${extensions.join(' ')})` : ''}
+            </div>
           {/if}
         {/if}
       {/if}
@@ -123,13 +128,17 @@
     <footer class="flex items-center gap-2 border-t p-3">
       <span class="text-xs text-muted-foreground">
         {#if mode === 'files'}
-          {picked.length ? `${picked.length} selected` : 'Nothing ticked: the current folder is used'}
+          {picked.length
+            ? `${picked.length} selected`
+            : programs
+              ? 'Tick the program'
+              : 'Nothing ticked: the current folder is used'}
         {:else}
           Choose the folder you're in
         {/if}
       </span>
       <Button variant="outline" class="ml-auto" onclick={onclose}>Cancel</Button>
-      <Button onclick={confirm}>{mode === 'folder' ? 'Use this folder' : 'Add'}</Button>
+      <Button disabled={programs && !picked.length} onclick={confirm}>{mode === 'folder' ? 'Use this folder' : 'Add'}</Button>
     </footer>
   </Dialog.Content>
 </Dialog.Root>

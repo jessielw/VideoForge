@@ -30,9 +30,21 @@ def roots(request: Request) -> list[str]:
     return [str(p) for p in request.app.state.settings.roots]
 
 
+_WINDOWS_PROGRAMS = {".exe", ".bat", ".cmd", ".com"}
+
+
+def _is_program(entry: os.DirEntry[str]) -> bool:
+    """A file a tool path can point at: on Windows by its extension; elsewhere one that can run, or has no
+    extension (a program whose execute bit got lost, e.g. copied over SMB: the tool check then says so)."""
+    suffix = Path(entry.name).suffix.lower()
+    if os.name == "nt":
+        return suffix in _WINDOWS_PROGRAMS
+    return not suffix or os.access(entry.path, os.X_OK)
+
+
 @router.get("/fs/list")
-def list_dir(request: Request, path: str, extensions: str = "") -> dict[str, Any]:
-    """A folder's subfolders and files (files filtered by comma-separated extensions)."""
+def list_dir(request: Request, path: str, extensions: str = "", programs: bool = False) -> dict[str, Any]:
+    """A folder's subfolders and files (files filtered by comma-separated extensions, or to programs)."""
     folder = Path(path)
     allowed = request.app.state.settings.roots
     if allowed and not any(_under(folder, r) for r in allowed):
@@ -47,7 +59,11 @@ def list_dir(request: Request, path: str, extensions: str = "") -> dict[str, Any
                 try:
                     if entry.is_dir():
                         dirs.append({"name": entry.name, "path": entry.path})
-                    elif not wanted or Path(entry.name).suffix.lower() in wanted:
+                    elif (
+                        _is_program(entry)
+                        if programs
+                        else not wanted or Path(entry.name).suffix.lower() in wanted
+                    ):
                         st = entry.stat()
                         files.append({"name": entry.name, "path": entry.path, "size": st.st_size, "mtime": st.st_mtime})
                 except OSError:
