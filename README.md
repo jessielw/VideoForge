@@ -73,15 +73,17 @@ the log; `videoforge.cmd --help`). Build it yourself with `uv run python scripts
 ## Docker (Linux)
 
 The image (`ghcr.io/jessielw/videoforge`, amd64) carries the free tools: MKVToolNix, x264, x265, FFmpeg 9,
-MP4Box, opus-tools, DeeZy, truehdd, and the [VapourSynth plugins](#vapoursynth-plugins), built from source.
+MP4Box, opus-tools, DeeZy, truehdd, Wine (for qaac), and the [VapourSynth plugins](#vapoursynth-plugins),
+built from source.
 Start from [compose.yaml](compose.yaml): set your media folder, then `docker compose up -d` and open
 http://127.0.0.1:8765.
 
 - `/data`: the queue, templates, settings and logs. `/media` (or any folder you mount): sources and outputs;
   each job's work folder goes next to its source, so the mount must be writable.
 - `/tools`: what the image can't ship. Dolby Encoding Engine (Linux build) as `/tools/dee/dee` for DDP /
-  Atmos, and more VapourSynth plugins (`.so`) in `/tools/vs-plugins`. qaac is Windows only (ffmpeg's AAC is
-  there instead).
+  Atmos; qaac in `/tools/qaac` (`qaac64.exe` with its `QTfiles64` folder, as on Windows: the image runs it
+  under Wine); more VapourSynth plugins (`.so`) in `/tools/vs-plugins`. Restart the container after adding
+  qaac.
 - The server listens on port 8765 in the container: publish it (`-p 127.0.0.1:8765:8765`; on Unraid, add a
   Port to the template, container port 8765). Without that, nothing outside the container reaches it.
 - There's no login: publish the port on `127.0.0.1` as the compose file does, or put it behind your own

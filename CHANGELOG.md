@@ -38,7 +38,7 @@ The first beta: an encode and mux job queue in the browser, for one user on Wind
   file paths.
 - **Portable build (Windows x64).** A zip with its own Python: unpack, add the tools, run `VideoForge.exe`.
 - **Docker (Linux, amd64).** The server with the free tools (MKVToolNix, x264, x265, FFmpeg 9, MP4Box,
-  opus-tools, DeeZy, truehdd), in a browser.
+  opus-tools, DeeZy, truehdd), in a browser. qaac runs under Wine from `/tools/qaac`.
 - **Bundled VapourSynth plugins.** Source filters (BestSource, L-SMASH-Works, FFMS2, d2vsource) and common
   filters (EdgeFixer, FillBorders, MVTools, znedi3, dfttest2, BM3D, zsmooth, vszip, fmtconv, descale, ...)
   plus havsfunc, mvsfunc and awsmfunc, from one list (`vsplugins/manifest.toml`): built from source in the

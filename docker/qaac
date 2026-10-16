@@ -1,0 +1,38 @@
+#!/bin/bash
+# qaac (Windows) under Wine: qaac64.exe and its QTfiles64 folder (Apple's CoreAudioToolbox) in /tools/qaac
+# (or QAAC_DIR). The entrypoint puts this on PATH only when qaac64.exe is there.
+# Wine refuses a prefix someone else owns, so each user id gets its own: a copy of the image's template.
+set -euo pipefail
+exe="${QAAC_DIR:-/tools/qaac}/qaac64.exe"
+if [ ! -f "$exe" ]; then
+    echo "qaac: $exe not found (mount qaac64.exe and its QTfiles64 folder there)" >&2
+    exit 127
+fi
+# No display drivers: there's no display, and Wayland's would print an error on every run.
+export WINEDEBUG="${WINEDEBUG:--all}" WINEPREFIX="${WINEPREFIX:-$HOME/.wine-$(id -u)}" \
+    WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-winex11.drv,winewayland.drv=}"
+if [ ! -f "$WINEPREFIX/system.reg" ]; then
+    mkdir -p "$(dirname "$WINEPREFIX")"
+    (
+        flock 9
+        if [ ! -f "$WINEPREFIX/system.reg" ]; then
+            rm -rf "$WINEPREFIX" "$WINEPREFIX.new"
+            cp -R /opt/wine-prefix "$WINEPREFIX.new"
+            mv "$WINEPREFIX.new" "$WINEPREFIX"
+        fi
+    ) 9>"$WINEPREFIX.lock"
+fi
+# An absolute output path as a Windows one (Z: is the root), whatever the current folder is.
+args=()
+out=0
+for a in "$@"; do
+    if [ "$out" = 1 ] && [ "${a:0:1}" = / ]; then
+        a="Z:${a//\//\\}"
+    fi
+    out=0
+    if [ "$a" = -o ] || [ "$a" = --output ]; then
+        out=1
+    fi
+    args+=("$a")
+done
+exec /usr/lib/wine/wine64 "$exe" "${args[@]}"

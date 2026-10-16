@@ -14,7 +14,8 @@ deezy = "deezy"
 truehdd = "truehdd"
 # Dolby Encoding Engine isn't free to ship: put it in /tools/dee (or set its path in Settings).
 dee = "/tools/dee/dee"
-# qaac is Windows only: its AAC encode shows as unavailable (ffmpeg's AAC is there).
+# qaac runs under Wine: put qaac64.exe and its QTfiles64 folder (Apple's CoreAudioToolbox) in /tools/qaac.
+# Without them its AAC encode shows as unavailable (ffmpeg's AAC is there).
 qaac = "qaac"
 # More VapourSynth plugins (.so) of your own; the image's (vsplugins/manifest.toml: BestSource, L-SMASH,
 # FFMS2 and the common filters) are always loaded.
