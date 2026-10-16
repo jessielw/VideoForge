@@ -444,6 +444,12 @@ def py(code: str) -> list[str]:
     return [sys.executable, "-c", code]
 
 
+def test_process_run_drops_color_codes():
+    lines: list[str] = []
+    process.run([py(r"print('\x1b[32mImport results\x1b[0m'); print('\x1b[0m')")], lines.append)
+    assert lines == ["[python] Import results"]  # the color-only line is gone too
+
+
 def test_process_run_streams_lines():
     lines: list[str] = []
     process.run([py("print('a'); print('50%', end='\\r'); print('b')")], lines.append)

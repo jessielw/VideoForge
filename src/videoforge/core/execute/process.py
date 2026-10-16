@@ -22,6 +22,8 @@ _POLL_S = 0.2
 _OK_CODES = {"mkvmerge": {0, 1}, "mkvpropedit": {0, 1}}
 # Progress bars redraw with \r, so a "line" ends at either.
 _LINE_SPLIT = re.compile(r"[\r\n]+")
+# Terminal color codes (MP4Box colors its output even into a pipe on Linux).
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 _TAIL = 20
 # A producer's complaint that its pipe closed (vspipe's fwrite error, EPIPE/EINVAL on Windows).
 _BROKEN_PIPE = re.compile(r"fwrite\(\) call failed|broken pipe|errno:? (?:22|32)\b", re.IGNORECASE)
@@ -64,6 +66,7 @@ def _pump(stream: IO[bytes], name: str, log: LogFn, tail: list[str]) -> None:
     pending = ""
 
     def emit(line: str) -> None:
+        line = _ANSI.sub("", line)
         if line.strip():
             tail.append(line)
             del tail[:-_TAIL]
