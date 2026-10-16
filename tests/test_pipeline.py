@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 
 from conftest import audio, plan_for, simulate_output, source, sub
 import pytest
@@ -485,6 +486,38 @@ def test_process_run_cancel():
     threading.Timer(0.3, token.cancel).start()
     with pytest.raises(Cancelled):
         process.run([py("import time; time.sleep(30)")], lambda _l: None, token)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process groups (Windows: taskkill /T)")
+def test_process_run_cancel_ends_the_tools_children(tmp_path):
+    """DeeZy starts ffmpeg/DEE: a cancel ends the tool's whole process group, not just the tool."""
+    pid_file = tmp_path / "child.pid"
+    spawn = (
+        "import subprocess, sys, time; "
+        "c = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)']); "
+        f"open({str(pid_file)!r}, 'w').write(str(c.pid)); time.sleep(30)"
+    )
+    token = CancelToken()
+    threading.Thread(target=lambda: (_wait_for_file(pid_file), token.cancel()), daemon=True).start()
+    with pytest.raises(Cancelled):
+        process.run([py(spawn)], lambda _l: None, token)
+    child = int(pid_file.read_text())
+    for _ in range(50):
+        try:
+            os.kill(child, 0)  # still there (or a zombie waiting for init to reap it)
+        except ProcessLookupError:
+            return
+        if Path(f"/proc/{child}/stat").is_file() and Path(f"/proc/{child}/stat").read_text().split()[2] == "Z":
+            return
+        time.sleep(0.1)
+    raise AssertionError(f"the tool's child {child} outlived the cancel")
+
+
+def _wait_for_file(path: Path) -> None:
+    for _ in range(100):
+        if path.is_file() and path.read_text():
+            return
+        time.sleep(0.05)
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Job Objects are Windows only")

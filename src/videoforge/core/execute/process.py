@@ -7,6 +7,7 @@ from collections.abc import Callable, Sequence
 import io
 import os
 import re
+import signal
 import subprocess
 import threading
 from typing import IO, cast
@@ -85,7 +86,11 @@ def _kill_tree(proc: subprocess.Popen) -> None:
             ["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True, check=False, creationflags=_NO_WINDOW
         )
     else:
-        proc.kill()
+        # Each tool leads its own process group (start_new_session in run()), so this ends its children too.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 def _signed(code: int) -> int:
@@ -113,6 +118,7 @@ def run(argvs: Sequence[Sequence[str]], log: LogFn, cancel: CancelToken | None =
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE if producer else subprocess.STDOUT,
                 creationflags=_NO_WINDOW | jobobject.SUSPENDED,
+                start_new_session=os.name != "nt",  # POSIX: its own process group, for _kill_tree
             )
             procs.append(proc)
             jobobject.adopt(proc)  # ends with VideoForge, even on a crash
