@@ -59,11 +59,7 @@ def list_dir(request: Request, path: str, extensions: str = "", programs: bool =
                 try:
                     if entry.is_dir():
                         dirs.append({"name": entry.name, "path": entry.path})
-                    elif (
-                        _is_program(entry)
-                        if programs
-                        else not wanted or Path(entry.name).suffix.lower() in wanted
-                    ):
+                    elif _is_program(entry) if programs else not wanted or Path(entry.name).suffix.lower() in wanted:
                         st = entry.stat()
                         files.append({"name": entry.name, "path": entry.path, "size": st.st_size, "mtime": st.st_mtime})
                 except OSError:
