@@ -38,7 +38,15 @@ missing. A bare name (`ffmpeg`, `MP4Box`) is looked up on `PATH`.
 Only MKVToolNix, an encoder and the source filter plugin are needed to start; the audio tools are only
 needed for the encodes that use them (copying a track needs none).
 
-## Quick start
+## Portable build (Windows)
+
+Unpack `VideoForge-<version>-windows-x64.zip` anywhere, put the tools in its `tools/` (or set their paths on
+the Settings page), and run `VideoForge.exe`: VideoForge in its own window, with a tray icon. It carries its
+own Python, so nothing else is installed. `videoforge.cmd` is the console way in (`videoforge.cmd serve` shows
+the log; `videoforge.cmd --help`). Build it yourself with `uv run python scripts/build_portable.py` (writes
+`build/portable/`).
+
+## Quick start (from source)
 
 ```
 git clone https://github.com/jessielw/VideoForge

@@ -65,8 +65,11 @@ def ensure_vspipe(vspipe: str) -> None:
     """pip's vapoursynth needs `vapoursynth config` once before vspipe can start its Python."""
     ok = subprocess.run([vspipe, "--version"], capture_output=True, creationflags=_NO_WINDOW, check=False)
     if ok.returncode != 0:
+        python = Path(sys.executable)
+        if python.stem.lower() == "pythonw":  # the portable build's window: register the console Python
+            python = python.with_name("python" + python.suffix)
         subprocess.run(
-            [sys.executable, "-m", "vapoursynth", "config"], capture_output=True, creationflags=_NO_WINDOW, check=True
+            [str(python), "-m", "vapoursynth", "config"], capture_output=True, creationflags=_NO_WINDOW, check=True
         )
 
 

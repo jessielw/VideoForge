@@ -36,6 +36,7 @@ The first beta: an encode and mux job queue in the browser, for one user on Wind
 - **Settings.** Tool paths with a check for each, folder browser roots, the disk wait, Shut down.
 - **Desktop window.** `serve --window`: the app in its own window with a tray icon; Explorer drops carry
   file paths.
+- **Portable build (Windows x64).** A zip with its own Python: unpack, add the tools, run `VideoForge.exe`.
 - **Profiles.** The built-in `manual` profile; other profiles (a release group's rules) install as separate
   packages under the `videoforge.profiles` entry point group.
 

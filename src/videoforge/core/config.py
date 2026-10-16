@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
+import os
 from pathlib import Path
 import shutil
 import sys
+import sysconfig
 import tomllib
 
 from videoforge.core.pairing import MatchRules
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+# The app's folder: videoforge.toml, tools/ and the built frontend. The checkout by default; a portable
+# build's launcher sets VIDEOFORGE_ROOT to its own folder (the package is installed in its Python).
+PROJECT_ROOT = Path(os.environ.get("VIDEOFORGE_ROOT") or Path(__file__).resolve().parents[3])
 
 
 @dataclass(frozen=True)
@@ -46,8 +50,12 @@ def _resolve_tool(value: str, base: Path) -> str:
 
 
 def default_vspipe() -> str:
-    exe = Path(sys.executable).with_name("vspipe.exe" if sys.platform == "win32" else "vspipe")
-    return str(exe) if exe.is_file() else shutil.which("vspipe") or "vspipe"
+    """The vspipe pip's vapoursynth installed: next to this Python (a venv's) or in its scripts folder."""
+    name = "vspipe.exe" if sys.platform == "win32" else "vspipe"
+    for folder in (Path(sys.executable).parent, Path(sysconfig.get_path("scripts"))):
+        if (folder / name).is_file():
+            return str(folder / name)
+    return shutil.which("vspipe") or "vspipe"
 
 
 def _merged(base: dict, over: dict) -> dict:

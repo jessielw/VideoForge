@@ -60,6 +60,7 @@ src/videoforge/
   desktop.py             `serve --window`: the app in a pywebview window with a tray icon (pystray; the `desktop`
                          extra), drops carry paths
 frontend/                Svelte 5 + Vite + TypeScript + Tailwind -> frontend/dist (served by FastAPI)
+scripts/build_portable.py  The portable zip (see "Portable build"); scripts/launcher/VideoForge.cs its launcher
 legacy/qt_gui/           The archived PySide6 GUI and its tests. Reference only; not packaged.
 tools/                   Binaries (gitignored): MKVToolNix, DEE, DeeZy, qaac, opus-tools, truehdd, x264, x265, vs-plugins
                          (MP4Box and ffmpeg default to PATH; see README "Tools")
@@ -211,6 +212,28 @@ UI kit: shadcn-svelte components (on bits-ui) in `frontend/src/lib/components/ui
 shadcn-svelte CLI, `components.json`; `$lib` = `src/lib`), `@lucide/svelte` icons, `mode-watcher` for
 light / dark / system (the toggle in the nav), `svelte-sonner` toasts (save errors, finished runs).
 Theme tokens live in `src/app.css` (shadcn's names plus `success`, `warning`, `info`).
+
+## Portable build
+
+`scripts/build_portable.py` (Windows x64; the Release workflow runs it on a version tag and drafts a release):
+
+```
+VideoForge/
+  VideoForge.exe         Launcher (C#, built with Windows' own csc.exe): runtime\pythonw.exe -m videoforge serve --window
+  videoforge.cmd         The same with runtime\python.exe and the arguments given (console)
+  runtime/               uv's standalone CPython with the locked dependencies (desktop extra) and VideoForge installed
+  frontend/dist/         The built frontend
+  videoforge.toml, tools/, README.md, CHANGELOG.md, LICENSE
+```
+
+- Both launchers set `VIDEOFORGE_ROOT` to the folder: `config.PROJECT_ROOT` (videoforge.toml, tools/, the frontend)
+  is that instead of the checkout. The data folder stays `%APPDATA%\VideoForge`.
+- A real Python, not a frozen app: vspipe embeds the Python registered by `vapoursynth config` (python.exe +
+  python3xx.dll, the standard library as files), and the preview worker is `python -m`. `default_vspipe` also
+  looks in the Python's scripts folder (`runtime\Scripts\vspipe.exe`), and `ensure_vspipe` registers python.exe
+  when running under pythonw.exe.
+- The same layout works on macOS / Linux (standalone CPython and the vapoursynth wheel exist there) with a
+  shell launcher, once the Linux CI run's findings are fixed. No tools are bundled.
 
 ## Profiles
 

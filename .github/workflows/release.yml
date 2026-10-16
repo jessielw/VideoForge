@@ -1,0 +1,109 @@
+name: Release
+
+# A version tag (0.1.0, as in pyproject.toml; no "v") builds the portable zip and opens a draft release with
+# the version's CHANGELOG.md section. Publishing the draft is done by hand.
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to draft the release for (e.g. 0.1.0); empty builds the zip only"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable:
+    name: Portable (Windows x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+
+      - name: Tag matches the version
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          if [[ "$GITHUB_REF_NAME" != "$version" ]]; then
+            echo "::error::tag $GITHUB_REF_NAME doesn't match pyproject.toml's version $version"
+            exit 1
+          fi
+
+      - name: Build
+        run: python scripts/build_portable.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: portable-windows-x64
+          path: build/portable/VideoForge-*-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Draft release
+    needs: portable
+    if: github.event_name == 'push' || inputs.tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Release notes from CHANGELOG.md
+        shell: bash
+        run: |
+          # The "## [<tag>]" section, up to the next "## [" heading, without the link lines at the end.
+          awk -v tag="$TAG" '
+            /^## \[/ { keep = index($0, "## [" tag "]") == 1; next }
+            keep && !/^\[[^]]+\]: / { print }
+          ' CHANGELOG.md > notes.md
+          if [[ ! -s notes.md ]]; then
+            echo "::error::CHANGELOG.md has no section for $TAG"
+            exit 1
+          fi
+          cat notes.md
+
+      - name: Download the zip
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Draft the release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
+        with:
+          tag_name: ${{ env.TAG }}
+          name: VideoForge ${{ env.TAG }}
+          body_path: notes.md
+          draft: true
+          prerelease: ${{ startsWith(env.TAG, '0.') }}
+          files: artifacts/*
+          fail_on_unmatched_files: true
