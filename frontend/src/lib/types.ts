@@ -93,6 +93,19 @@ export interface EncoderSettings {
   depth: number
   options: Record<string, string>
   extra: string
+  source_color: boolean // tag the encode with the source's colour description (and HDR10 metadata on x265)
+}
+
+// The source's colour description in x264 / x265's names ('' / 0 / null: not given)
+export interface VideoColor {
+  primaries: string
+  transfer: string
+  matrix: string
+  range: string
+  chroma_loc: number | null
+  master_display: string
+  max_cll: number
+  max_fall: number
 }
 
 export interface Progress {
@@ -315,6 +328,7 @@ export interface Tracks {
     default_duration_ns: number | null
     sar_num: number // the pixel aspect ratio (not 1:1 on an anamorphic source)
     sar_den: number
+    color: VideoColor
   } | null
   audio: AudioTrack[]
   subs: SubTrack[]
@@ -336,6 +350,7 @@ export interface JobDetail extends JobSummary {
   plan: Plan | null
   tracks: Tracks | null
   output_name: string | null // the file the run will write (null until planned)
+  color_args: string[] | null // the source's colour flags for this encoder (null until probed)
 }
 
 export interface ClipInfo {

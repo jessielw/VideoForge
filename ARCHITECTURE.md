@@ -39,6 +39,8 @@ src/videoforge/
       ffindex.py         FFMS2's index with progress, through the plugin's own ffms2.dll (ctypes)
       crop.py            Auto-crop detection (RGB lightness on sampled lines, read straight from YUV)
       encoders.py        x264 / x265: settings -> argv (1 or 2 pass), progress parsing
+      color.py           The source's colour (MediaInfo -> VideoInfo.color) -> --colorprim/--transfer/... and
+                         x265's HDR10 SEI, before the job's options (vspipe's y4m carries no colour)
       qpf.py             AutoQPF: chapters -> qpf + chapter file
     execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel), jobobject.py (tools end with the server, Windows)
                          mux.MUXERS: mkvmerge (MKV) and MP4Box (MP4), each with what its container can't hold

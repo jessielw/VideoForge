@@ -137,6 +137,21 @@ class SubTrack:
 
 
 @dataclass(slots=True)
+class VideoColor:
+    """The source video's colour description, in x264 / x265's names ("" / 0 / None: the source doesn't say).
+    Read by probe (core/video/color.py); the encode is tagged with it."""
+
+    primaries: str = ""  # --colorprim: bt709, bt2020, smpte432, ...
+    transfer: str = ""  # --transfer: bt709, smpte2084 (PQ), arib-std-b67 (HLG), ...
+    matrix: str = ""  # --colormatrix: bt709, bt2020nc, smpte170m, ...
+    range: str = ""  # limited or full
+    chroma_loc: int | None = None  # --chromaloc 0-5
+    master_display: str = ""  # HDR10 mastering display, x265's G(x,y)B(x,y)R(x,y)WP(x,y)L(max,min)
+    max_cll: int = 0  # HDR10 content light levels, cd/m2
+    max_fall: int = 0
+
+
+@dataclass(slots=True)
 class VideoInfo:
     width: int
     height: int
@@ -146,6 +161,7 @@ class VideoInfo:
     # The pixel aspect ratio (a pixel's width / height): not 1:1 on an anamorphic source (DVD, some HDTV).
     sar_num: int = 1
     sar_den: int = 1
+    color: VideoColor = field(default_factory=VideoColor)
 
     @property
     def sar(self) -> Fraction:

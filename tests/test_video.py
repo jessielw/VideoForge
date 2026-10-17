@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 from videoforge.core.config import PROJECT_ROOT
+from videoforge.core.models import VideoColor
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video import crop as autocrop, vs as vsx
 from videoforge.core.video.encoders import encoder_command, output_name, progress, vspipe_command
@@ -443,6 +444,9 @@ def test_crop_view_lines_up_with_the_uncropped_frame():
     )  # no crop: the frame as it is
 
 
+P3_1000 = "G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50)"
+
+
 @needs_vs
 @pytest.mark.parametrize("encoder", list(Encoder))
 def test_vspipe_into_encoder(clip_file, tmp_path, encoder):
@@ -460,10 +464,20 @@ def test_vspipe_into_encoder(clip_file, tmp_path, encoder):
     enc = EncoderSettings(encoder=encoder, preset="ultrafast", crf=30)
     out = tmp_path / output_name(enc)
     lines: list[str] = []
+    # An HDR10 source's colour (the flags must be ones the real encoder takes, and land in the stream).
+    color = VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", 2, P3_1000, 1000, 400)
+    argv = encoder_command(str(exe), enc, frames=48, output=out, color=color)
     # vspipe finds the plugins through the environment configure() set for this process.
-    process.run([vspipe_command(vspipe, script), encoder_command(str(exe), enc, frames=48, output=out)], lines.append)
+    process.run([vspipe_command(vspipe, script), argv], lines.append)
     assert out.is_file() and out.stat().st_size > 1000
     assert any(progress(line) is not None for line in lines) or any("frames" in line for line in lines)
+    from pymediainfo import MediaInfo
+
+    [video] = [t for t in MediaInfo.parse(str(out)).tracks if t.track_type == "Video"]
+    assert (video.color_primaries, video.transfer_characteristics) == ("BT.2020", "PQ")
+    if encoder is Encoder.X265:
+        assert video.mastering_display_luminance == "min: 0.0050 cd/m2, max: 1000 cd/m2"
+        assert video.maximum_content_light_level == "1000 cd/m2"
 
 
 def test_manual_encode_defaults_are_fresh_copies(profile):

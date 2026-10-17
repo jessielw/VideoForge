@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from videoforge.core.models import Issue, Severity, track_key, with_copies
 from videoforge.core.pipeline.build import output_path
 from videoforge.core.plan_io import to_json
+from videoforge.core.video.color import color_args
 from videoforge.core.video.script import index_exists
 from videoforge.core.video.settings import EncoderSettings, RateControl
 from videoforge.server.queue import Entry, JobQueue
@@ -72,6 +74,7 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     out["plan"] = None
     out["output_name"] = None
     out["tracks"] = None
+    out["color_args"] = None  # the source's colour flags for this encoder (added unless source_color is off)
     if e.plan is not None:
         plan = to_json(e.plan)
         for key in ("source", "inputs", "overrides"):  # sent elsewhere
@@ -94,4 +97,6 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
             "has_chapters": src.has_chapters,
             "count": len(tracks),
         }
+        if src.video is not None:
+            out["color_args"] = color_args(src.video.color, replace(e.spec.encoder, source_color=True))
     return out

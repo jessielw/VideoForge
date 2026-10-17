@@ -23,6 +23,7 @@ from videoforge.core.classify import (
     resolve_sub_language,
 )
 from videoforge.core.models import AudioTrack, SourceInfo, SubTrack, VideoInfo
+from videoforge.core.video.color import from_mediainfo
 
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -117,6 +118,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                 language=language,
                 sar_num=sar.numerator,
                 sar_den=sar.denominator,
+                color=from_mediainfo(mi),
             )
         elif kind == "audio":
             if mi is None and len(audio) < len(mi_audio) and mi_audio[len(audio)].track_id is None:

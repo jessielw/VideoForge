@@ -5,15 +5,27 @@
   import PlusIcon from '@lucide/svelte/icons/plus'
   import XIcon from '@lucide/svelte/icons/x'
   import { Button } from '$lib/components/ui/button'
+  import { Checkbox } from '$lib/components/ui/checkbox'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
 
+  // colorArgs: the job's source's colour flags for this encoder (the job editor; null until probed, absent in
+  // the batch panel and on the Templates page, which have no one source)
   let {
     value,
     onchange,
     disabled = false,
-  }: { value: EncoderSettings; onchange: (v: EncoderSettings) => void; disabled?: boolean } = $props()
+    colorArgs,
+  }: {
+    value: EncoderSettings
+    onchange: (v: EncoderSettings) => void
+    disabled?: boolean
+    colorArgs?: string[] | null
+  } = $props()
+
+  const HDR_TRANSFERS = ['smpte2084', 'arib-std-b67'] // PQ, HLG
+  const hdr = $derived(!!colorArgs && colorArgs.some((a, i) => colorArgs[i - 1] === '--transfer' && HDR_TRANSFERS.includes(a)))
 
   const PRESETS = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo']
   const TUNES: Record<EncoderName, string[]> = {
@@ -116,6 +128,31 @@
       {#each DEPTHS[value.encoder] as d (d)}<option value={d}>{d}-bit</option>{/each}
     </NativeSelect>
   </div>
+
+  <label class="flex items-start gap-3 text-sm">
+    <Checkbox class="mt-0.5" checked={value.source_color} {disabled} onCheckedChange={v => set('source_color', v)} />
+    <span class="min-w-0">
+      Colour from the source
+      <span class="block text-xs text-muted-foreground">
+        Tags the encode with the source's colour description{value.encoder === 'x265' ? ' and HDR10 metadata' : ''}
+        (vspipe passes none on). An option below with the same flag wins. Untick it when the script changes the colours.
+      </span>
+      {#if colorArgs !== undefined}
+        {#if colorArgs === null}
+          <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
+        {:else if !colorArgs.length}
+          <span class="block text-xs text-muted-foreground">The source doesn't describe its colours.</span>
+        {:else}
+          <code class="mt-1 block font-mono text-xs break-all {value.source_color ? '' : 'text-muted-foreground line-through'}"
+            >{colorArgs.join(' ')}</code
+          >
+        {/if}
+        {#if hdr && value.source_color && value.depth < 10}
+          <span class="mt-1 block text-xs text-warning">An HDR source: encode it at 10-bit.</span>
+        {/if}
+      {/if}
+    </span>
+  </label>
 
   <div>
     <div class="section-label mb-2">Options (--name value, in order; an empty value is a flag)</div>

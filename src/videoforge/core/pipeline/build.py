@@ -146,14 +146,17 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
     exe = app.tools.x265 if enc.encoder is Encoder.X265 else app.tools.x264
     v = plan.source.video
     sar = spec.video.output_sar(v.width, v.height, v.sar) if v is not None else None
+    color = v.color if v is not None else None
     pipe = tuple(vspipe_command(app.tools.vspipe, script))
     shared = (script, source) + ((qpfile,) if qpfile else ())
     out = spec.video_output
     name = enc.encoder.value
     if enc.passes == 2:
         stats = work / "video.stats"
-        first = encoder_command(exe, enc, output=Path(os.devnull), pass_number=1, stats=stats, qpfile=qpfile, sar=sar)
-        second = encoder_command(exe, enc, output=out, pass_number=2, stats=stats, qpfile=qpfile, sar=sar)
+        first = encoder_command(
+            exe, enc, output=Path(os.devnull), pass_number=1, stats=stats, qpfile=qpfile, sar=sar, color=color
+        )
+        second = encoder_command(exe, enc, output=out, pass_number=2, stats=stats, qpfile=qpfile, sar=sar, color=color)
         steps += [
             Step(
                 "video.pass1",
@@ -175,7 +178,7 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
             ),
         ]
     else:
-        argv = encoder_command(exe, enc, output=out, qpfile=qpfile, sar=sar)
+        argv = encoder_command(exe, enc, output=out, qpfile=qpfile, sar=sar, color=color)
         steps.append(
             Step(
                 "video",

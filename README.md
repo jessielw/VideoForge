@@ -12,7 +12,8 @@ and finished steps are skipped on a rerun.
 > **Status:** 0.1.0 beta. It works end to end, but expect changes. See [CHANGELOG.md](CHANGELOG.md).
 
 Not yet: sources other than MKV (remux an MP4 or M2TS to MKV first), GPU filters, a login (see
-[Docker](#docker-linux)).
+[Docker](#docker-linux)), Dolby Vision and HDR10+ (an HDR10 source keeps its HDR10 metadata; the DV and
+HDR10+ layers are dropped).
 
 ## Requirements
 

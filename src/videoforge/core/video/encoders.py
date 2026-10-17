@@ -13,6 +13,8 @@ from pathlib import Path
 import re
 import shlex
 
+from videoforge.core.models import VideoColor
+from videoforge.core.video.color import color_args
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
 
 EXTENSIONS = {Encoder.X264: ".264", Encoder.X265: ".hevc"}
@@ -48,10 +50,12 @@ def encoder_command(
     stats: Path | None = None,
     qpfile: Path | None = None,
     sar: Fraction | None = None,
+    color: VideoColor | None = None,
 ) -> list[str]:
     """One encoder run reading y4m from stdin. pass_number is 1 or 2 for a two-pass encode. sar is the
-    encode's pixel aspect ratio (vspipe's y4m carries none), written when it isn't square; a --sar in the
-    options or extra arguments comes after it, and wins."""
+    encode's pixel aspect ratio (vspipe's y4m carries none), written when it isn't square; color is the
+    source's colour description (color.color_args). A --sar or colour flag in the options or extra arguments
+    comes after them, and wins."""
     x265 = settings.encoder is Encoder.X265
     argv = [exe, "--y4m"] if x265 else [exe, "--demuxer", "y4m"]
     argv += ["--frames", str(frames)] if frames else []
@@ -69,6 +73,7 @@ def encoder_command(
         argv += ["--output-depth", str(settings.depth)]
     if sar is not None and sar != 1:
         argv += ["--sar", f"{sar.numerator}:{sar.denominator}"]
+    argv += color_args(color, settings)
     argv += _options(settings.options)
     if qpfile is not None:
         argv += ["--qpfile", str(qpfile)]

@@ -29,7 +29,10 @@ source), or in Docker on Linux.
   frame previews at the shape it plays at (the AR toggle shows the stored pixels); an ordered filter
   chain as in StaxRip (crop and resize are steps in it; each filter can move, switch off or be edited) with
   one-click presets by category, built on the bundled plugins; the generated VapourSynth script, editable. Source filters: FFMS2 (the default, with index progress), L-SMASH, BestSource.
-- **Encoder.** x264 and x265 option panels, 1 or 2 passes; AutoQPF chapters to a qpf file.
+- **Encoder.** x264 and x265 option panels, 1 or 2 passes; AutoQPF chapters to a qpf file. The encode is
+  tagged with the source's colour description (primaries, transfer, matrix, range, chroma location, read by
+  MediaInfo) and on x265 its HDR10 metadata (mastering display, MaxCLL / MaxFALL); shown on the Encoder tab,
+  "Colour from the source" switches it off, and an option with the same flag wins.
 - **Notifications.** Settings → Notifications sends to any service Apprise supports (Discord, Telegram, ntfy,
   Pushover, email, ...): each destination picks its events (job done, failed, cancelled, queue finished), can be
   switched off, and has a Test button that shows the service's own error.
