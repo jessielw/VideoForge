@@ -179,6 +179,7 @@ class JobState:
     output: Path | None = None
     issues: list[Issue] = field(default_factory=list)
     error: str = ""
+    keep: list[str] = field(default_factory=list)  # steps the user chose to reuse on the next run (run_steps' keep)
 
 
 def planned_encode(spec: JobSpec, source: SourceInfo) -> SourceInfo:

@@ -20,6 +20,7 @@ from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.pipeline.steps import ProgressFn, Runner, run_steps
 from videoforge.core.probe import probe
 from videoforge.core.tools import tool_issues
+from videoforge.core.workdir import note_finished
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -54,7 +55,9 @@ def run_job(
     run's steps (the pipeline's, then Validate), and on_step hears each change to one of them
     (first every step as pending). A step's output lines go to step_log (default: log); with
     app.parallel_audio, audio encodes run alongside the video, so callbacks come from more than
-    one thread (one at a time). The rest of state is set from the result."""
+    one thread (one at a time). state.keep (steps to reuse whatever their fingerprint) is used up. Each
+    finished step's files are noted in the work folder (note_finished), for other jobs on the source.
+    The rest of state is set from the result."""
     state = state if state is not None else JobState()
     state.run = []
     log = log or (lambda _line: None)
@@ -105,18 +108,26 @@ def _run(
             on_step(r)
         work.mkdir(parents=True, exist_ok=True)
         output.parent.mkdir(parents=True, exist_ok=True)
+
+        def finished(record: StepRecord) -> None:
+            note_finished(work, record.id, record.fingerprint, record.outputs, record.seconds)
+            if on_record:
+                on_record(record)
+
+        keep, state.keep = state.keep, []
         run_steps(
             built.steps,
             state.steps,
             log=log,
             cancel=cancel,
             progress=progress,
-            on_record=on_record,
+            on_record=finished,
             runner=runner,
             runs=state.run[:-1],
             on_step=on_step,
             step_log=step_log,
             parallel=app.parallel_audio,
+            keep=keep,
         )
         validate.status = StepStatus.RUNNING
         on_step(validate)

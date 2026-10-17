@@ -49,6 +49,7 @@ src/videoforge/
       steps.py           Step (command(s) or Python call), outputs, fingerprint
       build.py           JobSpec + Plan -> [index, qpf, video pass(es), audio, mux, validate]
       run.py             Run steps; skip a step whose fingerprint and outputs match (resume)
+      reuse.py           A job's finished files by section (video, each audio), for the Reuse dialog
   plugins/               The plugin API (__init__: Plugin, PluginContext, the events; docs/plugins.md) and loader.py:
                          <data dir>/plugins/<id>/videoforge-plugin.toml + `videoforge.plugins` entry points, each
                          plugin run on its own thread off the bus
@@ -149,6 +150,13 @@ index ─► qpf/chapters ─┬► video (vspipe | x264/x265, 1 or 2 passes) �
   fingerprint matches and whose outputs exist. That gives crash recovery (restart
   the server and the job resumes after its last finished step) and cheap reruns
   (change a subtitle flag and only the mux runs again).
+- Reuse, StaxRip-like: each finished step's files are noted in `<work>/finished-steps.json` (step,
+  fingerprint, size, mtime; `workdir.note_finished`), so any job on the source can find them (a rerun, a
+  re-added job, another label). `pipeline/reuse.reuse_offers` lists a job's sections (the video, each audio
+  encode) whose file is finished, and whether today's settings made it. Start queue / Run selected ask
+  (`POST /api/queue/reuse`, the Reuse dialog) when there are any: ticked sections go to `JobState.keep`
+  (`run_steps(keep=...)` reuses them whatever their fingerprint and records today's), unticked ones lose
+  their records and are made again. The index, script, chapters and mux follow the rule above.
 - An imported encode (e.g. from StaxRip) replaces the video steps.
 - The plan is container-neutral: tracks carry plain flags (default, forced, hearing impaired,
   commentary, original, visual impaired), languages and titles. The job's container

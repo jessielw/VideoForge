@@ -10,7 +10,7 @@ only redoes the mux.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
@@ -96,13 +96,12 @@ def line_progress(line: str) -> float | None:
     return frac
 
 
+def _present(step: Step) -> bool:
+    return all(p.exists() for p in step.outputs) and (step.present is None or step.present())
+
+
 def _reusable(step: Step, record: StepRecord | None) -> bool:
-    return (
-        record is not None
-        and record.fingerprint == step.fingerprint()
-        and all(p.exists() for p in step.outputs)
-        and (step.present is None or step.present())
-    )
+    return record is not None and record.fingerprint == step.fingerprint() and _present(step)
 
 
 def run_steps(
@@ -118,6 +117,7 @@ def run_steps(
     on_step: Callable[[StepRun], None] | None = None,
     step_log: Callable[[StepRun, str], None] | None = None,
     parallel: int = 0,
+    keep: Collection[str] = (),
 ) -> None:
     """Run the steps in order. records: the job's last finished steps, updated in place.
     runs: one StepRun per step (default: fresh ones), updated as each step starts, ends or fails;
@@ -126,7 +126,9 @@ def run_steps(
     With parallel > 0, background steps (the audio encodes) run on up to that many threads while the
     steps after them go on; a step that reads a background step's outputs waits for it, and all are done
     before this returns. A step that fails stops the others. Callbacks may then come from several threads,
-    one at a time. Raises ToolError (a step failed or didn't write its outputs) or Cancelled."""
+    one at a time. keep: step ids the user chose to reuse whatever their fingerprint (their outputs must be
+    there); they get a record with today's fingerprint. Raises ToolError (a step failed or didn't write its
+    outputs) or Cancelled."""
     total_weight = sum(s.weight for s in steps) or 1.0
     runs = runs if runs is not None else [s.to_run() for s in steps]
     lock = threading.RLock()  # the records, the runs and the callbacks, between a step and the background
@@ -254,7 +256,14 @@ def run_steps(
     try:
         for i, step in enumerate(steps):
             run = runs[i]
-            if (prior := records.get(step.id)) is not None and _reusable(step, prior):
+            prior = records.get(step.id)
+            if step.id in keep and not _reusable(step, prior) and _present(step):
+                prior = StepRecord(step.id, step.fingerprint(), list(step.outputs), prior.seconds if prior else 0.0)
+                with lock:
+                    records[step.id] = prior
+                    if on_record:
+                        on_record(prior)
+            if prior is not None and _reusable(step, prior):
                 log(f"== {i + 1}/{len(steps)} {step.label}: done in an earlier run, reused")
                 run.status, run.seconds = StepStatus.REUSED, prior.seconds
                 changed(run)

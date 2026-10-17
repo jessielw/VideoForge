@@ -20,6 +20,7 @@ import type {
   Presets,
   Profile,
   QueueState,
+  ReuseJob,
   StepOutput,
   ToolCheck,
   ScriptCheck,
@@ -155,7 +156,10 @@ export const api = {
   steps: (id: string) => get<StepOutput[]>(`/api/jobs/${id}/steps`),
 
   queue: () => get<QueueState>('/api/queue'),
-  start: (ids?: string[]) => post<QueueState>('/api/queue/start', ids ? { ids } : {}),
+  // reuse: per job, the offered sections to keep (the others are made again); jobs left out reuse as always
+  start: (ids?: string[], reuse?: Record<string, string[]>) =>
+    post<QueueState>('/api/queue/start', { ...(ids ? { ids } : {}), ...(reuse ? { reuse } : {}) }),
+  reuse: (ids?: string[]) => post<{ jobs: ReuseJob[] }>('/api/queue/reuse', ids ? { ids } : {}),
   enqueue: (ids: string[]) => post<QueueState & { enqueued: string[] }>('/api/queue/enqueue', { ids }),
   dequeue: (ids: string[]) => post<QueueState>('/api/queue/dequeue', { ids }),
   stop: () => post<QueueState>('/api/queue/stop'),

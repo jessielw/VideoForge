@@ -481,6 +481,23 @@ export interface QueueState {
   index_queued: number
 }
 
+// A finished file a start could reuse (POST /api/queue/reuse), by section of the job.
+export interface ReuseOffer {
+  id: string // "video", "audio.2"
+  label: string
+  file: string
+  size: number
+  seconds: number // how long it took to make (0 when unknown)
+  finished: number | null // epoch seconds
+  current: boolean // made with today's settings
+}
+
+export interface ReuseJob {
+  id: string
+  name: string
+  offers: ReuseOffer[]
+}
+
 export interface MatchedJob {
   source: string
   encode: string | null

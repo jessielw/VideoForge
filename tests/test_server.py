@@ -28,7 +28,7 @@ from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioCodec as C, SubFormat as F, VideoInfo
 from videoforge.core.pipeline.steps import Step, StepProgress
 from videoforge.core.video.settings import Crop
-from videoforge.core.workdir import keep_records, work_dir
+from videoforge.core.workdir import keep_records, note_finished, work_dir
 from videoforge.profiles.manual import ManualProfile
 from videoforge.server.app import create_app
 from videoforge.server.queue import Services
@@ -490,6 +490,51 @@ class EncodingRun(WritingRun):
         spec.work_dir.mkdir(exist_ok=True)
         (spec.work_dir / "video.264").write_bytes(b"264")
         return super().__call__(spec, plan, profile, app, **kw)
+
+
+class KeepSpyRun(EncodingRun):
+    """EncodingRun that notes what each run was told to keep and which step records it started with."""
+
+    def __init__(self):
+        super().__init__()
+        self.seen: list[tuple[list[str], set[str]]] = []
+
+    def __call__(self, spec, plan, profile, app, **kw):
+        self.seen.append((list(kw["state"].keep), set(kw["state"].steps)))
+        return super().__call__(spec, plan, profile, app, **kw)
+
+
+def test_reuse_question(tmp_path):
+    """/reuse lists what a start's jobs could reuse (a file another run finished counts, with other settings
+    too); /start's `reuse` keeps the chosen sections and drops the records of the others."""
+    make_files(tmp_path, "S01E01", "S01E02")
+    run = KeepSpyRun()
+    with make_client(tmp_path, run=run) as client:
+        one, two = add(client, tmp_path)
+        for job in (one, two):
+            wait_for(client, job, "ready", "warn")
+        q = client.app.state.queue
+        assert client.post("/api/queue/reuse", json={"ids": [one]}).json() == {"jobs": []}
+
+        video = q.get(one).spec.video_output
+        video.parent.mkdir()
+        video.write_bytes(b"264")
+        note_finished(video.parent, "video", "made with other settings", [video], 12.0)
+        jobs = client.post("/api/queue/reuse", json={}).json()["jobs"]  # Start queue: every runnable job
+        assert [(j["id"], j["name"]) for j in jobs] == [(one, "Show.S01E01.mkv")]
+        (offer,) = jobs[0]["offers"]
+        assert (offer["id"], offer["file"], offer["size"], offer["seconds"]) == ("video", str(video), 3, 12.0)
+        assert offer["current"] is False and offer["label"] == "Video (x264)"
+
+        client.post("/api/queue/start", json={"ids": [one], "reuse": {one: ["video"]}})
+        q.wait(5)
+        assert run.seen[-1][0] == ["video"]
+
+        q.get(one).state.steps["video"] = StepRecord("video", "old", [video])
+        client.post("/api/queue/start", json={"ids": [one], "reuse": {one: []}})  # made again
+        q.wait(5)
+        assert run.seen[-1] == ([], set())
+        assert client.post("/api/queue/reuse", json={"ids": [two]}).json() == {"jobs": []}
 
 
 def test_work_folders(tmp_path):

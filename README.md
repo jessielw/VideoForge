@@ -150,7 +150,8 @@ app's database and win over both.
   `<output name>.videoforge.json` (how it was made: settings, script, each track and the source track it
   came from, commands, tool versions) and `<output name>.videoforge.jsonl` (live events). The format is in
   [docs/job-record.md](docs/job-record.md), for tools that read it. It stays after the job, so a rerun reuses
-  the encodes. To clean up: Settings → Work folders deletes a job's folder once it's done (the records and log
+  the encodes: `finished-steps.json` notes which files are finished, and Start queue / Run selected ask which
+  of them (the video, each audio encode) to reuse and which to make again. To clean up: Settings → Work folders deletes a job's folder once it's done (the records and log
   are copied to `records/` in the data folder first), or remove jobs with Remove → "Remove and delete work
   folders".
 - **The output folder:** the finished file (written as `<output>.partial`, renamed when the mux is done).

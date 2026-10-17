@@ -19,6 +19,10 @@ source), or in Docker on Linux.
   encode, up to 2 at once by default (Settings → Audio encodes; 0 runs them one by one). A running job shows
   its step, the encoder's speed (fps) and time left, the time since it started and a guess at the job's time
   left, in the queue and the job's header.
+- **Reuse finished files.** When the jobs you start already have a finished video or audio encode in their work
+  folder (from an earlier run, a job removed and added again, or a variant with another label), Start queue /
+  Run selected asks per file: reuse it (the job is then mostly a mux, as in StaxRip) or make it again. Files
+  made with other settings are offered too, marked and unticked.
 - **Work folders.** A job's index, encodes and log live in `<source>_tmp/` next to the source. Settings →
   Work folders deletes it once the job is done (off by default; the job records and log are copied to the
   data folder's `records/` first, the newest 100 kept), and Remove → "Remove and delete work folders" deletes

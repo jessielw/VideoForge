@@ -51,6 +51,7 @@ from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioMatch, JobInputs, Overrides, Plan, Severity, track_key
 from videoforge.core.notify import Sender, send as notify_send
 from videoforge.core.pipeline.build import index_steps, job_output
+from videoforge.core.pipeline.reuse import ReuseOffer, reuse_offers
 from videoforge.core.pipeline.run import missing_inputs, run_job
 from videoforge.core.pipeline.steps import ProgressFn, StepProgress, run_steps
 from videoforge.core.plan_io import to_json
@@ -582,6 +583,49 @@ class JobQueue:
                     self._save(e)
                     self._changed(e)
         self._queue_changed()
+
+    def start_targets(self, ids: Iterable[str] | None = None) -> list[Entry]:
+        """The jobs a start would run: the given ones that are runnable or queued; with none given, the
+        queued ones, or every runnable one when none is queued (as the start route queues them)."""
+        with self._lock:
+            entries = self.entries()
+            if ids:
+                wanted = set(ids)
+                return [e for e in entries if e.id in wanted and (e.runnable or e.queued)]
+            queued = [e for e in entries if e.queued]
+            return queued or [e for e in entries if e.runnable]
+
+    def reuse_offers(self, e: Entry) -> list[ReuseOffer]:
+        """The finished files e's next run could reuse (core/pipeline/reuse.py); [] when it can't be built."""
+        if e.plan is None or e.running:
+            return []
+        try:
+            return reuse_offers(e.spec, e.plan, self.profile(e), self.app, e.state.steps)
+        except (ToolError, OSError, ValueError) as ex:
+            logger.warning("%s: no reuse offers (%s)", e.spec.name, ex)
+            return []
+
+    def choose_reuse(self, choices: dict[str, Iterable[str]]) -> None:
+        """The user's answer to the reuse question, per job: the sections to reuse (offer ids). Those are
+        kept on the next run whatever their settings; the other offered sections are made again."""
+        for job_id, chosen in choices.items():
+            e = self._entries.get(job_id)
+            if e is None or e.running:
+                continue
+            offers, wanted = self.reuse_offers(e), set(chosen)
+            with self._lock:
+                e.state.keep = [s for o in offers if o.id in wanted for s in o.steps]
+                for o in offers:
+                    if o.id not in wanted:
+                        for s in o.steps:
+                            e.state.steps.pop(s, None)
+                self._save(e)
+            logger.info(
+                "%s: reuse %s, redo %s",
+                e.spec.name,
+                [o.id for o in offers if o.id in wanted] or "nothing",
+                [o.id for o in offers if o.id not in wanted] or "nothing",
+            )
 
     def start(self) -> None:
         with self._lock:

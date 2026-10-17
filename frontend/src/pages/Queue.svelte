@@ -24,12 +24,13 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import JobEditor from '../components/JobEditor.svelte'
+  import ReuseDialog from '../components/ReuseDialog.svelte'
   import { api } from '../lib/api'
   import { percent, progressTimes, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { router } from '../lib/router.svelte'
   import { layout } from '../lib/layout.svelte'
   import { app } from '../lib/state.svelte'
-  import type { EncoderSettings, JobDetail } from '../lib/types'
+  import type { EncoderSettings, JobDetail, ReuseJob } from '../lib/types'
 
   let selected = $state<string[]>([])
   let anchor = $state<string | null>(null)
@@ -152,6 +153,24 @@
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     }
+  }
+
+  // Start queue / Run selected: when the jobs have finished files from an earlier run, ask which to reuse.
+  let reuseJobs = $state<ReuseJob[]>([])
+  let reuseIds = $state<string[] | undefined>()
+  let reuseOpen = $state(false)
+
+  async function run(ids?: string[]) {
+    const { jobs } = await api.reuse(ids)
+    if (!jobs.length) return api.start(ids)
+    reuseJobs = jobs
+    reuseIds = ids
+    reuseOpen = true
+  }
+
+  function startReusing(reuse: Record<string, string[]>) {
+    reuseOpen = false
+    act(() => api.start(reuseIds, reuse))
   }
 
   async function move(step: number) {
@@ -361,11 +380,11 @@
         </Button>
         <Button variant="outline" onclick={() => act(api.cancel)} title="Cancel the running job"><SquareIcon />Cancel</Button>
       {:else}
-        <Button disabled={!runnable} onclick={() => act(() => api.start())} title="Run every ready job in order">
+        <Button disabled={!runnable} onclick={() => act(() => run())} title="Run every ready job in order">
           <PlayIcon />Start queue
         </Button>
       {/if}
-      <Button variant="outline" disabled={!selected.length} onclick={() => act(() => api.start(selected))} title="Queue the selected jobs and start">
+      <Button variant="outline" disabled={!selected.length} onclick={() => act(() => run(selected))} title="Queue the selected jobs and start">
         <PlayIcon />Run selected
       </Button>
       {#if indexing}
@@ -531,3 +550,5 @@
     {/if}
   </section>
 </div>
+
+<ReuseDialog bind:open={reuseOpen} jobs={reuseJobs} onstart={startReusing} />
