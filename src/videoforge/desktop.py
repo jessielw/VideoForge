@@ -71,6 +71,44 @@ def _ask_in_front(window: Any, title: str, message: str) -> bool:
     )
 
 
+def _steady_tray_menu(tray: Any) -> None:
+    """pystray's right-click menu on Windows, with what it lacks (Microsoft's KB135788): a WM_NULL posted
+    after the menu, without which the next one may close or drop its click; and a log line with what the
+    menu returned (a Quit that did nothing left no line at all). Left as pystray's when its internals aren't
+    the expected ones."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    import ctypes.wintypes as wt
+
+    try:
+        from pystray._util import win32 as pw
+
+        original = tray._on_notify
+        handlers = tray._message_handlers
+    except (ImportError, AttributeError):
+        return
+    kernel32 = ctypes.windll.kernel32
+
+    def on_notify(wparam: int, lparam: int) -> int:
+        if lparam != pw.WM_RBUTTONUP or not tray._menu_handle:
+            return original(wparam, lparam)
+        front = pw.SetForegroundWindow(tray._hwnd)  # or the menu doesn't close when clicked away from
+        point = wt.POINT()
+        pw.GetCursorPos(ctypes.byref(point))
+        hmenu, callbacks = tray._menu_handle
+        flags = pw.TPM_RIGHTALIGN | pw.TPM_BOTTOMALIGN | pw.TPM_RETURNCMD
+        index = pw.TrackPopupMenuEx(hmenu, flags, point.x, point.y, tray._menu_hwnd, None)
+        error = 0 if index else kernel32.GetLastError()
+        pw.PostMessage(tray._hwnd, 0, 0, 0)  # WM_NULL
+        logger.info("Tray: menu closed (item %s, in front %s, error %s)", index, bool(front), error)
+        if index > 0:
+            callbacks[index - 1](tray)
+        return 0
+
+    handlers[pw.WM_NOTIFY] = on_notify
+
+
 def _on_console_stop(callback: Any) -> Any:
     """Calls `callback` on Ctrl+C / Ctrl+Break / console close (Windows), before Python's own handling runs;
     returns the handler, which must be kept alive."""
@@ -147,7 +185,8 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
             window.maximize() if state["maximized"] else window.restore()
 
     def quit_app() -> None:
-        # Debug logging: tray Quit once did nothing while the window was up (X then quit); not reproduced since.
+        # Tray Quit sometimes did nothing (the editor expanded, after several tries): no line here, so the menu
+        # dropped the click; _steady_tray_menu logs what each menu returned.
         logger.info("Tray: Quit (thread %s, %s)", threading.current_thread().name, state)
         if app.state.queue.queue_state()["running"]:
             show()
@@ -205,6 +244,7 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
             pystray.MenuItem("Quit", quit_app),
         ),
     )
+    _steady_tray_menu(tray)
     try:
         tray.run_detached()
     except Exception as ex:  # no tray (e.g. some Linux desktops): closing the window quits
