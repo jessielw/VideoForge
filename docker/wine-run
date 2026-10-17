@@ -1,6 +1,6 @@
 #!/bin/bash
 # Runs a Windows program under Wine: wine-run EXE [ARGS...]. Paths pass as they are: Wine maps / to Z:, so the
-# current folder is on Z: and a "/media/..." path reads as Z:\media\....
+# current folder is on Z: and a "/media/..." path reads as the same path on drive Z:.
 # Wine refuses a prefix someone else owns, so each user id gets its own: a copy of the image's template.
 set -euo pipefail
 exe="$1"
