@@ -33,6 +33,7 @@ class AppState {
   encodes = $state<AudioEncodeInfo[]>([])
   presets = $state<Presets>({ video: [], encoder: [], template: [], template_defaults: {} })
   filterPresets = $state<FilterPreset[]>([])
+  version = $state('') // the server's, for bug reports
 
   #socket: WebSocket | null = null
   #refreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -87,6 +88,10 @@ class AppState {
 
   async start(): Promise<void> {
     this.profiles = await api.profiles()
+    api.health().then(
+      h => (this.version = h.version),
+      () => {},
+    )
     this.loadEncoders()
     this.loadPresets()
     this.loadFilterPresets()

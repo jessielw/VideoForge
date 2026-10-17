@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Request, WebSocket, WebSocketDisconnect
 
+from videoforge import version
 from videoforge.core.execute.mux import MUXERS
 from videoforge.core.plan_io import to_json
 from videoforge.core.template import Template
@@ -24,7 +25,7 @@ router = APIRouter(prefix="/api")
 
 @router.get("/health")
 def health() -> dict[str, Any]:
-    return {"ok": True}
+    return {"ok": True, "version": version()}
 
 
 # --- folder browser -------------------------------------------------------------------

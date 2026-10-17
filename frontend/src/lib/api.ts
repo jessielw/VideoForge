@@ -83,7 +83,8 @@ export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides
 }
 
 export const api = {
-  profiles: () => get<Profile[]>('/api/profiles'),
+  health: () => get<{ ok: boolean; version: string }>('/api/health'),
+  profiles:() => get<Profile[]>('/api/profiles'),
   presets: () => get<Presets>('/api/presets'),
   filterPresets: () => get<FilterPreset[]>('/api/filter-presets'),
   savePreset: (kind: PresetKind, name: string, data: unknown) =>

@@ -56,8 +56,11 @@
 <div class="flex h-full">
   <nav class="flex {layout.navCollapsed ? 'w-14' : 'w-48'} shrink-0 flex-col border-r bg-card">
     <div class="flex items-center gap-2 py-4 {layout.navCollapsed ? 'justify-center' : 'px-4'}">
-      <img src="/favicon.svg" alt="" class="size-6" />
-      {#if !layout.navCollapsed}<span class="text-base font-semibold tracking-wide">VideoForge</span>{/if}
+      <img src="/favicon.svg" alt="" class="size-6" title={app.version ? `VideoForge ${app.version}` : undefined} />
+      {#if !layout.navCollapsed}
+        <span class="text-base font-semibold tracking-wide">VideoForge</span>
+        {#if app.version}<span class="text-xs text-muted-foreground tabular-nums">{app.version}</span>{/if}
+      {/if}
     </div>
     <div class="flex flex-col gap-0.5 px-2">
       {#each NAV as item (item.page)}

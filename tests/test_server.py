@@ -123,6 +123,12 @@ def make_client(tmp_path: Path, run=None, records=None, detect_crop=None, runner
     return TestClient(app)
 
 
+def test_health_gives_the_version(tmp_path):
+    from videoforge import version
+
+    assert make_client(tmp_path).get("/api/health").json() == {"ok": True, "version": version()}
+
+
 def wait_for(client: TestClient, job_id: str, *statuses: str, timeout: float = 5) -> dict:
     end = time.monotonic() + timeout
     while time.monotonic() < end:
