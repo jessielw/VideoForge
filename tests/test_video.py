@@ -18,7 +18,7 @@ from videoforge.core.config import PROJECT_ROOT
 from videoforge.core.models import VideoColor
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video import crop as autocrop, vs as vsx
-from videoforge.core.video.encoders import encoder_command, output_name, progress, vspipe_command
+from videoforge.core.video.encoders import encoder_command, output_name, progress, rate, vspipe_command
 from videoforge.core.video.filters import PRESETS
 from videoforge.core.video.script import build_script, script_parts
 from videoforge.core.video.settings import (
@@ -172,6 +172,22 @@ def test_progress_lines():
     assert progress("[vspipe] Frame: 50/200 (12.3 fps)") == 0.25
     assert progress("[x265] 250 frames: 4.1 fps, 900 kb/s", frames=1000) == 0.25
     assert progress("[x264] encoded 1000 frames") is None
+    # Patman's x264 / x265 mods
+    patman = "[x264] [69.9%] 1006/1440 Frames @ 201.8 FPS | 5878.2 kb/s | 0:00:04 [-0:01:02] | 30.80 MB [44.09 MB]  "
+    assert progress(patman) == pytest.approx(0.699)
+    assert progress("[x265] 8 Frames @ 13.61 FPS | 48387 kb/s | 2.02 MB  ", frames=80) == 0.1
+
+
+def test_rate_lines():
+    assert rate("[x264] [ 12.5%] 125/1000 frames, 30.1 fps, 9000 kb/s, eta 1:00:29") == (30.1, 3629)
+    assert rate("[x265] [50.0%] 500/1000 frames, 4.12 fps") == (4.12, None)
+    assert rate("[x264] [69.9%] 1006/1440 Frames @ 201.8 FPS | 5878.2 kb/s | 0:00:04 [-0:01:02] | 30.80 MB") == (
+        201.8,
+        62,
+    )
+    assert rate("[x265] 8 Frames @ 13.61 FPS | 48387 kb/s | 2.02 MB  ") == (13.61, None)
+    assert rate("[vspipe] Frame: 50/200 (12.3 fps)") == (None, None)  # it reads ahead: not the encode's speed
+    assert rate("[vspipe] Frame: 50/200") == (None, None)
 
 
 # --- auto-crop ----------------------------------------------------------------------

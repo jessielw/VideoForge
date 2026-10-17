@@ -2,7 +2,7 @@
   // One job, StaxRip-style: issues on top, then Video | Encoder | Audio | Subtitles | Output | Log.
   // Changes save straight away (the server replans); a queued, running or indexing job is read-only.
   import { api, type SpecChanges } from '../lib/api'
-  import { basename, SEVERITY_TONE, STATUS_LABEL, STATUS_TONE } from '../lib/format'
+  import { basename, duration, SEVERITY_TONE, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type { CommandStep, JobDetail } from '../lib/types'
   import EncoderPanel from './EncoderPanel.svelte'
@@ -127,11 +127,17 @@
         />
       </div>
       {#if live?.progress && (live.status === 'running' || live.status === 'indexing')}
+        {@const p = live.progress}
         <div class="flex items-center gap-3 text-xs text-muted-foreground">
           <div class="h-1.5 flex-1 overflow-hidden rounded bg-muted">
-            <div class="h-full bg-info transition-[width]" style="width:{live.progress.overall * 100}%"></div>
+            <div class="h-full bg-info transition-[width]" style="width:{p.overall * 100}%"></div>
           </div>
-          <span>{live.progress.step} · {(live.progress.fraction * 100).toFixed(1)}%</span>
+          <span class="tabular-nums">
+            {p.step} · {(p.fraction * 100).toFixed(1)}%{p.eta != null ? ` (${duration(p.eta)} left)` : ''}
+            {#if p.fps != null}· {p.fps < 10 ? p.fps.toFixed(2) : p.fps.toFixed(1)} fps{/if}
+            {#if p.elapsed != null}· {duration(p.elapsed)} elapsed{/if}
+            {#if p.left != null}<span title="A guess from the job's pace so far">· job ~{duration(p.left)} left</span>{/if}
+          </span>
         </div>
       {/if}
       {#if problems.length}

@@ -88,7 +88,7 @@ class FakeRun:
         log("== 1/1 Video (x264)")
         run.log("[x264] [ 50.0%] 1/2 frames")  # as run_steps keeps a step's tail
         step_log(run, "[x264] [ 50.0%] 1/2 frames")
-        progress(StepProgress(0, 1, step, 0.5, 0.5))
+        progress(StepProgress(0, 1, step, 0.5, 0.5, fps=24.0, eta=10))
         if self.block:
             while not cancel.cancelled:
                 time.sleep(0.01)
@@ -256,6 +256,27 @@ def test_files_added_to_a_job(tmp_path):
         assert bad.status_code == 422
 
 
+def test_progress_guesses_the_jobs_time_left(tmp_path, monkeypatch):
+    import videoforge.server.queue as queue_module
+
+    make_files(tmp_path, "S01E01")
+    with make_client(tmp_path) as client:
+        (job_id,) = add(client, tmp_path)
+        wait_for(client, job_id, "ready", "warn")
+        queue = client.app.state.queue
+        entry = queue.get(job_id)
+        clock = [100.0]
+        monkeypatch.setattr(queue_module, "_now", lambda: clock[0])
+        progress = queue._progress(entry)
+        step = Step("video", "Video (x264)")
+        progress(StepProgress(0, 3, step, 1.0, 0.4, reused=True))  # done in an earlier run: no time spent
+        progress(StepProgress(1, 3, step, 0.0, 0.4))
+        assert entry.progress["left"] is None
+        clock[0] = 130.0
+        progress(StepProgress(1, 3, step, 0.5, 0.6))  # 0.2 in 30 s: 0.4 left takes 60 s
+        assert (entry.progress["elapsed"], entry.progress["left"]) == (30, 60)
+
+
 def test_queue_runs_jobs_and_streams_events(tmp_path):
     make_files(tmp_path, "S01E01", "S01E02")
     records: list = []
@@ -277,6 +298,9 @@ def test_queue_runs_jobs_and_streams_events(tmp_path):
             assert (step_event["index"], step_event["total"], step_event["step"]["status"]) == (0, 1, "pending")
             tool_line = next(ev for ev in events if ev["type"] == "log" and ev["line"].startswith("[x264]"))
             assert tool_line["step"] == "video"
+            p = next(ev for ev in events if ev["type"] == "progress")
+            assert (p["step"], p["overall"], p["fps"], p["eta"], p["elapsed"]) == ("Video (x264)", 0.5, 24.0, 10, 0)
+            assert p["left"] is None  # too soon to guess the job's time left
             # The worker's last queue event says the queue stopped (it once said running until a reload).
             while not ((ev := ws.receive_json())["type"] == "queue" and ev["queued"] == 0 and ev["current"] is None):
                 pass

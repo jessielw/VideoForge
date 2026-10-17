@@ -799,3 +799,28 @@ def test_progress_only_lines_are_logged_every_tenth(tmp_path: Path):
     ]
     assert any("[x264]" in line for line in lines)
     assert len(fractions) > 50  # the progress bar still sees every line
+
+
+def test_progress_carries_the_encoders_fps_and_eta(tmp_path: Path):
+    from videoforge.core.pipeline.steps import Step, StepProgress, run_steps
+
+    out = tmp_path / "video.264"
+
+    def runner(argvs, log, cancel):
+        log("[vspipe] Frame: 36/240 (40.0 fps)")  # it reads ahead of the encoder: its lines move the bar
+        log("[x264] [ 10.0%] 24/240 frames, 30.00 fps, 900 kb/s, eta 0:00:08")  # behind: no event, figures kept
+        log("[vspipe] Frame: 60/240 (41.0 fps)")
+        log("[x264] [ 20.0%] 48/240 frames, 32.50 fps, 900 kb/s, eta 0:00:06")
+        log("[vspipe] Frame: 72/240 (41.0 fps)")
+        out.write_text("264", encoding="utf-8")
+
+    events: list[StepProgress] = []
+    step = Step("video", "Video", argvs=(("vspipe",), ("x264",)), outputs=(out,))
+    run_steps([step], {}, log=lambda _line: None, runner=runner, progress=events.append)
+    assert [(e.fraction, e.fps, e.eta) for e in events] == [
+        (0.0, None, None),
+        (0.15, None, None),
+        (0.25, 30.0, 8),
+        (0.3, 32.5, 6),
+        (1.0, 32.5, 6),
+    ]

@@ -52,7 +52,7 @@ from videoforge.core.models import AudioMatch, JobInputs, Overrides, Plan, Sever
 from videoforge.core.notify import Sender, send as notify_send
 from videoforge.core.pipeline.build import index_steps, job_output
 from videoforge.core.pipeline.run import missing_inputs, run_job
-from videoforge.core.pipeline.steps import StepProgress, run_steps
+from videoforge.core.pipeline.steps import ProgressFn, StepProgress, run_steps
 from videoforge.core.plan_io import to_json
 from videoforge.core.profile import Profile
 from videoforge.core.record import JsonLines, RunRecorder, event
@@ -66,6 +66,7 @@ from videoforge.server.store import Store
 LOG_LINES = 5000
 STEP_LINES = 3000  # per step, in memory
 _PROGRESS_INTERVAL = 0.25  # seconds between progress events per job
+_ETA_AFTER = (0.01, 5.0)  # a job's time left is guessed once this run moved overall this far, for this long
 logger = logging.getLogger(__name__)
 LANE_SETTING = "index_lane"  # the store's record of the lane: job ids in order, the one being indexed first
 
@@ -670,24 +671,11 @@ class JobQueue:
         )
         recorder.started_run()
         self.bus.emit(JobStarted(_copy(e.spec), recorder.output))
-        last = [0.0]
 
         def log(line: str) -> None:
             self._log(e, line, log_file)
 
-        def progress(p: StepProgress) -> None:
-            e.progress = {
-                "step": p.step.label,
-                "index": p.index,
-                "total": p.total,
-                "fraction": round(p.fraction, 4),
-                "overall": round(p.overall, 4),
-                "reused": p.reused,
-            }
-            now = _now()
-            if p.fraction in (0.0, 1.0) or now - last[0] >= _PROGRESS_INTERVAL:
-                last[0] = now
-                self.events.publish("progress", id=e.id, **e.progress)
+        progress = self._progress(e)
 
         def on_record(_r: StepRecord) -> None:
             self._save(e)  # a crash after this step resumes after it
@@ -763,6 +751,41 @@ class JobQueue:
         if not self._closing:  # a shutdown's cancel isn't news: the job resumes on the next start
             self.bus.emit(JobFinished(_copy(e.spec), result, _now() - started, record))
         return result.status
+
+    def _progress(self, e: Entry) -> ProgressFn:
+        """A run's progress callback (a job's or the index lane's): sets e.progress, with the step's fps and eta
+        when its encoder prints them, the seconds since the run started, and the job's time left (from how fast
+        overall moved since this run's own work began: steps reused from an earlier run don't count), and
+        publishes it at most every _PROGRESS_INTERVAL (a step's start and end always)."""
+        started = _now()
+        last = 0.0
+        base: tuple[float, float] | None = None  # (time, overall) at the first step this run does itself
+
+        def progress(p: StepProgress) -> None:
+            nonlocal last, base
+            now = _now()
+            if base is None and not p.reused:
+                base = (now, p.overall)
+            left = None
+            if base is not None and p.overall - base[1] >= _ETA_AFTER[0] and now - base[0] >= _ETA_AFTER[1]:
+                left = round((now - base[0]) * (1 - p.overall) / (p.overall - base[1]))
+            e.progress = {
+                "step": p.step.label,
+                "index": p.index,
+                "total": p.total,
+                "fraction": round(p.fraction, 4),
+                "overall": round(p.overall, 4),
+                "reused": p.reused,
+                "fps": None if p.fps is None else round(p.fps, 2),
+                "eta": p.eta,
+                "elapsed": round(now - started),
+                "left": left,
+            }
+            if p.fraction in (0.0, 1.0) or now - last >= _PROGRESS_INTERVAL:
+                last = now
+                self.events.publish("progress", id=e.id, **e.progress)
+
+        return progress
 
     def _clean_up(self, e: Entry, record: Path | None) -> Path | None:
         """A done job's work folder, deleted (AppConfig.delete_work_dir) once its records and log are copied
@@ -929,24 +952,11 @@ class JobQueue:
 
     def _index(self, e: Entry) -> None:
         log_file = _open_log(e)  # makes the work folder too
-        last = [0.0]
 
         def log(line: str) -> None:
             self._log(e, line, log_file)
 
-        def progress(p: StepProgress) -> None:
-            e.progress = {
-                "step": p.step.label,
-                "index": p.index,
-                "total": p.total,
-                "fraction": round(p.fraction, 4),
-                "overall": round(p.overall, 4),
-                "reused": p.reused,
-            }
-            now = _now()
-            if p.fraction in (0.0, 1.0) or now - last[0] >= _PROGRESS_INTERVAL:
-                last[0] = now
-                self.events.publish("progress", id=e.id, **e.progress)
+        progress = self._progress(e)
 
         def on_record(_r: StepRecord) -> None:
             with self._lock:

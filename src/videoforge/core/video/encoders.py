@@ -19,8 +19,12 @@ from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
 
 EXTENSIONS = {Encoder.X264: ".264", Encoder.X265: ".hevc"}
 _PERCENT = re.compile(r"\[\s*(\d+(?:\.\d+)?)%\]")  # both encoders: "[ 12.3%] 1234/10000 frames, ..."
-_X265_FRAMES = re.compile(r"^\s*(\d+) frames:")  # x265 without --frames: "1234 frames: 23.4 fps, ..."
+# x265 without --frames: "1234 frames: 23.4 fps, ..." (Patman's mod: "1234 Frames @ 23.4 FPS | ...")
+_X265_FRAMES = re.compile(r"^\s*(\d+) frames(?::| @)", re.IGNORECASE)
 _VSPIPE_FRAMES = re.compile(r"Frame:\s*(\d+)/(\d+)")
+_FPS = re.compile(r"(\d+(?:\.\d+)?) fps\b", re.IGNORECASE)
+# x264 / x265 "eta 0:01:23"; Patman's mods "| 0:00:04 [-0:01:23] |" (elapsed [-left])
+_ETA = re.compile(r"(?:\beta |\[-)(\d+):(\d\d):(\d\d)")
 
 
 def output_name(settings: EncoderSettings) -> str:
@@ -93,3 +97,14 @@ def progress(line: str, frames: int | None = None) -> float | None:
     if frames and (m := _X265_FRAMES.match(line.split("] ", 1)[-1])):
         return int(m.group(1)) / frames
     return None
+
+
+def rate(line: str) -> tuple[float | None, int | None]:
+    """Frames per second and the encoder's own time left (seconds) from a line progress() reads, where it prints
+    them. Only for progress lines: an info line like "1920x1080 fps 24/1" isn't one. vspipe's lines give neither:
+    it reads ahead of the encoder, so its fps isn't the encode's."""
+    if _VSPIPE_FRAMES.search(line):
+        return None, None
+    fps = float(m.group(1)) if (m := _FPS.search(line)) else None
+    eta = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3)) if (m := _ETA.search(line)) else None
+    return fps, eta

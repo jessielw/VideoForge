@@ -24,7 +24,7 @@ import time
 from videoforge.core.execute import process
 from videoforge.core.execute.process import CancelToken, LogFn, ToolError
 from videoforge.core.job import StepRecord, StepRun, StepStatus
-from videoforge.core.video.encoders import progress as encoder_progress
+from videoforge.core.video.encoders import progress as encoder_progress, rate as encoder_rate
 
 Runner = Callable[[Sequence[Sequence[str]], LogFn, CancelToken | None], None]
 _MKV_PROGRESS = re.compile(r"Progress:\s*(\d+)%")
@@ -81,6 +81,8 @@ class StepProgress:
     fraction: float  # of this step, 0..1
     overall: float  # of the job, 0..1
     reused: bool = False
+    fps: float | None = None  # this step's encoder (or vspipe), when it prints one
+    eta: int | None = None  # seconds left in this step, by the encoder's own count
 
 
 ProgressFn = Callable[[StepProgress], None]
@@ -131,7 +133,15 @@ def run_steps(
     stop = CancelToken(cancel)  # also set when a step fails, so the others end
     done_weight = 0.0
     partial: dict[int, float] = {}  # the running steps' fractions
+    rates: dict[int, tuple[float | None, int | None]] = {}  # the running steps' last fps and eta
     lead: int | None = None  # the running foreground step: progress names it while background steps run too
+
+    def note_rate(i: int, line: str) -> None:
+        fps, eta = encoder_rate(line)
+        if fps is not None or eta is not None:
+            with lock:
+                old = rates.get(i, (None, None))
+                rates[i] = (old[0] if fps is None else fps, old[1] if eta is None else eta)
 
     def report(i: int, frac: float, reused: bool = False) -> None:
         if not progress:
@@ -142,12 +152,16 @@ def run_steps(
             shown = i if lead is None else lead
             # the lead may not have reported yet (it is set just before its step starts)
             shown_frac = partial.get(shown, 0.0)
-            progress(StepProgress(shown, len(steps), steps[shown], shown_frac, overall, reused and shown == i))
+            fps, eta = rates.get(shown, (None, None))
+            progress(
+                StepProgress(shown, len(steps), steps[shown], shown_frac, overall, reused and shown == i, fps, eta)
+            )
 
     def finished(i: int) -> None:
         nonlocal done_weight
         with lock:
             partial.pop(i, None)
+            rates.pop(i, None)
             done_weight += steps[i].weight
 
     def changed(run: StepRun) -> None:
@@ -190,6 +204,9 @@ def run_steps(
                         if m is not None:
                             shown[tool] = int(m.group(1)) // 10
                     frac = line_progress(line)
+                    if frac is not None:
+                        # every line's: vspipe reads ahead, so the encoder's lines rarely move the fraction
+                        note_rate(i, line)
                     if frac is not None and frac - last >= 0.002:  # throttle progress events
                         last = frac
                         report(i, min(frac, 1.0))

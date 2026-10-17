@@ -25,7 +25,7 @@
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import JobEditor from '../components/JobEditor.svelte'
   import { api } from '../lib/api'
-  import { percent, STATUS_LABEL, STATUS_TONE } from '../lib/format'
+  import { percent, progressTimes, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { router } from '../lib/router.svelte'
   import { layout } from '../lib/layout.svelte'
   import { app } from '../lib/state.svelte'
@@ -432,7 +432,12 @@
               </div>
               {percent(job.progress.overall)}
             </div>
-            <div class="truncate text-xs text-muted-foreground">{job.progress.step}</div>
+            <div class="flex gap-2 text-xs text-muted-foreground">
+              <span class="truncate">{job.progress.step}</span>
+              <span class="ml-auto shrink-0 tabular-nums" title="Encoder speed · time since the run started · the job's time left (a guess from its pace so far)"
+                >{progressTimes(job.progress)}</span
+              >
+            </div>
           {:else if job.issue}
             <div class="mt-0.5 truncate text-xs {['blocked', 'error', 'failed', 'invalid'].includes(job.status) ? 'text-destructive' : 'text-warning'}">
               {job.issue}

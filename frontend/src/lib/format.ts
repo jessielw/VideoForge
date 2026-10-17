@@ -1,4 +1,4 @@
-import type { Severity, Status, TrackOverride } from './types'
+import type { Progress, Severity, Status, TrackOverride } from './types'
 
 export const STATUS_LABEL: Record<Status, string> = {
   probing: 'Probing',
@@ -60,6 +60,26 @@ export function bytes(n: number): string {
 
 export function percent(fraction: number): string {
   return `${(fraction * 100).toFixed(1)}%`
+}
+
+/** Seconds as m:ss, or h:mm:ss from an hour. */
+export function duration(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds))
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const h = Math.floor(s / 3600)
+  const m = Math.floor(s / 60) % 60
+  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`
+}
+
+/** A run's speed and times for one line: "23.4 fps · 1:23 · ~4:56 left" (what the run has so far). */
+export function progressTimes(p: Progress): string {
+  return [
+    p.fps !== null && p.fps !== undefined ? `${p.fps < 10 ? p.fps.toFixed(2) : p.fps.toFixed(1)} fps` : '',
+    p.elapsed !== undefined ? duration(p.elapsed) : '',
+    p.left !== null && p.left !== undefined ? `~${duration(p.left)} left` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 /** Languages offered in pickers; any other IETF tag can be typed. */

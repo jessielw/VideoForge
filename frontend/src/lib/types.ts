@@ -115,6 +115,10 @@ export interface Progress {
   fraction: number
   overall: number
   reused: boolean
+  fps: number | null // the step's encoder (or vspipe), when it prints one
+  eta: number | null // seconds left in the step, by the encoder's own count
+  elapsed: number // seconds since the run started
+  left: number | null // the job's seconds left, guessed from how fast it went so far
 }
 
 export interface JobSummary {
