@@ -12,6 +12,7 @@ thread, so the server runs in a thread and the tray detached, the way Reclaimerr
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 import sys
 import threading
@@ -21,6 +22,7 @@ from PIL import Image, ImageDraw
 import uvicorn
 
 APP_ID = "VideoForge.VideoForge"
+logger = logging.getLogger(__name__)
 
 
 def dropped_paths(event: dict[str, Any]) -> list[str]:
@@ -139,11 +141,14 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
     tray: Any = None
 
     def show() -> None:
+        logger.info("Window: show (%s)", state)
         window.show()
         if state["minimized"]:
             window.maximize() if state["maximized"] else window.restore()
 
     def quit_app() -> None:
+        # Debug logging: tray Quit once did nothing while the window was up (X then quit); not reproduced since.
+        logger.info("Tray: Quit (thread %s, %s)", threading.current_thread().name, state)
         if app.state.queue.queue_state()["running"]:
             show()
             if not _ask_in_front(
@@ -151,13 +156,22 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
                 "Quit VideoForge",
                 "A job is running. Stop it and quit?\n\nStarted again, it skips the steps it finished.",
             ):
+                logger.info("Tray: Quit cancelled (a job is running)")
                 return
         quitting.set()
-        window.destroy()
+        logger.info("Tray: Quit: closing the window")
+        try:
+            window.destroy()
+        except Exception:
+            logger.exception("Tray: Quit: closing the window failed")
+            raise
+        logger.info("Tray: Quit: the window closed")
 
     def on_closing() -> bool:
         if quitting.is_set() or tray is None:
+            logger.info("Window: closing (quitting %s, tray %s)", quitting.is_set(), tray is not None)
             return True
+        logger.info("Window: closing hides it to the tray")
         window.hide()
         if not state["told"]:
             state["told"] = True
