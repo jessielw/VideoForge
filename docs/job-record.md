@@ -19,6 +19,11 @@ Each job has a work folder next to its source, `<source file name>_tmp/` (for `S
 so outputs made from one source (a job label such as `dubbed`, or MKV and MP4) each keep their own
 files. Glob `*.videoforge.json` in a work folder to find every output made from that source.
 
+With Settings → Work folders on (`delete_work_dir`), a done job's work folder is deleted. Its records and its
+log are copied first to `<data folder>/records/`, where the newest 100 of each are kept: the records by their
+own names, the log as `<source file name>.videoforge.log`. The events file isn't kept there; the same events
+are in the queue-wide stream below.
+
 VideoForge also appends every job's events, plus the index lane's, to one stream in its data folder:
 `%APPDATA%\VideoForge\logs\events.jsonl` on Windows (`$XDG_DATA_HOME/VideoForge` or
 `~/.local/share/VideoForge` elsewhere; `serve --data-dir` moves it). It rolls over at 10 MB to

@@ -523,6 +523,9 @@ export interface ConfigState {
   index_waits_for_disk: boolean // batch indexing holds a job back while an encode reads its disk
   parallel_audio: number // audio encodes at once beside a job's video; 0 = one by one
   parallel_audio_default: number // videoforge.toml's
+  delete_work_dir: boolean // delete a done job's <source>_tmp/ (records and log copied to records_dir first)
+  delete_work_dir_default: boolean // videoforge.toml's
+  records_dir: string
   notifications: NotificationDestination[]
   notification_events: { id: NotificationEvent; label: string; default: boolean }[]
   actions: ActionSetting[]

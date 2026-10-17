@@ -21,12 +21,14 @@ import pytest
 from test_pipeline import fake_tool_files
 
 from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools
+from videoforge.core.events import JobFinished
 from videoforge.core.execute.process import Cancelled, ToolError
 from videoforge.core.job import JobResult, JobSpec, JobStatus, StepRecord, StepStatus, planned_encode
 from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioCodec as C, SubFormat as F, VideoInfo
 from videoforge.core.pipeline.steps import Step, StepProgress
 from videoforge.core.video.settings import Crop
+from videoforge.core.workdir import keep_records, work_dir
 from videoforge.profiles.manual import ManualProfile
 from videoforge.server.app import create_app
 from videoforge.server.queue import Services
@@ -462,6 +464,82 @@ def test_actions_and_plugins(tmp_path):
         assert [a["name"] for a in state["actions"]] == ["To library"]
         assert state["plugins"]["loaded"] == [] and [p["id"] for p in state["plugins"]["disabled"]] == ["spy"]
         assert state["restart"] == []
+
+
+class EncodingRun(WritingRun):
+    """WritingRun that leaves an encode in the work folder, as a real run does."""
+
+    def __call__(self, spec, plan, profile, app, **kw):
+        spec.work_dir.mkdir(exist_ok=True)
+        (spec.work_dir / "video.264").write_bytes(b"264")
+        return super().__call__(spec, plan, profile, app, **kw)
+
+
+def test_work_folders(tmp_path):
+    """Off by default: a done job keeps its work folder. On: it's deleted after its record and log are copied
+    to <data dir>/records, and the record path actions get is the copy. Removing jobs can delete theirs."""
+    make_files(tmp_path, "S01E01", "S01E02", "S01E03")
+    records = tmp_path / "data" / "records"
+    finished = []
+    with make_client(tmp_path, run=EncodingRun()) as client:
+        client.app.state.queue.bus.subscribe(finished.append, JobFinished, name="spy")
+        cfg = client.get("/api/config").json()
+        assert (cfg["delete_work_dir"], cfg["delete_work_dir_default"]) == (False, False)
+        assert cfg["records_dir"] == str(records)
+        one, two, three = add(client, tmp_path)
+        work = {i: tmp_path / "src" / f"Show.S01E0{n}.mkv_tmp" for n, i in enumerate((one, two, three), 1)}
+        for job in (one, two, three):
+            wait_for(client, job, "ready", "warn")
+
+        client.post("/api/queue/start", json={"ids": [one]})
+        wait_for(client, one, "done")
+        client.app.state.queue.wait(5)
+        assert (work[one] / "video.264").is_file() and not records.exists()
+
+        assert client.put("/api/config", json={"delete_work_dir": "yes"}).status_code == 422
+        assert client.put("/api/config", json={"delete_work_dir": True}).json()["delete_work_dir"] is True
+        client.post("/api/queue/start", json={"ids": [two]})
+        wait_for(client, two, "done")
+        client.app.state.queue.wait(5)
+        assert not work[two].exists()
+        record = records / "Show.S01E02.mkv.videoforge.json"
+        assert json.loads(record.read_text("utf-8"))["output"]["path"].endswith("Show.S01E02.mkv")
+        assert "Job complete:" in (records / "Show.S01E02.mkv.videoforge.log").read_text("utf-8")
+        assert finished[-1].record == record
+        assert any(
+            line.startswith("Work folder deleted: ") for line in client.get(f"/api/jobs/{two}/log").json()["lines"]
+        )
+        client.app.state.queue.job_log(two, "an action's line")  # doesn't make the folder again
+        assert not work[two].exists()
+
+        r = client.post("/api/jobs/remove", json={"ids": [one, three], "work_dirs": True}).json()
+        assert r == {"removed": [one, three], "deleted": [str(work[one])], "kept": {}}  # three never had one
+        assert not work[one].exists()
+        assert client.post("/api/jobs/remove", json={"ids": [two]}).json()["deleted"] == []
+    with make_client(tmp_path) as client:  # kept across a restart
+        assert client.get("/api/config").json()["delete_work_dir"] is True
+
+
+def test_keep_records_keeps_the_newest(tmp_path):
+    dest = tmp_path / "records"
+    for n in range(3):
+        source = tmp_path / f"s{n}.mkv"
+        work_dir(source).mkdir()
+        (work_dir(source) / "videoforge.log").write_text("log", encoding="utf-8")
+        (work_dir(source) / f"s{n}.mkv.videoforge.json").write_text("{}", encoding="utf-8")
+        copied = keep_records(source, dest, keep=2)
+        for path in copied.values():
+            os.utime(path, (n + 1, n + 1))  # the earlier copies are older
+    assert copied == {
+        "s2.mkv.videoforge.json": dest / "s2.mkv.videoforge.json",
+        "videoforge.log": dest / "s2.mkv.videoforge.log",
+    }
+    assert sorted(p.name for p in dest.iterdir()) == [
+        "s1.mkv.videoforge.json",
+        "s1.mkv.videoforge.log",
+        "s2.mkv.videoforge.json",
+        "s2.mkv.videoforge.log",
+    ]
 
 
 def test_restart_requeues_an_interrupted_job(tmp_path):

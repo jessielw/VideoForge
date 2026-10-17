@@ -101,6 +101,7 @@ export const api = {
     profile?: string | null
     index_waits_for_disk?: boolean
     parallel_audio?: number | null
+    delete_work_dir?: boolean | null
     notifications?: NotificationDestination[]
     actions?: ActionSetting[]
     disabled_plugins?: string[]
@@ -142,7 +143,11 @@ export const api = {
   update: (id: string, changes: SpecChanges) => patch<JobDetail>(`/api/jobs/${id}`, changes),
   apply: (ids: string[], changes: SpecChanges) =>
     post<{ updated: string[]; skipped: string[] }>('/api/jobs/apply', { ids, ...changes }),
-  remove: (ids: string[]) => post<{ removed: string[] }>('/api/jobs/remove', { ids }),
+  remove: (ids: string[], workDirs = false) =>
+    post<{ removed: string[]; deleted: string[]; kept: Record<string, string> }>('/api/jobs/remove', {
+      ids,
+      work_dirs: workDirs,
+    }),
   reorder: (ids: string[]) => post<{ ids: string[] }>('/api/jobs/reorder', { ids }),
   reprobe: (ids: string[]) => post('/api/jobs/reprobe', { ids }),
   log: (id: string) => get<{ lines: string[] }>(`/api/jobs/${id}/log`),

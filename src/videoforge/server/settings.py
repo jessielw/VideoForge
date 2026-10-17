@@ -36,6 +36,11 @@ class ServerSettings:
         return self.data_dir / "videoforge.db"
 
     @property
+    def records_dir(self) -> Path:
+        """Job records and logs kept from deleted work folders (workdir.keep_records)."""
+        return self.data_dir / "records"
+
+    @property
     def plugins_dir(self) -> Path:
         """A folder per plugin (plugins/loader.py)."""
         return self.data_dir / "plugins"
@@ -59,6 +64,7 @@ class SavedSettings:
     actions: list[Action] = field(default_factory=list)  # what runs after a job ends or the queue finishes
     disabled_plugins: list[str] = field(default_factory=list)  # plugin ids not loaded on the next start
     parallel_audio: int | None = None  # audio encodes alongside the video; None = videoforge.toml's
+    delete_work_dir: bool | None = None  # delete a done job's work folder; None = videoforge.toml's
 
     @classmethod
     def load(cls, store) -> SavedSettings:
@@ -72,6 +78,7 @@ class SavedSettings:
             load_actions(store.get_setting("actions") or []),
             [str(i) for i in store.get_setting("disabled_plugins") or []],
             store.get_setting("parallel_audio"),
+            store.get_setting("delete_work_dir"),
         )
 
     def save(self, store) -> None:
@@ -83,8 +90,13 @@ class SavedSettings:
         store.set_setting("actions", [a.to_json() for a in self.actions])
         store.set_setting("disabled_plugins", self.disabled_plugins)
         store.set_setting("parallel_audio", self.parallel_audio)
+        store.set_setting("delete_work_dir", self.delete_work_dir)
 
     def app_config(self, base: AppConfig, profile: str) -> AppConfig:
         """base (videoforge.toml) with these settings over it."""
         cfg = replace(with_tools(base, self.tools), profile=profile)
-        return cfg if self.parallel_audio is None else replace(cfg, parallel_audio=self.parallel_audio)
+        if self.parallel_audio is not None:
+            cfg = replace(cfg, parallel_audio=self.parallel_audio)
+        if self.delete_work_dir is not None:
+            cfg = replace(cfg, delete_work_dir=self.delete_work_dir)
+        return cfg

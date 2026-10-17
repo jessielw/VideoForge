@@ -59,6 +59,7 @@ from videoforge.core.record import JsonLines, RunRecorder, event
 from videoforge.core.template import Template, apply_audio, apply_subs, template_choice
 from videoforge.core.tools import versions as tool_versions
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
+from videoforge.core.workdir import keep_records, remove_work_dir, work_dir
 from videoforge.server.events import EventHub
 from videoforge.server.store import Store
 
@@ -186,10 +187,12 @@ class JobQueue:
         probe_workers: int = 2,
         queue_events: JsonLines | None = None,
         bus: EventBus | None = None,
+        records_dir: Path | None = None,
     ) -> None:
         self.app, self.profiles, self.store, self.events = app, profiles, store, events
         self.services = services or Services()
         self.queue_events = queue_events  # every job's events in one stream (core/record.py)
+        self.records_dir = records_dir  # where a deleted work folder's records go (app.delete_work_dir)
         # What a run did, for notifications, actions and plugins (core/events.py); the hub above is the browser's.
         self.bus = bus or EventBus()
         self._entries: dict[str, Entry] = {}
@@ -750,6 +753,8 @@ class JobQueue:
                 log(f"Could not save the job history: {ex}")
         if log_file is not None:
             log_file.close()
+        if result.status is JobStatus.DONE and self.app.delete_work_dir:
+            record = self._clean_up(e, record)
         with self._lock:
             e.running, e.progress = False, None
             self._save(e)
@@ -758,6 +763,47 @@ class JobQueue:
         if not self._closing:  # a shutdown's cancel isn't news: the job resumes on the next start
             self.bus.emit(JobFinished(_copy(e.spec), result, _now() - started, record))
         return result.status
+
+    def _clean_up(self, e: Entry, record: Path | None) -> Path | None:
+        """A done job's work folder, deleted (AppConfig.delete_work_dir) once its records and log are copied
+        to records_dir; kept while a preview is indexing the source. Returns where the job record is now."""
+        if not e.source_lock.acquire(blocking=False):
+            self._log(e, "Work folder kept: a preview is reading it")
+            return record
+        source = e.spec.inputs.source
+        try:
+            kept = keep_records(source, self.records_dir) if self.records_dir is not None else {}
+            remove_work_dir(source)
+        except OSError as ex:
+            self._log(e, f"Work folder not deleted: {ex}")
+            return record
+        finally:
+            e.source_lock.release()
+        self._log(e, f"Work folder deleted: {e.spec.work_dir}")
+        logger.info("%s: work folder deleted (records kept in %s)", e.spec.name, self.records_dir)
+        return kept.get(record.name) if record is not None else None
+
+    def delete_work_dirs(self, sources: Iterable[Path]) -> tuple[list[str], dict[str, str]]:
+        """Delete the work folders of removed jobs' sources, unless the source is back in the queue (added
+        again meanwhile). Returns (deleted folders, {folder: why it was kept}); a source without one is left out."""
+        deleted, kept = [], {}
+        for source in dict.fromkeys(sources):
+            folder = work_dir(source)
+            if not folder.is_dir():
+                continue
+            with self._lock:
+                shared = self._find_source(source)
+            if shared is not None:
+                kept[str(folder)] = f"{shared.spec.name} uses it too"
+                continue
+            try:
+                remove_work_dir(source)
+            except OSError as ex:
+                kept[str(folder)] = str(ex)
+                continue
+            deleted.append(str(folder))
+            logger.info("Work folder deleted: %s", folder)
+        return deleted, kept
 
     # --- the index lane ------------------------------------------------------------------
 
@@ -972,12 +1018,13 @@ class JobQueue:
 
     def job_log(self, job_id: str, line: str) -> None:
         """A line in a job's log from outside a run (an action or a plugin, after the job ended): shown in
-        the browser and appended to <source>_tmp/videoforge.log. A job no longer in the queue is skipped."""
+        the browser and appended to <source>_tmp/videoforge.log (when there still is one: a done job's may
+        be deleted). A job no longer in the queue is skipped."""
         with self._lock:
             e = self._entries.get(job_id)
         if e is None:
             return
-        log_file = _open_log(e)
+        log_file = _open_log(e) if e.spec.work_dir.is_dir() else None
         try:
             self._log(e, line, log_file)
         finally:

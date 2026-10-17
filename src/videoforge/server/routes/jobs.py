@@ -215,7 +215,13 @@ def apply_to_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[st
 
 @router.post("/jobs/remove")
 def remove_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    return {"removed": queue_of(request).remove(body.get("ids") or [])}
+    """{ids, work_dirs}: remove jobs (queued, running or indexing ones stay); with work_dirs, also delete
+    their work folders (queue.delete_work_dirs). Returns {removed, deleted, kept}."""
+    q = queue_of(request)
+    sources = {e.id: e.spec.inputs.source for e in q.entries()}
+    removed = q.remove(body.get("ids") or [])
+    deleted, kept = q.delete_work_dirs(sources[i] for i in removed) if body.get("work_dirs") else ([], {})
+    return {"removed": removed, "deleted": deleted, "kept": kept}
 
 
 @router.delete("/jobs/{job_id}")

@@ -20,6 +20,7 @@
   import { toast } from 'svelte-sonner'
   import { Button } from '$lib/components/ui/button'
   import * as Card from '$lib/components/ui/card'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import JobEditor from '../components/JobEditor.svelte'
@@ -163,10 +164,18 @@
     await act(() => api.reorder(step < 0 ? order : order.reverse()))
   }
 
-  async function remove() {
+  // workDirs: their <source>_tmp folders go too (one another job in the queue shares is kept)
+  async function remove(workDirs = false) {
     await act(async () => {
-      const r = await api.remove(selected)
-      if (r.removed.length < selected.length) toast.info('Queued or running jobs were kept')
+      const r = await api.remove(selected, workDirs)
+      if (r.removed.length < selected.length) toast.info('Queued, running or indexing jobs were kept')
+      const kept = Object.entries(r.kept)
+      if (r.deleted.length) toast.info(`Deleted ${r.deleted.length} work folder${r.deleted.length > 1 ? 's' : ''}`)
+      if (kept.length) {
+        toast.warning(`Kept ${kept.length} work folder${kept.length > 1 ? 's' : ''}`, {
+          description: kept.map(([folder, why]) => `${folder}: ${why}`).join('; '),
+        })
+      }
       selected = []
       router.go('queue')
     })
@@ -375,9 +384,19 @@
       <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => act(() => api.reprobe(selected))} title="Probe again">
         <RefreshCwIcon />
       </Button>
-      <Button variant="ghost" size="icon" class="hover:text-destructive" disabled={!selected.length} onclick={remove} title="Remove"
-        ><Trash2Icon /></Button
-      >
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger disabled={!selected.length} title="Remove">
+          {#snippet child({ props })}
+            <Button {...props} variant="ghost" size="icon" class="hover:text-destructive" aria-label="Remove"><Trash2Icon /></Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end" class="w-auto">
+          <DropdownMenu.Item onSelect={() => remove()}>Remove from the queue</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => remove(true)} title="Also delete each job's work folder next to its source (<source>_tmp: index, encodes, log)">
+            Remove and delete work folders
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
     </div>
 
     <!-- svelte-ignore a11y_no_static_element_interactions (the arrow keys of the rows inside) -->

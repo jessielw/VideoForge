@@ -77,6 +77,7 @@ def create_app(
         settings.probe_workers,
         queue_events=queue_events,
         bus=bus,
+        records_dir=settings.records_dir,
     )
     job_queue.index_waits_for_disk = saved.index_waits_for_disk
     notifier = Notifier(services.send_notification, list(saved.notifications))

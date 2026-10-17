@@ -26,6 +26,8 @@ is refused when the action is saved.
 After a job: `{output}`, `{output_dir}`, `{output_name}`, `{output_stem}`, `{source}`,
 `{source_dir}`, `{work_dir}`, `{record}` (the job record), `{name}`, `{label}`, `{job}` (its id),
 `{status}` (done, invalid, failed, skipped, cancelled). A token the job doesn't have (no output) is empty.
+With Settings → Work folders on, a done job's `{work_dir}` is already deleted when its actions run, and
+`{record}` is the copy in `<data folder>/records/`.
 
 When the queue finishes: `{status}` (finished, or stopped with jobs still queued), `{jobs}`, `{done}`,
 `{failed}`, `{left}`, `{took}`.

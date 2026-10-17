@@ -410,6 +410,26 @@
         </label>
       </section>
 
+      <section class="space-y-3">
+        <h2 class="font-medium">Work folders</h2>
+        <label class="flex items-start gap-3 text-sm">
+          <Checkbox
+            class="mt-0.5"
+            checked={config.delete_work_dir}
+            onCheckedChange={v => change({ delete_work_dir: v === config?.delete_work_dir_default ? null : v })}
+          />
+          <span>
+            Delete a job's work folder once it's done
+            <span class="block text-xs text-muted-foreground">
+              The <code>&lt;source&gt;_tmp</code> folder next to the source (index, encodes, log) is deleted after the
+              job succeeds; its job records and log are copied to {config.records_dir} first (the newest 100 kept). A job
+              that fails or is cancelled keeps it, to resume from. videoforge.toml says:
+              {config.delete_work_dir_default ? 'on' : 'off'}
+            </span>
+          </span>
+        </label>
+      </section>
+
       <!-- the events a notification or an action wants (skip: ones it can't have) -->
       {#snippet eventChoices(
         events: NotificationEvent[],

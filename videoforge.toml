@@ -40,6 +40,9 @@ staxrip_temp = true
 # Audio encodes a job runs at once beside its video encode (they start once the source is indexed);
 # 0 encodes them one by one. The Settings page can change it.
 parallel_audio = 2
+# Delete a job's work folder (<source>_tmp: the index, the encodes, the log) once the job is done;
+# its job records and log are copied to <data folder>/records first. The Settings page can change it.
+delete_work_dir = false
 
 [actions]
 # Let the Settings page's command actions run (a program after a job ends or the queue finishes).

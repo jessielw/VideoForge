@@ -23,7 +23,8 @@ src/videoforge/
                          source's tracks are known
     plan_io.py           Type-driven JSON codec for every model
     disks.py             Which physical disk a path is on (the index lane waits for an encode on its disk)
-    workdir.py           <source>_tmp/ per job: indexes, script, encodes, stats, logs
+    workdir.py           <source>_tmp/ per job: indexes, script, encodes, stats, logs; keep_records copies a
+                         folder's records and log to <data dir>/records before it's deleted
     history.py           Finished-output records (data dir; nothing reads them yet)
     record.py            What a run did, for other tools: <output>.videoforge.json + .jsonl events (docs/job-record.md)
     events.py            EventBus: JobStarted / JobFinished / QueueFinished / IndexFinished, emitted by the queue,
@@ -133,7 +134,10 @@ index ─► qpf/chapters ─┬► video (vspipe | x264/x265, 1 or 2 passes) �
                        └► audio encodes (up to N at once) ────────────┘
 ```
 
-- Each step writes only into the job's `<source>_tmp/` (the mux writes `<out>.partial`).
+- Each step writes only into the job's `<source>_tmp/` (the mux writes `<out>.partial`). The folder stays
+  after the run (a rerun reuses it) unless `AppConfig.delete_work_dir` is on: then the queue deletes a done
+  job's folder (`JobQueue._clean_up`, after `keep_records`) before `JobFinished` goes out, so the event's
+  record is the kept copy. Removing jobs can delete theirs too (`JobQueue.delete_work_dirs`).
 - The audio encodes are background steps (`Step.background`): `run_steps` starts them on up to
   `AppConfig.parallel_audio` threads (videoforge.toml `[pipeline]`, Settings → Audio encodes; default 2)
   once the index is done (it reads the whole source too), and goes on with the video. A step waits for
