@@ -7,7 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [0.1.0] - Unreleased
 
-The first beta: an encode and mux job queue in the browser, for one user on Windows.
+The first beta: an encode and mux job queue in the browser, for one user: on Windows (portable zip or from
+source), or in Docker on Linux.
 
 ### Added
 
@@ -21,8 +22,9 @@ The first beta: an encode and mux job queue in the browser, for one user on Wind
   cropped-off margins stacked back on, so a FillBorders after the crop shows); auto crop; resize as in
   StaxRip (keep aspect ratio: the height follows the width and each crop, on mod 2/4/8/16, with the aspect
   error shown; anamorphic sources included, and an encode keeps its pixel aspect via --sar); an anamorphic
-  frame previews at the shape it plays at (the AR toggle shows the stored pixels); filters;
-  the generated VapourSynth script, editable. Source filters: FFMS2 (the default, with index progress), L-SMASH, BestSource.
+  frame previews at the shape it plays at (the AR toggle shows the stored pixels); an ordered filter
+  chain as in StaxRip (crop and resize are steps in it; each filter can move, switch off or be edited) with
+  one-click presets by category, built on the bundled plugins; the generated VapourSynth script, editable. Source filters: FFMS2 (the default, with index progress), L-SMASH, BestSource.
 - **Encoder.** x264 and x265 option panels, 1 or 2 passes; AutoQPF chapters to a qpf file.
 - **Notifications.** Settings → Notifications sends to any service Apprise supports (Discord, Telegram, ntfy,
   Pushover, email, ...): each destination picks its events (job done, failed, cancelled, queue finished), can be
@@ -55,7 +57,8 @@ The first beta: an encode and mux job queue in the browser, for one user on Wind
 - **Logs and job records.** A text log in each job's work folder, an app log per session, and for each
   output a machine-readable record of how it was made plus a live event stream
   ([docs/job-record.md](docs/job-record.md)).
-- **Settings.** Tool paths with a check for each, folder browser roots, the disk wait, Shut down.
+- **Settings.** Tool paths with a check for each, folder browser roots, the disk wait, Shut down. The version
+  shows in the sidebar (and `/api/health`).
 - **Desktop window.** `serve --window`: the app in its own window with a tray icon; Explorer drops carry
   file paths.
 - **Portable build (Windows x64).** A zip with its own Python: unpack, add the tools, run `VideoForge.exe`.
@@ -70,4 +73,4 @@ The first beta: an encode and mux job queue in the browser, for one user on Wind
 - **Profiles.** The built-in `manual` profile; other profiles (a release group's rules) install as separate
   packages under the `videoforge.profiles` entry point group.
 
-[0.1.0]: https://github.com/jessielw/VideoForge/commits/main
+[0.1.0]: https://github.com/jessielw/VideoForge/releases/tag/0.1.0

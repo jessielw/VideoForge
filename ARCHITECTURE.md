@@ -4,8 +4,8 @@ StaxRip in a browser for one user: queue a job (or a batch of episodes), and eac
 one runs a pipeline end to end: index, VapourSynth script (crop, resize,
 filters), video encode, audio, subtitles, mux, validate. A group's rules live in a
 profile: the built-in `manual` profile (no rules; the user sets up each
-track), or a group's profile installed as its own package. Runs as one local process on Windows (FastAPI + a built Svelte app);
-the same server can later run in Docker.
+track), or a group's profile installed as its own package. Runs as one local process (FastAPI + a built Svelte
+app): on Windows (portable zip or from source), or in Docker on Linux.
 
 ## Layout
 
@@ -24,7 +24,7 @@ src/videoforge/
     plan_io.py           Type-driven JSON codec for every model
     disks.py             Which physical disk a path is on (the index lane waits for an encode on its disk)
     workdir.py           <source>_tmp/ per job: indexes, script, encodes, stats, logs
-    history.py           Finished-output records (data dir; for the parked Fix release page)
+    history.py           Finished-output records (data dir; nothing reads them yet)
     record.py            What a run did, for other tools: <output>.videoforge.json + .jsonl events (docs/job-record.md)
     events.py            EventBus: JobStarted / JobFinished / QueueFinished / IndexFinished, emitted by the queue,
                          for notifications, actions and plugins (each subscriber hands slow work to its own thread)
@@ -70,7 +70,6 @@ frontend/                Svelte 5 + Vite + TypeScript + Tailwind -> frontend/dis
 scripts/build_portable.py  The portable zip (see "Portable build"); scripts/launcher/VideoForge.cs its launcher
 scripts/fetch_plugins.py   The bundled VapourSynth plugins' Windows builds and filter scripts (vsplugins/manifest.toml)
 vsplugins/               The bundled VapourSynth plugins: manifest.toml, the Docker plugins image (Dockerfile, build.py)
-legacy/qt_gui/           The archived PySide6 GUI and its tests. Reference only; not packaged.
 tools/                   Binaries (gitignored): MKVToolNix, DEE, DeeZy, qaac, opus-tools, truehdd, x264, x265, vs-plugins
                          (MP4Box and ffmpeg default to PATH; see README "Tools")
 ```

@@ -11,9 +11,15 @@ and finished steps are skipped on a rerun.
 
 > **Status:** 0.1.0 beta. It works end to end, but expect changes. See [CHANGELOG.md](CHANGELOG.md).
 
+Not yet: sources other than MKV (remux an MP4 or M2TS to MKV first), GPU filters, a login (see
+[Docker](#docker-linux)).
+
 ## Requirements
 
-- Windows, Python 3.12+ and [uv](https://docs.astral.sh/uv/)
+The [portable build](#portable-build-windows) and the [Docker image](#docker-linux) carry everything but
+the tools. From source:
+
+- Windows (or Linux), Python 3.12+ and [uv](https://docs.astral.sh/uv/)
 - Node.js (to build the web app)
 - The tools below. VapourSynth itself and `vspipe` come with the `vapoursynth` Python package, and
   MediaInfo with `pymediainfo`; nothing to install for those.
