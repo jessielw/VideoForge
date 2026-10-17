@@ -65,8 +65,7 @@ turns them off. Turn them on there in a `videoforge.local.toml` only if no one e
 The folder is made when it's missing. The file goes to `<name>.partial` first and is renamed when
 it's complete, so a library scanner never sees half a file (a move on the same disk is just a
 rename). A file already there is left alone and the action fails, unless "Replace a file already
-there" is on. Moving the output doesn't change the job record or the history, which keep the path the
-run wrote.
+there" is on. Moving the output doesn't change the job record, which keeps the path the run wrote.
 
 ## Webhook body
 

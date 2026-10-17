@@ -8,8 +8,7 @@ from pathlib import Path
 import string
 
 from videoforge.core.actions import Action, load_actions
-from videoforge.core.config import PROJECT_ROOT, AppConfig, with_tools
-from videoforge.core.history import app_data_dir
+from videoforge.core.config import PROJECT_ROOT, AppConfig, app_data_dir, with_tools
 from videoforge.core.notify import Destination, load_destinations
 
 MAX_PARALLEL_AUDIO = 8  # the Settings page's limit on audio encodes at once
@@ -26,7 +25,7 @@ def default_roots() -> list[Path]:
 class ServerSettings:
     host: str = "127.0.0.1"  # one user, this machine: no auth, so don't listen beyond it by default
     port: int = 8765
-    data_dir: Path = field(default_factory=app_data_dir)  # videoforge.db, job history
+    data_dir: Path = field(default_factory=app_data_dir)  # videoforge.db, logs, kept job records, plugins
     roots: list[Path] = field(default_factory=default_roots)  # what the folder browser offers
     frontend_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "frontend" / "dist")
     probe_workers: int = 2  # concurrent probes (sources are often on a network share)

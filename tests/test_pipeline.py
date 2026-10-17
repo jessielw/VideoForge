@@ -824,3 +824,14 @@ def test_progress_carries_the_encoders_fps_and_eta(tmp_path: Path):
         (0.3, 32.5, 6),
         (1.0, 32.5, 6),
     ]
+
+
+def test_work_dir_is_next_to_the_source_and_separate_from_staxrip(tmp_path: Path):
+    from videoforge.core.workdir import remove_work_dir, work_dir
+
+    src = tmp_path / "Show.S01E01.mkv"
+    assert work_dir(src) == tmp_path / "Show.S01E01.mkv_tmp"  # StaxRip's is Show.S01E01.mkv_temp
+    assert remove_work_dir(src) is False
+    (work_dir(src) / "sub").mkdir(parents=True)
+    (work_dir(src) / "sub" / "a.ec3").write_bytes(b"x")
+    assert remove_work_dir(src) is True and not work_dir(src).exists()

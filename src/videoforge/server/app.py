@@ -21,7 +21,6 @@ from fastapi.staticfiles import StaticFiles
 from videoforge.core.actions import ActionRunner
 from videoforge.core.config import AppConfig, load_app_config
 from videoforge.core.events import EventBus, JobFinished, QueueFinished
-from videoforge.core.history import JobHistory
 from videoforge.core.notify import Notifier
 from videoforge.core.profile import Profile
 from videoforge.core.record import QUEUE_EVENTS, QUEUE_EVENTS_MAX, JsonLines, event
@@ -51,9 +50,7 @@ def create_app(
     settings = settings or ServerSettings()
     base = app_config or load_app_config()  # videoforge.toml (+ .local); the Settings page layers over it
     ids = profile_ids or registered()
-    if services is None:
-        history = JobHistory(settings.data_dir / "history")
-        services = Services(record=history.record)
+    services = services or Services()
 
     store = Store(settings.db_path)
     saved = SavedSettings.load(store)

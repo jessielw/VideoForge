@@ -170,7 +170,6 @@ class Services:
 
     probe: Callable[[JobSpec, AppConfig], ProbedInputs] = probe_spec
     run: Callable[..., JobResult] = run_job
-    record: Callable[[JobResult], object] | None = None  # JobHistory.record
     detect_crop: Callable[[JobSpec], Crop] | None = None  # reads the source (VapourSynth)
     runner: Callable[..., None] = process.run  # the index lane's tool runner
     versions: Callable[[Tools, Sequence[str]], dict[str, str]] | None = tool_versions  # for job records
@@ -734,11 +733,6 @@ class JobQueue:
             f" -> {result.output}" if result.output else "",
             f" ({result.error})" if result.error else "",
         )
-        if self.services.record is not None:
-            try:
-                self.services.record(result)
-            except OSError as ex:
-                log(f"Could not save the job history: {ex}")
         if log_file is not None:
             log_file.close()
         if result.status is JobStatus.DONE and self.app.delete_work_dir:

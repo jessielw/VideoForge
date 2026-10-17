@@ -17,6 +17,12 @@ from videoforge.core.pairing import MatchRules
 PROJECT_ROOT = Path(os.environ.get("VIDEOFORGE_ROOT") or Path(__file__).resolve().parents[3])
 
 
+def app_data_dir() -> Path:
+    """The default data folder (`serve --data-dir` moves it): %APPDATA%\\VideoForge, else the XDG data home's."""
+    base = os.environ.get("APPDATA") or os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return Path(base) / "VideoForge"
+
+
 @dataclass(frozen=True)
 class Tools:
     mkvmerge: str

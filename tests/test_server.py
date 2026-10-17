@@ -105,13 +105,8 @@ class FakeRun:
         return JobResult(plan, JobStatus.DONE, out)
 
 
-def make_client(tmp_path: Path, run=None, records=None, detect_crop=None, runner=None, send=None) -> TestClient:
-    services = Services(
-        probe=fake_probe,
-        run=run or FakeRun(),
-        record=(records.append if records is not None else None),
-        detect_crop=detect_crop,
-    )
+def make_client(tmp_path: Path, run=None, detect_crop=None, runner=None, send=None) -> TestClient:
+    services = Services(probe=fake_probe, run=run or FakeRun(), detect_crop=detect_crop)
     if runner is not None:
         services.runner = runner
     if send is not None:
@@ -279,8 +274,7 @@ def test_progress_guesses_the_jobs_time_left(tmp_path, monkeypatch):
 
 def test_queue_runs_jobs_and_streams_events(tmp_path):
     make_files(tmp_path, "S01E01", "S01E02")
-    records: list = []
-    with make_client(tmp_path, records=records) as client:
+    with make_client(tmp_path) as client:
         ids = add(client, tmp_path)
         for i in ids:
             wait_for(client, i, "ready", "warn")
@@ -308,7 +302,6 @@ def test_queue_runs_jobs_and_streams_events(tmp_path):
         for i in ids:
             job = wait_for(client, i, "done")
             assert job["steps"]["video"]["fingerprint"] == "abc"
-        assert len(records) == 2
         log = client.get(f"/api/jobs/{ids[0]}/log").json()["lines"]
         assert "[x264] [ 50.0%] 1/2 frames" in log
         (step,) = client.get(f"/api/jobs/{ids[0]}/steps").json()

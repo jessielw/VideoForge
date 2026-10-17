@@ -16,7 +16,9 @@ source), or in Docker on Linux.
   script → x264 / x265 (1 or 2 passes) → audio → mux → validate. Jobs run one at a time and survive restarts;
   a rerun skips every step whose command and inputs haven't changed, so a crashed job resumes after its last
   finished step and a changed subtitle flag only muxes again. A job's audio encodes run alongside its video
-  encode, up to 2 at once by default (Settings → Audio encodes; 0 runs them one by one).
+  encode, up to 2 at once by default (Settings → Audio encodes; 0 runs them one by one). A running job shows
+  its step, the encoder's speed (fps) and time left, the time since it started and a guess at the job's time
+  left, in the queue and the job's header.
 - **Work folders.** A job's index, encodes and log live in `<source>_tmp/` next to the source. Settings →
   Work folders deletes it once the job is done (off by default; the job records and log are copied to the
   data folder's `records/` first, the newest 100 kept), and Remove → "Remove and delete work folders" deletes

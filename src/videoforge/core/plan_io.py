@@ -34,7 +34,7 @@ def _hints(cls: type) -> dict[str, Any]:
 
 
 def to_json(value: Any) -> Any:
-    """A dataclass tree as JSON-ready values (also used by core.history)."""
+    """A dataclass tree as JSON-ready values."""
     if isinstance(value, Layout):
         return str(value)
     if dataclasses.is_dataclass(value):

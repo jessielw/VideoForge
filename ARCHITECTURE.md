@@ -25,7 +25,6 @@ src/videoforge/
     disks.py             Which physical disk a path is on (the index lane waits for an encode on its disk)
     workdir.py           <source>_tmp/ per job: indexes, script, encodes, stats, logs; keep_records copies a
                          folder's records and log to <data dir>/records before it's deleted
-    history.py           Finished-output records (data dir; nothing reads them yet)
     record.py            What a run did, for other tools: <output>.videoforge.json + .jsonl events (docs/job-record.md)
     events.py            EventBus: JobStarted / JobFinished / QueueFinished / IndexFinished, emitted by the queue,
                          for notifications, actions and plugins (each subscriber hands slow work to its own thread)
