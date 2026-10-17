@@ -38,11 +38,43 @@ export const SOURCE_FILTERS: { id: SourceFilter; label: string; title: string }[
   { id: 'lsmash', label: 'L-SMASH Works', title: 'Quick to index' },
 ]
 
+// Where a filter goes in the chain, in chain order (core.video.settings.FilterCategory).
+export const FILTER_CATEGORIES = [
+  { id: 'field', label: 'Field', title: 'IVTC, deinterlacing (before the crop, so it keeps the fields)' },
+  { id: 'crop', label: 'Crop', title: '' },
+  { id: 'restoration', label: 'Restoration', title: 'Dirty lines, deblocking, dehaloing' },
+  { id: 'noise', label: 'Noise', title: 'Denoising' },
+  { id: 'line', label: 'Line', title: 'Anti-aliasing, sharpening' },
+  { id: 'resize', label: 'Resize', title: '' },
+  { id: 'deband', label: 'Deband', title: 'Smoothing banding' },
+  { id: 'grain', label: 'Grain', title: 'Adding grain' },
+  { id: 'custom', label: 'Custom', title: 'Your own lines' },
+] as const
+export type FilterCategory = (typeof FILTER_CATEGORIES)[number]['id']
+
+export interface FilterStep {
+  category: FilterCategory
+  name: string
+  script: string // lines on `clip`; empty for the crop and resize steps (made from crop and resize)
+  enabled: boolean
+}
+
+// A built-in filter (core.video.filters): a family's presets are its variants (strengths, widths).
+export interface FilterPreset {
+  category: FilterCategory
+  family: string // the menu's label
+  variant: string // its button ('' for a filter with just the one)
+  name: string // the step's name: family and variant
+  fill_in: boolean // added with its lines open, to type values in (an Empty variant, Custom)
+  script: string
+  description: string
+}
+
 export interface VideoSettings {
   source_filter: SourceFilter
   crop: Crop
   resize: Resize | null
-  filters: string
+  filters: FilterStep[] // in order; always one crop and one resize step
   custom: string | null
 }
 

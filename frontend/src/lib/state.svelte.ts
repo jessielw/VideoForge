@@ -2,7 +2,7 @@
 import { toast } from 'svelte-sonner'
 import { api } from './api'
 import { STATUS_LABEL } from './format'
-import type { AudioEncodeInfo, EncoderSettings, JobSummary, Preset, PresetKind, Presets, Profile, QueueState, StepRun, Template, VideoPresetData } from './types'
+import type { AudioEncodeInfo, EncoderSettings, FilterPreset, JobSummary, Preset, PresetKind, Presets, Profile, QueueState, StepRun, Template, VideoPresetData } from './types'
 import { keepVideoViews } from './videoView.svelte'
 
 const MAX_LOG = 20000
@@ -32,6 +32,7 @@ class AppState {
   logSeq = 0
   encodes = $state<AudioEncodeInfo[]>([])
   presets = $state<Presets>({ video: [], encoder: [], template: [], template_defaults: {} })
+  filterPresets = $state<FilterPreset[]>([])
 
   #socket: WebSocket | null = null
   #refreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -51,6 +52,14 @@ class AppState {
       this.presets = await api.presets()
     } catch {
       /* only the profiles' defaults are offered */
+    }
+  }
+
+  async loadFilterPresets(): Promise<void> {
+    try {
+      this.filterPresets = await api.filterPresets()
+    } catch {
+      /* the chain is still editable; only adding a built-in filter is missing */
     }
   }
 
@@ -80,6 +89,7 @@ class AppState {
     this.profiles = await api.profiles()
     this.loadEncoders()
     this.loadPresets()
+    this.loadFilterPresets()
     await this.refreshJobs()
     this.connect()
   }

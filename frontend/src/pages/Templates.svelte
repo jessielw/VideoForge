@@ -16,6 +16,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import EncoderPanel from '../components/EncoderPanel.svelte'
+  import FilterChain from '../components/FilterChain.svelte'
   import TemplateAudioEditor from '../components/TemplateAudioEditor.svelte'
   import TemplateSubsEditor from '../components/TemplateSubsEditor.svelte'
   import { api } from '../lib/api'
@@ -286,15 +287,12 @@
                 </div>
               {/if}
             </div>
-            <div class="space-y-2">
-              <span class="text-sm text-muted-foreground">Filters (VapourSynth lines on <code>clip</code>)</span>
-              <Textarea
-                class="h-24 w-full font-mono text-xs"
-                placeholder="clip = core.std.Levels(clip, ...)"
-                bind:value={draft.video.filters}
-                disabled={readOnly || draft.video.custom !== null}
-              />
-            </div>
+            <FilterChain
+              bind:filters={draft.video.filters}
+              crop={draft.crop_mode === 'fixed' ? draft.video.crop : undefined}
+              resize={draft.video.resize}
+              disabled={readOnly || draft.video.custom !== null}
+            />
             <div class="space-y-2">
               <label class="flex items-center gap-2 text-sm">
                 <Checkbox
@@ -302,7 +300,7 @@
                   disabled={readOnly}
                   onCheckedChange={on => (draft!.video.custom = on ? (opened?.data.video.custom ?? '') : null)}
                 />
-                Custom script body (instead of crop, resize and filters)
+                Custom script body (instead of the filters)
               </label>
               {#if draft.video.custom !== null}
                 <Textarea

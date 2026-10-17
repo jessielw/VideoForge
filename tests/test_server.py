@@ -630,6 +630,7 @@ def test_presets(tmp_path):
         }
         (vid,) = client.put("/api/presets/video/720p", json=video).json()["video"]
         assert "crop" not in vid["data"] and vid["data"]["resize"]["kernel"] == "Spline36"
+        assert [f["category"] for f in vid["data"]["filters"]] == ["crop", "resize", "custom"]  # the old text, upgraded
 
         assert client.put("/api/presets/audio/x", json={}).status_code == 404
         assert client.put("/api/presets/encoder/%20", json={}).status_code == 422
@@ -668,7 +669,11 @@ def test_templates(tmp_path):
             spec = job["spec"]
             assert spec["encoder"]["encoder"] == "x265" and spec["encoder"]["crf"] == 16
             assert spec["mux"] == {"container": "mkv", "extra": "-x"} and spec["qpf"] is False
-            assert spec["video"]["filters"] == "clip = clip"
+            assert [(f["category"], f["script"]) for f in spec["video"]["filters"]] == [  # the old text, upgraded
+                ("crop", ""),
+                ("resize", ""),
+                ("custom", "clip = clip"),
+            ]
             assert spec["video"]["crop"] == {"left": 0, "top": 20, "right": 0, "bottom": 22} and not spec["autocrop"]
             assert job["indexed"]  # the lane indexed it first, one job at a time
         assert len(indexer.calls) == 2

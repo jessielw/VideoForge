@@ -1,7 +1,7 @@
 <script lang="ts">
   // The job's VapourSynth processing: the preview (Source with the crop drawn, or Output; keys 1 and 2
   // flip at the same frame) and a side panel: Settings (crop, auto-crop, mod 2, source filter, resize,
-  // extra filter lines) or Script (Run saves an edited body as the job's custom script, then shows its
+  // the filter chain) or Script (Run saves an edited body as the job's custom script, then shows its
   // info and frames or the error).
   // Every save hands us a new `job` object, so effects key on derived values (jobId, scriptKey)
   // that only change when the content does; otherwise each save would remount the preview.
@@ -28,7 +28,7 @@
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as Tabs from '$lib/components/ui/tabs'
-  import { Textarea } from '$lib/components/ui/textarea'
+  import FilterChain from './FilterChain.svelte'
   import PresetMenu from './PresetMenu.svelte'
   import ScriptEditor from './ScriptEditor.svelte'
 
@@ -481,14 +481,7 @@
         </section>
 
         <section class="space-y-2">
-          <span class="section-label">Filters (VapourSynth lines on <code>clip</code>)</span>
-          <Textarea
-            class="h-24 w-full font-mono text-xs"
-            placeholder="clip = core.std.Levels(clip, ...)"
-            bind:value={video.filters}
-            onchange={() => commit(0)}
-            disabled={video.custom !== null}
-          />
+          <FilterChain bind:filters={video.filters} crop={video.crop} resize={video.resize} disabled={video.custom !== null} onchange={() => commit(0)} />
           {#if video.custom !== null}
             <p class="text-xs text-warning">
               A custom script body is in use, so crop, resize and filters don't apply.

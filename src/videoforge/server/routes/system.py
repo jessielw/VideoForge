@@ -16,6 +16,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Request, We
 from videoforge.core.execute.mux import MUXERS
 from videoforge.core.plan_io import to_json
 from videoforge.core.template import Template
+from videoforge.core.video.filters import PRESETS
 from videoforge.server.events import EventHub
 
 router = APIRouter(prefix="/api")
@@ -223,6 +224,12 @@ def profiles(request: Request) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+@router.get("/filter-presets")
+def filter_presets() -> list[dict[str, Any]]:
+    """The built-in filter presets (core.video.filters), in their categories' chain order."""
+    return [to_json(p) for p in sorted(PRESETS, key=lambda p: p.category.rank)]
 
 
 @router.get("/settings")

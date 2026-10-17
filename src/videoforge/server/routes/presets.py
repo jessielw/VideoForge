@@ -2,7 +2,7 @@
 whole run's settings), saved in the store.
 
 Each profile's own defaults are the built-in presets (the UI has them from /api/profiles);
-these are the user's, on top. A video preset holds the source filter, resize, filters
+these are the user's, on top. A video preset holds the source filter, resize, filter chain
 and custom body, not the crop: that belongs to each source (a template says what to do with it).
 Each profile can have one of the user's templates as its default: New jobs starts on it, and
 jobs added with no settings of their own get it.
@@ -26,9 +26,19 @@ DEFAULTS = "template_defaults"  # setting: {profile id: template name}
 
 def _all(request: Request) -> dict[str, Any]:
     store = request.app.state.store
-    out: dict[str, Any] = {kind: [{"name": n, "data": d} for n, d in store.presets(kind).items()] for kind in KINDS}
+    out: dict[str, Any] = {
+        kind: [{"name": n, "data": _upgraded(kind, d)} for n, d in store.presets(kind).items()] for kind in KINDS
+    }
     out["template_defaults"] = template_defaults(store)
     return out
+
+
+def _upgraded(kind: str, data: Any) -> Any:
+    """A stored preset in the current shape (one saved by an older version is rewritten as it's read)."""
+    try:
+        return normalize(kind, data)
+    except HTTPException:
+        return data
 
 
 def template_defaults(store: Any) -> dict[str, str]:

@@ -6,7 +6,7 @@ Layout of every script:
     core = vs.core
     src = <source filter>(<source>, index in the work folder)
     clip = src
-    <crop, resize, filters>  or  <custom body>
+    <the filter chain: crop, resize and filters in order>  or  <custom body>
     <bit depth conversion for the encoder>
     clip.set_output()
 
@@ -19,7 +19,7 @@ import glob
 from pathlib import Path
 from typing import Literal
 
-from videoforge.core.video.settings import SourceFilter, VideoSettings
+from videoforge.core.video.settings import FilterCategory, SourceFilter, VideoSettings
 
 Stage = Literal["source", "output"]
 
@@ -60,21 +60,25 @@ def processing_lines(settings: VideoSettings) -> list[str]:
             lines.pop()
         return lines  # as typed (indentation kept), less blank lines at either end
     lines = []
-    c = settings.crop
-    if not c.is_zero:
-        lines.append(f"clip = core.std.Crop(clip, left={c.left}, right={c.right}, top={c.top}, bottom={c.bottom})")
-    if settings.resize is not None:
-        r = settings.resize
-        lines.append(f"clip = core.resize.{r.kernel}(clip, width={r.width}, height={r.height})")
-    if settings.filters.strip():
-        lines += settings.filters.strip().splitlines()
+    c, r = settings.crop, settings.resize
+    for step in settings.filters:
+        if step.category is FilterCategory.CROP:
+            if not c.is_zero:
+                lines.append(
+                    f"clip = core.std.Crop(clip, left={c.left}, right={c.right}, top={c.top}, bottom={c.bottom})"
+                )
+        elif step.category is FilterCategory.RESIZE:
+            if r is not None:
+                lines.append(f"clip = core.resize.{r.kernel}(clip, width={r.width}, height={r.height})")
+        elif step.enabled and step.script.strip():
+            lines += step.script.strip().splitlines()
     return lines
 
 
 def script_parts(
     settings: VideoSettings, source: Path, index_dir: Path, *, depth: int | None = None, stage: Stage = "output"
 ) -> tuple[list[str], list[str], list[str]]:
-    """The script as (head, body, tail) lines. The body is the part the user edits (crop/resize/filters
+    """The script as (head, body, tail) lines. The body is the part the user edits (the filter chain
     or the custom body); head (imports, source) and tail (depth conversion, output) are generated."""
     head = [
         "import vapoursynth as vs",

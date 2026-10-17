@@ -14,13 +14,17 @@ import numpy as np
 import pytest
 
 from videoforge.core.config import PROJECT_ROOT
+from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video import crop as autocrop, vs as vsx
 from videoforge.core.video.encoders import encoder_command, output_name, progress, vspipe_command
+from videoforge.core.video.filters import PRESETS
 from videoforge.core.video.script import build_script, script_parts
 from videoforge.core.video.settings import (
     Crop,
     Encoder,
     EncoderSettings,
+    FilterCategory,
+    FilterStep,
     RateControl,
     Resize,
     SourceFilter,
@@ -31,13 +35,14 @@ TOOLS = PROJECT_ROOT / "tools"
 PLUGINS = TOOLS / "vs-plugins"
 FFMPEG = shutil.which("ffmpeg")
 vsx.configure(PLUGINS)  # before any clip loads in this test process
+INVERT = FilterStep(FilterCategory.CUSTOM, "Invert", "clip = clip.std.Invert()")
 
 
 # --- script -------------------------------------------------------------------------
 
 
 def test_script_layout():
-    s = VideoSettings(crop=Crop(0, 22, 0, 22), resize=Resize(1280, 544), filters="clip = clip.std.Invert()")
+    s = VideoSettings(crop=Crop(0, 22, 0, 22), resize=Resize(1280, 544), filters=[INVERT])
     src, work = Path("D:/Show/E01.mkv"), Path("D:/Show/E01.mkv_tmp")
     text = build_script(s, src, work, depth=10)
     lines = text.splitlines()
@@ -58,7 +63,7 @@ def test_script_layout():
 
 
 def test_script_parts_split_the_editable_body():
-    s = VideoSettings(crop=Crop(0, 22, 0, 22), filters="clip = clip.std.Invert()")
+    s = VideoSettings(crop=Crop(0, 22, 0, 22), filters=[INVERT])
     head, body, tail = script_parts(s, Path("a.mkv"), Path("w"), depth=10)
     assert head[-1] == "clip = src" and tail[-1] == "clip.set_output()"
     assert body == ["clip = core.std.Crop(clip, left=0, right=0, top=22, bottom=22)", "clip = clip.std.Invert()"]
@@ -191,6 +196,81 @@ def test_detect_reads_the_frames_range():
     assert autocrop.detect(clip) == Crop(0, 22, 0, 22)  # no range set
     assert autocrop.detect(clip.std.SetFrameProps(_Range=int(vs.RANGE_LIMITED))) == Crop(0, 22, 0, 22)
     assert autocrop.detect(clip.std.SetFrameProps(_Range=int(vs.RANGE_FULL))) == Crop()
+
+
+# --- filter chain ---------------------------------------------------------------------
+
+
+def test_chain_order_makes_the_script():
+    """The steps run in their chain order; the crop and resize steps are always there, made from crop/resize."""
+    grain = FilterStep(FilterCategory.GRAIN, "Grain", "clip = grain(clip)")
+    field = FilterStep(FilterCategory.FIELD, "IVTC", "clip = ivtc(clip)")
+    off = FilterStep(FilterCategory.NOISE, "Off", "clip = off(clip)", enabled=False)
+    s = VideoSettings(crop=Crop(0, 22, 0, 22), resize=Resize(1280, 544), filters=[field, grain, off])
+    assert [f.category for f in s.filters] == ["field", "crop", "resize", "grain", "noise"]  # put in at their place
+    head, body, tail = script_parts(s, Path("a.mkv"), Path("w"))
+    assert body == [
+        "clip = ivtc(clip)",
+        "clip = core.std.Crop(clip, left=0, right=0, top=22, bottom=22)",
+        "clip = core.resize.Spline36(clip, width=1280, height=544)",
+        "clip = grain(clip)",
+    ]
+    s.filters = [s.filters[2], s.filters[1]]  # resize before crop
+    s.__post_init__()
+    assert script_parts(s, Path("a.mkv"), Path("w"))[1][0].startswith("clip = core.resize")
+    assert s.output_size(1920, 1080) == (1280, 500)
+    s.resize = None
+    assert script_parts(s, Path("a.mkv"), Path("w"))[1] == [
+        "clip = core.std.Crop(clip, left=0, right=0, top=22, bottom=22)"
+    ]
+    assert s.output_size(1920, 1080) == (1920, 1036)
+    dupes = VideoSettings(filters=[*VideoSettings().filters, FilterStep(FilterCategory.CROP, "Crop", enabled=False)])
+    assert [f.category for f in dupes.filters] == ["crop", "resize"] and dupes.filters[0].enabled
+
+
+def test_old_filters_text_becomes_a_custom_step():
+    old = from_json(VideoSettings, {"filters": "clip = clip.std.Invert()", "crop": {"top": 2}})
+    assert [(f.category, f.script) for f in old.filters] == [
+        ("crop", ""),
+        ("resize", ""),
+        ("custom", "clip = clip.std.Invert()"),
+    ]
+    assert old.crop == Crop(top=2)
+    assert from_json(VideoSettings, {"filters": ""}).filters == VideoSettings().filters
+    assert from_json(VideoSettings, to_json(old)) == old  # the new shape reads back as it is
+
+
+def test_filter_presets():
+    """Every preset compiles; a family's variants share one category; names are unique."""
+    assert len({p.name for p in PRESETS}) == len(PRESETS)
+    for p in PRESETS:
+        compile(p.script, p.name, "exec")
+        assert "{}" not in p.script and p.category not in (FilterCategory.CROP, FilterCategory.RESIZE)
+    families: dict[str, FilterCategory] = {}
+    for p in PRESETS:
+        assert families.setdefault(p.family, p.category) is p.category
+
+
+@pytest.mark.parametrize("preset", [p for p in PRESETS if p.script], ids=lambda p: p.name)
+def test_filter_presets_run(preset):
+    """Each preset runs on 8- and 16-bit video (skipped when its plugin or filter script isn't installed)."""
+    import vapoursynth as vs
+
+    core = vs.core
+    for fmt in (vs.YUV420P8, vs.YUV420P16):
+        if fmt == vs.YUV420P16 and preset.family == "IVTC (VIVTC)":
+            continue  # VFM takes 8-bit only
+        clip = core.std.BlankClip(width=640, height=360, format=fmt, length=12, fpsnum=24000, fpsden=1001)
+        ns = {"vs": vs, "core": core, "clip": clip}
+        try:
+            exec(preset.script, ns)  # noqa: S102 - the built-in presets
+        except ImportError as e:
+            pytest.skip(f"no filter script: {e}")
+        except AttributeError as e:
+            if "namespace" not in str(e):
+                raise
+            pytest.skip(f"no plugin: {e}")
+        ns["clip"].get_frame(5)
 
 
 # --- real VapourSynth and encoders ---------------------------------------------------

@@ -9,6 +9,7 @@ import type {
   Crop,
   DirListing,
   EncoderSettings,
+  FilterPreset,
   JobDetail,
   JobSpec,
   JobSummary,
@@ -84,6 +85,7 @@ export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides
 export const api = {
   profiles: () => get<Profile[]>('/api/profiles'),
   presets: () => get<Presets>('/api/presets'),
+  filterPresets: () => get<FilterPreset[]>('/api/filter-presets'),
   savePreset: (kind: PresetKind, name: string, data: unknown) =>
     request<Presets>('PUT', `/api/presets/${kind}/${encodeURIComponent(name)}`, data),
   deletePreset: (kind: PresetKind, name: string) => request<Presets>('DELETE', `/api/presets/${kind}/${encodeURIComponent(name)}`),

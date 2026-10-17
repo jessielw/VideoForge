@@ -183,7 +183,7 @@ def _video(spec: JobSpec, plan: Plan, commands: dict[str, str]) -> dict[str, Any
         "source_filter": v.source_filter.value,
         "crop": to_json(v.crop),
         "resize": to_json(v.resize) if v.resize else None,
-        "filters": v.filters,
+        "filters": [to_json(s) for s in v.filters if s.enabled],
         "custom_script": v.custom is not None,
         "encoder": {
             "name": enc.encoder.value,

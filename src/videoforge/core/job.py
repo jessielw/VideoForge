@@ -186,8 +186,7 @@ def planned_encode(spec: JobSpec, source: SourceInfo) -> SourceInfo:
     v = source.video
     if v is None:
         return SourceInfo(path=path, name=path.name, video=None)
-    c, r = spec.video.crop, spec.video.resize
-    width, height = (r.width, r.height) if r else (v.width - c.left - c.right, v.height - c.top - c.bottom)
+    width, height = spec.video.output_size(v.width, v.height)
     return SourceInfo(
         path=path,
         name=path.name,

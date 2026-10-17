@@ -2,7 +2,8 @@
 
 The models are plain dataclasses, so one type-driven codec covers them all:
 paths are strings, enums are their values, a Layout is "5.1", and frozensets
-are sorted lists. Fields missing from an older file fall back to their defaults.
+are sorted lists. Fields missing from an older file fall back to their defaults, and a type with an
+`upgrade_json` static method rewrites its older JSON first.
 Version 1 files (per-subtitle forced/sdh/dub overrides) are upgraded on load.
 """
 
@@ -75,6 +76,8 @@ def from_json(tp: Any, value: Any) -> Any:
     if isinstance(tp, type) and issubclass(tp, Enum):
         return tp(value)
     if dataclasses.is_dataclass(tp):
+        if upgrade := getattr(tp, "upgrade_json", None):  # a type whose JSON changed shape
+            value = upgrade(value)
         hints = _hints(tp)
         names = {f.name for f in dataclasses.fields(tp)}
         return tp(**{k: from_json(hints[k], v) for k, v in value.items() if k in names})
