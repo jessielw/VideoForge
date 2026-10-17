@@ -16,7 +16,7 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     import numpy as np
@@ -167,7 +167,7 @@ def crop_view(pre: vs.VideoNode, clip: vs.VideoNode, left: int, top: int, right:
     length, the frame rate or the color family, that can't line up: `clip` as it is (no marker prop)."""
     import vapoursynth as vs
 
-    core = vs.core
+    core: Any = vs.core  # the stubs don't know the plugin namespaces (std, resize)
     width, height = pre.width - left - right, pre.height - top - bottom
     if (
         (clip.width, clip.height, clip.num_frames, clip.fps) != (width, height, pre.num_frames, pre.fps)
