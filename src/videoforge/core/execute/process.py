@@ -42,17 +42,19 @@ class ToolError(RuntimeError):
 
 
 class CancelToken:
-    """Set from another thread (e.g. the GUI) to stop the running job."""
+    """Set from another thread (e.g. the GUI) to stop the running job. A token with a parent is
+    cancelled with it too (a job's steps stop together when one of them fails)."""
 
-    def __init__(self) -> None:
+    def __init__(self, parent: CancelToken | None = None) -> None:
         self._event = threading.Event()
+        self._parent = parent
 
     def cancel(self) -> None:
         self._event.set()
 
     @property
     def cancelled(self) -> bool:
-        return self._event.is_set()
+        return self._event.is_set() or (self._parent is not None and self._parent.cancelled)
 
 
 def tool_name(argv: Sequence[str]) -> str:

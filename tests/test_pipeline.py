@@ -56,7 +56,8 @@ APP = AppConfig(
         ffmpeg=_TOOLS["ffmpeg"],
         x264="x264",
         vspipe="vspipe",
-    )
+    ),
+    parallel_audio=0,  # one step at a time, in order (the parallel tests set their own)
 )
 
 
@@ -288,8 +289,8 @@ def test_video_steps_two_pass(profile, tmp_path):
     job.video.crop = Crop(0, 140, 0, 140)
     plan.encode_path = job.video_output
     built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
-    assert [s.id for s in built.steps] == ["script", "index", "video.pass1", "video.pass2", "audio.1", "audio.2", "mux"]
-    pass1, pass2 = built.steps[2], built.steps[3]
+    assert [s.id for s in built.steps] == ["script", "index", "audio.1", "audio.2", "video.pass1", "video.pass2", "mux"]
+    pass1, pass2 = built.steps[4], built.steps[5]
     assert pass1.argvs[0][:4] == ("vspipe", "-c", "y4m", "-p")
     assert "--pass" in pass1.argvs[1] and os.devnull in pass1.argvs[1]
     assert pass2.argvs[1][-3:] == ("--output", str(job.video_output), "-")
@@ -301,7 +302,7 @@ def test_video_steps_two_pass(profile, tmp_path):
     assert result.status is JobStatus.DONE, result.error
     assert "core.std.Crop(clip, left=0, right=0, top=140, bottom=140)" in (job.work_dir / "video.vpy").read_text()
     # FFMS2 (the default) is indexed by core/video/ffindex.py, with progress
-    assert tools_called(runner) == ["python", "x264", "x264", "qaac64", "deezy", "mkvmerge"]
+    assert tools_called(runner) == ["python", "qaac64", "deezy", "x264", "x264", "mkvmerge"]
     assert runner.calls[0][0][1:3] == ["-m", "videoforge.core.video.ffindex"]
 
     (job.work_dir / "Show.S01E01.mkv.ffindex").write_bytes(b"index")  # what the real one leaves
@@ -314,6 +315,134 @@ def test_video_steps_two_pass(profile, tmp_path):
     third = FakeRunner()
     run_job(job, plan, profile, APP, state=state, runner=third, prober=lambda *_: simulate_output(plan))
     assert tools_called(third) == ["vspipe", "x264", "x264", "mkvmerge"]
+
+
+# --- audio encodes beside the video ------------------------------------------------
+
+
+def video_job(plan, tmp_path):
+    job = JobSpec(
+        inputs=JobInputs(plan.source.path, subtitles=plan.inputs.subtitles),
+        profile="manual",
+        qpf=False,
+        output_dir=tmp_path / "out",
+    )
+    plan.encode_path = job.video_output
+    return job
+
+
+class OverlapRunner(FakeRunner):
+    """FakeRunner that notes which tools run at once. A tool in `waits` waits (up to 5 s) until all the
+    tools named there for it have started."""
+
+    def __init__(self, waits: dict[str, set[str]] | None = None, fail_on: str | None = None):
+        super().__init__(fail_on)
+        self.waits = waits or {}
+        self.lock = threading.Lock()
+        self.cond = threading.Condition(self.lock)
+        self.started: set[str] = set()
+        self.active: list[str] = []
+        self.together: list[set[str]] = []  # who ran at once, at each start
+
+    def __call__(self, argvs, log, cancel):
+        name = Path(argvs[-1][0]).stem
+        with self.cond:
+            self.started.add(name)
+            self.active.append(name)
+            self.together.append(set(self.active))
+            self.cond.notify_all()
+            self.cond.wait_for(lambda: self.waits.get(name, set()) <= self.started, timeout=5)
+        try:
+            super().__call__(argvs, log, cancel)
+        finally:
+            with self.cond:
+                self.active.remove(name)
+
+
+def test_audio_encodes_run_beside_the_video(profile, tmp_path):
+    plan = make_plan(tmp_path)
+    job = video_job(plan, tmp_path)
+    runner = OverlapRunner(waits={"x264": {"qaac64", "deezy"}, "qaac64": {"x264"}, "deezy": {"x264"}})
+    state, events = JobState(), []
+    app = replace(APP, parallel_audio=2)
+    prober = lambda *_: simulate_output(plan)
+    result = run_job(job, plan, profile, app, state=state, runner=runner, prober=prober, progress=events.append)
+    assert result.status is JobStatus.DONE, result.error
+    assert any({"qaac64", "deezy", "x264"} <= t for t in runner.together)
+    assert tools_called(runner)[0] == "python" and tools_called(runner)[-1] == "mkvmerge"  # index first, mux last
+    assert all(r.status is StepStatus.DONE for r in state.run)
+    assert [e.overall for e in events] == sorted(e.overall for e in events)  # it only goes forward
+    assert events[-1].overall == pytest.approx(1.0)
+
+    again = OverlapRunner()  # a rerun reuses the background steps like any other
+    run_job(job, plan, profile, app, state=state, runner=again, prober=prober)
+    assert tools_called(again) == ["python"]  # the fake leaves no index file, so only that runs again
+
+
+@pytest.mark.parametrize("parallel", [1, 2])
+def test_parallel_audio_limit(profile, tmp_path, parallel):
+    plan = make_plan(tmp_path)  # a reused encode: only the audio and the mux
+    runner = OverlapRunner(waits={"qaac64": {"deezy"}, "deezy": {"qaac64"}} if parallel == 2 else {})
+    app = replace(APP, parallel_audio=parallel)
+    result = run_plan(plan, tmp_path / "out", profile, app, runner=runner, prober=lambda *_: simulate_output(plan))
+    assert result.status is JobStatus.DONE, result.error
+    assert max(len(t - {"mkvmerge"}) for t in runner.together) == parallel
+    assert not any("mkvmerge" in t and len(t) > 1 for t in runner.together)  # the mux waits for the audio
+
+
+def test_failed_audio_stops_the_video(profile, tmp_path):
+    plan = make_plan(tmp_path)
+    job = video_job(plan, tmp_path)
+
+    class Runner(OverlapRunner):
+        def __call__(self, argvs, log, cancel):
+            if Path(argvs[-1][0]).stem != "x264":
+                return super().__call__(argvs, log, cancel)
+            with self.cond:
+                self.started.add("x264")
+                self.cond.notify_all()
+            end = time.monotonic() + 5
+            while not cancel.cancelled and time.monotonic() < end:
+                time.sleep(0.01)
+            raise Cancelled()  # the real runner, on the cancel
+
+    runner = Runner(waits={"deezy": {"x264"}}, fail_on="deezy")
+    state = JobState()
+    result = run_job(job, plan, profile, replace(APP, parallel_audio=2), state=state, runner=runner)
+    assert result.status is JobStatus.FAILED and "deezy" in result.error
+    status = {r.id: r.status for r in state.run}
+    assert status["audio.2"] is StepStatus.FAILED and status["video"] is StepStatus.CANCELLED
+    assert status["mux"] is StepStatus.PENDING
+    assert result.error.startswith(f"Step {[r.id for r in state.run].index('audio.2') + 1}/")
+    assert "mux" not in state.steps and "audio.2" not in state.steps
+
+
+def test_cancel_stops_the_background_steps(profile, tmp_path):
+    plan = make_plan(tmp_path)
+    token = CancelToken()
+
+    def runner(argvs, log, cancel):
+        token.cancel()  # the user cancels while the first audio encode runs
+        while not cancel.cancelled:
+            time.sleep(0.01)
+        raise Cancelled()
+
+    state = JobState()
+    result = run_plan(
+        plan, tmp_path / "out", profile, replace(APP, parallel_audio=1), state=state, runner=runner, cancel=token
+    )
+    assert result.status is JobStatus.CANCELLED
+    assert [r.status for r in state.run] == [StepStatus.CANCELLED] + [StepStatus.PENDING] * 3
+
+
+def test_cancel_token_follows_its_parent():
+    parent = CancelToken()
+    child = CancelToken(parent)
+    child.cancel()
+    assert child.cancelled and not parent.cancelled
+    other = CancelToken(parent)
+    parent.cancel()
+    assert other.cancelled
 
 
 # --- a real job end to end -----------------------------------------------------------

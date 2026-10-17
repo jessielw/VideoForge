@@ -46,17 +46,20 @@ def run_job(
     progress: ProgressFn | None = None,
     on_record: Callable[[StepRecord], None] | None = None,
     on_step: Callable[[StepRun], None] | None = None,
+    step_log: Callable[[StepRun, str], None] | None = None,
     runner: Runner = process.run,
     prober: Prober = probe,
 ) -> JobResult:
     """state.steps (the finished steps of earlier runs) is read and updated; state.run is this
     run's steps (the pipeline's, then Validate), and on_step hears each change to one of them
-    (first every step as pending). The rest of state is set from the result."""
+    (first every step as pending). A step's output lines go to step_log (default: log); with
+    app.parallel_audio, audio encodes run alongside the video, so callbacks come from more than
+    one thread (one at a time). The rest of state is set from the result."""
     state = state if state is not None else JobState()
     state.run = []
     log = log or (lambda _line: None)
     on_step = on_step or (lambda _run: None)
-    result = _run(spec, plan, profile, app, state, log, cancel, progress, on_record, on_step, runner, prober)
+    result = _run(spec, plan, profile, app, state, log, cancel, progress, on_record, on_step, step_log, runner, prober)
     state.status, state.output, state.issues, state.error = result.status, result.output, result.issues, result.error
     return result
 
@@ -70,7 +73,9 @@ def _failed_step(state: JobState, error: str) -> str:
     return error
 
 
-def _run(spec, plan, profile, app, state, log, cancel, progress, on_record, on_step, runner, prober) -> JobResult:
+def _run(
+    spec, plan, profile, app, state, log, cancel, progress, on_record, on_step, step_log, runner, prober
+) -> JobResult:
     if plan.blocked:
         reasons = "; ".join(i.message for i in plan.issues if i.severity is Severity.BLOCK)
         return JobResult(plan, JobStatus.SKIPPED, error=reasons)
@@ -110,6 +115,8 @@ def _run(spec, plan, profile, app, state, log, cancel, progress, on_record, on_s
             runner=runner,
             runs=state.run[:-1],
             on_step=on_step,
+            step_log=step_log,
+            parallel=app.parallel_audio,
         )
         validate.status = StepStatus.RUNNING
         on_step(validate)

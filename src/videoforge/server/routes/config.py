@@ -10,7 +10,7 @@ jobs, probes and runs use them. Switching a plugin on or off takes effect on the
 from __future__ import annotations
 
 from contextlib import suppress
-from dataclasses import asdict, replace
+from dataclasses import asdict
 import os
 from pathlib import Path
 from typing import Any
@@ -26,7 +26,7 @@ from videoforge.core.tools import TOOL_NAMES, TOOLS, check, detect, missing_for_
 from videoforge.core.video import vs as vsx
 from videoforge.plugins.loader import describe as describe_plugins
 from videoforge.profiles import default_profile_id
-from videoforge.server.settings import SavedSettings
+from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
 
 router = APIRouter(prefix="/api/config")
 RESTART_FOR: dict[str, str] = {  # setting -> why VideoForge needs a restart for it
@@ -61,6 +61,8 @@ def _state(request: Request) -> dict[str, Any]:
         "profiles": [{"id": pid, "name": profiles(pid).name} for pid in ids],
         "restart": [RESTART_FOR[n] for n in sorted(s.restart_for)],
         "index_waits_for_disk": saved.index_waits_for_disk,
+        "parallel_audio": s.config.parallel_audio,
+        "parallel_audio_default": s.base_config.parallel_audio,
         "notifications": [d.to_json() for d in saved.notifications],
         "notification_events": [
             {"id": e.value, "label": label, "default": e in DEFAULT_EVENTS} for e, label in EVENT_LABELS.items()
@@ -82,6 +84,7 @@ def get_config(request: Request) -> dict[str, Any]:
 def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     """Change any of: tools ({name: path, or "" / null for the default}), roots (a list, or null
     for every drive), profile (an id, or null for videoforge.toml's), index_waits_for_disk (bool),
+    parallel_audio (audio encodes at once beside the video, 0 to MAX_PARALLEL_AUDIO; null for videoforge.toml's),
     notifications (the whole list: [{name, url, enabled, events}]), actions (the whole list:
     [{name, kind, target, enabled, events, overwrite}]), disabled_plugins (plugin ids)."""
     s = request.app.state
@@ -107,6 +110,13 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         if profile is not None and profile not in s.profile_ids:
             raise HTTPException(422, f"No profile {profile!r} is installed")
     waits = bool(body["index_waits_for_disk"]) if "index_waits_for_disk" in body else saved.index_waits_for_disk
+    parallel = saved.parallel_audio
+    if "parallel_audio" in body:
+        parallel = body["parallel_audio"]
+        if parallel is not None and (
+            not isinstance(parallel, int) or isinstance(parallel, bool) or not 0 <= parallel <= MAX_PARALLEL_AUDIO
+        ):
+            raise HTTPException(422, f"parallel_audio: a whole number from 0 to {MAX_PARALLEL_AUDIO}")
     destinations = saved.notifications
     if "notifications" in body:
         try:
@@ -125,7 +135,7 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         disabled = sorted({str(i) for i in body["disabled_plugins"] or []})
 
     before = s.config.tools
-    new = SavedSettings(tools, roots, profile, waits, destinations, actions, disabled)
+    new = SavedSettings(tools, roots, profile, waits, destinations, actions, disabled, parallel)
     new.save(s.store)
     s.saved = new
     s.queue.set_index_waits_for_disk(waits)
@@ -136,7 +146,7 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     else:
         s.restart_for.discard("plugins")
     s.default_profile = default_profile_id(profile or s.base_config.profile, s.profile_ids)
-    cfg = replace(with_tools(s.base_config, tools), profile=s.default_profile)
+    cfg = new.app_config(s.base_config, s.default_profile)
     s.config = cfg
     s.queue.app = cfg  # new probes and runs use it; a running job keeps the one it started with
     s.settings.roots = [Path(r) for r in roots] if roots else list(s.default_roots)

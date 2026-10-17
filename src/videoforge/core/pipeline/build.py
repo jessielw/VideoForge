@@ -1,6 +1,9 @@
 """A job's steps from its spec and plan.
 
-    script -> index -> chapters/qpf -> video (1 or 2 passes) -> audio encodes -> mux
+    script -> index -> chapters/qpf -> audio encodes -> video (1 or 2 passes) -> mux
+
+The audio encodes are background steps: with AppConfig.parallel_audio they run alongside the
+video encode (after the index, which reads the whole source too), and the mux waits for them.
 
 Everything is written into the job's work folder except the mux, which writes
 <output>.partial and moves it into place when it is complete. A job that reuses
@@ -193,13 +196,14 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
 
     settings = profile.audio_settings()
     encoded: dict[int, Path] = {}
+    audio: list[Step] = []
     for pos, a in enumerate(plan.audio):
         src = a.source.external_path or plan.source.path  # an added audio file is read from itself
         cmd = audio_command(a, pos, src, work, settings, app.tools)
         if cmd is None:
             continue
         encoded[pos] = cmd.output
-        steps.append(
+        audio.append(
             Step(
                 f"audio.{pos + 1}",
                 f"Encode audio {pos + 1}: {a.title}",
@@ -207,8 +211,11 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
                 outputs=(cmd.output,),
                 inputs=(src,),
                 weight=4,
+                background=True,
             )
         )
+    at = next((n for n, s in enumerate(steps) if s.id.startswith("video")), len(steps))
+    steps[at:at] = audio
 
     container = spec.container(profile)
     if container == "mp4" and (chapters := mp4_chapters_step(plan, work)) is not None:

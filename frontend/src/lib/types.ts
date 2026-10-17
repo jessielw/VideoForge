@@ -480,6 +480,8 @@ export interface ConfigState {
   profiles: { id: string; name: string }[]
   restart: string[]
   index_waits_for_disk: boolean // batch indexing holds a job back while an encode reads its disk
+  parallel_audio: number // audio encodes at once beside a job's video; 0 = one by one
+  parallel_audio_default: number // videoforge.toml's
   notifications: NotificationDestination[]
   notification_events: { id: NotificationEvent; label: string; default: boolean }[]
   actions: ActionSetting[]

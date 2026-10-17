@@ -77,6 +77,17 @@
     }
   }
 
+  async function setParallelAudio(input: HTMLInputElement) {
+    if (!config) return
+    const { parallel_audio: now, parallel_audio_default: fallback } = config
+    const n = Math.round(Number(input.value))
+    if (input.value.trim() === '' || !Number.isFinite(n) || n < 0 || n > 8) {
+      input.value = String(now)
+      return
+    }
+    if (!(await change({ parallel_audio: n === fallback ? null : n }))) input.value = String(now)
+  }
+
   async function setTool(t: ToolSetting, value: string) {
     const path = value.trim()
     if (!(await change({ tools: { [t.name]: path && path !== t.default ? path : null } }))) return
@@ -373,6 +384,27 @@
             <span class="block text-xs text-muted-foreground">
               A job in the index lane whose source is on the disk the running encode reads waits for it to finish; jobs on
               other disks go first. Index now on a job never waits.
+            </span>
+          </span>
+        </label>
+      </section>
+
+      <section class="space-y-3">
+        <h2 class="font-medium">Audio encodes</h2>
+        <label class="flex items-start gap-3 text-sm">
+          <Input
+            type="number"
+            min="0"
+            max="8"
+            class="w-20"
+            value={config.parallel_audio}
+            onchange={e => setParallelAudio(e.currentTarget)}
+          />
+          <span>
+            At once, beside the video encode
+            <span class="block text-xs text-muted-foreground">
+              A job's audio encodes start once its source is indexed and run while the video encodes; the mux waits for
+              them. 0 encodes them one by one, before the video. videoforge.toml says: {config.parallel_audio_default}
             </span>
           </span>
         </label>

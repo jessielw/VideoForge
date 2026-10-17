@@ -29,6 +29,11 @@ encode_extensions = [".h264", ".264", ".avc", ".hevc", ".265", ".h265"]
 scan_source_folder = true
 staxrip_temp = true
 
+[pipeline]
+# Audio encodes a job runs at once beside its video encode (they start once the source is indexed);
+# 0 encodes them one by one. The Settings page can change it.
+parallel_audio = 2
+
 [actions]
 # Let the Settings page's command actions run. Off here: the web page has no login, so anyone who can
 # reach the container could run anything in it. Turn it on in a videoforge.local.toml if only you can.

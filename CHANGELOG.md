@@ -14,7 +14,8 @@ The first beta: an encode and mux job queue in the browser, for one user on Wind
 - **Job queue.** Queue a job or a batch of episodes (a folder of source MKVs); each runs index → VapourSynth
   script → x264 / x265 (1 or 2 passes) → audio → mux → validate. Jobs run one at a time and survive restarts;
   a rerun skips every step whose command and inputs haven't changed, so a crashed job resumes after its last
-  finished step and a changed subtitle flag only muxes again.
+  finished step and a changed subtitle flag only muxes again. A job's audio encodes run alongside its video
+  encode, up to 2 at once by default (Settings → Audio encodes; 0 runs them one by one).
 - **Video.** Frame preview with zoom, pan and a crop overlay; auto crop; resize; filters; the generated
   VapourSynth script, editable. Source filters: FFMS2 (the default, with index progress), L-SMASH, BestSource.
 - **Encoder.** x264 and x265 option panels, 1 or 2 passes; AutoQPF chapters to a qpf file.

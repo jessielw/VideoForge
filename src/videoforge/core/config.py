@@ -41,6 +41,7 @@ class AppConfig:
     profile: str | None = None  # default profile id for new jobs; None = the built-in one
     allow_commands: bool = False  # [actions] commands: the Settings page's command actions may run
     plugins: dict[str, dict] = field(default_factory=dict)  # [plugins.<id>]: each plugin's own settings
+    parallel_audio: int = 2  # audio encodes run alongside a job's video, this many at once; 0 = one by one
 
 
 def _resolve_tool(value: str, base: Path) -> str:
@@ -106,6 +107,12 @@ def load_app_config(path: Path | None = None) -> AppConfig:
     )
     allow_commands = bool(data.get("actions", {}).get("commands", False))
     plugins = {k: v for k, v in data.get("plugins", {}).items() if isinstance(v, dict)}
+    parallel_audio = max(0, int(data.get("pipeline", {}).get("parallel_audio", AppConfig.parallel_audio)))
     return AppConfig(
-        tools=tools, matching=matching, profile=data.get("profile"), allow_commands=allow_commands, plugins=plugins
+        tools=tools,
+        matching=matching,
+        profile=data.get("profile"),
+        allow_commands=allow_commands,
+        plugins=plugins,
+        parallel_audio=parallel_audio,
     )

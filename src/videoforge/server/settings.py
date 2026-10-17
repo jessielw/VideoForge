@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import os
 from pathlib import Path
 import string
 
 from videoforge.core.actions import Action, load_actions
-from videoforge.core.config import PROJECT_ROOT
+from videoforge.core.config import PROJECT_ROOT, AppConfig, with_tools
 from videoforge.core.history import app_data_dir
 from videoforge.core.notify import Destination, load_destinations
+
+MAX_PARALLEL_AUDIO = 8  # the Settings page's limit on audio encodes at once
 
 
 def default_roots() -> list[Path]:
@@ -56,6 +58,7 @@ class SavedSettings:
     notifications: list[Destination] = field(default_factory=list)  # where job and queue news goes
     actions: list[Action] = field(default_factory=list)  # what runs after a job ends or the queue finishes
     disabled_plugins: list[str] = field(default_factory=list)  # plugin ids not loaded on the next start
+    parallel_audio: int | None = None  # audio encodes alongside the video; None = videoforge.toml's
 
     @classmethod
     def load(cls, store) -> SavedSettings:
@@ -68,6 +71,7 @@ class SavedSettings:
             load_destinations(store.get_setting("notifications") or []),
             load_actions(store.get_setting("actions") or []),
             [str(i) for i in store.get_setting("disabled_plugins") or []],
+            store.get_setting("parallel_audio"),
         )
 
     def save(self, store) -> None:
@@ -78,3 +82,9 @@ class SavedSettings:
         store.set_setting("notifications", [d.to_json() for d in self.notifications])
         store.set_setting("actions", [a.to_json() for a in self.actions])
         store.set_setting("disabled_plugins", self.disabled_plugins)
+        store.set_setting("parallel_audio", self.parallel_audio)
+
+    def app_config(self, base: AppConfig, profile: str) -> AppConfig:
+        """base (videoforge.toml) with these settings over it."""
+        cfg = replace(with_tools(base, self.tools), profile=profile)
+        return cfg if self.parallel_audio is None else replace(cfg, parallel_audio=self.parallel_audio)

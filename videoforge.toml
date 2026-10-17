@@ -36,6 +36,11 @@ scan_source_folder = true
 # a_qpf/qpf_chapters.txt for chapters when no chapter file was added.
 staxrip_temp = true
 
+[pipeline]
+# Audio encodes a job runs at once beside its video encode (they start once the source is indexed);
+# 0 encodes them one by one. The Settings page can change it.
+parallel_audio = 2
+
 [actions]
 # Let the Settings page's command actions run (a program after a job ends or the queue finishes).
 # The web page has no login, so turn this off if anyone else can reach VideoForge.

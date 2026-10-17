@@ -130,10 +130,17 @@ added, to one job, or to a batch; a template applied after a job's own edits rep
 ## Pipeline
 
 ```
-index ─► qpf/chapters ─► video (vspipe | x264/x265, 1 or 2 passes) ─► audio encodes ─► mux ─► validate
+index ─► qpf/chapters ─┬► video (vspipe | x264/x265, 1 or 2 passes) ─┬► mux ─► validate
+                       └► audio encodes (up to N at once) ────────────┘
 ```
 
 - Each step writes only into the job's `<source>_tmp/` (the mux writes `<out>.partial`).
+- The audio encodes are background steps (`Step.background`): `run_steps` starts them on up to
+  `AppConfig.parallel_audio` threads (videoforge.toml `[pipeline]`, Settings → Audio encodes; default 2)
+  once the index is done (it reads the whole source too), and goes on with the video. A step waits for
+  the background steps whose outputs it reads (the mux), and one step failing cancels the others
+  (a child `CancelToken`). With 0 they run one by one, before the video. Their lines reach the queue
+  through `step_log`, tagged with their step, since several steps run at once.
 - A step's fingerprint covers its command and inputs. A rerun skips a step whose
   fingerprint matches and whose outputs exist. That gives crash recovery (restart
   the server and the job resumes after its last finished step) and cheap reruns

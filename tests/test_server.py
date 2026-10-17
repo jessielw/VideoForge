@@ -75,7 +75,7 @@ class FakeRun:
         self.runs: list[str] = []
         self.block = block
 
-    def __call__(self, spec, plan, profile, app, *, state, log, cancel, progress, on_record, on_step):
+    def __call__(self, spec, plan, profile, app, *, state, log, cancel, progress, on_record, on_step, step_log):
         self.runs.append(spec.name)
         step = Step("video", "Video (x264)", argvs=(("x264", "--crf", "18"),))
         run = step.to_run()
@@ -84,8 +84,8 @@ class FakeRun:
         run.status = StepStatus.RUNNING
         on_step(run)
         log("== 1/1 Video (x264)")
-        log("[x264] [ 50.0%] 1/2 frames")
         run.log("[x264] [ 50.0%] 1/2 frames")  # as run_steps keeps a step's tail
+        step_log(run, "[x264] [ 50.0%] 1/2 frames")
         progress(StepProgress(0, 1, step, 0.5, 0.5))
         if self.block:
             while not cancel.cancelled:
@@ -515,7 +515,7 @@ def test_a_job_that_wont_stop_is_requeued_after_shutdown(tmp_path):
     release = threading.Event()
 
     class Stubborn(FakeRun):
-        def __call__(self, spec, plan, profile, app, *, state, log, cancel, progress, on_record, on_step):
+        def __call__(self, spec, plan, profile, app, *, state, log, cancel, progress, on_record, on_step, step_log):
             run = Step("video", "Video (x264)", argvs=(("x264",),)).to_run()
             state.run = [run]
             run.status = StepStatus.RUNNING
@@ -591,12 +591,22 @@ def test_settings_page_config(tmp_path):
         changed = client.put("/api/config", json={"tools": {"vs_plugins": str(folder)}}).json()
         assert not changed["restart"]  # the preview worker restarts with the new folder
 
+        assert (cfg["parallel_audio"], cfg["parallel_audio_default"]) == (2, 2)
+        assert client.put("/api/config", json={"parallel_audio": 0}).json()["parallel_audio"] == 0
+        assert client.app.state.queue.app.parallel_audio == 0  # new runs use it
+        for bad in (-1, 9, 1.5, "2", True):
+            assert client.put("/api/config", json={"parallel_audio": bad}).status_code == 422
+
     with make_client(tmp_path) as client:  # kept across a restart
         cfg = client.get("/api/config").json()
         assert {t["name"]: t for t in cfg["tools"]}["x264"]["custom"] == sys.executable
-        assert cfg["roots"] == [str(folder)]
-        reset = client.put("/api/config", json={"tools": {"x264": None}, "roots": None, "profile": None}).json()
+        assert cfg["roots"] == [str(folder)] and cfg["parallel_audio"] == 0
+        assert client.app.state.queue.app.parallel_audio == 0
+        reset = client.put(
+            "/api/config", json={"tools": {"x264": None}, "roots": None, "profile": None, "parallel_audio": None}
+        ).json()
         assert {t["name"]: t for t in reset["tools"]}["x264"]["path"] == "x264" and not reset["roots_custom"]
+        assert reset["parallel_audio"] == 2
 
 
 def test_presets(tmp_path):

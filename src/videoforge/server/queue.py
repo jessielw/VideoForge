@@ -117,7 +117,6 @@ class Entry:
     log: deque[str] = field(default_factory=lambda: deque(maxlen=LOG_LINES))
     # The last run's output per step (in memory; state.run keeps only each step's tail).
     step_lines: dict[str, deque[str]] = field(default_factory=dict)
-    current_step: str | None = None
 
     @property
     def id(self) -> str:
@@ -688,10 +687,7 @@ class JobQueue:
 
         def on_step(run: StepRun) -> None:
             if run.status is StepStatus.RUNNING:
-                e.current_step = run.id
                 e.step_lines[run.id] = deque(maxlen=STEP_LINES)
-            elif e.current_step == run.id:
-                e.current_step = None
             if run.status is not StepStatus.PENDING:
                 self._save(e)
             index = next((i for i, r in enumerate(e.state.run) if r is run), -1)
@@ -701,8 +697,11 @@ class JobQueue:
                 "step", id=e.id, index=index, total=len(e.state.run), step=step_json(run, with_tail=False)
             )
 
+        def step_log(run: StepRun, line: str) -> None:
+            self._log(e, line, log_file, step=run.id)
+
         with self._lock:
-            e.step_lines, e.current_step = {}, None
+            e.step_lines = {}
         log(f"### {e.spec.name} ({datetime.now().isoformat(timespec='seconds')})")
         try:
             result = self.services.run(
@@ -716,6 +715,7 @@ class JobQueue:
                 progress=progress,
                 on_record=on_record,
                 on_step=on_step,
+                step_log=step_log,
             )
         except Exception as ex:  # a bug must not kill the queue
             logger.exception("%s: the run raised", e.spec.name)
@@ -747,7 +747,7 @@ class JobQueue:
         if log_file is not None:
             log_file.close()
         with self._lock:
-            e.running, e.progress, e.current_step = False, None, None
+            e.running, e.progress = False, None
             self._save(e)
         self._changed(e)
         self._index_wake.set()  # a job held back for this one's disk may go
@@ -984,18 +984,16 @@ class JobQueue:
         if self.queue_events is not None:
             self.queue_events.write(event(kind, job=e.id, name=e.spec.name, **fields))
 
-    def _log(self, e: Entry, line: str, file=None) -> None:
+    def _log(self, e: Entry, line: str, file=None, step: str | None = None) -> None:
+        """step: the step whose output it is (several run at once while audio encodes run beside the video)."""
         e.log.append(line)
         if file is not None:
             try:
                 file.write(f"{datetime.now():%H:%M:%S} {line}\n")
             except OSError:
                 pass
-        step = e.current_step
-        if step is not None and not line.startswith("== "):  # the step header is the step's panel
-            e.step_lines[step].append(line)
-        else:
-            step = None
+        if step is not None:
+            e.step_lines.setdefault(step, deque(maxlen=STEP_LINES)).append(line)
         self.events.publish("log", id=e.id, line=line, step=step)
 
     def step_output(self, e: Entry) -> list[dict[str, Any]]:

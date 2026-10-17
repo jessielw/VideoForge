@@ -407,7 +407,7 @@ def _deezy(
         "--output",
         str(output),
         "--temp-dir",
-        str(temp_dir / "deezy"),
+        str(temp_dir / f"deezy.{output.stem}"),  # its own: audio encodes may run at the same time
         "--overwrite",
         "--ffmpeg",
         tools.ffmpeg,

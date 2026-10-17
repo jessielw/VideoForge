@@ -97,6 +97,7 @@ export const api = {
     roots?: string[] | null
     profile?: string | null
     index_waits_for_disk?: boolean
+    parallel_audio?: number | null
     notifications?: NotificationDestination[]
     actions?: ActionSetting[]
     disabled_plugins?: string[]

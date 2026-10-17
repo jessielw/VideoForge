@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from dataclasses import replace
 from functools import partial
 import logging
 from pathlib import Path
@@ -20,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from videoforge.core.actions import ActionRunner
-from videoforge.core.config import AppConfig, load_app_config, with_tools
+from videoforge.core.config import AppConfig, load_app_config
 from videoforge.core.events import EventBus, JobFinished, QueueFinished
 from videoforge.core.history import JobHistory
 from videoforge.core.notify import Notifier
@@ -59,7 +58,7 @@ def create_app(
     store = Store(settings.db_path)
     saved = SavedSettings.load(store)
     default = default_profile_id(saved.profile or base.profile, ids)
-    cfg = replace(with_tools(base, saved.tools), profile=default)
+    cfg = saved.app_config(base, default)
     default_roots = list(settings.roots)
     if saved.roots:
         settings.roots = [Path(r) for r in saved.roots]
