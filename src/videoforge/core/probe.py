@@ -6,6 +6,7 @@ MediaInfo ``track_id``).
 
 from __future__ import annotations
 
+from fractions import Fraction
 import json
 from pathlib import Path
 import subprocess
@@ -67,6 +68,23 @@ def _int(value: Any) -> int | None:
         return None
 
 
+def _sar(width: int, height: int, props: dict[str, Any], mi: Any) -> Fraction:
+    """The pixel aspect ratio: from mkvmerge's display size when it has one (exact; it's the container's,
+    when it's there: not for an MP4 or a TS), else MediaInfo's, from the stream too. MediaInfo rounds it to
+    3 decimals (1.185): the simplest fraction that rounds the same is taken (32:27)."""
+    shown = (props.get("display_dimensions") or "").split("x")
+    if width > 0 and height > 0 and len(shown) == 2 and all(d.isdigit() and int(d) for d in shown):
+        return Fraction(int(shown[0]) * height, int(shown[1]) * width)
+    try:
+        shown_par = Fraction(str(getattr(mi, "pixel_aspect_ratio", None) or 1))
+    except (ValueError, ZeroDivisionError):
+        return Fraction(1)
+    if shown_par <= 0:
+        return Fraction(1)
+    simple = shown_par.limit_denominator(100)
+    return simple if abs(simple - shown_par) <= Fraction(1, 2000) else shown_par.limit_denominator(10000)
+
+
 def probe(path: Path, mkvmerge: str) -> SourceInfo:
     ident = mkvmerge_identify(path, mkvmerge)
     mi_all = MediaInfo.parse(str(path)).tracks
@@ -87,12 +105,18 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
 
         if kind == "video" and video is None:
             dims = (props.get("pixel_dimensions") or "0x0").split("x")
+            width, height = int(dims[0]), int(dims[1])
+            if mi is None:  # a raw stream: no track ids to pair by
+                mi = next((t for t in mi_all if t.track_type == "Video"), None)
+            sar = _sar(width, height, props, mi)
             video = VideoInfo(
-                width=int(dims[0]),
-                height=int(dims[1]),
+                width=width,
+                height=height,
                 start_ms=_ms(props.get("minimum_timestamp")),
                 default_duration_ns=props.get("default_duration"),
                 language=language,
+                sar_num=sar.numerator,
+                sar_den=sar.denominator,
             )
         elif kind == "audio":
             if mi is None and len(audio) < len(mi_audio) and mi_audio[len(audio)].track_id is None:

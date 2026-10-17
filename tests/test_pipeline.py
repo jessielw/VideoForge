@@ -459,6 +459,86 @@ needs_tools = pytest.mark.skipif(
 
 
 @needs_tools
+@pytest.mark.parametrize("ext", [".mkv", ".mp4", ".ts"])
+def test_probe_reads_the_pixel_aspect(tmp_path, ext):
+    """An anamorphic source's pixel aspect ratio, whatever the container (a TS has it in the stream only)."""
+    from fractions import Fraction
+
+    from videoforge.core.config import load_app_config
+    from videoforge.core.probe import probe
+
+    src = tmp_path / f"dvd{ext}"
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=1:size=720x480:rate=24",
+         "-vf", "setsar=32/27", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-y", str(src)],
+        check=True,
+    )  # fmt: skip
+    video = probe(src, load_app_config().tools.mkvmerge).video
+    assert video is not None and (video.width, video.height) == (720, 480)
+    assert abs(video.sar - Fraction(32, 27)) < Fraction(1, 500), video.sar
+
+
+@needs_tools
+@pytest.mark.parametrize(("keep_ar", "container"), [(False, "mkv"), (True, "mkv"), (False, "mp4")])
+def test_real_anamorphic_job_keeps_its_shape(tmp_path, keep_ar, container):
+    """A 16:9 DVD (720x480, 32:27 pixels), cropped: as it is, the encode keeps the pixel aspect; resized
+    with keep AR, it's square at the cropped picture's aspect. Either way the output plays at the same shape."""
+    from fractions import Fraction
+
+    if container == "mp4" and shutil.which("MP4Box") is None:
+        pytest.skip("needs MP4Box (GPAC) on PATH")
+    from videoforge.core.config import load_app_config
+    from videoforge.core.execute.mux import MuxSettings
+    from videoforge.core.job import plan_spec, probe_spec
+    from videoforge.core.probe import probe
+    from videoforge.core.video import vs as vsx
+    from videoforge.core.video.settings import Resize
+    from videoforge.profiles import get_profile
+
+    app = load_app_config()
+    vsx.configure(app.tools.vs_plugins)
+    vsx.ensure_vspipe(app.tools.vspipe)
+    src = tmp_path / "Movie.2001.mkv"
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=1:size=720x480:rate=24",
+         "-f", "lavfi", "-i", "sine=duration=1", "-map", "0:v", "-map", "1:a", "-vf", "setsar=32/27",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "2", "-metadata:s:a:0", "language=eng",
+         "-y", str(src)],
+        check=True,
+    )  # fmt: skip
+    job = JobSpec(
+        inputs=JobInputs(src),
+        profile="manual",
+        output_dir=tmp_path / "out",
+        encoder=EncoderSettings(preset="ultrafast", crf=30),
+        qpf=False,
+        mux=MuxSettings(container=container),
+    )
+    job.video.crop = Crop(8, 0, 8, 0)
+    if keep_ar:
+        job.video.resize = Resize(854, 480, keep_ar=True)
+    probed = probe_spec(job, app)
+    assert probed.source.video is not None and probed.source.video.sar == Fraction(32, 27)
+    job.video.fit_resize(720, 480, probed.source.video.sar)
+    profile = get_profile("manual")
+    plan = plan_spec(job, probed, profile)
+    assert not plan.blocked, plan.issues
+    lines: list[str] = []
+    result = run_job(job, plan, profile, app, log=lines.append)
+    assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
+    out = probe(result.output, app.tools.mkvmerge).video
+    assert out is not None
+    if keep_ar:
+        assert (out.width, out.height, out.sar) == (854, 492, 1)
+    else:
+        # Matroska keeps a display size in whole pixels (834x480): 417:352, not quite 32:27.
+        assert (out.width, out.height) == (704, 480) and abs(out.sar - Fraction(32, 27)) < Fraction(1, 1000)
+    assert result.output.suffix == f".{container}"
+    shape = Fraction(out.width, out.height) * out.sar
+    assert abs(shape / (Fraction(704, 480) * Fraction(32, 27)) - 1) < Fraction(1, 200)
+
+
+@needs_tools
 def test_real_job_end_to_end(tmp_path):
     """ffmpeg-made source (letterboxed video, English AAC 2.0, chapters) -> crop + x264 + AutoQPF + mux."""
     from videoforge.core.config import load_app_config

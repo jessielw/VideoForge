@@ -18,12 +18,14 @@
     filters = $bindable(),
     crop,
     resize,
+    template = false,
     disabled = false,
     onchange = () => {},
   }: {
     filters: FilterStep[]
     crop?: Crop // shown on the crop step (a template's crop may be per job: none)
     resize: Resize | null
+    template?: boolean // a keep-AR resize's height is each job's
     disabled?: boolean
     onchange?: () => void
   } = $props()
@@ -59,7 +61,7 @@
       const { left, top, right, bottom } = crop
       return left || top || right || bottom ? `${left}/${top}/${right}/${bottom}` : 'none'
     }
-    if (s.category === 'resize') return resize ? `${resize.width}×${resize.height}` : 'off'
+    if (s.category === 'resize') return resize ? `${resize.width}×${resize.keep_ar && template ? 'auto' : resize.height}` : 'off'
     return FILTER_CATEGORIES.find(c => c.id === s.category)?.label ?? s.category
   }
 </script>

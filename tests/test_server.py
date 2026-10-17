@@ -641,6 +641,24 @@ def test_presets(tmp_path):
         assert client.delete("/api/presets/encoder/Fast x265").json()["encoder"] == []
 
 
+def test_keep_ar_resize_is_fitted_on_the_server(tmp_path):
+    """A keep-AR resize's height follows each crop change (and the probe), whatever height was sent."""
+    make_files(tmp_path, "S01E01")
+    with make_client(tmp_path) as client:
+        (job_id,) = add(client, tmp_path)
+        video = wait_for(client, job_id, "ready", "warn")["spec"]["video"]
+        resize = {"width": 1280, "height": 720, "kernel": "Spline36", "keep_ar": True, "mod": 2}
+        bars = {"left": 0, "top": 140, "right": 0, "bottom": 140}
+        client.patch(f"/api/jobs/{job_id}", json={"video": video | {"crop": bars, "resize": resize}})
+        job = client.get(f"/api/jobs/{job_id}").json()
+        assert job["spec"]["video"]["resize"]["height"] == 534
+        client.patch(
+            f"/api/jobs/{job_id}",
+            json={"video": job["spec"]["video"] | {"crop": {"left": 0, "top": 0, "right": 0, "bottom": 0}}},
+        )
+        assert client.get(f"/api/jobs/{job_id}").json()["spec"]["video"]["resize"]["height"] == 720
+
+
 def test_templates(tmp_path):
     """A template sets the whole run when jobs are added or on a batch; its auto crop is detected per
     job afterwards, on the index lane after the index (the job can't be queued meanwhile), and a crop set

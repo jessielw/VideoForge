@@ -8,6 +8,7 @@ timestamps. A qpfile (from the chapters) forces keyframes at chapter starts.
 
 from __future__ import annotations
 
+from fractions import Fraction
 from pathlib import Path
 import re
 import shlex
@@ -46,8 +47,11 @@ def encoder_command(
     pass_number: int | None = None,
     stats: Path | None = None,
     qpfile: Path | None = None,
+    sar: Fraction | None = None,
 ) -> list[str]:
-    """One encoder run reading y4m from stdin. pass_number is 1 or 2 for a two-pass encode."""
+    """One encoder run reading y4m from stdin. pass_number is 1 or 2 for a two-pass encode. sar is the
+    encode's pixel aspect ratio (vspipe's y4m carries none), written when it isn't square; a --sar in the
+    options or extra arguments comes after it, and wins."""
     x265 = settings.encoder is Encoder.X265
     argv = [exe, "--y4m"] if x265 else [exe, "--demuxer", "y4m"]
     argv += ["--frames", str(frames)] if frames else []
@@ -63,6 +67,8 @@ def encoder_command(
         argv += ["--pass", str(pass_number), "--stats", str(stats)]
     if x265 or settings.depth != 8:
         argv += ["--output-depth", str(settings.depth)]
+    if sar is not None and sar != 1:
+        argv += ["--sar", f"{sar.numerator}:{sar.denominator}"]
     argv += _options(settings.options)
     if qpfile is not None:
         argv += ["--qpfile", str(qpfile)]

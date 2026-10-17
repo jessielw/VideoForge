@@ -26,8 +26,10 @@ export interface Crop {
 
 export interface Resize {
   width: number
-  height: number
+  height: number // with keep_ar, fitted to the job's source and crop (the server fits it on every change)
   kernel: string
+  keep_ar: boolean // the height follows the width, keeping the display aspect ratio
+  mod: number // both sides a multiple of it
 }
 
 export type SourceFilter = 'bestsource' | 'lsmash' | 'ffms2'
@@ -306,7 +308,14 @@ export interface Plan {
 }
 
 export interface Tracks {
-  video: { width: number; height: number; start_ms: number; default_duration_ns: number | null } | null
+  video: {
+    width: number
+    height: number
+    start_ms: number
+    default_duration_ns: number | null
+    sar_num: number // the pixel aspect ratio (not 1:1 on an anamorphic source)
+    sar_den: number
+  } | null
   audio: AudioTrack[]
   subs: SubTrack[]
   has_chapters: boolean

@@ -433,6 +433,10 @@ class JobQueue:
     def _replan(self, e: Entry) -> None:
         if e.probed is None:
             return
+        # A keep-AR resize follows the source and crop (a new probe, an auto-crop, a template's width).
+        v = e.probed.source.video
+        if v is not None and e.spec.video.fit_resize(v.width, v.height, v.sar):
+            self._save(e)
         try:
             e.plan = plan_spec(e.spec, e.probed, self.profile(e), self.app.tools)
             if e.spec.overrides.original_language is None:  # pin the guess so it survives edits

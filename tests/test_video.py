@@ -6,6 +6,7 @@ in tools/vs-plugins and the encoders in tools/; they skip when those are missing
 
 from __future__ import annotations
 
+from fractions import Fraction
 from pathlib import Path
 import shutil
 import subprocess
@@ -29,6 +30,9 @@ from videoforge.core.video.settings import (
     Resize,
     SourceFilter,
     VideoSettings,
+    ar_error,
+    fit_height,
+    fit_width,
 )
 
 TOOLS = PROJECT_ROOT / "tools"
@@ -140,6 +144,27 @@ def test_x265_crf_depth():
     assert output_name(s) == "video.hevc"
 
 
+def test_encode_keeps_the_pixel_aspect():
+    """The encoder is told the encode's pixel aspect (vspipe's y4m has none): an anamorphic source's when
+    it isn't resized, square after a keep-AR resize, the shape undoing a fixed size's stretch otherwise."""
+    dvd = Fraction(32, 27)
+    s = VideoSettings(crop=Crop(8, 0, 8, 0))
+    assert s.output_sar(720, 480, dvd) == dvd  # a crop keeps the pixels' shape
+    s.resize = Resize(854, 480, keep_ar=True)
+    assert s.output_sar(720, 480, dvd) == 1
+    s.resize = Resize(704, 480)  # the size it went in at: still anamorphic
+    assert s.output_sar(720, 480, dvd) == dvd
+    s.resize = Resize(640, 480)  # squeezed
+    assert s.output_sar(720, 480, dvd) == dvd * 704 / 640
+    assert VideoSettings(crop=Crop(0, 140, 0, 140), resize=Resize(1280, 534)).output_sar(1920, 1080) == 1  # 0.1% off
+    assert VideoSettings(custom="clip = clip").output_sar(720, 480, dvd) is None
+
+    enc = EncoderSettings(extra="--sar 1:1")
+    argv = encoder_command("x264", enc, output=Path("v.264"), sar=dvd)
+    assert argv[argv.index("--sar") + 1] == "32:27" and argv.index("--sar") < argv.index("1:1")  # the user's wins
+    assert "--sar" not in encoder_command("x265", EncoderSettings(Encoder.X265), output=Path("v.hevc"), sar=Fraction(1))
+
+
 def test_progress_lines():
     assert progress("[x264] [ 12.5%] 125/1000 frames, 30.1 fps, 9000 kb/s, eta 0:00:29") == 0.125
     assert progress("[x265] [50.0%] 500/1000 frames, 4.12 fps") == 0.5
@@ -243,6 +268,34 @@ def test_chain_order_makes_the_script():
     assert s.output_size(1920, 1080) == (1920, 1036)
     dupes = VideoSettings(filters=[*VideoSettings().filters, FilterStep(FilterCategory.CROP, "Crop", enabled=False)])
     assert [f.category for f in dupes.filters] == ["crop", "resize"] and dupes.filters[0].enabled
+
+
+def test_keep_ar_resize_follows_the_crop():
+    """StaxRip's resize: the height follows the width at the display aspect ratio going in (the crop, the
+    pixel aspect), both on the mod; a fixed size, a custom body or a resize before the crop is left alone."""
+    assert fit_height(1280, 1920, 800) == 534 and fit_height(1280, 1920, 800, mod=8) == 536
+    assert fit_width(534, 1920, 800) == 1282
+    assert abs(ar_error(1280, 534, 1920, 800)) < 0.2
+    assert fit_height(720, 720, 480, Fraction(32, 27)) == 406  # a 16:9 DVD: 405 on mod 2
+    assert fit_height(854, 704, 480, Fraction(32, 27)) == 492  # its 704 wide picture, 1.74:1
+
+    s = VideoSettings(crop=Crop(0, 140, 0, 140), resize=Resize(1281, 720, keep_ar=True))
+    assert s.fit_resize(1920, 1080) and (s.resize.width, s.resize.height) == (1282, 534)  # the width on the mod
+    assert not s.fit_resize(1920, 1080)  # already fitted
+    s.crop = Crop()
+    assert s.fit_resize(1920, 1080) and s.resize.height == 722
+    s.resize.mod = 16
+    assert s.fit_resize(1920, 1080) and (s.resize.width, s.resize.height) == (1280, 720)
+    s.filters = [s.filters[1], s.filters[0]]  # resize before crop: the source's own aspect
+    s.crop = Crop(0, 140, 0, 140)
+    assert not s.fit_resize(1920, 1080)
+    s.filters.reverse()
+    s.custom = "clip = clip"
+    assert not s.fit_resize(1920, 1080)
+    fixed = VideoSettings(crop=Crop(0, 140, 0, 140), resize=Resize(1280, 720))
+    assert not fixed.fit_resize(1920, 1080) and fixed.resize.height == 720
+    old = from_json(Resize, {"width": 1280, "height": 544, "kernel": "Spline36"})  # saved before keep_ar
+    assert not old.keep_ar and old.mod == 2
 
 
 def test_old_filters_text_becomes_a_custom_step():

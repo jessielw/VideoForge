@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from fractions import Fraction
+import math
 from typing import Any
 
 
@@ -32,8 +34,35 @@ class Crop:
 @dataclass(slots=True)
 class Resize:
     width: int
-    height: int
+    height: int  # with keep_ar, the last fitted height: each replan fits it to the job's source and crop
     kernel: str = "Spline36"  # a core.resize function: Spline36, Bicubic, Lanczos, Point, ...
+    # StaxRip's resize: the height follows the width, so the square-pixel output keeps the display aspect
+    # ratio of the picture going in (the cropped source, an anamorphic one's pixel aspect included).
+    keep_ar: bool = False
+    mod: int = 2  # both sides are a multiple of this
+
+
+SQUARE_ENOUGH = Fraction(1, 100)  # a pixel this close to square is written as square
+
+
+def round_mod(value: Fraction | float, mod: int) -> int:
+    """The nearest multiple of mod (halves up; at least mod). frontend/src/lib/resize.ts does the same."""
+    return max(mod, math.floor(Fraction(value) / mod + Fraction(1, 2)) * mod)
+
+
+def fit_height(width: int, src_width: int, src_height: int, sar: Fraction = Fraction(1), mod: int = 2) -> int:
+    """The height of a width-wide, square-pixel picture with the display aspect ratio of src_width x
+    src_height pixels shaped sar (width / height of one pixel)."""
+    return round_mod(Fraction(width * src_height) / (src_width * sar), mod)
+
+
+def fit_width(height: int, src_width: int, src_height: int, sar: Fraction = Fraction(1), mod: int = 2) -> int:
+    return round_mod(Fraction(height) * src_width * sar / src_height, mod)
+
+
+def ar_error(width: int, height: int, src_width: int, src_height: int, sar: Fraction = Fraction(1)) -> float:
+    """How far width x height's aspect ratio is from the source's display aspect ratio, in percent."""
+    return float((Fraction(width, height) / (Fraction(src_width, src_height) * sar) - 1) * 100)
 
 
 class FilterCategory(StrEnum):
@@ -115,6 +144,51 @@ class VideoSettings:
             elif s.category is FilterCategory.RESIZE and self.resize is not None:
                 width, height = self.resize.width, self.resize.height
         return width, height
+
+    def resize_input(self, width: int, height: int) -> tuple[int, int]:
+        """The size going into the resize step: the source's, less the crop when it comes first."""
+        for s in self.filters:
+            if s.category is FilterCategory.RESIZE:
+                break
+            if s.category is FilterCategory.CROP:
+                c = self.crop
+                width, height = width - c.left - c.right, height - c.top - c.bottom
+        return width, height
+
+    def fit_resize(self, width: int, height: int, sar: Fraction = Fraction(1)) -> bool:
+        """A keep_ar resize fitted to a width x height source (sar-shaped pixels) and the crop: the width
+        on its mod, the height following it. True when that changed the size."""
+        r = self.resize
+        if r is None or not r.keep_ar or self.custom is not None:
+            return False
+        in_w, in_h = self.resize_input(width, height)
+        if in_w <= 0 or in_h <= 0:
+            return False
+        w = round_mod(r.width, r.mod)
+        h = fit_height(w, in_w, in_h, sar, r.mod)
+        if (w, h) == (r.width, r.height):
+            return False
+        r.width, r.height = w, h
+        return True
+
+    def output_sar(self, width: int, height: int, sar: Fraction = Fraction(1)) -> Fraction | None:
+        """The encode's pixel aspect ratio for a width x height source of sar-shaped pixels, so it plays at
+        the shape it had (vspipe's y4m carries none: the encoder is told). Without a resize, the source's
+        (a crop doesn't change a pixel's shape); after a keep-AR resize, square; after a fixed size, the
+        pixel shape that undoes its stretch (square when that's within SQUARE_ENOUGH, as a fixed size
+        rounded from the aspect is). None for a custom body: its size isn't known here."""
+        if self.custom is not None:
+            return None
+        r = self.resize
+        if r is None:
+            return sar
+        if r.keep_ar:
+            return Fraction(1)
+        in_w, in_h = self.resize_input(width, height)
+        if min(in_w, in_h, r.width, r.height) <= 0:
+            return Fraction(1)
+        shape = (sar * in_w * r.height / (in_h * r.width)).limit_denominator(10000)
+        return Fraction(1) if abs(shape - 1) <= SQUARE_ENOUGH else shape
 
 
 class Encoder(StrEnum):

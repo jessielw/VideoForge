@@ -20,6 +20,7 @@
   import { layout } from '../lib/layout.svelte'
   import { videoView } from '../lib/videoView.svelte'
   import { clipLength } from '../lib/format'
+  import { fitted, resizeInput, type Geometry } from '../lib/resize'
   import { SOURCE_FILTERS, type ClipInfo, type Crop, type JobDetail, type SourceFilter, type VideoSettings } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
@@ -32,13 +33,13 @@
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
   import WandSparklesIcon from '@lucide/svelte/icons/wand-sparkles'
   import { Button } from '$lib/components/ui/button'
-  import { Checkbox } from '$lib/components/ui/checkbox'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as Tabs from '$lib/components/ui/tabs'
   import { Toggle } from '$lib/components/ui/toggle'
   import FilterChain from './FilterChain.svelte'
   import PresetMenu from './PresetMenu.svelte'
+  import ResizeEditor from './ResizeEditor.svelte'
   import ScriptEditor from './ScriptEditor.svelte'
 
   let {
@@ -207,6 +208,8 @@
   let timer: ReturnType<typeof setTimeout> | undefined
   function commit(delay = 350) {
     clearTimeout(timer)
+    // A keep-AR resize follows the crop at once (the server fits it the same way on save).
+    if (video.resize) video.resize = fitted(video.resize, resizeIn)
     queued = true
     timer = setTimeout(async () => {
       queued = false
@@ -293,9 +296,16 @@
       return { text: `The script failed${vv.checked.line ? ` (line ${vv.checked.line})` : ''}: this is the last good frame.`, tone: 'bad' as const }
     return null
   })
-  // The uncropped frame's size: the crop view's, else the output's plus the saved crop (without a resize).
+  // The probed source (its pixel aspect too), and the picture going into the resize step.
+  const source = $derived.by<Geometry | null>(() => {
+    const v = job.tracks?.video
+    return v && v.width > 0 && v.height > 0 ? { width: v.width, height: v.height, sarNum: v.sar_num ?? 1, sarDen: v.sar_den ?? 1 } : null
+  })
+  const resizeIn = $derived(source ? resizeInput(video, source) : null)
+  // The uncropped frame's size: the crop view's, the probed source's, else the output's plus the saved crop (without a resize).
   const src = $derived.by(() => {
     if (info.crop) return info.crop
+    if (source) return source
     const o = info.output
     const c = job.spec.video.crop
     return o && !job.spec.video.resize ? { width: o.width + c.left + c.right, height: o.height + c.top + c.bottom } : null
@@ -533,28 +543,7 @@
           </NativeSelect>
         </section>
 
-        <section class="space-y-2">
-          <label class="flex items-center gap-2">
-            <Checkbox
-              checked={!!video.resize}
-              onCheckedChange={on => {
-                video.resize = on ? { width: outW, height: outH, kernel: 'Spline36' } : null
-                commit()
-              }}
-            />
-            <span class="section-label">Resize</span>
-          </label>
-          {#if video.resize}
-            <div class="flex items-center gap-2">
-              <Input class="w-20" type="number" step="2" aria-label="Width" bind:value={video.resize.width} onchange={() => commit()} />
-              ×
-              <Input class="w-20" type="number" step="2" aria-label="Height" bind:value={video.resize.height} onchange={() => commit()} />
-              <NativeSelect class="min-w-0 flex-1" aria-label="Kernel" bind:value={video.resize.kernel} onchange={() => commit()}>
-                {#each ['Spline36', 'Spline64', 'Lanczos', 'Bicubic', 'Bilinear', 'Point'] as k (k)}<option value={k}>{k}</option>{/each}
-              </NativeSelect>
-            </div>
-          {/if}
-        </section>
+        <ResizeEditor bind:resize={video.resize} input={video.custom === null ? resizeIn : null} onchange={() => commit()} />
 
         <section class="space-y-2">
           <FilterChain bind:filters={video.filters} crop={video.crop} resize={video.resize} disabled={video.custom !== null} onchange={() => commit(0)} />

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from fractions import Fraction
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING
@@ -181,16 +182,23 @@ class JobState:
 
 
 def planned_encode(spec: JobSpec, source: SourceInfo) -> SourceInfo:
-    """The encode the video steps will write: cropped/resized size, the source's frame rate."""
+    """The encode the video steps will write: cropped/resized size, pixel aspect, the source's frame rate."""
     path = spec.video_output
     v = source.video
     if v is None:
         return SourceInfo(path=path, name=path.name, video=None)
     width, height = spec.video.output_size(v.width, v.height)
+    sar = spec.video.output_sar(v.width, v.height, v.sar) or Fraction(1)
     return SourceInfo(
         path=path,
         name=path.name,
-        video=VideoInfo(width=width, height=height, default_duration_ns=v.default_duration_ns),
+        video=VideoInfo(
+            width=width,
+            height=height,
+            default_duration_ns=v.default_duration_ns,
+            sar_num=sar.numerator,
+            sar_den=sar.denominator,
+        ),
     )
 
 

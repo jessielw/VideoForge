@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from fractions import Fraction
 from pathlib import Path
 
 
@@ -142,6 +143,13 @@ class VideoInfo:
     start_ms: int = 0  # first video timestamp in the container
     default_duration_ns: int | None = None  # frame duration; timestamps a raw .h264/.hevc encode at mux
     language: str = "und"  # the source's video language, written on the encode at mux
+    # The pixel aspect ratio (a pixel's width / height): not 1:1 on an anamorphic source (DVD, some HDTV).
+    sar_num: int = 1
+    sar_den: int = 1
+
+    @property
+    def sar(self) -> Fraction:
+        return Fraction(self.sar_num, self.sar_den) if self.sar_num > 0 and self.sar_den > 0 else Fraction(1)
 
 
 @dataclass(slots=True)

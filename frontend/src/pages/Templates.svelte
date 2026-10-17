@@ -17,6 +17,7 @@
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import EncoderPanel from '../components/EncoderPanel.svelte'
   import FilterChain from '../components/FilterChain.svelte'
+  import ResizeEditor from '../components/ResizeEditor.svelte'
   import TemplateAudioEditor from '../components/TemplateAudioEditor.svelte'
   import TemplateSubsEditor from '../components/TemplateSubsEditor.svelte'
   import { api } from '../lib/api'
@@ -36,7 +37,6 @@
   let error = $state('')
 
   const SIDES = ['left', 'top', 'right', 'bottom'] as const
-  const KERNELS = ['Spline36', 'Spline64', 'Lanczos', 'Bicubic', 'Bilinear', 'Point']
   const CROP_MODES: { id: CropMode; label: string }[] = [
     { id: 'keep', label: "Keep each job's" },
     { id: 'fixed', label: 'Fixed' },
@@ -267,30 +267,12 @@
                 <p class="text-xs text-muted-foreground">Applying the template leaves each job's crop as it is.</p>
               {/if}
             </div>
-            <div class="space-y-2">
-              <label class="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={!!draft.video.resize}
-                  disabled={readOnly}
-                  onCheckedChange={on => (draft!.video.resize = on ? { width: 1920, height: 1080, kernel: 'Spline36' } : null)}
-                />
-                Resize
-              </label>
-              {#if draft.video.resize}
-                <div class="flex items-center gap-2">
-                  <Input class="w-24" type="number" step="2" aria-label="Width" bind:value={draft.video.resize.width} />
-                  ×
-                  <Input class="w-24" type="number" step="2" aria-label="Height" bind:value={draft.video.resize.height} />
-                  <NativeSelect class="min-w-0 flex-1" aria-label="Kernel" bind:value={draft.video.resize.kernel}>
-                    {#each KERNELS as k (k)}<option value={k}>{k}</option>{/each}
-                  </NativeSelect>
-                </div>
-              {/if}
-            </div>
+            <ResizeEditor bind:resize={draft.video.resize} disabled={readOnly} />
             <FilterChain
               bind:filters={draft.video.filters}
               crop={draft.crop_mode === 'fixed' ? draft.video.crop : undefined}
               resize={draft.video.resize}
+              template
               disabled={readOnly || draft.video.custom !== null}
             />
             <div class="space-y-2">
