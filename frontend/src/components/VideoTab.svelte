@@ -66,6 +66,8 @@
   let adoptNext = false
   const dirty = $derived(!!vv.parts && vv.body !== vv.parts.body.join('\n'))
   const jobId = $derived(job.id)
+  // A value, not job: every save brings a new job object, and an effect reading through it reruns each time.
+  const sourceFilter = $derived(job.spec.video.source_filter)
   const scriptKey = $derived(job.id + JSON.stringify(job.spec.video) + job.spec.encoder.depth)
   // The source's index is there (for the job's source filter): only then is the clip opened.
   const ready = $derived(job.indexed)
@@ -116,7 +118,7 @@
 
   $effect(() => {
     void jobId
-    void job.spec.video.source_filter // another filter: its own clip (and index)
+    void sourceFilter // another filter: its own clip (and index)
     if (!ready) return
     // A script view left with a good run shows its output again at once (the rerun refreshes it).
     const ran = untrack(() => vv.checked)

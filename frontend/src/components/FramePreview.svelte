@@ -547,7 +547,7 @@
         {#if error}
           <pre class="max-w-full overflow-auto border border-destructive/50 bg-destructive/10 p-3 text-xs whitespace-pre-wrap text-destructive">{error}</pre>
         {:else if loading}
-          <span class="text-muted-foreground">Loading the frame (the first one indexes the source, which can take a while)…</span>
+          <span class="text-muted-foreground">Loading the frame…</span>
         {/if}
       </div>
     {:else if error || notice}
