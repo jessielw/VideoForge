@@ -1,17 +1,22 @@
 <script lang="ts">
   // A job's frames from the server (VapourSynth, lossless PNG): zoom (fit .. 800%, Ctrl+wheel and
   // double-click zoom at the pointer), drag to pan with a minimap, an edge-detect view for spotting
-  // borders, a crop overlay, and frame stepping (←/→ 1, Shift 10, PgUp/PgDn 1 s, Home/End).
-  // With `oncrop` the crop is edited on the Source frame: the wheel moves the crop line nearest the
-  // pointer 2 px a notch (that side is marked), a drag on a line moves it (snapped to 2); then
-  // Shift+wheel scrolls a zoomed view and a drag anywhere else still pans.
+  // borders, the crop lines, and frame stepping (←/→ 1, Shift 10, PgUp/PgDn 1 s, Home/End).
+  // Zoom counts screen (device) pixels: at 100% one frame pixel is one screen pixel, and from 100% up
+  // the frame is drawn nearest-neighbour, so every pixel shows as it is.
+  // The crop stage is the output with the cropped-off margins stacked back on (the server's crop view),
+  // so the picture between the lines is the real output (a FillBorders after the crop shows) and each
+  // line sits on a pixel boundary: a one-pixel line just outside the kept picture, the margins tinted.
+  // With `oncrop` the crop is edited there: the wheel moves the crop line nearest the pointer 2 px a
+  // notch (that side is marked), a drag on a line moves it (snapped to 2); then Shift+wheel scrolls a
+  // zoomed view and a drag anywhere else still pans.
   // The frame sits on a matte (gray, black or white) with a margin all round, so every edge pixel
   // can be scrolled into view clear of the scrollbars and told apart from the background.
   // A new frame replaces the old one only once it has decoded, so zoom, scroll and the picture
   // stay put while it loads (a spinner shows over it when a load takes a moment); a failed load
   // keeps the last frame under an error banner. Zoom, edges and scroll are bindable so the caller
   // can bring a view back as it was left.
-  import { tick, untrack } from 'svelte'
+  import { tick, untrack, type Snippet } from 'svelte'
   import { api } from '../lib/api'
   import type { Crop } from '../lib/types'
   import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left'
@@ -41,11 +46,11 @@
     edges = $bindable(false),
     scroll = $bindable({ left: 0, top: 0 }),
     notice = null,
-    onstage,
     oncrop,
+    tools,
   }: {
     jobId: string
-    stage: 'source' | 'output'
+    stage: 'crop' | 'output'
     frames: number
     fps?: number
     width: number
@@ -57,8 +62,8 @@
     edges?: boolean
     scroll?: { left: number; top: number }
     notice?: { text: string; tone: 'muted' | 'bad' } | null
-    onstage?: (stage: 'source' | 'output') => void // keys 1 and 2, at the same frame
-    oncrop?: (crop: Crop) => void // set: the wheel and the crop lines edit the crop (Source only)
+    oncrop?: (crop: Crop) => void // set: the wheel and the crop lines edit the crop (crop stage only)
+    tools?: Snippet // more toolbar controls, after Matte
   } = $props()
 
   const ZOOMS = [25, 50, 75, 100, 150, 200, 300, 400, 600, 800]
@@ -74,6 +79,9 @@
   let slow = $state(false) // a load past a short delay: show the spinner (quick steps don't flash it)
   let error = $state('')
   let pictType = $state('')
+  let cropView = $state(false) // the shown frame has its crop margins on (the lines can be drawn on it)
+  let nat = $state({ w: 0, h: 0 }) // the shown frame's size: the overlay is laid on what is shown
+  let dpr = $state(window.devicePixelRatio || 1)
   let edgeSrc = $state<string | null>(null)
   let viewport = $state<HTMLDivElement>()
   let panning = $state(false)
@@ -92,7 +100,7 @@
     loading = true
     const spin = setTimeout(() => controller === c && (slow = true), 250)
     try {
-      const res = await fetch(api.frameUrl(jobId, n, st as 'source' | 'output', v, 'png'), { signal: c.signal })
+      const res = await fetch(api.frameUrl(jobId, n, st as 'crop' | 'output', v, 'png'), { signal: c.signal })
       if (!res.ok) {
         let msg = `${res.status}`
         try {
@@ -112,7 +120,9 @@
       }
       if (src) URL.revokeObjectURL(src)
       src = url
+      nat = { w: img.naturalWidth, h: img.naturalHeight }
       pictType = res.headers.get('X-Frame-Type') ?? ''
+      cropView = res.headers.get('X-Crop-View') === '1'
       error = ''
       if (edges) makeEdges()
     } catch (e) {
@@ -150,7 +160,6 @@
     else if (e.key === 'End') seek(frames - 1)
     else if (e.key === '+' || e.key === '=') zoomBy(1)
     else if (e.key === '-') zoomBy(-1)
-    else if (onstage && (e.key === '1' || e.key === '2')) onstage(e.key === '1' ? 'source' : 'output')
     else return
     e.preventDefault()
   }
@@ -174,22 +183,44 @@
     if (pannable) updateMap()
   }
 
+  // The device pixel ratio changes with browser zoom and with a move to a screen of another scale; a
+  // move doesn't always resize the window, so watch the ratio itself (a query for the current one).
+  $effect(() => {
+    const mq = matchMedia(`(resolution: ${dpr}dppx)`)
+    const update = () => (dpr = window.devicePixelRatio || 1)
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  })
+
   // --- zoom ---
   $effect(() => {
     const v = viewport
     if (!v) return
-    const ro = new ResizeObserver(() => {
-      vw = v.clientWidth
-      vh = v.clientHeight
+    // Rounded down from the real (fractional) size: clientWidth rounds to nearest, and a fitted frame a
+    // fraction of a pixel too big would bring a scrollbar that shrinks the fit (and so on, round and round).
+    const ro = new ResizeObserver(([e]) => {
+      vw = Math.floor(e.contentRect.width)
+      vh = Math.floor(e.contentRect.height)
     })
     ro.observe(v)
     return () => ro.disconnect()
   })
 
-  const fitScale = $derived(vw && vh ? Math.max(0.01, Math.min((vw - 2 * PAD) / width, (vh - 2 * PAD) / height)) : 1)
+  // The frame's size: the shown image's, the clip's until one is shown.
+  const W = $derived(nat.w || width)
+  const H = $derived(nat.h || height)
+  // scale: screen (device) pixels per frame pixel; layout is in CSS px, dpr of them to a device pixel.
+  const fitScale = $derived(vw && vh ? Math.max(0.01, Math.min(((vw - 2 * PAD) * dpr) / W, ((vh - 2 * PAD) * dpr) / H)) : 1)
   const scale = $derived(zoom ? zoom / 100 : fitScale)
-  const dispW = $derived(Math.floor(width * scale))
-  const dispH = $derived(Math.floor(height * scale))
+  const css = $derived(scale / dpr) // CSS px per frame pixel
+  // A length in frame pixels as CSS px, rounded to whole device pixels (so edges land on screen pixels).
+  const snap = (v: number) => Math.round(v * scale) / dpr
+  const dispW = $derived(Math.floor(W * scale) / dpr)
+  const dispH = $derived(Math.floor(H * scale) / dpr)
+  // The frame's place: centred, at least PAD in, on a whole device pixel. Centred on the viewport's
+  // client size, which is rounded: the box round the frame is never sized from it (see the markup).
+  const frameX = $derived(Math.round(Math.max(PAD, (vw - dispW) / 2) * dpr) / dpr)
+  const frameY = $derived(Math.round(Math.max(PAD, (vh - dispH) / 2) * dpr) / dpr)
   const pannable = $derived(dispW + 2 * PAD > vw + 1 || dispH + 2 * PAD > vh + 1)
 
   // Change the zoom keeping the frame point under (cx, cy) (client coordinates; default the
@@ -203,13 +234,13 @@
     const r = viewport.getBoundingClientRect()
     const x = cx === undefined ? viewport.clientWidth / 2 : cx - r.left - viewport.clientLeft
     const y = cy === undefined ? viewport.clientHeight / 2 : cy - r.top - viewport.clientTop
-    const before = scale
+    const before = css
     const fx = (viewport.scrollLeft + x - frameEl.offsetLeft) / before
     const fy = (viewport.scrollTop + y - frameEl.offsetTop) / before
     zoom = z
     await tick()
-    viewport.scrollLeft = fx * scale + frameEl.offsetLeft - x
-    viewport.scrollTop = fy * scale + frameEl.offsetTop - y
+    viewport.scrollLeft = fx * css + frameEl.offsetLeft - x
+    viewport.scrollTop = fy * css + frameEl.offsetTop - y
     updateMap()
   }
 
@@ -270,7 +301,8 @@
   const MIN_OUT = 16 // the smallest picture a crop may leave, px
   const HIT = 6 // how close to a crop line (screen px) a press grabs it
   const OPPOSITE = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' } as const
-  const cropping = $derived(!!oncrop && !!crop && stage === 'source')
+  const lined = $derived(!!crop && stage === 'crop' && cropView) // the lines go on the shown frame
+  const cropping = $derived(!!oncrop && lined)
   let armed = $state<keyof Crop | null>(null) // the side the wheel moves: the line nearest the pointer
   let onLine = $state(false) // the pointer is on that line, so a press drags it
   let cropDrag = $state<{ side: keyof Crop; id: number } | null>(null)
@@ -279,13 +311,13 @@
   // The pointer in source pixels (off the frame on the matte too) and one screen px in source px.
   function framePoint(e: MouseEvent) {
     const r = frameEl!.getBoundingClientRect()
-    return { x: ((e.clientX - r.left) / r.width) * width, y: ((e.clientY - r.top) / r.height) * height, px: width / r.width }
+    return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H, px: W / r.width }
   }
 
   function nearestLine(e: MouseEvent) {
     const { x, y, px } = framePoint(e)
     const c = crop!
-    const d = { left: x - c.left, right: width - c.right - x, top: y - c.top, bottom: height - c.bottom - y }
+    const d = { left: x - c.left, right: W - c.right - x, top: y - c.top, bottom: H - c.bottom - y }
     const side = (Object.keys(d) as (keyof Crop)[]).reduce((a, b) => (Math.abs(d[b]) < Math.abs(d[a]) ? b : a))
     return { side, near: Math.abs(d[side]) / px <= HIT }
   }
@@ -293,7 +325,7 @@
   // Even, and never past the opposite side (MIN_OUT left between them).
   function setSide(side: keyof Crop, v: number) {
     const c = crop!
-    const max = Math.floor(((side === 'left' || side === 'right' ? width : height) - c[OPPOSITE[side]] - MIN_OUT) / 2) * 2
+    const max = Math.floor(((side === 'left' || side === 'right' ? W : H) - c[OPPOSITE[side]] - MIN_OUT) / 2) * 2
     v = Math.max(0, Math.min(max, Math.round(v / 2) * 2))
     if (v !== c[side]) oncrop!({ ...c, [side]: v })
   }
@@ -317,7 +349,7 @@
     if (cropDrag) {
       const { x, y } = framePoint(e)
       const s = cropDrag.side
-      setSide(s, s === 'left' ? x : s === 'right' ? width - x : s === 'top' ? y : height - y)
+      setSide(s, s === 'left' ? x : s === 'right' ? W - x : s === 'top' ? y : H - y)
     } else if (!panning) {
       const n = nearestLine(e)
       armed = n.side
@@ -447,9 +479,10 @@
   }
 
   const shown = $derived(edges && edgeSrc ? edgeSrc : src)
-  const pct = (v: number, of: number) => `${(v / of) * 100}%`
-  const outW = $derived(crop ? width - crop.left - crop.right : width)
-  const outH = $derived(crop ? height - crop.top - crop.bottom : height)
+  const outW = $derived(crop ? W - crop.left - crop.right : W)
+  const outH = $derived(crop ? H - crop.top - crop.bottom : H)
+  // The crop stage's frame came back without its margins: a filter after the crop changes the frame.
+  const unlined = $derived(!!src && !loading && stage === 'crop' && !cropView)
 </script>
 
 <div class="flex h-full min-h-0 flex-col gap-2">
@@ -468,8 +501,9 @@
     <Button variant="ghost" onclick={nextMatte} title="Background around the frame: {matte} (click to change)">
       <span class="inline-block size-3.5 border" style="background:{MATTES[matte]}"></span>Matte
     </Button>
+    {@render tools?.()}
     <span class="ml-auto text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-      {width}×{height}{crop && stage === 'source' ? ` → ${outW}×${outH}` : ''} · {Math.round(scale * 100)}%
+      {W}×{H}{lined ? ` → ${outW}×${outH}` : ''} · {Math.round(scale * 100)}%
       {#if pictType}· {pictType}-frame{/if}
     </span>
   </div>
@@ -496,32 +530,38 @@
       {onpointerleave}
       {onscroll}
     >
-      <!-- At least the viewport's size, centring the frame; bigger when the frame (plus its margin) is. -->
-      <div class="grid min-h-full min-w-full place-items-center" style="width:max-content;height:max-content;padding:{PAD}px">
-        <div bind:this={frameEl} class="relative" style="width:{dispW}px;height:{dispH}px">
+      <!-- At least the viewport's size (100%, not its rounded client size: a fraction of a pixel over
+           would bring a scrollbar, which shrinks the fit, which drops the scrollbar, round and round);
+           bigger when the frame plus its margin is. The frame sits on a whole device pixel, its size in
+           whole device pixels, so its pixels and the lines line up. -->
+      <div class="relative min-h-full min-w-full" style="width:{dispW + 2 * PAD}px;height:{dispH + 2 * PAD}px">
+        <div bind:this={frameEl} class="absolute" style="left:{frameX}px;top:{frameY}px;width:{dispW}px;height:{dispH}px">
           {#if shown}
             <img
               src={shown}
               alt="Frame {frame}"
               draggable="false"
               class="block h-full w-full select-none"
-              style="image-rendering: {scale >= 2 ? 'pixelated' : 'auto'}"
+              style="image-rendering: {scale >= 1 ? 'pixelated' : 'auto'}"
             />
-            {#if crop && stage === 'source'}
-              {@const band = (side: keyof Crop) => (armed === side ? 'bg-destructive/60' : 'bg-destructive/40')}
+            {#if lined && crop}
+              {@const band = (side: keyof Crop) => (armed === side ? 'bg-destructive/55' : 'bg-destructive/35')}
+              {@const line = (side: keyof Crop) => (armed === side ? 'var(--primary)' : 'var(--destructive)')}
+              {@const t = snap(crop.top)}
+              {@const b = snap(crop.bottom)}
+              {@const px = 1 / dpr}
               <div class="pointer-events-none absolute inset-0">
-                <div class="absolute inset-x-0 top-0 {band('top')}" style="height:{pct(crop.top, height)}"></div>
-                <div class="absolute inset-x-0 bottom-0 {band('bottom')}" style="height:{pct(crop.bottom, height)}"></div>
+                <!-- The cropped-off margins, tinted. -->
+                <div class="absolute inset-x-0 top-0 {band('top')}" style="height:{t}px"></div>
+                <div class="absolute inset-x-0 bottom-0 {band('bottom')}" style="height:{b}px"></div>
+                <div class="absolute left-0 {band('left')}" style="top:{t}px;bottom:{b}px;width:{snap(crop.left)}px"></div>
+                <div class="absolute right-0 {band('right')}" style="top:{t}px;bottom:{b}px;width:{snap(crop.right)}px"></div>
+                <!-- The lines: one screen pixel just outside the kept picture, so none of its pixels is covered. -->
                 <div
-                  class="absolute left-0 {band('left')}"
-                  style="top:{pct(crop.top, height)};bottom:{pct(crop.bottom, height)};width:{pct(crop.left, width)}"
+                  class="absolute box-border"
+                  style="left:{snap(crop.left) - px}px;top:{t - px}px;right:{snap(crop.right) - px}px;bottom:{b - px}px;border:{px}px solid;border-color:{line('top')} {line('right')} {line('bottom')} {line('left')}"
                 ></div>
-                <div
-                  class="absolute right-0 {band('right')}"
-                  style="top:{pct(crop.top, height)};bottom:{pct(crop.bottom, height)};width:{pct(crop.right, width)}"
-                ></div>
-                <!-- No outline round the kept picture: it would cover the edge rows a crop is judged by.
-                     The side the wheel moves is marked on the matte, just outside the frame. -->
+                <!-- The side the wheel moves is marked on the matte too, just outside the frame. -->
                 {#if cropping && armed}
                   <div
                     class="absolute bg-primary {armed === 'top' || armed === 'bottom' ? 'inset-x-0 h-1' : 'inset-y-0 w-1'}"
@@ -550,8 +590,8 @@
           <span class="text-muted-foreground">Loading the frame…</span>
         {/if}
       </div>
-    {:else if error || notice}
-      <!-- Over the kept frame: why it isn't the newest. -->
+    {:else if error || notice || unlined}
+      <!-- Over the kept frame: why it isn't the newest (or has no crop lines). -->
       <div class="pointer-events-none absolute inset-x-2 top-2 flex flex-col items-start gap-1 text-xs">
         {#if error}
           <pre class="max-h-24 max-w-full overflow-hidden bg-destructive px-2 py-1 whitespace-pre-wrap text-white">{error}</pre>
@@ -559,6 +599,11 @@
         {#if notice}
           <span class="px-2 py-1 text-white {notice.tone === 'bad' ? 'bg-destructive' : 'bg-black/70'}"
             >{notice.text}</span
+          >
+        {/if}
+        {#if unlined}
+          <span class="bg-black/70 px-2 py-1 text-white"
+            >No crop lines: a filter after the crop changes the size, length or colors, so this is the output as it is.</span
           >
         {/if}
       </div>

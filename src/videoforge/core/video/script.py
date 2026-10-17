@@ -10,7 +10,10 @@ Layout of every script:
     <bit depth conversion for the encoder>
     clip.set_output()
 
-`stage="source"` stops after `clip = src` (the crop editor shows the uncropped frame).
+`stage="source"` stops after `clip = src` (the uncropped frame, for auto-crop).
+`stage="crop"` is the crop editor's view: the output, less a resize after the crop, with the cropped-off
+margins stacked back on (vs.crop_view), so the crop lines sit on the uncropped frame's pixels while the
+picture between them is the real output. Only the preview worker runs it (it imports VideoForge).
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ from typing import Literal
 
 from videoforge.core.video.settings import FilterCategory, SourceFilter, VideoSettings
 
-Stage = Literal["source", "output"]
+Stage = Literal["source", "crop", "output"]
 
 
 def _q(path: Path | str) -> str:
@@ -51,7 +54,9 @@ def index_exists(source: Path, source_filter: SourceFilter, index_dir: Path) -> 
     return ffms2_index(source, index_dir).is_file()
 
 
-def processing_lines(settings: VideoSettings) -> list[str]:
+def processing_lines(settings: VideoSettings, *, crop_view: bool = False) -> list[str]:
+    """The body's lines. crop_view keeps the clip before the crop (`_vf_pre`), leaves out a resize after
+    it and ends with the crop view (see the module docstring)."""
     if settings.custom is not None:
         lines = settings.custom.splitlines()
         while lines and not lines[0].strip():
@@ -61,17 +66,26 @@ def processing_lines(settings: VideoSettings) -> list[str]:
         return lines  # as typed (indentation kept), less blank lines at either end
     lines = []
     c, r = settings.crop, settings.resize
+    cropped = False
     for step in settings.filters:
         if step.category is FilterCategory.CROP:
+            if crop_view:
+                lines.append("_vf_pre = clip")
+                cropped = True
             if not c.is_zero:
                 lines.append(
                     f"clip = core.std.Crop(clip, left={c.left}, right={c.right}, top={c.top}, bottom={c.bottom})"
                 )
         elif step.category is FilterCategory.RESIZE:
-            if r is not None:
+            if r is not None and not cropped:
                 lines.append(f"clip = core.resize.{r.kernel}(clip, width={r.width}, height={r.height})")
         elif step.enabled and step.script.strip():
             lines += step.script.strip().splitlines()
+    if cropped:
+        lines += [
+            "from videoforge.core.video.vs import crop_view as _vf_crop_view",
+            f"clip = _vf_crop_view(_vf_pre, clip, left={c.left}, top={c.top}, right={c.right}, bottom={c.bottom})",
+        ]
     return lines
 
 
@@ -98,7 +112,7 @@ def script_parts(
             ),
         ]
     tail.append("clip.set_output()")
-    return head, processing_lines(settings), tail
+    return head, processing_lines(settings, crop_view=stage == "crop"), tail
 
 
 def build_script(

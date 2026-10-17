@@ -16,8 +16,10 @@ The first beta: an encode and mux job queue in the browser, for one user on Wind
   a rerun skips every step whose command and inputs haven't changed, so a crashed job resumes after its last
   finished step and a changed subtitle flag only muxes again. A job's audio encodes run alongside its video
   encode, up to 2 at once by default (Settings → Audio encodes; 0 runs them one by one).
-- **Video.** Frame preview with zoom, pan and a crop overlay; auto crop; resize; filters; the generated
-  VapourSynth script, editable. Source filters: FFMS2 (the default, with index progress), L-SMASH, BestSource.
+- **Video.** One preview of the script's output, as in VapourSynth Editor, with zoom (100% = one screen
+  pixel per frame pixel, nearest-neighbour from there up), pan and crop lines drawn on the real output (the
+  cropped-off margins stacked back on, so a FillBorders after the crop shows); auto crop; resize; filters;
+  the generated VapourSynth script, editable. Source filters: FFMS2 (the default, with index progress), L-SMASH, BestSource.
 - **Encoder.** x264 and x265 option panels, 1 or 2 passes; AutoQPF chapters to a qpf file.
 - **Notifications.** Settings → Notifications sends to any service Apprise supports (Discord, Telegram, ntfy,
   Pushover, email, ...): each destination picks its events (job done, failed, cancelled, queue finished), can be

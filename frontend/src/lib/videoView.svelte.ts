@@ -1,11 +1,11 @@
-// Where the video editor was left, per job: what the preview and the side panel show, frame, zoom, scroll, edge view and the
+// Where the video editor was left, per job: the side panel, the crop lines, frame, zoom, scroll, edge view and the
 // script editor's text (unsaved edits too). Switching tabs, jobs or pages comes back to it;
 // it goes when the job leaves the queue (or the page reloads).
 import type { ScriptCheck, ScriptParts } from './types'
 
 export type VideoView = {
-  stage: 'source' | 'output' // the preview: the source (crop drawn on it) or the script's output
   panel: 'settings' | 'script' // the side panel: crop, filter, resize, filters; or the script editor
+  cropView: boolean // with Settings: the preview shows the crop lines (the output with its margins back on)
   frame: number
   zoom: number // percent; 0 = fit
   edges: boolean
@@ -21,8 +21,8 @@ export function videoView(jobId: string): VideoView {
   let v = views.get(jobId)
   if (!v) {
     const fresh = $state<VideoView>({
-      stage: 'source',
       panel: 'settings',
+      cropView: true,
       frame: 0,
       zoom: 0,
       edges: false,

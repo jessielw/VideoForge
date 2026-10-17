@@ -1,8 +1,14 @@
 <script lang="ts">
-  // The job's VapourSynth processing: the preview (Source with the crop drawn, or Output; keys 1 and 2
-  // flip at the same frame) and a side panel: Settings (crop, auto-crop, mod 2, source filter, resize,
-  // the filter chain) or Script (Run saves an edited body as the job's custom script, then shows its
-  // info and frames or the error).
+  // The job's VapourSynth processing: one preview, of the script's output (as in VapourSynth Editor),
+  // and a side panel: Settings (crop, auto-crop, source filter, resize, the filter chain) or Script
+  // (Run saves an edited body as the job's custom script, then shows its info and frames or the error).
+  // With Settings the Crop toggle shows the crop lines: the output, less a resize after the crop, with
+  // the cropped-off margins stacked back on, so the lines are on real pixels and the picture between
+  // them is what the encode gets (a FillBorders after the crop included).
+  // Auto refresh (on by default, kept in the browser): each saved change renders the frame again. Off,
+  // as in VapourSynth Editor, changes still save at once but the frame waits for F5 or Refresh (or a
+  // step to another frame, which is rendered as saved); the crop lines still follow at once. F5 never
+  // reloads the page here, so it can't lose unsaved script edits; in the Script panel it runs the script.
   // Every save hands us a new `job` object, so effects key on derived values (jobId, scriptKey)
   // that only change when the content does; otherwise each save would remount the preview.
   // Opening a job never indexes its source: until it's indexed the preview is an index panel (Index
@@ -17,17 +23,20 @@
   import { SOURCE_FILTERS, type ClipInfo, type Crop, type JobDetail, type SourceFilter, type VideoSettings } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
+  import CropIcon from '@lucide/svelte/icons/crop'
   import DatabaseZapIcon from '@lucide/svelte/icons/database-zap'
   import SquareIcon from '@lucide/svelte/icons/square'
   import MaximizeIcon from '@lucide/svelte/icons/maximize'
   import MinimizeIcon from '@lucide/svelte/icons/minimize'
   import PlayIcon from '@lucide/svelte/icons/play'
+  import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
   import WandSparklesIcon from '@lucide/svelte/icons/wand-sparkles'
   import { Button } from '$lib/components/ui/button'
   import { Checkbox } from '$lib/components/ui/checkbox'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as Tabs from '$lib/components/ui/tabs'
+  import { Toggle } from '$lib/components/ui/toggle'
   import FilterChain from './FilterChain.svelte'
   import PresetMenu from './PresetMenu.svelte'
   import ScriptEditor from './ScriptEditor.svelte'
@@ -40,21 +49,16 @@
 
   // Preview, panel, frame, zoom, scroll and the script editor's text, kept per job (JobEditor remounts this per job).
   const vv = videoView(untrack(() => job.id))
-  const stage = $derived(vv.stage)
-  const scripting = $derived(vv.panel === 'script' && vv.stage === 'output') // the preview shows the script's runs
-  let info = $state<Record<string, ClipInfo | null>>({ source: null, output: null })
+  type Stage = 'crop' | 'output'
+  const scripting = $derived(vv.panel === 'script') // the preview shows the script's runs
+  // A custom body has no crop step to draw: the crop lines are for the generated chain.
+  const canCrop = $derived(vv.panel === 'settings' && job.spec.video.custom === null)
+  const stage = $derived<Stage>(canCrop && vv.cropView ? 'crop' : 'output')
+  let info = $state<Record<Stage, ClipInfo | null>>({ crop: null, output: null })
   let infoError = $state('')
   let version = $state(0)
-  // The source frame changes only with the source filter: crop and filter saves don't reload it.
-  let sourceVersion = $state(0)
-  let lastFilter = untrack(() => job.spec.video.source_filter)
-  $effect(() => {
-    const f = job.spec.video.source_filter
-    if (f !== lastFilter) {
-      lastFilter = f
-      sourceVersion++
-    }
-  })
+  let auto = $state(readAuto()) // a save renders the frame again; off, it waits for F5 / Refresh
+  let stale = $state(false) // saved changes the frame doesn't show yet (auto off)
   let detecting = $state(false)
   // The editable copy; the effect below resets it when the job changes on the server.
   let video = $state<VideoSettings>(untrack(() => structuredClone($state.snapshot(job.spec.video)) as VideoSettings))
@@ -104,7 +108,7 @@
   // Called from effects: it must not read `info` before its await, or the effect that
   // resets `info` would depend on it and loop. A failure keeps the last good info, so the
   // preview keeps its frame (under the error) instead of unmounting.
-  async function loadInfo(st: 'source' | 'output') {
+  async function loadInfo(st: Stage) {
     const id = jobId
     let value: ClipInfo | null = null
     try {
@@ -122,15 +126,16 @@
     if (!ready) return
     // A script view left with a good run shows its output again at once (the rerun refreshes it).
     const ran = untrack(() => vv.checked)
-    info = { source: null, output: ran?.ok ? ran.info : null }
-    loadInfo('source')
+    info = { crop: null, output: ran?.ok ? ran.info : null }
   })
 
-  // The script panel runs the script itself (refresh), which brings the output info with it.
+  // Settings: the shown stage's info, again after each save. The script panel runs the script itself
+  // (refresh), which brings the output info with it.
   $effect(() => {
-    if (ready && vv.stage === 'output' && vv.panel === 'settings') {
+    if (ready && vv.panel === 'settings') {
       void version
-      loadInfo('output')
+      void sourceFilter
+      loadInfo(stage)
     }
   })
 
@@ -156,6 +161,7 @@
       vv.checked = c
       if (c.ok) {
         info = { ...info, output: c.info }
+        stale = false
         version++
       }
     } finally {
@@ -207,16 +213,59 @@
       saving = true
       try {
         await save($state.snapshot(video) as VideoSettings)
-        version++
+        if (auto) version++
+        else stale = true
       } finally {
         saving = false
       }
     }, delay)
   }
 
+  // Render the frame (and its info) again with the saved settings.
+  function refreshPreview() {
+    stale = false
+    version++
+  }
+
+  // A step to another frame (or the crop lines switched) renders it as saved: that is the refresh.
+  $effect(() => {
+    void vv.frame
+    void stage
+    untrack(() => stale && refreshPreview())
+  })
+
+  function readAuto(): boolean {
+    try {
+      return localStorage.getItem('videoforge.autoRefresh') !== '0'
+    } catch {
+      return true // storage blocked
+    }
+  }
+
+  function setAuto(on: boolean) {
+    auto = on
+    try {
+      localStorage.setItem('videoforge.autoRefresh', on ? '1' : '0')
+    } catch {
+      /* storage blocked */
+    }
+    if (on && stale) refreshPreview()
+  }
+
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && !e.defaultPrevented && layout.videoExpanded) layout.videoExpanded = false
+    else if (e.key === 'F5' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault()
+      if (!scripting) refreshPreview()
+      else if (!running && !saving && ready) run()
+    }
+  }
+
+  // Crop edits from the side panel show the lines (the picture only shows them in the crop view).
   function setCrop(side: keyof Crop, value: number) {
     const v = Math.max(0, Math.round(value / 2) * 2)
     video.crop = { ...video.crop, [side]: v }
+    vv.cropView = true
     commit()
   }
 
@@ -224,46 +273,43 @@
     detecting = true
     try {
       video.crop = await api.autocrop(jobId, 20)
+      vv.cropView = true
       commit(0)
     } finally {
       detecting = false
     }
   }
 
-  // The script editor shows what it makes, so opening it switches the preview to Output.
   function openScript() {
     vv.panel = 'script'
-    vv.stage = 'output'
   }
 
-  const current = $derived(info[stage])
+  // The other stage's info until this one's comes: switching the crop lines keeps the preview up.
+  const current = $derived(info[stage] ?? info[stage === 'crop' ? 'output' : 'crop'])
   const notice = $derived.by(() => {
-    if (!scripting) return null
+    if (!scripting) return stale ? { text: 'Changed: F5 or Refresh to see it on this frame', tone: 'muted' as const } : null
     if (running) return { text: 'Running the script…', tone: 'muted' as const }
     if (vv.checked && !vv.checked.ok)
       return { text: `The script failed${vv.checked.line ? ` (line ${vv.checked.line})` : ''}: this is the last good frame.`, tone: 'bad' as const }
     return null
   })
-  const src = $derived(info.source)
+  // The uncropped frame's size: the crop view's, else the output's plus the saved crop (without a resize).
+  const src = $derived.by(() => {
+    if (info.crop) return info.crop
+    const o = info.output
+    const c = job.spec.video.crop
+    return o && !job.spec.video.resize ? { width: o.width + c.left + c.right, height: o.height + c.top + c.bottom } : null
+  })
   const outW = $derived(src ? src.width - video.crop.left - video.crop.right : 0)
   const outH = $derived(src ? src.height - video.crop.top - video.crop.bottom : 0)
   const SIDES: (keyof Crop)[] = ['left', 'top', 'right', 'bottom']
-  const STAGES = [
-    { id: 'source', label: 'Source', title: 'The source, with the crop drawn on it (key 1)' },
-    { id: 'output', label: 'Output', title: 'What the script makes: cropped, resized, filtered (key 2)' },
-  ] as const
 </script>
 
-<svelte:window onkeydown={e => e.key === 'Escape' && !e.defaultPrevented && layout.videoExpanded && (layout.videoExpanded = false)} />
+<svelte:window {onkeydown} />
 
 <div class="flex min-h-0 gap-4 {layout.videoExpanded ? 'fixed inset-0 z-40 bg-background p-4' : 'h-full'}">
   <div class="flex min-w-0 flex-1 flex-col gap-2">
-    <div class="flex items-center gap-2">
-      <Tabs.Root value={vv.stage} onValueChange={v => (vv.stage = v as typeof vv.stage)}>
-        <Tabs.List aria-label="Preview">
-          {#each STAGES as v (v.id)}<Tabs.Trigger value={v.id} class="px-3" title={v.title}>{v.label}</Tabs.Trigger>{/each}
-        </Tabs.List>
-      </Tabs.Root>
+    <div class="flex h-9 items-center gap-2">
       {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
       {#if infoError && !scripting}<span class="truncate text-xs text-destructive" title={infoError}>{infoError}</span>{/if}
       <Button
@@ -321,21 +367,49 @@
         fps={current.fps}
         width={current.width}
         height={current.height}
-        version={stage === 'source' ? sourceVersion : version}
-        crop={stage === 'source' ? video.crop : null}
+        {version}
+        crop={stage === 'crop' ? video.crop : null}
         bind:frame={vv.frame}
         bind:zoom={vv.zoom}
         bind:edges={vv.edges}
         bind:scroll={vv.scroll}
         {notice}
-        onstage={s => (vv.stage = s)}
-        oncrop={editable && vv.panel === 'settings' && !video.custom
+        oncrop={editable && stage === 'crop'
           ? c => {
               video.crop = c
               commit()
             }
           : undefined}
-      />
+      >
+        {#snippet tools()}
+          {#if vv.panel === 'settings'}
+            <Toggle
+              pressed={stage === 'crop'}
+              disabled={!canCrop}
+              onPressedChange={on => (vv.cropView = on)}
+              class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+              title={canCrop
+                ? 'Crop lines: the output with the cropped-off margins shown (a resize after the crop is left out). Off: the output as encoded'
+                : 'A custom script body is in use: it has no crop step to show'}
+            >
+              <CropIcon />Crop
+            </Toggle>
+            <Toggle
+              pressed={auto}
+              onPressedChange={setAuto}
+              class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+              title="Auto refresh: each change renders the frame again. Off: the frame waits for F5 or Refresh"
+            >
+              Auto
+            </Toggle>
+            {#if !auto}
+              <Button variant={stale ? 'default' : 'ghost'} onclick={refreshPreview} title="Render the frame with the saved settings (F5)">
+                <RefreshCwIcon />Refresh
+              </Button>
+            {/if}
+          {/if}
+        {/snippet}
+      </FramePreview>
     {:else if scripting}
       <div class="flex flex-1 items-center justify-center border text-muted-foreground">
         {running ? 'Running the script…' : 'No frames: the script failed.'}
@@ -395,7 +469,7 @@
       {/if}
     </section>
   {:else}
-    <aside class="min-h-0 flex-1 space-y-5 overflow-auto pr-1">
+    <aside class="min-h-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto pr-1">
       <PresetMenu
         kind="video"
         profile={job.profile}
@@ -406,7 +480,8 @@
           commit(0)
         }}
       />
-      <fieldset disabled={!editable} class="space-y-5">
+      <!-- min-w-0: a fieldset is as wide as its widest content by default, which ran past the panel. -->
+      <fieldset disabled={!editable} class="min-w-0 space-y-5">
         <section class="space-y-2">
           <div class="flex items-center justify-between">
             <span class="section-label">Crop</span>
@@ -435,6 +510,7 @@
               variant="outline"
               onclick={() => {
                 video.crop = { left: 0, top: 0, right: 0, bottom: 0 }
+                vv.cropView = true
                 commit(0)
               }}>Reset</Button
             >
@@ -449,7 +525,7 @@
             value={video.source_filter}
             onchange={e => {
               video.source_filter = (e.target as HTMLSelectElement).value as SourceFilter
-              info = { source: null, output: null }
+              info = { crop: null, output: null }
               commit(0) // the saved job brings the new filter (and whether it's indexed): the preview follows
             }}
           >

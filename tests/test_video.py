@@ -73,6 +73,23 @@ def test_script_parts_split_the_editable_body():
     assert script_parts(s, Path("a.mkv"), Path("w"), stage="source")[1:] == ([], ["clip.set_output()"])
 
 
+def test_crop_stage_is_the_output_with_its_margins_back():
+    s = VideoSettings(crop=Crop(0, 22, 0, 20), resize=Resize(1280, 544), filters=[INVERT])
+    s.filters = [s.filters[0], INVERT, s.filters[1]]  # crop, invert, resize
+    body = script_parts(s, Path("a.mkv"), Path("w"), stage="crop")[1]
+    assert body == [
+        "_vf_pre = clip",
+        "clip = core.std.Crop(clip, left=0, right=0, top=22, bottom=20)",
+        "clip = clip.std.Invert()",  # the resize after the crop is left out: the lines are in uncropped pixels
+        "from videoforge.core.video.vs import crop_view as _vf_crop_view",
+        "clip = _vf_crop_view(_vf_pre, clip, left=0, top=22, right=0, bottom=20)",
+    ]
+    s.filters = [s.filters[2], s.filters[0], s.filters[1]]  # a resize before the crop stays
+    assert script_parts(s, Path("a.mkv"), Path("w"), stage="crop")[1][0].startswith("clip = core.resize.Spline36")
+    s.custom = "clip = src"
+    assert script_parts(s, Path("a.mkv"), Path("w"), stage="crop")[1] == ["clip = src"]
+
+
 @pytest.mark.parametrize(
     ("script", "line", "message"),
     [
@@ -343,6 +360,34 @@ def test_autocrop_preview_and_output(clip_file, tmp_path):
     assert cache.get(build_script(settings, clip_file, tmp_path, depth=10)) is out
     with pytest.raises(vsx.ScriptError):
         vsx.load_clip("clip = 1")
+
+
+@needs_vs
+def test_crop_view_lines_up_with_the_uncropped_frame():
+    import vapoursynth as vs
+
+    core = vs.core
+    pre = core.std.BlankClip(format=vs.YUV420P8, width=64, height=48, length=3, color=[100, 128, 128])
+    clip = core.std.Crop(pre, left=2, right=4, top=6, bottom=8).std.Invert()
+    view = vsx.crop_view(pre, clip, 2, 6, 4, 8)
+    assert (view.width, view.height, view.num_frames) == (64, 48, 3)
+    f = view.get_frame(1)
+    luma = np.asarray(f[0])
+    assert f.props[vsx.CROP_VIEW_PROP] == 1
+    assert (
+        (luma[:6] == 100).all()
+        and (luma[-8:] == 100).all()
+        and (luma[:, :2] == 100).all()
+        and (luma[:, -4:] == 100).all()
+    )
+    assert (luma[6:-8, 2:-4] == 155).all()  # the filtered output, exactly between the lines
+    deeper = core.resize.Point(clip, format=vs.YUV420P16)
+    assert vsx.crop_view(pre, deeper, 2, 6, 4, 8).format.id == vs.YUV420P16  # the margins follow the depth
+    resized = core.resize.Point(clip, width=32, height=16)
+    assert vsx.crop_view(pre, resized, 2, 6, 4, 8) is resized  # can't line up: the output as it is
+    assert (
+        vsx.crop_view(pre, pre, 0, 0, 0, 0).get_frame(0).props[vsx.CROP_VIEW_PROP] == 1
+    )  # no crop: the frame as it is
 
 
 @needs_vs

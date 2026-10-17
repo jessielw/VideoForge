@@ -1,5 +1,5 @@
-"""A job's video in the browser: clip info, frames (source = uncropped, output = processed),
-auto-crop, the generated script, and a check that runs it (the script editor's Run).
+"""A job's video in the browser: clip info, frames (source = uncropped, crop = the crop editor's view,
+output = processed), auto-crop, the generated script, and a check that runs it (the script editor's Run).
 
 Clips come from the same script generator the encode uses and are loaded and cached per job
 and stage in the preview worker (core/video/preview.py, a child process). Only an indexed source is
@@ -23,7 +23,7 @@ from videoforge.core.video.vs import ScriptError
 from videoforge.server.queue import Entry, JobQueue
 
 router = APIRouter(prefix="/api/jobs/{job_id}/video")
-Stage = Literal["source", "output"]
+Stage = Literal["source", "crop", "output"]
 
 
 def _entry(request: Request, job_id: str) -> Entry:
@@ -140,13 +140,18 @@ def frame(
         e = _entry(request, job_id)
         preview, script, slot = _preview(request), script_for(e, stage), _slot(e.spec, stage)
         with _loading(e, preview, script, slot):
-            data, pict, frames = preview.frame(script, n, fmt, quality, slot=slot)
+            data, pict, frames, crop_view = preview.frame(script, n, fmt, quality, slot=slot)
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex) from None
     return Response(
         data,
         media_type=f"image/{fmt}",
-        headers={"Cache-Control": "no-store", "X-Frame-Type": pict, "X-Frame-Count": str(frames)},
+        headers={
+            "Cache-Control": "no-store",
+            "X-Frame-Type": pict,
+            "X-Frame-Count": str(frames),
+            "X-Crop-View": "1" if crop_view else "0",
+        },
     )
 
 

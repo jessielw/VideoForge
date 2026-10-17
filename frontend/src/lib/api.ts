@@ -157,8 +157,8 @@ export const api = {
   index: (ids: string[], first = false) => post<QueueState & { taken: string[] }>('/api/queue/index', { ids, first }),
   stopIndex: (ids?: string[]) => post<QueueState>('/api/queue/index/stop', ids ? { ids } : {}),
 
-  clipInfo: (id: string, stage: 'source' | 'output') => get<ClipInfo>(`/api/jobs/${id}/video/info?stage=${stage}`),
-  frameUrl: (id: string, n: number, stage: 'source' | 'output', version: number, fmt: 'jpeg' | 'png' = 'jpeg') =>
+  clipInfo: (id: string, stage: 'crop' | 'output') => get<ClipInfo>(`/api/jobs/${id}/video/info?stage=${stage}`),
+  frameUrl: (id: string, n: number, stage: 'crop' | 'output', version: number, fmt: 'jpeg' | 'png' = 'jpeg') =>
     `/api/jobs/${id}/video/frame?n=${n}&stage=${stage}&fmt=${fmt}&v=${version}`,
   autocrop: (id: string, samples = 20) => post<Crop>(`/api/jobs/${id}/video/autocrop?samples=${samples}`),
   script: (id: string) => get<ScriptParts>(`/api/jobs/${id}/video/script`),

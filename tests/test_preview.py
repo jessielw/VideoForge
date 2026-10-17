@@ -23,7 +23,7 @@ def preview():
 def test_preview_runs_scripts_in_a_worker(preview):
     info = preview.info(BLANK.format(n=10))
     assert (info.width, info.height, info.frames) == (64, 48, 10)
-    image, _pict, frames = preview.frame(BLANK.format(n=10), 3, "png")
+    image, _pict, frames, _crop_view = preview.frame(BLANK.format(n=10), 3, "png")
     assert image[:4] == b"\x89PNG" and frames == 10
     assert preview.check(BLANK.format(n=10)).format == "RGB24"
     boxed = (

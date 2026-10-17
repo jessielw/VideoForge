@@ -157,6 +157,43 @@ def frame_image(clip: vs.VideoNode, n: int, fmt: Literal["jpeg", "png"] = "jpeg"
     return buf.getvalue()
 
 
+CROP_VIEW_PROP = "VFCropView"  # set on the crop view's frames when the margins are stacked back on
+
+
+def crop_view(pre: vs.VideoNode, clip: vs.VideoNode, left: int, top: int, right: int, bottom: int) -> vs.VideoNode:
+    """The crop editor's frame: `clip` (cropped and filtered, so a FillBorders after the crop shows as
+    it will be) with the rows and columns the crop cut from `pre` stacked back round it, so it lines
+    up pixel for pixel with the uncropped frame. When a filter after the crop changed the size, the
+    length, the frame rate or the color family, that can't line up: `clip` as it is (no marker prop)."""
+    import vapoursynth as vs
+
+    core = vs.core
+    width, height = pre.width - left - right, pre.height - top - bottom
+    if (
+        (clip.width, clip.height, clip.num_frames, clip.fps) != (width, height, pre.num_frames, pre.fps)
+        or clip.format is None
+        or pre.format is None
+        or clip.format.color_family != pre.format.color_family
+    ):
+        return clip
+    if pre.format.id != clip.format.id:  # a filter changed the depth or subsampling: the margins follow
+        pre = core.resize.Point(pre, format=clip.format.id)
+    row = [clip]
+    if left:
+        row.insert(0, core.std.Crop(pre, right=pre.width - left, top=top, bottom=bottom))
+    if right:
+        row.append(core.std.Crop(pre, left=pre.width - right, top=top, bottom=bottom))
+    rows = [core.std.StackHorizontal(row) if len(row) > 1 else clip]
+    if top:
+        rows.insert(0, core.std.Crop(pre, bottom=pre.height - top))
+    if bottom:
+        rows.append(core.std.Crop(pre, top=pre.height - bottom))
+    out = core.std.StackVertical(rows) if len(rows) > 1 else rows[0]
+    if out is not clip:
+        out = core.std.CopyFrameProps(out, clip)
+    return core.std.SetFrameProps(out, **{CROP_VIEW_PROP: 1})
+
+
 def frame_props(clip: vs.VideoNode, n: int) -> dict[str, object]:
     """Readable frame properties (picture type, matrix, ...)."""
     n = max(0, min(n, clip.num_frames - 1))

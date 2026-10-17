@@ -104,8 +104,9 @@ def _handle(cache: Any, req: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
             return {"info": asdict(vsx.clip_info(clip))}, b""
         if op == "frame":
             image = vsx.frame_image(clip, n, req.get("fmt", "jpeg"), int(req.get("quality", 90)))
-            pict = vsx.frame_props(clip, n).get("_PictType", "")
-            return {"pict": str(pict), "frames": clip.num_frames}, image
+            props = vsx.frame_props(clip, n)
+            reply = {"pict": str(props.get("_PictType", "")), "frames": clip.num_frames}
+            return reply | {"crop_view": bool(props.get(vsx.CROP_VIEW_PROP))}, image
         if op == "autocrop":
             return {"crop": asdict(autocrop.detect(clip, samples=int(req.get("samples", 20))))}, b""
     except Exception as e:  # a filter failing on a frame; the script itself loaded
@@ -331,10 +332,11 @@ class Preview:
 
     def frame(
         self, script: str, n: int, fmt: Literal["jpeg", "png"] = "jpeg", quality: int = 90, slot: str | None = None
-    ) -> tuple[bytes, str, int]:
-        """Frame n as an image, with its picture type and the clip's frame count."""
+    ) -> tuple[bytes, str, int, bool]:
+        """Frame n as an image, with its picture type, the clip's frame count and whether it is a crop
+        view with its margins on (script stage "crop")."""
         reply, image = self._call("frame", script, slot, n=n, fmt=fmt, quality=quality)
-        return image, reply["pict"], reply["frames"]
+        return image, reply["pict"], reply["frames"], reply.get("crop_view", False)
 
     def autocrop(self, script: str, samples: int = 20, slot: str | None = None) -> Crop:
         return Crop(**self._call("autocrop", script, slot, samples=samples)[0]["crop"])
