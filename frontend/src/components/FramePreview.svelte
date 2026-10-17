@@ -16,6 +16,9 @@
   // stay put while it loads (a spinner shows over it when a load takes a moment); a failed load
   // keeps the last frame under an error banner. Zoom, edges and scroll are bindable so the caller
   // can bring a view back as it was left.
+  // `sar` is the frame's pixel shape (width / height): an anamorphic frame is shown widened (or narrowed)
+  // to the shape it plays at, zoom counting the frame's rows; the crop lines and the pointer follow. The
+  // AR toggle shows the stored pixels instead (one screen pixel per frame pixel both ways at 100%).
   import { tick, untrack, type Snippet } from 'svelte'
   import { api } from '../lib/api'
   import type { Crop } from '../lib/types'
@@ -46,6 +49,7 @@
     edges = $bindable(false),
     scroll = $bindable({ left: 0, top: 0 }),
     notice = null,
+    sar = 1,
     oncrop,
     tools,
   }: {
@@ -62,6 +66,7 @@
     edges?: boolean
     scroll?: { left: number; top: number }
     notice?: { text: string; tone: 'muted' | 'bad' } | null
+    sar?: number // the frame's pixel aspect ratio (width / height of one pixel)
     oncrop?: (crop: Crop) => void // set: the wheel and the crop lines edit the crop (crop stage only)
     tools?: Snippet // more toolbar controls, after Matte
   } = $props()
@@ -74,6 +79,7 @@
   let vh = $state(0)
   let frameEl = $state<HTMLDivElement>()
   let matte = $state<Matte>(readMatte())
+  let shaped = $state(readShaped()) // an anamorphic frame shown at its display shape
   let src = $state<string | null>(null)
   let loading = $state(false)
   let slow = $state(false) // a load past a short delay: show the spinner (quick steps don't flash it)
@@ -209,13 +215,18 @@
   // The frame's size: the shown image's, the clip's until one is shown.
   const W = $derived(nat.w || width)
   const H = $derived(nat.h || height)
-  // scale: screen (device) pixels per frame pixel; layout is in CSS px, dpr of them to a device pixel.
-  const fitScale = $derived(vw && vh ? Math.max(0.01, Math.min(((vw - 2 * PAD) * dpr) / W, ((vh - 2 * PAD) * dpr) / H)) : 1)
+  const anamorphic = $derived(Math.abs(sar - 1) > 1e-6)
+  const ax = $derived(anamorphic && shaped ? sar : 1) // the frame drawn ax times as wide as its rows' scale
+  // scale: screen (device) pixels per frame pixel (down, for an anamorphic frame); layout is in CSS px,
+  // dpr of them to a device pixel.
+  const fitScale = $derived(vw && vh ? Math.max(0.01, Math.min(((vw - 2 * PAD) * dpr) / (W * ax), ((vh - 2 * PAD) * dpr) / H)) : 1)
   const scale = $derived(zoom ? zoom / 100 : fitScale)
-  const css = $derived(scale / dpr) // CSS px per frame pixel
+  const css = $derived(scale / dpr) // CSS px per frame pixel, down
+  const cssX = $derived(css * ax) // and across
   // A length in frame pixels as CSS px, rounded to whole device pixels (so edges land on screen pixels).
   const snap = (v: number) => Math.round(v * scale) / dpr
-  const dispW = $derived(Math.floor(W * scale) / dpr)
+  const snapX = (v: number) => Math.round(v * scale * ax) / dpr
+  const dispW = $derived(Math.floor(W * scale * ax) / dpr)
   const dispH = $derived(Math.floor(H * scale) / dpr)
   // The frame's place: centred, at least PAD in, on a whole device pixel. Centred on the viewport's
   // client size, which is rounded: the box round the frame is never sized from it (see the markup).
@@ -234,12 +245,11 @@
     const r = viewport.getBoundingClientRect()
     const x = cx === undefined ? viewport.clientWidth / 2 : cx - r.left - viewport.clientLeft
     const y = cy === undefined ? viewport.clientHeight / 2 : cy - r.top - viewport.clientTop
-    const before = css
-    const fx = (viewport.scrollLeft + x - frameEl.offsetLeft) / before
-    const fy = (viewport.scrollTop + y - frameEl.offsetTop) / before
+    const fx = (viewport.scrollLeft + x - frameEl.offsetLeft) / cssX
+    const fy = (viewport.scrollTop + y - frameEl.offsetTop) / css
     zoom = z
     await tick()
-    viewport.scrollLeft = fx * css + frameEl.offsetLeft - x
+    viewport.scrollLeft = fx * cssX + frameEl.offsetLeft - x
     viewport.scrollTop = fy * css + frameEl.offsetTop - y
     updateMap()
   }
@@ -287,6 +297,23 @@
     return 'gray'
   }
 
+  function readShaped(): boolean {
+    try {
+      return localStorage.getItem('videoforge.anamorphic') !== 'stored'
+    } catch {
+      return true // storage blocked
+    }
+  }
+
+  function toggleShaped() {
+    shaped = !shaped
+    try {
+      localStorage.setItem('videoforge.anamorphic', shaped ? 'shaped' : 'stored')
+    } catch {
+      /* storage blocked */
+    }
+  }
+
   function nextMatte() {
     const keys = Object.keys(MATTES) as Matte[]
     matte = keys[(keys.indexOf(matte) + 1) % keys.length]
@@ -308,18 +335,19 @@
   let cropDrag = $state<{ side: keyof Crop; id: number } | null>(null)
   let wheelRest = 0 // touchpads scroll in small steps; they add up to a notch
 
-  // The pointer in source pixels (off the frame on the matte too) and one screen px in source px.
+  // The pointer in source pixels (off the frame on the matte too) and one screen px in source px, each way.
   function framePoint(e: MouseEvent) {
     const r = frameEl!.getBoundingClientRect()
-    return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H, px: W / r.width }
+    return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H, pxX: W / r.width, pxY: H / r.height }
   }
 
+  // The crop line nearest the pointer, measured in screen px (an anamorphic frame's differ across and down).
   function nearestLine(e: MouseEvent) {
-    const { x, y, px } = framePoint(e)
+    const { x, y, pxX, pxY } = framePoint(e)
     const c = crop!
-    const d = { left: x - c.left, right: W - c.right - x, top: y - c.top, bottom: H - c.bottom - y }
+    const d = { left: (x - c.left) / pxX, right: (W - c.right - x) / pxX, top: (y - c.top) / pxY, bottom: (H - c.bottom - y) / pxY }
     const side = (Object.keys(d) as (keyof Crop)[]).reduce((a, b) => (Math.abs(d[b]) < Math.abs(d[a]) ? b : a))
-    return { side, near: Math.abs(d[side]) / px <= HIT }
+    return { side, near: Math.abs(d[side]) <= HIT }
   }
 
   // Even, and never past the opposite side (MIN_OUT left between them).
@@ -501,9 +529,19 @@
     <Button variant="ghost" onclick={nextMatte} title="Background around the frame: {matte} (click to change)">
       <span class="inline-block size-3.5 border" style="background:{MATTES[matte]}"></span>Matte
     </Button>
+    {#if anamorphic}
+      <Toggle
+        pressed={shaped}
+        onPressedChange={toggleShaped}
+        class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+        title="Anamorphic frame (pixels {+sar.toFixed(4)}:1). On: shown at the shape it plays at. Off: the stored pixels (exact at 100% and up)"
+      >
+        AR
+      </Toggle>
+    {/if}
     {@render tools?.()}
     <span class="ml-auto text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-      {W}×{H}{lined ? ` → ${outW}×${outH}` : ''} · {Math.round(scale * 100)}%
+      {W}×{H}{lined ? ` → ${outW}×${outH}` : ''}{anamorphic ? ` · plays ${((W * sar) / H).toFixed(2)}:1` : ''} · {Math.round(scale * 100)}%
       {#if pictType}· {pictType}-frame{/if}
     </span>
   </div>
@@ -554,12 +592,12 @@
                 <!-- The cropped-off margins, tinted. -->
                 <div class="absolute inset-x-0 top-0 {band('top')}" style="height:{t}px"></div>
                 <div class="absolute inset-x-0 bottom-0 {band('bottom')}" style="height:{b}px"></div>
-                <div class="absolute left-0 {band('left')}" style="top:{t}px;bottom:{b}px;width:{snap(crop.left)}px"></div>
-                <div class="absolute right-0 {band('right')}" style="top:{t}px;bottom:{b}px;width:{snap(crop.right)}px"></div>
+                <div class="absolute left-0 {band('left')}" style="top:{t}px;bottom:{b}px;width:{snapX(crop.left)}px"></div>
+                <div class="absolute right-0 {band('right')}" style="top:{t}px;bottom:{b}px;width:{snapX(crop.right)}px"></div>
                 <!-- The lines: one screen pixel just outside the kept picture, so none of its pixels is covered. -->
                 <div
                   class="absolute box-border"
-                  style="left:{snap(crop.left) - px}px;top:{t - px}px;right:{snap(crop.right) - px}px;bottom:{b - px}px;border:{px}px solid;border-color:{line('top')} {line('right')} {line('bottom')} {line('left')}"
+                  style="left:{snapX(crop.left) - px}px;top:{t - px}px;right:{snapX(crop.right) - px}px;bottom:{b - px}px;border:{px}px solid;border-color:{line('top')} {line('right')} {line('bottom')} {line('left')}"
                 ></div>
                 <!-- The side the wheel moves is marked on the matte too, just outside the frame. -->
                 {#if cropping && armed}
@@ -612,7 +650,7 @@
     {#if pannable && (panning || showMap) && shown}
       <div class="pointer-events-none absolute right-3 bottom-3 w-48 overflow-hidden rounded-md border bg-black/80 shadow-lg">
         <div class="relative">
-          <img src={shown} alt="" class="block w-full opacity-70" />
+          <img src={shown} alt="" class="block w-full opacity-70" style="aspect-ratio:{W * ax} / {H}" />
           <div
             class="absolute border-2 border-primary"
             style="left:{mapPos.left}%;top:{mapPos.top}%;width:{mapPos.w}%;height:{mapPos.h}%"

@@ -20,7 +20,7 @@
   import { layout } from '../lib/layout.svelte'
   import { videoView } from '../lib/videoView.svelte'
   import { clipLength } from '../lib/format'
-  import { fitted, resizeInput, type Geometry } from '../lib/resize'
+  import { fitted, previewShape, resizeInput, type Geometry } from '../lib/resize'
   import { SOURCE_FILTERS, type ClipInfo, type Crop, type JobDetail, type SourceFilter, type VideoSettings } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
@@ -302,6 +302,8 @@
     return v && v.width > 0 && v.height > 0 ? { width: v.width, height: v.height, sarNum: v.sar_num ?? 1, sarDen: v.sar_den ?? 1 } : null
   })
   const resizeIn = $derived(source ? resizeInput(video, source) : null)
+  // The shown frame's pixel shape, from the saved settings it was rendered with (the script panel's runs too).
+  const shape = $derived(previewShape(job.spec.video, source, stage))
   // The uncropped frame's size: the crop view's, the probed source's, else the output's plus the saved crop (without a resize).
   const src = $derived.by(() => {
     if (info.crop) return info.crop
@@ -384,6 +386,7 @@
         bind:edges={vv.edges}
         bind:scroll={vv.scroll}
         {notice}
+        sar={shape}
         oncrop={editable && stage === 'crop'
           ? c => {
               video.crop = c

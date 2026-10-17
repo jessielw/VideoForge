@@ -56,6 +56,16 @@ export function outputShape(r: Resize | null, g: Geometry): number {
   return Math.abs(shape - 1) <= 0.01 ? 1 : shape
 }
 
+// The shape of the preview frame's pixels, so it shows as the encode plays: the output's (the shape the
+// encode is told; a custom body's isn't known, so it shows as stored), or the crop view's, which leaves out
+// a resize after the crop (its pixels are the source's then).
+export function previewShape(video: VideoSettings, source: Geometry | null, stage: 'crop' | 'output'): number {
+  if (!source || video.custom !== null) return 1
+  const at = (c: string) => video.filters.findIndex(s => s.category === c)
+  if (stage === 'crop' && at('crop') < at('resize')) return source.sarNum / source.sarDen
+  return outputShape(video.resize, resizeInput(video, source))
+}
+
 // The source's geometry less the crop when the crop step comes before the resize (VideoSettings.resize_input).
 export function resizeInput(video: VideoSettings, source: Geometry): Geometry {
   let { width, height } = source
