@@ -106,6 +106,12 @@ def progress(line: str, frames: int | None = None) -> float | None:
     return None
 
 
+def progress_line(line: str) -> bool:
+    """Whether a line of encoder or vspipe output is a progress line (one every frame or two), with or without
+    a fraction progress() can read from it."""
+    return bool(_PERCENT.search(line) or _VSPIPE_FRAMES.search(line) or _X265_FRAMES.match(line.split("] ", 1)[-1]))
+
+
 def rate(line: str) -> tuple[float | None, int | None]:
     """Frames per second and the encoder's own time left (seconds) from a line progress() reads, where it prints
     them. Only for progress lines: an info line like "1920x1080 fps 24/1" isn't one. vspipe's lines give neither:

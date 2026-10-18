@@ -24,13 +24,19 @@ import time
 from videoforge.core.execute import process
 from videoforge.core.execute.process import CancelToken, LogFn, ToolError
 from videoforge.core.job import StepRecord, StepRun, StepStatus
-from videoforge.core.video.encoders import progress as encoder_progress, rate as encoder_rate
+from videoforge.core.video.encoders import (
+    progress as encoder_progress,
+    progress_line as encoder_progress_line,
+    rate as encoder_rate,
+)
 
 Runner = Callable[[Sequence[Sequence[str]], LogFn, CancelToken | None], None]
 _MKV_PROGRESS = re.compile(r"Progress:\s*(\d+)%")
 # Source filters indexing: L-SMASH "Creating lwi index file 45%", BestSource "track #0 index progress 45%"
 _INDEX_PROGRESS = re.compile(r"index (?:file|progress) (\d+)%")
-# Lines that only say how far a step is (indexers, mkvmerge): logged at every 10% (the progress bar sees them all)
+# Lines that only say how far a step is (indexers, mkvmerge): logged at every 10% (the progress bar sees them all).
+# The encoders', vspipe's and qaac's (one every frame or two) are logged at every 1% of the step: a long encode's
+# would push the job's first lines out of its log.
 _THIN_PROGRESS = re.compile(r"(?:index (?:file|progress)|(?:^|\] )Progress:)\s*(\d+)%")
 
 
@@ -199,17 +205,24 @@ def run_steps(
                 step.call(out)
             else:
                 last = -1.0
-                shown: dict[str, int] = {}  # per tool: the last tenth of a thinned progress line logged
+                latest = 0.0  # the step's last fraction read, for an x265 line that has none of its own
+                shown: dict[str, int] = {}  # per tool: the last tenth (or hundredth) of a progress line logged
 
                 def tool_log(line: str) -> None:
-                    nonlocal last
-                    m = _THIN_PROGRESS.search(line)
-                    tool = line.partition("]")[0]
-                    if m is None or int(m.group(1)) // 10 > shown.get(tool, -1):
-                        out(line)
-                        if m is not None:
-                            shown[tool] = int(m.group(1)) // 10
+                    nonlocal last, latest
                     frac = line_progress(line)
+                    if frac is not None:
+                        latest = frac
+                    mark = None
+                    if m := _THIN_PROGRESS.search(line):
+                        mark = int(m.group(1)) // 10
+                    elif encoder_progress_line(line):
+                        mark = int(latest * 100)
+                    tool = line.partition("]")[0]
+                    if mark is None or mark > shown.get(tool, -1):
+                        out(line)
+                        if mark is not None:
+                            shown[tool] = mark
                     if frac is not None:
                         # every line's: vspipe reads ahead, so the encoder's lines rarely move the fraction
                         note_rate(i, line)

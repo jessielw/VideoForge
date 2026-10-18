@@ -15,7 +15,7 @@ from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template import Template
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
-from videoforge.server.queue import Busy, JobQueue
+from videoforge.server.queue import LOG_LINES, Busy, JobQueue
 from videoforge.server.routes.presets import default_template
 from videoforge.server.views import detail, summary
 
@@ -271,7 +271,7 @@ def job_commands(request: Request, job_id: str) -> list[dict[str, Any]]:
 
 
 @router.get("/jobs/{job_id}/log")
-def job_log(request: Request, job_id: str, tail: int = 2000) -> dict[str, Any]:
+def job_log(request: Request, job_id: str, tail: int = LOG_LINES) -> dict[str, Any]:
     e = _entry(queue_of(request), job_id)
     return {"lines": list(e.log)[-tail:]}
 

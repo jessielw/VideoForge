@@ -786,7 +786,7 @@ def test_progress_only_lines_are_logged_every_tenth(tmp_path: Path):
         log("[ffindex] ffms2 index progress 100%")
         for pct in (0, 5, 50, 100):
             log(f"[mkvmerge] Progress: {pct}%")
-        log("[x264] [50.0%] 120/240 frames, 30.00 fps")  # an encoder's line says more: always kept
+        log("[x264] [50.0%] 120/240 frames, 30.00 fps")  # an encoder's first line is kept
         out.write_text("idx", encoding="utf-8")
 
     lines: list[str] = []
@@ -802,6 +802,31 @@ def test_progress_only_lines_are_logged_every_tenth(tmp_path: Path):
     ]
     assert any("[x264]" in line for line in lines)
     assert len(fractions) > 50  # the progress bar still sees every line
+
+
+def test_encoder_progress_lines_are_logged_every_hundredth(tmp_path: Path):
+    from videoforge.core.pipeline.steps import Step, run_steps
+
+    out = tmp_path / "video.hevc"
+    frames = 5000
+
+    def runner(argvs, log, cancel):
+        for n in range(1, frames + 1):
+            log(f"[vspipe] Frame: {n}/{frames} ({n / 10:.1f} fps)")
+            log(f"[x265] {n} frames: 6.63 fps, 2617.03 kb/s  ")  # no --frames: no fraction of its own
+        log(f"[x265] encoded {frames} frames in 754.12s (6.63 fps), 2600.00 kb/s, Avg QP:30.12")
+        out.write_text("hevc", encoding="utf-8")
+
+    lines: list[str] = []
+    fractions: list[float] = []
+    step = Step("video", "Encode", argvs=(("vspipe",), ("x265",)), outputs=(out,))
+    run_steps([step], {}, log=lines.append, runner=runner, progress=lambda p: fractions.append(p.fraction))
+    vspipe = [line for line in lines if line.startswith("[vspipe]")]
+    x265 = [line for line in lines if line.startswith("[x265]") and "encoded" not in line]
+    assert len(vspipe) == 101 and len(x265) == 101  # 0%..100%, not 5000 each
+    assert vspipe[0] == f"[vspipe] Frame: 1/{frames} (0.1 fps)" and x265[50].startswith("[x265] 2500 frames:")
+    assert lines[-1].startswith("[x265] encoded")  # the summary isn't a progress line
+    assert fractions[-1] == 1.0
 
 
 def test_progress_carries_the_encoders_fps_and_eta(tmp_path: Path):
