@@ -25,6 +25,22 @@ _VSPIPE_FRAMES = re.compile(r"Frame:\s*(\d+)/(\d+)")
 _FPS = re.compile(r"(\d+(?:\.\d+)?) fps\b", re.IGNORECASE)
 # x264 / x265 "eta 0:01:23"; Patman's mods "| 0:00:04 [-0:01:23] |" (elapsed [-left])
 _ETA = re.compile(r"(?:\beta |\[-)(\d+):(\d\d):(\d\d)")
+# H.265's MaxBR for Main / Main 10 (kb/s) by level x 10: (Main tier, High tier); below level 4 there's no High tier
+_LEVEL_KBPS = {
+    10: (128, 128),
+    20: (1500, 1500),
+    21: (3000, 3000),
+    30: (6000, 6000),
+    31: (10000, 10000),
+    40: (12000, 30000),
+    41: (20000, 50000),
+    50: (25000, 100000),
+    51: (40000, 160000),
+    52: (60000, 240000),
+    60: (60000, 240000),
+    61: (120000, 480000),
+    62: (240000, 800000),
+}
 
 
 def output_name(settings: EncoderSettings) -> str:
@@ -44,6 +60,41 @@ def _options(options: dict[str, str]) -> list[str]:
     return args
 
 
+def _setting(settings: EncoderSettings, name: str) -> str | None:
+    """The value the options or the extra arguments give a flag ("" for a bare flag; the extra arguments come
+    last, so theirs wins); None when neither sets it."""
+    value = None
+    for key, v in settings.options.items():
+        if key.lstrip("-") == name:
+            value = v
+    args = shlex.split(settings.extra, posix=False) if settings.extra.strip() else []
+    for i, arg in enumerate(args):
+        flag, eq, v = arg.partition("=")
+        if flag.startswith("--") and flag[2:] == name:
+            nxt = args[i + 1] if i + 1 < len(args) else ""
+            value = v if eq else ("" if nxt.startswith("--") else nxt)
+    return value
+
+
+def level_vbv(settings: EncoderSettings) -> list[str] | None:
+    """The --vbv-maxrate / --vbv-bufsize the options and extra arguments leave out, filled with --level-idc's
+    max bitrate (High tier unless --no-high-tier, x265's default), as StaxRip does for an HDR encode: [] when
+    both are set, None when one is missing and the level isn't set or known. x265 reads a level below 10 as
+    "5.1" and from 10 as "51"."""
+    missing = [f for f in ("vbv-maxrate", "vbv-bufsize") if not _setting(settings, f)]
+    if not missing:
+        return []
+    try:
+        level = float(_setting(settings, "level-idc") or "")
+    except ValueError:
+        return None
+    kbps = _LEVEL_KBPS.get(int(10 * level + 0.5) if level < 10 else int(level))
+    if kbps is None:
+        return None
+    rate = str(kbps[0] if _setting(settings, "no-high-tier") is not None else kbps[1])
+    return [arg for f in missing for arg in ("--" + f, rate)]
+
+
 def encoder_command(
     exe: str,
     settings: EncoderSettings,
@@ -61,7 +112,7 @@ def encoder_command(
     """One encoder run reading y4m from stdin. pass_number is 1 or 2 for a two-pass encode. sar is the
     encode's pixel aspect ratio (vspipe's y4m carries none), written when it isn't square; color is the
     source's colour description (color.color_args); hdr10plus an x265 encode's HDR10+ metadata and dolby_vision
-    its profile 8.1 RPU (hdr.py). A --sar
+    its profile 8.1 RPU (hdr.py), with the VBV x265 needs for it filled from --level-idc (level_vbv). A --sar
     or colour flag in the options or extra arguments comes after them, and wins."""
     x265 = settings.encoder is Encoder.X265
     argv = [exe, "--y4m"] if x265 else [exe, "--demuxer", "y4m"]
@@ -85,6 +136,7 @@ def encoder_command(
         argv += ["--dhdr10-info", str(hdr10plus)]
     if dolby_vision is not None and x265:
         argv += ["--dolby-vision-profile", "8.1", "--dolby-vision-rpu", str(dolby_vision)]
+        argv += level_vbv(settings) or []
     argv += _options(settings.options)
     if qpfile is not None:
         argv += ["--qpfile", str(qpfile)]

@@ -996,6 +996,8 @@ def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
         ({}, {"depth": 8}, ["hdr.dv_depth"]),
         ({}, {"options": {}}, ["hdr.dv_vbv"]),
         ({}, {"options": {}, "extra": "--vbv-maxrate 1000 --vbv-bufsize=1000"}, []),
+        ({}, {"options": {"level-idc": "5.1"}}, []),
+        ({}, {"options": {"level-idc": "4.4"}}, ["hdr.dv_vbv"]),
         ({}, {"source_color": False}, ["hdr.dv_master"]),
         ({"dv_profile": 5, "dv_compat": None}, {}, ["hdr.dv_profile5"]),
         ({"dv_profile": 5, "dv_compat": None}, {"dolby_vision": False}, ["hdr.dv_profile5"]),

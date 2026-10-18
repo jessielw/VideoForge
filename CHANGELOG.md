@@ -51,7 +51,8 @@ source), or in Docker on Linux.
   ("Dolby Vision from the source" on the Encoder tab, on by default), in MKV and MP4: dovi_tool reads the RPU,
   its active area (L5) follows the crop and resize, x265 writes it. Checked like HDR10+ (the script's frames
   before the encode, 8.1 in the output). It needs a 10-bit encode, `--vbv-maxrate` and `--vbv-bufsize` (x265's
-  rule) and a mastering display; the job blocks without them. Not carried yet: profile 5 (always blocks: it has
+  rule; with `--level-idc` set, the level's max bitrate fills the ones not set, High tier unless
+  `--no-high-tier`, as StaxRip does) and a mastering display; the job blocks without them. Not carried yet: profile 5 (always blocks: it has
   no HDR10 layer) and 8.4 (HLG); x264 drops it (a warning).
 - **Dolby Vision FEL.** A profile 7 FEL's enhancement layer is baked into the picture (felbaker, now among the
   bundled plugins) and its RPU goes on as 8.1: the index lane demuxes the layer (dovi_tool), muxes it into an

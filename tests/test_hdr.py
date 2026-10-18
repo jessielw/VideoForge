@@ -5,10 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from videoforge.core.models import VideoHdr, VideoInfo
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video import hdr
-from videoforge.core.video.encoders import encoder_command
+from videoforge.core.video.encoders import encoder_command, level_vbv
 from videoforge.core.video.hdr import from_mediainfo, hdr10plus_frames, l5_offsets, rpu_edit, video_stream_argv
 from videoforge.core.video.settings import (
     Crop,
@@ -146,3 +148,27 @@ def test_dolby_vision_x265_args():
     )
     i = x265.index("--dolby-vision-profile")
     assert x265[i : i + 4] == ["--dolby-vision-profile", "8.1", "--dolby-vision-rpu", "dv_rpu.bin"]
+    # VBV from --level-idc, only where the job sets none
+    leveled = EncoderSettings(encoder=Encoder.X265, depth=10, options={"level-idc": "5.1", "vbv-maxrate": "50000"})
+    x265 = encoder_command("x265", leveled, output=Path("v.hevc"), dolby_vision=rpu)
+    assert x265[i + 4 : i + 6] == ["--vbv-bufsize", "160000"] and x265.count("--vbv-maxrate") == 1
+    plain = encoder_command("x265", leveled, output=Path("v.hevc"))
+    assert "--vbv-bufsize" not in plain  # only for Dolby Vision
+
+
+@pytest.mark.parametrize(
+    ("options", "extra", "vbv"),
+    [
+        ({"vbv-maxrate": "40000", "vbv-bufsize": "30000"}, "", []),
+        ({}, "", None),
+        ({"level-idc": "5.1"}, "", ["--vbv-maxrate", "160000", "--vbv-bufsize", "160000"]),
+        ({"level-idc": "51", "no-high-tier": ""}, "", ["--vbv-maxrate", "40000", "--vbv-bufsize", "40000"]),
+        ({"level-idc": "4"}, "--vbv-maxrate=20000", ["--vbv-bufsize", "30000"]),
+        ({}, "--level-idc 6.2 --no-high-tier", ["--vbv-maxrate", "240000", "--vbv-bufsize", "240000"]),
+        ({"level-idc": "3"}, "", ["--vbv-maxrate", "6000", "--vbv-bufsize", "6000"]),  # no High tier
+        ({"level-idc": "4.4"}, "", None),
+        ({"level-idc": "high"}, "", None),
+    ],
+)
+def test_level_vbv(options, extra, vbv):
+    assert level_vbv(EncoderSettings(encoder=Encoder.X265, options=options, extra=extra)) == vbv

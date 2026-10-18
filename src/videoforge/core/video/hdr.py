@@ -14,8 +14,8 @@ Dolby Vision (profile 8.1, and a profile 7 MEL as 8.1; StaxRip's flow): `ffmpeg 
 writes the source's RPU to the work folder. An edit step moves its L5 active area (the letterbox offsets) by
 the job's crop and resize (DoviCrop's: `dovi_tool export`, each offset less the crop, at least 0) and makes it
 profile 8.1 (`dovi_tool editor`, mode 2); a check compares its frames with the script's, as for HDR10+; x265
-writes it (`--dolby-vision-profile 8.1 --dolby-vision-rpu`). x265 needs VBV for it (HRD), a 10-bit encode and
-a mastering display. Profile 5 (no HDR10 layer) and 8.4 (HLG) aren't carried yet.
+writes it (`--dolby-vision-profile 8.1 --dolby-vision-rpu`). x265 needs VBV for it (HRD; with only
+`--level-idc` set, the level's max bitrate fills it, as StaxRip does), a 10-bit encode and a mastering display. Profile 5 (no HDR10 layer) and 8.4 (HLG) aren't carried yet.
 
 A profile 7 FEL's enhancement layer is baked into the picture (StaxRip's flow, felbaker's fel.Bake): the index
 lane demuxes it (`dovi_tool demux --el-only`), muxes it into an MKV with the source's frame duration (so the
@@ -45,6 +45,7 @@ from videoforge.core.config import Tools
 from videoforge.core.execute.process import LogFn, ToolError, run
 from videoforge.core.models import Issue, Severity, SourceInfo, VideoColor, VideoHdr, VideoInfo
 from videoforge.core.tools import locate
+from videoforge.core.video.encoders import level_vbv
 from videoforge.core.video.settings import Encoder, EncoderSettings, FilterCategory, SourceFilter, VideoSettings
 
 logger = logging.getLogger(__name__)
@@ -244,9 +245,11 @@ def _dv_issues(
     if settings.depth != 10:
         block("hdr.dv_depth", "Dolby Vision needs a 10-bit encode: set the bit depth")
     flags = _flags(settings)
-    if not {"vbv-maxrate", "vbv-bufsize"} <= flags:
+    if level_vbv(settings) is None:
         block(
-            "hdr.dv_vbv", "x265 needs --vbv-maxrate and --vbv-bufsize for Dolby Vision (HRD): set them in the options"
+            "hdr.dv_vbv",
+            "x265 needs --vbv-maxrate and --vbv-bufsize for Dolby Vision (HRD): set them in the options, or "
+            "--level-idc to fill them with its max bitrate",
         )
     if not (settings.source_color and video.color.master_display) and "master-display" not in flags:
         block(

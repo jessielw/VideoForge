@@ -29,7 +29,23 @@
     dv?: VideoHdr | false | null
   } = $props()
 
-  const vbv = $derived('vbv-maxrate' in value.options && 'vbv-bufsize' in value.options)
+  // H.265 MaxBR (kb/s) by level x 10, [Main tier, High tier]: Dolby Vision fills a missing --vbv-maxrate /
+  // --vbv-bufsize from --level-idc (High tier unless --no-high-tier), as encoders.level_vbv does
+  const LEVEL_KBPS: Record<number, [number, number]> = {
+    10: [128, 128], 20: [1500, 1500], 21: [3000, 3000], 30: [6000, 6000], 31: [10000, 10000], 40: [12000, 30000],
+    41: [20000, 50000], 50: [25000, 100000], 51: [40000, 160000], 52: [60000, 240000], 60: [60000, 240000],
+    61: [120000, 480000], 62: [240000, 800000],
+  }
+  // the VBV flags filled from the level ([] when both are set, null when one is missing and the level can't fill it)
+  const levelVbv = $derived.by(() => {
+    const missing = ['vbv-maxrate', 'vbv-bufsize'].filter(f => !value.options[f])
+    if (!missing.length) return []
+    const level = parseFloat(value.options['level-idc'] ?? '')
+    const kbps = LEVEL_KBPS[level < 10 ? Math.round(10 * level) : Math.trunc(level)]
+    if (!kbps) return null
+    const rate = 'no-high-tier' in value.options ? kbps[0] : kbps[1]
+    return missing.flatMap(f => [`--${f}`, String(rate)])
+  })
 
   const HDR_TRANSFERS = ['smpte2084', 'arib-std-b67'] // PQ, HLG
   const hdr = $derived(!!colorArgs && colorArgs.some((a, i) => colorArgs[i - 1] === '--transfer' && HDR_TRANSFERS.includes(a)))
@@ -194,7 +210,8 @@
       Dolby Vision from the source
       <span class="block text-xs text-muted-foreground">
         x265: carries a source's Dolby Vision into the encode as profile 8.1 (dovi_tool reads the RPU and moves its active
-        area with the crop and resize). Needs a 10-bit encode, --vbv-maxrate and --vbv-bufsize, and a script that keeps every
+        area with the crop and resize). Needs a 10-bit encode, --vbv-maxrate and --vbv-bufsize (or --level-idc, whose max
+        bitrate fills the ones not set), and a script that keeps every
         frame. A FEL's enhancement layer is baked into the picture first (felbaker). Profile 5 and 8.4 (HLG) aren't
         carried yet.
       </span>
@@ -209,7 +226,7 @@
           <span class="mt-1 block text-xs text-warning">x264 can't carry Dolby Vision: the encode keeps the HDR10 layer.</span>
         {:else}
           <code class="mt-1 block font-mono text-xs break-all {value.dolby_vision ? '' : 'text-muted-foreground line-through'}"
-            >--dolby-vision-profile 8.1 --dolby-vision-rpu dv_rpu.bin</code
+            >--dolby-vision-profile 8.1 --dolby-vision-rpu dv_rpu.bin{levelVbv?.length ? ' ' + levelVbv.join(' ') : ''}</code
           >
           {#if value.dolby_vision}
             {#if dv.dv_compat === 4}
@@ -223,8 +240,11 @@
             {#if value.depth !== 10}
               <span class="mt-1 block text-xs text-warning">Dolby Vision needs a 10-bit encode.</span>
             {/if}
-            {#if !vbv}
-              <span class="mt-1 block text-xs text-warning">Add --vbv-maxrate and --vbv-bufsize below (x265 needs VBV for Dolby Vision).</span>
+            {#if levelVbv === null}
+              <span class="mt-1 block text-xs text-warning"
+                >Add --vbv-maxrate and --vbv-bufsize below, or --level-idc to fill them with its max bitrate (x265 needs VBV for Dolby
+                Vision).</span
+              >
             {/if}
           {/if}
         {/if}
