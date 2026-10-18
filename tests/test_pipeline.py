@@ -29,11 +29,13 @@ from videoforge.core.models import (
     Plan,
     Severity,
     SubFormat as F,
+    VideoHdr,
     VideoInfo,
 )
 from videoforge.core.pipeline.build import build_steps
 from videoforge.core.pipeline.run import run_job, run_plan
-from videoforge.core.video.settings import Crop, EncoderSettings, RateControl, SourceFilter
+from videoforge.core.video import hdr
+from videoforge.core.video.settings import Crop, Encoder, EncoderSettings, RateControl, SourceFilter
 
 
 def fake_tool_files(*names: str) -> dict[str, str]:
@@ -835,3 +837,69 @@ def test_work_dir_is_next_to_the_source_and_separate_from_staxrip(tmp_path: Path
     (work_dir(src) / "sub").mkdir(parents=True)
     (work_dir(src) / "sub" / "a.ec3").write_bytes(b"x")
     assert remove_work_dir(src) is True and not work_dir(src).exists()
+
+
+# --- HDR10+ ------------------------------------------------------------------------
+
+
+def test_hdr10plus_is_carried_into_x265(profile, tmp_path, monkeypatch):
+    plan = make_plan(tmp_path)
+    assert plan.source.video is not None
+    plan.source.video.hdr = VideoHdr(hdr10plus=True)
+    job = video_job(plan, tmp_path)
+    job.encoder = EncoderSettings(encoder=Encoder.X265, depth=10, preset="fast")
+    out = tmp_path / "out" / "Show.S01E01.mkv"
+    built = build_steps(job, plan, profile, APP, out)
+    ids = [s.id for s in built.steps]
+    assert ids.index("hdr10plus") < ids.index("hdr10plus.check") < ids.index("video")
+    meta = job.work_dir / "hdr10plus.json"
+    extract = next(s for s in built.steps if s.id == "hdr10plus")
+    assert extract.argvs[0][-5:] == ("-bsf:v", "hevc_mp4toannexb", "-f", "hevc", "-")
+    assert extract.argvs[1] == ("hdr10plus_tool", "extract", "-o", str(meta), "-")
+    video = next(s for s in built.steps if s.id == "video").argvs[1]
+    assert video[video.index("--dhdr10-info") + 1] == str(meta)
+
+    monkeypatch.setattr(hdr, "script_frames", lambda *_: 240)
+    monkeypatch.setattr(hdr, "hdr10plus_frames", lambda _p: 240)
+    result = run_job(
+        job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: simulate_output(plan)
+    )
+    assert result.status is JobStatus.DONE, result.error
+
+    # the output lost it: invalid
+    lost = replace(simulate_output(plan), video=replace(plan.source.video, hdr=VideoHdr()))
+    result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: lost)
+    assert result.status is JobStatus.INVALID
+    assert [i.code for i in result.issues] == ["hdr.hdr10plus_missing"]
+
+    # a script with other frames than the metadata stops before the encode
+    monkeypatch.setattr(hdr, "script_frames", lambda *_: 238)
+    runner = FakeRunner()
+    result = run_job(job, plan, profile, APP, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
+    assert result.status is JobStatus.FAILED and "238 frames" in (result.error or "")
+    assert "x265" not in tools_called(runner)
+
+
+@pytest.mark.parametrize(
+    ("encoder", "depth", "on", "codes"),
+    [
+        (Encoder.X264, 8, True, ["hdr.hdr10plus_x264"]),
+        (Encoder.X265, 8, True, ["hdr.hdr10plus_depth"]),
+        (Encoder.X265, 10, False, []),
+        (Encoder.X265, 10, True, []),
+    ],
+)
+def test_hdr10plus_plan(profile, tmp_path, encoder, depth, on, codes):
+    plan = make_plan(tmp_path)
+    assert plan.source.video is not None
+    plan.source.video.hdr = VideoHdr(hdr10plus=True)
+    job = video_job(plan, tmp_path)
+    job.encoder = EncoderSettings(encoder=encoder, depth=depth, hdr10plus=on)
+    tools = replace(APP.tools, hdr10plus_tool=fake_tool_files("hdr10plus_tool")["hdr10plus_tool"])
+    assert [i.code for i in hdr.issues(plan.source.video, job.encoder, tools)] == codes
+    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    carried = encoder is Encoder.X265 and on
+    assert ("hdr10plus" in [s.id for s in built.steps]) is carried
+    missing = replace(APP.tools, hdr10plus_tool=str(tmp_path / "nope.exe"))
+    found = [i.code for i in hdr.issues(plan.source.video, job.encoder, missing)]
+    assert ("tools.missing" in found) is carried

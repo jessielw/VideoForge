@@ -36,6 +36,7 @@ from videoforge.core.models import (
     VideoInfo,
 )
 from videoforge.core.tools import tool_issues
+from videoforge.core.video import hdr
 from videoforge.core.video.encoders import output_name
 from videoforge.core.video.qpf import qpf_paths
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
@@ -232,4 +233,6 @@ def plan_spec(spec: JobSpec, probed: ProbedInputs, profile: Profile, tools: Tool
     if tools is not None:
         plan.issues += tool_issues(plan, tools, spec.container(profile))
     plan.issues += mux_issues(plan, spec.container(profile))
+    if spec.encodes_video:
+        plan.issues += hdr.issues(probed.source.video, spec.encoder, tools)
     return plan

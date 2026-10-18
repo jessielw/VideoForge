@@ -10,18 +10,20 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
 
-  // colorArgs: the job's source's colour flags for this encoder (the job editor; null until probed, absent in
-  // the batch panel and on the Templates page, which have no one source)
+  // colorArgs: the job's source's colour flags for this encoder; hdr10plus: whether the source has HDR10+ (the job
+  // editor; null until probed, absent in the batch panel and on the Templates page, which have no one source)
   let {
     value,
     onchange,
     disabled = false,
     colorArgs,
+    hdr10plus,
   }: {
     value: EncoderSettings
     onchange: (v: EncoderSettings) => void
     disabled?: boolean
     colorArgs?: string[] | null
+    hdr10plus?: boolean | null
   } = $props()
 
   const HDR_TRANSFERS = ['smpte2084', 'arib-std-b67'] // PQ, HLG
@@ -149,6 +151,33 @@
         {/if}
         {#if hdr && value.source_color && value.depth < 10}
           <span class="mt-1 block text-xs text-warning">An HDR source: encode it at 10-bit.</span>
+        {/if}
+      {/if}
+    </span>
+  </label>
+
+  <label class="flex items-start gap-3 text-sm">
+    <Checkbox class="mt-0.5" checked={value.hdr10plus} {disabled} onCheckedChange={v => set('hdr10plus', v)} />
+    <span class="min-w-0">
+      HDR10+ from the source
+      <span class="block text-xs text-muted-foreground">
+        x265: carries a source's HDR10+ metadata into the encode (hdr10plus_tool reads it, x265's --dhdr10-info writes it). Needs a
+        10-bit encode and a script that keeps every frame (no trims).
+      </span>
+      {#if hdr10plus !== undefined}
+        {#if hdr10plus === null}
+          <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
+        {:else if !hdr10plus}
+          <span class="block text-xs text-muted-foreground">The source has no HDR10+.</span>
+        {:else if value.encoder !== 'x265'}
+          <span class="mt-1 block text-xs text-warning">x264 can't carry HDR10+: the encode keeps HDR10 only.</span>
+        {:else}
+          <code class="mt-1 block font-mono text-xs break-all {value.hdr10plus ? '' : 'text-muted-foreground line-through'}"
+            >--dhdr10-info hdr10plus.json</code
+          >
+          {#if value.hdr10plus && value.depth < 10}
+            <span class="mt-1 block text-xs text-warning">HDR10+ needs a 10-bit encode.</span>
+          {/if}
         {/if}
       {/if}
     </span>

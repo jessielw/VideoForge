@@ -56,7 +56,8 @@ def test_mp4box_command():
     )
     assert argv[:2] == ["MP4Box", "-noprog"]
     assert adds(argv) == [
-        "enc.h264:fps=24000/1001:lang=en-US:name=",  # the source's exact rate and language; no GPAC handler name
+        # the source's exact rate and language; no GPAC handler name; no HDR boxes (the stream carries them)
+        "enc.h264:fps=24000/1001:hdr=none:lang=en-US:name=",
         # copied from the source: mkvmerge id + 1, shifted by the source's start; ':' can't be in a name
         "Movie.mkv#trackID=2:lang=en:group=1:name=Main - 5.1:delay=-40",
         # encoded: ffmpeg's AAC doesn't keep the delay, so the mux applies it

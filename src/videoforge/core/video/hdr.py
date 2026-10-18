@@ -1,8 +1,14 @@
-"""A source's dynamic HDR metadata: Dolby Vision and HDR10+ (MediaInfo), and a profile 7 enhancement layer's
-kind (FEL or MEL, which MediaInfo can't tell) from a second of its RPU.
+"""A source's dynamic HDR metadata: Dolby Vision and HDR10+ (MediaInfo), a profile 7 enhancement layer's
+kind (FEL or MEL, which MediaInfo can't tell) from a second of its RPU, and carrying HDR10+ into an x265
+encode.
 
-The FEL / MEL read is the user's dv_check way (StaxRip's "dv_check" folder): a second of the video stream from
-10 s in, through dovi_tool extract-rpu, then `dovi_tool info -f 0` on its first frame for `el_type`.
+The FEL / MEL read is dv_check's (StaxRip's "dv_check" folder): a second of the video stream from 10 s in,
+through dovi_tool extract-rpu, then `dovi_tool info -f 0` on its first frame for `el_type`.
+
+HDR10+ (as StaxRip does it): `ffmpeg ... -f hevc - | hdr10plus_tool extract -o hdr10plus.json -` into the
+work folder, then x265 `--dhdr10-info hdr10plus.json`. The JSON has one entry per frame of the source, so
+the script must give the same frames: a check step compares them before the encode (a trim, a frame-rate
+filter or a source filter counting frames its own way would put the metadata out of step).
 """
 
 from __future__ import annotations
@@ -18,12 +24,16 @@ import tempfile
 from typing import Any
 
 from videoforge.core.config import Tools
-from videoforge.core.execute.process import ToolError, run
-from videoforge.core.models import VideoHdr
+from videoforge.core.execute.process import LogFn, ToolError, run
+from videoforge.core.models import Issue, Severity, SourceInfo, VideoHdr, VideoInfo
+from videoforge.core.tools import locate
+from videoforge.core.video.settings import Encoder, EncoderSettings
 
 logger = logging.getLogger(__name__)
 
+HDR10PLUS_JSON = "hdr10plus.json"  # in the work folder
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+_FRAMES = re.compile(r"(?:^|\] )Frames:\s*(\d+)", re.MULTILINE)  # process.run tags lines "[vspipe] "
 _PROFILE = re.compile(r"Profile (\d+)(?:\.(\d+))?")
 _DVHE = re.compile(r"\b(?:dvhe|dvh1|dvav|dva1|dav1)\.(\d+)", re.IGNORECASE)
 
@@ -115,3 +125,70 @@ def _el_type(source: str, _size: int, _mtime: int, ffmpeg: str, dovi_tool: str) 
             except (OSError, ToolError, ValueError) as ex:
                 logger.info("%s: no RPU sample from %s s: %s", Path(source).name, start, ex)
     return ""
+
+
+def keeps_hdr10plus(video: VideoInfo | None, settings: EncoderSettings) -> bool:
+    """Whether the encode carries the source's HDR10+: x265, the source has it, and the job didn't untick it."""
+    return video is not None and video.hdr.hdr10plus and settings.hdr10plus and settings.encoder is Encoder.X265
+
+
+def issues(video: VideoInfo | None, settings: EncoderSettings, tools: Tools | None = None) -> list[Issue]:
+    """What stands in the way of carrying the source's HDR10+ (the Encoder tab's "HDR10+ from the source")."""
+    if video is None or not video.hdr.hdr10plus or not settings.hdr10plus:
+        return []
+    untick = "or untick HDR10+ from the source on the Encoder tab"
+    if settings.encoder is not Encoder.X265:
+        return [Issue(Severity.WARN, "hdr.hdr10plus_x264", "x264 can't carry HDR10+: the encode keeps HDR10 only")]
+    out = []
+    if settings.depth < 10:
+        out.append(
+            Issue(Severity.BLOCK, "hdr.hdr10plus_depth", f"HDR10+ needs a 10-bit encode: set the bit depth, {untick}")
+        )
+    if tools is not None and (missing := [n for n in ("ffmpeg", "hdr10plus_tool") if not locate(getattr(tools, n))]):
+        out.append(
+            Issue(
+                Severity.BLOCK, "tools.missing", f"HDR10+ needs {' and '.join(missing)}: set it in Settings, {untick}"
+            )
+        )
+    return out
+
+
+def hdr10plus_argvs(tools: Tools, source: Path, out: Path) -> tuple[tuple[str, ...], ...]:
+    """The source's HDR10+ metadata into a JSON file: ffmpeg | hdr10plus_tool extract."""
+    extract = (tools.hdr10plus_tool, "extract", "-o", str(out), "-")
+    return (tuple(video_stream_argv(tools.ffmpeg, source)), extract)
+
+
+def script_frames(vspipe: str, script: Path) -> int:
+    """The frames a VapourSynth script gives (`vspipe --info`)."""
+    lines: list[str] = []
+    run([(vspipe, "--info", str(script), "-")], lines.append)
+    m = _FRAMES.search("\n".join(lines))
+    if m is None:
+        raise ToolError(f"vspipe --info printed no frame count for {script.name}")
+    return int(m.group(1))
+
+
+def hdr10plus_frames(path: Path) -> int:
+    """The frames an hdr10plus_tool JSON describes."""
+    with path.open(encoding="utf-8") as f:
+        return len(json.load(f).get("SceneInfo") or [])
+
+
+def check_frames(vspipe: str, script: Path, metadata: Path, log: LogFn) -> None:
+    """Raise ToolError when the script's frame count isn't the HDR10+ metadata's."""
+    frames, meta = script_frames(vspipe, script), hdr10plus_frames(metadata)
+    if frames != meta:
+        raise ToolError(
+            f"The script gives {frames} frames and the source's HDR10+ metadata has {meta}: they would be out of step "
+            "(a trim or a frame-rate filter, or a source filter counting frames differently: try FFMS2). Untick "
+            "HDR10+ from the source on the Encoder tab to encode without it."
+        )
+    log(f"HDR10+ metadata: {meta} frames, as the script")
+
+
+def output_issues(video: VideoInfo | None, settings: EncoderSettings, output: SourceInfo) -> list[Issue]:
+    """A BLOCK when the output was meant to carry HDR10+ and MediaInfo finds none in it."""
+    if keeps_hdr10plus(video, settings) and output.video is not None and not output.video.hdr.hdr10plus:
+        return [Issue(Severity.BLOCK, "hdr.hdr10plus_missing", "The output has no HDR10+ metadata")]
+    return []

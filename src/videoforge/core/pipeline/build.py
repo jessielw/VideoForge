@@ -26,6 +26,7 @@ from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
 from videoforge.core.models import Plan
 from videoforge.core.pipeline.steps import Step
+from videoforge.core.video import hdr
 from videoforge.core.video.encoders import encoder_command, vspipe_command
 from videoforge.core.video.qpf import make_qpf, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
@@ -149,14 +150,51 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
     color = v.color if v is not None else None
     pipe = tuple(vspipe_command(app.tools.vspipe, script))
     shared = (script, source) + ((qpfile,) if qpfile else ())
+    hdr10plus = None
+    if hdr.keeps_hdr10plus(v, enc):
+        hdr10plus = work / hdr.HDR10PLUS_JSON
+        meta = hdr10plus
+
+        def check_frames(log: LogFn) -> None:
+            hdr.check_frames(app.tools.vspipe, script, meta, log)
+
+        steps += [
+            Step(
+                "hdr10plus",
+                "HDR10+ metadata (hdr10plus_tool)",
+                argvs=hdr.hdr10plus_argvs(app.tools, source, meta),
+                outputs=(meta,),
+                inputs=(source,),
+                weight=1,
+            ),
+            Step(
+                "hdr10plus.check",
+                "HDR10+ frames against the script",
+                call=check_frames,
+                inputs=(script, meta),
+                key=text,
+                weight=0.1,
+            ),
+        ]
+        shared += (meta,)
     out = spec.video_output
     name = enc.encoder.value
     if enc.passes == 2:
         stats = work / "video.stats"
         first = encoder_command(
-            exe, enc, output=Path(os.devnull), pass_number=1, stats=stats, qpfile=qpfile, sar=sar, color=color
+            exe,
+            enc,
+            output=Path(os.devnull),
+            pass_number=1,
+            stats=stats,
+            qpfile=qpfile,
+            sar=sar,
+            color=color,
+            hdr10plus=hdr10plus,
         )
-        second = encoder_command(exe, enc, output=out, pass_number=2, stats=stats, qpfile=qpfile, sar=sar, color=color)
+        second = encoder_command(
+            exe, enc, output=out, pass_number=2, stats=stats, qpfile=qpfile, sar=sar, color=color, hdr10plus=hdr10plus
+        )
         steps += [
             Step(
                 "video.pass1",
@@ -178,7 +216,7 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
             ),
         ]
     else:
-        argv = encoder_command(exe, enc, output=out, qpfile=qpfile, sar=sar, color=color)
+        argv = encoder_command(exe, enc, output=out, qpfile=qpfile, sar=sar, color=color, hdr10plus=hdr10plus)
         steps.append(
             Step(
                 "video",

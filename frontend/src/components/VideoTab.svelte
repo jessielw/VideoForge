@@ -501,8 +501,11 @@
           <section class="space-y-1">
             <span class="section-label">HDR</span>
             <p class="text-sm">{hdr.join(' · ')}</p>
-            {#if job.tracks?.video?.hdr?.dv_profile || job.tracks?.video?.hdr?.hdr10plus}
-              <p class="text-xs text-muted-foreground">Dolby Vision and HDR10+ aren't carried into the encode yet: it keeps the HDR10 layer.</p>
+            {#if job.tracks?.video?.hdr?.dv_profile}
+              <p class="text-xs text-muted-foreground">Dolby Vision isn't carried into the encode yet: it keeps the HDR10 layer.</p>
+            {/if}
+            {#if job.tracks?.video?.hdr?.hdr10plus}
+              <p class="text-xs text-muted-foreground">HDR10+ goes into an x265 encode (Encoder tab: HDR10+ from the source).</p>
             {/if}
           </section>
         {/if}

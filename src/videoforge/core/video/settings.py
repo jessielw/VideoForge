@@ -215,6 +215,7 @@ class EncoderSettings:
     options: dict[str, str] = field(default_factory=dict)
     extra: str = ""  # raw arguments appended last
     source_color: bool = True  # tag the encode with the source's colour description and HDR10 metadata (color.py)
+    hdr10plus: bool = True  # carry a source's HDR10+ metadata into an x265 encode (hdr.py)
 
     @property
     def passes(self) -> int:

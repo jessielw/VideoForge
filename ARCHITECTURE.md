@@ -40,6 +40,8 @@ src/videoforge/
       encoders.py        x264 / x265: settings -> argv (1 or 2 pass), progress parsing (fraction, fps, the encoder's eta)
       color.py           The source's colour (MediaInfo -> VideoInfo.color) -> --colorprim/--transfer/... and
                          x265's HDR10 SEI, before the job's options (vspipe's y4m carries no colour)
+      hdr.py             Dolby Vision / HDR10+ in the source (MediaInfo -> VideoInfo.hdr; FEL or MEL from a second
+                         of the RPU); HDR10+ into x265: hdr10plus_tool's JSON, --dhdr10-info, the frame check
       qpf.py             AutoQPF: chapters -> qpf + chapter file
     execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel), jobobject.py (tools end with the server, Windows)
                          mux.MUXERS: mkvmerge (MKV) and MP4Box (MP4), each with what its container can't hold
@@ -158,6 +160,13 @@ index ─► qpf/chapters ─┬► video (vspipe | x264/x265, 1 or 2 passes) �
   (`run_steps(keep=...)` reuses them whatever their fingerprint and records today's), unticked ones lose
   their records and are made again. The index, script, chapters and mux follow the rule above.
 - An imported encode (e.g. from StaxRip) replaces the video steps.
+- HDR10+ (`core/video/hdr.py`, x265 with "HDR10+ from the source" on): before the video, `hdr10plus`
+  (`ffmpeg ... -f hevc - | hdr10plus_tool extract`, StaxRip's command) writes `hdr10plus.json` to the work
+  folder and `hdr10plus.check` compares its frames with the script's (`vspipe --info`): a trim, a frame-rate
+  filter or a source filter counting frames its own way would put the metadata out of step, so the job stops
+  there. x265 gets `--dhdr10-info`; the validate step blocks an output MediaInfo finds no HDR10+ in. MP4Box
+  adds the video with `:hdr=none` (no HDR boxes: the stream's SEI carries it, and MediaInfo would list it
+  twice). x264 drops it (a warning); 8-bit blocks.
 - The plan is container-neutral: tracks carry plain flags (default, forced, hearing impaired,
   commentary, original, visual impaired), languages and titles. The job's container
   (`JobSpec.container()`: its `MuxSettings.container` when the profile lists it in `containers`,
@@ -325,8 +334,9 @@ defaults, audio encoder settings, and the checks on the finished file.
   binaries link to). L-SMASH-Works carries its own static FFmpeg (it doesn't build against 9 yet), kept to
   itself with `-Bsymbolic`. Zig plugins (zsmooth, vszip) are built per CPU level in a folder with a
   `manifest.vs`, so VapourSynth loads the best one. The `Dockerfile` (the app) copies `/opt/vf`, links its
-  `vs-plugins/` as the vapoursynth package's autoloaded `plugins/`, and adds Debian trixie's MKVToolNix, x265
-  and opus-tools, DeeZy and truehdd release binaries and the filter scripts. `docker.yml` tags the plugins
+  `vs-plugins/` as the vapoursynth package's autoloaded `plugins/`, builds x265 (8/10/12-bit, with HDR10+:
+  Debian's has no `--dhdr10-info`), and adds Debian trixie's MKVToolNix and opus-tools, the DeeZy, truehdd,
+  dovi_tool and hdr10plus_tool release binaries and the filter scripts. `docker.yml` tags the plugins
   image with a hash of `vsplugins/` and builds it only when that tag is new, then the app image on it (GHCR,
   on a version tag). `docker/videoforge.toml` is its config (`VIDEOFORGE_ROOT=/app`), data in `/data`, the
   user's tools in `/tools` (DEE, qaac, more plugins). The config names DEE and qaac bare (`dee`, `qaac`):

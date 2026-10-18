@@ -55,11 +55,12 @@ def encoder_command(
     qpfile: Path | None = None,
     sar: Fraction | None = None,
     color: VideoColor | None = None,
+    hdr10plus: Path | None = None,
 ) -> list[str]:
     """One encoder run reading y4m from stdin. pass_number is 1 or 2 for a two-pass encode. sar is the
     encode's pixel aspect ratio (vspipe's y4m carries none), written when it isn't square; color is the
-    source's colour description (color.color_args). A --sar or colour flag in the options or extra arguments
-    comes after them, and wins."""
+    source's colour description (color.color_args); hdr10plus an x265 encode's HDR10+ metadata (hdr.py). A --sar
+    or colour flag in the options or extra arguments comes after them, and wins."""
     x265 = settings.encoder is Encoder.X265
     argv = [exe, "--y4m"] if x265 else [exe, "--demuxer", "y4m"]
     argv += ["--frames", str(frames)] if frames else []
@@ -78,6 +79,8 @@ def encoder_command(
     if sar is not None and sar != 1:
         argv += ["--sar", f"{sar.numerator}:{sar.denominator}"]
     argv += color_args(color, settings)
+    if hdr10plus is not None and x265:
+        argv += ["--dhdr10-info", str(hdr10plus)]
     argv += _options(settings.options)
     if qpfile is not None:
         argv += ["--qpfile", str(qpfile)]

@@ -7,7 +7,10 @@ from types import SimpleNamespace
 
 from videoforge.core.models import VideoHdr, VideoInfo
 from videoforge.core.plan_io import from_json, to_json
-from videoforge.core.video.hdr import from_mediainfo, video_stream_argv
+from videoforge.core.video import hdr
+from videoforge.core.video.encoders import encoder_command
+from videoforge.core.video.hdr import from_mediainfo, hdr10plus_frames, video_stream_argv
+from videoforge.core.video.settings import Encoder, EncoderSettings
 
 # The FEL test file (a UHD Blu-ray remux), as MediaInfo 25 reads it
 P7_FEL = SimpleNamespace(
@@ -68,3 +71,26 @@ def test_video_stream_argv():
     assert argv.index("-ss") < argv.index("-i") < argv.index("-t")
     assert argv[-9:] == ["-map", "0:v:0", "-c:v:0", "copy", "-bsf:v", "hevc_mp4toannexb", "-f", "hevc", "-"]
     assert "-ss" not in video_stream_argv("ffmpeg", Path("a.mkv"))
+
+
+def test_hdr10plus_frames_and_x264(tmp_path):
+    meta = tmp_path / "hdr10plus.json"
+    meta.write_text('{"JSONInfo": {"HDR10plusProfile": "B"}, "SceneInfo": [{}, {}, {}]}', encoding="utf-8")
+    assert hdr10plus_frames(meta) == 3
+    x264 = encoder_command("x264", EncoderSettings(), output=Path("v.264"), hdr10plus=meta)
+    assert "--dhdr10-info" not in x264  # x264 has no HDR10+
+    x265 = encoder_command(
+        "x265", EncoderSettings(encoder=Encoder.X265, depth=10), output=Path("v.hevc"), hdr10plus=meta
+    )
+    assert x265[x265.index("--dhdr10-info") + 1] == str(meta)
+
+
+def test_script_frames_reads_vspipe_info(monkeypatch):
+    """process.run hands back vspipe's lines tagged with its name."""
+
+    def fake_run(argvs, log, cancel=None):
+        for line in ("Output Index: 0", "Width: 3840", "Frames: 1200", "FPS: 24000/1001 (23.976 fps)"):
+            log(f"[vspipe] {line}")
+
+    monkeypatch.setattr(hdr, "run", fake_run)
+    assert hdr.script_frames("vspipe", Path("video.vpy")) == 1200

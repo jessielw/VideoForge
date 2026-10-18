@@ -262,8 +262,9 @@ def mp4box_command(
     start_ms = video.start_ms if video else 0
 
     argv: list[str] = [mp4box, "-noprog"]
-    # the source's language; an empty handler name (MP4Box would write its own, e.g. "264:fps=24@GPAC...")
-    opts = f":lang={video.language if video else 'und'}:name="
+    # the source's language; an empty handler name (MP4Box would write its own, e.g. "264:fps=24@GPAC..."); no HDR
+    # boxes (hdr=none): the stream's own SEI carries it, and MediaInfo would list it twice
+    opts = f":hdr=none:lang={video.language if video else 'und'}:name="
     if plan.encode_path.suffix.lower() in raw_extensions:
         if not (video and video.default_duration_ns):
             raise MuxError("Raw encode needs the source frame rate, and the source has none")

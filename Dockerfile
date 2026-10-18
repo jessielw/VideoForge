@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 # VideoForge in a container: the server and its free tools. The native ones (FFmpeg, MP4Box, x264, the
-# VapourSynth plugins) come from the plugins image (vsplugins/), built rarely; MKVToolNix, x265 and opus-tools
-# from Debian; DeeZy, truehdd, dovi_tool and hdr10plus_tool from their releases; Wine for Windows tools. DEE,
-# qaac and other tools of your own go in /tools (docker/entrypoint.sh).
+# VapourSynth plugins) come from the plugins image (vsplugins/), built rarely; x265 is built here (with HDR10+);
+# MKVToolNix and opus-tools from Debian; DeeZy, truehdd, dovi_tool and hdr10plus_tool from their releases; Wine
+# for Windows tools. DEE, qaac and other tools of your own go in /tools (docker/entrypoint.sh).
 # See README "Docker".
 #   docker build -t videoforge .                      (with the published plugins image)
 #   docker build -t videoforge-plugins vsplugins && docker build --build-arg PLUGINS_IMAGE=videoforge-plugins -t videoforge .
@@ -10,6 +10,9 @@
 ARG PYTHON_IMAGE=python:3.12-slim-trixie
 ARG PLUGINS_IMAGE=ghcr.io/jessielw/videoforge-plugins:latest
 ARG DEEZY_VERSION=1.3.15
+# x265 from source: Debian's is built without HDR10+ (--dhdr10-info)
+ARG X265_VERSION=4.1
+ARG X265_SHA256=a31699c6a89806b74b0151e5e6a7df65de4b49050482fe5ebf8a4379d7af8f29
 ARG TRUEHDD_VERSION=0.6.2
 # quietvoid's Dolby Vision / HDR10+ tools (MIT): the versions scripts/fetch_tools.py takes for Windows
 ARG DOVI_TOOL_VERSION=2.3.4
@@ -26,6 +29,32 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
 RUN npm run build
+
+# --- x265 ----------------------------------------------------------------------------------------------
+# 8, 10 and 12-bit in one static binary (the usual multilib build), with HDR10+ (ENABLE_HDR10_PLUS). git is there
+# so its CMake reads the version from the tarball's x265Version.txt (without it: "version unknown")
+FROM ${PYTHON_IMAGE} AS x265
+ARG X265_VERSION
+ARG X265_SHA256
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl cmake nasm g++ make git \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN curl -fsSL -o x265.tar.gz "https://download.videolan.org/pub/videolan/x265/x265_${X265_VERSION}.tar.gz" \
+    && echo "${X265_SHA256}  x265.tar.gz" | sha256sum -c - \
+    && tar -xzf x265.tar.gz && mv "x265_${X265_VERSION}" x265
+RUN set -e; common="-DCMAKE_BUILD_TYPE=Release -DENABLE_HDR10_PLUS=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5"; \
+    mkdir -p b12 b10 b8; \
+    cmake -S x265/source -B b12 $common -DHIGH_BIT_DEPTH=ON -DMAIN12=ON -DEXPORT_C_API=OFF -DENABLE_SHARED=OFF \
+        -DENABLE_CLI=OFF; \
+    cmake --build b12 -j"$(nproc)"; \
+    cmake -S x265/source -B b10 $common -DHIGH_BIT_DEPTH=ON -DEXPORT_C_API=OFF -DENABLE_SHARED=OFF -DENABLE_CLI=OFF; \
+    cmake --build b10 -j"$(nproc)"; \
+    cp b12/libx265.a b8/libx265_main12.a; cp b10/libx265.a b8/libx265_main10.a; \
+    cmake -S x265/source -B b8 $common -DENABLE_SHARED=OFF -DLINKED_10BIT=ON -DLINKED_12BIT=ON \
+        -DEXTRA_LIB="x265_main10.a;x265_main12.a" -DEXTRA_LINK_FLAGS=-L.; \
+    cmake --build b8 -j"$(nproc)"; \
+    install -m 0755 b8/x265 /x265
 
 # --- release binaries ---------------------------------------------------------------------------------
 FROM ${PYTHON_IMAGE} AS downloads
@@ -61,13 +90,14 @@ FROM ${PYTHON_IMAGE} AS app
 # The Debian libraries the plugins image's binaries link to are listed in it.
 COPY --from=plugins /opt/vf/runtime-packages.txt /tmp/runtime-packages.txt
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends mkvtoolnix opus-tools tini x265 $(cat /tmp/runtime-packages.txt) \
+    && apt-get install -y --no-install-recommends mkvtoolnix opus-tools tini $(cat /tmp/runtime-packages.txt) \
     && rm -rf /var/lib/apt/lists/* /tmp/runtime-packages.txt
 COPY --from=plugins /opt/vf /opt/vf
 RUN echo /opt/vf/lib > /etc/ld.so.conf.d/vf.conf && ldconfig
 COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
 COPY --from=downloads /out/deezy-bin /usr/local/bin/deezy
 COPY --from=downloads /out/truehdd-bin /usr/local/bin/truehdd
+COPY --from=x265 /x265 /usr/local/bin/x265
 COPY --from=downloads /out/dovi_tool-bin /usr/local/bin/dovi_tool
 COPY --from=downloads /out/hdr10plus_tool-bin /usr/local/bin/hdr10plus_tool
 # Wine for the Windows tools in /tools/wine (qaac, DEE's Windows build). Its DLLs lose their debug info
