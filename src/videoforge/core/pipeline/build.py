@@ -177,6 +177,47 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
             ),
         ]
         shared += (meta,)
+    dolby_vision = None
+    if hdr.keeps_dv(v, enc) and v is not None:
+        source_rpu, dolby_vision = work / hdr.DV_SOURCE_RPU, work / hdr.DV_RPU
+        rpu, width, height = dolby_vision, v.width, v.height
+        order = [s.category.value for s in spec.video.filters if s.category.value in ("crop", "resize")]
+
+        def edit_rpu(log: LogFn) -> None:
+            hdr.edit_rpu(app.tools.dovi_tool, source_rpu, rpu, spec.video, width, height, log)
+
+        def check_rpu(log: LogFn) -> None:
+            hdr.check_rpu_frames(app.tools.vspipe, app.tools.dovi_tool, script, rpu, log)
+
+        steps += [
+            Step(
+                "dovi.rpu",
+                "Dolby Vision RPU (dovi_tool)",
+                argvs=hdr.rpu_argvs(app.tools, source, source_rpu),
+                outputs=(source_rpu,),
+                inputs=(source,),
+                weight=1,
+            ),
+            # Keyed by the crop and resize (and their order): a new one edits the RPU again.
+            Step(
+                "dovi.edit",
+                "Dolby Vision RPU: crop, resize, profile 8.1",
+                call=edit_rpu,
+                outputs=(rpu,),
+                inputs=(source_rpu,),
+                key=f"{width}x{height} {spec.video.crop} {spec.video.resize} {order}",
+                weight=0.2,
+            ),
+            Step(
+                "dovi.check",
+                "Dolby Vision frames against the script",
+                call=check_rpu,
+                inputs=(script, rpu),
+                key=text,
+                weight=0.1,
+            ),
+        ]
+        shared += (rpu,)
     out = spec.video_output
     name = enc.encoder.value
     if enc.passes == 2:
@@ -191,9 +232,19 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
             sar=sar,
             color=color,
             hdr10plus=hdr10plus,
+            dolby_vision=dolby_vision,
         )
         second = encoder_command(
-            exe, enc, output=out, pass_number=2, stats=stats, qpfile=qpfile, sar=sar, color=color, hdr10plus=hdr10plus
+            exe,
+            enc,
+            output=out,
+            pass_number=2,
+            stats=stats,
+            qpfile=qpfile,
+            sar=sar,
+            color=color,
+            hdr10plus=hdr10plus,
+            dolby_vision=dolby_vision,
         )
         steps += [
             Step(
@@ -216,7 +267,9 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
             ),
         ]
     else:
-        argv = encoder_command(exe, enc, output=out, qpfile=qpfile, sar=sar, color=color, hdr10plus=hdr10plus)
+        argv = encoder_command(
+            exe, enc, output=out, qpfile=qpfile, sar=sar, color=color, hdr10plus=hdr10plus, dolby_vision=dolby_vision
+        )
         steps.append(
             Step(
                 "video",

@@ -9,8 +9,16 @@ from videoforge.core.models import VideoHdr, VideoInfo
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video import hdr
 from videoforge.core.video.encoders import encoder_command
-from videoforge.core.video.hdr import from_mediainfo, hdr10plus_frames, video_stream_argv
-from videoforge.core.video.settings import Encoder, EncoderSettings
+from videoforge.core.video.hdr import from_mediainfo, hdr10plus_frames, l5_offsets, rpu_edit, video_stream_argv
+from videoforge.core.video.settings import (
+    Crop,
+    Encoder,
+    EncoderSettings,
+    FilterCategory,
+    FilterStep,
+    Resize,
+    VideoSettings,
+)
 
 # The FEL test file (a UHD Blu-ray remux), as MediaInfo 25 reads it
 P7_FEL = SimpleNamespace(
@@ -94,3 +102,47 @@ def test_script_frames_reads_vspipe_info(monkeypatch):
 
     monkeypatch.setattr(hdr, "run", fake_run)
     assert hdr.script_frames("vspipe", Path("video.vpy")) == 1200
+
+
+def test_l5_offsets_follow_crop_and_resize():
+    bars = {"id": 0, "left": 0, "right": 0, "top": 276, "bottom": 276}  # 2.40:1 in 3840x2160
+    plain = VideoSettings()
+    assert l5_offsets(bars, plain, 3840, 2160) == {"left": 0, "right": 0, "top": 276, "bottom": 276}
+    cropped = VideoSettings(crop=Crop(top=276, bottom=276))
+    assert l5_offsets(bars, cropped, 3840, 2160) == dict.fromkeys(("left", "right", "top", "bottom"), 0)
+    # cropped past the bars: 0, not negative (DoviCrop's -f)
+    over = VideoSettings(crop=Crop(left=4, right=4, top=280, bottom=270))
+    assert l5_offsets(bars, over, 3840, 2160) == {"left": 0, "right": 0, "top": 0, "bottom": 6}
+    # a resize after the crop scales what's left: 3840 -> 1920 halves it
+    half = VideoSettings(crop=Crop(bottom=270), resize=Resize(1920, 945))
+    assert l5_offsets(bars, half, 3840, 2160) == {"left": 0, "right": 0, "top": 138, "bottom": 3}
+    # a resize before the crop: the crop is in the resized picture's pixels
+    first = VideoSettings(
+        crop=Crop(top=138, bottom=138),
+        resize=Resize(1920, 1080),
+        filters=[FilterStep(FilterCategory.RESIZE, "Resize"), FilterStep(FilterCategory.CROP, "Crop")],
+    )
+    assert l5_offsets(bars, first, 3840, 2160) == dict.fromkeys(("left", "right", "top", "bottom"), 0)
+
+    export = {"mode": 0, "active_area": {"crop": True, "presets": [bars], "edits": {"0-1796": 0}}}
+    assert rpu_edit(export, cropped, 3840, 2160) == {
+        "mode": 2,
+        "active_area": {
+            "crop": True,
+            "presets": [{"id": 0, "left": 0, "right": 0, "top": 0, "bottom": 0}],
+            "edits": {"0-1796": 0},
+        },
+    }
+    assert rpu_edit({"presets": [bars]}, plain, 3840, 2160)["active_area"]["edits"] == {"all": 0}  # older export
+    assert rpu_edit({"mode": 0}, plain, 3840, 2160) == {"mode": 2}  # no L5
+
+
+def test_dolby_vision_x265_args():
+    rpu = Path("dv_rpu.bin")
+    x264 = encoder_command("x264", EncoderSettings(), output=Path("v.264"), dolby_vision=rpu)
+    assert "--dolby-vision-rpu" not in x264
+    x265 = encoder_command(
+        "x265", EncoderSettings(encoder=Encoder.X265, depth=10), output=Path("v.hevc"), dolby_vision=rpu
+    )
+    i = x265.index("--dolby-vision-profile")
+    assert x265[i : i + 4] == ["--dolby-vision-profile", "8.1", "--dolby-vision-rpu", "dv_rpu.bin"]

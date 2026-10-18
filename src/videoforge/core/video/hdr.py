@@ -1,5 +1,5 @@
 """A source's dynamic HDR metadata: Dolby Vision and HDR10+ (MediaInfo), a profile 7 enhancement layer's
-kind (FEL or MEL, which MediaInfo can't tell) from a second of its RPU, and carrying HDR10+ into an x265
+kind (FEL or MEL, which MediaInfo can't tell) from a second of its RPU, and carrying both into an x265
 encode.
 
 The FEL / MEL read is dv_check's (StaxRip's "dv_check" folder): a second of the video stream from 10 s in,
@@ -9,13 +9,23 @@ HDR10+ (as StaxRip does it): `ffmpeg ... -f hevc - | hdr10plus_tool extract -o h
 work folder, then x265 `--dhdr10-info hdr10plus.json`. The JSON has one entry per frame of the source, so
 the script must give the same frames: a check step compares them before the encode (a trim, a frame-rate
 filter or a source filter counting frames its own way would put the metadata out of step).
+
+Dolby Vision (profile 8.1, and a profile 7 MEL as 8.1; StaxRip's flow): `ffmpeg ... | dovi_tool extract-rpu`
+writes the source's RPU to the work folder. An edit step moves its L5 active area (the letterbox offsets) by
+the job's crop and resize (DoviCrop's: `dovi_tool export`, each offset less the crop, at least 0) and makes it
+profile 8.1 (`dovi_tool editor`, mode 2); a check compares its frames with the script's, as for HDR10+; x265
+writes it (`--dolby-vision-profile 8.1 --dolby-vision-rpu`). x265 needs VBV for it (HRD), a 10-bit encode and
+a mastering display. Profile 5 (no HDR10 layer), 8.4 (HLG) and a FEL (its enhancement layer has to be baked
+into the picture) aren't carried yet.
 """
 
 from __future__ import annotations
 
+from fractions import Fraction
 import functools
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import re
@@ -27,13 +37,18 @@ from videoforge.core.config import Tools
 from videoforge.core.execute.process import LogFn, ToolError, run
 from videoforge.core.models import Issue, Severity, SourceInfo, VideoHdr, VideoInfo
 from videoforge.core.tools import locate
-from videoforge.core.video.settings import Encoder, EncoderSettings
+from videoforge.core.video.settings import Encoder, EncoderSettings, FilterCategory, VideoSettings
 
 logger = logging.getLogger(__name__)
 
-HDR10PLUS_JSON = "hdr10plus.json"  # in the work folder
+# In the work folder
+HDR10PLUS_JSON = "hdr10plus.json"
+DV_SOURCE_RPU = "dv_source.bin"  # the source's RPU
+DV_RPU = "dv_rpu.bin"  # the encode's: cropped, resized, profile 8.1
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-_FRAMES = re.compile(r"(?:^|\] )Frames:\s*(\d+)", re.MULTILINE)  # process.run tags lines "[vspipe] "
+# vspipe --info's and dovi_tool info -s's; process.run tags lines "[vspipe] "
+_FRAMES = re.compile(r"(?:^|\] )\s*Frames:\s*(\d+)", re.MULTILINE)
+_L5 = ("left", "right", "top", "bottom")
 _PROFILE = re.compile(r"Profile (\d+)(?:\.(\d+))?")
 _DVHE = re.compile(r"\b(?:dvhe|dvh1|dvav|dva1|dav1)\.(\d+)", re.IGNORECASE)
 
@@ -132,9 +147,93 @@ def keeps_hdr10plus(video: VideoInfo | None, settings: EncoderSettings) -> bool:
     return video is not None and video.hdr.hdr10plus and settings.hdr10plus and settings.encoder is Encoder.X265
 
 
-def issues(video: VideoInfo | None, settings: EncoderSettings, tools: Tools | None = None) -> list[Issue]:
-    """What stands in the way of carrying the source's HDR10+ (the Encoder tab's "HDR10+ from the source")."""
-    if video is None or not video.hdr.hdr10plus or not settings.hdr10plus:
+def keeps_dv(video: VideoInfo | None, settings: EncoderSettings) -> bool:
+    """Whether the encode carries the source's Dolby Vision: x265, a profile 7 or 8 source, and the job didn't
+    untick it (issues() blocks the ones it can't carry yet)."""
+    return (
+        video is not None
+        and video.hdr.dv_profile in (7, 8)
+        and settings.dolby_vision
+        and settings.encoder is Encoder.X265
+    )
+
+
+def _missing_tools(tools: Tools | None, names: tuple[str, ...]) -> list[str]:
+    return [n for n in names if not locate(getattr(tools, n))] if tools is not None else []
+
+
+def _flags(settings: EncoderSettings) -> set[str]:
+    """The flag names the job's options and extra arguments set ("vbv-maxrate", ...)."""
+    extra = (a.lstrip("-").split("=")[0] for a in settings.extra.split() if a.startswith("--"))
+    return {n.lstrip("-") for n in settings.options} | set(extra)
+
+
+def issues(
+    video: VideoInfo | None,
+    settings: EncoderSettings,
+    tools: Tools | None = None,
+    video_settings: VideoSettings | None = None,
+) -> list[Issue]:
+    """What stands in the way of carrying the source's HDR10+ and Dolby Vision (the Encoder tab's "HDR10+ /
+    Dolby Vision from the source")."""
+    if video is None:
+        return []
+    return _hdr10plus_issues(video, settings, tools) + _dv_issues(video, settings, tools, video_settings)
+
+
+def _dv_issues(
+    video: VideoInfo, settings: EncoderSettings, tools: Tools | None, video_settings: VideoSettings | None
+) -> list[Issue]:
+    dv = video.hdr
+    if dv.dv_profile == 5:
+        return [
+            Issue(
+                Severity.BLOCK,
+                "hdr.dv_profile5",
+                "Dolby Vision profile 5 has no HDR10 layer to encode (its colours only look right through the RPU): "
+                "not supported yet",
+            )
+        ]
+    if dv.dv_profile not in (7, 8) or not settings.dolby_vision:
+        return []
+    untick = "or untick Dolby Vision from the source on the Encoder tab"
+    if settings.encoder is not Encoder.X265:
+        return [Issue(Severity.WARN, "hdr.dv_x264", "x264 can't carry Dolby Vision: the encode keeps the HDR10 layer")]
+    out = []
+
+    def block(code: str, message: str) -> None:
+        out.append(Issue(Severity.BLOCK, code, f"{message}, {untick}"))
+
+    if dv.dv_compat == 4:
+        block("hdr.dv_hlg", "Dolby Vision 8.4 (HLG) isn't carried yet: unticked, the encode keeps the HLG layer")
+    if dv.dv_profile == 7 and dv.dv_el != "MEL":
+        bake = "a FEL's enhancement layer has to be baked into the picture, which isn't supported yet"
+        if dv.dv_el != "FEL":
+            bake = f"The enhancement layer's kind (FEL or MEL) couldn't be read, and {bake}"
+        block("hdr.dv_fel", f"{bake[0].upper()}{bake[1:]}: unticked, the encode keeps the base layer")
+    if settings.depth != 10:
+        block("hdr.dv_depth", "Dolby Vision needs a 10-bit encode: set the bit depth")
+    flags = _flags(settings)
+    if not {"vbv-maxrate", "vbv-bufsize"} <= flags:
+        block(
+            "hdr.dv_vbv", "x265 needs --vbv-maxrate and --vbv-bufsize for Dolby Vision (HRD): set them in the options"
+        )
+    if not (settings.source_color and video.color.master_display) and "master-display" not in flags:
+        block(
+            "hdr.dv_master",
+            "x265's Dolby Vision 8.1 needs a mastering display: the source has none, or the source's colour is off",
+        )
+    if video_settings is not None and video_settings.custom is not None:
+        block(
+            "hdr.dv_custom", "Dolby Vision follows the Video tab's crop and resize, and a custom script's aren't known"
+        )
+    if missing := _missing_tools(tools, ("ffmpeg", "dovi_tool")):
+        block("tools.missing", f"Dolby Vision needs {' and '.join(missing)}: set it in Settings")
+    return out
+
+
+def _hdr10plus_issues(video: VideoInfo, settings: EncoderSettings, tools: Tools | None) -> list[Issue]:
+    if not video.hdr.hdr10plus or not settings.hdr10plus:
         return []
     untick = "or untick HDR10+ from the source on the Encoder tab"
     if settings.encoder is not Encoder.X265:
@@ -144,7 +243,7 @@ def issues(video: VideoInfo | None, settings: EncoderSettings, tools: Tools | No
         out.append(
             Issue(Severity.BLOCK, "hdr.hdr10plus_depth", f"HDR10+ needs a 10-bit encode: set the bit depth, {untick}")
         )
-    if tools is not None and (missing := [n for n in ("ffmpeg", "hdr10plus_tool") if not locate(getattr(tools, n))]):
+    if missing := _missing_tools(tools, ("ffmpeg", "hdr10plus_tool")):
         out.append(
             Issue(
                 Severity.BLOCK, "tools.missing", f"HDR10+ needs {' and '.join(missing)}: set it in Settings, {untick}"
@@ -175,20 +274,99 @@ def hdr10plus_frames(path: Path) -> int:
         return len(json.load(f).get("SceneInfo") or [])
 
 
-def check_frames(vspipe: str, script: Path, metadata: Path, log: LogFn) -> None:
-    """Raise ToolError when the script's frame count isn't the HDR10+ metadata's."""
-    frames, meta = script_frames(vspipe, script), hdr10plus_frames(metadata)
+def _same_frames(frames: int, meta: int, what: str, setting: str, log: LogFn) -> None:
     if frames != meta:
         raise ToolError(
-            f"The script gives {frames} frames and the source's HDR10+ metadata has {meta}: they would be out of step "
+            f"The script gives {frames} frames and the source's {what} has {meta}: they would be out of step "
             "(a trim or a frame-rate filter, or a source filter counting frames differently: try FFMS2). Untick "
-            "HDR10+ from the source on the Encoder tab to encode without it."
+            f"{setting} from the source on the Encoder tab to encode without it."
         )
-    log(f"HDR10+ metadata: {meta} frames, as the script")
+    log(f"{what}: {meta} frames, as the script")
+
+
+def check_frames(vspipe: str, script: Path, metadata: Path, log: LogFn) -> None:
+    """Raise ToolError when the script's frame count isn't the HDR10+ metadata's."""
+    _same_frames(script_frames(vspipe, script), hdr10plus_frames(metadata), "HDR10+ metadata", "HDR10+", log)
+
+
+def rpu_argvs(tools: Tools, source: Path, out: Path) -> tuple[tuple[str, ...], ...]:
+    """The source's Dolby Vision RPU into a file: ffmpeg | dovi_tool extract-rpu (as it is: mode 0)."""
+    extract = (tools.dovi_tool, "-m", "0", "extract-rpu", "-", "-o", str(out))
+    return (tuple(video_stream_argv(tools.ffmpeg, source)), extract)
+
+
+def rpu_frames(dovi_tool: str, rpu: Path) -> int:
+    """The frames an RPU file describes (`dovi_tool info -s`)."""
+    lines: list[str] = []
+    run([(dovi_tool, "info", "-s", "-i", str(rpu))], lines.append)
+    m = _FRAMES.search("\n".join(lines))
+    if m is None:
+        raise ToolError(f"dovi_tool info printed no frame count for {rpu.name}")
+    return int(m.group(1))
+
+
+def check_rpu_frames(vspipe: str, dovi_tool: str, script: Path, rpu: Path, log: LogFn) -> None:
+    """Raise ToolError when the script's frame count isn't the RPU's."""
+    _same_frames(script_frames(vspipe, script), rpu_frames(dovi_tool, rpu), "Dolby Vision RPU", "Dolby Vision", log)
+
+
+def l5_offsets(offsets: dict[str, Any], video_settings: VideoSettings, width: int, height: int) -> dict[str, int]:
+    """An L5 active area (the letterbox bars, in pixels of the width x height source) on the encode's picture:
+    each side less the crop (at least 0: cropped past the bar), then scaled by the resize, in the chain's order."""
+    out = {k: int(offsets.get(k) or 0) for k in _L5}
+    for s in video_settings.filters:
+        if s.category is FilterCategory.CROP:
+            c = video_settings.crop
+            out = {k: max(0, v - getattr(c, k)) for k, v in out.items()}
+            width, height = width - c.left - c.right, height - c.top - c.bottom
+        elif s.category is FilterCategory.RESIZE and (r := video_settings.resize) is not None and width and height:
+            scale = {"left": Fraction(r.width, width), "top": Fraction(r.height, height)}
+            scale |= {"right": scale["left"], "bottom": scale["top"]}
+            out = {k: math.floor(v * scale[k] + Fraction(1, 2)) for k, v in out.items()}
+            width, height = r.width, r.height
+    return out
+
+
+def rpu_edit(level5: dict[str, Any], video_settings: VideoSettings, width: int, height: int) -> dict[str, Any]:
+    """dovi_tool editor's config for the encode's RPU, from `dovi_tool export --data level5=`: profile 8.1
+    (mode 2) and each L5 preset on the encode's picture."""
+    area = level5.get("active_area") or level5  # dovi_tool < 2.3.3 exports the bare active area (DoviCrop)
+    presets = area.get("presets") or []
+    config: dict[str, Any] = {"mode": 2}
+    if presets:
+        config["active_area"] = {
+            "crop": True,
+            "presets": [{**p, **l5_offsets(p, video_settings, width, height)} for p in presets],
+            "edits": area.get("edits") or {"all": presets[0].get("id", 0)},
+        }
+    return config
+
+
+def edit_rpu(
+    dovi_tool: str, rpu: Path, out: Path, video_settings: VideoSettings, width: int, height: int, log: LogFn
+) -> None:
+    """The source's RPU (rpu) as the encode's (out): its L5 offsets following the crop and resize, profile 8.1.
+    The L5 export and the editor's config are left next to out."""
+    level5, config = out.with_name(out.stem + "_l5.json"), out.with_name(out.stem + "_edit.json")
+    run([(dovi_tool, "export", "--data", f"level5={level5}", "-i", str(rpu))], log)
+    with level5.open(encoding="utf-8") as f:
+        edit = rpu_edit(json.load(f), video_settings, width, height)
+    config.write_text(json.dumps(edit, indent=2), encoding="utf-8")
+    run([(dovi_tool, "editor", "-i", str(rpu), "-j", str(config), "-o", str(out))], log)
+    presets = edit.get("active_area", {}).get("presets", [])
+    areas = "; ".join(" ".join(f"{k}={p[k]}" for k in _L5) for p in presets) or "none"
+    log(f"Dolby Vision RPU: profile 8.1, L5 offsets {areas}")
 
 
 def output_issues(video: VideoInfo | None, settings: EncoderSettings, output: SourceInfo) -> list[Issue]:
-    """A BLOCK when the output was meant to carry HDR10+ and MediaInfo finds none in it."""
-    if keeps_hdr10plus(video, settings) and output.video is not None and not output.video.hdr.hdr10plus:
-        return [Issue(Severity.BLOCK, "hdr.hdr10plus_missing", "The output has no HDR10+ metadata")]
-    return []
+    """A BLOCK when the output was meant to carry HDR10+ or Dolby Vision and MediaInfo finds none in it."""
+    found = output.video.hdr if output.video is not None else None
+    if found is None:
+        return []
+    out = []
+    if keeps_hdr10plus(video, settings) and not found.hdr10plus:
+        out.append(Issue(Severity.BLOCK, "hdr.hdr10plus_missing", "The output has no HDR10+ metadata"))
+    if keeps_dv(video, settings) and (found.dv_profile, found.dv_compat) != (8, 1):
+        what = f"Dolby Vision {found.dv_name}" if found.dv_profile else "no Dolby Vision"
+        out.append(Issue(Severity.BLOCK, "hdr.dv_missing", f"The output has {what}, not 8.1"))
+    return out

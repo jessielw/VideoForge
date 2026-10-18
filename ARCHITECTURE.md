@@ -41,7 +41,8 @@ src/videoforge/
       color.py           The source's colour (MediaInfo -> VideoInfo.color) -> --colorprim/--transfer/... and
                          x265's HDR10 SEI, before the job's options (vspipe's y4m carries no colour)
       hdr.py             Dolby Vision / HDR10+ in the source (MediaInfo -> VideoInfo.hdr; FEL or MEL from a second
-                         of the RPU); HDR10+ into x265: hdr10plus_tool's JSON, --dhdr10-info, the frame check
+                         of the RPU); HDR10+ into x265 (hdr10plus_tool's JSON, --dhdr10-info) and Dolby Vision
+                         as 8.1 (dovi_tool's RPU, its L5 moved by the crop and resize); their frame checks
       qpf.py             AutoQPF: chapters -> qpf + chapter file
     execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel), jobobject.py (tools end with the server, Windows)
                          mux.MUXERS: mkvmerge (MKV) and MP4Box (MP4), each with what its container can't hold
@@ -167,6 +168,15 @@ index ─► qpf/chapters ─┬► video (vspipe | x264/x265, 1 or 2 passes) �
   there. x265 gets `--dhdr10-info`; the validate step blocks an output MediaInfo finds no HDR10+ in. MP4Box
   adds the video with `:hdr=none` (no HDR boxes: the stream's SEI carries it, and MediaInfo would list it
   twice). x264 drops it (a warning); 8-bit blocks.
+- Dolby Vision (the same file; x265 with "Dolby Vision from the source" on; profile 8.1, or a profile 7 MEL):
+  `dovi.rpu` (`ffmpeg ... | dovi_tool extract-rpu`) writes `dv_source.bin`; `dovi.edit` exports its L5 active
+  area, moves each offset by the crop (at least 0) and scales it by the resize in the chain's order (DoviCrop's
+  logic, `l5_offsets`), and writes `dv_rpu.bin` with `dovi_tool editor` in mode 2 (8.1); keyed by the source size,
+  crop, resize and their order. `dovi.check` compares the RPU's frames with the script's, as for HDR10+. x265 gets
+  `--dolby-vision-profile 8.1 --dolby-vision-rpu`; it needs VBV (HRD), 10-bit and a mastering display, so the
+  plan blocks without them, as it does for profile 5 (no HDR10 layer), 8.4 (HLG), a FEL (it needs the bake) and a
+  custom script body (its crop isn't known). mkvmerge and MP4Box write the DV configuration from the stream; the
+  validate step blocks an output MediaInfo doesn't find 8.1 in.
 - The plan is container-neutral: tracks carry plain flags (default, forced, hearing impaired,
   commentary, original, visual impaired), languages and titles. The job's container
   (`JobSpec.container()`: its `MuxSettings.container` when the profile lists it in `containers`,

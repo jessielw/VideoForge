@@ -903,3 +903,98 @@ def test_hdr10plus_plan(profile, tmp_path, encoder, depth, on, codes):
     missing = replace(APP.tools, hdr10plus_tool=str(tmp_path / "nope.exe"))
     found = [i.code for i in hdr.issues(plan.source.video, job.encoder, missing)]
     assert ("tools.missing" in found) is carried
+
+
+# --- Dolby Vision ------------------------------------------------------------------
+
+
+def dv_job(plan, tmp_path, **encoder):
+    assert plan.source.video is not None
+    plan.source.video.hdr = VideoHdr(dv_profile=8, dv_compat=1, dv_level=6, dv_layers="BL+RPU")
+    plan.source.video.color = replace(plan.source.video.color, master_display="G(13250,34500)B(7500,3000)")
+    job = video_job(plan, tmp_path)
+    settings = {"encoder": Encoder.X265, "depth": 10, "options": {"vbv-maxrate": "40000", "vbv-bufsize": "40000"}}
+    job.encoder = EncoderSettings(preset="fast", **(settings | encoder))
+    return job
+
+
+def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
+    plan = make_plan(tmp_path)
+    job = dv_job(plan, tmp_path)
+    out = tmp_path / "out" / "Show.S01E01.mkv"
+    built = build_steps(job, plan, profile, APP, out)
+    ids = [s.id for s in built.steps]
+    assert ids.index("dovi.rpu") < ids.index("dovi.edit") < ids.index("dovi.check") < ids.index("video")
+    source_rpu, rpu = job.work_dir / "dv_source.bin", job.work_dir / "dv_rpu.bin"
+    extract = next(s for s in built.steps if s.id == "dovi.rpu")
+    assert extract.argvs[1] == ("dovi_tool", "-m", "0", "extract-rpu", "-", "-o", str(source_rpu))
+    video = next(s for s in built.steps if s.id == "video").argvs[1]
+    i = video.index("--dolby-vision-profile")
+    assert video[i : i + 4] == ("--dolby-vision-profile", "8.1", "--dolby-vision-rpu", str(rpu))
+
+    edits = []
+
+    def edit(_dovi, src, dst, video_settings, width, height, log):
+        edits.append((src, video_settings.crop))
+        dst.write_bytes(b"rpu")
+
+    monkeypatch.setattr(hdr, "edit_rpu", edit)
+    monkeypatch.setattr(hdr, "script_frames", lambda *_: 240)
+    monkeypatch.setattr(hdr, "rpu_frames", lambda *_: 240)
+    dv = replace(plan.source.video, hdr=VideoHdr(dv_profile=8, dv_compat=1))
+    carried = replace(simulate_output(plan), video=dv)
+    result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: carried)
+    assert result.status is JobStatus.DONE, result.error
+    assert edits == [(source_rpu, job.video.crop)]
+
+    # the output lost it: invalid
+    lost = replace(simulate_output(plan), video=replace(plan.source.video, hdr=VideoHdr()))
+    result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: lost)
+    assert result.status is JobStatus.INVALID
+    assert [i.code for i in result.issues] == ["hdr.dv_missing"]
+
+    # a script with other frames than the RPU stops before the encode
+    monkeypatch.setattr(hdr, "script_frames", lambda *_: 238)
+    runner = FakeRunner()
+    result = run_job(job, plan, profile, APP, state=JobState(), runner=runner, prober=lambda *_: carried)
+    assert result.status is JobStatus.FAILED and "238 frames" in (result.error or "")
+    assert "x265" not in tools_called(runner)
+
+
+@pytest.mark.parametrize(
+    ("hdr_info", "encoder", "codes"),
+    [
+        ({}, {}, []),
+        ({}, {"dolby_vision": False}, []),
+        ({}, {"encoder": Encoder.X264, "depth": 8}, ["hdr.dv_x264"]),
+        ({}, {"depth": 8}, ["hdr.dv_depth"]),
+        ({}, {"options": {}}, ["hdr.dv_vbv"]),
+        ({}, {"options": {}, "extra": "--vbv-maxrate 1000 --vbv-bufsize=1000"}, []),
+        ({}, {"source_color": False}, ["hdr.dv_master"]),
+        ({"dv_profile": 5, "dv_compat": None}, {}, ["hdr.dv_profile5"]),
+        ({"dv_profile": 5, "dv_compat": None}, {"dolby_vision": False}, ["hdr.dv_profile5"]),
+        ({"dv_compat": 4}, {}, ["hdr.dv_hlg"]),
+        ({"dv_compat": 4}, {"dolby_vision": False}, []),
+        ({"dv_profile": 7, "dv_compat": 6, "dv_el": "MEL"}, {}, []),
+        ({"dv_profile": 7, "dv_compat": 6, "dv_el": "FEL"}, {}, ["hdr.dv_fel"]),
+        ({"dv_profile": 7, "dv_compat": 6, "dv_el": ""}, {}, ["hdr.dv_fel"]),
+    ],
+)
+def test_dolby_vision_plan(profile, tmp_path, hdr_info, encoder, codes):
+    plan = make_plan(tmp_path)
+    job = dv_job(plan, tmp_path, **encoder)
+    video = plan.source.video
+    video.hdr = replace(video.hdr, **hdr_info)
+    tools = replace(APP.tools, dovi_tool=fake_tool_files("dovi_tool")["dovi_tool"])
+    assert [i.code for i in hdr.issues(video, job.encoder, tools, job.video)] == codes
+    missing = replace(APP.tools, dovi_tool=str(tmp_path / "nope.exe"))
+    assert ("tools.missing" in [i.code for i in hdr.issues(video, job.encoder, missing)]) is (
+        hdr.keeps_dv(video, job.encoder)
+    )
+
+
+def test_dolby_vision_custom_script_blocks(tmp_path):
+    plan = make_plan(tmp_path)
+    job = dv_job(plan, tmp_path)
+    job.video.custom = "clip = src"
+    assert [i.code for i in hdr.issues(plan.source.video, job.encoder, None, job.video)] == ["hdr.dv_custom"]

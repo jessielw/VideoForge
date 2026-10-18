@@ -1,7 +1,7 @@
 <script lang="ts">
   // Encoder settings (x264 / x265): rate control, preset, tune, bit depth, --options, extra args.
   // Emits a fresh copy on every change; the parent decides when to save.
-  import type { EncoderName, EncoderSettings, RateControl } from '../lib/types'
+  import type { EncoderName, EncoderSettings, RateControl, VideoHdr } from '../lib/types'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import XIcon from '@lucide/svelte/icons/x'
   import { Button } from '$lib/components/ui/button'
@@ -10,21 +10,26 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
 
-  // colorArgs: the job's source's colour flags for this encoder; hdr10plus: whether the source has HDR10+ (the job
-  // editor; null until probed, absent in the batch panel and on the Templates page, which have no one source)
+  // colorArgs: the job's source's colour flags for this encoder; hdr10plus: whether the source has HDR10+; dv: its
+  // Dolby Vision (false: none) (the job editor; null until probed, absent in the batch panel and on the Templates
+  // page, which have no one source)
   let {
     value,
     onchange,
     disabled = false,
     colorArgs,
     hdr10plus,
+    dv,
   }: {
     value: EncoderSettings
     onchange: (v: EncoderSettings) => void
     disabled?: boolean
     colorArgs?: string[] | null
     hdr10plus?: boolean | null
+    dv?: VideoHdr | false | null
   } = $props()
+
+  const vbv = $derived('vbv-maxrate' in value.options && 'vbv-bufsize' in value.options)
 
   const HDR_TRANSFERS = ['smpte2084', 'arib-std-b67'] // PQ, HLG
   const hdr = $derived(!!colorArgs && colorArgs.some((a, i) => colorArgs[i - 1] === '--transfer' && HDR_TRANSFERS.includes(a)))
@@ -177,6 +182,47 @@
           >
           {#if value.hdr10plus && value.depth < 10}
             <span class="mt-1 block text-xs text-warning">HDR10+ needs a 10-bit encode.</span>
+          {/if}
+        {/if}
+      {/if}
+    </span>
+  </label>
+
+  <label class="flex items-start gap-3 text-sm">
+    <Checkbox class="mt-0.5" checked={value.dolby_vision} {disabled} onCheckedChange={v => set('dolby_vision', v)} />
+    <span class="min-w-0">
+      Dolby Vision from the source
+      <span class="block text-xs text-muted-foreground">
+        x265: carries a source's Dolby Vision into the encode as profile 8.1 (dovi_tool reads the RPU and moves its active
+        area with the crop and resize). Needs a 10-bit encode, --vbv-maxrate and --vbv-bufsize, and a script that keeps every
+        frame. Profile 5, 8.4 (HLG) and FEL aren't carried yet.
+      </span>
+      {#if dv !== undefined}
+        {#if dv === null}
+          <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
+        {:else if !dv || !dv.dv_profile}
+          <span class="block text-xs text-muted-foreground">The source has no Dolby Vision.</span>
+        {:else if dv.dv_profile === 5}
+          <span class="mt-1 block text-xs text-warning">Profile 5 has no HDR10 layer to encode: not supported yet.</span>
+        {:else if value.encoder !== 'x265'}
+          <span class="mt-1 block text-xs text-warning">x264 can't carry Dolby Vision: the encode keeps the HDR10 layer.</span>
+        {:else}
+          <code class="mt-1 block font-mono text-xs break-all {value.dolby_vision ? '' : 'text-muted-foreground line-through'}"
+            >--dolby-vision-profile 8.1 --dolby-vision-rpu dv_rpu.bin</code
+          >
+          {#if value.dolby_vision}
+            {#if dv.dv_compat === 4}
+              <span class="mt-1 block text-xs text-warning">Dolby Vision 8.4 (HLG) isn't carried yet: untick it to keep the HLG layer.</span>
+            {/if}
+            {#if dv.dv_profile === 7 && dv.dv_el !== 'MEL'}
+              <span class="mt-1 block text-xs text-warning">A FEL has to be baked into the picture, which isn't supported yet: untick it to keep the base layer.</span>
+            {/if}
+            {#if value.depth !== 10}
+              <span class="mt-1 block text-xs text-warning">Dolby Vision needs a 10-bit encode.</span>
+            {/if}
+            {#if !vbv}
+              <span class="mt-1 block text-xs text-warning">Add --vbv-maxrate and --vbv-bufsize below (x265 needs VBV for Dolby Vision).</span>
+            {/if}
           {/if}
         {/if}
       {/if}

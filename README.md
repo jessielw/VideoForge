@@ -12,8 +12,8 @@ and finished steps are skipped on a rerun.
 > **Status:** 0.1.0 beta. It works end to end, but expect changes. See [CHANGELOG.md](CHANGELOG.md).
 
 Not yet: sources other than MKV (remux an MP4 or M2TS to MKV first), GPU filters, a login (see
-[Docker](#docker-linux)), Dolby Vision (an HDR10 source keeps its HDR10 metadata and HDR10+ goes into x265
-encodes; the DV layer is dropped).
+[Docker](#docker-linux)), Dolby Vision profile 5, 8.4 (HLG) and FEL (profile 8.1 and a MEL go into x265 encodes as
+8.1).
 
 ## Requirements
 

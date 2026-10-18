@@ -40,13 +40,19 @@ source), or in Docker on Linux.
   MediaInfo) and on x265 its HDR10 metadata (mastering display, MaxCLL / MaxFALL); shown on the Encoder tab,
   "Colour from the source" switches it off, and an option with the same flag wins. The Video tab names the
   source's HDR formats: HDR10 / HLG, HDR10+, Dolby Vision with its profile, layers and FEL or MEL (read
-  from a second of its RPU); Dolby Vision isn't carried into the encode yet.
+  from a second of its RPU).
 - **HDR10+.** An x265 encode of an HDR10+ source carries its dynamic metadata ("HDR10+ from the source" on
   the Encoder tab, on by default): hdr10plus_tool reads it from the source, x265 writes it
   (`--dhdr10-info`), in MKV and MP4. A check before the encode stops the job when the script's frames
   aren't the metadata's (a trim, a frame-rate filter); the output is checked for it. x264 drops it (a
   warning), an 8-bit encode blocks. MP4 output no longer adds HDR boxes of its own (MP4Box `:hdr=none`):
   the stream carries the HDR metadata, so MediaInfo lists it once.
+- **Dolby Vision.** An x265 encode of a profile 8.1 source (or a profile 7 MEL) carries its Dolby Vision as 8.1
+  ("Dolby Vision from the source" on the Encoder tab, on by default), in MKV and MP4: dovi_tool reads the RPU,
+  its active area (L5) follows the crop and resize, x265 writes it. Checked like HDR10+ (the script's frames
+  before the encode, 8.1 in the output). It needs a 10-bit encode, `--vbv-maxrate` and `--vbv-bufsize` (x265's
+  rule) and a mastering display; the job blocks without them. Not carried yet: profile 5 (always blocks: it has
+  no HDR10 layer), 8.4 (HLG) and FEL (it has to be baked into the picture); x264 drops it (a warning).
 - **Notifications.** Settings → Notifications sends to any service Apprise supports (Discord, Telegram, ntfy,
   Pushover, email, ...): each destination picks its events (job done, failed, cancelled, queue finished), can be
   switched off, and has a Test button that shows the service's own error.

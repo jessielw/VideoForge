@@ -173,7 +173,7 @@
         <div class="grid max-w-6xl gap-6 2xl:grid-cols-2">
           <div class="space-y-4">
             <PresetMenu kind="encoder" profile={job.profile} current={job.spec.encoder} disabled={!editable} apply={encoder => save({ encoder })} />
-            <EncoderPanel value={job.spec.encoder} disabled={!editable} colorArgs={job.color_args} hdr10plus={job.tracks ? !!job.tracks.video?.hdr?.hdr10plus : null} onchange={encoder => save({ encoder })} />
+            <EncoderPanel value={job.spec.encoder} disabled={!editable} colorArgs={job.color_args} hdr10plus={job.tracks ? !!job.tracks.video?.hdr?.hdr10plus : null} dv={job.tracks ? (job.tracks.video?.hdr ?? false) : null} onchange={encoder => save({ encoder })} />
           </div>
           <div class="space-y-2">
             <span class="section-label">Commands this job runs</span>
