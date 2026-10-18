@@ -60,6 +60,8 @@ TOOLS: tuple[ToolInfo, ...] = (
         "dee", "Dolby Encoding Engine", "DDP / Atmos encoder used by DeeZy (not redistributable)", (("--help",), ())
     ),
     ToolInfo("truehdd", "truehdd", "Decodes TrueHD Atmos for DDP Atmos encodes"),
+    ToolInfo("dovi_tool", "dovi_tool", "Carries a source's Dolby Vision metadata (RPU) into the encode"),
+    ToolInfo("hdr10plus_tool", "hdr10plus_tool", "Carries a source's HDR10+ metadata into the encode"),
 )
 TOOL_NAMES = tuple(t.name for t in TOOLS)
 

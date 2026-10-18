@@ -6,7 +6,8 @@ The folder holds a standalone Python (the python-build-standalone build uv insta
 locked dependencies installed in it, the built frontend, videoforge.toml, an empty tools/, and VideoForge.exe,
 which runs `python -m videoforge serve --window` with VIDEOFORGE_ROOT set to the folder. A real Python is the
 point: vspipe embeds it, and the preview worker is `python -m`. Unpacked anywhere, it runs from there. The
-VapourSynth plugins and filter scripts of vsplugins/manifest.toml come with it (scripts/fetch_plugins.py).
+VapourSynth plugins and filter scripts of vsplugins/manifest.toml come with it (scripts/fetch_plugins.py), and
+dovi_tool and hdr10plus_tool (scripts/fetch_tools.py).
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ TOOLS_README = """Put the tools here (or anywhere, and set their paths on the Se
 
   MKVToolNix\\mkvmerge.exe   x264\\x264.exe   x265\\x265.exe
   vs-plugins\\ already holds the VapourSynth plugins VideoForge bundles (source filters, common filters): add yours
+  dovi_tool\\ and hdr10plus_tool\\ come with it (Dolby Vision and HDR10+ metadata)
   DeeZy\\deezy.exe   DEE\\dee.exe   truehdd\\truehdd.exe   qaac\\qaac64.exe   opus-tools\\opusenc.exe
   ffmpeg and MP4Box are looked up on PATH unless set.
 
@@ -119,6 +121,7 @@ def main() -> int:
     (folder / "tools").mkdir()
     run(sys.executable, ROOT / "scripts" / "fetch_plugins.py", "--plugins", folder / "tools" / "vs-plugins",
         "--scripts", folder / "runtime" / "Lib" / "site-packages")  # fmt: skip
+    run(sys.executable, ROOT / "scripts" / "fetch_tools.py", "--tools", folder / "tools")
     (folder / "tools" / "README.txt").write_text(TOOLS_README.replace("\n", "\r\n"), encoding="utf-8")
     launcher(python, folder, work)
 

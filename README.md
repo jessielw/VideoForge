@@ -42,6 +42,7 @@ missing. A bare name (`ffmpeg`, `MP4Box`) is looked up on `PATH`.
 | truehdd | `tools/truehdd/truehdd.exe` | DDP Atmos from TrueHD Atmos |
 | qaac | `tools/qaac/qaac64.exe` | AAC (Apple) |
 | opus-tools | `tools/opus-tools/opusenc.exe` | Opus (opusenc) |
+| [dovi_tool](https://github.com/quietvoid/dovi_tool), [hdr10plus_tool](https://github.com/quietvoid/hdr10plus_tool) | `tools/dovi_tool/dovi_tool.exe`, `tools/hdr10plus_tool/hdr10plus_tool.exe` | Dolby Vision and HDR10+ metadata (`uv run python scripts/fetch_tools.py` downloads both; the portable build and the image have them) |
 
 Only MKVToolNix, an encoder and the source filter plugin are needed to start; the audio tools are only
 needed for the encodes that use them (copying a track needs none).
@@ -80,7 +81,7 @@ the log; `videoforge.cmd --help`). Build it yourself with `uv run python scripts
 ## Docker (Linux)
 
 The image (`ghcr.io/jessielw/videoforge`, amd64) carries the free tools: MKVToolNix, x264, x265, FFmpeg 9,
-MP4Box, opus-tools, DeeZy, truehdd, Wine (for Windows tools), and the [VapourSynth plugins](#vapoursynth-plugins),
+MP4Box, opus-tools, DeeZy, truehdd, dovi_tool, hdr10plus_tool, Wine (for Windows tools), and the [VapourSynth plugins](#vapoursynth-plugins),
 built from source.
 Start from [compose.yaml](compose.yaml): set your media folder, then `docker compose up -d` and open
 http://127.0.0.1:8765.

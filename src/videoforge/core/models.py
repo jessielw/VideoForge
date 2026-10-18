@@ -152,6 +152,26 @@ class VideoColor:
 
 
 @dataclass(slots=True)
+class VideoHdr:
+    """The source video's dynamic HDR metadata, beyond HDR10 (MediaInfo; core/video/hdr.py). 0 / "": none."""
+
+    dv_profile: int = 0  # Dolby Vision profile: 5, 7, 8
+    dv_compat: int | None = None  # its base layer's compatibility id: 7.6 -> 6, 8.1 -> 1, 8.4 -> 4
+    dv_level: int = 0
+    dv_layers: str = ""  # "BL+EL+RPU", "BL+RPU"
+    dv_el: str = ""  # a profile 7 enhancement layer: "FEL" or "MEL" (from the RPU); "" = none, or not read
+    hdr10plus: bool = False  # SMPTE ST 2094-40 dynamic metadata (SEI in the stream)
+
+    @property
+    def dv_name(self) -> str:
+        """ "7.6 FEL", "8.1", "5"; "" without Dolby Vision."""
+        if not self.dv_profile:
+            return ""
+        name = f"{self.dv_profile}" + (f".{self.dv_compat}" if self.dv_compat is not None else "")
+        return f"{name} {self.dv_el}" if self.dv_el else name
+
+
+@dataclass(slots=True)
 class VideoInfo:
     width: int
     height: int
@@ -162,6 +182,7 @@ class VideoInfo:
     sar_num: int = 1
     sar_den: int = 1
     color: VideoColor = field(default_factory=VideoColor)
+    hdr: VideoHdr = field(default_factory=VideoHdr)
 
     @property
     def sar(self) -> Fraction:

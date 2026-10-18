@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 # VideoForge in a container: the server and its free tools. The native ones (FFmpeg, MP4Box, x264, the
 # VapourSynth plugins) come from the plugins image (vsplugins/), built rarely; MKVToolNix, x265 and opus-tools
-# from Debian; DeeZy and truehdd from their releases; Wine for Windows tools. DEE, qaac and other tools of
-# your own go in /tools (docker/entrypoint.sh).
+# from Debian; DeeZy, truehdd, dovi_tool and hdr10plus_tool from their releases; Wine for Windows tools. DEE,
+# qaac and other tools of your own go in /tools (docker/entrypoint.sh).
 # See README "Docker".
 #   docker build -t videoforge .                      (with the published plugins image)
 #   docker build -t videoforge-plugins vsplugins && docker build --build-arg PLUGINS_IMAGE=videoforge-plugins -t videoforge .
@@ -11,6 +11,11 @@ ARG PYTHON_IMAGE=python:3.12-slim-trixie
 ARG PLUGINS_IMAGE=ghcr.io/jessielw/videoforge-plugins:latest
 ARG DEEZY_VERSION=1.3.15
 ARG TRUEHDD_VERSION=0.6.2
+# quietvoid's Dolby Vision / HDR10+ tools (MIT): the versions scripts/fetch_tools.py takes for Windows
+ARG DOVI_TOOL_VERSION=2.3.4
+ARG DOVI_TOOL_SHA256=1844258e13c26607b32224bf1fa82b595d3b35949f5467405fda560daad32b3f
+ARG HDR10PLUS_TOOL_VERSION=1.7.2
+ARG HDR10PLUS_TOOL_SHA256=06385f37a639d61ba21d4be3150c863846933bc3b58110e094d8fc8f1c2249f2
 
 FROM ${PLUGINS_IMAGE} AS plugins
 
@@ -26,6 +31,10 @@ RUN npm run build
 FROM ${PYTHON_IMAGE} AS downloads
 ARG DEEZY_VERSION
 ARG TRUEHDD_VERSION
+ARG DOVI_TOOL_VERSION
+ARG DOVI_TOOL_SHA256
+ARG HDR10PLUS_TOOL_VERSION
+ARG HDR10PLUS_TOOL_SHA256
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl unzip \
     && rm -rf /var/lib/apt/lists/*
@@ -39,6 +48,13 @@ RUN base="truehdd-${TRUEHDD_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
     && echo "${sum%% *}  $base" | sha256sum -c - \
     && mkdir truehdd && tar -xzf "$base" -C truehdd \
     && find truehdd -type f -name truehdd -exec install -m 0755 {} /out/truehdd-bin \;
+RUN for t in "dovi_tool ${DOVI_TOOL_VERSION} ${DOVI_TOOL_SHA256}" "hdr10plus_tool ${HDR10PLUS_TOOL_VERSION} ${HDR10PLUS_TOOL_SHA256}"; do \
+        set -- $t; base="$1-$2-x86_64-unknown-linux-musl.tar.gz"; \
+        curl -fsSL -o "$base" "https://github.com/quietvoid/$1/releases/download/$2/$base" \
+        && echo "$3  $base" | sha256sum -c - \
+        && mkdir "$1" && tar -xzf "$base" -C "$1" \
+        && find "$1" -type f -name "$1" -exec install -m 0755 {} "/out/$1-bin" \; || exit 1; \
+    done
 
 # --- the app ------------------------------------------------------------------------------------------
 FROM ${PYTHON_IMAGE} AS app
@@ -52,6 +68,8 @@ RUN echo /opt/vf/lib > /etc/ld.so.conf.d/vf.conf && ldconfig
 COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
 COPY --from=downloads /out/deezy-bin /usr/local/bin/deezy
 COPY --from=downloads /out/truehdd-bin /usr/local/bin/truehdd
+COPY --from=downloads /out/dovi_tool-bin /usr/local/bin/dovi_tool
+COPY --from=downloads /out/hdr10plus_tool-bin /usr/local/bin/hdr10plus_tool
 # Wine for the Windows tools in /tools/wine (qaac, DEE's Windows build). Its DLLs lose their debug info
 # (711 MB -> 237 MB), and a template prefix is made for docker/wine-run to copy (docker/wine-prefix.sh).
 COPY docker/wine-prefix.sh /tmp/wine-prefix.sh

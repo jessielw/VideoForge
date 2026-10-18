@@ -108,6 +108,16 @@ export interface VideoColor {
   max_fall: number
 }
 
+// The source's dynamic HDR metadata beyond HDR10 (0 / '': none)
+export interface VideoHdr {
+  dv_profile: number // Dolby Vision profile: 5, 7, 8
+  dv_compat: number | null // its base layer's compatibility id (7.6 -> 6)
+  dv_level: number
+  dv_layers: string // 'BL+EL+RPU', 'BL+RPU'
+  dv_el: string // a profile 7 enhancement layer: 'FEL' or 'MEL' ('' = none, or not read)
+  hdr10plus: boolean
+}
+
 export interface Progress {
   step: string
   index: number
@@ -333,6 +343,7 @@ export interface Tracks {
     sar_num: number // the pixel aspect ratio (not 1:1 on an anamorphic source)
     sar_den: number
     color: VideoColor
+    hdr?: VideoHdr // absent on a job probed before it was read
   } | null
   audio: AudioTrack[]
   subs: SubTrack[]

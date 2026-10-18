@@ -12,6 +12,8 @@ opusenc = "opusenc"
 mp4box = "MP4Box"
 deezy = "deezy"
 truehdd = "truehdd"
+dovi_tool = "dovi_tool"
+hdr10plus_tool = "hdr10plus_tool"
 # DEE and qaac aren't free to ship: the entrypoint puts a launcher on PATH for each one in /tools.
 # Dolby Encoding Engine: the Linux build as /tools/dee/dee, or the Windows build as /tools/wine/dee/dee.exe
 # (run under Wine), each with its license next to it.

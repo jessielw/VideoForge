@@ -38,7 +38,9 @@ source), or in Docker on Linux.
 - **Encoder.** x264 and x265 option panels, 1 or 2 passes; AutoQPF chapters to a qpf file. The encode is
   tagged with the source's colour description (primaries, transfer, matrix, range, chroma location, read by
   MediaInfo) and on x265 its HDR10 metadata (mastering display, MaxCLL / MaxFALL); shown on the Encoder tab,
-  "Colour from the source" switches it off, and an option with the same flag wins.
+  "Colour from the source" switches it off, and an option with the same flag wins. The Video tab names the
+  source's HDR formats: HDR10 / HLG, HDR10+, Dolby Vision with its profile, layers and FEL or MEL (read
+  from a second of its RPU); Dolby Vision and HDR10+ aren't carried into the encode yet.
 - **Notifications.** Settings → Notifications sends to any service Apprise supports (Discord, Telegram, ntfy,
   Pushover, email, ...): each destination picks its events (job done, failed, cancelled, queue finished), can be
   switched off, and has a Test button that shows the service's own error.
@@ -75,8 +77,9 @@ source), or in Docker on Linux.
 - **Desktop window.** `serve --window`: the app in its own window with a tray icon; Explorer drops carry
   file paths.
 - **Portable build (Windows x64).** A zip with its own Python: unpack, add the tools, run `VideoForge.exe`.
+  dovi_tool and hdr10plus_tool come with it (`scripts/fetch_tools.py` fetches them for a source install).
 - **Docker (Linux, amd64).** The server with the free tools (MKVToolNix, x264, x265, FFmpeg 9, MP4Box,
-  opus-tools, DeeZy, truehdd), in a browser. Windows tools run under Wine from
+  opus-tools, DeeZy, truehdd, dovi_tool, hdr10plus_tool), in a browser. Windows tools run under Wine from
   `/tools/wine` (qaac, DEE's Windows build).
 - **Bundled VapourSynth plugins.** Source filters (BestSource, L-SMASH-Works, FFMS2, d2vsource) and common
   filters (EdgeFixer, FillBorders, MVTools, znedi3, dfttest2, BM3D, zsmooth, vszip, fmtconv, descale, ...)

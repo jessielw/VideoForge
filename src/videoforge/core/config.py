@@ -36,6 +36,8 @@ class Tools:
     x265: str = "x265"
     opusenc: str = "opusenc"
     mp4box: str = "MP4Box"
+    dovi_tool: str = "dovi_tool"  # Dolby Vision RPU extract / edit
+    hdr10plus_tool: str = "hdr10plus_tool"  # HDR10+ metadata extract
     vspipe: str = ""  # default: the one pip's vapoursynth installs next to this Python
     vs_plugins: str = ""  # extra VapourSynth plugin folder (VAPOURSYNTH_EXTRA_PLUGIN_PATH)
 

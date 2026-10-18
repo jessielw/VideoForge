@@ -32,6 +32,8 @@ from videoforge.core.pairing import (
     name_without_delay,
 )
 from videoforge.core.probe import mkvmerge_identify, probe
+from videoforge.core.tools import locate
+from videoforge.core.video import hdr
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -118,6 +120,9 @@ def external_audio_tracks(paths: list[Path], mkvmerge: str) -> tuple[list[AudioT
 def probe_inputs(inputs: JobInputs, app: AppConfig) -> ProbedInputs:
     mkvmerge = app.tools.mkvmerge
     source = probe(inputs.source, mkvmerge)
+    v = source.video
+    if v is not None and v.hdr.dv_profile == 7 and "EL" in v.hdr.dv_layers and locate(app.tools.dovi_tool):
+        v.hdr.dv_el = hdr.read_el_type(inputs.source, app.tools)  # MediaInfo can't tell FEL from MEL
     encode = probe(inputs.encode, mkvmerge) if inputs.encode else None
     ext, ext_issues = external_tracks(source, inputs.subtitles)
     ext_audio, audio_issues = external_audio_tracks(inputs.audio, mkvmerge)

@@ -19,7 +19,7 @@
   import { app } from '../lib/state.svelte'
   import { layout } from '../lib/layout.svelte'
   import { videoView } from '../lib/videoView.svelte'
-  import { clipLength } from '../lib/format'
+  import { clipLength, hdrFormats } from '../lib/format'
   import { fitted, previewShape, resizeInput, type Geometry } from '../lib/resize'
   import { SOURCE_FILTERS, type ClipInfo, type Crop, type JobDetail, type SourceFilter, type VideoSettings } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
@@ -315,6 +315,8 @@
   const outW = $derived(src ? src.width - video.crop.left - video.crop.right : 0)
   const outH = $derived(src ? src.height - video.crop.top - video.crop.bottom : 0)
   const SIDES: (keyof Crop)[] = ['left', 'top', 'right', 'bottom']
+  // The source's HDR formats (HDR10, HDR10+, Dolby Vision ...), for the HDR section
+  const hdr = $derived(job.tracks?.video ? hdrFormats(job.tracks.video.color, job.tracks.video.hdr) : [])
 </script>
 
 <svelte:window {onkeydown} />
@@ -495,6 +497,15 @@
       />
       <!-- min-w-0: a fieldset is as wide as its widest content by default, which ran past the panel. -->
       <fieldset disabled={!editable} class="min-w-0 space-y-5">
+        {#if hdr.length}
+          <section class="space-y-1">
+            <span class="section-label">HDR</span>
+            <p class="text-sm">{hdr.join(' · ')}</p>
+            {#if job.tracks?.video?.hdr?.dv_profile || job.tracks?.video?.hdr?.hdr10plus}
+              <p class="text-xs text-muted-foreground">Dolby Vision and HDR10+ aren't carried into the encode yet: it keeps the HDR10 layer.</p>
+            {/if}
+          </section>
+        {/if}
         <section class="space-y-2">
           <div class="flex items-center justify-between">
             <span class="section-label">Crop</span>

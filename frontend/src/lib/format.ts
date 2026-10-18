@@ -1,4 +1,4 @@
-import type { Progress, Severity, Status, TrackOverride } from './types'
+import type { Progress, Severity, Status, TrackOverride, VideoColor, VideoHdr } from './types'
 
 export const STATUS_LABEL: Record<Status, string> = {
   probing: 'Probing',
@@ -124,6 +124,19 @@ export function isEmpty(ov: TrackOverride): boolean {
     ov.layout === null &&
     !Object.keys(ov.options ?? {}).length
   )
+}
+
+// The source's HDR formats: ['HDR10', 'HDR10+', 'Dolby Vision 7.6 FEL (BL+EL+RPU)']; [] for SDR.
+export function hdrFormats(color: VideoColor, hdr: VideoHdr | undefined): string[] {
+  const out = []
+  if (color.transfer === 'arib-std-b67') out.push('HLG')
+  else if (color.transfer === 'smpte2084') out.push(color.master_display || color.max_cll ? 'HDR10' : 'PQ')
+  if (hdr?.hdr10plus) out.push('HDR10+')
+  if (hdr?.dv_profile) {
+    const name = `${hdr.dv_profile}${hdr.dv_compat !== null ? `.${hdr.dv_compat}` : ''}${hdr.dv_el ? ` ${hdr.dv_el}` : ''}`
+    out.push(`Dolby Vision ${name}${hdr.dv_layers ? ` (${hdr.dv_layers})` : ''}`)
+  }
+  return out
 }
 
 // A clip's running time (frames / fps) as h:mm:ss.mmm.

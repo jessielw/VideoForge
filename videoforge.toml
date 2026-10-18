@@ -18,6 +18,9 @@ x264 = "tools/x264/x264.exe"
 x265 = "tools/x265/x265.exe"
 # MP4 output (GPAC); tools/GPAC/mp4box.exe or on PATH.
 mp4box = "MP4Box"
+# Dolby Vision and HDR10+ metadata (scripts/fetch_tools.py downloads both).
+dovi_tool = "tools/dovi_tool/dovi_tool.exe"
+hdr10plus_tool = "tools/hdr10plus_tool/hdr10plus_tool.exe"
 # VapourSynth plugins (bestsource, lsmas, ffms2, filters). vspipe comes with the
 # vapoursynth Python package; set `vspipe` here only to use another one.
 vs_plugins = "tools/vs-plugins"

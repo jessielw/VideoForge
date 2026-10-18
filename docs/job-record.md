@@ -163,7 +163,7 @@ by), `"file"` (a chapter file the user gave: `path`), `"source"` (the source's o
 ### `tools`
 
 The version line of each tool the run used, keyed by VideoForge's tool name (`vspipe`, `x264`,
-`x265`, `ffmpeg`, `qaac`, `opusenc`, `deezy`, `dee`, `truehdd`, `mkvmerge`, `mp4box`); `""` when the
+`x265`, `ffmpeg`, `qaac`, `opusenc`, `deezy`, `dee`, `truehdd`, `mkvmerge`, `mp4box`, `dovi_tool`, `hdr10plus_tool`); `""` when the
 tool printed none.
 
 ## Events
