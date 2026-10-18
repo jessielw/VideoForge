@@ -7,10 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from videoforge.core.models import Issue, Severity, track_key, with_copies
-from videoforge.core.pipeline.build import output_path
+from videoforge.core.pipeline.build import indexed, output_path
 from videoforge.core.plan_io import to_json
 from videoforge.core.video.color import color_args
-from videoforge.core.video.script import index_exists
 from videoforge.core.video.settings import EncoderSettings, RateControl
 from videoforge.server.queue import Entry, JobQueue
 
@@ -55,9 +54,7 @@ def summary(e: Entry) -> dict[str, Any]:
         "crop": to_json(s.video.crop) if s.encodes_video and s.video.custom is None else None,
         "custom_script": s.encodes_video and s.video.custom is not None,
         # The source index is in the work folder (the video opens at once); a failed batch index says why.
-        "indexed": s.encodes_video
-        and not e.indexing
-        and index_exists(s.inputs.source, s.video.source_filter, s.work_dir),
+        "indexed": s.encodes_video and not e.indexing and indexed(s, e.source_video),
         "index_error": e.index_error,
         "index_held": e.index_held,  # waiting in the lane while an encode reads its disk
         "audio": [f"{a.title} ({a.language})" for a in e.plan.audio] if e.plan else [],

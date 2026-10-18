@@ -237,3 +237,9 @@ class ClipCache:
     def clear(self) -> None:
         with self._lock:
             self._clips.clear()
+
+    def drop(self, prefixes: list[str]) -> None:
+        """Free the clips whose slot starts with one of prefixes (a job's: "<id>:"), and the files they hold."""
+        with self._lock:
+            for key in [k for k in self._clips if k.startswith(tuple(prefixes))]:
+                del self._clips[key]

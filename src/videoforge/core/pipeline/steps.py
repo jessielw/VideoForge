@@ -48,6 +48,9 @@ class Step:
     finalize: Callable[[], object] | None = None  # after success, e.g. move a .partial into place
     present: Callable[[], bool] | None = None  # reuse needs it true too: a result whose file name the tool picks
     background: bool = False  # may run alongside the steps after it (run_steps' parallel)
+    # The step as it stands when its turn comes: a command built from an earlier step's output (a FEL encode's
+    # HDR10 values come from the RPU the job extracts first). run_steps calls it before the reuse check.
+    refresh: Callable[[], Step] | None = None
 
     @property
     def written(self) -> tuple[Path, ...]:
@@ -129,6 +132,7 @@ def run_steps(
     one at a time. keep: step ids the user chose to reuse whatever their fingerprint (their outputs must be
     there); they get a record with today's fingerprint. Raises ToolError (a step failed or didn't write its
     outputs) or Cancelled."""
+    steps = list(steps)  # refresh() replaces a step
     total_weight = sum(s.weight for s in steps) or 1.0
     runs = runs if runs is not None else [s.to_run() for s in steps]
     lock = threading.RLock()  # the records, the runs and the callbacks, between a step and the background
@@ -256,6 +260,13 @@ def run_steps(
     try:
         for i, step in enumerate(steps):
             run = runs[i]
+            if step.refresh is not None:
+                for j in [j for j in pending if set(steps[j].outputs) & set(step.inputs)]:
+                    pending.pop(j).result()
+                step = steps[i] = step.refresh()
+                if run.command != step.command_line:
+                    run.command = step.command_line
+                    changed(run)
             prior = records.get(step.id)
             if step.id in keep and not _reusable(step, prior) and _present(step):
                 prior = StepRecord(step.id, step.fingerprint(), list(step.outputs), prior.seconds if prior else 0.0)

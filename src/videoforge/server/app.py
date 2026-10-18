@@ -63,6 +63,8 @@ def create_app(
     preview = Preview()  # VapourSynth for the preview, in a child process started on first use
     if services.detect_crop is None:
         services.detect_crop = partial(video.source_crop, preview)
+    if services.release_preview is None:
+        services.release_preview = preview.release
     queue_events = JsonLines(settings.data_dir / "logs" / QUEUE_EVENTS, max_bytes=QUEUE_EVENTS_MAX)
     bus = EventBus()  # what runs do, for notifications, actions and plugins
     job_queue = JobQueue(

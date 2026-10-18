@@ -29,6 +29,7 @@ from videoforge.core.models import (
     Plan,
     Severity,
     SubFormat as F,
+    VideoColor,
     VideoHdr,
     VideoInfo,
 )
@@ -103,7 +104,7 @@ class FakeRunner:
         if self.fail_on and self.fail_on in last[0]:
             log(f"[{Path(last[0]).stem}] Error: something broke")
             raise ToolError(f"{last[0]} exited with code 2", 2)
-        for flag in ("-o", "--output", "--stats"):
+        for flag in ("-o", "--output", "--stats", "-e"):
             if flag in last and last[last.index(flag) + 1] != os.devnull:
                 Path(last[last.index(flag) + 1]).write_bytes(b"out")
         log(f"[{Path(last[0]).stem}] [ 50.0%] 1/2 frames")
@@ -976,8 +977,8 @@ def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
         ({"dv_compat": 4}, {}, ["hdr.dv_hlg"]),
         ({"dv_compat": 4}, {"dolby_vision": False}, []),
         ({"dv_profile": 7, "dv_compat": 6, "dv_el": "MEL"}, {}, []),
-        ({"dv_profile": 7, "dv_compat": 6, "dv_el": "FEL"}, {}, ["hdr.dv_fel"]),
-        ({"dv_profile": 7, "dv_compat": 6, "dv_el": ""}, {}, ["hdr.dv_fel"]),
+        ({"dv_profile": 7, "dv_compat": 6, "dv_el": "FEL"}, {}, []),
+        ({"dv_profile": 7, "dv_compat": 6, "dv_el": ""}, {}, ["hdr.dv_el"]),
     ],
 )
 def test_dolby_vision_plan(profile, tmp_path, hdr_info, encoder, codes):
@@ -998,3 +999,92 @@ def test_dolby_vision_custom_script_blocks(tmp_path):
     job = dv_job(plan, tmp_path)
     job.video.custom = "clip = src"
     assert [i.code for i in hdr.issues(plan.source.video, job.encoder, None, job.video)] == ["hdr.dv_custom"]
+
+
+def fel_job(plan, tmp_path, **encoder):
+    job = dv_job(plan, tmp_path, **encoder)
+    plan.source.video.hdr = VideoHdr(dv_profile=7, dv_compat=6, dv_level=6, dv_layers="BL+EL+RPU", dv_el="FEL")
+    plan.source.video.color = replace(
+        plan.source.video.color,
+        master_display="G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)",
+        max_cll=1000,
+        max_fall=400,
+    )
+    return job
+
+
+@pytest.mark.parametrize(("source_filter", "codes"), [(SourceFilter.FFMS2, []), (SourceFilter.LSMASH, []),
+                                                      (SourceFilter.BESTSOURCE, ["hdr.dv_bake_bs"])])  # fmt: skip
+def test_fel_bake_needs_ffms2_or_lsmas(tmp_path, source_filter, codes):
+    plan = make_plan(tmp_path)
+    job = fel_job(plan, tmp_path)
+    job.video.source_filter = source_filter
+    assert [i.code for i in hdr.issues(plan.source.video, job.encoder, None, job.video)] == codes
+
+
+SUMMARY = """Summary:
+  Frames: 240
+  Profile: 7 (FEL)
+  RPU mastering display: 0.0050/4000 nits
+  RPU content light level (L1): MaxCLL: {l1} nits, MaxFALL: {l1f} nits
+  L6 metadata: Mastering display: 0.0050/4000 nits. MaxCLL: 2573 nits, MaxFALL: 684 nits
+"""
+
+
+@pytest.mark.parametrize(("l1", "l1f", "cll"), [("1523.75", "301.20", (1523, 301)), ("0.01", "0.00", (2573, 684))])
+def test_fel_color_from_the_rpu(l1, l1f, cll):
+    source = VideoColor(
+        master_display="G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)",
+        max_cll=1000,
+        max_fall=400,
+    )
+    got = hdr.fel_color(source, SUMMARY.format(l1=l1, l1f=l1f))
+    assert got.master_display == "G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(40000000,50)"
+    assert (got.max_cll, got.max_fall) == cll
+    # no L1 or L6 light level: the source's
+    bare = hdr.fel_color(source, "RPU mastering display: 0.0001/1000 nits")
+    assert (bare.master_display.endswith("L(10000000,1)"), bare.max_cll, bare.max_fall) == (True, 1000, 400)
+
+
+@pytest.mark.parametrize("source_filter", [SourceFilter.FFMS2, SourceFilter.LSMASH])
+def test_fel_is_baked_into_the_encode(profile, tmp_path, monkeypatch, source_filter):
+    plan = make_plan(tmp_path)
+    job = fel_job(plan, tmp_path)
+    job.video.source_filter = source_filter
+    out = tmp_path / "out" / "Show.S01E01.mkv"
+    built = build_steps(job, plan, profile, APP, out)
+    ids = [s.id for s in built.steps]
+    work = job.work_dir
+    el, hevc = work / "dv_el.mkv", work / "dv_el.hevc"
+    assert ids.index("script") < ids.index("dovi.el") < ids.index("dovi.el_mkv") < ids.index("index")
+    assert ("dovi.el_index" in ids) is (source_filter is SourceFilter.FFMS2)
+    step = {s.id: s for s in built.steps}
+    assert step["dovi.el"].argvs[1] == ("dovi_tool", "demux", "--el-only", "-", "-e", str(hevc))
+    assert step["dovi.el_mkv"].argvs[0][1:] == ("-o", str(el), "--default-duration", "0:41708333ns", str(hevc))
+    text = (step["script"].key or "").splitlines()
+    assert text.index("clip = src") < text.index("clip = core.fel.Bake(clip, _vf_el, no_resample=1)")
+    assert "clip = core.std.SetFrameProps(clip, _Range=vs.RANGE_LIMITED)" in text
+    assert any(line.startswith("_vf_el = core.") and repr(str(el)) in line for line in text)
+    # before a run (no RPU yet) the encode shows the source's HDR10 values
+    video = step["video"].argvs[1]
+    assert video[video.index("--max-cll") + 1] == "1000,400"
+
+    monkeypatch.setattr(hdr, "edit_rpu", lambda _d, _s, dst, *_a: dst.write_bytes(b"rpu"))
+    monkeypatch.setattr(hdr, "script_frames", lambda *_: 240)
+    monkeypatch.setattr(hdr, "rpu_frames", lambda *_: 240)
+    monkeypatch.setattr(hdr, "rpu_summary", lambda *_: SUMMARY.format(l1="0.01", l1f="0.00"))
+    runner = FakeRunner()
+    carried = replace(simulate_output(plan), video=replace(plan.source.video, hdr=VideoHdr(dv_profile=8, dv_compat=1)))
+    state = JobState()
+    result = run_job(job, plan, profile, APP, state=state, runner=runner, prober=lambda *_: carried)
+    assert result.status is JobStatus.DONE, result.error
+    # the encode ran with the RPU's values (L6 here: L1 reads 0), and its Log tab line says so
+    x265 = next(c[-1] for c in runner.calls if Path(c[-1][0]).stem == "x265")
+    assert x265[x265.index("--max-cll") + 1] == "2573,684"
+    assert x265[x265.index("--master-display") + 1].endswith("L(40000000,50)")
+    assert "--max-cll 2573,684" in next(r.command for r in state.run if r.id == "video")
+    # a rerun reuses the encode (its fingerprint has the RPU's values)
+    runner = FakeRunner()
+    result = run_job(job, plan, profile, APP, state=state, runner=runner, prober=lambda *_: carried)
+    assert result.status is JobStatus.DONE, result.error
+    assert "x265" not in tools_called(runner)

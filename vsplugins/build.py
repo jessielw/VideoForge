@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
+import io
 import os
 from pathlib import Path
 import re
@@ -18,6 +20,8 @@ import shutil
 import subprocess
 import sys
 import tomllib
+import urllib.request
+import zipfile
 
 HERE = Path(__file__).resolve().parent
 PREFIX = Path(os.environ.get("VF_PREFIX", "/opt/vf"))
@@ -113,7 +117,29 @@ def find_library(entry: dict, out: Path) -> Path:
     return found[0]
 
 
+def install_download(entry: dict) -> None:
+    """A release build (`linux64`: url, sha256, files = {name in the plugin folder = path in the zip})."""
+    d = entry["linux64"]
+    print("+ download", d["url"], flush=True)
+    with urllib.request.urlopen(d["url"], timeout=120) as r:  # noqa: S310 - the manifest's https URL
+        data = r.read()
+    if (digest := hashlib.sha256(data).hexdigest()) != d["sha256"]:
+        sys.exit(f"{entry['name']}: sha256 {digest}, expected {d['sha256']}")
+    PLUGINS.mkdir(parents=True, exist_ok=True)
+    libs = []
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        for name, member in d["files"].items():
+            dest = PLUGINS / name
+            dest.write_bytes(z.read(member))
+            libs += [dest] if dest.suffix == ".so" else []
+    smoke(entry["namespace"], libs)
+    print(f"== {entry['name']}: {', '.join(d['files'])}", flush=True)
+
+
 def install_plugin(entry: dict) -> None:
+    if entry["build"] == "download":
+        install_download(entry)
+        return
     src = fetch(entry)
     env = {**os.environ, **entry.get("env", {})}
     for command in entry.get("before", []):

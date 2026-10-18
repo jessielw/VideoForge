@@ -195,7 +195,8 @@
       <span class="block text-xs text-muted-foreground">
         x265: carries a source's Dolby Vision into the encode as profile 8.1 (dovi_tool reads the RPU and moves its active
         area with the crop and resize). Needs a 10-bit encode, --vbv-maxrate and --vbv-bufsize, and a script that keeps every
-        frame. Profile 5, 8.4 (HLG) and FEL aren't carried yet.
+        frame. A FEL's enhancement layer is baked into the picture first (felbaker). Profile 5 and 8.4 (HLG) aren't
+        carried yet.
       </span>
       {#if dv !== undefined}
         {#if dv === null}
@@ -214,8 +215,10 @@
             {#if dv.dv_compat === 4}
               <span class="mt-1 block text-xs text-warning">Dolby Vision 8.4 (HLG) isn't carried yet: untick it to keep the HLG layer.</span>
             {/if}
-            {#if dv.dv_profile === 7 && dv.dv_el !== 'MEL'}
-              <span class="mt-1 block text-xs text-warning">A FEL has to be baked into the picture, which isn't supported yet: untick it to keep the base layer.</span>
+            {#if dv.dv_profile === 7 && dv.dv_el === 'FEL'}
+              <span class="mt-1 block text-xs text-muted-foreground">FEL: its enhancement layer is baked into the picture (FFMS2 or L-SMASH), and the HDR10 values come from the RPU.</span>
+            {:else if dv.dv_profile === 7 && dv.dv_el !== 'MEL'}
+              <span class="mt-1 block text-xs text-warning">The enhancement layer's kind (FEL or MEL) couldn't be read: untick it to keep the base layer.</span>
             {/if}
             {#if value.depth !== 10}
               <span class="mt-1 block text-xs text-warning">Dolby Vision needs a 10-bit encode.</span>

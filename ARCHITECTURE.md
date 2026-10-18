@@ -42,7 +42,8 @@ src/videoforge/
                          x265's HDR10 SEI, before the job's options (vspipe's y4m carries no colour)
       hdr.py             Dolby Vision / HDR10+ in the source (MediaInfo -> VideoInfo.hdr; FEL or MEL from a second
                          of the RPU); HDR10+ into x265 (hdr10plus_tool's JSON, --dhdr10-info) and Dolby Vision
-                         as 8.1 (dovi_tool's RPU, its L5 moved by the crop and resize); their frame checks
+                         as 8.1 (dovi_tool's RPU, its L5 moved by the crop and resize); a FEL's enhancement layer
+                         (demux, MKV) and its HDR10 values from the RPU; their frame checks
       qpf.py             AutoQPF: chapters -> qpf + chapter file
     execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel), jobobject.py (tools end with the server, Windows)
                          mux.MUXERS: mkvmerge (MKV) and MP4Box (MP4), each with what its container can't hold
@@ -174,9 +175,19 @@ index ─► qpf/chapters ─┬► video (vspipe | x264/x265, 1 or 2 passes) �
   logic, `l5_offsets`), and writes `dv_rpu.bin` with `dovi_tool editor` in mode 2 (8.1); keyed by the source size,
   crop, resize and their order. `dovi.check` compares the RPU's frames with the script's, as for HDR10+. x265 gets
   `--dolby-vision-profile 8.1 --dolby-vision-rpu`; it needs VBV (HRD), 10-bit and a mastering display, so the
-  plan blocks without them, as it does for profile 5 (no HDR10 layer), 8.4 (HLG), a FEL (it needs the bake) and a
-  custom script body (its crop isn't known). mkvmerge and MP4Box write the DV configuration from the stream; the
-  validate step blocks an output MediaInfo doesn't find 8.1 in.
+  plan blocks without them, as it does for profile 5 (no HDR10 layer), 8.4 (HLG), a profile 7 whose enhancement
+  layer couldn't be read and a custom script body (its crop isn't known). mkvmerge and MP4Box write the DV
+  configuration from the stream; the validate step blocks an output MediaInfo doesn't find 8.1 in.
+- A profile 7 FEL (`hdr.bakes_fel`) is baked: the index lane (`index_steps` with the source's video) adds
+  `dovi.el` (`ffmpeg ... | dovi_tool demux --el-only` -> `dv_el.hevc`), `dovi.el_mkv` (mkvmerge with the
+  source's default duration -> `dv_el.mkv`, so the source filter can seek it) and, for FFMS2, `dovi.el_index`
+  (L-SMASH indexes both when the index step opens the script). The script's generated head bakes it right after
+  `clip = src` (`script.bake_lines`, felbaker's `fel.Bake`: 16-bit in, 12-bit out, `_Range` set to limited), so
+  the preview and the encode see the same picture; stage "source" (auto crop) leaves it out. BestSource blocks
+  (it counts 2 frames fewer than FFMS2 / L-SMASH on the test file). The encode's HDR10 SEI comes from the RPU
+  (`hdr.fel_color`: "RPU mastering display", then L1's MaxCLL / MaxFALL, else L6, else the source's): the
+  encode steps carry `Step.refresh`, which `run_steps` calls when their turn comes, after `dovi.rpu` wrote the
+  RPU; before that (the Encoder tab) they show the source's values.
 - The plan is container-neutral: tracks carry plain flags (default, forced, hearing impaired,
   commentary, original, visual impaired), languages and titles. The job's container
   (`JobSpec.container()`: its `MuxSettings.container` when the profile lists it in `containers`,

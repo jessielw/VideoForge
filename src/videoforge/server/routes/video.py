@@ -10,14 +10,16 @@ a job never starts reading a whole remux.
 from __future__ import annotations
 
 from contextlib import AbstractContextManager, nullcontext
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
 from videoforge.core.job import JobSpec
+from videoforge.core.pipeline.build import baked_el, indexed
 from videoforge.core.plan_io import to_json
 from videoforge.core.video.preview import FrameError, Preview, PreviewError
-from videoforge.core.video.script import build_script, index_exists, script_parts
+from videoforge.core.video.script import build_script, script_parts
 from videoforge.core.video.settings import Crop
 from videoforge.core.video.vs import ScriptError
 from videoforge.server.queue import Entry, JobQueue
@@ -44,18 +46,19 @@ def _loading(e: Entry, preview: Preview, script: str, slot: str) -> AbstractCont
 
 
 def _indexed(e: Entry) -> None:
-    s = e.spec
-    if e.indexing or not index_exists(s.inputs.source, s.video.source_filter, s.work_dir):
+    if e.indexing or not indexed(e.spec, e.source_video):
         raise HTTPException(409, "The source isn't indexed yet: index it first (Video tab, or Index in the queue)")
 
 
 def script_for(e: Entry, stage: Stage) -> str:
-    return _script(e.spec, stage)
+    return _script(e.spec, stage, baked_el(e.spec, e.source_video))
 
 
-def _script(spec: JobSpec, stage: Stage) -> str:
+def _script(spec: JobSpec, stage: Stage, el: Path | None = None) -> str:
+    """The job's script at stage; el is a FEL's enhancement layer it bakes in (stage "source" leaves it out:
+    auto crop reads the base layer, the same size)."""
     spec.work_dir.mkdir(parents=True, exist_ok=True)  # the index lives there
-    return build_script(spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage)
+    return build_script(spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage, el=el)
 
 
 def _slot(spec: JobSpec, stage: Stage) -> str:
@@ -80,9 +83,15 @@ def _failed(ex: Exception) -> HTTPException:
 def script(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
     """The script, and its parts: head and tail are generated, body is what the user edits
     (the custom body, or the lines crop/resize/filters make). Line numbers count from the head."""
-    spec = _entry(request, job_id).spec
+    e = _entry(request, job_id)
+    spec = e.spec
     head, body, tail = script_parts(
-        spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage
+        spec.video,
+        spec.inputs.source,
+        spec.work_dir,
+        depth=spec.encoder.depth,
+        stage=stage,
+        el=baked_el(spec, e.source_video),
     )
     return {
         "script": "\n".join(head + body + tail) + "\n",
@@ -105,7 +114,12 @@ def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, A
         message = ex.message
         spec = e.spec
         head, body, _ = script_parts(
-            spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage
+            spec.video,
+            spec.inputs.source,
+            spec.work_dir,
+            depth=spec.encoder.depth,
+            stage=stage,
+            el=baked_el(spec, e.source_video),
         )
         if ex.line and ex.line > len(head) + len(body):
             message += " (in the generated end of the script: the body must leave a video clip in `clip`)"

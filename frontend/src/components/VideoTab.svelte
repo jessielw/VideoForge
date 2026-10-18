@@ -503,10 +503,13 @@
             <p class="text-sm">{hdr.join(' · ')}</p>
             {#if job.tracks?.video?.hdr?.dv_profile}
               {@const dv = job.tracks.video.hdr}
-              {#if dv.dv_profile === 8 && dv.dv_compat !== 4 || dv.dv_profile === 7 && dv.dv_el === 'MEL'}
+              {#if dv.dv_profile === 8 && dv.dv_compat !== 4 || dv.dv_profile === 7 && (dv.dv_el === 'MEL' || dv.dv_el === 'FEL')}
                 <p class="text-xs text-muted-foreground">Dolby Vision goes into an x265 encode as 8.1 (Encoder tab: Dolby Vision from the source), its active area following the crop and resize.</p>
+                {#if dv.dv_el === 'FEL'}
+                  <p class="text-xs text-muted-foreground">The FEL's enhancement layer is baked into the picture: the preview shows it baked, auto crop reads the base layer.</p>
+                {/if}
               {:else}
-                <p class="text-xs text-muted-foreground">This Dolby Vision ({dv.dv_profile === 5 ? 'profile 5' : dv.dv_profile === 7 ? 'FEL' : '8.4, HLG'}) isn't carried into the encode yet.</p>
+                <p class="text-xs text-muted-foreground">This Dolby Vision ({dv.dv_profile === 5 ? 'profile 5' : dv.dv_profile === 7 ? 'profile 7, enhancement layer not read' : '8.4, HLG'}) isn't carried into the encode yet.</p>
               {/if}
             {/if}
             {#if job.tracks?.video?.hdr?.hdr10plus}

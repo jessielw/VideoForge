@@ -109,6 +109,18 @@ def test_slots_through_the_worker(preview):
     assert worker.has("a:output", BLANK.format(n=7)) and not worker.has("a:output", BLANK.format(n=6))
 
 
+def test_release_frees_a_jobs_clips(preview):
+    preview.frame(BLANK.format(n=6), 1, slot="a:output")
+    preview.frame(BLANK.format(n=6), 1, slot="a:source")
+    preview.frame(BLANK.format(n=6), 1, slot="b:output")
+    preview.release(["a"])
+    worker = preview._worker
+    assert not worker.has("a:output", BLANK.format(n=6)) and not worker.has("a:source", BLANK.format(n=6))
+    assert worker.has("b:output", BLANK.format(n=6))
+    assert preview.frame(BLANK.format(n=6), 1, slot="a:output")[2] == 6  # loads again
+    Preview().release(["a"])  # no worker: nothing to do
+
+
 def test_an_idle_worker_stops_and_the_next_request_starts_one():
     p = Preview(idle_stop=1)
     try:

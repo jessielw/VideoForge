@@ -48,7 +48,7 @@ from videoforge.core.job import (
     probe_spec,
 )
 from videoforge.core.jobs import ProbedInputs, external_tracks
-from videoforge.core.models import AudioMatch, JobInputs, Overrides, Plan, Severity, track_key
+from videoforge.core.models import AudioMatch, JobInputs, Overrides, Plan, Severity, VideoInfo, track_key
 from videoforge.core.notify import Sender, send as notify_send
 from videoforge.core.pipeline.build import index_steps, job_output
 from videoforge.core.pipeline.reuse import ReuseOffer, reuse_offers
@@ -126,6 +126,13 @@ class Entry:
         return self.spec.id
 
     @property
+    def source_video(self) -> VideoInfo | None:
+        """The source's video as probed (None before the probe)."""
+        if self.plan is not None:
+            return self.plan.source.video
+        return self.probed.source.video if self.probed is not None else None
+
+    @property
     def busy(self) -> bool:
         return self.queued or self.running
 
@@ -172,6 +179,7 @@ class Services:
     probe: Callable[[JobSpec, AppConfig], ProbedInputs] = probe_spec
     run: Callable[..., JobResult] = run_job
     detect_crop: Callable[[JobSpec], Crop] | None = None  # reads the source (VapourSynth)
+    release_preview: Callable[[list[str]], None] | None = None  # frees the jobs' preview clips (their open files)
     runner: Callable[..., None] = process.run  # the index lane's tool runner
     versions: Callable[[Tools, Sequence[str]], dict[str, str]] | None = tool_versions  # for job records
     send_notification: Sender = notify_send  # one message to one Apprise URL
@@ -543,6 +551,8 @@ class JobQueue:
                 self._order.remove(job_id)
                 self.store.delete_job(job_id)
                 removed.append(job_id)
+        if removed and self.services.release_preview is not None:
+            self.services.release_preview(removed)  # their work folders may be deleted next
         for job_id in removed:
             self.events.publish("job.removed", id=job_id)
         return removed
@@ -1009,8 +1019,11 @@ class JobQueue:
             if missing := missing_inputs(e.spec):
                 raise ToolError("Missing input: " + ", ".join(str(p) for p in missing))
             with self._lock:
-                steps = index_steps(e.spec, self.app)
+                steps = index_steps(e.spec, self.app, e.source_video)
                 cancel = self._index_cancel
+                sharing = [o.id for o in self._entries.values() if o.spec.work_dir == e.spec.work_dir]
+            if self.services.release_preview is not None:
+                self.services.release_preview(sharing)  # a step may write a file a preview clip holds open
             if cancel is None:
                 raise RuntimeError("index lane: no cancel event")
             if not e.source_lock.acquire(blocking=False):

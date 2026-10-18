@@ -13,6 +13,7 @@ an existing encode has no script/index/chapters/video steps.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from functools import partial
 import os
 from pathlib import Path
 import sys
@@ -24,7 +25,7 @@ from videoforge.core.execute.audio import audio_command
 from videoforge.core.execute.mux import MUXERS, frame_rate, split_args
 from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
-from videoforge.core.models import Plan
+from videoforge.core.models import Plan, VideoColor, VideoInfo
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.video import hdr
 from videoforge.core.video.encoders import encoder_command, vspipe_command
@@ -80,15 +81,55 @@ def mp4_chapters_step(plan: Plan, work: Path) -> Step | None:
     return Step("chapters.mp4", "Chapters for MP4", call=convert, outputs=(out,), inputs=(src,), weight=0.05)
 
 
-def index_steps(spec: JobSpec, app: AppConfig) -> list[Step]:
-    """Write the script and index the source: a job's first steps, and all a batch index runs."""
+def baked_el(spec: JobSpec, video: VideoInfo | None) -> Path | None:
+    """The enhancement layer the job's script bakes in (hdr.bakes_fel), in its work folder; None without one."""
+    return spec.work_dir / hdr.DV_EL if spec.encodes_video and hdr.bakes_fel(video, spec.encoder) else None
+
+
+def job_script(spec: JobSpec, video: VideoInfo | None) -> str:
+    """The job's VapourSynth script, as the encode runs it."""
+    return build_script(
+        spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, el=baked_el(spec, video)
+    )
+
+
+def index_steps(spec: JobSpec, app: AppConfig, video: VideoInfo | None = None) -> list[Step]:
+    """Write the script and index the source: a job's first steps, and all a batch index runs. video is the
+    source's (the plan's): a FEL to bake adds its enhancement layer's demux, MKV and index."""
     work, source = spec.work_dir, spec.inputs.source
-    text = build_script(spec.video, source, work, depth=spec.encoder.depth)
+    text = job_script(spec, video)
     script = work / "video.vpy"
     source_filter = spec.video.source_filter
+    el = baked_el(spec, video)
 
     def write_script(_log: LogFn) -> None:
         script.write_text(text, encoding="utf-8")
+
+    steps = [
+        Step("script", "Write the VapourSynth script", call=write_script, outputs=(script,), key=text, weight=0.01)
+    ]
+    if el is not None and video is not None:
+        if not video.default_duration_ns:
+            raise ToolError("The source has no frame rate to time its enhancement layer by")
+        hevc = work / hdr.DV_EL_HEVC
+        steps += [
+            Step(
+                "dovi.el",
+                "Dolby Vision enhancement layer (dovi_tool demux)",
+                argvs=hdr.el_argvs(app.tools, source, hevc),
+                outputs=(hevc,),
+                inputs=(source,),
+                weight=1,
+            ),
+            Step(
+                "dovi.el_mkv",
+                "Enhancement layer into an MKV (mkvmerge)",
+                argvs=(hdr.el_mkv_argv(app.tools.mkvmerge, hevc, el, video.default_duration_ns),),
+                outputs=(el,),
+                inputs=(hevc,),
+                weight=0.3,
+            ),
+        ]
 
     if source_filter is SourceFilter.FFMS2:
         # FFMS2's Source() indexes silently: build its index first, with progress (core/video/ffindex.py).
@@ -97,9 +138,9 @@ def index_steps(spec: JobSpec, app: AppConfig) -> list[Step]:
         inputs: tuple[Path, ...] = (source,)
     else:
         # Opening the script makes the source filter build its index (minutes on a big remux).
+        # With a FEL to bake, the script opens its enhancement layer too: both are indexed.
         argv, inputs = (app.tools.vspipe, "--info", str(script), "-"), (source, script)
-    return [
-        Step("script", "Write the VapourSynth script", call=write_script, outputs=(script,), key=text, weight=0.01),
+    steps.append(
         # Reused while the index is there (BestSource names its file after the track).
         Step(
             "index",
@@ -108,16 +149,36 @@ def index_steps(spec: JobSpec, app: AppConfig) -> list[Step]:
             inputs=inputs,
             key=source_filter.value,
             weight=2,
-            present=lambda: index_exists(source, source_filter, work),
-        ),
-    ]
+            present=lambda: indexed(spec, video),
+        )
+    )
+    if el is not None and source_filter is SourceFilter.FFMS2:
+        el_index = (sys.executable, "-m", "videoforge.core.video.ffindex", str(el), str(ffms2_index(el, work)))
+        steps.append(
+            Step(
+                "dovi.el_index",
+                "Index the enhancement layer",
+                argvs=(el_index,),
+                inputs=(el,),
+                weight=0.5,
+                present=lambda: index_exists(el, source_filter, work),
+            )
+        )
+    return steps
+
+
+def indexed(spec: JobSpec, video: VideoInfo | None) -> bool:
+    """Whether the job's source (and a FEL's enhancement layer it bakes) is indexed: opening its video is quick."""
+    s, el = spec.video.source_filter, baked_el(spec, video)
+    return index_exists(spec.inputs.source, s, spec.work_dir) and (el is None or index_exists(el, s, spec.work_dir))
 
 
 def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
     work, source, enc = spec.work_dir, spec.inputs.source, spec.encoder
     script = work / "video.vpy"
-    text = build_script(spec.video, source, work, depth=enc.depth)
-    steps = index_steps(spec, app)
+    v = plan.source.video
+    text = job_script(spec, v)
+    steps = index_steps(spec, app, v)
     qpfile = None
     if spec.makes_chapters:
         files = qpf_paths(work)
@@ -145,7 +206,6 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
         qpfile = files.qpfile
 
     exe = app.tools.x265 if enc.encoder is Encoder.X265 else app.tools.x264
-    v = plan.source.video
     sar = spec.video.output_sar(v.width, v.height, v.sar) if v is not None else None
     color = v.color if v is not None else None
     pipe = tuple(vspipe_command(app.tools.vspipe, script))
@@ -177,9 +237,9 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
             ),
         ]
         shared += (meta,)
-    dolby_vision = None
+    dolby_vision, source_rpu = None, work / hdr.DV_SOURCE_RPU
     if hdr.keeps_dv(v, enc) and v is not None:
-        source_rpu, dolby_vision = work / hdr.DV_SOURCE_RPU, work / hdr.DV_RPU
+        dolby_vision = work / hdr.DV_RPU
         rpu, width, height = dolby_vision, v.width, v.height
         order = [s.category.value for s in spec.video.filters if s.category.value in ("crop", "resize")]
 
@@ -220,33 +280,35 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
         shared += (rpu,)
     out = spec.video_output
     name = enc.encoder.value
-    if enc.passes == 2:
+
+    def encodes(color: VideoColor | None) -> list[Step]:
+        command = partial(
+            encoder_command,
+            exe,
+            enc,
+            qpfile=qpfile,
+            sar=sar,
+            color=color,
+            hdr10plus=hdr10plus,
+            dolby_vision=dolby_vision,
+        )
+        if enc.passes != 2:
+            argv = command(output=out)
+            return [
+                Step(
+                    "video",
+                    f"Video ({name})",
+                    argvs=(pipe, tuple(argv)),
+                    outputs=(out,),
+                    inputs=shared,
+                    key=text,
+                    weight=60,
+                )
+            ]
         stats = work / "video.stats"
-        first = encoder_command(
-            exe,
-            enc,
-            output=Path(os.devnull),
-            pass_number=1,
-            stats=stats,
-            qpfile=qpfile,
-            sar=sar,
-            color=color,
-            hdr10plus=hdr10plus,
-            dolby_vision=dolby_vision,
-        )
-        second = encoder_command(
-            exe,
-            enc,
-            output=out,
-            pass_number=2,
-            stats=stats,
-            qpfile=qpfile,
-            sar=sar,
-            color=color,
-            hdr10plus=hdr10plus,
-            dolby_vision=dolby_vision,
-        )
-        steps += [
+        first = command(output=Path(os.devnull), pass_number=1, stats=stats)
+        second = command(output=out, pass_number=2, stats=stats)
+        return [
             Step(
                 "video.pass1",
                 f"Video pass 1/2 ({name})",
@@ -266,22 +328,22 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
                 weight=60,
             ),
         ]
-    else:
-        argv = encoder_command(
-            exe, enc, output=out, qpfile=qpfile, sar=sar, color=color, hdr10plus=hdr10plus, dolby_vision=dolby_vision
-        )
-        steps.append(
-            Step(
-                "video",
-                f"Video ({name})",
-                argvs=(pipe, tuple(argv)),
-                outputs=(out,),
-                inputs=shared,
-                key=text,
-                weight=60,
-            )
-        )
-    return steps
+
+    if baked_el(spec, v) is None or color is None:
+        return steps + encodes(color)
+    # A baked FEL's HDR10 values come from the source's RPU, read when the encode's turn comes (the steps
+    # before it extract the RPU); until then (the Encoder tab before a run) the source's.
+    source_color, dovi_tool = color, app.tools.dovi_tool
+
+    def fel_color() -> VideoColor:
+        if not source_rpu.is_file():
+            return source_color
+        return hdr.fel_color(source_color, hdr.rpu_summary(dovi_tool, source_rpu))
+
+    def refreshed(k: int) -> Step:
+        return replace(encodes(fel_color())[k], refresh=lambda: refreshed(k))
+
+    return steps + [refreshed(k) for k in range(len(encodes(color)))]
 
 
 def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, output: Path) -> JobSteps:

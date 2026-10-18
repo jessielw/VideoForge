@@ -138,7 +138,11 @@ def main() -> None:
 
     def run(req: dict[str, Any]) -> None:
         try:
-            reply, payload = _handle(cache, req)
+            if req["op"] == "release":
+                cache.drop(req["prefixes"])
+                reply, payload = {}, b""
+            else:
+                reply, payload = _handle(cache, req)
         except Exception as e:  # reported to the server, the worker carries on
             reply, payload = {"error": "internal", "message": f"{type(e).__name__}: {e}"}, b""
         with lock:
@@ -192,6 +196,11 @@ class _Worker:
     def has(self, slot: str, script: str) -> bool:
         with self._lock:
             return self._loaded.get(slot) == script
+
+    def forget(self, prefixes: tuple[str, ...]) -> None:
+        with self._lock:
+            for slot in [s for s in self._loaded if s.startswith(prefixes)]:
+                del self._loaded[slot]
 
     def loaded(self, slot: str, script: str) -> None:
         with self._lock:
@@ -283,6 +292,20 @@ class Preview:
             worker.stop(reason)
 
     close = restart
+
+    def release(self, job_ids: list[str]) -> None:
+        """Free the jobs' clips (and the files their source filters hold open: a work folder about to be
+        deleted, or an enhancement layer the index lane writes again). Nothing to do without a worker."""
+        prefixes = [f"{i}:" for i in job_ids]
+        with self._lock:
+            worker = self._worker
+        if worker is None or worker.dead or not prefixes:
+            return
+        worker.forget(tuple(prefixes))
+        try:
+            worker.call({"op": "release", "prefixes": prefixes}, self.frame_timeout)
+        except (PreviewError, FutureTimeout) as e:
+            log.info("The preview didn't release %s: %s", ", ".join(job_ids), e)
 
     def has(self, script: str, slot: str | None = None) -> bool:
         """Whether the worker holds this clip now: a request for it won't load (or index) the source."""

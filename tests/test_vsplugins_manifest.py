@@ -7,7 +7,7 @@ import re
 import tomllib
 
 MANIFEST = tomllib.loads((Path(__file__).parents[1] / "vsplugins" / "manifest.toml").read_text(encoding="utf-8"))
-BUILDS = {"meson", "cmake", "autotools", "make", "zig", "cc"}
+BUILDS = {"meson", "cmake", "autotools", "make", "zig", "cc", "download"}
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
@@ -25,7 +25,8 @@ def test_every_plugin_has_a_source_a_build_and_a_windows_download():
             assert re.fullmatch(r"\d+\.\d+\.\d+", p["zig"]), p["name"]
         if p["build"] == "cc":
             assert p["sources"] and p["library"], p["name"]
-        for d in downloads(p):
+        linux = [p["linux64"]] if p["build"] == "download" else []
+        for d in downloads(p) + linux:
             assert d["url"].startswith("https://") and SHA256.fullmatch(d["sha256"]), p["name"]
             if d["url"].endswith((".zip", ".whl", ".7z")):
                 assert d["files"], f"{p['name']}: an archive needs `files`"

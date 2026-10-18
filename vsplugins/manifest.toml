@@ -6,7 +6,7 @@
 # [[plugin]]
 #   name, namespace (vs.core.<namespace>), repo, ref (a tag or a commit), license
 #   build      meson | cmake | autotools (autogen.sh/autoreconf, configure, make) | make | zig
-#              | cc (compile `sources` into one library)
+#              | cc (compile `sources` into one library) | download (the `linux64` release build)
 #   subdir     where the build files are (default: the repo's top)
 #   submodules true for all of the repo's submodules, or a list of their paths
 #   before     shell commands run in the repo before the build (e.g. a library it links statically)
@@ -22,6 +22,7 @@
 #   files      more files the plugin reads next to it (copied from the source tree)
 #   win64      the Windows build: {url, sha256, files = {path in the plugin folder = path in the archive}}, or
 #              a list of them; a download that isn't an archive is the file itself
+#   linux64    for download: the Linux build, as win64
 #
 # [[script]] is a Python filter script (one module: name, url, sha256, license) that scripts/fetch_plugins.py
 # puts in site-packages (for the Docker image too), with `replace` = {old = new} applied to its text; the
@@ -334,6 +335,20 @@ ref = "R7"
 license = "MIT"
 build = "meson"
 win64 = { url = "https://files.pythonhosted.org/packages/7d/68/3884378ad99b45479cbf991aee3ab9e43d1eeee8386e50dce817e4509aa1/vapoursynth_subtext-7.0-py3-none-win_amd64.whl", sha256 = "b8fe2c024d2f5d15eeb000ee7441105826ecd66d572615dbdfb8efb0e71e6b76", files = { "subtext.dll" = "vapoursynth/plugins/subtext.dll" } }
+
+# --- Dolby Vision -------------------------------------------------------------------------------------
+
+# Bakes a profile 7 FEL's enhancement layer into the base layer (core/video/hdr.py). A source build needs
+# Rust and cargo-c: the release builds (AVX2) are used on both platforms.
+[[plugin]]
+name = "felbaker"
+namespace = "fel"
+repo = "https://github.com/bbeny123/felbaker"
+ref = "1.0.0"
+license = "GPL-3.0"
+build = "download"
+linux64 = { url = "https://github.com/bbeny123/felbaker/releases/download/1.0.0/felbaker-linux-x64-avx2.zip", sha256 = "71eae3e89990f3e4eff7085a884c253e00c848ce86ff8b213b26445a7090ba04", files = { "libfelbaker.so" = "libfelbaker.so" } }
+win64 = { url = "https://github.com/bbeny123/felbaker/releases/download/1.0.0/felbaker-win-x64-avx2.zip", sha256 = "d98be96bc8f5e68785c0089fc6eab9e8a678f2bff3bb1cd25684d37c2f1adb79", files = { "felbaker.dll" = "felbaker.dll" } }
 
 # --- Python filter scripts ----------------------------------------------------------------------------
 

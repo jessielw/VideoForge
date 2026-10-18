@@ -52,7 +52,15 @@ source), or in Docker on Linux.
   its active area (L5) follows the crop and resize, x265 writes it. Checked like HDR10+ (the script's frames
   before the encode, 8.1 in the output). It needs a 10-bit encode, `--vbv-maxrate` and `--vbv-bufsize` (x265's
   rule) and a mastering display; the job blocks without them. Not carried yet: profile 5 (always blocks: it has
-  no HDR10 layer), 8.4 (HLG) and FEL (it has to be baked into the picture); x264 drops it (a warning).
+  no HDR10 layer) and 8.4 (HLG); x264 drops it (a warning).
+- **Dolby Vision FEL.** A profile 7 FEL's enhancement layer is baked into the picture (felbaker, now among the
+  bundled plugins) and its RPU goes on as 8.1: the index lane demuxes the layer (dovi_tool), muxes it into an
+  MKV with the source's frame rate and indexes it; the script bakes it right after the source, so the preview
+  shows the baked picture (auto crop reads the base layer). The HDR10 values come from the RPU: the mastering
+  display's luminance, and MaxCLL / MaxFALL from its L1 (else L6, else the source's). Needs FFMS2 or L-SMASH
+  (BestSource counts frames differently on such sources: it blocks). A profile 7 whose enhancement layer
+  couldn't be read still blocks. The preview now lets go of a job's clips when the job is removed and before
+  the index lane works on its source, so a work folder can be deleted and the layer written again.
 - **Notifications.** Settings → Notifications sends to any service Apprise supports (Discord, Telegram, ntfy,
   Pushover, email, ...): each destination picks its events (job done, failed, cancelled, queue finished), can be
   switched off, and has a Test button that shows the service's own error.

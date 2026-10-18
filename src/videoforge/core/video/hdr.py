@@ -15,12 +15,20 @@ writes the source's RPU to the work folder. An edit step moves its L5 active are
 the job's crop and resize (DoviCrop's: `dovi_tool export`, each offset less the crop, at least 0) and makes it
 profile 8.1 (`dovi_tool editor`, mode 2); a check compares its frames with the script's, as for HDR10+; x265
 writes it (`--dolby-vision-profile 8.1 --dolby-vision-rpu`). x265 needs VBV for it (HRD), a 10-bit encode and
-a mastering display. Profile 5 (no HDR10 layer), 8.4 (HLG) and a FEL (its enhancement layer has to be baked
-into the picture) aren't carried yet.
+a mastering display. Profile 5 (no HDR10 layer) and 8.4 (HLG) aren't carried yet.
+
+A profile 7 FEL's enhancement layer is baked into the picture (StaxRip's flow, felbaker's fel.Bake): the index
+lane demuxes it (`dovi_tool demux --el-only`), muxes it into an MKV with the source's frame duration (so the
+source filter can seek it) and indexes it; the script's head bakes it into the base layer right after the
+source (script.bake_lines), and the RPU goes on as above. The HDR10 SEI then comes from the RPU, as
+Parse-Fel-Master-Data and DoVi_Scripts do it (fel_color): the mastering display's luminance from "RPU
+mastering display" and MaxCLL / MaxFALL from the whole RPU's L1 (measured on the reconstructed picture, which
+can be brighter than the base layer), else L6, else the source's.
 """
 
 from __future__ import annotations
 
+from dataclasses import replace
 from fractions import Fraction
 import functools
 import json
@@ -35,9 +43,9 @@ from typing import Any
 
 from videoforge.core.config import Tools
 from videoforge.core.execute.process import LogFn, ToolError, run
-from videoforge.core.models import Issue, Severity, SourceInfo, VideoHdr, VideoInfo
+from videoforge.core.models import Issue, Severity, SourceInfo, VideoColor, VideoHdr, VideoInfo
 from videoforge.core.tools import locate
-from videoforge.core.video.settings import Encoder, EncoderSettings, FilterCategory, VideoSettings
+from videoforge.core.video.settings import Encoder, EncoderSettings, FilterCategory, SourceFilter, VideoSettings
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +53,19 @@ logger = logging.getLogger(__name__)
 HDR10PLUS_JSON = "hdr10plus.json"
 DV_SOURCE_RPU = "dv_source.bin"  # the source's RPU
 DV_RPU = "dv_rpu.bin"  # the encode's: cropped, resized, profile 8.1
+DV_EL_HEVC = "dv_el.hevc"  # a FEL's enhancement layer, as demuxed
+DV_EL = "dv_el.mkv"  # the same in an MKV, which the source filter opens
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 # vspipe --info's and dovi_tool info -s's; process.run tags lines "[vspipe] "
 _FRAMES = re.compile(r"(?:^|\] )\s*Frames:\s*(\d+)", re.MULTILINE)
 _L5 = ("left", "right", "top", "bottom")
 _PROFILE = re.compile(r"Profile (\d+)(?:\.(\d+))?")
 _DVHE = re.compile(r"\b(?:dvhe|dvh1|dvav|dva1|dav1)\.(\d+)", re.IGNORECASE)
+# dovi_tool info -s: "RPU mastering display: 0.0050/4000 nits", "RPU content light level (L1): MaxCLL: 0.01 nits,
+# MaxFALL: 0.00 nits", "L6 metadata: Mastering display: 0.0050/4000 nits. MaxCLL: 2573 nits, MaxFALL: 684 nits"
+_RPU_DISPLAY = re.compile(r"RPU mastering display:\s*([\d.]+)/([\d.]+) nits")
+_RPU_L1 = re.compile(r"RPU content light level[^:]*:\s*MaxCLL:\s*([\d.]+) nits,\s*MaxFALL:\s*([\d.]+) nits")
+_RPU_L6 = re.compile(r"L6 metadata:.*?MaxCLL:\s*([\d.]+) nits,\s*MaxFALL:\s*([\d.]+) nits")
 
 
 def _parts(track: Any, name: str) -> list[str]:
@@ -158,6 +173,11 @@ def keeps_dv(video: VideoInfo | None, settings: EncoderSettings) -> bool:
     )
 
 
+def bakes_fel(video: VideoInfo | None, settings: EncoderSettings) -> bool:
+    """Whether the encode bakes a profile 7 FEL's enhancement layer into the picture (and carries its RPU)."""
+    return keeps_dv(video, settings) and video is not None and video.hdr.dv_profile == 7 and video.hdr.dv_el == "FEL"
+
+
 def _missing_tools(tools: Tools | None, names: tuple[str, ...]) -> list[str]:
     return [n for n in names if not locate(getattr(tools, n))] if tools is not None else []
 
@@ -206,11 +226,21 @@ def _dv_issues(
 
     if dv.dv_compat == 4:
         block("hdr.dv_hlg", "Dolby Vision 8.4 (HLG) isn't carried yet: unticked, the encode keeps the HLG layer")
-    if dv.dv_profile == 7 and dv.dv_el != "MEL":
-        bake = "a FEL's enhancement layer has to be baked into the picture, which isn't supported yet"
-        if dv.dv_el != "FEL":
-            bake = f"The enhancement layer's kind (FEL or MEL) couldn't be read, and {bake}"
-        block("hdr.dv_fel", f"{bake[0].upper()}{bake[1:]}: unticked, the encode keeps the base layer")
+    if dv.dv_profile == 7 and dv.dv_el not in ("MEL", "FEL"):
+        block(
+            "hdr.dv_el",
+            "The enhancement layer's kind (FEL or MEL) couldn't be read (is dovi_tool set?): unticked, the encode "
+            "keeps the base layer",
+        )
+    tools_needed: tuple[str, ...] = ("ffmpeg", "dovi_tool")
+    if dv.dv_profile == 7 and dv.dv_el == "FEL":
+        tools_needed += ("mkvmerge",)
+        if video_settings is not None and video_settings.source_filter is SourceFilter.BESTSOURCE:
+            block(
+                "hdr.dv_bake_bs",
+                "Baking a FEL needs FFMS2 or L-SMASH as the source filter (BestSource counts this source's frames "
+                "differently, so the enhancement layer and the RPU would be out of step)",
+            )
     if settings.depth != 10:
         block("hdr.dv_depth", "Dolby Vision needs a 10-bit encode: set the bit depth")
     flags = _flags(settings)
@@ -227,7 +257,7 @@ def _dv_issues(
         block(
             "hdr.dv_custom", "Dolby Vision follows the Video tab's crop and resize, and a custom script's aren't known"
         )
-    if missing := _missing_tools(tools, ("ffmpeg", "dovi_tool")):
+    if missing := _missing_tools(tools, tools_needed):
         block("tools.missing", f"Dolby Vision needs {' and '.join(missing)}: set it in Settings")
     return out
 
@@ -308,6 +338,47 @@ def rpu_frames(dovi_tool: str, rpu: Path) -> int:
 def check_rpu_frames(vspipe: str, dovi_tool: str, script: Path, rpu: Path, log: LogFn) -> None:
     """Raise ToolError when the script's frame count isn't the RPU's."""
     _same_frames(script_frames(vspipe, script), rpu_frames(dovi_tool, rpu), "Dolby Vision RPU", "Dolby Vision", log)
+
+
+def el_argvs(tools: Tools, source: Path, out: Path) -> tuple[tuple[str, ...], ...]:
+    """A profile 7 source's enhancement layer into a raw HEVC file: ffmpeg | dovi_tool demux --el-only."""
+    demux = (tools.dovi_tool, "demux", "--el-only", "-", "-e", str(out))
+    return (tuple(video_stream_argv(tools.ffmpeg, source)), demux)
+
+
+def el_mkv_argv(mkvmerge: str, hevc: Path, out: Path, default_duration_ns: int) -> tuple[str, ...]:
+    """The raw enhancement layer into an MKV with the source's frame duration (raw HEVC has no timestamps, and
+    the source filters seek by them)."""
+    return (mkvmerge, "-o", str(out), "--default-duration", f"0:{default_duration_ns}ns", str(hevc))
+
+
+def rpu_summary(dovi_tool: str, rpu: Path) -> str:
+    """`dovi_tool info -s` of an RPU file. Cached per file, size and mtime (the encode's command reads it)."""
+    st = rpu.stat()
+    return _summary(dovi_tool, str(rpu), st.st_size, st.st_mtime_ns)
+
+
+@functools.lru_cache(maxsize=16)
+def _summary(dovi_tool: str, rpu: str, _size: int, _mtime: int) -> str:
+    lines: list[str] = []
+    run([(dovi_tool, "info", "-s", "-i", rpu)], lines.append)
+    return "\n".join(lines)
+
+
+def fel_color(color: VideoColor, summary: str) -> VideoColor:
+    """A baked FEL's HDR10 values from its RPU's summary (rpu_summary), as Parse-Fel-Master-Data and DoVi_Scripts
+    take them: the mastering display's primaries from the source (MediaInfo) and its luminance from "RPU
+    mastering display"; MaxCLL / MaxFALL from L1 (the whole RPU's), else L6, else the source's."""
+    out = replace(color)
+    if (m := _RPU_DISPLAY.search(summary)) and color.master_display:
+        lo, hi = float(m.group(1)), float(m.group(2))
+        primaries = color.master_display.split("L(")[0]
+        out.master_display = f"{primaries}L({math.floor(hi * 10000)},{math.floor(lo * 10000)})"
+    for pattern in (_RPU_L1, _RPU_L6):
+        if (m := pattern.search(summary)) and int(float(m.group(1))) > 0:
+            out.max_cll, out.max_fall = int(float(m.group(1))), int(float(m.group(2)))
+            break
+    return out
 
 
 def l5_offsets(offsets: dict[str, Any], video_settings: VideoSettings, width: int, height: int) -> dict[str, int]:

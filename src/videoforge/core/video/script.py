@@ -6,11 +6,12 @@ Layout of every script:
     core = vs.core
     src = <source filter>(<source>, index in the work folder)
     clip = src
+    <a FEL's enhancement layer baked in (bake_lines), when the job bakes one>
     <the filter chain: crop, resize and filters in order>  or  <custom body>
     <bit depth conversion for the encoder>
     clip.set_output()
 
-`stage="source"` stops after `clip = src` (the uncropped frame, for auto-crop).
+`stage="source"` stops after `clip = src` (the uncropped frame, for auto-crop; the base layer only).
 `stage="crop"` is the crop editor's view: the output, less a resize after the crop, with the cropped-off
 margins stacked back on (vs.crop_view), so the crop lines sit on the uncropped frame's pixels while the
 picture between them is the real output. Only the preview worker runs it (it imports VideoForge).
@@ -31,14 +32,32 @@ def _q(path: Path | str) -> str:
     return repr(str(path))  # a valid Python string literal for any Windows path
 
 
-def source_line(source: Path, source_filter: SourceFilter, index_dir: Path) -> str:
+def source_line(source: Path, source_filter: SourceFilter, index_dir: Path, name: str = "src") -> str:
     if source_filter is SourceFilter.BESTSOURCE:
         # cachemode 4: always read/write the index at cachepath + track + extension.
         index = index_dir / source.name
-        return f"src = core.bs.VideoSource({_q(source)}, cachemode=4, cachepath={_q(index)})"
+        return f"{name} = core.bs.VideoSource({_q(source)}, cachemode=4, cachepath={_q(index)})"
     if source_filter is SourceFilter.LSMASH:
-        return f"src = core.lsmas.LWLibavSource({_q(source)}, cachefile={_q(index_dir / (source.name + '.lwi'))})"
-    return f"src = core.ffms2.Source({_q(source)}, cachefile={_q(ffms2_index(source, index_dir))})"
+        return f"{name} = core.lsmas.LWLibavSource({_q(source)}, cachefile={_q(index_dir / (source.name + '.lwi'))})"
+    return f"{name} = core.ffms2.Source({_q(source)}, cachefile={_q(ffms2_index(source, index_dir))})"
+
+
+def bake_lines(el: Path, source_filter: SourceFilter, index_dir: Path) -> list[str]:
+    """A profile 7 FEL's enhancement layer (el, an MKV) baked into the base layer `clip` (felbaker's fel.Bake,
+    StaxRip's lines): the layer at the base layer's size and format, both at 16 bits, baked (12-bit out, limited
+    range though the clip says full), the plugin's own frame prop dropped."""
+    return [
+        source_line(el, source_filter, index_dir, name="_vf_el"),
+        "if (_vf_el.width, _vf_el.height, _vf_el.format.id) != (clip.width, clip.height, clip.format.id):",
+        "    _vf_el = core.resize.Spline16(_vf_el, width=clip.width, height=clip.height, format=clip.format.id)",
+        "if clip.format.bits_per_sample < 16:",
+        "    _vf_m = 1 << (16 - clip.format.bits_per_sample)",
+        '    clip = core.std.Expr(clip, f"x {_vf_m} *", format=vs.YUV420P16)',
+        '    _vf_el = core.std.Expr(_vf_el, f"x {_vf_m} *", format=vs.YUV420P16)',
+        "clip = core.fel.Bake(clip, _vf_el, no_resample=1)",
+        "clip = core.std.SetFrameProps(clip, _Range=vs.RANGE_LIMITED)",
+        'clip = core.std.RemoveFrameProps(clip, props=["_FelBaker_YccToRGB"])',
+    ]
 
 
 def ffms2_index(source: Path, index_dir: Path) -> Path:
@@ -90,10 +109,17 @@ def processing_lines(settings: VideoSettings, *, crop_view: bool = False) -> lis
 
 
 def script_parts(
-    settings: VideoSettings, source: Path, index_dir: Path, *, depth: int | None = None, stage: Stage = "output"
+    settings: VideoSettings,
+    source: Path,
+    index_dir: Path,
+    *,
+    depth: int | None = None,
+    stage: Stage = "output",
+    el: Path | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
     """The script as (head, body, tail) lines. The body is the part the user edits (the filter chain
-    or the custom body); head (imports, source) and tail (depth conversion, output) are generated."""
+    or the custom body); head (imports, source, a FEL's bake when el is given) and tail (depth conversion,
+    output) are generated."""
     head = [
         "import vapoursynth as vs",
         "core = vs.core",
@@ -102,6 +128,8 @@ def script_parts(
     ]
     if stage == "source":
         return head, [], ["clip.set_output()"]
+    if el is not None:
+        head += bake_lines(el, settings.source_filter, index_dir)
     tail = []
     if depth is not None:
         tail += [
@@ -116,8 +144,15 @@ def script_parts(
 
 
 def build_script(
-    settings: VideoSettings, source: Path, index_dir: Path, *, depth: int | None = None, stage: Stage = "output"
+    settings: VideoSettings,
+    source: Path,
+    index_dir: Path,
+    *,
+    depth: int | None = None,
+    stage: Stage = "output",
+    el: Path | None = None,
 ) -> str:
-    """The script text. depth converts the output to that bit depth (dithered) when it differs."""
-    head, body, tail = script_parts(settings, source, index_dir, depth=depth, stage=stage)
+    """The script text. depth converts the output to that bit depth (dithered) when it differs; el is a FEL's
+    enhancement layer to bake in."""
+    head, body, tail = script_parts(settings, source, index_dir, depth=depth, stage=stage, el=el)
     return "\n".join(head + body + tail) + "\n"

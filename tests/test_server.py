@@ -1069,6 +1069,24 @@ class FakeIndexer:
             time.sleep(0.01)
 
 
+def test_preview_clips_are_released_before_the_index_lane_and_on_remove(tmp_path):
+    """The index lane may write a file a preview clip holds open (a FEL's enhancement layer), and a removed
+    job's work folder may be deleted next: the jobs' clips are freed first."""
+    make_files(tmp_path, "S01E01")
+    indexer = FakeIndexer()
+    released = []
+    with make_client(tmp_path, runner=indexer) as client:
+        client.app.state.queue.services.release_preview = released.append
+        [one] = add(client, tmp_path)
+        wait_for(client, one, "ready", "warn")
+        client.post("/api/queue/index", json={"ids": [one]})
+        indexer.wait(1)
+        assert wait_for(client, one, "ready", "warn")["indexed"]
+        assert released == [[one]]
+        client.post("/api/jobs/remove", json={"ids": [one], "work_dirs": True})
+        assert released == [[one], [one]]
+
+
 def test_index_lane(tmp_path):
     """Index runs the script and index steps only, one job at a time, next to the encode queue; the job's
     encode then reuses them. Its video opens at once afterwards (the summary's `indexed`)."""
