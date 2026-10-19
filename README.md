@@ -12,8 +12,8 @@ and finished steps are skipped on a rerun.
 > **Status:** 0.1.0 beta. It works end to end, but expect changes. See [CHANGELOG.md](CHANGELOG.md).
 
 Not yet: sources other than MKV (remux an MP4 or M2TS to MKV first), GPU filters, a login (see
-[Docker](#docker-linux)), Dolby Vision profile 5 and 8.4 (HLG) (profile 8.1, a MEL and a FEL go into x265 encodes as
-8.1; a FEL's enhancement layer is baked into the picture).
+[Docker](#docker-linux)), Dolby Vision 8.4 (HLG) (profile 8.1, a MEL and a FEL go into x265 encodes as 8.1, a
+profile 5 as 5; a FEL's enhancement layer is baked into the picture).
 
 ## Requirements
 

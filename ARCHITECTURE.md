@@ -43,8 +43,8 @@ src/videoforge/
                          before the job's options (vspipe's y4m carries no colour; a --no- option turns one off)
       hdr.py             Dolby Vision / HDR10+ in the source (MediaInfo -> VideoInfo.hdr; FEL or MEL from a second
                          of the RPU); HDR10+ into x265 (hdr10plus_tool's JSON, --dhdr10-info) and Dolby Vision
-                         as 8.1 (dovi_tool's RPU, its L5 moved by the crop and resize); a FEL's enhancement layer
-                         (demux, MKV) and its HDR10 values from the RPU; their frame checks
+                         as 8.1, or a profile 5 as 5 (dovi_tool's RPU, its L5 moved by the crop and resize); a
+                         FEL's enhancement layer (demux, MKV) and its HDR10 values from the RPU; their frame checks
       qpf.py             AutoQPF: chapters -> qpf + chapter file
       vfr.py             A VFR source's timestamps (mkvextract timestamps_v2) onto an MKV's encode, while they fit
     execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel), jobobject.py (tools end with the server, Windows)
@@ -186,15 +186,18 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   there. x265 gets `--dhdr10-info`; the validate step blocks an output MediaInfo finds no HDR10+ in. MP4Box
   adds the video with `:hdr=none` (no HDR boxes: the stream's SEI carries it, and MediaInfo would list it
   twice). x264 drops it (a warning); 8-bit blocks.
-- Dolby Vision (the same file; x265 with "Dolby Vision from the source" on; profile 8.1, or a profile 7 MEL):
+- Dolby Vision (the same file; x265 with "Dolby Vision from the source" on; profile 8.1, a profile 7 MEL, or a
+  profile 5, which stays profile 5: `hdr.dv_profile`):
   `dovi.rpu` (`ffmpeg ... | dovi_tool extract-rpu`) writes `dv_source.bin`; `dovi.edit` exports its L5 active
   area, moves each offset by the crop (at least 0) and scales it by the resize in the chain's order (DoviCrop's
-  logic, `l5_offsets`), and writes `dv_rpu.bin` with `dovi_tool editor` in mode 2 (8.1); keyed by the source size,
-  crop, resize and their order. `dovi.check` compares the RPU's frames with the script's, as for HDR10+. x265 gets
-  `--dolby-vision-profile 8.1 --dolby-vision-rpu`; it needs VBV (HRD), 10-bit and a mastering display, so the
-  plan blocks without them, as it does for profile 5 (no HDR10 layer), 8.4 (HLG), a profile 7 whose enhancement
-  layer couldn't be read and a custom script body (its crop isn't known). mkvmerge and MP4Box write the DV
-  configuration from the stream; the validate step blocks an output MediaInfo doesn't find 8.1 in.
+  logic, `l5_offsets`), and writes `dv_rpu.bin` with `dovi_tool editor` in mode 2 (8.1) or 0 (profile 5, as it
+  is); keyed by the source size, crop, resize, their order and the profile. `dovi.check` compares the RPU's frames
+  with the script's, as for HDR10+. x265 gets `--dolby-vision-profile 8.1` (or `5`) `--dolby-vision-rpu`; it needs
+  VBV (HRD), 10-bit and (8.1) a mastering display, so the plan blocks without them, as it does for 8.4 (HLG), a
+  profile 7 whose enhancement layer couldn't be read and a custom script body (its crop isn't known). Profile 5
+  has no HDR10 layer (its base layer is IPTPQc2): x265 writes its own colour signalling for it, and an encode
+  without its RPU warns (`hdr.dv_profile5`). mkvmerge and MP4Box write the DV configuration from the stream; the
+  validate step blocks an output MediaInfo doesn't find the written profile in.
 - A profile 7 FEL (`hdr.bakes_fel`) is baked: the index lane (`index_steps` with the source's video) adds
   `dovi.el` (`ffmpeg ... | dovi_tool demux --el-only` -> `dv_el.hevc`), `dovi.el_mkv` (mkvmerge with the
   source's default duration -> `dv_el.mkv`, so the source filter can seek it) and, for FFMS2, `dovi.el_index`

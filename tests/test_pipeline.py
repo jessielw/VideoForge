@@ -1172,8 +1172,8 @@ def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
 
     edits = []
 
-    def edit(_dovi, src, dst, video_settings, width, height, log):
-        edits.append((src, video_settings.crop))
+    def edit(_dovi, src, dst, video_settings, width, height, log, profile):
+        edits.append((src, video_settings.crop, profile))
         dst.write_bytes(b"rpu")
 
     monkeypatch.setattr(hdr, "edit_rpu", edit)
@@ -1183,7 +1183,7 @@ def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
     carried = replace(simulate_output(plan), video=dv)
     result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: carried)
     assert result.status is JobStatus.DONE, result.error
-    assert edits == [(source_rpu, job.video.crop)]
+    assert edits == [(source_rpu, job.video.crop, "8.1")]
 
     # the output lost it: invalid
     lost = replace(simulate_output(plan), video=replace(plan.source.video, hdr=VideoHdr()))
@@ -1199,6 +1199,42 @@ def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
     assert "x265" not in tools_called(runner)
 
 
+def test_dolby_vision_profile_5_stays_profile_5(profile, tmp_path, monkeypatch):
+    """A profile 5 source (no HDR10 layer, no mastering display) is written as profile 5, as StaxRip does: the RPU
+    edited as it is (mode 0) but for its L5, and the output checked for profile 5."""
+    plan = make_plan(tmp_path)
+    job = dv_job(plan, tmp_path)
+    video = plan.source.video
+    video.hdr = VideoHdr(dv_profile=5, dv_level=9, dv_layers="BL+RPU")
+    video.color = replace(video.color, master_display="", range="full")
+    assert hdr.issues(video, job.encoder, None, job.video) == []
+    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    step = {s.id: s for s in built.steps}
+    argv = step["video"].argvs[1]
+    i = argv.index("--dolby-vision-profile")
+    assert argv[i : i + 2] == ("--dolby-vision-profile", "5") and "--hdr10" not in argv
+    assert step["dovi.edit"].label == "Dolby Vision RPU: crop, resize, profile 5"
+    assert hdr.rpu_edit({}, job.video, 1920, 1080, "5") == {"mode": 0}
+
+    edits = []
+
+    def edit(_dovi, src, dst, video_settings, width, height, log, profile):
+        edits.append(profile)
+        dst.write_bytes(b"rpu")
+
+    monkeypatch.setattr(hdr, "edit_rpu", edit)
+    monkeypatch.setattr(hdr, "script_frames", lambda *_: 240)
+    monkeypatch.setattr(hdr, "rpu_frames", lambda *_: 240)
+    carried = replace(simulate_output(plan), video=replace(video, hdr=VideoHdr(dv_profile=5)))
+    result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: carried)
+    assert result.status is JobStatus.DONE, result.error
+    assert edits == ["5"]
+    as_81 = replace(simulate_output(plan), video=replace(video, hdr=VideoHdr(dv_profile=8, dv_compat=1)))
+    result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: as_81)
+    assert result.status is JobStatus.INVALID
+    assert [i.message for i in result.issues] == ["The output has Dolby Vision 8.1, not 5"]
+
+
 @pytest.mark.parametrize(
     ("hdr_info", "encoder", "codes"),
     [
@@ -1211,8 +1247,11 @@ def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
         ({}, {"options": {"level-idc": "5.1"}}, []),
         ({}, {"options": {"level-idc": "4.4"}}, ["hdr.dv_vbv"]),
         ({}, {"source_color": False}, ["hdr.dv_master"]),
-        ({"dv_profile": 5, "dv_compat": None}, {}, ["hdr.dv_profile5"]),
+        ({"dv_profile": 5, "dv_compat": None}, {}, []),
+        ({"dv_profile": 5, "dv_compat": None}, {"source_color": False}, []),  # no HDR10 layer: no mastering display
+        ({"dv_profile": 5, "dv_compat": None}, {"depth": 8}, ["hdr.dv_depth"]),
         ({"dv_profile": 5, "dv_compat": None}, {"dolby_vision": False}, ["hdr.dv_profile5"]),
+        ({"dv_profile": 5, "dv_compat": None}, {"encoder": Encoder.X264, "depth": 10}, ["hdr.dv_profile5"]),
         ({"dv_compat": 4}, {}, ["hdr.dv_hlg"]),
         ({"dv_compat": 4}, {"dolby_vision": False}, []),
         ({"dv_profile": 7, "dv_compat": 6, "dv_el": "MEL"}, {}, []),

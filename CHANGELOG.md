@@ -61,8 +61,10 @@ source), or in Docker on Linux.
   its active area (L5) follows the crop and resize, x265 writes it. Checked like HDR10+ (the script's frames
   before the encode, 8.1 in the output). It needs a 10-bit encode, `--vbv-maxrate` and `--vbv-bufsize` (x265's
   rule; with `--level-idc` set, the level's max bitrate fills the ones not set, High tier unless
-  `--no-high-tier`, as StaxRip does) and a mastering display; the job blocks without them. Not carried yet: profile 5 (always blocks: it has
-  no HDR10 layer) and 8.4 (HLG); x264 drops it (a warning).
+  `--no-high-tier`, as StaxRip does) and a mastering display; the job blocks without them. A profile 5 source
+  stays profile 5 (StaxRip's flow: the RPU as it is but for its L5; no HDR10 layer, so no mastering display
+  needed); without its RPU (x264, or unticked) a profile 5 encode's colours look wrong, which warns. Not carried
+  yet: 8.4 (HLG); x264 drops it (a warning).
 - **Dolby Vision FEL.** A profile 7 FEL's enhancement layer is baked into the picture (felbaker, now among the
   bundled plugins) and its RPU goes on as 8.1: the index lane demuxes the layer (dovi_tool), muxes it into an
   MKV with the source's frame rate and indexes it; the script bakes it right after the source, so the preview

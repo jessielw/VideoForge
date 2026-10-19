@@ -216,7 +216,7 @@ class EncoderSettings:
     extra: str = ""  # raw arguments appended last
     source_color: bool = True  # tag the encode with the source's colour description and HDR10 metadata (color.py)
     hdr10plus: bool = True  # carry a source's HDR10+ metadata into an x265 encode (hdr.py)
-    dolby_vision: bool = True  # carry a source's Dolby Vision (as profile 8.1) into an x265 encode (hdr.py)
+    dolby_vision: bool = True  # carry a source's Dolby Vision (as profile 8.1, or 5) into an x265 encode (hdr.py)
 
     @property
     def passes(self) -> int:

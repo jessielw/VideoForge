@@ -266,14 +266,14 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
             ),
         ]
         shared += (meta,)
-    dolby_vision, source_rpu = None, work / hdr.DV_SOURCE_RPU
+    dolby_vision, source_rpu, dv_profile = None, work / hdr.DV_SOURCE_RPU, hdr.dv_profile(v)
     if hdr.keeps_dv(v, enc) and v is not None:
         dolby_vision = work / hdr.DV_RPU
         rpu, width, height = dolby_vision, v.width, v.height
         order = [s.category.value for s in spec.video.filters if s.category.value in ("crop", "resize")]
 
         def edit_rpu(log: LogFn) -> None:
-            hdr.edit_rpu(app.tools.dovi_tool, source_rpu, rpu, spec.video, width, height, log)
+            hdr.edit_rpu(app.tools.dovi_tool, source_rpu, rpu, spec.video, width, height, log, dv_profile)
 
         def check_rpu(log: LogFn) -> None:
             hdr.check_rpu_frames(app.tools.vspipe, app.tools.dovi_tool, script, rpu, log)
@@ -290,11 +290,11 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
             # Keyed by the crop and resize (and their order): a new one edits the RPU again.
             Step(
                 "dovi.edit",
-                "Dolby Vision RPU: crop, resize, profile 8.1",
+                f"Dolby Vision RPU: crop, resize, profile {dv_profile}",
                 call=edit_rpu,
                 outputs=(rpu,),
                 inputs=(source_rpu,),
-                key=f"{width}x{height} {spec.video.crop} {spec.video.resize} {order}",
+                key=f"{width}x{height} {spec.video.crop} {spec.video.resize} {order} {dv_profile}",
                 weight=0.2,
             ),
             Step(
@@ -320,6 +320,7 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
             color=color,
             hdr10plus=hdr10plus,
             dolby_vision=dolby_vision,
+            dv_profile=dv_profile,
         )
         if enc.passes != 2:
             argv = command(output=out)

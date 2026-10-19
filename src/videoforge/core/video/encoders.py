@@ -108,11 +108,12 @@ def encoder_command(
     color: VideoColor | None = None,
     hdr10plus: Path | None = None,
     dolby_vision: Path | None = None,
+    dv_profile: str = "8.1",
 ) -> list[str]:
     """One encoder run reading y4m from stdin. pass_number is 1 or 2 for a two-pass encode. sar is the
     encode's pixel aspect ratio (vspipe's y4m carries none), written when it isn't square; color is the
     source's colour description (color.color_args); hdr10plus an x265 encode's HDR10+ metadata and dolby_vision
-    its profile 8.1 RPU (hdr.py); with that RPU or HDR10, the VBV (HRD) is filled from --level-idc (level_vbv), as
+    its RPU, written as dv_profile (8.1, or 5: hdr.dv_profile); with that RPU or HDR10, the VBV (HRD) is filled from --level-idc (level_vbv), as
     StaxRip does. A --sar or colour flag in the options or extra arguments comes after them, and wins."""
     x265 = settings.encoder is Encoder.X265
     argv = [exe, "--y4m"] if x265 else [exe, "--demuxer", "y4m"]
@@ -135,7 +136,7 @@ def encoder_command(
     if hdr10plus is not None and x265:
         argv += ["--dhdr10-info", str(hdr10plus)]
     if dolby_vision is not None and x265:
-        argv += ["--dolby-vision-profile", "8.1", "--dolby-vision-rpu", str(dolby_vision)]
+        argv += ["--dolby-vision-profile", dv_profile, "--dolby-vision-rpu", str(dolby_vision)]
     if x265 and (dolby_vision is not None or hdr10(color, settings)):
         argv += level_vbv(settings) or []
     argv += _options(settings.options)

@@ -210,24 +210,23 @@
     <span class="min-w-0">
       Dolby Vision from the source
       <span class="block text-xs text-muted-foreground">
-        x265: carries a source's Dolby Vision into the encode as profile 8.1 (dovi_tool reads the RPU and moves its active
+        x265: carries a source's Dolby Vision into the encode as profile 8.1, or a profile 5 as 5 (dovi_tool reads the RPU and moves its active
         area with the crop and resize). Needs a 10-bit encode, --vbv-maxrate and --vbv-bufsize (or --level-idc, whose max
         bitrate fills the ones not set), and a script that keeps every
-        frame. A FEL's enhancement layer is baked into the picture first (felbaker). Profile 5 and 8.4 (HLG) aren't
-        carried yet.
+        frame. A FEL's enhancement layer is baked into the picture first (felbaker). 8.4 (HLG) isn't carried yet.
       </span>
       {#if dv !== undefined}
         {#if dv === null}
           <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
         {:else if !dv || !dv.dv_profile}
           <span class="block text-xs text-muted-foreground">The source has no Dolby Vision.</span>
-        {:else if dv.dv_profile === 5}
-          <span class="mt-1 block text-xs text-warning">Profile 5 has no HDR10 layer to encode: not supported yet.</span>
+        {:else if dv.dv_profile === 5 && (value.encoder !== 'x265' || !value.dolby_vision)}
+          <span class="mt-1 block text-xs text-warning">Profile 5 has no HDR10 layer: without its RPU the encode's colours look wrong, unless the script maps them.</span>
         {:else if value.encoder !== 'x265'}
           <span class="mt-1 block text-xs text-warning">x264 can't carry Dolby Vision: the encode keeps the HDR10 layer.</span>
         {:else}
           <code class="mt-1 block font-mono text-xs break-all {value.dolby_vision ? '' : 'text-muted-foreground line-through'}"
-            >--dolby-vision-profile 8.1 --dolby-vision-rpu dv_rpu.bin{levelVbv?.length ? ' ' + levelVbv.join(' ') : ''}</code
+            >--dolby-vision-profile {dv.dv_profile === 5 ? '5' : '8.1'} --dolby-vision-rpu dv_rpu.bin{levelVbv?.length ? ' ' + levelVbv.join(' ') : ''}</code
           >
           {#if value.dolby_vision}
             {#if dv.dv_compat === 4}

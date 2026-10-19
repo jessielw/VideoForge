@@ -15,7 +15,10 @@ writes the source's RPU to the work folder. An edit step moves its L5 active are
 the job's crop and resize (DoviCrop's: `dovi_tool export`, each offset less the crop, at least 0) and makes it
 profile 8.1 (`dovi_tool editor`, mode 2); a check compares its frames with the script's, as for HDR10+; x265
 writes it (`--dolby-vision-profile 8.1 --dolby-vision-rpu`). x265 needs VBV for it (HRD; with only
-`--level-idc` set, the level's max bitrate fills it, as StaxRip does), a 10-bit encode and a mastering display. Profile 5 (no HDR10 layer) and 8.4 (HLG) aren't carried yet.
+`--level-idc` set, the level's max bitrate fills it, as StaxRip does), a 10-bit encode and a mastering display.
+Profile 5 (StaxRip's too) stays profile 5: its base layer is IPTPQc2, not HDR10 (no mastering display; x265
+writes its own colour signalling), and the edit leaves the RPU as it is but for the L5 (mode 0). 8.4 (HLG) isn't
+carried yet.
 
 A profile 7 FEL's enhancement layer is baked into the picture (StaxRip's flow, felbaker's fel.Bake): the index
 lane demuxes it (`dovi_tool demux --el-only`), muxes it into an MKV with the source's frame duration (so the
@@ -53,7 +56,7 @@ logger = logging.getLogger(__name__)
 # In the work folder
 HDR10PLUS_JSON = "hdr10plus.json"
 DV_SOURCE_RPU = "dv_source.bin"  # the source's RPU
-DV_RPU = "dv_rpu.bin"  # the encode's: cropped, resized, profile 8.1
+DV_RPU = "dv_rpu.bin"  # the encode's: cropped, resized, profile 8.1 (or 5)
 DV_EL_HEVC = "dv_el.hevc"  # a FEL's enhancement layer, as demuxed
 DV_EL = "dv_el.mkv"  # the same in an MKV, which the source filter opens
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -164,14 +167,26 @@ def keeps_hdr10plus(video: VideoInfo | None, settings: EncoderSettings) -> bool:
 
 
 def keeps_dv(video: VideoInfo | None, settings: EncoderSettings) -> bool:
-    """Whether the encode carries the source's Dolby Vision: x265, a profile 7 or 8 source, and the job didn't
+    """Whether the encode carries the source's Dolby Vision: x265, a profile 5, 7 or 8 source, and the job didn't
     untick it (issues() blocks the ones it can't carry yet)."""
     return (
         video is not None
-        and video.hdr.dv_profile in (7, 8)
+        and video.hdr.dv_profile in (5, 7, 8)
         and settings.dolby_vision
         and settings.encoder is Encoder.X265
     )
+
+
+def dv_profile(video: VideoInfo | None) -> str:
+    """The profile the encode's Dolby Vision is written as (x265's --dolby-vision-profile): 5 for a profile 5
+    source, 8.1 for the others (a profile 7 MEL or FEL, 8.1), as StaxRip writes them."""
+    return "5" if video is not None and video.hdr.dv_profile == 5 else "8.1"
+
+
+# MediaInfo's (profile, compatibility) of each written profile
+_DV_FOUND = {"5": (5, None), "8.1": (8, 1)}
+# dovi_tool's editor mode per written profile: 0 leaves the RPU as it is, 2 makes it 8.1 (StaxRip's)
+_DV_MODES = {"5": 0, "8.1": 2}
 
 
 def bakes_fel(video: VideoInfo | None, settings: EncoderSettings) -> bool:
@@ -206,16 +221,16 @@ def _dv_issues(
     video: VideoInfo, settings: EncoderSettings, tools: Tools | None, video_settings: VideoSettings | None
 ) -> list[Issue]:
     dv = video.hdr
-    if dv.dv_profile == 5:
+    if dv.dv_profile == 5 and not keeps_dv(video, settings):
         return [
             Issue(
-                Severity.BLOCK,
+                Severity.WARN,
                 "hdr.dv_profile5",
-                "Dolby Vision profile 5 has no HDR10 layer to encode (its colours only look right through the RPU): "
-                "not supported yet",
+                "Dolby Vision profile 5 has no HDR10 layer: without its RPU (x264, or Dolby Vision from the source "
+                "unticked) the encode's colours look wrong, unless the script maps them",
             )
         ]
-    if dv.dv_profile not in (7, 8) or not settings.dolby_vision:
+    if dv.dv_profile not in (5, 7, 8) or not settings.dolby_vision:
         return []
     untick = "or untick Dolby Vision from the source on the Encoder tab"
     if settings.encoder is not Encoder.X265:
@@ -251,7 +266,11 @@ def _dv_issues(
             "x265 needs --vbv-maxrate and --vbv-bufsize for Dolby Vision (HRD): set them in the options, or "
             "--level-idc to fill them with its max bitrate",
         )
-    if not (settings.source_color and video.color.master_display) and "master-display" not in flags:
+    if (
+        dv.dv_profile != 5
+        and not (settings.source_color and video.color.master_display)
+        and "master-display" not in flags
+    ):
         block(
             "hdr.dv_master",
             "x265's Dolby Vision 8.1 needs a mastering display: the source has none, or the source's colour is off",
@@ -401,12 +420,14 @@ def l5_offsets(offsets: dict[str, Any], video_settings: VideoSettings, width: in
     return out
 
 
-def rpu_edit(level5: dict[str, Any], video_settings: VideoSettings, width: int, height: int) -> dict[str, Any]:
-    """dovi_tool editor's config for the encode's RPU, from `dovi_tool export --data level5=`: profile 8.1
-    (mode 2) and each L5 preset on the encode's picture."""
+def rpu_edit(
+    level5: dict[str, Any], video_settings: VideoSettings, width: int, height: int, profile: str = "8.1"
+) -> dict[str, Any]:
+    """dovi_tool editor's config for the encode's RPU, from `dovi_tool export --data level5=`: the written profile
+    (8.1: mode 2; 5: mode 0, as it is) and each L5 preset on the encode's picture."""
     area = level5.get("active_area") or level5  # dovi_tool < 2.3.3 exports the bare active area (DoviCrop)
     presets = area.get("presets") or []
-    config: dict[str, Any] = {"mode": 2}
+    config: dict[str, Any] = {"mode": _DV_MODES[profile]}
     if presets:
         config["active_area"] = {
             "crop": True,
@@ -417,19 +438,26 @@ def rpu_edit(level5: dict[str, Any], video_settings: VideoSettings, width: int, 
 
 
 def edit_rpu(
-    dovi_tool: str, rpu: Path, out: Path, video_settings: VideoSettings, width: int, height: int, log: LogFn
+    dovi_tool: str,
+    rpu: Path,
+    out: Path,
+    video_settings: VideoSettings,
+    width: int,
+    height: int,
+    log: LogFn,
+    profile: str = "8.1",
 ) -> None:
-    """The source's RPU (rpu) as the encode's (out): its L5 offsets following the crop and resize, profile 8.1.
-    The L5 export and the editor's config are left next to out."""
+    """The source's RPU (rpu) as the encode's (out): its L5 offsets following the crop and resize, as the profile
+    it's written as (dv_profile). The L5 export and the editor's config are left next to out."""
     level5, config = out.with_name(out.stem + "_l5.json"), out.with_name(out.stem + "_edit.json")
     run([(dovi_tool, "export", "--data", f"level5={level5}", "-i", str(rpu))], log)
     with level5.open(encoding="utf-8") as f:
-        edit = rpu_edit(json.load(f), video_settings, width, height)
+        edit = rpu_edit(json.load(f), video_settings, width, height, profile)
     config.write_text(json.dumps(edit, indent=2), encoding="utf-8")
     run([(dovi_tool, "editor", "-i", str(rpu), "-j", str(config), "-o", str(out))], log)
     presets = edit.get("active_area", {}).get("presets", [])
     areas = "; ".join(" ".join(f"{k}={p[k]}" for k in _L5) for p in presets) or "none"
-    log(f"Dolby Vision RPU: profile 8.1, L5 offsets {areas}")
+    log(f"Dolby Vision RPU: profile {profile}, L5 offsets {areas}")
 
 
 def output_issues(video: VideoInfo | None, settings: EncoderSettings, output: SourceInfo) -> list[Issue]:
@@ -440,7 +468,8 @@ def output_issues(video: VideoInfo | None, settings: EncoderSettings, output: So
     out = []
     if keeps_hdr10plus(video, settings) and not found.hdr10plus:
         out.append(Issue(Severity.BLOCK, "hdr.hdr10plus_missing", "The output has no HDR10+ metadata"))
-    if keeps_dv(video, settings) and (found.dv_profile, found.dv_compat) != (8, 1):
+    want = dv_profile(video)
+    if keeps_dv(video, settings) and (found.dv_profile, found.dv_compat) != _DV_FOUND[want]:
         what = f"Dolby Vision {found.dv_name}" if found.dv_profile else "no Dolby Vision"
-        out.append(Issue(Severity.BLOCK, "hdr.dv_missing", f"The output has {what}, not 8.1"))
+        out.append(Issue(Severity.BLOCK, "hdr.dv_missing", f"The output has {what}, not {want}"))
     return out
