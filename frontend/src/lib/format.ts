@@ -1,4 +1,12 @@
-import type { Progress, Severity, Status, TrackOverride, VideoColor, VideoHdr } from './types'
+import type { Priority, Progress, Severity, Status, TrackOverride, VideoColor, VideoHdr } from './types'
+
+export const PRIORITY_LABEL: Record<Priority, string> = {
+  idle: 'Idle',
+  below_normal: 'Below normal',
+  normal: 'Normal',
+  above_normal: 'Above normal',
+  high: 'High',
+}
 
 export const STATUS_LABEL: Record<Status, string> = {
   probing: 'Probing',

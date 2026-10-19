@@ -133,6 +133,7 @@
             <div class="h-full bg-info transition-[width]" style="width:{p.overall * 100}%"></div>
           </div>
           <span class="tabular-nums">
+            {#if app.queue.paused}<span class="text-warning">Paused ·</span>{/if}
             {p.step} · {(p.fraction * 100).toFixed(1)}%{p.eta != null ? ` (${duration(p.eta)} left)` : ''}
             {#if p.fps != null}· {p.fps < 10 ? p.fps.toFixed(2) : p.fps.toFixed(1)} fps{/if}
             {#if p.elapsed != null}· {duration(p.elapsed)} elapsed{/if}

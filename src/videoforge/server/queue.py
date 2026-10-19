@@ -8,6 +8,10 @@ only indexed sources, and a template's auto crop waits in the lane and runs afte
 can't be edited while it is being indexed. The lane is kept across restarts, and (a setting) a job
 waits while an encode reads its disk, unless it was asked for by itself (Index now).
 
+Pause suspends the running job's tools and the index lane's together, and resume lets them go on (a tool
+started meanwhile starts paused; Start resumes too). The Queue's priority choice is the running ones' for the
+rest of their run; the next ones get the Settings' again.
+
 Every change is saved and announced on the event hub. An edit replans from the
 cached probe (no file access) and clears the last run's outcome, but keeps the
 finished steps, so a rerun only redoes what the edit touched.
@@ -31,6 +35,7 @@ from videoforge.core.config import AppConfig, Tools
 from videoforge.core.disks import disks
 from videoforge.core.events import EventBus, IndexFinished, JobFinished, JobStarted, QueueFinished
 from videoforge.core.execute import process
+from videoforge.core.execute.control import Priority
 from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import Cancelled, CancelToken, ToolError
 from videoforge.core.job import (
@@ -213,6 +218,7 @@ class JobQueue:
         self._cancel: CancelToken | None = None
         self._stop_after_current = False
         self._closing = False  # shutdown() began: a job starting now is cancelled at once
+        self._paused = False  # pause(): the running job's and the index lane's tools are suspended
         self._indexer: threading.Thread | None = None
         self._index_active = False  # the lane's thread is working; cleared (under the lock) when it decides to stop
         self._index_order: list[str] = []  # the lane's jobs, in the order they're indexed
@@ -240,6 +246,8 @@ class JobQueue:
             "running": self.running,
             "current": current,
             "stop_after_current": self._stop_after_current,
+            "paused": self._paused,
+            "priority": next((t.priority for t in self._tokens()), None),  # the Queue's choice, while running
             "queued": sum(e.queued for e in self.entries()),
             "indexing": next((e.id for e in self.entries() if e.indexing), None),
             "index_queued": sum(e.index_queued for e in self.entries()),
@@ -638,6 +646,7 @@ class JobQueue:
             )
 
     def start(self) -> None:
+        self.resume()
         with self._lock:
             self._stop_after_current = False
             if not self._active:
@@ -653,6 +662,48 @@ class JobQueue:
     def cancel_current(self) -> None:
         if self._cancel is not None:
             self._cancel.cancel()
+
+    def _token(self) -> CancelToken:
+        """Under the lock: a new run's token, with the Settings' priorities, paused if the queue is."""
+        token = CancelToken(encoder_priority=self.app.encoder_priority, tool_priority=self.app.tool_priority)
+        if self._paused:
+            token.pause()
+        if self._closing:  # taken just before shutdown() cancelled (it saw no token yet)
+            token.cancel()
+        return token
+
+    def _tokens(self) -> list[CancelToken]:
+        return [t for t in (self._cancel, self._index_cancel) if t is not None]
+
+    def pause(self) -> None:
+        """Suspend the running job's tools and the index lane's (nothing running: nothing to pause)."""
+        with self._lock:
+            tokens = self._tokens()
+            self._paused = bool(tokens) or self._paused
+            for token in tokens:
+                token.pause()
+        self._queue_changed()
+
+    def resume(self) -> None:
+        with self._lock:
+            was, self._paused = self._paused, False
+            for token in self._tokens():
+                token.resume()
+        if was:
+            self._queue_changed()
+
+    def set_priority(self, priority: Priority | None) -> None:
+        """The running job's and the index lane's tools get this priority, for the rest of their run (None: the
+        Settings' again)."""
+        with self._lock:
+            for token in self._tokens():
+                token.set_priority(priority)
+        self._queue_changed()
+
+    def _settle(self) -> None:
+        """Under the lock: with nothing left running, the queue isn't paused."""
+        if not self._active and not self._index_active:
+            self._paused = False
 
     def wait(self, timeout: float | None = None) -> None:
         if self._worker is not None:
@@ -694,7 +745,8 @@ class JobQueue:
             with self._lock:
                 if self._worker is threading.current_thread():
                     self._active = False
-            self._cancel = None
+                self._cancel = None
+                self._settle()
             self._queue_changed()
             if ran and not self._closing:
                 left = sum(e.queued for e in self.entries()) if self._stop_after_current else 0
@@ -706,9 +758,7 @@ class JobQueue:
         started = _now()
         with self._lock:
             e.queued, e.running, e.progress = False, True, None
-            self._cancel = CancelToken()
-            if self._closing:  # taken just before shutdown() cancelled (it saw no token yet)
-                self._cancel.cancel()
+            self._cancel = self._token()
             self._save(e)
         self._changed(e)
         self._queue_changed()
@@ -728,7 +778,7 @@ class JobQueue:
         def log(line: str) -> None:
             self._log(e, line, log_file)
 
-        progress = self._progress(e)
+        progress = self._progress(e, self._cancel)
 
         def on_record(_r: StepRecord) -> None:
             self._save(e)  # a crash after this step resumes after it
@@ -800,18 +850,23 @@ class JobQueue:
             self.bus.emit(JobFinished(_copy(e.spec), result, _now() - started, record))
         return result.status
 
-    def _progress(self, e: Entry) -> ProgressFn:
+    def _progress(self, e: Entry, token: CancelToken | None) -> ProgressFn:
         """A run's progress callback (a job's or the index lane's): sets e.progress, with the step's fps and eta
         when its encoder prints them, the seconds since the run started, and the job's time left (from how fast
         overall moved since this run's own work began: steps reused from an earlier run don't count), and
-        publishes it at most every _PROGRESS_INTERVAL (a step's start and end always)."""
-        started = _now()
+        publishes it at most every _PROGRESS_INTERVAL (a step's start and end always). Time paused (the token's)
+        doesn't count."""
+
+        def clock() -> float:
+            return _now() - (token.paused_seconds if token is not None else 0.0)
+
+        started = clock()
         last = 0.0
         base: tuple[float, float] | None = None  # (time, overall) at the first step this run does itself
 
         def progress(p: StepProgress) -> None:
             nonlocal last, base
-            now = _now()
+            now = clock()
             if base is None and not p.reused:
                 base = (now, p.overall)
             left = None
@@ -972,12 +1027,11 @@ class JobQueue:
             if taken is not None:
                 self._index_order.remove(taken.id)
                 taken.index_queued, taken.index_now, taken.indexing, taken.progress = False, False, True, None
-                self._index_cancel = CancelToken()
-                if self._closing:
-                    self._index_cancel.cancel()
+                self._index_cancel = self._token()
                 return taken, True, changed
             if not waiting or self._closing:
                 self._index_active = False
+                self._settle()
                 return None, False, changed
             return None, True, changed
 
@@ -1004,7 +1058,7 @@ class JobQueue:
         def log(line: str) -> None:
             self._log(e, line, log_file)
 
-        progress = self._progress(e)
+        progress = self._progress(e, self._index_cancel)
 
         def on_record(_r: StepRecord) -> None:
             with self._lock:

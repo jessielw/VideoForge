@@ -24,6 +24,7 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import { api } from '../lib/api'
   import { drops } from '../lib/dropPaths.svelte'
+  import { PRIORITY_LABEL } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type {
     ActionKind,
@@ -31,6 +32,7 @@
     ConfigState,
     NotificationDestination,
     NotificationEvent,
+    Priority,
     ToolCheck,
     ToolSetting,
     ToolStatus,
@@ -408,6 +410,31 @@
             </span>
           </span>
         </label>
+      </section>
+
+      <section class="space-y-3">
+        <h2 class="font-medium">Process priority</h2>
+        {#each [
+          { key: 'encoder_priority', label: 'Video encode', hint: 'x264 / x265 and the vspipe feeding it' },
+          { key: 'tool_priority', label: 'Other tools', hint: 'audio encodes, the mux, indexing' },
+        ] as const as row (row.key)}
+          <label class="flex items-center gap-3 text-sm">
+            <span class="w-28 text-muted-foreground">{row.label}</span>
+            <NativeSelect value={config[row.key]} onchange={e => {
+                const v = e.currentTarget.value as Priority
+                change({ [row.key]: v === config?.[`${row.key}_default`] ? null : v })
+              }}>
+              {#each config.priorities as p (p)}<option value={p}>{PRIORITY_LABEL[p]}</option>{/each}
+            </NativeSelect>
+            <span class="text-xs text-muted-foreground">
+              {row.hint}. videoforge.toml says: {PRIORITY_LABEL[config[`${row.key}_default`]]}
+            </span>
+          </label>
+        {/each}
+        <p class="text-xs text-muted-foreground">
+          For jobs started from now on; the Queue's toolbar changes the running one's. On Linux it's a nice value, and
+          raising one back needs CAP_SYS_NICE.
+        </p>
       </section>
 
       <section class="space-y-3">

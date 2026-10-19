@@ -18,6 +18,7 @@ import pytest
 
 from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools
 from videoforge.core.execute import process
+from videoforge.core.execute.control import Priority
 from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import Cancelled, CancelToken, ToolError
 from videoforge.core.job import JobSpec, JobState, JobStatus, StepStatus
@@ -570,6 +571,118 @@ def test_cancel_token_follows_its_parent():
     other = CancelToken(parent)
     parent.cancel()
     assert other.cancelled
+
+
+# A tool that starts a child: both print their name, a count and their priority (Windows' class, else the nice
+# value) every 20 ms until killed.
+_TICKER = """
+import os, subprocess, sys, time
+
+def priority():
+    if os.name != "nt":
+        return os.getpriority(os.PRIO_PROCESS, 0)
+    import ctypes
+    k = ctypes.WinDLL("kernel32")
+    k.GetCurrentProcess.restype = ctypes.c_void_p
+    k.GetPriorityClass.argtypes = [ctypes.c_void_p]
+    return k.GetPriorityClass(k.GetCurrentProcess())
+
+role = sys.argv[1]
+if role == "parent":
+    subprocess.Popen([sys.executable, __file__, "child"])
+n = 0
+while True:
+    print(role, n, priority(), flush=True)
+    n += 1
+    time.sleep(0.02)
+"""
+_IDLE = 0x40 if os.name == "nt" else 19
+_NORMAL = 0x20 if os.name == "nt" else 0
+
+
+class _Ticker:
+    """process.run on _TICKER in a thread, with its lines as (role, priority)."""
+
+    def __init__(self, tmp_path: Path, token: CancelToken) -> None:
+        script = tmp_path / "ticker.py"
+        script.write_text(_TICKER, encoding="utf-8")
+        self.token, self.lines, self.error = token, [], None
+        self.thread = threading.Thread(target=self._run, args=([[sys.executable, str(script), "parent"]],))
+        self.thread.start()
+
+    def _run(self, argvs) -> None:
+        try:
+            process.run(argvs, self._line, self.token)
+        except BaseException as e:
+            self.error = e
+
+    def _line(self, line: str) -> None:
+        role, _n, prio = line.split("] ", 1)[1].split()
+        self.lines.append((role, int(prio)))
+
+    def wait_for(self, check, timeout: float = 10) -> None:
+        end = time.monotonic() + timeout
+        while not check(list(self.lines)):
+            assert time.monotonic() < end and self.thread.is_alive(), self.lines[-5:]
+            time.sleep(0.02)
+
+    def both_since(self, n: int):
+        return lambda lines: {role for role, _ in lines[n:]} == {"parent", "child"}
+
+    def stop(self) -> None:
+        self.token.cancel()
+        self.thread.join(10)
+        assert isinstance(self.error, Cancelled)
+
+
+def test_pause_suspends_a_tool_and_its_children(tmp_path):
+    ticker = _Ticker(tmp_path, CancelToken())
+    try:
+        ticker.wait_for(ticker.both_since(0))
+        ticker.token.pause()
+        time.sleep(0.3)  # lines already written still come in
+        n = len(ticker.lines)
+        time.sleep(0.5)
+        assert len(ticker.lines) == n and ticker.token.paused
+        ticker.token.resume()
+        ticker.wait_for(ticker.both_since(n))
+        assert 0.7 <= ticker.token.paused_seconds < 5 and not ticker.token.paused
+    finally:
+        ticker.stop()
+
+
+def test_a_tool_started_while_paused_waits(tmp_path):
+    token = CancelToken()
+    token.pause()
+    ticker = _Ticker(tmp_path, CancelToken(token))  # a step's token: its parent's pause holds
+    try:
+        time.sleep(0.5)
+        assert ticker.lines == []
+        token.resume()
+        ticker.wait_for(ticker.both_since(0))
+    finally:
+        ticker.stop()
+
+
+def test_priority_reaches_a_tool_and_its_children(tmp_path):
+    """The tool priority from the start, and a priority chosen while it runs (lowered: raising one back needs
+    a privilege on Linux)."""
+    ticker = _Ticker(tmp_path, CancelToken(tool_priority=Priority.IDLE, encoder_priority=Priority.HIGH))
+    try:
+        ticker.wait_for(ticker.both_since(0))
+        assert {p for _, p in ticker.lines} == {_IDLE}  # python isn't an encoder
+    finally:
+        ticker.stop()
+    ticker = _Ticker(tmp_path, CancelToken())
+    try:
+        ticker.wait_for(ticker.both_since(0))
+        assert {p for _, p in ticker.lines} == {_NORMAL}
+        ticker.token.set_priority(Priority.IDLE)
+        assert ticker.token.priority is Priority.IDLE
+        n = len(ticker.lines)
+        ticker.wait_for(lambda lines: {(r, p) for r, p in lines[n:]} >= {("parent", _IDLE), ("child", _IDLE)})
+    finally:
+        ticker.stop()
 
 
 # --- a real job end to end -----------------------------------------------------------

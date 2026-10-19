@@ -1,11 +1,13 @@
-"""Queue control: queue jobs, start the worker, stop after the current job, cancel it; the index lane."""
+"""Queue control: queue jobs, start the worker, stop after the current job, cancel it, pause and resume it,
+change its tools' priority; the index lane."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, HTTPException, Request
 
+from videoforge.core.execute.control import Priority
 from videoforge.server.queue import JobQueue
 
 router = APIRouter(prefix="/api/queue")
@@ -91,6 +93,33 @@ def cancel(request: Request) -> dict[str, Any]:
     q = queue_of(request)
     q.stop_after_current()
     q.cancel_current()
+    return q.queue_state()
+
+
+@router.post("/pause")
+def pause(request: Request) -> dict[str, Any]:
+    """Suspend the running job's tools and the index lane's."""
+    q = queue_of(request)
+    q.pause()
+    return q.queue_state()
+
+
+@router.post("/resume")
+def resume(request: Request) -> dict[str, Any]:
+    q = queue_of(request)
+    q.resume()
+    return q.queue_state()
+
+
+@router.post("/priority")
+def priority(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """`priority` (a Priority, or null for the Settings') for the running job's and the index lane's tools, for
+    the rest of their run."""
+    value = body.get("priority")
+    if value is not None and value not in tuple(Priority):
+        raise HTTPException(422, f"priority: one of {', '.join(Priority)}, or null")
+    q = queue_of(request)
+    q.set_priority(None if value is None else Priority(value))
     return q.queue_state()
 
 

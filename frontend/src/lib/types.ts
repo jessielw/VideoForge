@@ -503,10 +503,15 @@ export interface Presets {
 }
 export type PresetKind = 'video' | 'encoder' | 'template'
 
+// A tool's process priority (a nice value on Linux).
+export type Priority = 'idle' | 'below_normal' | 'normal' | 'above_normal' | 'high'
+
 export interface QueueState {
   running: boolean
   current: string | null
   stop_after_current: boolean
+  paused: boolean // the running job's tools and the index lane's are suspended
+  priority: Priority | null // chosen on the toolbar for the running ones; null = the Settings'
   queued: number
   indexing: string | null // the job the index lane is on
   index_queued: number
@@ -592,6 +597,11 @@ export interface ConfigState {
   parallel_audio_default: number // videoforge.toml's
   delete_work_dir: boolean // delete a done job's <source>_tmp/ (records and log copied to records_dir first)
   delete_work_dir_default: boolean // videoforge.toml's
+  encoder_priority: Priority // the video encode's (x264 / x265 and the vspipe feeding it)
+  encoder_priority_default: Priority // videoforge.toml's
+  tool_priority: Priority // every other tool's
+  tool_priority_default: Priority // videoforge.toml's
+  priorities: Priority[]
   records_dir: string
   notifications: NotificationDestination[]
   notification_events: { id: NotificationEvent; label: string; default: boolean }[]

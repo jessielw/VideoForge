@@ -9,6 +9,7 @@ import string
 
 from videoforge.core.actions import Action, load_actions
 from videoforge.core.config import PROJECT_ROOT, AppConfig, app_data_dir, with_tools
+from videoforge.core.execute.control import Priority
 from videoforge.core.notify import Destination, load_destinations
 
 MAX_PARALLEL_AUDIO = 8  # the Settings page's limit on audio encodes at once
@@ -64,6 +65,8 @@ class SavedSettings:
     disabled_plugins: list[str] = field(default_factory=list)  # plugin ids not loaded on the next start
     parallel_audio: int | None = None  # audio encodes alongside the video; None = videoforge.toml's
     delete_work_dir: bool | None = None  # delete a done job's work folder; None = videoforge.toml's
+    encoder_priority: Priority | None = None  # the video encode's process priority; None = videoforge.toml's
+    tool_priority: Priority | None = None  # every other tool's; None = videoforge.toml's
 
     @classmethod
     def load(cls, store) -> SavedSettings:
@@ -78,6 +81,8 @@ class SavedSettings:
             [str(i) for i in store.get_setting("disabled_plugins") or []],
             store.get_setting("parallel_audio"),
             store.get_setting("delete_work_dir"),
+            _priority(store.get_setting("encoder_priority")),
+            _priority(store.get_setting("tool_priority")),
         )
 
     def save(self, store) -> None:
@@ -90,6 +95,8 @@ class SavedSettings:
         store.set_setting("disabled_plugins", self.disabled_plugins)
         store.set_setting("parallel_audio", self.parallel_audio)
         store.set_setting("delete_work_dir", self.delete_work_dir)
+        store.set_setting("encoder_priority", self.encoder_priority)
+        store.set_setting("tool_priority", self.tool_priority)
 
     def app_config(self, base: AppConfig, profile: str) -> AppConfig:
         """base (videoforge.toml) with these settings over it."""
@@ -98,4 +105,12 @@ class SavedSettings:
             cfg = replace(cfg, parallel_audio=self.parallel_audio)
         if self.delete_work_dir is not None:
             cfg = replace(cfg, delete_work_dir=self.delete_work_dir)
+        if self.encoder_priority is not None:
+            cfg = replace(cfg, encoder_priority=self.encoder_priority)
+        if self.tool_priority is not None:
+            cfg = replace(cfg, tool_priority=self.tool_priority)
         return cfg
+
+
+def _priority(value: object) -> Priority | None:
+    return Priority(value) if value in tuple(Priority) else None

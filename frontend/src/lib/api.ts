@@ -18,6 +18,7 @@ import type {
   PathKind,
   PresetKind,
   Presets,
+  Priority,
   Profile,
   QueueState,
   ReuseJob,
@@ -103,6 +104,8 @@ export const api = {
     index_waits_for_disk?: boolean
     parallel_audio?: number | null
     delete_work_dir?: boolean | null
+    encoder_priority?: Priority | null
+    tool_priority?: Priority | null
     notifications?: NotificationDestination[]
     actions?: ActionSetting[]
     disabled_plugins?: string[]
@@ -164,6 +167,10 @@ export const api = {
   dequeue: (ids: string[]) => post<QueueState>('/api/queue/dequeue', { ids }),
   stop: () => post<QueueState>('/api/queue/stop'),
   cancel: () => post<QueueState>('/api/queue/cancel'),
+  pause: () => post<QueueState>('/api/queue/pause'),
+  resume: () => post<QueueState>('/api/queue/resume'),
+  // the running job's and the index lane's tools, for the rest of their run; null = the Settings'
+  priority: (priority: Priority | null) => post<QueueState>('/api/queue/priority', { priority }),
   index: (ids: string[], first = false) => post<QueueState & { taken: string[] }>('/api/queue/index', { ids, first }),
   stopIndex: (ids?: string[]) => post<QueueState>('/api/queue/index/stop', ids ? { ids } : {}),
 

@@ -18,7 +18,7 @@ export type PresetData<K extends PresetKind> = K extends 'video' ? VideoPresetDa
 
 class AppState {
   jobs = $state<JobSummary[]>([])
-  queue = $state<QueueState>({ running: false, current: null, stop_after_current: false, queued: 0, indexing: null, index_queued: 0 })
+  queue = $state<QueueState>({ running: false, current: null, stop_after_current: false, paused: false, priority: null, queued: 0, indexing: null, index_queued: 0 })
   profiles = $state<Profile[]>([])
   log = $state<LogLine[]>([])
   connected = $state(false)

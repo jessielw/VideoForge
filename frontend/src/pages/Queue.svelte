@@ -8,8 +8,10 @@
   import DatabaseCheckIcon from '@lucide/svelte/icons/database-check'
   import DatabaseXIcon from '@lucide/svelte/icons/database-x'
   import DatabaseZapIcon from '@lucide/svelte/icons/database-zap'
+  import GaugeIcon from '@lucide/svelte/icons/gauge'
   import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
   import ListChecksIcon from '@lucide/svelte/icons/list-checks'
+  import ListEndIcon from '@lucide/svelte/icons/list-end'
   import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close'
   import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open'
   import PauseIcon from '@lucide/svelte/icons/pause'
@@ -26,11 +28,11 @@
   import JobEditor from '../components/JobEditor.svelte'
   import ReuseDialog from '../components/ReuseDialog.svelte'
   import { api } from '../lib/api'
-  import { percent, progressTimes, STATUS_LABEL, STATUS_TONE } from '../lib/format'
+  import { percent, PRIORITY_LABEL, progressTimes, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { router } from '../lib/router.svelte'
   import { layout } from '../lib/layout.svelte'
   import { app } from '../lib/state.svelte'
-  import type { EncoderSettings, JobDetail, ReuseJob } from '../lib/types'
+  import type { EncoderSettings, JobDetail, Priority, ReuseJob } from '../lib/types'
 
   let selected = $state<string[]>([])
   let anchor = $state<string | null>(null)
@@ -226,6 +228,9 @@
     })
   }
   const indexing = $derived(!!app.queue.indexing || app.queue.index_queued > 0)
+  // tools running now (the job's, the index lane's): what Pause and the priority menu reach
+  const working = $derived(!!app.queue.current || !!app.queue.indexing)
+  const paused = (status: string) => app.queue.paused && (status === 'running' || status === 'indexing')
   // The toolbar's Index: the selected jobs, or every job when none is selected.
   const indexTarget = $derived(selected.length ? selected : app.jobs.map(j => j.id))
   const toIndex = $derived(unindexed(indexTarget).length)
@@ -376,13 +381,41 @@
       </Button>
       {#if app.queue.running}
         <Button variant="outline" onclick={() => act(api.stop)} title="Finish the current job, then stop">
-          <PauseIcon />{app.queue.stop_after_current ? 'Stopping…' : 'Stop after current'}
+          <ListEndIcon />{app.queue.stop_after_current ? 'Stopping…' : 'Stop after current'}
         </Button>
         <Button variant="outline" onclick={() => act(api.cancel)} title="Cancel the running job"><SquareIcon />Cancel</Button>
       {:else}
         <Button disabled={!runnable} onclick={() => act(() => run())} title="Run every ready job in order">
           <PlayIcon />Start queue
         </Button>
+      {/if}
+      {#if working || app.queue.paused}
+        {#if app.queue.paused}
+          <Button onclick={() => act(api.resume)} title="Go on with the paused tools"><PlayIcon />Resume</Button>
+        {:else}
+          <Button variant="outline" onclick={() => act(api.pause)}
+            title="Suspend the running job's tools and the index lane's (they use no CPU until resumed)">
+            <PauseIcon />Pause
+          </Button>
+        {/if}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger disabled={!working}
+            title="Process priority of the running tools, for the rest of their run (Settings has the default)">
+            {#snippet child({ props })}
+              <Button {...props} variant="ghost" size="icon" aria-label="Process priority"><GaugeIcon /></Button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="start" class="w-48">
+            <DropdownMenu.Label>Priority, this run</DropdownMenu.Label>
+            <DropdownMenu.RadioGroup value={app.queue.priority ?? ''}
+              onValueChange={v => act(() => api.priority((v || null) as Priority | null))}>
+              <DropdownMenu.RadioItem value="">As in Settings</DropdownMenu.RadioItem>
+              {#each Object.entries(PRIORITY_LABEL) as [value, label] (value)}
+                <DropdownMenu.RadioItem {value}>{label}</DropdownMenu.RadioItem>
+              {/each}
+            </DropdownMenu.RadioGroup>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
       {/if}
       <Button variant="outline" disabled={!selected.length} onclick={() => act(() => run(selected))} title="Queue the selected jobs and start">
         <PlayIcon />Run selected
@@ -430,7 +463,11 @@
         >
           <div class="flex items-center gap-2">
             <span class="truncate font-medium" title={job.source}>{job.name}</span>
-            <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
+            {#if paused(job.status)}
+              <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
+            {:else}
+              <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
+            {/if}
           </div>
           <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
             <span>{job.encoder}</span>

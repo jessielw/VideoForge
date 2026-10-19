@@ -10,6 +10,7 @@ import sys
 import sysconfig
 import tomllib
 
+from videoforge.core.execute.control import Priority
 from videoforge.core.pairing import MatchRules
 
 # The app's folder: videoforge.toml, tools/ and the built frontend. The checkout by default; a portable
@@ -52,6 +53,9 @@ class AppConfig:
     plugins: dict[str, dict] = field(default_factory=dict)  # [plugins.<id>]: each plugin's own settings
     parallel_audio: int = 2  # audio encodes run alongside a job's video, this many at once; 0 = one by one
     delete_work_dir: bool = False  # delete a job's <source>_tmp/ once it's done (its records are kept elsewhere)
+    # StaxRip's defaults: the video encode (x264 / x265 and the vspipe feeding it) below normal, other tools normal
+    encoder_priority: Priority = Priority.BELOW_NORMAL
+    tool_priority: Priority = Priority.NORMAL
 
 
 _MKVMERGE_SIBLINGS = ("mkvpropedit", "mkvextract")  # MKVToolNix's other tools: found next to mkvmerge
@@ -125,6 +129,8 @@ def load_app_config(path: Path | None = None) -> AppConfig:
     pipeline = data.get("pipeline", {})
     parallel_audio = max(0, int(pipeline.get("parallel_audio", AppConfig.parallel_audio)))
     delete_work_dir = bool(pipeline.get("delete_work_dir", AppConfig.delete_work_dir))
+    encoder_priority = Priority(pipeline.get("encoder_priority", AppConfig.encoder_priority))
+    tool_priority = Priority(pipeline.get("tool_priority", AppConfig.tool_priority))
     return AppConfig(
         tools=tools,
         matching=matching,
@@ -133,4 +139,6 @@ def load_app_config(path: Path | None = None) -> AppConfig:
         plugins=plugins,
         parallel_audio=parallel_audio,
         delete_work_dir=delete_work_dir,
+        encoder_priority=encoder_priority,
+        tool_priority=tool_priority,
     )

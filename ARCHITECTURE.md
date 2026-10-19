@@ -50,6 +50,8 @@ src/videoforge/
       target.py          A 2-pass target size -> the video bitrate (StaxRip's Calc.GetVideoBitrate): what the size
                          leaves after the audio, subtitles, attachments, HDR metadata and overhead, over the length
     execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel), jobobject.py (tools end with the server, Windows)
+                         control.py: pause and priority for a tool and its children (Windows: a job of its own,
+                         nested; POSIX: its process group); process.CancelToken holds a run's tools for them
                          mux.MUXERS: mkvmerge (MKV) and MP4Box (MP4), each with what its container can't hold
                          audio.ENCODES: every audio encode (DEE, qaac, opusenc, ffmpeg's FLAC/Opus/AAC/AC-3/E-AC-3)
                          with its layouts, bitrates and tools; planner, tool checks and UI all read it
@@ -68,7 +70,7 @@ src/videoforge/
     app.py               create_app(): /api routers + the built frontend (SPA fallback)
     settings.py          Port, data folder, browsable roots
     store.py             SQLite (app data): jobs (spec + state JSON, order), presets (video, encoder, template)
-    queue.py             The queue: one worker thread runs jobs in order; start/stop/cancel;
+    queue.py             The queue: one worker thread runs jobs in order; start/stop/cancel, pause/resume, priority;
                          the index lane (its own thread: work folder, script, source index; nothing else)
     events.py            Progress, log lines and job changes -> WebSocket /api/events
     routes/              fs (folder browser), jobs, media (probe), video (frames, crop, script),
@@ -398,7 +400,8 @@ defaults, audio encoder settings, and the checks on the finished file.
   `docker/wine-run`: each user id gets its own prefix (Wine refuses one another user owns), copied from a
   template whose DLLs are links into Wine (16 MB, ~2 s the first time); the display drivers are off. Paths
   pass unchanged: Wine maps / to Z:, the current drive. On POSIX each tool runs in its own process group, so
-  a cancel kills its children too (`process._kill_tree`).
+  a cancel kills its children too (`process._kill_tree`), a pause stops them (SIGSTOP / SIGCONT) and a priority
+  is the group's nice value (`execute/control.py`; the container runs as root, so raising one back works).
 - VapourSynth R81 loads only API 4 plugins: the manifest leaves out the API 3 ones (TDeintMod, EEDI2, CTMF,
   DFTTest, neo_f3kdb, RemapFrames, nnedi3) for dfttest2, vszip and znedi3. R81 also takes a keyword's
   trailing underscore only (`lambda_`), so the fetch patches havsfunc r33's `_lambda` / `_global`. The

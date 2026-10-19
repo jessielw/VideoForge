@@ -20,6 +20,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 from videoforge.core.actions import ACTION_LABELS, JOB_TOKENS, QUEUE_TOKENS, Action
 from videoforge.core.config import with_tools
 from videoforge.core.execute.audio import ENCODES
+from videoforge.core.execute.control import Priority
 from videoforge.core.notify import DEFAULT_EVENTS, EVENT_LABELS, Destination
 from videoforge.core.plan_io import to_json
 from videoforge.core.tools import TOOL_NAMES, TOOLS, check, detect, missing_for_encodes
@@ -65,6 +66,11 @@ def _state(request: Request) -> dict[str, Any]:
         "parallel_audio_default": s.base_config.parallel_audio,
         "delete_work_dir": s.config.delete_work_dir,
         "delete_work_dir_default": s.base_config.delete_work_dir,
+        "encoder_priority": s.config.encoder_priority,
+        "encoder_priority_default": s.base_config.encoder_priority,
+        "tool_priority": s.config.tool_priority,
+        "tool_priority_default": s.base_config.tool_priority,
+        "priorities": [p.value for p in Priority],
         "records_dir": str(s.settings.records_dir),
         "notifications": [d.to_json() for d in saved.notifications],
         "notification_events": [
@@ -89,6 +95,7 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     for every drive), profile (an id, or null for videoforge.toml's), index_waits_for_disk (bool),
     parallel_audio (audio encodes at once beside the video, 0 to MAX_PARALLEL_AUDIO; null for videoforge.toml's),
     delete_work_dir (bool: delete a done job's work folder; null for videoforge.toml's),
+    encoder_priority / tool_priority (a Priority; null for videoforge.toml's),
     notifications (the whole list: [{name, url, enabled, events}]), actions (the whole list:
     [{name, kind, target, enabled, events, overwrite}]), disabled_plugins (plugin ids)."""
     s = request.app.state
@@ -126,6 +133,13 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         delete_work = body["delete_work_dir"]
         if delete_work is not None and not isinstance(delete_work, bool):
             raise HTTPException(422, "delete_work_dir: true, false or null")
+    priorities = {}
+    for key in ("encoder_priority", "tool_priority"):
+        priorities[key] = getattr(saved, key)
+        if key in body:
+            if body[key] is not None and body[key] not in tuple(Priority):
+                raise HTTPException(422, f"{key}: one of {', '.join(Priority)}, or null")
+            priorities[key] = None if body[key] is None else Priority(body[key])
     destinations = saved.notifications
     if "notifications" in body:
         try:
@@ -144,7 +158,9 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         disabled = sorted({str(i) for i in body["disabled_plugins"] or []})
 
     before = s.config.tools
-    new = SavedSettings(tools, roots, profile, waits, destinations, actions, disabled, parallel, delete_work)
+    new = SavedSettings(
+        tools, roots, profile, waits, destinations, actions, disabled, parallel, delete_work, **priorities
+    )
     new.save(s.store)
     s.saved = new
     s.queue.set_index_waits_for_disk(waits)

@@ -38,6 +38,10 @@ parallel_audio = 2
 # Delete a job's work folder (<source>_tmp: the index, the encodes, the log) once the job is done;
 # its job records and log are copied to <data folder>/records first. The Settings page can change it.
 delete_work_dir = false
+# Process priority: idle, below_normal, normal, above_normal or high, as a nice value (raising one back
+# needs CAP_SYS_NICE). The video encode (x264 / x265 and the vspipe feeding it), and every other tool.
+encoder_priority = "below_normal"
+tool_priority = "normal"
 
 [actions]
 # Let the Settings page's command actions run. Off here: the web page has no login, so anyone who can

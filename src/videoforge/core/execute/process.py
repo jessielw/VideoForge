@@ -1,4 +1,4 @@
-"""Run external tools: a single command or a two-stage pipe, with log streaming and cancel."""
+"""Run external tools: a single command or a two-stage pipe, with log streaming, cancel, pause and priority."""
 
 from __future__ import annotations
 
@@ -10,9 +10,11 @@ import re
 import signal
 import subprocess
 import threading
+import time
 from typing import IO, cast
 
-from videoforge.core.execute import jobobject
+from videoforge.core.execute import control, jobobject
+from videoforge.core.execute.control import Priority
 
 LogFn = Callable[[str], None]
 
@@ -42,12 +44,28 @@ class ToolError(RuntimeError):
 
 
 class CancelToken:
-    """Set from another thread (e.g. the GUI) to stop the running job. A token with a parent is
-    cancelled with it too (a job's steps stop together when one of them fails)."""
+    """A run's control, used from another thread (e.g. the GUI): cancel it, pause and resume its tools, change
+    their priority. A token with a parent is cancelled with it too (a job's steps stop together when one of
+    them fails); its tools are the root token's, so they pause and change priority with it.
 
-    def __init__(self, parent: CancelToken | None = None) -> None:
+    Tools get the encoder priority (control.ENCODERS) or the tool priority, unless set_priority() chose one
+    for the rest of the run. A tool started while paused starts paused."""
+
+    def __init__(
+        self,
+        parent: CancelToken | None = None,
+        *,
+        encoder_priority: Priority = Priority.NORMAL,
+        tool_priority: Priority = Priority.NORMAL,
+    ) -> None:
         self._event = threading.Event()
         self._parent = parent
+        self._lock = threading.Lock()
+        self._tools: dict[control.ToolGroup, bool] = {}  # the running tools: is it an encoder's
+        self._priorities = (tool_priority, encoder_priority)
+        self._chosen: Priority | None = None  # set_priority()'s
+        self._paused_at: float | None = None
+        self._paused_s = 0.0  # the pauses before this one
 
     def cancel(self) -> None:
         self._event.set()
@@ -55,6 +73,69 @@ class CancelToken:
     @property
     def cancelled(self) -> bool:
         return self._event.is_set() or (self._parent is not None and self._parent.cancelled)
+
+    @property
+    def _root(self) -> CancelToken:
+        return self if self._parent is None else self._parent._root
+
+    @property
+    def paused(self) -> bool:
+        return self._root._paused_at is not None
+
+    @property
+    def paused_seconds(self) -> float:
+        """How long the run has been paused, all told (the current pause so far too)."""
+        root = self._root
+        with root._lock:
+            now = 0.0 if root._paused_at is None else time.monotonic() - root._paused_at
+            return root._paused_s + now
+
+    @property
+    def priority(self) -> Priority | None:
+        """The priority set_priority() chose (None: each tool's own, encoder or tool)."""
+        return self._root._chosen
+
+    def pause(self) -> None:
+        root = self._root
+        with root._lock:
+            if root._paused_at is None:
+                root._paused_at = time.monotonic()
+                for tool in root._tools:
+                    tool.suspend()
+
+    def resume(self) -> None:
+        root = self._root
+        with root._lock:
+            if root._paused_at is not None:
+                root._paused_s += time.monotonic() - root._paused_at
+                root._paused_at = None
+                for tool in root._tools:
+                    tool.resume()
+
+    def set_priority(self, priority: Priority | None) -> None:
+        """One priority for the run's tools, now and for the rest of the run (None: back to each one's own)."""
+        root = self._root
+        with root._lock:
+            root._chosen = priority
+            for tool, encoder in root._tools.items():
+                tool.set_priority(priority or root._priorities[encoder])
+
+    def _start(self, proc: subprocess.Popen, encoder: bool) -> control.ToolGroup:
+        """A tool started with jobobject.SUSPENDED, taken on and let run (or left paused)."""
+        root = self._root
+        with root._lock:
+            tool = control.ToolGroup(proc, root._chosen or root._priorities[encoder])
+            root._tools[tool] = encoder
+            if root._paused_at is not None:
+                tool.suspend()
+            tool.start()
+            return tool
+
+    def _end(self, tool: control.ToolGroup) -> None:
+        root = self._root
+        with root._lock:
+            root._tools.pop(tool, None)
+            tool.close()
 
 
 def tool_name(argv: Sequence[str]) -> str:
@@ -111,8 +192,10 @@ def run(argvs: Sequence[Sequence[str]], log: LogFn, cancel: CancelToken | None =
     if not 1 <= len(argvs) <= 2:
         raise ValueError("run() takes one command or a two-stage pipe")
     procs: list[subprocess.Popen] = []
+    tools: list[control.ToolGroup] = []
     pumps: list[threading.Thread] = []
     tails: list[list[str]] = []
+    encoder = any(tool_name(argv) in control.ENCODERS for argv in argvs)
 
     try:
         for i, argv in enumerate(argvs):
@@ -126,7 +209,10 @@ def run(argvs: Sequence[Sequence[str]], log: LogFn, cancel: CancelToken | None =
                 start_new_session=os.name != "nt",  # POSIX: its own process group, for _kill_tree
             )
             procs.append(proc)
-            jobobject.adopt(proc)  # ends with VideoForge, even on a crash
+            if cancel is not None:  # ends with VideoForge, even on a crash; pauses with the run
+                tools.append(cancel._start(proc, encoder))
+            else:
+                jobobject.adopt(proc)
             if i == 1 and procs[0].stdout is not None:
                 procs[0].stdout.close()  # the producer sees a broken pipe if the consumer dies
             tail: list[str] = []
@@ -147,6 +233,9 @@ def run(argvs: Sequence[Sequence[str]], log: LogFn, cancel: CancelToken | None =
         for p in reversed(procs):
             _kill_tree(p)
             p.wait()
+        if cancel is not None:
+            for tool in tools:
+                cancel._end(tool)
         for t in pumps:
             t.join(timeout=5)
 

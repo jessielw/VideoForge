@@ -189,7 +189,10 @@ def run_steps(
         changed(run)
         log(f"== {i + 1}/{len(steps)} {step.label}")
         report(i, 0.0)
-        started = time.monotonic()
+        started = time.monotonic() - stop.paused_seconds
+
+        def spent() -> float:  # a pause is no time spent
+            return time.monotonic() - stop.paused_seconds - started
 
         def out(line: str) -> None:
             run.log(line)
@@ -240,15 +243,15 @@ def run_steps(
                 if not path.exists():
                     raise ToolError(f"{step.label}: {path.name} is missing")
         except process.Cancelled:
-            run.status, run.seconds = StepStatus.CANCELLED, round(time.monotonic() - started, 1)
+            run.status, run.seconds = StepStatus.CANCELLED, round(spent(), 1)
             changed(run)
             raise
         except Exception as e:
-            run.status, run.seconds = StepStatus.FAILED, round(time.monotonic() - started, 1)
+            run.status, run.seconds = StepStatus.FAILED, round(spent(), 1)
             run.error, run.exit_code = str(e) or type(e).__name__, getattr(e, "returncode", None)
             changed(run)
             raise
-        record = StepRecord(step.id, step.fingerprint(), list(step.outputs), round(time.monotonic() - started, 1))
+        record = StepRecord(step.id, step.fingerprint(), list(step.outputs), round(spent(), 1))
         with lock:
             records[step.id] = record
             if on_record:

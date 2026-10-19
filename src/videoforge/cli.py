@@ -166,7 +166,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     plans = load_plans(args.plan)
     if args.only:
         plans = [p for p in plans if any(o in p.source.name for o in args.only)]
-    cancel = CancelToken()
+    cancel = CancelToken(encoder_priority=app.encoder_priority, tool_priority=app.tool_priority)
 
     def log(line: str) -> None:
         if args.verbose:

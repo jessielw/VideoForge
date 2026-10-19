@@ -22,6 +22,7 @@ from test_pipeline import fake_tool_files
 
 from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools
 from videoforge.core.events import JobFinished
+from videoforge.core.execute.control import Priority
 from videoforge.core.execute.process import Cancelled, ToolError
 from videoforge.core.job import JobResult, JobSpec, JobStatus, StepRecord, StepStatus, planned_encode
 from videoforge.core.jobs import ProbedInputs, external_tracks
@@ -263,7 +264,7 @@ def test_progress_guesses_the_jobs_time_left(tmp_path, monkeypatch):
         entry = queue.get(job_id)
         clock = [100.0]
         monkeypatch.setattr(queue_module, "_now", lambda: clock[0])
-        progress = queue._progress(entry)
+        progress = queue._progress(entry, None)
         step = Step("video", "Video (x264)")
         progress(StepProgress(0, 3, step, 1.0, 0.4, reused=True))  # done in an earlier run: no time spent
         progress(StepProgress(1, 3, step, 0.0, 0.4))
@@ -342,6 +343,38 @@ def test_busy_jobs_cant_change_and_cancel_stops(tmp_path):
         wait_for(client, job_id, "cancelled")
         client.app.state.queue.wait(5)
         assert client.get("/api/queue").json()["running"] is False
+
+
+def test_pause_resume_and_priority_reach_the_running_job(tmp_path):
+    make_files(tmp_path)
+    tokens = []
+
+    class Run(FakeRun):
+        def __call__(self, spec, plan, profile, app, *, cancel, **kw):
+            tokens.append(cancel)
+            return super().__call__(spec, plan, profile, app, cancel=cancel, **kw)
+
+    with make_client(tmp_path, run=Run(block=True)) as client:
+        (job_id,) = add(client, tmp_path)
+        wait_for(client, job_id, "ready", "warn")
+        client.post("/api/queue/start", json={"ids": [job_id]})
+        wait_for(client, job_id, "running")
+        end = time.monotonic() + 5
+        while not tokens and time.monotonic() < end:  # it shows running just before the run begins
+            time.sleep(0.01)
+        (token,) = tokens
+        assert client.post("/api/queue/pause").json()["paused"] is True and token.paused
+        assert client.post("/api/queue/resume").json()["paused"] is False and not token.paused
+        assert client.post("/api/queue/priority", json={"priority": "idle"}).json()["priority"] == "idle"
+        assert token.priority == "idle"
+        assert client.post("/api/queue/priority", json={"priority": "turbo"}).status_code == 422
+        assert client.post("/api/queue/priority", json={"priority": None}).json()["priority"] is None
+        client.post("/api/queue/pause")
+        client.post("/api/queue/cancel")  # a paused job cancels
+        wait_for(client, job_id, "cancelled")
+        client.app.state.queue.wait(5)
+        assert client.get("/api/queue").json()["paused"] is False  # nothing runs: nothing is paused
+        assert client.post("/api/queue/pause").json()["paused"] is False
 
 
 def test_notifications(tmp_path):
@@ -581,6 +614,26 @@ def test_work_folders(tmp_path):
         assert client.post("/api/jobs/remove", json={"ids": [two]}).json()["deleted"] == []
     with make_client(tmp_path) as client:  # kept across a restart
         assert client.get("/api/config").json()["delete_work_dir"] is True
+
+
+def test_priority_settings(tmp_path):
+    """StaxRip's defaults, changed on the Settings page and kept across a restart; the next run's tokens get them."""
+    with make_client(tmp_path) as client:
+        cfg = client.get("/api/config").json()
+        assert (cfg["encoder_priority"], cfg["encoder_priority_default"]) == ("below_normal", "below_normal")
+        assert (cfg["tool_priority"], cfg["tool_priority_default"]) == ("normal", "normal")
+        assert "idle" in cfg["priorities"]
+        assert client.put("/api/config", json={"tool_priority": "turbo"}).status_code == 422
+        cfg = client.put("/api/config", json={"encoder_priority": "idle", "tool_priority": "high"}).json()
+        assert (cfg["encoder_priority"], cfg["tool_priority"]) == ("idle", "high")
+        queue = client.app.state.queue
+        with queue._lock:
+            token = queue._token()
+        assert token._priorities == (Priority.HIGH, Priority.IDLE)
+    with make_client(tmp_path) as client:
+        assert client.get("/api/config").json()["encoder_priority"] == "idle"
+        cfg = client.put("/api/config", json={"encoder_priority": None}).json()
+        assert cfg["encoder_priority"] == "below_normal"
 
 
 def test_keep_records_keeps_the_newest(tmp_path):
@@ -1181,6 +1234,8 @@ def test_index_lane_stop(tmp_path):
             "running": False,
             "current": None,
             "stop_after_current": False,
+            "paused": False,
+            "priority": None,
             "queued": 0,
             "indexing": None,
             "index_queued": 0,

@@ -19,6 +19,11 @@ source), or in Docker on Linux.
   encode, up to 2 at once by default (Settings → Audio encodes; 0 runs them one by one). A running job shows
   its step, the encoder's speed (fps) and time left, the time since it started and a guess at the job's time
   left, in the queue and the job's header.
+- **Pause and process priority.** The Queue's Pause suspends the running job's tools and the index lane's,
+  children too (DeeZy's ffmpeg / DEE), until Resume; paused time doesn't count in a step's time or the job's
+  time left. Tools run at StaxRip's priorities: the video encode (x264 / x265 and the vspipe feeding it) below
+  normal, other tools normal (Settings → Process priority, `[pipeline] encoder_priority` / `tool_priority`); the
+  toolbar's gauge menu changes the running ones' for the rest of their run. On Linux it's a nice value.
 - **Reuse finished files.** When the jobs you start already have a finished video or audio encode in their work
   folder (from an earlier run, a job removed and added again, or a variant with another label), Start queue /
   Run selected asks per file: reuse it (the job is then mostly a mux, as in StaxRip) or make it again. Files
