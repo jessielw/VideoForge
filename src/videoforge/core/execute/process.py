@@ -19,7 +19,7 @@ LogFn = Callable[[str], None]
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _POLL_S = 0.2
 # Exit codes that still mean success (MKVToolNix returns 1 for warnings).
-_OK_CODES = {"mkvmerge": {0, 1}, "mkvpropedit": {0, 1}}
+_OK_CODES = {"mkvmerge": {0, 1}, "mkvpropedit": {0, 1}, "mkvextract": {0, 1}}
 # Progress bars redraw with \r, so a "line" ends at either.
 _LINE_SPLIT = re.compile(r"[\r\n]+")
 # Terminal color codes (MP4Box colors its output even into a pipe on Linux).

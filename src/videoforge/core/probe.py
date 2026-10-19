@@ -122,6 +122,9 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                 sar_den=sar.denominator,
                 color=from_mediainfo(mi),
                 hdr=hdr.from_mediainfo(mi),
+                id=track["id"],
+                vfr=getattr(mi, "frame_rate_mode", None) == "VFR",
+                duration_ms=_int(getattr(mi, "duration", None)) or 0,
             )
         elif kind == "audio":
             if mi is None and len(audio) < len(mi_audio) and mi_audio[len(audio)].track_id is None:

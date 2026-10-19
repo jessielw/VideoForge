@@ -42,6 +42,20 @@ def test_a_trim_or_a_speed_change_warns():
     assert [(i.severity, i.code) for i in issues] == [(Severity.WARN, "video.length")]
 
 
+def test_a_vfr_source_checks_its_frames():
+    """A VFR source's timestamps time a script that keeps every frame (its length is the source's, whatever the
+    averaged rate says); one that doesn't is muxed at its own rate, and checked against MediaInfo's duration."""
+    source = VideoInfo(640, 360, default_duration_ns=41708333, frames=240, vfr=True, duration_ms=9018)
+    assert length_warning(source, 240, Fraction(29875, 1122)) == ""  # BestSource's average rate
+    assert length_warning(source, 240, None) == ""
+    dropped = length_warning(source, 216, Fraction(24000, 1001))  # an IVTC to 23.976: 9.009 s, as long
+    assert "216 frames and the source 240" in dropped and "constant 23.976 fps" in dropped
+    assert "out of step" not in dropped
+    trimmed = length_warning(source, 120, Fraction(24000, 1001))
+    assert "constant 23.976 fps" in trimmed and "out of step" in trimmed
+    assert "the source's first frame duration" in length_warning(source, 216, None)
+
+
 def test_no_check_without_both_lengths():
     assert length_warning(VideoInfo(1920, 1080, default_duration_ns=41708333), 100, Fraction(24)) == ""  # no frames
     assert length_warning(VideoInfo(1920, 1080, frames=100), 50, Fraction(24)) == ""  # no source rate

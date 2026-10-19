@@ -160,7 +160,7 @@ def test_encodes_need_their_tools(tmp_path):
 
 def test_with_tools_layers_paths_and_brings_mkvpropedit(tmp_path):
     (tmp_path / "mkv").mkdir()
-    for exe in ("mkvmerge.exe", "mkvpropedit.exe"):
+    for exe in ("mkvmerge.exe", "mkvpropedit.exe", "mkvextract.exe"):
         (tmp_path / "mkv" / exe).write_bytes(b"")
     base = AppConfig(
         tools=Tools(mkvmerge="mkvmerge", deezy="deezy", dee="dee", truehdd="truehdd", qaac="qaac", ffmpeg="ffmpeg")
@@ -168,6 +168,7 @@ def test_with_tools_layers_paths_and_brings_mkvpropedit(tmp_path):
     cfg = with_tools(base, {"mkvmerge": "mkv/mkvmerge.exe", "x264": "", "qaac": str(tmp_path / "q.exe")}, tmp_path)
     assert cfg.tools.mkvmerge == str(tmp_path / "mkv" / "mkvmerge.exe")
     assert cfg.tools.mkvpropedit == str(tmp_path / "mkv" / "mkvpropedit.exe")  # came along
+    assert cfg.tools.mkvextract == str(tmp_path / "mkv" / "mkvextract.exe")
     assert cfg.tools.x264 == "x264"  # an empty value keeps the base
     assert cfg.tools.qaac == str(Path(tmp_path / "q.exe"))
     assert base.tools.mkvmerge == "mkvmerge"  # the base is untouched

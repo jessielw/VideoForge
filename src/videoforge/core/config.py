@@ -32,6 +32,7 @@ class Tools:
     qaac: str
     ffmpeg: str
     mkvpropedit: str = "mkvpropedit"  # default: next to mkvmerge
+    mkvextract: str = "mkvextract"  # default: next to mkvmerge
     x264: str = "x264"
     x265: str = "x265"
     opusenc: str = "opusenc"
@@ -51,6 +52,9 @@ class AppConfig:
     plugins: dict[str, dict] = field(default_factory=dict)  # [plugins.<id>]: each plugin's own settings
     parallel_audio: int = 2  # audio encodes run alongside a job's video, this many at once; 0 = one by one
     delete_work_dir: bool = False  # delete a job's <source>_tmp/ once it's done (its records are kept elsewhere)
+
+
+_MKVMERGE_SIBLINGS = ("mkvpropedit", "mkvextract")  # MKVToolNix's other tools: found next to mkvmerge
 
 
 def _resolve_tool(value: str, base: Path) -> str:
@@ -79,16 +83,17 @@ def _merged(base: dict, over: dict) -> dict:
 
 def with_tools(cfg: AppConfig, paths: dict[str, str], base: Path = PROJECT_ROOT) -> AppConfig:
     """cfg with some tool paths replaced (the Settings page's; relative ones resolve against base).
-    A new mkvmerge brings the mkvpropedit next to it, unless that is set too."""
+    A new mkvmerge brings the mkvpropedit and mkvextract next to it, unless those are set too."""
     names = asdict(cfg.tools)
     for name, value in paths.items():
         if name in names and value:
             names[name] = _resolve_tool(value, base)
-    if paths.get("mkvmerge") and not paths.get("mkvpropedit"):
-        mkvmerge = Path(names["mkvmerge"])
-        sibling = mkvmerge.with_name("mkvpropedit" + mkvmerge.suffix)
-        if sibling.is_file():
-            names["mkvpropedit"] = str(sibling)
+    for tool in _MKVMERGE_SIBLINGS:
+        if paths.get("mkvmerge") and not paths.get(tool):
+            mkvmerge = Path(names["mkvmerge"])
+            sibling = mkvmerge.with_name(tool + mkvmerge.suffix)
+            if sibling.is_file():
+                names[tool] = str(sibling)
     return replace(cfg, tools=Tools(**names))
 
 
@@ -100,9 +105,10 @@ def load_app_config(path: Path | None = None) -> AppConfig:
         data = _merged(data, tomllib.loads(local.read_text(encoding="utf-8")))
     base = path.parent
     names = {name: _resolve_tool(v, base) for name, v in data["tools"].items()}
-    if "mkvpropedit" not in names:
-        sibling = Path(names["mkvmerge"]).with_name("mkvpropedit" + Path(names["mkvmerge"]).suffix)
-        names["mkvpropedit"] = str(sibling) if sibling.is_file() else _resolve_tool("mkvpropedit", base)
+    for tool in _MKVMERGE_SIBLINGS:
+        if tool not in names:
+            sibling = Path(names["mkvmerge"]).with_name(tool + Path(names["mkvmerge"]).suffix)
+            names[tool] = str(sibling) if sibling.is_file() else _resolve_tool(tool, base)
     if "vspipe" not in names:
         names["vspipe"] = default_vspipe()
     tools = Tools(**names)

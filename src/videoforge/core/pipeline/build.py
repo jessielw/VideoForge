@@ -1,9 +1,11 @@
 """A job's steps from its spec and plan.
 
-    script -> index -> script info -> chapters/qpf -> audio encodes -> video (1 or 2 passes) -> mux
+    script -> index -> script info -> chapters/qpf -> (VFR) timestamps -> audio encodes -> video (1 or 2 passes)
+    -> mux
 
 The script info (vspipe --info) gives the encode's frame rate, which an IVTC or a double-rate deinterlace makes
-other than the source's: AutoQPF and the mux read it when their turn comes (Step.refresh).
+other than the source's: AutoQPF and the mux read it when their turn comes (Step.refresh). A VFR source's
+timestamps (core/video/vfr.py) time an MKV's encode instead, when they fit the script's frame count.
 
 The audio encodes are background steps: with AppConfig.parallel_audio they run alongside the
 video encode (after the index, which reads the whole source too), and the mux waits for them.
@@ -31,7 +33,7 @@ from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
 from videoforge.core.models import Plan, VideoColor, VideoInfo
 from videoforge.core.pipeline.steps import Step
-from videoforge.core.video import hdr, info
+from videoforge.core.video import hdr, info, vfr
 from videoforge.core.video.encoders import encoder_command, vspipe_command
 from videoforge.core.video.qpf import make_qpf, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
@@ -399,10 +401,23 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
                 background=True,
             )
         )
+    container = spec.container(profile)
+    video = plan.source.video
+    timestamps = work / vfr.TIMESTAMPS if vfr.carries(video, container) and video is not None else None
+    if timestamps is not None and video is not None:
+        argv = vfr.extract_argv(app.tools.mkvextract, plan.source.path, video.id, timestamps)
+        stamps = Step(
+            "timestamps",
+            "Source timestamps (mkvextract)",
+            argvs=(argv,),
+            outputs=(timestamps,),
+            inputs=(plan.source.path,),
+            weight=0.5,
+        )
+        audio.insert(0, stamps)
     at = next((n for n, s in enumerate(steps) if s.id.startswith("video")), len(steps))
     steps[at:at] = audio
 
-    container = spec.container(profile)
     if container == "mp4" and (chapters := mp4_chapters_step(plan, work)) is not None:
         steps.append(chapters)
         plan = replace(plan, chapters_path=chapters.outputs[0])
@@ -415,19 +430,26 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
     muxer, extra = MUXERS[container], split_args(spec.mux.extra)
 
     # The job's encode is timed by the script's frame rate, once the info step has read it (before a run, the
-    # source's); a reused encode by the source's.
-    def mux_step(fps: Fraction | None) -> Step:
+    # source's); a reused encode by the source's. A VFR source's timestamps time it instead, while they fit the
+    # script (one per frame: an IVTC or a trim drops them for the script's rate).
+    def timing() -> tuple[Fraction | None, Path | None]:
+        found = info.read(work / info.SCRIPT_INFO)
+        if found is None:
+            return None, timestamps
+        return found.fps, timestamps if timestamps is not None and vfr.fits(timestamps, found.frames) else None
+
+    def mux_step(fps: Fraction | None, stamps: Path | None) -> Step:
         return Step(
             "mux",
             "Mux",
-            argvs=(tuple(muxer.command(plan, encoded, partial, app, extra, fps)),),
+            argvs=(tuple(muxer.command(plan, encoded, partial, app, extra, fps, stamps)),),
             outputs=(output,),
             writes=(partial,),
-            inputs=tuple(mux_inputs),
+            inputs=(*mux_inputs, *((stamps,) if stamps else ())),
             finalize=lambda: partial.replace(output),
             weight=3,
-            refresh=(lambda: mux_step(script_fps(spec))) if spec.encodes_video else None,
+            refresh=(lambda: mux_step(*timing())) if spec.encodes_video else None,
         )
 
-    steps.append(mux_step(None))
+    steps.append(mux_step(None, timestamps))
     return JobSteps(steps, output, encoded)

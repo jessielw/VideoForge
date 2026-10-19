@@ -45,6 +45,7 @@ src/videoforge/
                          as 8.1 (dovi_tool's RPU, its L5 moved by the crop and resize); a FEL's enhancement layer
                          (demux, MKV) and its HDR10 values from the RPU; their frame checks
       qpf.py             AutoQPF: chapters -> qpf + chapter file
+      vfr.py             A VFR source's timestamps (mkvextract timestamps_v2) onto an MKV's encode, while they fit
     execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel), jobobject.py (tools end with the server, Windows)
                          mux.MUXERS: mkvmerge (MKV) and MP4Box (MP4), each with what its container can't hold
                          audio.ENCODES: every audio encode (DEE, qaac, opusenc, ffmpeg's FLAC/Opus/AAC/AC-3/E-AC-3)
@@ -170,6 +171,13 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   source's (MediaInfo's frame count x the frame duration) beyond 3 frames would put the source's audio,
   subtitles and chapters out of step: `length_warning` shows on the Video tab (the output clip's info) and the
   validate step adds it as a `video.length` WARN.
+- Variable frame rate (`core/video/vfr.py`, StaxRip's Demux.vb / Muxer.vb): a source MediaInfo calls VFR
+  (`VideoInfo.vfr`; its `default_duration_ns` is only the first frame's, and BestSource reports an averaged
+  rate) gets a `timestamps` step into an MKV: `mkvextract timestamps_v2` writes `timestamps.txt` (one line per
+  frame and the last one's end), and the mux takes `--timestamps 0:<file>` instead of `--default-duration`
+  (a reused encode too). The mux's refresh keeps them while they fit the script's frame count; a script that
+  drops or adds frames (an IVTC) is muxed at its own rate, and `length_warning` says so (its length then checked
+  against MediaInfo's duration). MP4Box takes no timestamps file: `mux.mp4_vfr` WARN.
 - HDR10+ (`core/video/hdr.py`, x265 with "HDR10+ from the source" on): before the video, `hdr10plus`
   (`ffmpeg ... -f hevc - | hdr10plus_tool extract`, StaxRip's command) writes `hdr10plus.json` to the work
   folder and `hdr10plus.check` compares its frames with the script's (`vspipe --info`): a trim, a frame-rate

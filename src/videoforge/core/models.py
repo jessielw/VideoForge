@@ -184,6 +184,11 @@ class VideoInfo:
     sar_den: int = 1
     color: VideoColor = field(default_factory=VideoColor)
     hdr: VideoHdr = field(default_factory=VideoHdr)
+    id: int = 0  # mkvmerge's track id (mkvextract's too)
+    # A variable frame rate (MediaInfo's FrameRate_Mode): default_duration_ns is then only the first frame's,
+    # and the encode is timed by the source's own timestamps (core/video/vfr.py).
+    vfr: bool = False
+    duration_ms: int = 0  # the video's length (MediaInfo); 0 = not known
 
     @property
     def sar(self) -> Fraction:

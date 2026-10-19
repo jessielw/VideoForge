@@ -18,6 +18,7 @@ import pytest
 
 from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools
 from videoforge.core.execute import process
+from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import Cancelled, CancelToken, ToolError
 from videoforge.core.job import JobSpec, JobState, JobStatus, StepStatus
 from videoforge.core.models import (
@@ -109,6 +110,9 @@ class FakeRunner:
                 Path(last[last.index(flag) + 1]).write_bytes(b"out")
         if "--info" in last and last[-1] != "-":  # the script info step: vspipe writes the clip's info
             Path(last[-1]).write_text(self.script_info, encoding="utf-8")
+        if "timestamps_v2" in last:  # mkvextract: <track>:<file>, one timestamp per frame
+            stamps = "".join(f"{round(i * 1001 / 24)}\n" for i in range(241))  # and the last frame's end
+            Path(last[-1].split(":", 1)[1]).write_text("# timestamp format v2\n" + stamps, encoding="utf-8")
         log(f"[{Path(last[0]).stem}] [ 50.0%] 1/2 frames")
 
     script_info = "Width: 1920\nHeight: 1080\nFrames: 240\nFPS: 24000/1001 (23.976 fps)\n"
@@ -356,6 +360,47 @@ def test_the_encode_is_timed_by_the_scripts_frame_rate(profile, tmp_path):
     mux = runner.calls[-1][0]
     assert mux[mux.index("--default-duration") + 1] == "0:24000/1001p"
     assert not [i for i in result.issues if i.code == "video.length"]  # 240 frames at 23.976 = 300 at 29.97
+
+
+def test_a_vfr_source_keeps_its_timestamps(profile, tmp_path):
+    """A VFR source's timestamps (mkvextract) time the encode while they fit the script's frames; an IVTC that
+    drops frames is muxed at the script's rate. MP4Box takes none: no timestamps step."""
+    plan = make_plan(tmp_path)
+    plan.source.video = VideoInfo(1920, 1080, default_duration_ns=41708333, frames=240, vfr=True, id=0)
+    job = video_job(plan, tmp_path)
+    out = tmp_path / "out" / "Show.S01E01.mkv"
+    built = build_steps(job, plan, profile, APP, out)
+    step = {s.id: s for s in built.steps}
+    ids = [s.id for s in built.steps]
+    stamps = job.work_dir / "timestamps.txt"
+    argv = ("mkvextract", "--ui-language", "en", "timestamps_v2", str(plan.source.path), f"0:{stamps}")
+    assert step["timestamps"].argvs == (argv,) and step["timestamps"].outputs == (stamps,)
+    assert ids.index("script.info") < ids.index("timestamps") < ids.index("video")
+    mux = step["mux"].argvs[0]
+    assert mux[mux.index("--timestamps") + 1] == f"0:{stamps}" and "--default-duration" not in mux  # before a run
+
+    job.work_dir.mkdir(parents=True)
+    FakeRunner()([argv], lambda _: None, None)  # 240 timestamps
+    info_file = job.work_dir / "video.info.txt"
+    info_file.write_text(FakeRunner.script_info, encoding="utf-8")  # 240 frames: they fit
+    mux = step["mux"].refresh().argvs[0]
+    assert mux[mux.index("--timestamps") + 1] == f"0:{stamps}" and "--default-duration" not in mux
+    info_file.write_text(FakeRunner.script_info.replace("Frames: 240", "Frames: 192"), encoding="utf-8")
+    mux = step["mux"].refresh().argvs[0]  # a decimated script: its own rate
+    assert "--timestamps" not in mux and mux[mux.index("--default-duration") + 1] == "0:24000/1001p"
+
+    job.mux = MuxSettings(container="mp4")
+    mp4 = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mp4")
+    assert "timestamps" not in [s.id for s in mp4.steps]
+
+    job.mux = MuxSettings()
+    shutil.rmtree(job.work_dir)
+    runner = FakeRunner()
+    result = run_job(job, plan, profile, APP, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
+    assert result.status is JobStatus.DONE, result.error
+    mux = runner.calls[-1][0]
+    assert mux[mux.index("--timestamps") + 1] == f"0:{stamps}"
+    assert not [i for i in result.issues if i.code == "video.length"]
 
 
 def test_a_script_shorter_than_the_source_warns(profile, tmp_path):
@@ -644,6 +689,68 @@ def test_real_decimated_job_keeps_the_scripts_frame_rate(tmp_path):
     assert [a["file_name"] for a in mkvmerge_identify(result.output, app.tools.mkvmerge)["attachments"]] == ["Font.ttf"]
     qpf = (job.work_dir / "chapters.qpf").read_text().split()
     assert "36" in qpf and "45" not in qpf  # chapter 2 at 1.5 s: frame 36 at 24 fps (45 at the source's 30)
+
+
+@needs_tools
+def test_real_vfr_job_keeps_the_sources_timestamps(tmp_path):
+    """A VFR source (5 s at 23.976 fps, then 4 s at 29.97): the output's timestamps are the source's (StaxRip's
+    mkvextract timestamps_v2 + --timestamps), not a constant averaged rate."""
+    from videoforge.core.config import load_app_config
+    from videoforge.core.job import plan_spec, probe_spec
+    from videoforge.core.video import vs as vsx
+    from videoforge.profiles import get_profile
+
+    app = load_app_config()
+    vsx.configure(app.tools.vs_plugins)
+    vsx.ensure_vspipe(app.tools.vspipe)
+    raw, src = tmp_path / "video.h264", tmp_path / "Show.S01E01.mkv"
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+         "testsrc2=duration=10:size=320x180:rate=24000/1001", "-frames:v", "240", "-c:v", "libx264",
+         "-pix_fmt", "yuv420p", "-y", str(raw)],
+        check=True,
+    )  # fmt: skip
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=9", "-c:a", "aac",
+         "-y", str(tmp_path / "audio.m4a")],
+        check=True,
+    )  # fmt: skip
+    ms = [i * 1001 / 24 if i < 120 else 120 * 1001 / 24 + (i - 120) * 1001 / 30 for i in range(240)]
+    given = tmp_path / "given.txt"
+    given.write_text("# timestamp format v2\n" + "".join(f"{t:.6f}\n" for t in ms), encoding="utf-8")
+    subprocess.run(
+        [app.tools.mkvmerge, "-q", "-o", str(src), "--timestamps", f"0:{given}", str(raw), str(tmp_path / "audio.m4a")],
+        check=True,
+    )  # fmt: skip
+    job = JobSpec(
+        inputs=JobInputs(src),
+        profile="manual",
+        output_dir=tmp_path / "out",
+        encoder=EncoderSettings(preset="ultrafast", crf=30),
+    )
+    profile = get_profile("manual")
+    plan = plan_spec(job, probe_spec(job, app), profile)
+    assert plan.source.video is not None and plan.source.video.vfr
+    assert not plan.blocked, plan.issues
+
+    lines: list[str] = []
+    result = run_job(job, plan, profile, app, log=lines.append)
+    assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
+    assert not [i for i in result.issues if i.code == "video.length"]
+
+    def timestamps(path: Path) -> list[str]:
+        out = tmp_path / f"{path.stem}.timestamps.txt"
+        subprocess.run([app.tools.mkvextract, str(path), "timestamps_v2", f"0:{out}"], check=True, capture_output=True)
+        return out.read_text(encoding="utf-8").splitlines()[1:]
+
+    source_stamps = timestamps(src)
+    assert len(source_stamps) == 241  # each frame's, and the last one's end
+    assert (
+        int(source_stamps[1]) - int(source_stamps[0]) == 42 and int(source_stamps[200]) - int(source_stamps[199]) == 33
+    )
+    output_stamps = timestamps(result.output)
+    assert output_stamps[:240] == source_stamps[:240]  # every frame's
+    assert float(output_stamps[240]) == pytest.approx(float(source_stamps[240]), abs=1)  # the end: sub-ms rounding
 
 
 @needs_tools

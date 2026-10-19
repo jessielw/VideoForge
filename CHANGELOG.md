@@ -38,7 +38,10 @@ source), or in Docker on Linux.
   The encode is timed by the script's frame rate (`vspipe --info`), as in StaxRip: an IVTC or a double-rate
   deinterlace muxes at its own rate and AutoQPF places the chapters by it. A script whose length isn't the
   source's (a trim, a filter that changes the speed) warns on the Video tab and on the finished job: the
-  source's audio, subtitles and chapters would be out of step.
+  source's audio, subtitles and chapters would be out of step. A variable frame rate source (MediaInfo's VFR)
+  keeps its timestamps in an MKV, as in StaxRip (`mkvextract timestamps_v2`, mkvmerge `--timestamps`), while
+  the script keeps every frame; one that doesn't (an IVTC) is muxed at its own constant rate and warns, and an
+  MP4 (MP4Box takes no timestamps) warns that it's muxed at a constant rate.
 - **Encoder.** x264 and x265 option panels, 1 or 2 passes; AutoQPF chapters to a qpf file. The encode is
   tagged with the source's colour description (primaries, transfer, matrix, range, chroma location, read by
   MediaInfo) and on x265 its HDR10 metadata (mastering display, MaxCLL / MaxFALL); shown on the Encoder tab,

@@ -96,6 +96,17 @@ def test_mp4_issues():
     assert "Audio 1: MP4 has no original flag; left out" in [i.message for i in mux_issues(plan, "mp4")]  # set by hand
 
 
+def test_a_vfr_source_into_mp4_warns():
+    """MP4Box takes no timestamps file: a VFR source's MP4 is muxed at a constant rate (MKV keeps them)."""
+    plan = mp4_plan()
+    assert not [i for i in mux_issues(plan, "mp4") if i.code == "mux.mp4_vfr"]
+    plan.source.video.vfr = True
+    assert [(i.severity, i.code) for i in mux_issues(plan, "mp4") if i.code == "mux.mp4_vfr"] == [
+        (Severity.WARN, "mux.mp4_vfr")
+    ]
+    assert mux_issues(plan, "mkv") == []
+
+
 def test_job_container_and_output_name():
     profile = ManualProfile()
     spec = JobSpec(inputs=JobInputs(Path("Movie.mkv")), profile="manual")

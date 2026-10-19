@@ -100,6 +100,20 @@ def test_raw_encode_is_timed_by_the_scripts_frame_rate():
     assert value(bob, "--default-duration") == ["0:60000/1001p"]
 
 
+def test_vfr_timestamps_time_the_encode():
+    """A VFR source's timestamps (mkvextract timestamps_v2) time the encode instead of a fixed frame duration, as
+    StaxRip's --timestamps 0:<file> does; a non-raw encode takes them too."""
+    plan = aot_plan()
+    encoded = {0: Path("a.m4a"), 1: Path("b.ec3")}
+    stamps = Path("tmp/timestamps.txt")
+    argv = mux_command(plan, encoded, OUT, "mkvmerge", RAW, fps=Fraction(24000, 1001), timestamps=stamps)
+    assert value(argv, "--timestamps") == [f"0:{stamps}"] and "--default-duration" not in argv
+    assert argv.index("--timestamps") < argv.index("Show.S01E01_job.h264")  # an option of the encode's input
+    plan = aot_plan(encode="Show.S01E01_job.mkv")
+    argv = mux_command(plan, encoded, OUT, "mkvmerge", RAW, timestamps=stamps)
+    assert value(argv, "--timestamps") == [f"0:{stamps}"] and "--video-tracks" in argv
+
+
 def test_source_attachments_and_global_tags_are_kept():
     """An ASS subtitle's fonts are the source's attachments: they go into the output (as StaxRip does), and so
     do its global tags; the encode's and other inputs' don't."""

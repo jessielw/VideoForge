@@ -344,6 +344,7 @@ export interface Tracks {
     default_duration_ns: number | null
     sar_num: number // the pixel aspect ratio (not 1:1 on an anamorphic source)
     sar_den: number
+    vfr?: boolean // a variable frame rate: an MKV keeps the source's timestamps
     color: VideoColor
     hdr?: VideoHdr // absent on a job probed before it was read
   } | null

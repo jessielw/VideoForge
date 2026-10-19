@@ -120,10 +120,12 @@ def mux_command(
     raw_extensions: tuple[str, ...],
     extra: list[str] | None = None,
     fps: Fraction | None = None,
+    timestamps: Path | None = None,
 ) -> list[str]:
     """mkvmerge argv for a plan. encoded_audio maps plan.audio positions to their encoded files;
     extra (the user's arguments) goes before the first input. fps is a raw encode's frame rate (the script's,
-    which an IVTC or a double-rate deinterlace changed); without it, the source's."""
+    which an IVTC or a double-rate deinterlace changed); without it, the source's. timestamps (a VFR source's,
+    core/video/vfr.py) time the encode instead."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
     video = plan.source.video
@@ -134,7 +136,10 @@ def mux_command(
     order: list[str] = ["0:0"]
 
     # 0: the encode, video only.
-    if plan.encode_path.suffix.lower() in raw_extensions:
+    raw = plan.encode_path.suffix.lower() in raw_extensions
+    if timestamps is not None:
+        argv += ["--timestamps", f"0:{timestamps}"]
+    elif raw:
         if fps:
             rate = f"{fps}p"
         elif video and video.default_duration_ns:
@@ -142,7 +147,7 @@ def mux_command(
         else:
             raise MuxError("Raw encode needs the source frame rate, and the source has none")
         argv += ["--default-duration", f"0:{rate}"]
-    else:
+    if not raw:
         # Chapters come from the qpf file or the source, never the encode.
         argv += [
             "--video-tracks",
@@ -342,8 +347,10 @@ class Muxer(Protocol):
         app: AppConfig,
         extra: list[str] | None = None,
         fps: Fraction | None = None,
+        timestamps: Path | None = None,
     ) -> list[str]:
-        """fps: a raw encode's frame rate (the script's); None for the source's."""
+        """fps: a raw encode's frame rate (the script's); None for the source's. timestamps: a VFR source's,
+        which time the encode instead (an MKV's; MP4Box takes none)."""
         ...
 
     def issues(self, plan: Plan) -> list[Issue]:
@@ -369,8 +376,11 @@ class MkvMerge:
         app: AppConfig,
         extra: list[str] | None = None,
         fps: Fraction | None = None,
+        timestamps: Path | None = None,
     ) -> list[str]:
-        return mux_command(plan, encoded_audio, output, app.tools.mkvmerge, app.matching.encode_extensions, extra, fps)
+        return mux_command(
+            plan, encoded_audio, output, app.tools.mkvmerge, app.matching.encode_extensions, extra, fps, timestamps
+        )
 
     def issues(self, plan: Plan) -> list[Issue]:
         return []
@@ -395,11 +405,21 @@ class Mp4Box:
         app: AppConfig,
         extra: list[str] | None = None,
         fps: Fraction | None = None,
+        timestamps: Path | None = None,
     ) -> list[str]:
         return mp4box_command(plan, encoded_audio, output, app.tools.mp4box, app.matching.encode_extensions, extra, fps)
 
     def issues(self, plan: Plan) -> list[Issue]:
         issues: list[Issue] = []
+        if plan.source.video is not None and plan.source.video.vfr:
+            issues.append(
+                Issue(
+                    Severity.WARN,
+                    "mux.mp4_vfr",
+                    "The source has a variable frame rate: MP4Box takes no timestamps file, so the MP4 is muxed "
+                    "at a constant rate (MKV keeps the source's timestamps)",
+                )
+            )
         for i, a in enumerate(plan.audio, 1):
             if a.out_codec in (AudioCodec.LPCM, AudioCodec.OTHER):
                 issues.append(
