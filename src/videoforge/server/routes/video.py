@@ -17,6 +17,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Request, Response
 
 from videoforge.core.job import JobSpec
+from videoforge.core.models import SubTrack
 from videoforge.core.pipeline.build import baked_el, indexed
 from videoforge.core.plan_io import to_json
 from videoforge.core.video.info import length_warning
@@ -48,7 +49,7 @@ def _loading(e: Entry, preview: Preview, script: str, slot: str) -> AbstractCont
 
 
 def _indexed(e: Entry) -> None:
-    if e.indexing or not indexed(e.spec, e.source_video):
+    if e.indexing or not indexed(e.spec, e.source_video, e.burn):
         raise HTTPException(409, "The source isn't indexed yet: index it first (Video tab, or Index in the queue)")
 
 
@@ -59,14 +60,16 @@ def _info_json(e: Entry, i: ClipInfo, stage: Stage) -> dict[str, Any]:
 
 
 def script_for(e: Entry, stage: Stage) -> str:
-    return _script(e.spec, stage, baked_el(e.spec, e.source_video))
+    return _script(e.spec, stage, baked_el(e.spec, e.source_video), e.burn)
 
 
-def _script(spec: JobSpec, stage: Stage, el: Path | None = None) -> str:
+def _script(spec: JobSpec, stage: Stage, el: Path | None = None, burn: SubTrack | None = None) -> str:
     """The job's script at stage; el is a FEL's enhancement layer it bakes in (stage "source" leaves it out:
-    auto crop reads the base layer, the same size)."""
+    auto crop reads the base layer, the same size), burn a subtitle track it burns in (not at stage "source")."""
     spec.work_dir.mkdir(parents=True, exist_ok=True)  # the index lives there
-    return build_script(spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage, el=el)
+    return build_script(
+        spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, stage=stage, el=el, burn=burn
+    )
 
 
 def _slot(spec: JobSpec, stage: Stage) -> str:
@@ -100,6 +103,7 @@ def script(request: Request, job_id: str, stage: Stage = "output") -> dict[str, 
         depth=spec.encoder.depth,
         stage=stage,
         el=baked_el(spec, e.source_video),
+        burn=e.burn,
     )
     return {
         "script": "\n".join(head + body + tail) + "\n",
@@ -128,6 +132,7 @@ def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, A
             depth=spec.encoder.depth,
             stage=stage,
             el=baked_el(spec, e.source_video),
+            burn=e.burn,
         )
         if ex.line and ex.line > len(head) + len(body):
             message += " (in the generated end of the script: the body must leave a video clip in `clip`)"

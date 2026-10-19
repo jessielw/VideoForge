@@ -22,6 +22,7 @@ from videoforge.core.models import (
     Severity,
     SourceInfo,
     SubTrack,
+    track_key,
 )
 from videoforge.core.pairing import (
     MatchResult,
@@ -33,7 +34,7 @@ from videoforge.core.pairing import (
 )
 from videoforge.core.probe import mkvmerge_identify, probe
 from videoforge.core.tools import locate
-from videoforge.core.video import hdr
+from videoforge.core.video import burn, hdr
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -145,10 +146,17 @@ def plan_job(
         probed = replace(probed, issues=[i for i in probed.issues if i.code != "subs.external_name"])
     else:
         probed = replace(probed, external_subs=[t for t in probed.external_subs if t.language != "und"])
-    plan = profile.plan(probed, original_language, overrides or Overrides())
+    overrides = overrides or Overrides()
+    plan = profile.plan(probed, original_language, overrides)
     plan.profile = profile.id
     plan.inputs = inputs
     plan.issues[:0] = probed.issues
+    # A subtitle burned into the video leaves the mux, whatever the profile chose for it.
+    marked = burn.picked(probed.source.subs + probed.external_subs, overrides) if inputs.encode is None else []
+    if marked:
+        plan.burn = marked[0]
+        plan.subs = [s for s in plan.subs if track_key(s.source) != track_key(marked[0])]
+        plan.issues += burn.issues(marked)
     if inputs.encode is not None and inputs.encode_state is EncodeState.IN_PROGRESS:
         plan.issues.insert(0, Issue(Severity.BLOCK, "pair.encoding", f"{inputs.encode.name} is still encoding"))
     return plan

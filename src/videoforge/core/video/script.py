@@ -8,6 +8,7 @@ Layout of every script:
     clip = src
     <a FEL's enhancement layer baked in (bake_lines), when the job bakes one>
     <the filter chain: crop, resize and filters in order>  or  <custom body>
+    <a subtitle burned in (burn.lines): before the crop (image) or after it (text); after a custom body>
     <bit depth conversion for the encoder>
     clip.set_output()
 
@@ -23,6 +24,8 @@ import glob
 from pathlib import Path
 from typing import Literal
 
+from videoforge.core.models import SubTrack
+from videoforge.core.video import burn as burn_in
 from videoforge.core.video.settings import FilterCategory, SourceFilter, VideoSettings
 
 Stage = Literal["source", "crop", "output"]
@@ -73,21 +76,28 @@ def index_exists(source: Path, source_filter: SourceFilter, index_dir: Path) -> 
     return ffms2_index(source, index_dir).is_file()
 
 
-def processing_lines(settings: VideoSettings, *, crop_view: bool = False) -> list[str]:
+def processing_lines(
+    settings: VideoSettings, *, crop_view: bool = False, burn: SubTrack | None = None, work: Path | None = None
+) -> list[str]:
     """The body's lines. crop_view keeps the clip before the crop (`_vf_pre`), leaves out a resize after
-    it and ends with the crop view (see the module docstring)."""
+    it and ends with the crop view (see the module docstring). burn: a subtitle track drawn on the video, its
+    file in (or extracted to) work."""
+    sub = burn_in.lines(burn, work or Path()) if burn is not None else []
     if settings.custom is not None:
         lines = settings.custom.splitlines()
         while lines and not lines[0].strip():
             lines.pop(0)
         while lines and not lines[-1].strip():
             lines.pop()
-        return lines  # as typed (indentation kept), less blank lines at either end
+        return lines + sub  # as typed (indentation kept), less blank lines at either end
     lines = []
     c, r = settings.crop, settings.resize
     cropped = False
+    image = burn is not None and burn_in.is_image(burn)
     for step in settings.filters:
         if step.category is FilterCategory.CROP:
+            if image:
+                lines += sub
             if crop_view:
                 lines.append("_vf_pre = clip")
                 cropped = True
@@ -95,6 +105,8 @@ def processing_lines(settings: VideoSettings, *, crop_view: bool = False) -> lis
                 lines.append(
                     f"clip = core.std.Crop(clip, left={c.left}, right={c.right}, top={c.top}, bottom={c.bottom})"
                 )
+            if not image:
+                lines += sub
         elif step.category is FilterCategory.RESIZE:
             if r is not None and not cropped:
                 lines.append(f"clip = core.resize.{r.kernel}(clip, width={r.width}, height={r.height})")
@@ -116,10 +128,11 @@ def script_parts(
     depth: int | None = None,
     stage: Stage = "output",
     el: Path | None = None,
+    burn: SubTrack | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
     """The script as (head, body, tail) lines. The body is the part the user edits (the filter chain
     or the custom body); head (imports, source, a FEL's bake when el is given) and tail (depth conversion,
-    output) are generated."""
+    output) are generated. burn: a subtitle track burned in (its lines join the body)."""
     head = [
         "import vapoursynth as vs",
         "core = vs.core",
@@ -140,7 +153,7 @@ def script_parts(
             ),
         ]
     tail.append("clip.set_output()")
-    return head, processing_lines(settings, crop_view=stage == "crop"), tail
+    return head, processing_lines(settings, crop_view=stage == "crop", burn=burn, work=index_dir), tail
 
 
 def build_script(
@@ -151,8 +164,9 @@ def build_script(
     depth: int | None = None,
     stage: Stage = "output",
     el: Path | None = None,
+    burn: SubTrack | None = None,
 ) -> str:
     """The script text. depth converts the output to that bit depth (dithered) when it differs; el is a FEL's
-    enhancement layer to bake in."""
-    head, body, tail = script_parts(settings, source, index_dir, depth=depth, stage=stage, el=el)
+    enhancement layer to bake in; burn a subtitle track to burn in."""
+    head, body, tail = script_parts(settings, source, index_dir, depth=depth, stage=stage, el=el, burn=burn)
     return "\n".join(head + body + tail) + "\n"

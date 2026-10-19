@@ -1,11 +1,12 @@
 """A job's steps from its spec and plan.
 
-    script -> index -> script info -> chapters/qpf -> (VFR) timestamps -> audio encodes -> video (1 or 2 passes)
-    -> mux
+    script -> (burned subtitle) extract -> index -> script info -> chapters/qpf -> (VFR) timestamps -> audio
+    encodes -> video (1 or 2 passes) -> mux
 
 The script info (vspipe --info) gives the encode's frame rate, which an IVTC or a double-rate deinterlace makes
 other than the source's: AutoQPF and the mux read it when their turn comes (Step.refresh). A VFR source's
-timestamps (core/video/vfr.py) time an MKV's encode instead, when they fit the script's frame count.
+timestamps (core/video/vfr.py) time an MKV's encode instead, when they fit the script's frame count. A source
+subtitle track burned in (core/video/burn.py) is extracted with the index, so the preview can draw it too.
 
 The audio encodes are background steps: with AppConfig.parallel_audio they run alongside the
 video encode (after the index, which reads the whole source too), and the mux waits for them. A target size's
@@ -33,9 +34,9 @@ from videoforge.core.execute.audio import audio_command, measure_argv, measure_p
 from videoforge.core.execute.mux import MUXERS, frame_rate, split_args
 from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
-from videoforge.core.models import Plan, PlannedAudio, VideoColor, VideoInfo
+from videoforge.core.models import Plan, PlannedAudio, SubTrack, VideoColor, VideoInfo
 from videoforge.core.pipeline.steps import Step
-from videoforge.core.video import hdr, info, target, vfr
+from videoforge.core.video import burn as burn_in, hdr, info, target, vfr
 from videoforge.core.video.encoders import encoder_command, vspipe_command
 from videoforge.core.video.qpf import make_qpf, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
@@ -94,18 +95,21 @@ def baked_el(spec: JobSpec, video: VideoInfo | None) -> Path | None:
     return spec.work_dir / hdr.DV_EL if spec.encodes_video and hdr.bakes_fel(video, spec.encoder) else None
 
 
-def job_script(spec: JobSpec, video: VideoInfo | None) -> str:
+def job_script(spec: JobSpec, video: VideoInfo | None, burn: SubTrack | None = None) -> str:
     """The job's VapourSynth script, as the encode runs it."""
     return build_script(
-        spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, el=baked_el(spec, video)
+        spec.video, spec.inputs.source, spec.work_dir, depth=spec.encoder.depth, el=baked_el(spec, video), burn=burn
     )
 
 
-def index_steps(spec: JobSpec, app: AppConfig, video: VideoInfo | None = None) -> list[Step]:
+def index_steps(
+    spec: JobSpec, app: AppConfig, video: VideoInfo | None = None, burn: SubTrack | None = None
+) -> list[Step]:
     """Write the script and index the source: a job's first steps, and all a batch index runs. video is the
-    source's (the plan's): a FEL to bake adds its enhancement layer's demux, MKV and index."""
+    source's (the plan's): a FEL to bake adds its enhancement layer's demux, MKV and index. burn is the subtitle
+    track the job burns in (plan.burn): a source track's is extracted."""
     work, source = spec.work_dir, spec.inputs.source
-    text = job_script(spec, video)
+    text = job_script(spec, video, burn)
     script = work / "video.vpy"
     source_filter = spec.video.source_filter
     el = baked_el(spec, video)
@@ -139,6 +143,19 @@ def index_steps(spec: JobSpec, app: AppConfig, video: VideoInfo | None = None) -
             ),
         ]
 
+    if burn is not None and burn.external_path is None:
+        sub = burn_in.file(burn, work)
+        steps.append(
+            Step(
+                "burn.extract",
+                f"Subtitle to burn in (mkvextract): {burn_in.label(burn)}",
+                argvs=(burn_in.extract_argv(app.tools.mkvextract, source, burn, sub),),
+                outputs=(sub,),
+                inputs=(source,),
+                weight=0.5,
+            )
+        )
+
     if source_filter is SourceFilter.FFMS2:
         # FFMS2's Source() indexes silently: build its index first, with progress (core/video/ffindex.py).
         # It depends on the source alone, so a crop edit doesn't index again.
@@ -157,7 +174,7 @@ def index_steps(spec: JobSpec, app: AppConfig, video: VideoInfo | None = None) -
             inputs=inputs,
             key=source_filter.value,
             weight=2,
-            present=lambda: indexed(spec, video),
+            present=lambda: indexed(spec, video, None),
         )
     )
     if el is not None and source_filter is SourceFilter.FFMS2:
@@ -182,10 +199,15 @@ def script_fps(spec: JobSpec) -> Fraction | None:
     return found.fps if found else None
 
 
-def indexed(spec: JobSpec, video: VideoInfo | None) -> bool:
-    """Whether the job's source (and a FEL's enhancement layer it bakes) is indexed: opening its video is quick."""
-    s, el = spec.video.source_filter, baked_el(spec, video)
-    return index_exists(spec.inputs.source, s, spec.work_dir) and (el is None or index_exists(el, s, spec.work_dir))
+def indexed(spec: JobSpec, video: VideoInfo | None, burn: SubTrack | None) -> bool:
+    """Whether the job's source (and a FEL's enhancement layer it bakes) is indexed, and a subtitle it burns in
+    extracted: opening its video is quick."""
+    s, el, work = spec.video.source_filter, baked_el(spec, video), spec.work_dir
+    return (
+        index_exists(spec.inputs.source, s, work)
+        and (el is None or index_exists(el, s, work))
+        and burn_in.present(burn, work)
+    )
 
 
 def video_steps(
@@ -195,8 +217,8 @@ def video_steps(
     work, source, enc = spec.work_dir, spec.inputs.source, spec.encoder
     script = work / "video.vpy"
     v = plan.source.video
-    text = job_script(spec, v)
-    steps = index_steps(spec, app, v)
+    text = job_script(spec, v, plan.burn)
+    steps = index_steps(spec, app, v, plan.burn)
     info_file = work / info.SCRIPT_INFO
     steps.append(
         Step(

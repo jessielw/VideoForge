@@ -308,11 +308,14 @@ class TrackOverride:
     bitrate_kbps: int | None = None
     layout: Layout | None = None
     options: dict[str, str] = field(default_factory=dict)  # the encode's own settings (execute.audio.EncodeOption keys)
+    # Subtitles: burned into the video instead of muxed (core.video.burn; one per job).
+    burn: bool | None = None
 
     @property
     def empty(self) -> bool:
         return (
             self.exclude is None
+            and self.burn is None
             and self.language is None
             and self.title is None
             and not self.flags
@@ -461,6 +464,7 @@ class Plan:
     chapters_path: Path | None = None  # external chapters (StaxRip qpf); None = take the encode's/source's
     audio: list[PlannedAudio] = field(default_factory=list)
     subs: list[PlannedSub] = field(default_factory=list)
+    burn: SubTrack | None = None  # the subtitle track burned into the video (core.video.burn), not muxed
     issues: list[Issue] = field(default_factory=list)
     overrides: Overrides = field(default_factory=Overrides)  # what produced this plan; kept for replanning
     profile: str = ""  # id of the profile whose rules made this plan (and whose checks validate it)

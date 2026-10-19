@@ -83,13 +83,22 @@
         <div class="flex items-center gap-1">
           <span class="mr-2 text-sm font-medium">Rule {i + 1}</span>
           <NativeSelect
-            aria-label="Rule {i + 1}: keep or leave out"
-            value={r.track.exclude ? 'exclude' : 'keep'}
+            aria-label="Rule {i + 1}: keep, leave out or burn in"
+            value={r.track.exclude ? 'exclude' : r.track.burn ? 'burn' : 'keep'}
             {disabled}
-            onchange={e => change(s => (s.rules[i].track = { ...rule().track, exclude: e.currentTarget.value === 'exclude' || null }))}
+            onchange={e =>
+              change(
+                s =>
+                  (s.rules[i].track = {
+                    ...rule().track,
+                    exclude: e.currentTarget.value === 'exclude' || null,
+                    burn: e.currentTarget.value === 'burn' || null,
+                  }),
+              )}
           >
             <option value="keep">Keep</option>
             <option value="exclude">Leave out</option>
+            <option value="burn" title="Burned into the video instead of muxed: the first track a burn-in rule matches">Burn in</option>
           </NativeSelect>
           <Button
             variant="ghost"
@@ -154,7 +163,7 @@
             </label>
           {/each}
         </div>
-        {#if !r.track.exclude}
+        {#if !r.track.exclude && !r.track.burn}
           <div class="flex flex-wrap items-center gap-2">
             <span class="mr-1 w-8 text-xs text-muted-foreground">Set</span>
             <Input

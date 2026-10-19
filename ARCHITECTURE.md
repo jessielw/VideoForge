@@ -47,6 +47,8 @@ src/videoforge/
                          FEL's enhancement layer (demux, MKV) and its HDR10 values from the RPU; their frame checks
       qpf.py             AutoQPF: chapters -> qpf + chapter file
       vfr.py             A VFR source's timestamps (mkvextract timestamps_v2) onto an MKV's encode, while they fit
+      burn.py            A subtitle track burned into the video (SubText's TextFile / ImageFile; a source track
+                         extracted with the index); out of the mux (plan.burn)
       target.py          A 2-pass target size -> the video bitrate (StaxRip's Calc.GetVideoBitrate): what the size
                          leaves after the audio, subtitles, attachments, HDR metadata and overhead, over the length
     execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel), jobobject.py (tools end with the server, Windows)
@@ -191,6 +193,15 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   (a reused encode too). The mux's refresh keeps them while they fit the script's frame count; a script that
   drops or adds frames (an IVTC) is muxed at its own rate, and `length_warning` says so (its length then checked
   against MediaInfo's duration). MP4Box takes no timestamps file: `mux.mp4_vfr` WARN.
+- Burned-in subtitles (`core/video/burn.py`, StaxRip's `Project.AddHardcodedSubtitleFilter`): a subtitle track's
+  `TrackOverride.burn` (the track editor, or a template's subtitle rule: its first match) makes `plan_job` move
+  it from `plan.subs` to `plan.burn`, whatever the profile chose (an encode only; one per job, a second marked
+  one warns; a format SubText can't draw blocks). The script draws it in the body: text (`sub.TextFile`) after
+  the crop step, as StaxRip; an image (`sub.ImageFile`) before it, since SubText scales the subtitle's canvas (the
+  source frame) onto the clip; after a custom body; never at the `source` stage (auto crop). A source track gets
+  a `burn.extract` step among the index steps (`mkvextract tracks` to `burn.<id>.<ext>` in the work folder), and
+  `indexed()` waits for that file, so the preview (which opens only an indexed job) can draw it. The filter
+  menu's `subtitle` category (after the crop) holds a plain `sub.TextFile` preset for a file typed in.
 - HDR10+ (`core/video/hdr.py`, x265 with "HDR10+ from the source" on): before the video, `hdr10plus`
   (`ffmpeg ... -f hevc - | hdr10plus_tool extract`, StaxRip's command) writes `hdr10plus.json` to the work
   folder and `hdr10plus.check` compares its frames with the script's (`vspipe --info`): a trim, a frame-rate

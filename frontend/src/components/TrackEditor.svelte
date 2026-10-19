@@ -2,8 +2,8 @@
   // The full track editor, for profiles that follow it (track_editor, e.g. manual): the audio or
   // the subtitle tracks (one kind per tab) in output order. Drag a track by its handle (or use
   // the arrows) to reorder, untick it to leave it out, edit its title, language and flags, and
-  // copy or encode each audio track. Every change saves and replans; each track shows its source
-  // at a glance and what will be written.
+  // copy or encode each audio track, or burn one subtitle track into the video. Every change saves and
+  // replans; each track shows its source at a glance and what will be written.
   // Files can be added to the job here and removed again, and an audio track can be used more
   // than once ("Add a track from…": a copy with its own encode, title and flags).
   import type { InputChanges } from '../lib/api'
@@ -19,6 +19,7 @@
   import CheckIcon from '@lucide/svelte/icons/check'
   import CopyPlusIcon from '@lucide/svelte/icons/copy-plus'
   import FilePlusIcon from '@lucide/svelte/icons/file-plus'
+  import FlameIcon from '@lucide/svelte/icons/flame'
   import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical'
   import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
@@ -140,6 +141,17 @@
   }
 
   const setIncluded = (t: Track, on: boolean) => editTrack(t, ov => (ov.exclude = on ? null : true))
+
+  // Burning a subtitle in: one track per job (marking one unmarks the others); it leaves the mux. Only an
+  // encode can take it, and only the formats SubText draws (core.video.burn).
+  const BURNS = ['srt', 'ass', 'pgs', 'vobsub']
+  const burnKey = $derived(plan?.burn ? (plan.burn.external_path ? `ext:${basename(plan.burn.external_path)}` : `id:${plan.burn.id}`) : null)
+  const canBurn = (t: Track) => !isAudio(t) && !job.spec.inputs.encode && BURNS.includes(t.format)
+  function setBurn(t: Track, on: boolean) {
+    const o = draft()
+    for (const s of subRows) edit(o, s.key, ov => (ov.burn = s.key === t.key && on ? true : null))
+    commit(o)
+  }
   const setTitle = (t: Track, v: string) => editTrack(t, ov => (ov.title = v === t.title ? null : v))
   const setLanguage = (t: Track, v: string) => editTrack(t, ov => (ov.language = !v || v === t.language ? null : v))
 
@@ -357,7 +369,8 @@
 
 {#snippet trackRow(t: Track, i: number, count: number)}
   {@const ov = ovOf(t)}
-  {@const off = excluded(t)}
+  {@const burned = burnKey === t.key}
+  {@const off = excluded(t) || burned}
   {@const pos = outPos(t)}
   {@const copy = isAudio(t) && t.copy ? t : null}
   {#if dropAt === i}<div class="-my-1 h-0.5 rounded-full bg-primary"></div>{/if}
@@ -396,6 +409,19 @@
           </div>
         {/if}
       </div>
+      {#if !isAudio(t) && (canBurn(t) || ov?.burn)}
+        <Toggle
+          variant="outline"
+          size="sm"
+          class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
+            data-[state=on]:text-primary"
+          pressed={!!ov?.burn}
+          title={burned
+            ? 'Burned into the video (not muxed): image subtitles before the crop, text after it'
+            : 'Burn this track into the video instead of muxing it (one per job)'}
+          onPressedChange={on => setBurn(t, on)}><FlameIcon class="size-3" />Burn in</Toggle
+        >
+      {/if}
       {#if copy}
         <Badge variant="outline" class="border-primary/40 bg-primary/10 text-primary" title="Another output track from {sourceLabel(t)}"
           >copy {copy.copy}</Badge

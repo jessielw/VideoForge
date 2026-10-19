@@ -53,7 +53,7 @@ from videoforge.core.job import (
     probe_spec,
 )
 from videoforge.core.jobs import ProbedInputs, external_tracks
-from videoforge.core.models import AudioMatch, JobInputs, Overrides, Plan, Severity, VideoInfo, track_key
+from videoforge.core.models import AudioMatch, JobInputs, Overrides, Plan, Severity, SubTrack, VideoInfo, track_key
 from videoforge.core.notify import Sender, send as notify_send
 from videoforge.core.pipeline.build import index_steps, job_output
 from videoforge.core.pipeline.reuse import ReuseOffer, reuse_offers
@@ -136,6 +136,11 @@ class Entry:
         if self.plan is not None:
             return self.plan.source.video
         return self.probed.source.video if self.probed is not None else None
+
+    @property
+    def burn(self) -> SubTrack | None:
+        """The subtitle track the job burns into its video (None before the plan)."""
+        return self.plan.burn if self.plan is not None else None
 
     @property
     def busy(self) -> bool:
@@ -1073,7 +1078,7 @@ class JobQueue:
             if missing := missing_inputs(e.spec):
                 raise ToolError("Missing input: " + ", ".join(str(p) for p in missing))
             with self._lock:
-                steps = index_steps(e.spec, self.app, e.source_video)
+                steps = index_steps(e.spec, self.app, e.source_video, e.burn)
                 cancel = self._index_cancel
                 sharing = [o.id for o in self._entries.values() if o.spec.work_dir == e.spec.work_dir]
             if self.services.release_preview is not None:

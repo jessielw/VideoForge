@@ -339,18 +339,22 @@ def test_filter_presets():
 
 
 @pytest.mark.parametrize("preset", [p for p in PRESETS if p.script], ids=lambda p: p.name)
-def test_filter_presets_run(preset):
-    """Each preset runs on 8- and 16-bit video (skipped when its plugin or filter script isn't installed)."""
+def test_filter_presets_run(preset, tmp_path):
+    """Each preset runs on 8- and 16-bit video (skipped when its plugin or filter script isn't installed); a file
+    to fill in (the burn-in's) is a real SRT."""
     import vapoursynth as vs
 
     core = vs.core
+    srt = tmp_path / "a.srt"
+    srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nHello\n", encoding="utf-8")
+    script = preset.script.replace("file=r''", f"file={str(srt)!r}")
     for fmt in (vs.YUV420P8, vs.YUV420P16):
         if fmt == vs.YUV420P16 and preset.family == "IVTC (VIVTC)":
             continue  # VFM takes 8-bit only
         clip = core.std.BlankClip(width=640, height=360, format=fmt, length=12, fpsnum=24000, fpsden=1001)
         ns = {"vs": vs, "core": core, "clip": clip}
         try:
-            exec(preset.script, ns)  # noqa: S102 - the built-in presets
+            exec(script, ns)  # noqa: S102 - the built-in presets
         except ImportError as e:
             pytest.skip(f"no filter script: {e}")
         except AttributeError as e:

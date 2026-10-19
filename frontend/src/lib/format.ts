@@ -132,6 +132,7 @@ export function emptyOverride(): TrackOverride {
 export function isEmpty(ov: TrackOverride): boolean {
   return (
     ov.exclude === null &&
+    (ov.burn ?? null) === null &&
     ov.language === null &&
     ov.title === null &&
     !Object.keys(ov.flags).length &&

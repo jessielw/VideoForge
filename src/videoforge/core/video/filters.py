@@ -75,6 +75,16 @@ PRESETS: list[FilterPreset] = [
         "import havsfunc\nclip = havsfunc.QTGMC(clip, Preset='Slower', InputType=1)",
         "Clean up shimmer and combing left in progressive video",
     ),
+    # Subtitle: a text subtitle file drawn on the cropped picture (a track burned in from the track editor
+    # is placed by core.video.burn; an image subtitle goes there, before the crop).
+    FilterPreset(
+        C.SUBTITLE,
+        "Burn in subtitles",
+        "",
+        "clip = core.sub.TextFile(clip, file=r'')  # an SRT or ASS file; style='...' restyles an SRT",
+        "Draw an SRT or ASS file on the video (SubText); PGS: burn a track in from the Subtitles tab",
+        fill_in=True,
+    ),
     # Restoration
     *_variants(
         C.RESTORATION,

@@ -44,6 +44,7 @@ export const SOURCE_FILTERS: { id: SourceFilter; label: string; title: string }[
 export const FILTER_CATEGORIES = [
   { id: 'field', label: 'Field', title: 'IVTC, deinterlacing (before the crop, so it keeps the fields)' },
   { id: 'crop', label: 'Crop', title: '' },
+  { id: 'subtitle', label: 'Subtitle', title: 'Burning subtitles in (after the crop)' },
   { id: 'restoration', label: 'Restoration', title: 'Dirty lines, deblocking, dehaloing' },
   { id: 'noise', label: 'Noise', title: 'Denoising' },
   { id: 'line', label: 'Line', title: 'Anti-aliasing, sharpening' },
@@ -199,6 +200,7 @@ export interface TrackOverride {
   bitrate_kbps: number | null
   layout: string | null // "2.0", "5.1", ...
   options: Record<string, string> // the encode's own settings (AudioEncodeInfo.options keys)
+  burn?: boolean | null // subtitles: burned into the video instead of muxed (one per job)
 }
 
 export interface Overrides {
@@ -335,6 +337,7 @@ export interface Plan {
   chapters_path: string | null
   audio: PlannedAudio[]
   subs: PlannedSub[]
+  burn: Omit<SubTrack, 'key' | 'detected'> | null // the subtitle track burned into the video, not muxed
   issues: Issue[]
   profile: string
 }

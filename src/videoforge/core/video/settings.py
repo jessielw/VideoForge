@@ -71,6 +71,7 @@ class FilterCategory(StrEnum):
 
     FIELD = "field"  # IVTC, deinterlacing
     CROP = "crop"
+    SUBTITLE = "subtitle"  # burned in: StaxRip puts it right after the crop
     RESTORATION = "restoration"  # dirty lines, deblocking, dehaloing
     NOISE = "noise"  # denoising
     LINE = "line"  # anti-aliasing, sharpening

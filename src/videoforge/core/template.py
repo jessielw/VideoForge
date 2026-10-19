@@ -177,13 +177,17 @@ def apply_subs(overrides: Overrides, subs: TemplateSubs, tracks: list[SubTrack])
     rules: the earlier choices for them (settings, order) are replaced. Each track takes its first
     matching rule's settings (no language: that's per source); one no rule matches is kept or left
     out (subs.others). Kept tracks are ordered by rule, then source order. One default at most: when
-    a rule sets it, the first kept track to get it keeps it and every other subtitle has it off."""
+    a rule sets it, the first kept track to get it keeps it and every other subtitle has it off. One burned in:
+    the first track a burn-in rule matches; later ones go on to the next rules."""
     keys = [track_key(t) for t in tracks]
     ours = set(keys)
     out = {k: v for k, v in overrides.tracks.items() if k not in ours}
     ranked: list[tuple[int, int, str]] = []  # (rule, source position, key) of the kept tracks
+    burned = False
     for pos, (key, track) in enumerate(zip(keys, tracks, strict=True)):
-        rule = next((i for i, r in enumerate(subs.rules) if sub_matches(r, track)), None)
+        rule = next(
+            (i for i, r in enumerate(subs.rules) if not (burned and r.track.burn) and sub_matches(r, track)), None
+        )
         if rule is None:
             if subs.others is OtherTracks.EXCLUDE:
                 out[key] = TrackOverride(exclude=True)
@@ -191,9 +195,10 @@ def apply_subs(overrides: Overrides, subs: TemplateSubs, tracks: list[SubTrack])
                 ranked.append((len(subs.rules), pos, key))
             continue
         ov = replace(copy.deepcopy(subs.rules[rule].track), language=None)
+        burned = burned or bool(ov.burn)
         if not ov.empty:
             out[key] = ov
-        if not ov.exclude:
+        if not ov.exclude and not ov.burn:
             ranked.append((rule, pos, key))
     kept = [key for _, _, key in sorted(ranked)]
     if any(key in out and out[key].flags.get("default") for key in kept):

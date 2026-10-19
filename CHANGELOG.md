@@ -105,6 +105,13 @@ source), or in Docker on Linux.
   the loudness range is compressed to fit (loudnorm's dynamic mode), kept at the source's sample rate.
 - **Subtitles.** Keep, leave out, reorder, retitle and flag source subtitles and added SRT files (matched by
   name or SxxEyy).
+- **Burn in subtitles.** "Burn in" on a subtitle track (a source track or an added SRT / ASS / SUP / IDX file)
+  draws it into the video with the bundled SubText plugin, as StaxRip's hardcoded subtitle, and leaves it out of
+  the mux; one per job, an encode only. A source track is extracted with the index (mkvextract), so the preview
+  shows it too. Text (SRT, ASS) is drawn after the crop, as in StaxRip; an image subtitle (PGS, VobSub) before
+  it, on the frame it was made for (SubText would stretch it onto the cropped one). A template's subtitle rule
+  can burn in too (the first track it matches). The filter menu's Subtitle category has a "Burn in subtitles"
+  preset for a file of your own (its lines to edit: a `style` for an SRT, say).
 - **Containers.** MKV (mkvmerge) and MP4 (MP4Box), each with a warning or a block for what it can't hold. MKV
   keeps the source's attachments (an ASS subtitle's fonts) and global tags, as StaxRip does.
 - **Templates.** A job's whole setup without a file: video, crop mode (keep, the template's, detect per job),
