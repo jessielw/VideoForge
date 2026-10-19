@@ -251,7 +251,10 @@ def cmd_serve(args: argparse.Namespace) -> int:
             f"VideoForge on [bold]{url}[/], in its own window (closing it keeps VideoForge in the tray;"
             " Quit there or Ctrl+C here to stop)"
         )
-        return run_window(create_app(settings), args.host, args.port, url, settings.data_dir)
+        # The window keeps its cache across starts: a page address of its own per build never finds an old one.
+        index = settings.frontend_dir / "index.html"
+        page = f"{url}/?build={index.stat().st_mtime_ns}" if index.is_file() else url
+        return run_window(create_app(settings), args.host, args.port, page, settings.data_dir)
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, (url,)).start()
     everywhere = ", listening on all addresses" if args.host in ("0.0.0.0", "::") else ""  # noqa: S104 (a comparison)
