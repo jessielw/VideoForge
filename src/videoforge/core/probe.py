@@ -116,6 +116,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                 height=height,
                 start_ms=_ms(props.get("minimum_timestamp")),
                 default_duration_ns=props.get("default_duration"),
+                frames=_int(getattr(mi, "frame_count", None)) or 0,
                 language=language,
                 sar_num=sar.numerator,
                 sar_den=sar.denominator,

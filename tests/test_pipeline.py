@@ -107,7 +107,11 @@ class FakeRunner:
         for flag in ("-o", "--output", "--stats", "-e"):
             if flag in last and last[last.index(flag) + 1] != os.devnull:
                 Path(last[last.index(flag) + 1]).write_bytes(b"out")
+        if "--info" in last and last[-1] != "-":  # the script info step: vspipe writes the clip's info
+            Path(last[-1]).write_text(self.script_info, encoding="utf-8")
         log(f"[{Path(last[0]).stem}] [ 50.0%] 1/2 frames")
+
+    script_info = "Width: 1920\nHeight: 1080\nFrames: 240\nFPS: 24000/1001 (23.976 fps)\n"
 
 
 def tools_called(runner: FakeRunner) -> list[str]:
@@ -292,8 +296,9 @@ def test_video_steps_two_pass(profile, tmp_path):
     job.video.crop = Crop(0, 140, 0, 140)
     plan.encode_path = job.video_output
     built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
-    assert [s.id for s in built.steps] == ["script", "index", "audio.1", "audio.2", "video.pass1", "video.pass2", "mux"]
-    pass1, pass2 = built.steps[4], built.steps[5]
+    ids = ["script", "index", "script.info", "audio.1", "audio.2", "video.pass1", "video.pass2", "mux"]
+    assert [s.id for s in built.steps] == ids
+    pass1, pass2 = built.steps[5], built.steps[6]
     assert pass1.argvs[0][:4] == ("vspipe", "-c", "y4m", "-p")
     assert "--pass" in pass1.argvs[1] and os.devnull in pass1.argvs[1]
     assert pass2.argvs[1][-3:] == ("--output", str(job.video_output), "-")
@@ -305,19 +310,61 @@ def test_video_steps_two_pass(profile, tmp_path):
     assert result.status is JobStatus.DONE, result.error
     assert "core.std.Crop(clip, left=0, right=0, top=140, bottom=140)" in (job.work_dir / "video.vpy").read_text()
     # FFMS2 (the default) is indexed by core/video/ffindex.py, with progress
-    assert tools_called(runner) == ["python", "qaac64", "deezy", "x264", "x264", "mkvmerge"]
+    assert tools_called(runner) == ["python", "vspipe", "qaac64", "deezy", "x264", "x264", "mkvmerge"]
     assert runner.calls[0][0][1:3] == ["-m", "videoforge.core.video.ffindex"]
 
     (job.work_dir / "Show.S01E01.mkv.ffindex").write_bytes(b"index")  # what the real one leaves
     job.video.crop = Crop(0, 138, 0, 138)  # a new crop: script and video again; the index and audio reused
     again = FakeRunner()
     run_job(job, plan, profile, APP, state=state, runner=again, prober=lambda *_: simulate_output(plan))
-    assert tools_called(again) == ["x264", "x264", "mkvmerge"]
+    assert tools_called(again) == ["vspipe", "x264", "x264", "mkvmerge"]
 
     job.video.source_filter = SourceFilter.LSMASH  # another filter: its own index, by opening the script
     third = FakeRunner()
     run_job(job, plan, profile, APP, state=state, runner=third, prober=lambda *_: simulate_output(plan))
-    assert tools_called(third) == ["vspipe", "x264", "x264", "mkvmerge"]
+    assert tools_called(third) == ["vspipe", "vspipe", "x264", "x264", "mkvmerge"]
+
+
+def test_the_encode_is_timed_by_the_scripts_frame_rate(profile, tmp_path):
+    """An IVTC of a 29.97 source: the mux and AutoQPF take the script's 23.976 (vspipe --info), not the source's."""
+    plan = make_plan(tmp_path)
+    plan.source.video = VideoInfo(720, 480, default_duration_ns=33366667, frames=300)
+    job = video_job(plan, tmp_path)
+    job.qpf = True
+    out = tmp_path / "out" / "Show.S01E01.mkv"
+    built = build_steps(job, plan, profile, APP, out)
+    step = {s.id: s for s in built.steps}
+    ids = [s.id for s in built.steps]
+    assert ids.index("index") < ids.index("script.info") < ids.index("chapters")
+    assert step["script.info"].argvs == (
+        ("vspipe", "--info", str(job.work_dir / "video.vpy"), str(job.work_dir / "video.info.txt")),
+    )
+    mux = step["mux"].argvs[0]
+    assert mux[mux.index("--default-duration") + 1] == "0:30000/1001p"  # before a run: the source's
+    assert step["chapters"].key == "30000/1001"
+
+    job.work_dir.mkdir(parents=True)
+    (job.work_dir / "video.info.txt").write_text(FakeRunner.script_info, encoding="utf-8")
+    mux = step["mux"].refresh().argvs[0]  # once the info step has run
+    assert mux[mux.index("--default-duration") + 1] == "0:24000/1001p"
+    assert step["chapters"].refresh().key == "24000/1001"
+
+    job.qpf = False  # AutoQPF reads a real source; the rest runs with the fake tools
+    runner = FakeRunner()
+    result = run_job(job, plan, profile, APP, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
+    assert result.status is JobStatus.DONE, result.error
+    mux = runner.calls[-1][0]
+    assert mux[mux.index("--default-duration") + 1] == "0:24000/1001p"
+    assert not [i for i in result.issues if i.code == "video.length"]  # 240 frames at 23.976 = 300 at 29.97
+
+
+def test_a_script_shorter_than_the_source_warns(profile, tmp_path):
+    plan = make_plan(tmp_path)
+    plan.source.video = VideoInfo(1920, 1080, default_duration_ns=41708333, frames=480)  # 20 s; the script's 10 s
+    job = video_job(plan, tmp_path)
+    result = run_job(job, plan, profile, APP, runner=FakeRunner(), prober=lambda *_: simulate_output(plan))
+    assert result.status is JobStatus.DONE, result.error
+    assert [i.code for i in result.issues if i.severity is Severity.WARN] == ["video.length"]
 
 
 # --- audio encodes beside the video ------------------------------------------------
@@ -539,6 +586,64 @@ def test_real_anamorphic_job_keeps_its_shape(tmp_path, keep_ar, container):
     assert result.output.suffix == f".{container}"
     shape = Fraction(out.width, out.height) * out.sar
     assert abs(shape / (Fraction(704, 480) * Fraction(32, 27)) - 1) < Fraction(1, 200)
+
+
+@needs_tools
+def test_real_decimated_job_keeps_the_scripts_frame_rate(tmp_path):
+    """A 30 fps source a script decimates to 24 (as an IVTC does): the output plays at 24 fps for as long as the
+    source, and AutoQPF's chapter keyframe is the 24 fps frame. The source's attachment (a font) goes along."""
+    from videoforge.core.config import load_app_config
+    from videoforge.core.job import plan_spec, probe_spec
+    from videoforge.core.probe import mkvmerge_identify, probe
+    from videoforge.core.video import vs as vsx
+    from videoforge.core.video.settings import FilterCategory, FilterStep
+    from videoforge.profiles import get_profile
+
+    app = load_app_config()
+    vsx.configure(app.tools.vs_plugins)
+    vsx.ensure_vspipe(app.tools.vspipe)
+    src = tmp_path / "Show.S01E01.mkv"
+    meta = tmp_path / "chapters.txt"
+    meta.write_text(
+        ";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1500\ntitle=Chapter 01\n"
+        "[CHAPTER]\nTIMEBASE=1/1000\nSTART=1500\nEND=3000\ntitle=Chapter 02\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=3:size=320x180:rate=30",
+         "-f", "lavfi", "-i", "sine=duration=3", "-i", str(meta), "-map", "0:v", "-map", "1:a", "-map_chapters", "2",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-y", str(tmp_path / "plain.mkv")],
+        check=True,
+    )  # fmt: skip
+    font = tmp_path / "Font.ttf"
+    font.write_bytes(b"not really a font")
+    subprocess.run(
+        [app.tools.mkvmerge, "-q", "-o", str(src), "--attachment-mime-type", "font/ttf", "--attach-file", str(font),
+         str(tmp_path / "plain.mkv")],
+        check=True,
+    )  # fmt: skip
+    job = JobSpec(
+        inputs=JobInputs(src),
+        profile="manual",
+        output_dir=tmp_path / "out",
+        encoder=EncoderSettings(preset="ultrafast", crf=30),
+    )
+    decimate = "clip = core.std.SelectEvery(clip, 5, [0, 1, 2, 3])\nclip = core.std.AssumeFPS(clip, fpsnum=24)"
+    job.video.filters.insert(0, FilterStep(FilterCategory.FIELD, "Decimate", decimate))
+    profile = get_profile("manual")
+    plan = plan_spec(job, probe_spec(job, app), profile)
+    assert not plan.blocked, plan.issues
+
+    lines: list[str] = []
+    result = run_job(job, plan, profile, app, log=lines.append)
+    assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
+    assert not [i for i in result.issues if i.code == "video.length"]
+    out = probe(result.output, app.tools.mkvmerge)
+    assert out.video is not None and out.video.default_duration_ns == pytest.approx(1e9 / 24, abs=2)
+    assert out.video.frames == 72  # 3 s at 24 fps
+    assert [a["file_name"] for a in mkvmerge_identify(result.output, app.tools.mkvmerge)["attachments"]] == ["Font.ttf"]
+    qpf = (job.work_dir / "chapters.qpf").read_text().split()
+    assert "36" in qpf and "45" not in qpf  # chapter 2 at 1.5 s: frame 36 at 24 fps (45 at the source's 30)
 
 
 @needs_tools

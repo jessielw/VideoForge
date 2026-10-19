@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
 from pathlib import Path
 
 from conftest import audio, plan_for, simulate_output, source, sub
@@ -45,6 +46,17 @@ def mp4_plan(subs=None, overrides=None):
 
 def adds(argv):
     return [argv[i + 1] for i, a in enumerate(argv) if a == "-add"]
+
+
+def test_mp4box_raw_encode_takes_the_scripts_frame_rate():
+    plan = mp4_plan()
+    argv = mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW, fps=Fraction(24000, 1001))
+    assert adds(argv)[0] == "enc.h264:fps=24000/1001:hdr=none:lang=en-US:name="
+    plan.source.video.default_duration_ns = 33366667  # a 29.97 source an IVTC made 23.976
+    argv = mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW, fps=Fraction(24000, 1001))
+    assert adds(argv)[0].startswith("enc.h264:fps=24000/1001:")
+    argv = mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW)
+    assert adds(argv)[0].startswith("enc.h264:fps=30000/1001:")
 
 
 def test_mp4box_command():

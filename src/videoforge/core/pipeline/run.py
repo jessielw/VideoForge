@@ -20,7 +20,7 @@ from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.pipeline.steps import ProgressFn, Runner, run_steps
 from videoforge.core.probe import probe
 from videoforge.core.tools import tool_issues
-from videoforge.core.video import hdr
+from videoforge.core.video import hdr, info
 from videoforge.core.workdir import note_finished
 
 if TYPE_CHECKING:
@@ -138,6 +138,7 @@ def _run(
         issues = profile.validate_output(plan, found)
         if spec.encodes_video:
             issues += hdr.output_issues(plan.source.video, spec.encoder, found)
+            issues += info.length_issues(plan.source.video, info.read(work / info.SCRIPT_INFO))
         blocking = [i.message for i in issues if i.severity is Severity.BLOCK]
         for i in issues:
             validate.log(f"{i.severity.value}: {i.message}")

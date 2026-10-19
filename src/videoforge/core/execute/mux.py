@@ -2,7 +2,7 @@
 
 mkvmerge:
 Inputs, in order: the encode (video only), the source (copied audio and
-subtitles), then one file per encoded audio track, per copied track of an added
+subtitles, its attachments and global tags), then one file per encoded audio track, per copied track of an added
 audio file or copy of a track (Overrides.copies: mkvmerge takes a track once per
 input), and per external subtitle.
 
@@ -40,6 +40,7 @@ from videoforge.core.models import (
     PlannedSub,
     Severity,
     SubFormat,
+    VideoInfo,
     track_key,
 )
 
@@ -70,6 +71,15 @@ def frame_rate(default_duration_ns: int) -> Fraction:
 def _frame_rate(default_duration_ns: int) -> str:
     rate = _known_rate(default_duration_ns)
     return f"{rate}p" if rate else f"{default_duration_ns}ns"
+
+
+def _raw_rate(video: VideoInfo | None, fps: Fraction | None) -> str:
+    """A raw encode's frame rate as MP4Box takes it ("24000/1001"): the script's (fps), else the source's."""
+    if fps:
+        return str(fps)
+    if not (video and video.default_duration_ns):
+        raise MuxError("Raw encode needs the source frame rate, and the source has none")
+    return _known_rate(video.default_duration_ns) or f"1000000000/{video.default_duration_ns}"
 
 
 def _flag(on: bool) -> str:
@@ -109,9 +119,11 @@ def mux_command(
     mkvmerge: str,
     raw_extensions: tuple[str, ...],
     extra: list[str] | None = None,
+    fps: Fraction | None = None,
 ) -> list[str]:
     """mkvmerge argv for a plan. encoded_audio maps plan.audio positions to their encoded files;
-    extra (the user's arguments) goes before the first input."""
+    extra (the user's arguments) goes before the first input. fps is a raw encode's frame rate (the script's,
+    which an IVTC or a double-rate deinterlace changed); without it, the source's."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
     video = plan.source.video
@@ -123,9 +135,13 @@ def mux_command(
 
     # 0: the encode, video only.
     if plan.encode_path.suffix.lower() in raw_extensions:
-        if not (video and video.default_duration_ns):
+        if fps:
+            rate = f"{fps}p"
+        elif video and video.default_duration_ns:
+            rate = _frame_rate(video.default_duration_ns)
+        else:
             raise MuxError("Raw encode needs the source frame rate, and the source has none")
-        argv += ["--default-duration", f"0:{_frame_rate(video.default_duration_ns)}"]
+        argv += ["--default-duration", f"0:{rate}"]
     else:
         # Chapters come from the qpf file or the source, never the encode.
         argv += [
@@ -145,10 +161,11 @@ def mux_command(
         str(plan.encode_path),
     ]
 
-    # 1: the source, copied audio and subtitles only.
+    # 1: the source, copied audio and subtitles, and its attachments (an ASS subtitle's fonts) and global tags
+    # (as StaxRip carries them).
     copied = [a for a in plan.audio if a.action is AudioAction.COPY and not a.source.is_external and not a.source.copy]
     internal_subs = [s for s in plan.subs if not s.source.is_external]
-    argv += ["--no-video", "--no-attachments", "--no-global-tags"]
+    argv += ["--no-video"]
     if external_chapters:
         argv += ["--no-chapters"]
     argv += ["--audio-tracks", ",".join(str(a.source.id) for a in copied)] if copied else ["--no-audio"]
@@ -253,8 +270,9 @@ def mp4box_command(
     mp4box: str,
     raw_extensions: tuple[str, ...],
     extra: list[str] | None = None,
+    fps: Fraction | None = None,
 ) -> list[str]:
-    """MP4Box argv for a plan (the same inputs and timing as mux_command). chapters_path must
+    """MP4Box argv for a plan (the same inputs, timing and fps as mux_command). chapters_path must
     be OGM text; extra goes just before -new."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
@@ -266,10 +284,7 @@ def mp4box_command(
     # boxes (hdr=none): the stream's own SEI carries it, and MediaInfo would list it twice
     opts = f":hdr=none:lang={video.language if video else 'und'}:name="
     if plan.encode_path.suffix.lower() in raw_extensions:
-        if not (video and video.default_duration_ns):
-            raise MuxError("Raw encode needs the source frame rate, and the source has none")
-        rate = _known_rate(video.default_duration_ns) or f"1000000000/{video.default_duration_ns}"
-        argv += ["-add", f"{plan.encode_path}:fps={rate}{opts}"]
+        argv += ["-add", f"{plan.encode_path}:fps={_raw_rate(video, fps)}{opts}"]
     else:
         argv += ["-add", f"{plan.encode_path}#video{opts}"]
 
@@ -320,8 +335,16 @@ class Muxer(Protocol):
     carries_titles: bool  # titles and every flag can be read back by the output check
 
     def command(
-        self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig, extra: list[str] | None = None
-    ) -> list[str]: ...
+        self,
+        plan: Plan,
+        encoded_audio: dict[int, Path],
+        output: Path,
+        app: AppConfig,
+        extra: list[str] | None = None,
+        fps: Fraction | None = None,
+    ) -> list[str]:
+        """fps: a raw encode's frame rate (the script's); None for the source's."""
+        ...
 
     def issues(self, plan: Plan) -> list[Issue]:
         """What this container can't hold as planned: BLOCK (can't mux) or WARN (left out)."""
@@ -339,9 +362,15 @@ class MkvMerge:
     carries_titles = True
 
     def command(
-        self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig, extra: list[str] | None = None
+        self,
+        plan: Plan,
+        encoded_audio: dict[int, Path],
+        output: Path,
+        app: AppConfig,
+        extra: list[str] | None = None,
+        fps: Fraction | None = None,
     ) -> list[str]:
-        return mux_command(plan, encoded_audio, output, app.tools.mkvmerge, app.matching.encode_extensions, extra)
+        return mux_command(plan, encoded_audio, output, app.tools.mkvmerge, app.matching.encode_extensions, extra, fps)
 
     def issues(self, plan: Plan) -> list[Issue]:
         return []
@@ -359,9 +388,15 @@ class Mp4Box:
     SUBS = (SubFormat.SRT, SubFormat.TX3G, SubFormat.VOBSUB)
 
     def command(
-        self, plan: Plan, encoded_audio: dict[int, Path], output: Path, app: AppConfig, extra: list[str] | None = None
+        self,
+        plan: Plan,
+        encoded_audio: dict[int, Path],
+        output: Path,
+        app: AppConfig,
+        extra: list[str] | None = None,
+        fps: Fraction | None = None,
     ) -> list[str]:
-        return mp4box_command(plan, encoded_audio, output, app.tools.mp4box, app.matching.encode_extensions, extra)
+        return mp4box_command(plan, encoded_audio, output, app.tools.mp4box, app.matching.encode_extensions, extra, fps)
 
     def issues(self, plan: Plan) -> list[Issue]:
         issues: list[Issue] = []

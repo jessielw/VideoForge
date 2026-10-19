@@ -52,12 +52,13 @@ def test_keep_reuses_a_video_made_with_other_settings(profile, tmp_path):
     job.video.crop = Crop(0, 140, 0, 140)
 
     state.keep = ["video"]
-    assert run(job, plan, profile, state) == []  # the script is written again; no encode, the same mux
+    # the script is written again (and read for its frame rate); no encode, the same mux
+    assert run(job, plan, profile, state) == ["vspipe"]
     assert state.keep == []  # used up
     assert offers(job, plan, profile, state)["video"].current  # adopted: today's settings now
 
     job.video.crop = Crop(0, 138, 0, 138)  # not kept: made again, as always
-    assert run(job, plan, profile, state) == ["x264", "mkvmerge"]
+    assert run(job, plan, profile, state) == ["vspipe", "x264", "mkvmerge"]
 
 
 def test_a_new_job_on_the_source_finds_the_finished_files(profile, tmp_path):

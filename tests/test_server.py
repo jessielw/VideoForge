@@ -188,8 +188,9 @@ def test_add_inspect_and_edit(tmp_path):
         assert [j["encoder"] for j in client.get("/api/jobs").json()] == ["x264 crf 17", "x264 crf 17"]
 
         commands = client.get(f"/api/jobs/{ids[0]}/commands").json()
-        assert [c["id"] for c in commands] == ["script", "index", "chapters", "video", "mux"]  # audio is copied
-        assert "--crf 17" in commands[3]["command"] and " | " in commands[3]["command"]
+        steps = ["script", "index", "script.info", "chapters", "video", "mux"]  # audio is copied
+        assert [c["id"] for c in commands] == steps
+        assert "--crf 17" in commands[4]["command"] and " | " in commands[4]["command"]
         assert client.patch(f"/api/jobs/{ids[0]}", json={"encoder": {"rate_control": "nope"}}).status_code == 422
         assert edited["output_name"] == "Show.S01E01.mkv"
         labelled = client.patch(f"/api/jobs/{ids[0]}", json={"label": ' dubbed? "JA" '}).json()

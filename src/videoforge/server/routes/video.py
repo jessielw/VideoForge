@@ -10,6 +10,7 @@ a job never starts reading a whole remux.
 from __future__ import annotations
 
 from contextlib import AbstractContextManager, nullcontext
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Literal
 
@@ -18,10 +19,11 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from videoforge.core.job import JobSpec
 from videoforge.core.pipeline.build import baked_el, indexed
 from videoforge.core.plan_io import to_json
+from videoforge.core.video.info import length_warning
 from videoforge.core.video.preview import FrameError, Preview, PreviewError
 from videoforge.core.video.script import build_script, script_parts
 from videoforge.core.video.settings import Crop
-from videoforge.core.video.vs import ScriptError
+from videoforge.core.video.vs import ClipInfo, ScriptError
 from videoforge.server.queue import Entry, JobQueue
 
 router = APIRouter(prefix="/api/jobs/{job_id}/video")
@@ -48,6 +50,12 @@ def _loading(e: Entry, preview: Preview, script: str, slot: str) -> AbstractCont
 def _indexed(e: Entry) -> None:
     if e.indexing or not indexed(e.spec, e.source_video):
         raise HTTPException(409, "The source isn't indexed yet: index it first (Video tab, or Index in the queue)")
+
+
+def _info_json(e: Entry, i: ClipInfo, stage: Stage) -> dict[str, Any]:
+    """The clip's info for the page; the output's carries length_warning when its length isn't the source's."""
+    warning = length_warning(e.source_video, i.frames, Fraction(i.fps_num, i.fps_den) if i.fps_num else None)
+    return to_json(i) | {"fps": i.fps, "length_warning": warning if stage == "output" else ""}
 
 
 def script_for(e: Entry, stage: Stage) -> str:
@@ -126,7 +134,7 @@ def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, A
         return {"ok": False, "error": message, "line": ex.line}
     except (FrameError, PreviewError) as ex:  # a filter failing on frame 0, or the preview stopped
         return {"ok": False, "error": str(ex), "line": None}
-    return {"ok": True, "info": to_json(i) | {"fps": i.fps}}
+    return {"ok": True, "info": _info_json(e, i, stage)}
 
 
 @router.get("/info")
@@ -138,7 +146,7 @@ def info(request: Request, job_id: str, stage: Stage = "output") -> dict[str, An
             i = preview.info(script, slot=slot)
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex) from None
-    return to_json(i) | {"fps": i.fps}
+    return _info_json(e, i, stage)
 
 
 @router.get("/frame")

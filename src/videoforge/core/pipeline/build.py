@@ -1,6 +1,9 @@
 """A job's steps from its spec and plan.
 
-    script -> index -> chapters/qpf -> audio encodes -> video (1 or 2 passes) -> mux
+    script -> index -> script info -> chapters/qpf -> audio encodes -> video (1 or 2 passes) -> mux
+
+The script info (vspipe --info) gives the encode's frame rate, which an IVTC or a double-rate deinterlace makes
+other than the source's: AutoQPF and the mux read it when their turn comes (Step.refresh).
 
 The audio encodes are background steps: with AppConfig.parallel_audio they run alongside the
 video encode (after the index, which reads the whole source too), and the mux waits for them.
@@ -13,6 +16,7 @@ an existing encode has no script/index/chapters/video steps.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from fractions import Fraction
 from functools import partial
 import os
 from pathlib import Path
@@ -27,7 +31,7 @@ from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
 from videoforge.core.models import Plan, VideoColor, VideoInfo
 from videoforge.core.pipeline.steps import Step
-from videoforge.core.video import hdr
+from videoforge.core.video import hdr, info
 from videoforge.core.video.encoders import encoder_command, vspipe_command
 from videoforge.core.video.qpf import make_qpf, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
@@ -167,6 +171,13 @@ def index_steps(spec: JobSpec, app: AppConfig, video: VideoInfo | None = None) -
     return steps
 
 
+def script_fps(spec: JobSpec) -> Fraction | None:
+    """The script's frame rate, once the job's script info step has written it; None before that, or for a
+    variable rate."""
+    found = info.read(spec.work_dir / info.SCRIPT_INFO)
+    return found.fps if found else None
+
+
 def indexed(spec: JobSpec, video: VideoInfo | None) -> bool:
     """Whether the job's source (and a FEL's enhancement layer it bakes) is indexed: opening its video is quick."""
     s, el = spec.video.source_filter, baked_el(spec, video)
@@ -179,21 +190,35 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
     v = plan.source.video
     text = job_script(spec, v)
     steps = index_steps(spec, app, v)
+    info_file = work / info.SCRIPT_INFO
+    steps.append(
+        Step(
+            "script.info",
+            "Script frames and frame rate (vspipe --info)",
+            argvs=(info.info_argv(app.tools.vspipe, script, info_file),),
+            outputs=(info_file,),
+            inputs=(script, source),
+            key=text,
+            weight=0.05,
+        )
+    )
     qpfile = None
     if spec.makes_chapters:
         files = qpf_paths(work)
         video = plan.source.video
         if video is None or not video.default_duration_ns:
             raise ToolError("The source has no frame rate to place chapters by")
-        fps = frame_rate(video.default_duration_ns)
+        source_fps = frame_rate(video.default_duration_ns)
 
-        def make_chapters(log: LogFn) -> None:
-            if make_qpf(source, work, fps) is None:
-                raise ToolError("AutoQPF could not read or generate chapters for the source")
-            log(f"Chapters and qpfile written ({fps} fps)")
+        # The chapters' frames are the script's: its frame rate once the info step has read it (before a run,
+        # the source's).
+        def chapters_step(fps: Fraction) -> Step:
+            def make_chapters(log: LogFn) -> None:
+                if make_qpf(source, work, fps) is None:
+                    raise ToolError("AutoQPF could not read or generate chapters for the source")
+                log(f"Chapters and qpfile written ({fps} fps)")
 
-        steps.append(
-            Step(
+            return Step(
                 "chapters",
                 "Chapters and qpfile (AutoQPF)",
                 call=make_chapters,
@@ -201,8 +226,10 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
                 inputs=(source,),
                 key=str(fps),
                 weight=0.1,
+                refresh=lambda: chapters_step(script_fps(spec) or source_fps),
             )
-        )
+
+        steps.append(chapters_step(source_fps))
         qpfile = files.qpfile
 
     exe = app.tools.x265 if enc.encoder is Encoder.X265 else app.tools.x264
@@ -380,22 +407,27 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
         steps.append(chapters)
         plan = replace(plan, chapters_path=chapters.outputs[0])
     partial = output.with_name(output.name + ".partial")
-    mux = MUXERS[container].command(plan, encoded, partial, app, split_args(spec.mux.extra))
     mux_inputs = [
         p for p in (plan.source.path, plan.encode_path, plan.chapters_path, *encoded.values()) if p is not None
     ]
     mux_inputs += [s.source.external_path for s in plan.subs if s.source.external_path is not None]
     mux_inputs += list(dict.fromkeys(a.source.external_path for a in plan.audio if a.source.external_path is not None))
-    steps.append(
-        Step(
+    muxer, extra = MUXERS[container], split_args(spec.mux.extra)
+
+    # The job's encode is timed by the script's frame rate, once the info step has read it (before a run, the
+    # source's); a reused encode by the source's.
+    def mux_step(fps: Fraction | None) -> Step:
+        return Step(
             "mux",
             "Mux",
-            argvs=(tuple(mux),),
+            argvs=(tuple(muxer.command(plan, encoded, partial, app, extra, fps)),),
             outputs=(output,),
             writes=(partial,),
             inputs=tuple(mux_inputs),
             finalize=lambda: partial.replace(output),
             weight=3,
+            refresh=(lambda: mux_step(script_fps(spec))) if spec.encodes_video else None,
         )
-    )
+
+    steps.append(mux_step(None))
     return JobSteps(steps, output, encoded)

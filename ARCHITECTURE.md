@@ -136,8 +136,8 @@ added, to one job, or to a batch; a template applied after a job's own edits rep
 ## Pipeline
 
 ```
-index ─► qpf/chapters ─┬► video (vspipe | x264/x265, 1 or 2 passes) ─┬► mux ─► validate
-                       └► audio encodes (up to N at once) ────────────┘
+index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265, 1 or 2 passes) ─┬► mux ─► validate
+                                      └► audio encodes (up to N at once) ────────────┘
 ```
 
 - Each step writes only into the job's `<source>_tmp/` (the mux writes `<out>.partial`). The folder stays
@@ -162,6 +162,14 @@ index ─► qpf/chapters ─┬► video (vspipe | x264/x265, 1 or 2 passes) �
   (`run_steps(keep=...)` reuses them whatever their fingerprint and records today's), unticked ones lose
   their records and are made again. The index, script, chapters and mux follow the rule above.
 - An imported encode (e.g. from StaxRip) replaces the video steps.
+- Frame rate (`core/video/info.py`): `script.info` (`vspipe --info video.vpy video.info.txt`, keyed by the script)
+  reads the script's frames and frame rate, which an IVTC or a double-rate deinterlace makes other than the
+  source's. The `chapters` (AutoQPF's frames) and `mux` steps (a raw encode's `--default-duration` / MP4Box
+  `:fps=`) carry `Step.refresh` and take it when their turn comes, as StaxRip takes the script's rate; before a
+  run (the commands shown) and for a variable rate, the source's. A script whose length (frames / fps) isn't the
+  source's (MediaInfo's frame count x the frame duration) beyond 3 frames would put the source's audio,
+  subtitles and chapters out of step: `length_warning` shows on the Video tab (the output clip's info) and the
+  validate step adds it as a `video.length` WARN.
 - HDR10+ (`core/video/hdr.py`, x265 with "HDR10+ from the source" on): before the video, `hdr10plus`
   (`ffmpeg ... -f hevc - | hdr10plus_tool extract`, StaxRip's command) writes `hdr10plus.json` to the work
   folder and `hdr10plus.check` compares its frames with the script's (`vspipe --info`): a trim, a frame-rate
@@ -194,7 +202,7 @@ index ─► qpf/chapters ─┬► video (vspipe | x264/x265, 1 or 2 passes) �
   else `Profile.container`) picks the muxer (`execute/mux.py` `MUXERS`) and the output extension;
   the job's extra arguments go to that tool as typed.
   - The video gets the source video's language (`VideoInfo.language`).
-  - mkvmerge writes every flag.
+  - mkvmerge writes every flag, and keeps the source's attachments (an ASS subtitle's fonts) and global tags.
   - MP4Box: language, title (handler name; MP4Box can't take ':' in it; the video's is empty, not
     GPAC's own), default = the enabled track of its alternate group, forced on timed text. Other
     flags warn, except an original flag carried from the source (most releases set it on every

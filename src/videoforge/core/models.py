@@ -177,6 +177,7 @@ class VideoInfo:
     height: int
     start_ms: int = 0  # first video timestamp in the container
     default_duration_ns: int | None = None  # frame duration; timestamps a raw .h264/.hevc encode at mux
+    frames: int = 0  # frame count (MediaInfo); 0 = not known
     language: str = "und"  # the source's video language, written on the encode at mux
     # The pixel aspect ratio (a pixel's width / height): not 1:1 on an anamorphic source (DVD, some HDTV).
     sar_num: int = 1

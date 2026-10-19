@@ -35,6 +35,10 @@ source), or in Docker on Linux.
   frame previews at the shape it plays at (the AR toggle shows the stored pixels); an ordered filter
   chain as in StaxRip (crop and resize are steps in it; each filter can move, switch off or be edited) with
   one-click presets by category, built on the bundled plugins; the generated VapourSynth script, editable. Source filters: FFMS2 (the default, with index progress), L-SMASH, BestSource.
+  The encode is timed by the script's frame rate (`vspipe --info`), as in StaxRip: an IVTC or a double-rate
+  deinterlace muxes at its own rate and AutoQPF places the chapters by it. A script whose length isn't the
+  source's (a trim, a filter that changes the speed) warns on the Video tab and on the finished job: the
+  source's audio, subtitles and chapters would be out of step.
 - **Encoder.** x264 and x265 option panels, 1 or 2 passes; AutoQPF chapters to a qpf file. The encode is
   tagged with the source's colour description (primaries, transfer, matrix, range, chroma location, read by
   MediaInfo) and on x265 its HDR10 metadata (mastering display, MaxCLL / MaxFALL); shown on the Encoder tab,
@@ -80,7 +84,8 @@ source), or in Docker on Linux.
   its layouts and bitrates, and a setting the track can't take is fitted or blocked.
 - **Subtitles.** Keep, leave out, reorder, retitle and flag source subtitles and added SRT files (matched by
   name or SxxEyy).
-- **Containers.** MKV (mkvmerge) and MP4 (MP4Box), each with a warning or a block for what it can't hold.
+- **Containers.** MKV (mkvmerge) and MP4 (MP4Box), each with a warning or a block for what it can't hold. MKV
+  keeps the source's attachments (an ASS subtitle's fonts) and global tags, as StaxRip does.
 - **Templates.** A job's whole setup without a file: video, crop mode (keep, the template's, detect per job),
   encoder, container, AutoQPF, audio by position or by rules, subtitles by rules. Star one as the default
   for new jobs; apply one to a job or a batch.

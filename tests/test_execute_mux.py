@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
 from pathlib import Path
 
 from conftest import audio, plan_for, source, sub
@@ -84,6 +85,30 @@ def test_aot_layout():
     assert len(order) == 1 + len(plan.audio) + len(plan.subs)
     # Delay once: AAC at mux; DeeZy already baked the DDP delay in
     assert value(argv, "--sync") == ["0:-7"]
+
+
+def test_raw_encode_is_timed_by_the_scripts_frame_rate():
+    """An IVTC made 23.976 fps of a 29.97 source: the encode is timed by the script (StaxRip's
+    p.Script.GetCachedFrameRate), the source's rate only without one."""
+    plan = aot_plan()
+    plan.source.video.default_duration_ns = 33366667
+    encoded = {0: Path("a.m4a"), 1: Path("b.ec3")}
+    assert value(mux_command(plan, encoded, OUT, "mkvmerge", RAW), "--default-duration") == ["0:30000/1001p"]
+    ivtc = mux_command(plan, encoded, OUT, "mkvmerge", RAW, fps=Fraction(24000, 1001))
+    assert value(ivtc, "--default-duration") == ["0:24000/1001p"]
+    bob = mux_command(plan, encoded, OUT, "mkvmerge", RAW, fps=Fraction(60000, 1001))  # double-rate deinterlace
+    assert value(bob, "--default-duration") == ["0:60000/1001p"]
+
+
+def test_source_attachments_and_global_tags_are_kept():
+    """An ASS subtitle's fonts are the source's attachments: they go into the output (as StaxRip does), and so
+    do its global tags; the encode's and other inputs' don't."""
+    plan = aot_plan(encode="Show.S01E01_job.mkv")
+    argv = mux_command(plan, {0: Path("a.m4a"), 1: Path("b.ec3")}, OUT, "mkvmerge", RAW)
+    encode_args = argv[: argv.index("Show.S01E01_job.mkv")]
+    source_args = argv[argv.index("Show.S01E01_job.mkv") + 1 : argv.index("Show.S01E01.mkv")]
+    assert {"--no-attachments", "--no-global-tags"} <= set(encode_args)
+    assert "--no-attachments" not in source_args and "--no-global-tags" not in source_args
 
 
 def test_titles_and_flags_follow_plan():

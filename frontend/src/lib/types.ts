@@ -379,6 +379,7 @@ export interface ClipInfo {
   format: string
   bits: number
   fps: number
+  length_warning?: string // the output's length isn't the source's: its audio, subtitles and chapters would be out of step
 }
 
 // The job's script: head and tail are generated, body is the editable part (line numbers run head -> tail).

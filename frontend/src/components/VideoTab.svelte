@@ -480,6 +480,7 @@
           <span><span class="text-muted-foreground">Format</span> {i.format}</span>
           <span><span class="text-muted-foreground">FPS</span> {+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span>
           <span><span class="text-muted-foreground">Length</span> {clipLength(i.frames, i.fps_num, i.fps_den)}</span>
+          {#if i.length_warning}<span class="basis-full text-warning">{i.length_warning}</span>{/if}
         </div>
       {/if}
     </section>
@@ -572,6 +573,7 @@
 
         <section class="space-y-2">
           <FilterChain bind:filters={video.filters} crop={video.crop} resize={video.resize} disabled={video.custom !== null} onchange={() => commit(0)} />
+          {#if info.output?.length_warning}<p class="text-xs text-warning">{info.output.length_warning}</p>{/if}
           {#if video.custom !== null}
             <p class="text-xs text-warning">
               A custom script body is in use, so crop, resize and filters don't apply.
