@@ -267,7 +267,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
         )
     )
     app.state.shutdown = lambda: setattr(server, "should_exit", True)  # the page's Shut down
-    server.run()
+    try:
+        server.run()
+    except KeyboardInterrupt:
+        # Uvicorn re-raises SIGINT after its graceful shutdown and lifespan cleanup.
+        pass
     return 0
 
 
