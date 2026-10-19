@@ -1,7 +1,7 @@
 <script lang="ts">
   // Encoder settings (x264 / x265): rate control, preset, tune, bit depth, --options, extra args.
   // Emits a fresh copy on every change; the parent decides when to save.
-  import type { EncoderName, EncoderSettings, RateControl, VideoHdr } from '../lib/types'
+  import type { EncoderName, EncoderSettings, RateControl, SizeBudget, VideoHdr } from '../lib/types'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import XIcon from '@lucide/svelte/icons/x'
   import { Button } from '$lib/components/ui/button'
@@ -11,8 +11,8 @@
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
 
   // colorArgs: the job's source's colour flags for this encoder; hdr10plus: whether the source has HDR10+; dv: its
-  // Dolby Vision (false: none) (the job editor; null until probed, absent in the batch panel and on the Templates
-  // page, which have no one source)
+  // Dolby Vision (false: none); budget: where a 2-pass target size goes (the job editor; null until probed or
+  // planned, absent in the batch panel and on the Templates page, which have no one source)
   let {
     value,
     onchange,
@@ -20,6 +20,7 @@
     colorArgs,
     hdr10plus,
     dv,
+    budget,
   }: {
     value: EncoderSettings
     onchange: (v: EncoderSettings) => void
@@ -27,7 +28,35 @@
     colorArgs?: string[] | null
     hdr10plus?: boolean | null
     dv?: VideoHdr | false | null
+    budget?: SizeBudget | null
   } = $props()
+
+  // StaxRip's size menu (MB) and its default target size
+  const SIZES: [number, string][] = [[4700, 'DVD / BD-5'], [8540, 'DVD-DL / BD-9'], [25000, 'BD'], [50000, 'BD-DL']]
+  const DEFAULT_SIZE = 5000
+  const sized = $derived(value.rate_control === '2pass' && value.target_mb !== null)
+
+  const mb = (bytes: number) => `${Math.round(bytes / 1e6).toLocaleString()} MB`
+  function duration(seconds: number) {
+    const s = Math.round(seconds)
+    return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+  }
+  // what the target size takes away from the video, the parts that have any
+  const spent = $derived(
+    budget
+      ? (
+          [
+            ['audio', budget.audio],
+            ['subtitles', budget.subs],
+            ['attachments', budget.attachments],
+            ['HDR metadata', budget.metadata],
+            ['container overhead', budget.overhead],
+          ] as [string, number][]
+        )
+          .filter(([, n]) => n > 0)
+          .map(([what, n]) => `${what} ${mb(n)}`)
+      : [],
+  )
 
   // H.265 MaxBR (kb/s) by level x 10, [Main tier, High tier]: Dolby Vision fills a missing --vbv-maxrate /
   // --vbv-bufsize from --level-idc (High tier unless --no-high-tier), as encoders.level_vbv does
@@ -121,6 +150,23 @@
           value={value.crf}
           onchange={e => set('crf', +(e.target as HTMLInputElement).value)}
         />
+      {:else if sized}
+        <Input
+          class="w-28"
+          type="number"
+          aria-label="Target size"
+          list="target-sizes"
+          step="100"
+          min="1"
+          value={value.target_mb}
+          onchange={e => {
+            const n = Math.round(+(e.target as HTMLInputElement).value)
+            set('target_mb', n > 0 ? n : DEFAULT_SIZE)
+          }}
+        />
+        <datalist id="target-sizes">
+          {#each SIZES as [size, label] (size)}<option value={size}>{label}</option>{/each}
+        </datalist>
       {:else}
         <Input
           class="w-28"
@@ -130,9 +176,43 @@
           min="100"
           value={value.bitrate_kbps}
           onchange={e => set('bitrate_kbps', +(e.target as HTMLInputElement).value)}
-        /><span class="text-sm text-muted-foreground">kb/s</span>
+        />
+      {/if}
+      {#if value.rate_control === '2pass'}
+        <NativeSelect
+          value={sized ? 'mb' : 'kbps'}
+          aria-label="Bitrate or size"
+          onchange={e => set('target_mb', e.currentTarget.value === 'mb' ? DEFAULT_SIZE : null)}
+        >
+          <option value="kbps">kb/s</option>
+          <option value="mb">MB (file size)</option>
+        </NativeSelect>
+      {:else if value.rate_control === 'abr'}
+        <span class="text-sm text-muted-foreground">kb/s</span>
       {/if}
     </div>
+    {#if sized}
+      <span></span>
+      <div class="text-xs text-muted-foreground">
+        The video gets what the size leaves: less the audio, subtitles, attachments, HDR metadata and container overhead, over
+        the length (StaxRip's sum). Pass 2 counts the encoded audio's files.
+        {#if budget === null}
+          <span class="block">Worked out once the job is planned.</span>
+        {:else if budget}
+          <span class="mt-1 block text-foreground">
+            ≈ {budget.kbps.toLocaleString()} kb/s for the video ({mb(budget.video)} over {duration(budget.seconds)}){spent.length
+              ? `: ${mb(budget.target)} less ${spent.join(', ')}`
+              : ''}
+          </span>
+          {#if budget.video <= 0}
+            <span class="mt-1 block text-destructive">The size leaves nothing for the video.</span>
+          {/if}
+          {#if budget.unknown.length}
+            <span class="mt-1 block text-warning">Not counted (size not known): {budget.unknown.join(', ')}.</span>
+          {/if}
+        {/if}
+      </div>
+    {/if}
 
     <span class="section-label">Preset</span>
     <NativeSelect class="w-48" value={value.preset} aria-label="Preset" onchange={e => set('preset', e.currentTarget.value)}>

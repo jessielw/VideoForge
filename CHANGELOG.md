@@ -42,7 +42,11 @@ source), or in Docker on Linux.
   keeps its timestamps in an MKV, as in StaxRip (`mkvextract timestamps_v2`, mkvmerge `--timestamps`), while
   the script keeps every frame; one that doesn't (an IVTC) is muxed at its own constant rate and warns, and an
   MP4 (MP4Box takes no timestamps) warns that it's muxed at a constant rate.
-- **Encoder.** x264 and x265 option panels, 1 or 2 passes; AutoQPF chapters to a qpf file. The encode is
+- **Encoder.** x264 and x265 option panels, 1 or 2 passes; AutoQPF chapters to a qpf file. A 2-pass encode
+  takes a bitrate or a target file size (MB, with StaxRip's DVD / BD sizes to pick): the video gets what the
+  size leaves after the audio, subtitles, attachments, HDR metadata and container overhead, over the script's
+  length (StaxRip's sum). Pass 2 waits for the audio encodes and counts their files; the Encoder tab shows the
+  bitrate and where the size goes, and a size that leaves the video nothing blocks the job. The encode is
   tagged with the source's colour description (primaries, transfer, matrix, range, chroma location, read by
   MediaInfo) and on x265 its HDR10 metadata (mastering display, MaxCLL / MaxFALL) with StaxRip's flags
   alongside it (`--hdr10 --repeat-headers --hrd --aud`, `--range limited` when the source doesn't say, the VBV

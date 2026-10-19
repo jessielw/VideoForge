@@ -190,6 +190,7 @@ def _video(spec: JobSpec, plan: Plan, commands: dict[str, str]) -> dict[str, Any
             "rate_control": enc.rate_control.value,
             "crf": enc.crf,
             "bitrate_kbps": enc.bitrate_kbps,
+            "target_mb": enc.target_mb,
             "preset": enc.preset,
             "tune": enc.tune,
             "depth": enc.depth,

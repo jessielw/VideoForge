@@ -100,6 +100,7 @@ When VideoForge encoded the video:
     "name": "x264",                        // "x264" | "x265"
     "rate_control": "crf",                 // "crf" | "abr" | "2pass"
     "crf": 18.0, "bitrate_kbps": 10000,    // the one rate_control uses counts
+    "target_mb": null,                     // 2pass: the target size (MB) that set the bitrate (the commands carry it)
     "preset": "slower", "tune": "", "depth": 8,
     "options": { "aq-mode": "3" },         // --name value (an empty value is a bare flag)
     "extra": ""                            // raw arguments, as typed

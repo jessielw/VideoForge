@@ -9,6 +9,7 @@ from typing import Any
 from videoforge.core.models import Issue, Severity, track_key, with_copies
 from videoforge.core.pipeline.build import indexed, output_path
 from videoforge.core.plan_io import to_json
+from videoforge.core.video import info, target
 from videoforge.core.video.color import color_args
 from videoforge.core.video.settings import EncoderSettings, RateControl
 from videoforge.server.queue import Entry, JobQueue
@@ -17,6 +18,8 @@ from videoforge.server.queue import Entry, JobQueue
 def encoder_label(enc: EncoderSettings) -> str:
     if enc.rate_control is RateControl.CRF:
         rc = f"crf {enc.crf:g}"
+    elif target.applies(enc):
+        rc = f"2-pass {enc.target_mb} MB"
     else:
         rc = f"{'2-pass ' if enc.passes == 2 else ''}{enc.bitrate_kbps} kb/s"
     return f"{enc.encoder.value} {rc}" + (f" {enc.depth}-bit" if enc.depth != 8 else "")
@@ -72,12 +75,19 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     out["output_name"] = None
     out["tracks"] = None
     out["color_args"] = None  # the source's colour flags for this encoder (added unless source_color is off)
+    out["target"] = None  # where a 2-pass target size goes, and the bitrate it leaves the video
     if e.plan is not None:
         plan = to_json(e.plan)
         for key in ("source", "inputs", "overrides"):  # sent elsewhere
             plan.pop(key, None)
         out["plan"] = plan
         out["output_name"] = output_path(e.spec, e.plan, profile, Path()).name
+        enc = e.spec.encoder
+        if e.spec.encodes_video and target.applies(enc) and enc.target_mb is not None:
+            found = target.budget(
+                enc.target_mb, e.plan, e.spec.container(profile), info.read(e.spec.work_dir / info.SCRIPT_INFO)
+            )
+            out["target"] = to_json(found) | {"video": found.video, "kbps": found.kbps} if found else None
     if e.probed is not None:
         src = e.probed.source
         tracks = [*src.audio, *e.probed.external_audio, *src.subs, *e.probed.external_subs]

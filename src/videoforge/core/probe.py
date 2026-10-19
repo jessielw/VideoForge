@@ -180,6 +180,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                     original=bool(props.get("flag_original")),
                     visual_impaired=bool(props.get("flag_visual_impaired")),
                     element_count=int(count) if count else None,
+                    size_bytes=_int(getattr(mi, "stream_size", None)),
                     number=props.get("number"),
                 )
             )
@@ -191,4 +192,5 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
         audio=audio,
         subs=subs,
         has_chapters=bool(ident.get("chapters")),
+        attachments_bytes=sum(a.get("size") or 0 for a in ident.get("attachments", [])),
     )

@@ -88,6 +88,7 @@ export interface EncoderSettings {
   rate_control: RateControl
   crf: number
   bitrate_kbps: number
+  target_mb: number | null // 2-pass: the output's size in MB (decimal), which sets the bitrate instead
   preset: string
   tune: string
   depth: number
@@ -369,6 +370,21 @@ export interface JobDetail extends JobSummary {
   tracks: Tracks | null
   output_name: string | null // the file the run will write (null until planned)
   color_args: string[] | null // the source's colour flags for this encoder (null until probed)
+  target: SizeBudget | null // where a 2-pass target size goes (null without one, or until planned)
+}
+
+// A target size's bytes: the video gets what the rest leaves (core/video/target.py)
+export interface SizeBudget {
+  target: number
+  seconds: number
+  audio: number
+  subs: number
+  attachments: number
+  metadata: number // HDR10+ / Dolby Vision
+  overhead: number
+  unknown: string[] // tracks whose size isn't known (counted as nothing)
+  video: number
+  kbps: number
 }
 
 export interface ClipInfo {

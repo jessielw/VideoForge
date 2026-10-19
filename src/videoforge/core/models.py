@@ -120,6 +120,7 @@ class SubTrack:
     original: bool = False
     visual_impaired: bool = False
     element_count: int | None = None
+    size_bytes: int | None = None  # the stream's size, when the file says
     number: int | None = None  # MKV track number (mkvmerge id + 1, gMKVExtract "trackN")
     external_path: Path | None = None
     extracted_from: int | None = None  # source track number an external file was extracted from
@@ -203,6 +204,7 @@ class SourceInfo:
     audio: list[AudioTrack] = field(default_factory=list)
     subs: list[SubTrack] = field(default_factory=list)
     has_chapters: bool = False
+    attachments_bytes: int = 0  # the attachments' size (an ASS subtitle's fonts)
 
 
 # --- Job inputs ---------------------------------------------------------------

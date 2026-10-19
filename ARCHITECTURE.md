@@ -47,6 +47,8 @@ src/videoforge/
                          FEL's enhancement layer (demux, MKV) and its HDR10 values from the RPU; their frame checks
       qpf.py             AutoQPF: chapters -> qpf + chapter file
       vfr.py             A VFR source's timestamps (mkvextract timestamps_v2) onto an MKV's encode, while they fit
+      target.py          A 2-pass target size -> the video bitrate (StaxRip's Calc.GetVideoBitrate): what the size
+                         leaves after the audio, subtitles, attachments, HDR metadata and overhead, over the length
     execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel), jobobject.py (tools end with the server, Windows)
                          mux.MUXERS: mkvmerge (MKV) and MP4Box (MP4), each with what its container can't hold
                          audio.ENCODES: every audio encode (DEE, qaac, opusenc, ffmpeg's FLAC/Opus/AAC/AC-3/E-AC-3)
@@ -208,6 +210,15 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   (`hdr.fel_color`: "RPU mastering display", then L1's MaxCLL / MaxFALL, else L6, else the source's): the
   encode steps carry `Step.refresh`, which `run_steps` calls when their turn comes, after `dovi.rpu` wrote the
   RPU; before that (the Encoder tab) they show the source's values.
+- Target size (`core/video/target.py`, 2-pass with `EncoderSettings.target_mb`): StaxRip's sum, in decimal MB
+  (its default prefix): the target less the audio (a copy's MediaInfo stream size, an encode's bitrate over the
+  length, qaac TVBR by StaxRip's guess from its quality, FLAC by the lossless source's bitrate), the subtitles
+  (their stream or file size, whole: mkvmerge doesn't compress them), an MKV's attachments, the HDR10+ JSON /
+  Dolby Vision RPU and StaxRip's overhead per frame (0.014 KiB in MKV, 0.013 in MP4), over the script's length
+  (a VFR MKV's: the source's). Both passes carry `Step.refresh`: pass 1 counts the planned sizes, and pass 2 has
+  the encoded audio files among its inputs, so `run_steps` waits for those background steps and its bitrate
+  counts their sizes (StaxRip corrects the bitrate once the audio is done). The plan blocks a size that leaves
+  the video nothing (`video.target_small`) or a source without a length, and warns for tracks of unknown size.
 - The plan is container-neutral: tracks carry plain flags (default, forced, hearing impaired,
   commentary, original, visual impaired), languages and titles. The job's container
   (`JobSpec.container()`: its `MuxSettings.container` when the profile lists it in `containers`,

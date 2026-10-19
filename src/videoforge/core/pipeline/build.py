@@ -8,7 +8,8 @@ other than the source's: AutoQPF and the mux read it when their turn comes (Step
 timestamps (core/video/vfr.py) time an MKV's encode instead, when they fit the script's frame count.
 
 The audio encodes are background steps: with AppConfig.parallel_audio they run alongside the
-video encode (after the index, which reads the whole source too), and the mux waits for them.
+video encode (after the index, which reads the whole source too), and the mux waits for them. A target size's
+second pass waits for them too: its bitrate counts their files (core/video/target.py).
 
 Everything is written into the job's work folder except the mux, which writes
 <output>.partial and moves it into place when it is complete. A job that reuses
@@ -17,6 +18,7 @@ an existing encode has no script/index/chapters/video steps.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
 from functools import partial
@@ -33,11 +35,11 @@ from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
 from videoforge.core.models import Plan, VideoColor, VideoInfo
 from videoforge.core.pipeline.steps import Step
-from videoforge.core.video import hdr, info, vfr
+from videoforge.core.video import hdr, info, target, vfr
 from videoforge.core.video.encoders import encoder_command, vspipe_command
 from videoforge.core.video.qpf import make_qpf, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
-from videoforge.core.video.settings import Encoder, SourceFilter
+from videoforge.core.video.settings import Encoder, EncoderSettings, SourceFilter
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -186,7 +188,10 @@ def indexed(spec: JobSpec, video: VideoInfo | None) -> bool:
     return index_exists(spec.inputs.source, s, spec.work_dir) and (el is None or index_exists(el, s, spec.work_dir))
 
 
-def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
+def video_steps(
+    spec: JobSpec, plan: Plan, app: AppConfig, container: str = "mkv", encoded: Mapping[int, Path] | None = None
+) -> list[Step]:
+    """encoded: plan.audio position -> its encoded file, which a target size's pass 2 counts."""
     work, source, enc = spec.work_dir, spec.inputs.source, spec.encoder
     script = work / "video.vpy"
     v = plan.source.video
@@ -309,12 +314,23 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
         shared += (rpu,)
     out = spec.video_output
     name = enc.encoder.value
+    audio_files = tuple((encoded or {}).values())
+
+    def sized(final: bool) -> EncoderSettings:
+        """The settings with a target size's bitrate: the script's length once its info step has run (before a
+        run, the source's); pass 2 (final) counts the encoded audio's files, pass 1 the planned sizes. Without a
+        length, the typed bitrate (target.issues blocks the job)."""
+        if not target.applies(enc) or enc.target_mb is None:
+            return enc
+        found = target.budget(
+            enc.target_mb, plan, container, info.read(info_file), encoded if final else None, (hdr10plus, dolby_vision)
+        )
+        return enc if found is None else replace(enc, bitrate_kbps=found.kbps)
 
     def encodes(color: VideoColor | None) -> list[Step]:
         command = partial(
             encoder_command,
             exe,
-            enc,
             qpfile=qpfile,
             sar=sar,
             color=color,
@@ -323,7 +339,7 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
             dv_profile=dv_profile,
         )
         if enc.passes != 2:
-            argv = command(output=out)
+            argv = command(enc, output=out)
             return [
                 Step(
                     "video",
@@ -336,8 +352,10 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
                 )
             ]
         stats = work / "video.stats"
-        first = command(output=Path(os.devnull), pass_number=1, stats=stats)
-        second = command(output=out, pass_number=2, stats=stats)
+        first = command(sized(False), output=Path(os.devnull), pass_number=1, stats=stats)
+        second = command(sized(True), output=out, pass_number=2, stats=stats)
+        # A target size's pass 2 waits for the audio encodes (run_steps), whose files its bitrate counts.
+        waits = audio_files if target.applies(enc) else ()
         return [
             Step(
                 "video.pass1",
@@ -353,20 +371,22 @@ def video_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
                 f"Video pass 2/2 ({name})",
                 argvs=(pipe, tuple(second)),
                 outputs=(out,),
-                inputs=(*shared, stats),
+                inputs=(*shared, stats, *waits),
                 key=text,
                 weight=60,
             ),
         ]
 
-    if baked_el(spec, v) is None or color is None:
+    fel = baked_el(spec, v) is not None and color is not None
+    if not fel and not target.applies(enc):
         return steps + encodes(color)
     # A baked FEL's HDR10 values come from the source's RPU, read when the encode's turn comes (the steps
-    # before it extract the RPU); until then (the Encoder tab before a run) the source's.
+    # before it extract the RPU); until then (the Encoder tab before a run) the source's. A target size's
+    # bitrate is worked out again then too: by the script's length and the files the steps before it wrote.
     source_color, dovi_tool = color, app.tools.dovi_tool
 
-    def fel_color() -> VideoColor:
-        if not source_rpu.is_file():
+    def fel_color() -> VideoColor | None:
+        if not fel or source_color is None or not source_rpu.is_file():
             return source_color
         return hdr.fel_color(source_color, hdr.rpu_summary(dovi_tool, source_rpu))
 
@@ -380,8 +400,6 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
     if plan.source.path is None:
         raise ToolError("The plan has no source file")
     work = spec.work_dir
-    steps = video_steps(spec, plan, app) if spec.encodes_video else []
-
     settings = profile.audio_settings()
     encoded: dict[int, Path] = {}
     audio: list[Step] = []
@@ -403,6 +421,7 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
             )
         )
     container = spec.container(profile)
+    steps = video_steps(spec, plan, app, container, encoded) if spec.encodes_video else []
     video = plan.source.video
     timestamps = work / vfr.TIMESTAMPS if vfr.carries(video, container) and video is not None else None
     if timestamps is not None and video is not None:

@@ -208,6 +208,8 @@ class EncoderSettings:
     rate_control: RateControl = RateControl.CRF
     crf: float = 18.0
     bitrate_kbps: int = 10000
+    # 2-pass: the output file's size in MB (decimal), which sets the bitrate instead (core/video/target.py)
+    target_mb: int | None = None
     preset: str = "slower"
     tune: str = ""
     depth: int = 8  # output bit depth; the script converts to it

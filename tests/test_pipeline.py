@@ -36,7 +36,7 @@ from videoforge.core.models import (
 )
 from videoforge.core.pipeline.build import build_steps
 from videoforge.core.pipeline.run import run_job, run_plan
-from videoforge.core.video import hdr
+from videoforge.core.video import hdr, target
 from videoforge.core.video.settings import Crop, Encoder, EncoderSettings, RateControl, SourceFilter
 
 
@@ -472,6 +472,38 @@ def test_audio_encodes_run_beside_the_video(profile, tmp_path):
     again = OverlapRunner()  # a rerun reuses the background steps like any other
     run_job(job, plan, profile, app, state=state, runner=again, prober=prober)
     assert tools_called(again) == ["python"]  # the fake leaves no index file, so only that runs again
+
+
+def test_a_target_size_sets_the_two_pass_bitrate(profile, tmp_path):
+    """Pass 1 by the planned audio sizes; pass 2 waits for the audio encodes (beside pass 1) and counts their files."""
+    plan = make_plan(tmp_path)
+    plan.source.video = VideoInfo(1920, 1080, default_duration_ns=41708333, frames=240)
+    job = video_job(plan, tmp_path)
+    job.encoder = EncoderSettings(rate_control=RateControl.TWO_PASS, target_mb=10)
+    out = tmp_path / "out" / "Show.S01E01.mkv"
+    built = build_steps(job, plan, profile, APP, out)
+    step = {s.id: s for s in built.steps}
+    assert set(built.encoded_audio.values()) <= set(step["video.pass2"].inputs)  # so run_steps waits for the audio
+
+    def bitrate(s):
+        argv = s.argvs[1]
+        return int(argv[argv.index("--bitrate") + 1])
+
+    before = target.budget(10, plan, "mkv", None)
+    assert before is not None and bitrate(step["video.pass1"]) == bitrate(step["video.pass2"]) == before.kbps
+
+    runner = OverlapRunner(waits={"x264": {"qaac64", "deezy"}, "qaac64": {"x264"}, "deezy": {"x264"}})
+    app = replace(APP, parallel_audio=2)
+    result = run_job(job, plan, profile, app, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
+    assert result.status is JobStatus.DONE, result.error
+    assert any({"qaac64", "deezy", "x264"} <= t for t in runner.together)  # pass 1 beside the audio
+    encodes = [c[1] for c in runner.calls if Path(c[-1][0]).stem == "x264"]
+    found = target.info.read(job.work_dir / target.info.SCRIPT_INFO)
+    planned = target.budget(10, plan, "mkv", found)
+    encoded = target.budget(10, plan, "mkv", found, built.encoded_audio)
+    assert planned is not None and encoded is not None and planned.kbps != encoded.kbps
+    assert encoded.audio == 3 * len(built.encoded_audio)  # the fake tools' files
+    assert [int(a[a.index("--bitrate") + 1]) for a in encodes] == [planned.kbps, encoded.kbps]
 
 
 @pytest.mark.parametrize("parallel", [1, 2])
