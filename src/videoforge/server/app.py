@@ -152,4 +152,6 @@ def _mount_frontend(app: FastAPI, settings: ServerSettings) -> None:
         file = (dist / path).resolve()
         if path and file.is_file() and dist.resolve() in file.parents:
             return FileResponse(file)
-        return FileResponse(index)
+        # Asked for again each time (the assets it names are hashed), so a new build shows on the next load
+        # instead of a cached page naming the last build's.
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})

@@ -1468,3 +1468,20 @@ def test_video_preview_endpoints(tmp_path):
         assert not_a_clip["line"] > head + 1 and "the body must leave a video clip" in not_a_clip["error"]
         assert client.get(f"{base}/script").json()["custom"]
         assert run("clip = src[5:15]")["info"]["frames"] == 10
+
+
+def test_the_page_is_never_served_stale(tmp_path):
+    """index.html says no-cache, so a desktop window shows a new build on its next load."""
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    app = create_app(
+        ServerSettings(data_dir=tmp_path / "data", roots=[tmp_path], frontend_dir=dist),
+        APP,
+        services=Services(probe=fake_probe, run=FakeRun()),
+        setup_vapoursynth=False,
+    )
+    with TestClient(app) as client:
+        for path in ("/", "/queue"):
+            r = client.get(path)
+            assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
