@@ -111,6 +111,8 @@ class FakeRunner:
                 Path(last[last.index(flag) + 1]).write_bytes(b"out")
         if "--info" in last and last[-1] != "-":  # the script info step: vspipe writes the clip's info
             Path(last[-1]).write_text(self.script_info, encoding="utf-8")
+        if "videoforge.core.execute.loudness" in last:  # an audio measure step: <out.json> after the module
+            Path(last[3]).write_text('{"max_volume": -4.5}', encoding="utf-8")
         if "timestamps_v2" in last:  # mkvextract: <track>:<file>, one timestamp per frame
             stamps = "".join(f"{round(i * 1001 / 24)}\n" for i in range(241))  # and the last frame's end
             Path(last[-1].split(":", 1)[1]).write_text("# timestamp format v2\n" + stamps, encoding="utf-8")
@@ -441,7 +443,8 @@ class OverlapRunner(FakeRunner):
         self.together: list[set[str]] = []  # who ran at once, at each start
 
     def __call__(self, argvs, log, cancel):
-        name = Path(argvs[-1][0]).stem
+        measure = "videoforge.core.execute.loudness" in argvs[-1]
+        name = "measure" if measure else Path(argvs[-1][0]).stem
         with self.cond:
             self.started.add(name)
             self.active.append(name)
@@ -505,6 +508,27 @@ def test_a_target_size_sets_the_two_pass_bitrate(profile, tmp_path):
     assert planned is not None and encoded is not None and planned.kbps != encoded.kbps
     assert encoded.audio == 3 * len(built.encoded_audio)  # the fake tools' files
     assert [int(a[a.index("--bitrate") + 1]) for a in encodes] == [planned.kbps, encoded.kbps]
+
+
+@pytest.mark.parametrize("parallel", [0, 2])
+def test_a_normalized_track_is_measured_first(profile, tmp_path, parallel):
+    plan = make_plan(tmp_path)
+    plan.audio[0].options = {"normalize": "peak"}  # the AAC (ffmpeg | qaac)
+    job = video_job(plan, tmp_path)
+    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    ids = [s.id for s in built.steps]
+    assert ids.index("audio.1.measure") + 1 == ids.index("audio.1") and "audio.2.measure" not in ids
+    step = {s.id: s for s in built.steps}
+    assert step["audio.1.measure"].outputs[0] in step["audio.1"].inputs and step["audio.1"].refresh is not None
+
+    runner = OverlapRunner(waits={"x264": {"measure"}, "measure": {"x264"}} if parallel else {})
+    app = replace(APP, parallel_audio=parallel)
+    result = run_job(job, plan, profile, app, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
+    assert result.status is JobStatus.DONE, result.error
+    if parallel:
+        assert any({"measure", "x264"} <= t for t in runner.together)  # the measure beside the video
+    (ffmpeg, _), *_ = [c for c in runner.calls if Path(c[-1][0]).stem == "qaac64"]
+    assert ffmpeg[ffmpeg.index("-af") + 1] == "volume=4.5dB"  # FakeRunner's measure: -4.5 dB
 
 
 @pytest.mark.parametrize("parallel", [1, 2])

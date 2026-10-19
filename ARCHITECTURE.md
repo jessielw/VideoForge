@@ -55,6 +55,8 @@ src/videoforge/
                          mux.MUXERS: mkvmerge (MKV) and MP4Box (MP4), each with what its container can't hold
                          audio.ENCODES: every audio encode (DEE, qaac, opusenc, ffmpeg's FLAC/Opus/AAC/AC-3/E-AC-3)
                          with its layouts, bitrates and tools; planner, tool checks and UI all read it
+                         loudness.py: an audio track's normalize measure (ffmpeg volumedetect / loudnorm pass 1),
+                         run as `python -m`, writing what ffmpeg printed to JSON for the encode
     pipeline/
       steps.py           Step (command(s) or Python call), outputs, fingerprint
       build.py           JobSpec + Plan -> [index, qpf, video pass(es), audio, mux, validate]
@@ -156,6 +158,12 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   the background steps whose outputs it reads (the mux), and one step failing cancels the others
   (a child `CancelToken`). With 0 they run one by one, before the video. Their lines reach the queue
   through `step_log`, tagged with their step, since several steps run at once.
+- A background step that reads another's outputs waits for it on its own thread, and its `Step.refresh` and
+  reuse check run there too, so the steps after it don't wait. Normalizing by peak or loudness uses this: an
+  `audio.N.measure` step (`execute/loudness.py`, the encode's downmix then volumedetect or loudnorm's first
+  pass) writes `audioN_<lang>.loudness.json`, and the encode `audio.N` refreshes from it (the gain, or
+  loudnorm's second pass with the measured values, `linear=true`, and an `aresample` back to the source's rate,
+  since loudnorm's dynamic mode puts out 192 kHz). dynaudnorm is one pass. DeeZy's encodes don't offer it.
 - A step's fingerprint covers its command and inputs. A rerun skips a step whose
   fingerprint matches and whose outputs exist. That gives crash recovery (restart
   the server and the job resumes after its last finished step) and cheap reruns

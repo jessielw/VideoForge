@@ -6,6 +6,7 @@
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
+  import { shownOptions } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import TrackFlags from './TrackFlags.svelte'
   import type { AudioAction, EncodeOptionInfo, TrackOverride, TrackProperty } from '../lib/types'
@@ -104,7 +105,7 @@
   </div>
   {#if enc?.options.length && settingsOpen}
     <div class="grid gap-x-4 gap-y-2 rounded-md border bg-muted/30 p-2 text-sm sm:grid-cols-[12rem_1fr]">
-      {#each enc.options as o (o.key)}
+      {#each shownOptions(enc.options, o => value.options?.[o.key] ?? o.default) as o (o.key)}
         {@const v = value.options?.[o.key] ?? o.default}
         {@const id = `${label}-${o.key}`.replace(/\W+/g, '-')}
         <label class="text-muted-foreground" for={id} title={o.help}>{o.label}</label>
@@ -114,7 +115,7 @@
               {#each o.choices as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
             </NativeSelect>
           {:else if o.range}
-            <Input {id} class="w-24" type="number" min={o.range[0]} max={o.range[1]} value={v} {disabled} onchange={e => setOption(o, e.currentTarget.value)} />
+            <Input {id} class="w-24" type="number" min={o.range[0]} max={o.range[1]} step={o.step} value={v} {disabled} onchange={e => setOption(o, e.currentTarget.value)} />
           {:else}
             <Input {id} class="min-w-0 flex-1 font-mono text-xs" value={v} placeholder={o.help} {disabled} onchange={e => setOption(o, e.currentTarget.value)} />
           {/if}

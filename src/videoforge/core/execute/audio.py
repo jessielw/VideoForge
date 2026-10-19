@@ -12,13 +12,19 @@ token), so we pass it explicitly; DeeZy bakes it into the stream (padding or
 trimming, plus DEE's own priming) and the output starts at 0. ffmpeg (alone or
 into qaac or opusenc) starts at the first audio sample, so those get the delay at mux
 (mkvmerge --sync).
+
+Normalize (StaxRip's ffmpeg modes; DeeZy's DEE measures its own dialogue level): peak and loudnorm read the
+track first (measure_argv, core/execute/loudness.py) and the encode applies what that found; dynaudnorm is one
+pass. The measure runs the encode's own downmix first, so the level it reads is the output's.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 import shlex
+import sys
 
 from videoforge.core.config import Tools
 from videoforge.core.models import AudioAction, AudioCodec, Layout, PlannedAudio
@@ -37,7 +43,13 @@ class EncodeOption:
     default: str
     choices: tuple[tuple[str, str], ...] = ()  # (value, label); a pick list when set
     int_range: tuple[int, int] | None = None  # a whole number in this range when set
+    num_range: tuple[float, float] | None = None  # a number (decimals too) in this range when set
     help: str = ""  # anything else is free text
+    when: tuple[str, str] | None = None  # (key, value): used only while that option has that value
+
+    @property
+    def range(self) -> tuple[float, float] | None:
+        return self.int_range or self.num_range
 
     def problem(self, value: str) -> str:
         """Why this value can't be used ("" when it can)."""
@@ -47,7 +59,15 @@ class EncodeOption:
             lo, hi = self.int_range
             if not value.lstrip("-").isdigit() or not lo <= int(value) <= hi:
                 return f"{self.label} must be a whole number from {lo} to {hi}"
-        if not self.choices and not self.int_range and value.count('"') % 2:
+        if self.num_range:
+            lo, hi = self.num_range
+            try:
+                ok = lo <= float(value) <= hi  # False for nan
+            except ValueError:
+                ok = False
+            if not ok:
+                return f"{self.label} must be a number from {lo:g} to {hi:g}"
+        if not self.choices and not self.range and value.count('"') % 2:
             return f"{self.label} has an unclosed quote"
         return ""
 
@@ -76,6 +96,33 @@ _DIALNORM = EncodeOption(
     "-31",
     int_range=(-31, -1),
     help="-31 leaves the level alone; players turn quieter dialogue up",
+)
+
+
+_LOUDNORM = ("normalize", "loudnorm")
+_NORMALIZE = (
+    EncodeOption(
+        "normalize",
+        "Normalize",
+        "",
+        choices=(
+            ("", "Off"),
+            ("peak", "Peak to 0 dB (volumedetect)"),
+            ("loudnorm", "Loudness, EBU R128 (loudnorm)"),
+            ("dynaudnorm", "Dynamic (dynaudnorm)"),
+        ),
+        help="Peak and loudness read the whole track first",
+    ),
+    EncodeOption("loudnorm_i", "Target loudness (LUFS)", "-24", num_range=(-70, -5), when=_LOUDNORM),
+    EncodeOption("loudnorm_tp", "Highest true peak (dBTP)", "-2", num_range=(-9, 0), when=_LOUDNORM),
+    EncodeOption(
+        "loudnorm_lra",
+        "Loudness range (LU)",
+        "7",
+        num_range=(1, 50),
+        help="A source with a wider range is compressed to fit",
+        when=_LOUDNORM,
+    ),
 )
 
 
@@ -238,6 +285,7 @@ ENCODES: dict[AudioAction, AudioEncode] = {
                     int_range=(0, 127),
                     help="Used when no bitrate is set; 127 is the best",
                 ),
+                *_NORMALIZE,
                 _extra("qaac", "--lowpass 20000"),
             ),
         ),
@@ -257,6 +305,7 @@ ENCODES: dict[AudioAction, AudioEncode] = {
                     int_range=(0, 12),
                     help="Higher is smaller and slower; every level is lossless",
                 ),
+                *_NORMALIZE,
                 _EXTRA,
             ),
         ),
@@ -285,6 +334,7 @@ ENCODES: dict[AudioAction, AudioEncode] = {
                     choices=(("audio", "Music and film"), ("voip", "Speech"), ("lowdelay", "Low delay")),
                 ),
                 EncodeOption("complexity", "Complexity", "10", int_range=(0, 10), help="10 is the best quality"),
+                *_NORMALIZE,
                 _EXTRA,
             ),
         ),
@@ -313,6 +363,7 @@ ENCODES: dict[AudioAction, AudioEncode] = {
                     help="Matters at low bitrates",
                 ),
                 EncodeOption("comp", "Complexity", "10", int_range=(0, 10), help="10 is the best quality"),
+                *_NORMALIZE,
                 _extra("opusenc", "--framesize 40"),
             ),
         ),
@@ -328,6 +379,7 @@ ENCODES: dict[AudioAction, AudioEncode] = {
             bitrate_range=(8, 1536),
             options=(
                 EncodeOption("coder", "Coder", "twoloop", choices=(("twoloop", "Two-loop (better)"), ("fast", "Fast"))),
+                *_NORMALIZE,
                 _EXTRA,
             ),
         ),
@@ -341,7 +393,7 @@ ENCODES: dict[AudioAction, AudioEncode] = {
             ffmpeg_encoder="ac3",
             bitrates={1: 192, 2: 224, 6: 640},
             bitrate_choices=AC3_BITRATES,
-            options=(_DIALNORM, _EXTRA),
+            options=(_DIALNORM, *_NORMALIZE, _EXTRA),
         ),
         AudioEncode(
             AudioAction.EAC3,
@@ -353,7 +405,7 @@ ENCODES: dict[AudioAction, AudioEncode] = {
             ffmpeg_encoder="eac3",
             bitrates={1: 192, 2: 256, 6: 640},
             bitrate_range=(32, 6144),
-            options=(_DIALNORM, _EXTRA),
+            options=(_DIALNORM, *_NORMALIZE, _EXTRA),
         ),
     )
 }
@@ -394,6 +446,97 @@ class AudioCommand:
 
 def output_path(planned: PlannedAudio, position: int, temp_dir: Path) -> Path:
     return temp_dir / f"audio{position}_{planned.language}{ENCODES[planned.action].suffix}"
+
+
+def measure_path(planned: PlannedAudio, position: int, temp_dir: Path) -> Path:
+    """What a track's measure step found (core/execute/loudness.py), beside its encode."""
+    return output_path(planned, position, temp_dir).with_suffix(".loudness.json")
+
+
+def _normalize(planned: PlannedAudio) -> str:
+    """The track's normalize mode; "" for none, or an encode without the option (a copy, DeeZy's)."""
+    enc = ENCODES.get(planned.action)
+    return _opt(planned, "normalize") if enc and any(o.key == "normalize" for o in enc.options) else ""
+
+
+def needs_measure(planned: PlannedAudio) -> bool:
+    """True when the encode applies what a measure step reads first (peak and loudness normalizing)."""
+    return _normalize(planned) in ("peak", "loudnorm")
+
+
+def _chain(*filters: str) -> str:
+    return ",".join(f for f in filters if f)
+
+
+def _layout_filter(planned: PlannedAudio) -> str:
+    layout = str(planned.out_layout)
+    return f"aformat=channel_layouts={_FFMPEG_LAYOUT.get(layout, layout)}"
+
+
+def _pre(planned: PlannedAudio) -> str:
+    """The encode's own filter before normalizing: its output layout. qaac's comes from -ac, after any filter,
+    so a normalized downmix makes it a filter (only a downmix: at the same count -ac keeps the source's layout)."""
+    if planned.action is AudioAction.AAC and planned.out_layout.channels >= planned.source.layout.channels:
+        return ""
+    return _layout_filter(planned)
+
+
+def _loudnorm(planned: PlannedAudio) -> str:
+    return f"loudnorm=I={_opt(planned, 'loudnorm_i')}:TP={_opt(planned, 'loudnorm_tp')}:LRA={_opt(planned, 'loudnorm_lra')}"
+
+
+# loudnorm's second-pass options, by the first pass's JSON keys
+_MEASURED = {"input_i": "I", "input_tp": "TP", "input_lra": "LRA", "input_thresh": "thresh"}
+
+
+def normalize_filter(planned: PlannedAudio, measured: Mapping[str, float] | None) -> str:
+    """The encode's normalize filter ("" for none) from what its measure step found. Before that step has run
+    (measured None), peak has no gain yet and loudnorm shows as one pass."""
+    mode = _normalize(planned)
+    if mode == "dynaudnorm":
+        return "dynaudnorm"
+    if mode == "peak":
+        gain = -(measured or {}).get("max_volume", 0.0)
+        return f"volume={gain:.1f}dB" if gain > 0 else ""
+    if mode != "loudnorm":
+        return ""
+    # loudnorm resamples to 192 kHz when it can't stay linear (a source wider than the range, or a peak that
+    # would pass the limit): back to the source's rate.
+    rate = f"aresample={planned.source.sample_rate or 48000}"
+    if measured is None:
+        return _chain(_loudnorm(planned), rate)
+    if any(key not in measured for key in (*_MEASURED, "target_offset")):
+        return ""  # silence: no loudness to set
+    values = ":".join(f"measured_{name}={measured[key]:.2f}" for key, name in _MEASURED.items())
+    return _chain(f"{_loudnorm(planned)}:{values}:offset={measured['target_offset']:.2f}:linear=true", rate)
+
+
+def measure_argv(planned: PlannedAudio, source: Path, out: Path, tools: Tools) -> tuple[str, ...]:
+    """The measure step for normalize_filter: ffmpeg reads the track (after the encode's downmix) through
+    core/execute/loudness.py, which writes what it found to out."""
+    probe = "volumedetect" if _normalize(planned) == "peak" else f"{_loudnorm(planned)}:print_format=json"
+    return (
+        sys.executable,
+        "-m",
+        "videoforge.core.execute.loudness",
+        str(out),
+        str(planned.source.duration_ms or 0),
+        tools.ffmpeg,
+        "-hide_banner",
+        "-nostdin",
+        "-i",
+        str(source),
+        "-map",
+        f"0:a:{planned.source.index}",
+        "-vn",
+        "-sn",
+        "-dn",
+        "-af",
+        _chain(_pre(planned), probe),
+        "-f",
+        "null",
+        "-",
+    )
 
 
 def _deezy(
@@ -439,9 +582,15 @@ def _deezy(
 
 
 def _aac(
-    planned: PlannedAudio, source: Path, output: Path, settings: AudioSettings, tools: Tools
+    planned: PlannedAudio,
+    source: Path,
+    output: Path,
+    settings: AudioSettings,
+    tools: Tools,
+    measured: Mapping[str, float] | None,
 ) -> tuple[tuple[str, ...], ...]:
     # Float WAV so a lossless 24-bit source isn't truncated and a downmix can't clip.
+    norm = normalize_filter(planned, measured)
     ffmpeg = (
         tools.ffmpeg,
         "-hide_banner",
@@ -452,6 +601,7 @@ def _aac(
         str(source),
         "-map",
         f"0:a:{planned.source.index}",
+        *(("-af", _chain(_pre(planned), norm)) if norm else ()),
         "-ac",
         str(planned.out_layout.channels),
         "-c:a",
@@ -483,10 +633,11 @@ def _aac(
     return ffmpeg, qaac
 
 
-def _opusenc(planned: PlannedAudio, source: Path, output: Path, tools: Tools) -> tuple[tuple[str, ...], ...]:
+def _opusenc(
+    planned: PlannedAudio, source: Path, output: Path, tools: Tools, measured: Mapping[str, float] | None
+) -> tuple[tuple[str, ...], ...]:
     # Float WAV with the exact layout, so opusenc's channel mapping reads the right speakers.
     # No metadata and bitexact: opusenc warns about every LIST chunk ffmpeg would add.
-    layout = str(planned.out_layout)
     ffmpeg = (
         tools.ffmpeg,
         "-hide_banner",
@@ -505,7 +656,7 @@ def _opusenc(planned: PlannedAudio, source: Path, output: Path, tools: Tools) ->
         "-fflags",
         "+bitexact",
         "-af",
-        f"aformat=channel_layouts={_FFMPEG_LAYOUT.get(layout, layout)}",
+        _chain(_pre(planned), normalize_filter(planned, measured)),
         "-c:a",
         "pcm_f32le",
         "-f",
@@ -597,8 +748,9 @@ _FFMPEG_ARGS = {
 }
 
 
-def _ffmpeg(planned: PlannedAudio, source: Path, output: Path, tools: Tools) -> tuple[str, ...]:
-    layout = str(planned.out_layout)
+def _ffmpeg(
+    planned: PlannedAudio, source: Path, output: Path, tools: Tools, measured: Mapping[str, float] | None
+) -> tuple[str, ...]:
     return (
         tools.ffmpeg,
         "-hide_banner",
@@ -618,7 +770,7 @@ def _ffmpeg(planned: PlannedAudio, source: Path, output: Path, tools: Tools) -> 
         "-map_metadata",
         "-1",
         "-af",
-        f"aformat=channel_layouts={_FFMPEG_LAYOUT.get(layout, layout)}",
+        _chain(_pre(planned), normalize_filter(planned, measured)),
         *_FFMPEG_ARGS[planned.action](planned),
         *_extra_args(planned),
         str(output),
@@ -626,18 +778,25 @@ def _ffmpeg(planned: PlannedAudio, source: Path, output: Path, tools: Tools) -> 
 
 
 def audio_command(
-    planned: PlannedAudio, position: int, source: Path, temp_dir: Path, settings: AudioSettings, tools: Tools
+    planned: PlannedAudio,
+    position: int,
+    source: Path,
+    temp_dir: Path,
+    settings: AudioSettings,
+    tools: Tools,
+    measured: Mapping[str, float] | None = None,
 ) -> AudioCommand | None:
-    """The encode for one planned track, or None when it is copied from the source."""
+    """The encode for one planned track, or None when it is copied from the source. measured: what its measure
+    step found (needs_measure), once that has run."""
     if planned.action is AudioAction.COPY:
         return None
     output = output_path(planned, position, temp_dir)
     if planned.action is AudioAction.AAC:
-        argvs = _aac(planned, source, output, settings, tools)
+        argvs = _aac(planned, source, output, settings, tools, measured)
     elif planned.action is AudioAction.OPUSENC:
-        argvs = _opusenc(planned, source, output, tools)
+        argvs = _opusenc(planned, source, output, tools, measured)
     elif planned.action in _FFMPEG_ARGS:
-        argvs = (_ffmpeg(planned, source, output, tools),)
+        argvs = (_ffmpeg(planned, source, output, tools, measured),)
     else:
         argvs = (_deezy(planned, source, output, temp_dir, settings, tools),)
     return AudioCommand(planned, output, argvs)

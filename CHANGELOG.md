@@ -98,6 +98,11 @@ source), or in Docker on Linux.
 - **Audio.** Copy or encode each track, more than one output from one track: DDP and DDP Atmos (DeeZy + DEE,
   truehdd), AAC (qaac or ffmpeg), Opus (opusenc or ffmpeg), FLAC, AC-3, E-AC-3 (ffmpeg). Each encode lists
   its layouts and bitrates, and a setting the track can't take is fitted or blocked.
+- **Audio normalize.** StaxRip's ffmpeg modes on every encode but DDP (DEE sets its own dialogue level), in the
+  track's Settings: peak to 0 dB (volumedetect), loudness (EBU R128 loudnorm, two passes: target LUFS, true peak
+  and loudness range, default -24 / -2 / 7 as StaxRip) or dynamic (dynaudnorm). The track is measured after its
+  downmix in a step of its own, beside the video encode; the encode applies what it found. A source wider than
+  the loudness range is compressed to fit (loudnorm's dynamic mode), kept at the source's sample rate.
 - **Subtitles.** Keep, leave out, reorder, retitle and flag source subtitles and added SRT files (matched by
   name or SxxEyy).
 - **Containers.** MKV (mkvmerge) and MP4 (MP4Box), each with a warning or a block for what it can't hold. MKV

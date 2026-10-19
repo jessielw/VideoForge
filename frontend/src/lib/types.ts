@@ -177,7 +177,7 @@ export interface AudioEncodeInfo {
   options: EncodeOptionInfo[]
 }
 
-// One setting of an encode: a pick list (choices), a whole number (range), or free text.
+// One setting of an encode: a pick list (choices), a number (range, by step), or free text.
 export interface EncodeOptionInfo {
   key: string
   label: string
@@ -185,6 +185,8 @@ export interface EncodeOptionInfo {
   help: string
   choices: { value: string; label: string }[]
   range: [number, number] | null
+  step: number
+  when: { key: string; value: string } | null // used (and shown) only while that option has that value
 }
 
 export interface TrackOverride {

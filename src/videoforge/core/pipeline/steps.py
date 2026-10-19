@@ -262,11 +262,41 @@ def run_steps(
         report(i, 1.0)
         finished(i)
 
-    def background(i: int) -> None:
+    def reused(i: int) -> bool:
+        """Refresh step i, then reuse it if an earlier run did it: True when it did."""
+        step, run = steps[i], runs[i]
+        if step.refresh is not None:
+            step = step.refresh()
+            with lock:
+                steps[i] = step
+            if run.command != step.command_line:
+                run.command = step.command_line
+                changed(run)
+        with lock:
+            prior = records.get(step.id)
+            if step.id in keep and not _reusable(step, prior) and _present(step):
+                prior = StepRecord(step.id, step.fingerprint(), list(step.outputs), prior.seconds if prior else 0.0)
+                records[step.id] = prior
+                if on_record:
+                    on_record(prior)
+        if prior is None or not _reusable(step, prior):
+            return False
+        log(f"== {i + 1}/{len(steps)} {step.label}: done in an earlier run, reused")
+        run.status, run.seconds = StepStatus.REUSED, prior.seconds
+        changed(run)
+        report(i, 1.0, reused=True)
+        finished(i)
+        return True
+
+    def background(i: int, after: list[Future[None]]) -> None:
         if stop.cancelled:  # never started: it stays pending
             return
         try:
-            execute(i)
+            # The background steps it reads: submitted before it, so they hold a thread or are done (no deadlock).
+            for f in after:
+                f.result()
+            if not stop.cancelled and not reused(i):
+                execute(i)
         except BaseException:
             stop.cancel()
             raise
@@ -275,33 +305,16 @@ def run_steps(
     pending: dict[int, Future[None]] = {}  # background steps started (or waiting for a thread)
     try:
         for i, step in enumerate(steps):
-            run = runs[i]
-            if step.refresh is not None:
-                for j in [j for j in pending if set(steps[j].outputs) & set(step.inputs)]:
-                    pending.pop(j).result()
-                step = steps[i] = step.refresh()
-                if run.command != step.command_line:
-                    run.command = step.command_line
-                    changed(run)
-            prior = records.get(step.id)
-            if step.id in keep and not _reusable(step, prior) and _present(step):
-                prior = StepRecord(step.id, step.fingerprint(), list(step.outputs), prior.seconds if prior else 0.0)
-                with lock:
-                    records[step.id] = prior
-                    if on_record:
-                        on_record(prior)
-            if prior is not None and _reusable(step, prior):
-                log(f"== {i + 1}/{len(steps)} {step.label}: done in an earlier run, reused")
-                run.status, run.seconds = StepStatus.REUSED, prior.seconds
-                changed(run)
-                report(i, 1.0, reused=True)
-                finished(i)
-                continue
+            reads = [j for j in pending if set(steps[j].outputs) & set(step.inputs)]
             if pool is not None and step.background:
-                pending[i] = pool.submit(background, i)
+                # Refreshed and checked for reuse on its thread, once what it reads is done: a measure step
+                # beside the video doesn't hold up the video.
+                pending[i] = pool.submit(background, i, [pending[j] for j in reads])
                 continue
-            for j in [j for j in pending if set(steps[j].outputs) & set(step.inputs)]:
+            for j in reads:
                 pending.pop(j).result()  # raises what stopped it
+            if reused(i):
+                continue
             if stop.cancelled:
                 raise process.Cancelled()
             lead = i

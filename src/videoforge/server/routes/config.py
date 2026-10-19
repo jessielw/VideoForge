@@ -221,7 +221,9 @@ def encoders(request: Request) -> list[dict[str, Any]]:
                     "default": o.default,
                     "help": o.help,
                     "choices": [{"value": v, "label": lab} for v, lab in o.choices],
-                    "range": list(o.int_range) if o.int_range else None,
+                    "range": list(o.range) if o.range else None,
+                    "step": 1 if o.int_range else 0.1,
+                    "when": {"key": o.when[0], "value": o.when[1]} if o.when else None,
                 }
                 for o in e.options
             ],

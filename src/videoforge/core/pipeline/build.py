@@ -28,12 +28,12 @@ import sys
 from typing import TYPE_CHECKING
 
 from videoforge.core.config import AppConfig
-from videoforge.core.execute import chapters as ogm
-from videoforge.core.execute.audio import audio_command
+from videoforge.core.execute import chapters as ogm, loudness
+from videoforge.core.execute.audio import audio_command, measure_argv, measure_path, needs_measure
 from videoforge.core.execute.mux import MUXERS, frame_rate, split_args
 from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
-from videoforge.core.models import Plan, VideoColor, VideoInfo
+from videoforge.core.models import Plan, PlannedAudio, VideoColor, VideoInfo
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.video import hdr, info, target, vfr
 from videoforge.core.video.encoders import encoder_command, vspipe_command
@@ -409,17 +409,39 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
         if cmd is None:
             continue
         encoded[pos] = cmd.output
-        audio.append(
-            Step(
-                f"audio.{pos + 1}",
-                f"Encode audio {pos + 1}: {a.title}",
-                argvs=cmd.argvs,
-                outputs=(cmd.output,),
-                inputs=(src,),
-                weight=4,
-                background=True,
-            )
+        encode = Step(
+            f"audio.{pos + 1}",
+            f"Encode audio {pos + 1}: {a.title}",
+            argvs=cmd.argvs,
+            outputs=(cmd.output,),
+            inputs=(src,),
+            weight=4,
+            background=True,
         )
+        if needs_measure(a):
+            # Normalizing by a peak or a loudness: the encode applies what the measure step read, when its
+            # turn comes (on its own thread, beside the video: run_steps).
+            found = measure_path(a, pos, work)
+            audio.append(
+                Step(
+                    f"audio.{pos + 1}.measure",
+                    f"Measure audio {pos + 1}: {a.title}",
+                    argvs=(measure_argv(a, src, found, app.tools),),
+                    outputs=(found,),
+                    inputs=(src,),
+                    weight=1,
+                    background=True,
+                )
+            )
+
+            def measured(base: Step, a: PlannedAudio = a, pos: int = pos, src: Path = src, found: Path = found) -> Step:
+                again = audio_command(a, pos, src, work, settings, app.tools, loudness.read(found))
+                argvs = base.argvs if again is None else again.argvs
+                return replace(base, argvs=argvs, refresh=partial(measured, base))
+
+            encode = replace(encode, inputs=(src, found))
+            encode = replace(encode, refresh=partial(measured, encode))
+        audio.append(encode)
     container = spec.container(profile)
     steps = video_steps(spec, plan, app, container, encoded) if spec.encodes_video else []
     video = plan.source.video
@@ -441,7 +463,7 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
     if container == "mp4" and (chapters := mp4_chapters_step(plan, work)) is not None:
         steps.append(chapters)
         plan = replace(plan, chapters_path=chapters.outputs[0])
-    partial = output.with_name(output.name + ".partial")
+    unfinished = output.with_name(output.name + ".partial")
     mux_inputs = [
         p for p in (plan.source.path, plan.encode_path, plan.chapters_path, *encoded.values()) if p is not None
     ]
@@ -462,11 +484,11 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
         return Step(
             "mux",
             "Mux",
-            argvs=(tuple(muxer.command(plan, encoded, partial, app, extra, fps, stamps)),),
+            argvs=(tuple(muxer.command(plan, encoded, unfinished, app, extra, fps, stamps)),),
             outputs=(output,),
-            writes=(partial,),
+            writes=(unfinished,),
             inputs=(*mux_inputs, *((stamps,) if stamps else ())),
-            finalize=lambda: partial.replace(output),
+            finalize=lambda: unfinished.replace(output),
             weight=3,
             refresh=(lambda: mux_step(*timing())) if spec.encodes_video else None,
         )

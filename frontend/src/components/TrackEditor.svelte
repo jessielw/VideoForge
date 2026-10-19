@@ -7,7 +7,7 @@
   // Files can be added to the job here and removed again, and an audio track can be used more
   // than once ("Add a track from…": a copy with its own encode, title and flags).
   import type { InputChanges } from '../lib/api'
-  import { emptyOverride, isEmpty, LANGUAGES } from '../lib/format'
+  import { emptyOverride, isEmpty, LANGUAGES, shownOptions } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type { AudioAction, AudioEncodeInfo, AudioTrack, EncodeOptionInfo, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
   import FileBrowser from './FileBrowser.svelte'
@@ -545,7 +545,7 @@
         </div>
         {#if enc?.options.length && openSettings[t.key]}
           <div class="grid gap-x-4 gap-y-2 border-t border-border/60 px-3 py-2 text-sm sm:grid-cols-[12rem_1fr]">
-            {#each enc.options as o (o.key)}
+            {#each shownOptions(enc.options, o => ov?.options?.[o.key] ?? planned?.options?.[o.key] ?? o.default) as o (o.key)}
               {@const value = ov?.options?.[o.key] ?? planned?.options?.[o.key] ?? o.default}
               <label class="text-muted-foreground" for="opt-{t.key}-{o.key}" title={o.help}>{o.label}</label>
               <div class="flex items-center gap-2">
@@ -554,7 +554,7 @@
                     {#each o.choices as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
                   </NativeSelect>
                 {:else if o.range}
-                  <Input id="opt-{t.key}-{o.key}" class="w-24" type="number" min={o.range[0]} max={o.range[1]}
+                  <Input id="opt-{t.key}-{o.key}" class="w-24" type="number" min={o.range[0]} max={o.range[1]} step={o.step}
                     {value} onchange={e => setOption(t, o, e.currentTarget.value)} />
                 {:else}
                   <Input id="opt-{t.key}-{o.key}" class="min-w-0 flex-1 font-mono text-xs" {value} placeholder={o.help}

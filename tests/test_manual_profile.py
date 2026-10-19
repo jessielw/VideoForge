@@ -20,6 +20,8 @@ from videoforge.core.models import (
 from videoforge.profiles import default_profile_id, get_profile, profile_ids
 from videoforge.profiles.manual import ManualProfile
 
+NORMALIZE_OFF = {"normalize": "", "loudnorm_i": "-24", "loudnorm_tp": "-2", "loudnorm_lra": "7"}
+
 
 def movie():
     return source(
@@ -214,12 +216,23 @@ def test_added_audio_files_join_the_tracks():
 def test_encode_options_default_and_are_checked():
     stereo = [audio(C.FLAC, "2.0", index=0)]
     plan = encoded(stereo, id_1=TrackOverride(action=AudioAction.OPUS, options={"vbr": "constrained", "nope": "x"}))
-    assert plan.audio[0].options == {"vbr": "constrained", "application": "audio", "complexity": "10", "extra": ""}
+    assert plan.audio[0].options == {
+        "vbr": "constrained",
+        "application": "audio",
+        "complexity": "10",
+        **NORMALIZE_OFF,
+        "extra": "",
+    }
     bad = encoded(stereo, id_1=TrackOverride(action=AudioAction.FLAC, options={"level": "13"}))
     assert [i.code for i in bad.issues] == ["audio.option"] and "0 to 12" in bad.issues[0].message
     assert bad.audio[0].options["level"] == "8"  # the default stands in
     quotes = encoded(stereo, id_1=TrackOverride(action=AudioAction.AC3, options={"extra": '-metadata title="x'}))
     assert [i.code for i in quotes.issues] == ["audio.option"]
+    loud = encoded(
+        stereo, id_1=TrackOverride(action=AudioAction.FLAC, options={"loudnorm_tp": "-1.5", "loudnorm_i": "3"})
+    )
+    assert [i.code for i in loud.issues] == ["audio.option"] and "-70 to -5" in loud.issues[0].message
+    assert loud.audio[0].options["loudnorm_tp"] == "-1.5" and loud.audio[0].options["loudnorm_i"] == "-24"
 
 
 def test_encode_options_take_the_profiles_defaults():

@@ -1,4 +1,4 @@
-import type { Priority, Progress, Severity, Status, TrackOverride, VideoColor, VideoHdr } from './types'
+import type { EncodeOptionInfo, Priority, Progress, Severity, Status, TrackOverride, VideoColor, VideoHdr } from './types'
 
 export const PRIORITY_LABEL: Record<Priority, string> = {
   idle: 'Idle',
@@ -114,6 +114,14 @@ export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number)
     clearTimeout(t)
     t = setTimeout(() => fn(...a), ms)
   }
+}
+
+// An encode's options to show: one used only with another's value (loudnorm's targets) only then.
+export function shownOptions(options: EncodeOptionInfo[], valueOf: (o: EncodeOptionInfo) => string): EncodeOptionInfo[] {
+  return options.filter(o => {
+    const by = o.when && options.find(x => x.key === o.when?.key)
+    return !by || valueOf(by) === o.when?.value
+  })
 }
 
 export function emptyOverride(): TrackOverride {
