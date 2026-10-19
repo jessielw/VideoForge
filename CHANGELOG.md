@@ -44,8 +44,10 @@ source), or in Docker on Linux.
   MP4 (MP4Box takes no timestamps) warns that it's muxed at a constant rate.
 - **Encoder.** x264 and x265 option panels, 1 or 2 passes; AutoQPF chapters to a qpf file. The encode is
   tagged with the source's colour description (primaries, transfer, matrix, range, chroma location, read by
-  MediaInfo) and on x265 its HDR10 metadata (mastering display, MaxCLL / MaxFALL); shown on the Encoder tab,
-  "Colour from the source" switches it off, and an option with the same flag wins. The Video tab names the
+  MediaInfo) and on x265 its HDR10 metadata (mastering display, MaxCLL / MaxFALL) with StaxRip's flags
+  alongside it (`--hdr10 --repeat-headers --hrd --aud`, `--range limited` when the source doesn't say, the VBV
+  from `--level-idc`); shown on the Encoder tab, "Colour from the source" switches it off, and an option with
+  the same flag wins (`--no-hrd` and so on). The Video tab names the
   source's HDR formats: HDR10 / HLG, HDR10+, Dolby Vision with its profile, layers and FEL or MEL (read
   from a second of its RPU).
 - **HDR10+.** An x265 encode of an HDR10+ source carries its dynamic metadata ("HDR10+ from the source" on

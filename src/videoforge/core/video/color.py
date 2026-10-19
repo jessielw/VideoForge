@@ -128,10 +128,26 @@ def from_mediainfo(track: Any) -> VideoColor:
     )
 
 
+# What StaxRip's x265 SetMetaData adds with the HDR10 SEI (headers at every keyframe, HRD, access unit
+# delimiters); each has a --no- form the job's options can turn it off with.
+HDR10_FLAGS = ("--hdr10", "--repeat-headers", "--hrd", "--aud")
+
+
+def hdr10(color: VideoColor | None, settings: EncoderSettings) -> bool:
+    """Whether an encode carries the source's HDR10 SEI: x265, the source's colour on, and HDR10 values."""
+    return (
+        color is not None
+        and settings.source_color
+        and settings.encoder is Encoder.X265
+        and bool(color.master_display or color.max_cll or color.max_fall)
+    )
+
+
 def color_args(color: VideoColor | None, settings: EncoderSettings) -> list[str]:
     """The encoder flags for the source's colour (none when settings.source_color is off); x265 also gets
-    the HDR10 SEI (--master-display, --max-cll, --hdr10). Metadata only: tuning such as --hdr10-opt is the
-    job's options' business (as in StaxRip's "Import VUI metadata")."""
+    the HDR10 SEI (--master-display, --max-cll) and StaxRip's flags with it (HDR10_FLAGS, --range limited when
+    the source doesn't say). Metadata only: tuning such as --hdr10-opt is the job's options' business (as in
+    StaxRip's "Import VUI metadata")."""
     if color is None or not settings.source_color:
         return []
     x265 = settings.encoder is Encoder.X265
@@ -153,6 +169,6 @@ def color_args(color: VideoColor | None, settings: EncoderSettings) -> list[str]
         args += ["--master-display", color.master_display]
     if color.max_cll or color.max_fall:
         args += ["--max-cll", f"{color.max_cll},{color.max_fall}"]
-    if color.master_display or color.max_cll or color.max_fall:
-        args += ["--hdr10"]
+    if hdr10(color, settings):
+        args += [*HDR10_FLAGS, *([] if color.range else ["--range", "limited"])]
     return args

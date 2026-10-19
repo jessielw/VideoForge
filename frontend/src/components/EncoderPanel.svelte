@@ -158,7 +158,8 @@
       Colour from the source
       <span class="block text-xs text-muted-foreground">
         Tags the encode with the source's colour description{value.encoder === 'x265' ? ' and HDR10 metadata' : ''}
-        (vspipe passes none on). An option below with the same flag wins. Untick it when the script changes the colours.
+        (vspipe passes none on){value.encoder === 'x265' ? ', with --repeat-headers --hrd --aud for HDR10 as StaxRip sets them' : ''}.
+        An option below with the same flag wins (--no-hrd turns one off). Untick it when the script changes the colours.
       </span>
       {#if colorArgs !== undefined}
         {#if colorArgs === null}

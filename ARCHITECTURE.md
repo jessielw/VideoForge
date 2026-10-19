@@ -39,7 +39,8 @@ src/videoforge/
       crop.py            Auto-crop detection (RGB lightness on sampled lines, read straight from YUV)
       encoders.py        x264 / x265: settings -> argv (1 or 2 pass), progress parsing (fraction, fps, the encoder's eta)
       color.py           The source's colour (MediaInfo -> VideoInfo.color) -> --colorprim/--transfer/... and
-                         x265's HDR10 SEI, before the job's options (vspipe's y4m carries no colour)
+                         x265's HDR10 SEI with StaxRip's --repeat-headers --hrd --aud (and the VBV from --level-idc),
+                         before the job's options (vspipe's y4m carries no colour; a --no- option turns one off)
       hdr.py             Dolby Vision / HDR10+ in the source (MediaInfo -> VideoInfo.hdr; FEL or MEL from a second
                          of the RPU); HDR10+ into x265 (hdr10plus_tool's JSON, --dhdr10-info) and Dolby Vision
                          as 8.1 (dovi_tool's RPU, its L5 moved by the crop and resize); a FEL's enhancement layer
