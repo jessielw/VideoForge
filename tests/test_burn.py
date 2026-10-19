@@ -107,6 +107,23 @@ def test_a_source_track_is_extracted_with_the_index(tmp_path):
     assert burn.file(added, job.work_dir) == tmp_path / "Movie.en.srt"
 
 
+def test_a_track_of_an_m2ts_is_copied_into_an_mks_for_mkvextract(tmp_path):
+    """mkvextract reads Matroska only: from another container, mkvmerge copies the track out first."""
+    src = tmp_path / "00005.m2ts"
+    job = JobSpec(inputs=JobInputs(src), profile="manual")
+    names = ("mkvmerge", "deezy", "dee", "truehdd", "qaac", "ffmpeg", "mkvextract", "vspipe")
+    app = AppConfig(tools=Tools(**{n: n for n in names}))
+    steps = index_steps(job, app, None, sub(F.PGS, index=4))
+    assert [s.id for s in steps] == ["script", "burn.remux", "burn.extract", "index"]
+    mks, out = job.work_dir / "burn.14.mks", job.work_dir / "burn.14.sup"
+    assert steps[1].argvs == (
+        ("mkvmerge", "--ui-language", "en", "--output", str(mks), "--no-video", "--subtitle-tracks", "14",
+         "--no-audio", "--no-chapters", "--no-attachments", "--no-global-tags", "--no-track-tags", str(src)),
+    )  # fmt: skip
+    assert steps[2].argvs == (("mkvextract", "--ui-language", "en", "tracks", str(mks), f"0:{out}"),)
+    assert steps[2].inputs == (mks,)
+
+
 def test_a_templates_burn_rule_takes_the_first_track_it_matches():
     """The first match is burned (and not muxed); later ones go on to the next rule."""
     forced, full = sub(F.PGS, "en", index=0, forced=True), sub(F.PGS, "en", index=1)

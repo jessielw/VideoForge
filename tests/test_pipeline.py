@@ -4,6 +4,7 @@ and process.run on real subprocesses."""
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 import os
 from pathlib import Path
 import shutil
@@ -404,6 +405,26 @@ def test_a_vfr_source_keeps_its_timestamps(profile, tmp_path):
     mux = runner.calls[-1][0]
     assert mux[mux.index("--timestamps") + 1] == f"0:{stamps}"
     assert not [i for i in result.issues if i.code == "video.length"]
+
+
+def test_a_vfr_mp4_source_is_copied_into_an_mkv_for_its_timestamps(profile, tmp_path):
+    """mkvextract reads Matroska only: an MP4's video track is copied into an MKV (mkvmerge) to read them from."""
+    plan = make_plan(tmp_path)
+    mp4 = tmp_path / "Show.S01E01.mp4"
+    mp4.write_bytes(b"x")
+    plan.source.path = mp4
+    plan.source.video = VideoInfo(1920, 1080, default_duration_ns=41708333, frames=240, vfr=True, id=0)
+    job = video_job(plan, tmp_path)
+    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    step = {s.id: s for s in built.steps}
+    ids = [s.id for s in built.steps]
+    mkv, stamps = job.work_dir / "timestamps.mkv", job.work_dir / "timestamps.txt"
+    assert ids.index("timestamps.remux") + 1 == ids.index("timestamps")
+    remux = step["timestamps.remux"].argvs[0]
+    assert remux[:5] == (APP.tools.mkvmerge, "--ui-language", "en", "--output", str(mkv))
+    assert remux[5:8] == ("--video-tracks", "0", "--no-subtitles") and remux[-1] == str(mp4)
+    argv = ("mkvextract", "--ui-language", "en", "timestamps_v2", str(mkv), f"0:{stamps}")
+    assert step["timestamps"].argvs == (argv,) and step["timestamps"].inputs == (mkv,)
 
 
 def test_a_script_shorter_than_the_source_warns(profile, tmp_path):
@@ -1028,6 +1049,83 @@ def test_real_mp4_job_end_to_end(tmp_path):
         "CHAPTER02NAME=Middle",
     ]
     assert out.has_chapters
+
+
+@needs_tools
+@pytest.mark.parametrize(("ext", "container"), [(".mp4", "mkv"), (".m2ts", "mkv"), (".m2ts", "mp4"), (".mp4", "mp4")])
+def test_real_mp4_and_ts_sources_run_end_to_end(tmp_path, ext, container):
+    """An MP4 or a TS source: one AC-3 track copied, one encoded to FLAC. The TS's audio starts 0.5 s after its
+    video, and still does in the output. MediaInfo gives an x264 TS no frame rate (it calls it VFR): AutoQPF takes
+    the script's, and its timestamps are copied out through an MKV."""
+    if container == "mp4" and shutil.which("MP4Box") is None:
+        pytest.skip("needs MP4Box (GPAC) on PATH")
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe is None:
+        pytest.skip("needs ffprobe on PATH")
+    from videoforge.core.config import load_app_config
+    from videoforge.core.job import plan_spec, probe_spec
+    from videoforge.core.models import AudioAction, Overrides, TrackOverride
+    from videoforge.core.video import vs as vsx
+    from videoforge.profiles import get_profile
+
+    app = load_app_config()
+    vsx.configure(app.tools.vs_plugins)
+    vsx.ensure_vspipe(app.tools.vspipe)
+    src, delay = tmp_path / f"Movie.2020{ext}", 0.5 if ext == ".m2ts" else 0.0
+    video, sound = tmp_path / "video.mkv", tmp_path / "audio.mka"
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=3:size=320x180:rate=24",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-y", str(video)],
+        check=True,
+    )  # fmt: skip
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", f"sine=duration={3 - delay}", "-f", "lavfi",
+         "-i", f"sine=frequency=880:duration={3 - delay}", "-map", "0", "-map", "1", "-c:a", "ac3", "-y", str(sound)],
+        check=True,
+    )  # fmt: skip
+    # An MP4 is encoded straight in: a stream copy from MKV makes an edit list that hides the first frames.
+    picture, codec = (["-i", str(video)], ["-c:v", "copy"]) if ext == ".m2ts" else (
+        ["-f", "lavfi", "-i", "testsrc2=duration=3:size=320x180:rate=24"], ["-c:v", "libx264", "-pix_fmt", "yuv420p"]
+    )  # fmt: skip
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", *picture, "-itsoffset", str(delay), "-i", str(sound),
+         "-map", "0:v", "-map", "1:a:0", "-map", "1:a:1", *codec, "-c:a", "copy", "-metadata:s:a:0", "language=eng",
+         "-metadata:s:a:1", "language=jpn", "-y", str(src)],
+        check=True,
+    )  # fmt: skip
+    job = JobSpec(
+        inputs=JobInputs(src),
+        profile="manual",
+        output_dir=tmp_path / "out",
+        encoder=EncoderSettings(preset="ultrafast", crf=30),
+        overrides=Overrides(original_language="en", tracks={"id:2": TrackOverride(action=AudioAction.FLAC)}),
+        mux=MuxSettings(container=container),
+    )
+    profile = get_profile("manual")
+    plan = plan_spec(job, probe_spec(job, app), profile, app.tools)
+    assert not plan.blocked, plan.issues
+    ms = round(delay * 1000)
+    assert [(a.source.id, a.source.delay_ms, a.action) for a in plan.audio] == [
+        (1, ms, AudioAction.COPY),
+        (2, ms, AudioAction.FLAC),
+    ]
+
+    lines: list[str] = []
+    result = run_job(job, plan, profile, app, log=lines.append)
+    assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
+    assert result.output == tmp_path / "out" / f"Movie.2020.{container}"
+    shown = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "stream=codec_name,start_time,nb_frames",
+         "-of", "json", str(result.output)],
+        check=True, capture_output=True, text=True,
+    )  # fmt: skip
+    streams = json.loads(shown.stdout)["streams"]
+    assert [s["codec_name"] for s in streams] == ["h264", "ac3", "flac"]
+    assert float(streams[0]["start_time"]) == pytest.approx(0, abs=0.05)
+    assert [float(s["start_time"]) for s in streams[1:]] == pytest.approx([delay, delay], abs=0.05)
+    if container == "mp4":
+        assert streams[0]["nb_frames"] == "72"
+    assert (job.work_dir / "chapters.qpf").read_text().split()[:2] == ["0", "K"]
 
 
 # --- process.run on real subprocesses ---------------------------------------------

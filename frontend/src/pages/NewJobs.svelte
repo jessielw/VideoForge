@@ -154,7 +154,12 @@
         {/if}
       </div>
     </div>
-    <PathSlot label="Sources" hint="Remux MKVs, or a folder of them" bind:paths={sources} extensions={['.mkv']} />
+    <PathSlot
+      label="Sources"
+      hint="MKV, MP4 or M2TS / TS files, or a folder of them"
+      bind:paths={sources}
+      extensions={['.mkv', '.mp4', '.m4v', '.m2ts', '.mts', '.ts']}
+    />
     <PathSlot
       label="Encodes"
       hint="Optional: existing encodes (e.g. StaxRip) to mux instead of encoding the video"

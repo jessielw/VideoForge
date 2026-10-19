@@ -11,7 +11,7 @@ and finished steps are skipped on a rerun.
 
 > **Status:** 0.1.0 beta. It works end to end, but expect changes. See [CHANGELOG.md](CHANGELOG.md).
 
-Not yet: sources other than MKV (remux an MP4 or M2TS to MKV first), GPU filters, a login (see
+Not yet: sources other than MKV, MP4 and M2TS / TS (remux them to MKV first), GPU filters, a login (see
 [Docker](#docker-linux)), Dolby Vision 8.4 (HLG) (profile 8.1, a MEL and a FEL go into x265 encodes as 8.1, a
 profile 5 as 5; a FEL's enhancement layer is baked into the picture).
 
@@ -124,8 +124,8 @@ app's database and win over both.
 
 ## A short tour
 
-- **New jobs:** add a source MKV (or a folder of episodes for a batch), plus subtitle files, chapters, or an
-  existing encode to reuse. Each job starts on a template.
+- **New jobs:** add a source MKV, MP4 or M2TS (or a folder of episodes for a batch), plus subtitle files,
+  chapters, or an existing encode to reuse. Each job starts on a template.
 - **Queue:** the job list and each job's editor: **Video** (frame preview with zoom and crop overlay, auto
   crop, resize, filters, the generated VapourSynth script, which you can edit), **Encoder** (x264 / x265,
   1 or 2 passes), **Audio** and **Subtitles** (keep, leave out, reorder, retitle, flag; copy or encode

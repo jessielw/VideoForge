@@ -37,6 +37,7 @@ def mp4_plan(subs=None, overrides=None):
         name="Movie.mkv",
     )
     src.video = VideoInfo(1920, 1080, start_ms=40, default_duration_ns=41708333, language="en-US")
+    src.audio[0].delay_ms = -40  # it starts with the container, the video 40 ms later
     src.audio[1].delay_ms = 25
     src.audio[0].original = True  # as most releases flag their tracks
     plan = plan_for(src, source(name="enc.h264"), overrides)
@@ -70,7 +71,7 @@ def test_mp4box_command():
     assert adds(argv) == [
         # the source's exact rate and language; no GPAC handler name; no HDR boxes (the stream carries them)
         "enc.h264:fps=24000/1001:hdr=none:lang=en-US:name=",
-        # copied from the source: mkvmerge id + 1, shifted by the source's start; ':' can't be in a name
+        # copied from the source: mkvmerge id + 1, its delay to the video (MP4Box starts it at 0); no ':' in a name
         "Movie.mkv#trackID=2:lang=en:group=1:name=Main - 5.1:delay=-40",
         # encoded: ffmpeg's AAC doesn't keep the delay, so the mux applies it
         f"{Path('tmp/audio1_ja.m4a')}:lang=ja:group=1:disable:delay=25",

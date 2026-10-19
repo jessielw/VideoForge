@@ -96,6 +96,8 @@ class AudioTrack:
     size_bytes: int | None = None  # the stream's size, when the file says
     duration_ms: int | None = None
     copy: int = 0  # 1, 2, ...: another output track made from this same track (Overrides.copies)
+    number: int | None = None  # the container's track number: the MKV track number, the MP4 track ID, the TS PID
+    core: bool = False  # a Blu-ray TrueHD's AC-3 core: mkvmerge splits it out of the TrueHD's PID
 
     @property
     def is_external(self) -> bool:
@@ -121,7 +123,7 @@ class SubTrack:
     visual_impaired: bool = False
     element_count: int | None = None
     size_bytes: int | None = None  # the stream's size, when the file says
-    number: int | None = None  # MKV track number (mkvmerge id + 1, gMKVExtract "trackN")
+    number: int | None = None  # the container's track number (MKV: mkvmerge id + 1, gMKVExtract "trackN")
     external_path: Path | None = None
     extracted_from: int | None = None  # source track number an external file was extracted from
     # Classification hints from the external filename ({stem}.en.forced.srt etc.)

@@ -30,6 +30,8 @@ _TAG_ALIASES = {"forced": "forced", "sdh": "sdh", "hi": "sdh", "cc": "sdh", "dub
 # Filename words skipped while looking for the language token from the end.
 _NOISE_WORDS = {"synced", "sync", "full", "default", "srt", "subs", "sub", "cleaned", "ocr", "fixed"}
 
+# Containers a source can come in (mkvmerge reads them all): MKV, MP4 and MPEG transport streams.
+SOURCE_EXTENSIONS = (".mkv", ".mp4", ".m4v", ".m2ts", ".mts", ".ts")
 SUBTITLE_EXTENSIONS = (".srt",)
 CHAPTER_EXTENSIONS = (".txt", ".xml")
 _CHAPTER_NAME_RE = re.compile(r"(?i)chapter|qpf")
@@ -90,7 +92,7 @@ def _unique(paths: Iterable[Path]) -> list[Path]:
 
 
 def sort_files(files: Iterable[Path], rules: MatchRules, has_audio: Callable[[Path], bool]) -> FileSets:
-    """Sort a mixed drop into slots. An MKV without audio is an encode."""
+    """Sort a mixed drop into slots. A container without audio (an MKV, an MP4) is an encode."""
     raw = {e.lower() for e in rules.encode_extensions}
     sets = FileSets()
     for f in files:
@@ -101,7 +103,7 @@ def sort_files(files: Iterable[Path], rules: MatchRules, has_audio: Callable[[Pa
             sets.chapters.append(f)
         elif ext in raw:
             sets.encodes.append(f)
-        elif ext == ".mkv":
+        elif ext in SOURCE_EXTENSIONS:
             (sets.sources if has_audio(f) else sets.encodes).append(f)
     return sets
 
@@ -120,9 +122,9 @@ def slot_files(
     Any .txt/.xml given in the chapters slot is a chapter file, whatever its name.
     """
     raw = tuple(e.lower() for e in rules.encode_extensions)
-    in_source = expand(sources, (".mkv", *raw))
+    in_source = expand(sources, (*SOURCE_EXTENSIONS, *raw))
     return FileSets(
-        sources=[p for p in in_source if p.suffix.lower() == ".mkv"],
+        sources=[p for p in in_source if p.suffix.lower() in SOURCE_EXTENSIONS],
         encodes=_unique([*expand(encodes, (".mkv", *raw)), *(p for p in in_source if p.suffix.lower() in raw)]),
         subtitles=expand(subtitles, SUBTITLE_EXTENSIONS),
         chapters=expand(chapters, CHAPTER_EXTENSIONS),
@@ -131,7 +133,7 @@ def slot_files(
 
 def discover(paths: Iterable[Path], rules: MatchRules, has_audio: Callable[[Path], bool]) -> MatchResult:
     """Expand files/folders, sort them into slots and match them."""
-    exts = {".mkv", *rules.encode_extensions, *SUBTITLE_EXTENSIONS, *CHAPTER_EXTENSIONS}
+    exts = {*SOURCE_EXTENSIONS, *rules.encode_extensions, *SUBTITLE_EXTENSIONS, *CHAPTER_EXTENSIONS}
     return match_files(sort_files(expand(paths, exts), rules, has_audio), rules)
 
 

@@ -12,7 +12,7 @@ source), or in Docker on Linux.
 
 ### Added
 
-- **Job queue.** Queue a job or a batch of episodes (a folder of source MKVs); each runs index → VapourSynth
+- **Job queue.** Queue a job or a batch of episodes (a folder of sources); each runs index → VapourSynth
   script → x264 / x265 (1 or 2 passes) → audio → mux → validate. Jobs run one at a time and survive restarts;
   a rerun skips every step whose command and inputs haven't changed, so a crashed job resumes after its last
   finished step and a changed subtitle flag only muxes again. A job's audio encodes run alongside its video
@@ -113,7 +113,17 @@ source), or in Docker on Linux.
   can burn in too (the first track it matches). The filter menu's Subtitle category has a "Burn in subtitles"
   preset for a file of your own (its lines to edit: a `style` for an SRT, say).
 - **Containers.** MKV (mkvmerge) and MP4 (MP4Box), each with a warning or a block for what it can't hold. MKV
-  keeps the source's attachments (an ASS subtitle's fonts) and global tags, as StaxRip does.
+  keeps the source's attachments (an ASS subtitle's fonts) and global tags, as StaxRip does. MP4Box starts each
+  track it copies at 0, so a copied track gets its delay to the video, as an encoded one does.
+- **MP4 and M2TS / TS sources.** A source can be an MKV, MP4 (.mp4, .m4v) or MPEG transport stream (.m2ts,
+  .mts, .ts), indexed straight from the file as in StaxRip. The frame rate comes from MediaInfo (mkvmerge has one
+  for an MKV only; 23.976 is taken as 24000/1001), a TS's audio delay from its timestamps and an MP4's from its
+  edit lists when MediaInfo lists them. A Blu-ray TrueHD track's AC-3 core is a track of its own (to copy into an
+  MKV or encode; MP4Box can't copy it apart, so MP4 blocks that). MP4 output takes a TS track by its PID and an
+  MP4's by its track ID. mkvextract reads Matroska only: a burned-in subtitle and a VFR source's timestamps are
+  first copied into an MKV in the work folder (mkvmerge), which keeps the TS's timing. When MediaInfo gives a TS
+  no frame rate (an x264 TS) or no chapters (a TS's program menu), AutoQPF takes the script's frame rate and
+  chapters every 5% of the runtime.
 - **Templates.** A job's whole setup without a file: video, crop mode (keep, the template's, detect per job),
   encoder, container, AutoQPF, audio by position or by rules, subtitles by rules. Star one as the default
   for new jobs; apply one to a job or a batch.

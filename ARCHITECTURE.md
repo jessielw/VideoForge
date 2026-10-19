@@ -47,6 +47,7 @@ src/videoforge/
                          FEL's enhancement layer (demux, MKV) and its HDR10 values from the RPU; their frame checks
       qpf.py             AutoQPF: chapters -> qpf + chapter file
       vfr.py             A VFR source's timestamps (mkvextract timestamps_v2) onto an MKV's encode, while they fit
+      remux.py           One track of an MP4 / TS source copied into an MKV (mkvmerge), for mkvextract
       burn.py            A subtitle track burned into the video (SubText's TextFile / ImageFile; a source track
                          extracted with the index); out of the mux (plan.burn)
       target.py          A 2-pass target size -> the video bitrate (StaxRip's Calc.GetVideoBitrate): what the size
@@ -200,8 +201,25 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   the crop step, as StaxRip; an image (`sub.ImageFile`) before it, since SubText scales the subtitle's canvas (the
   source frame) onto the clip; after a custom body; never at the `source` stage (auto crop). A source track gets
   a `burn.extract` step among the index steps (`mkvextract tracks` to `burn.<id>.<ext>` in the work folder), and
-  `indexed()` waits for that file, so the preview (which opens only an indexed job) can draw it. The filter
+  `indexed()` waits for that file, so the preview (which opens only an indexed job) can draw it (from an MP4 or a
+  TS, `burn.remux` copies the track into `burn.<id>.mks` first: see below). The filter
   menu's `subtitle` category (after the crop) holds a plain `sub.TextFile` preset for a file typed in.
+- Sources other than MKV (`pairing.SOURCE_EXTENSIONS`: MP4, M2TS / TS), read straight from the file as StaxRip
+  does (its source filters open them; it demuxes audio with ffmpeg or MP4Box, VideoForge's audio steps read the
+  source with ffmpeg as for an MKV). `probe.py` joins mkvmerge and MediaInfo on the track number, which is the MP4
+  track ID or the TS PID there (kept in `AudioTrack.number` / `SubTrack.number`). mkvmerge has no frame duration
+  outside Matroska: `default_duration_ns` comes from MediaInfo's frame rate (23.976 -> 24000/1001); an x264 TS has
+  none in MediaInfo, so AutoQPF and the mux of a raw encode take the script's rate (`Step.refresh`), and MediaInfo
+  calls it VFR (its timestamps go through the VFR path). An audio delay is MediaInfo's Video_Delay (a TS's), else
+  the MP4 edit lists' Source_Delay (an empty edit delays a track, a skipped start doesn't); MediaInfo doesn't list
+  every edit list, so an MP4 delay it misses is lost on an encode (a copy keeps it: mkvmerge reads edit lists).
+  A Blu-ray TrueHD PID's AC-3 core is a track of its own in mkvmerge (and ffmpeg's `a:N`), under the same number;
+  MediaInfo's one track is the TrueHD's, so the core takes mkvmerge's details (`AudioTrack.core`). MP4Box takes a
+  TS track by PID, an MP4's by track ID (`mux._mp4_track`), and can't copy a core apart (`mux.mp4_core` BLOCK).
+  mkvextract reads Matroska only: `build.mkvextract_input` puts a `burn.remux` / `timestamps.remux` step
+  (`core/video/remux.py`, mkvmerge with the one track) before `burn.extract` / `timestamps`; mkvmerge keeps a TS's
+  offset to its earliest stream, as the mux does. AutoQPF can't read a TS's program menu (a menu with no
+  chapters): `qpf.make_qpf` writes chapters every 5% of MediaInfo's runtime and has AutoQPF read that file.
 - HDR10+ (`core/video/hdr.py`, x265 with "HDR10+ from the source" on): before the video, `hdr10plus`
   (`ffmpeg ... -f hevc - | hdr10plus_tool extract`, StaxRip's command) writes `hdr10plus.json` to the work
   folder and `hdr10plus.check` compares its frames with the script's (`vspipe --info`): a trim, a frame-rate

@@ -14,8 +14,10 @@ here. A copied track of an added audio file gets its own delay (e.g. from
 gMKVExtract SRTs keep the source's container timestamps, so they get the same
 shift as the source tracks; other external SRTs are used as timed.
 
-MP4Box takes the same inputs and timing (`:delay=`), each track straight from its
-file (`#trackID=` = mkvmerge id + 1). MP4 has no track flags as such: the default
+MP4Box takes the same inputs and timing (`:delay=`; it starts each track it takes at 0, so a
+copied track gets its delay to the video, as an encoded one does), each track straight from its
+file (`#trackID=`: mkvmerge id + 1 in an MKV, the track number mkvmerge read in an MP4 or a TS: its
+track ID, its PID). MP4 has no track flags as such: the default
 track of each kind is the enabled one in its alternate group, a forced SRT gets
 the timed-text forced flags, and the other flags are left out (a WARN says so).
 """
@@ -34,12 +36,14 @@ from videoforge.core.execute.audio import delay_in_encode
 from videoforge.core.models import (
     AudioAction,
     AudioCodec,
+    AudioTrack,
     Issue,
     Plan,
     PlannedAudio,
     PlannedSub,
     Severity,
     SubFormat,
+    SubTrack,
     VideoInfo,
     track_key,
 )
@@ -268,6 +272,12 @@ def _mp4_options(t: PlannedAudio | PlannedSub, group: int, delay_ms: int) -> str
     return ":" + ":".join(opts)
 
 
+def _mp4_track(plan: Plan, t: AudioTrack | SubTrack) -> str:
+    """A source track as MP4Box picks it out of the source."""
+    mkv = plan.source.path is not None and plan.source.path.suffix.lower() == ".mkv"
+    return f"{plan.source.path}#trackID={t.id + 1 if mkv or t.number is None else t.number}"
+
+
 def mp4box_command(
     plan: Plan,
     encoded_audio: dict[int, Path],
@@ -295,9 +305,9 @@ def mp4box_command(
 
     for pos, a in enumerate(plan.audio):
         if a.action is AudioAction.COPY:
-            path = a.source.external_path or plan.source.path
-            delay = a.source.delay_ms if a.source.is_external else -start_ms
-            argv += ["-add", f"{path}#trackID={a.source.id + 1}" + _mp4_options(a, 1, delay)]
+            # MP4Box starts every track it takes at 0: a copied track gets its delay to the video back here.
+            track = f"{a.source.external_path}#trackID={a.source.id + 1}" if a.source.is_external else None
+            argv += ["-add", (track or _mp4_track(plan, a.source)) + _mp4_options(a, 1, a.source.delay_ms)]
             continue
         encoded = encoded_audio.get(pos)
         if encoded is None:
@@ -310,7 +320,7 @@ def mp4box_command(
             delay = -start_ms if s.source.extracted_from is not None else 0
             argv += ["-add", str(s.source.external_path) + _mp4_options(s, 2, delay)]
         else:
-            argv += ["-add", f"{plan.source.path}#trackID={s.source.id + 1}" + _mp4_options(s, 2, -start_ms)]
+            argv += ["-add", _mp4_track(plan, s.source) + _mp4_options(s, 2, -start_ms)]
 
     if plan.chapters_path is not None:
         argv += ["-chap", str(plan.chapters_path)]
@@ -421,7 +431,16 @@ class Mp4Box:
                 )
             )
         for i, a in enumerate(plan.audio, 1):
-            if a.out_codec in (AudioCodec.LPCM, AudioCodec.OTHER):
+            if a.action is AudioAction.COPY and a.source.core:
+                issues.append(
+                    Issue(
+                        Severity.BLOCK,
+                        "mux.mp4_core",
+                        f"Audio {i} is the AC-3 core of a TrueHD track: MP4Box can't copy it apart from the TrueHD; "
+                        "encode it or use MKV",
+                    )
+                )
+            elif a.out_codec in (AudioCodec.LPCM, AudioCodec.OTHER):
                 issues.append(
                     Issue(
                         Severity.BLOCK,

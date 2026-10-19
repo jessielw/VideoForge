@@ -1,7 +1,8 @@
-"""Probe a local MKV: mkvmerge -J for track ids/flags/languages, MediaInfo for audio detail.
+"""Probe a source (MKV, MP4, M2TS / TS): mkvmerge -J for track ids/flags/languages, MediaInfo for detail.
 
-The two are joined on the MKV track number (mkvmerge ``properties.number`` ==
-MediaInfo ``track_id``).
+The two are joined on the track number (mkvmerge ``properties.number`` == MediaInfo ``track_id``: the MKV
+track number, the MP4 track ID, the TS PID). A Blu-ray TrueHD PID carries an AC-3 core that mkvmerge lists as
+a track of its own, under the same number; MediaInfo has one track for the PID, the TrueHD's.
 """
 
 from __future__ import annotations
@@ -70,6 +71,22 @@ def _int(value: Any) -> int | None:
         return None
 
 
+_NTSC = (24, 30, 48, 60, 120)  # the 1000/1001 rates MediaInfo writes rounded (23.976)
+
+
+def _frame_ns(mi: Any) -> int | None:
+    """The frame duration from MediaInfo's frame rate: an MP4's or a TS's (mkvmerge has one for an MKV only).
+    A rounded NTSC rate is taken as the exact one (23.976 -> 24000/1001), as mkvmerge would time it."""
+    try:
+        rate = Fraction(str(getattr(mi, "frame_rate", None) or 0))
+    except (ValueError, ZeroDivisionError):
+        return None
+    if rate <= 0:
+        return None
+    rate = next((Fraction(n * 1000, 1001) for n in _NTSC if abs(rate - Fraction(n * 1000, 1001)) < 0.002), rate)
+    return round(1_000_000_000 / rate)
+
+
 def _sar(width: int, height: int, props: dict[str, Any], mi: Any) -> Fraction:
     """The pixel aspect ratio: from mkvmerge's display size when it has one (exact; it's the container's,
     when it's there: not for an MP4 or a TS), else MediaInfo's, from the stream too. MediaInfo rounds it to
@@ -87,12 +104,26 @@ def _sar(width: int, height: int, props: dict[str, Any], mi: Any) -> Fraction:
     return simple if abs(simple - shown_par) <= Fraction(1, 2000) else shown_par.limit_denominator(10000)
 
 
+def _delay(mi: Any, video_mi: Any) -> int:
+    """An audio track's delay to the video in ms: MediaInfo's (an MKV's, a TS's), else the tracks' MP4 edit lists
+    (Source_Delay). An empty edit starts a track late; a skipped start (B-frame reordering, encoder priming) is
+    negative and starts it at 0, as a player shows it."""
+    relative = getattr(mi, "delay_relative_to_video", None)
+    if relative is not None:
+        return int(relative)
+    edit = _int(getattr(mi, "source_delay", None))
+    if edit is None:
+        return 0
+    return max(edit, 0) - max(_int(getattr(video_mi, "source_delay", None)) or 0, 0)
+
+
 def probe(path: Path, mkvmerge: str) -> SourceInfo:
     ident = mkvmerge_identify(path, mkvmerge)
     mi_all = MediaInfo.parse(str(path)).tracks
     mi_tracks = {t.track_id: t for t in mi_all if t.track_type in ("Video", "Audio", "Text") and t.track_id is not None}
     # A raw stream (.ac3, .flac, ...) has no track ids in MediaInfo: pair its audio tracks by order.
     mi_audio = [t for t in mi_all if t.track_type == "Audio"]
+    mi_video = next((t for t in mi_all if t.track_type == "Video"), None)
 
     video: VideoInfo | None = None
     audio: list[AudioTrack] = []
@@ -109,13 +140,13 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
             dims = (props.get("pixel_dimensions") or "0x0").split("x")
             width, height = int(dims[0]), int(dims[1])
             if mi is None:  # a raw stream: no track ids to pair by
-                mi = next((t for t in mi_all if t.track_type == "Video"), None)
+                mi = mi_video
             sar = _sar(width, height, props, mi)
             video = VideoInfo(
                 width=width,
                 height=height,
                 start_ms=_ms(props.get("minimum_timestamp")),
-                default_duration_ns=props.get("default_duration"),
+                default_duration_ns=props.get("default_duration") or _frame_ns(mi),
                 frames=_int(getattr(mi, "frame_count", None)) or 0,
                 language=language,
                 sar_num=sar.numerator,
@@ -129,8 +160,12 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
         elif kind == "audio":
             if mi is None and len(audio) < len(mi_audio) and mi_audio[len(audio)].track_id is None:
                 mi = mi_audio[len(audio)]
+            pid = mi  # the stream's own: its delay holds for a core in it too
+            core = track["id"] in (props.get("multiplexed_tracks") or [])[1:]
+            if core:
+                mi = None  # MediaInfo's track is the TrueHD's; mkvmerge's details are the core's
             fmt = parse_audio_format(
-                getattr(mi, "format", None),
+                getattr(mi, "format", None) or track.get("codec"),
                 getattr(mi, "commercial_name", None),
                 getattr(mi, "format_additionalfeatures", None),
             )
@@ -154,7 +189,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                     atmos=fmt.atmos,
                     dtsx=fmt.dtsx,
                     bitrate_kbps=round(bit_rate / 1000) if isinstance(bit_rate, int) else None,
-                    delay_ms=int(getattr(mi, "delay_relative_to_video", None) or 0),
+                    delay_ms=_delay(pid, mi_video),
                     format_name=getattr(mi, "format", "") or track.get("codec", ""),
                     sample_rate=_int(getattr(mi, "sampling_rate", None)) or props.get("audio_sampling_frequency"),
                     bit_depth=(_int(getattr(mi, "bit_depth", None)) or props.get("audio_bits_per_sample"))
@@ -162,6 +197,8 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                     else None,
                     size_bytes=_int(getattr(mi, "stream_size", None)),
                     duration_ms=_int(getattr(mi, "duration", None)),
+                    number=props.get("number"),
+                    core=core,
                 )
             )
         elif kind == "subtitles":

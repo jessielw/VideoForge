@@ -31,12 +31,12 @@ from typing import TYPE_CHECKING
 from videoforge.core.config import AppConfig
 from videoforge.core.execute import chapters as ogm, loudness
 from videoforge.core.execute.audio import audio_command, measure_argv, measure_path, needs_measure
-from videoforge.core.execute.mux import MUXERS, frame_rate, split_args
+from videoforge.core.execute.mux import MUXERS, MuxError, frame_rate, split_args
 from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
 from videoforge.core.models import Plan, PlannedAudio, SubTrack, VideoColor, VideoInfo
 from videoforge.core.pipeline.steps import Step
-from videoforge.core.video import burn as burn_in, hdr, info, target, vfr
+from videoforge.core.video import burn as burn_in, hdr, info, remux, target, vfr
 from videoforge.core.video.encoders import encoder_command, vspipe_command
 from videoforge.core.video.qpf import make_qpf, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
@@ -102,6 +102,25 @@ def job_script(spec: JobSpec, video: VideoInfo | None, burn: SubTrack | None = N
     )
 
 
+def mkvextract_input(
+    app: AppConfig, source: Path, kind: str, track: int, out: Path, step_id: str
+) -> tuple[list[Step], Path, int]:
+    """Where mkvextract reads a source's track: the source itself (an MKV), else out, an MKV of the track
+    alone that the step returned writes first (core/video/remux.py). The file and the track's id in it."""
+    if not remux.needed(source):
+        return [], source, track
+    what = "video" if kind == "video" else "subtitle"
+    step = Step(
+        step_id,
+        f"Copy the {what} track into an MKV (mkvmerge)",
+        argvs=(remux.argv(app.tools.mkvmerge, source, kind, track, out),),
+        outputs=(out,),
+        inputs=(source,),
+        weight=0.3,
+    )
+    return [step], out, 0
+
+
 def index_steps(
     spec: JobSpec, app: AppConfig, video: VideoInfo | None = None, burn: SubTrack | None = None
 ) -> list[Step]:
@@ -145,13 +164,15 @@ def index_steps(
 
     if burn is not None and burn.external_path is None:
         sub = burn_in.file(burn, work)
+        copied, mkv, track = mkvextract_input(app, source, "subtitles", burn.id, sub.with_suffix(".mks"), "burn.remux")
+        steps += copied
         steps.append(
             Step(
                 "burn.extract",
                 f"Subtitle to burn in (mkvextract): {burn_in.label(burn)}",
-                argvs=(burn_in.extract_argv(app.tools.mkvextract, source, burn, sub),),
+                argvs=(burn_in.extract_argv(app.tools.mkvextract, mkv, replace(burn, id=track), sub),),
                 outputs=(sub,),
-                inputs=(source,),
+                inputs=(mkv,),
                 weight=0.5,
             )
         )
@@ -235,14 +256,14 @@ def video_steps(
     if spec.makes_chapters:
         files = qpf_paths(work)
         video = plan.source.video
-        if video is None or not video.default_duration_ns:
-            raise ToolError("The source has no frame rate to place chapters by")
-        source_fps = frame_rate(video.default_duration_ns)
+        source_fps = frame_rate(video.default_duration_ns) if video and video.default_duration_ns else None
 
         # The chapters' frames are the script's: its frame rate once the info step has read it (before a run,
-        # the source's).
-        def chapters_step(fps: Fraction) -> Step:
+        # the source's, which MediaInfo doesn't give for every TS).
+        def chapters_step(fps: Fraction | None) -> Step:
             def make_chapters(log: LogFn) -> None:
+                if fps is None:
+                    raise ToolError("Neither the source nor the script has a frame rate to place chapters by")
                 if make_qpf(source, work, fps) is None:
                     raise ToolError("AutoQPF could not read or generate chapters for the source")
                 log(f"Chapters and qpfile written ({fps} fps)")
@@ -469,16 +490,19 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
     video = plan.source.video
     timestamps = work / vfr.TIMESTAMPS if vfr.carries(video, container) and video is not None else None
     if timestamps is not None and video is not None:
-        argv = vfr.extract_argv(app.tools.mkvextract, plan.source.path, video.id, timestamps)
+        copied, mkv, track = mkvextract_input(
+            app, plan.source.path, "video", video.id, timestamps.with_suffix(".mkv"), "timestamps.remux"
+        )
+        argv = vfr.extract_argv(app.tools.mkvextract, mkv, track, timestamps)
         stamps = Step(
             "timestamps",
             "Source timestamps (mkvextract)",
             argvs=(argv,),
             outputs=(timestamps,),
-            inputs=(plan.source.path,),
+            inputs=(mkv,),
             weight=0.5,
         )
-        audio.insert(0, stamps)
+        audio[0:0] = [*copied, stamps]
     at = next((n for n, s in enumerate(steps) if s.id.startswith("video")), len(steps))
     steps[at:at] = audio
 
@@ -503,10 +527,16 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
         return found.fps, timestamps if timestamps is not None and vfr.fits(timestamps, found.frames) else None
 
     def mux_step(fps: Fraction | None, stamps: Path | None) -> Step:
+        try:
+            argv = tuple(muxer.command(plan, encoded, unfinished, app, extra, fps, stamps))
+        except MuxError:
+            if fps is not None or not spec.encodes_video:
+                raise
+            argv = ()  # a raw encode, a source MediaInfo gives no frame rate (some TS): the script's, when it comes
         return Step(
             "mux",
             "Mux",
-            argvs=(tuple(muxer.command(plan, encoded, unfinished, app, extra, fps, stamps)),),
+            argvs=(argv,) if argv else (),
             outputs=(output,),
             writes=(unfinished,),
             inputs=(*mux_inputs, *((stamps,) if stamps else ())),
