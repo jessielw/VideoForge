@@ -104,7 +104,8 @@ source), or in Docker on Linux.
   downmix in a step of its own, beside the video encode; the encode applies what it found. A source wider than
   the loudness range is compressed to fit (loudnorm's dynamic mode), kept at the source's sample rate.
 - **Subtitles.** Keep, leave out, reorder, retitle and flag source subtitles and added SRT files (matched by
-  name or SxxEyy).
+  name or SxxEyy). The Select subtitles menu selects all, deselects all, or keeps only one language or type
+  (PGS, VobSub, SRT, ASS, etc.), with track counts and the job's edited languages.
 - **Burn in subtitles.** "Burn in" on a subtitle track (a source track or an added SRT / ASS / SUP / IDX file)
   draws it into the video with the bundled SubText plugin, as StaxRip's hardcoded subtitle, and leaves it out of
   the mux; one per job, an encode only. A source track is extracted with the index (mkvextract), so the preview

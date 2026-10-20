@@ -14,6 +14,8 @@
   import { Button } from '$lib/components/ui/button'
   import { Checkbox } from '$lib/components/ui/checkbox'
   import { Input } from '$lib/components/ui/input'
+  import SubtitleSelectionMenu from './SubtitleSelectionMenu.svelte'
+  import { selectSubtitles } from '../lib/subtitleSelection'
 
   let {
     job,
@@ -94,6 +96,12 @@
   const subLanguage = (t: SubTrack) => subOverride(t)?.language ?? t.language
   const flagValue = (t: SubTrack, key: string) => subOverride(t)?.flags[key] ?? t.detected[key] ?? false
   const flagPinned = (t: SubTrack, key: string) => key in (subOverride(t)?.flags ?? {})
+
+  function selectSubs(include: (t: SubTrack) => boolean) {
+    const o = copy()
+    selectSubtitles(o, subRows, include)
+    save(o)
+  }
 
   function setFlag(t: SubTrack, key: string, on: boolean) {
     editTrack(t.key, ov => {
@@ -181,6 +189,9 @@
     {#if kind === 'sub'}
     <section>
       <div class="mb-2 flex items-center gap-2"><CaptionsIcon class="size-4 text-primary" /><span class="font-medium">Subtitles</span></div>
+      <div class="mb-3">
+        <SubtitleSelectionMenu tracks={subRows} {overrides} disabled={!editable} onselect={selectSubs} />
+      </div>
       <table class="w-full text-sm">
         <thead class="text-left text-xs text-muted-foreground uppercase">
           <tr>

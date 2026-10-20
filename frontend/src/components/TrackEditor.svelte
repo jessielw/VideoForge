@@ -11,6 +11,8 @@
   import { app } from '../lib/state.svelte'
   import type { AudioAction, AudioEncodeInfo, AudioTrack, EncodeOptionInfo, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
   import FileBrowser from './FileBrowser.svelte'
+  import SubtitleSelectionMenu from './SubtitleSelectionMenu.svelte'
+  import { selectSubtitles } from '../lib/subtitleSelection'
   import { drops, pathDrop } from '../lib/dropPaths.svelte'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
@@ -141,6 +143,12 @@
   }
 
   const setIncluded = (t: Track, on: boolean) => editTrack(t, ov => (ov.exclude = on ? null : true))
+
+  function selectSubs(include: (t: SubTrack) => boolean) {
+    const o = draft()
+    selectSubtitles(o, subRows, include)
+    commit(o)
+  }
 
   // Burning a subtitle in: one track per job (marking one unmarks the others); it leaves the mux. Only an
   // encode can take it, and only the formats SubText draws (core.video.burn).
@@ -660,6 +668,11 @@
           >Drag a track by its handle to reorder; {drops.desktop ? 'drop' : 'paste'} files here to add them; every change saves.</span
         >
       </div>
+      {#if kind === 'sub'}
+        <div class="mb-3">
+          <SubtitleSelectionMenu tracks={subRows} {overrides} disabled={!editable} onselect={selectSubs} />
+        </div>
+      {/if}
       {#if rows.length}
         <div class="space-y-2" role="list">
           {#each rows as t, i (t.key)}
