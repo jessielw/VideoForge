@@ -139,6 +139,26 @@ class StepRecord:
     fingerprint: str
     outputs: list[Path] = field(default_factory=list)
     seconds: float = 0.0
+    output_stats: dict[str, list[int]] = field(default_factory=dict)
+
+    def capture_outputs(self) -> None:
+        """Remember the completed files; old records without these stamps must be revalidated."""
+        self.output_stats = {}
+        for path in self.outputs:
+            st = path.stat()
+            self.output_stats[str(path)] = [st.st_size, st.st_mtime_ns]
+
+    def outputs_match(self, outputs: list[Path]) -> bool:
+        if outputs != self.outputs:
+            return False
+        try:
+            for path in outputs:
+                st = path.stat()
+                if not path.is_file() or self.output_stats.get(str(path)) != [st.st_size, st.st_mtime_ns]:
+                    return False
+        except OSError:
+            return False
+        return True
 
 
 class StepStatus(StrEnum):

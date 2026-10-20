@@ -29,6 +29,7 @@ from videoforge.core.video.encoders import (
     progress_line as encoder_progress_line,
     rate as encoder_rate,
 )
+from videoforge.core.workdir import finished_files, forget_finished
 
 Runner = Callable[[Sequence[Sequence[str]], LogFn, CancelToken | None], None]
 _MKV_PROGRESS = re.compile(r"Progress:\s*(\d+)%")
@@ -110,7 +111,19 @@ def _present(step: Step) -> bool:
 
 
 def _reusable(step: Step, record: StepRecord | None) -> bool:
-    return record is not None and record.fingerprint == step.fingerprint() and _present(step)
+    return (
+        record is not None
+        and record.fingerprint == step.fingerprint()
+        and record.outputs_match(list(step.outputs))
+        and _present(step)
+    )
+
+
+def _finished(step: Step, record: StepRecord | None) -> bool:
+    """Explicit reuse may change settings, but must still refer to completed, unchanged files."""
+    if record is not None and record.outputs_match(list(step.outputs)):
+        return True
+    return bool(step.outputs) and all(p.name in finished_files(p.parent) for p in step.outputs)
 
 
 def run_steps(
@@ -202,6 +215,7 @@ def run_steps(
                 log(line)
 
         try:
+            forget_finished(step.outputs)
             for path in step.written:  # a stale file from an earlier run must not pass for this one's
                 path.unlink(missing_ok=True)
             if step.call is not None:
@@ -253,6 +267,7 @@ def run_steps(
             changed(run)
             raise
         record = StepRecord(step.id, step.fingerprint(), list(step.outputs), round(spent(), 1))
+        record.capture_outputs()
         with lock:
             records[step.id] = record
             if on_record:
@@ -275,8 +290,9 @@ def run_steps(
                 changed(run)
         with lock:
             prior = records.get(step.id)
-            if step.id in keep and not _reusable(step, prior) and _present(step):
+            if step.id in keep and not _reusable(step, prior) and _present(step) and _finished(step, prior):
                 prior = StepRecord(step.id, step.fingerprint(), list(step.outputs), prior.seconds if prior else 0.0)
+                prior.capture_outputs()
                 records[step.id] = prior
                 if on_record:
                     on_record(prior)

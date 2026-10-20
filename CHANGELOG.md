@@ -12,6 +12,10 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Correctness fixes: completed files.** Resume and explicit reuse check the completed file's size and
+  modification time. An output replaced or truncated by another job is no longer accepted from an old
+  job record; old records without file stamps are revalidated through the work folder or rebuilt.
+
 - **Job queue.** Queue a job or a batch of episodes (a folder of sources); each runs index → VapourSynth
   script → x264 / x265 / VP8 / VP9 / SVT-AV1 (1 or 2 passes) → audio → mux → validate. Jobs run one at a time and survive restarts;
   a rerun skips every step whose command and inputs haven't changed, so a crashed job resumes after its last

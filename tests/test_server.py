@@ -565,6 +565,7 @@ def test_reuse_question(tmp_path):
         assert run.seen[-1][0] == ["video"]
 
         q.get(one).state.steps["video"] = StepRecord("video", "old", [video])
+        q.get(one).state.steps["video"].capture_outputs()
         client.post("/api/queue/start", json={"ids": [one], "reuse": {one: []}})  # made again
         q.wait(5)
         assert run.seen[-1] == ([], set())

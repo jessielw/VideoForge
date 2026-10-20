@@ -98,6 +98,25 @@ def finished_files(folder: Path) -> dict[str, FinishedFile]:
     return found
 
 
+def forget_finished(outputs: tuple[Path, ...]) -> None:
+    """Invalidate completion before a step replaces files, including a run that later fails."""
+    with _finished_lock:
+        for folder in {p.parent for p in outputs}:
+            path = folder / FINISHED_NAME
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(doc, dict):
+                    continue
+                for out in outputs:
+                    if out.parent == folder:
+                        doc.pop(out.name, None)
+                tmp = path.with_name(path.name + ".tmp")
+                tmp.write_text(json.dumps(doc, indent=1), encoding="utf-8")
+                os.replace(tmp, path)
+            except (OSError, ValueError):
+                continue
+
+
 def keep_records(source: Path, dest: Path, keep: int = KEEP_RECORDS) -> dict[str, Path]:
     """Copy a work folder's job records and its log into dest before the folder is deleted: the records
     by their own names, the log as `<source name>.videoforge.log`. dest keeps the newest `keep` of each.

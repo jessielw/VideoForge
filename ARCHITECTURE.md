@@ -173,7 +173,10 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   loudnorm's second pass with the measured values, `linear=true`, and an `aresample` back to the source's rate,
   since loudnorm's dynamic mode puts out 192 kHz). dynaudnorm is one pass. DeeZy's encodes don't offer it.
 - A step's fingerprint covers its command and inputs. A rerun skips a step whose
-  fingerprint matches and whose outputs exist. That gives crash recovery (restart
+  fingerprint matches and whose outputs still match the size and modification time captured in its
+  `StepRecord`. Records without output stamps rebuild unless the user explicitly adopts files verified
+  by the work folder's completion manifest. Starting a replacement invalidates its manifest entries.
+  That gives crash recovery (restart
   the server and the job resumes after its last finished step) and cheap reruns
   (change a subtitle flag and only the mux runs again).
 - Reuse, StaxRip-like: each finished step's files are noted in `<work>/finished-steps.json` (step,

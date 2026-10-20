@@ -66,7 +66,7 @@ def reuse_offers(
         except OSError:
             continue
         record = records.get(last.id)
-        own = record is not None and file in record.outputs
+        own = record is not None and record.outputs_match(list(last.outputs))
         noted = finished.get(file.name) if file.parent == work else None
         if not own and noted is None:
             continue

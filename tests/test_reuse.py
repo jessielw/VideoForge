@@ -4,6 +4,7 @@ note of finished files (for any job on the source)."""
 from __future__ import annotations
 
 from conftest import simulate_output
+import pytest
 from test_pipeline import APP, FakeRunner, make_plan, tools_called, video_job
 
 from videoforge.core.job import JobState, JobStatus
@@ -11,6 +12,45 @@ from videoforge.core.pipeline.reuse import reuse_offers
 from videoforge.core.pipeline.run import run_job
 from videoforge.core.video.settings import Crop
 from videoforge.core.workdir import FINISHED_NAME, finished_files, note_finished
+
+
+@pytest.mark.parametrize("keep", [False, True])
+def test_changed_output_is_neither_offered_nor_reused(profile, tmp_path, keep):
+    plan = make_plan(tmp_path)
+    job = video_job(plan, tmp_path)
+    state = JobState()
+    run(job, plan, profile, state)
+    job.video_output.write_bytes(b"an interrupted replacement")
+    assert "video" not in offers(job, plan, profile, state)
+    if keep:
+        state.keep = ["video"]  # even a choice made before the file changed
+    assert "x264" in run(job, plan, profile, state)
+
+
+def test_another_jobs_completed_output_is_not_current(profile, tmp_path):
+    plan = make_plan(tmp_path)
+    job = video_job(plan, tmp_path)
+    state = JobState()
+    run(job, plan, profile, state)
+    job.video_output.write_bytes(b"another job's completed encode")
+    note_finished(job.work_dir, "video", "other-settings", [job.video_output], 1)
+    assert not offers(job, plan, profile, state)["video"].current
+    assert "x264" in run(job, plan, profile, state)
+
+
+def test_output_identity_survives_serialization(tmp_path):
+    from videoforge.core.job import StepRecord
+    from videoforge.core.plan_io import from_json, to_json
+
+    output = tmp_path / "encoded.flac"
+    output.write_bytes(b"complete")
+    record = StepRecord("audio.1", "settings", [output])
+    assert not record.outputs_match([output])  # legacy record
+    record.capture_outputs()
+    restored = from_json(StepRecord, to_json(record))
+    assert restored.outputs_match([output])
+    output.write_bytes(b"replaced")
+    assert not restored.outputs_match([output])
 
 
 def run(job, plan, profile, state):
