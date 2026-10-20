@@ -517,7 +517,7 @@
   </section>
 {/snippet}
 
-  <section class="min-w-0 flex-1">
+  <section class="min-w-0 flex-1 overflow-auto">
     {#if single}
       {#key single}<JobEditor jobId={single} />{/key}
     {:else if selected.length > 1}
