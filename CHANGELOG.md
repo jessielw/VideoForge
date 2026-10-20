@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Correctness fixes: output color.** VP8, VP9, and AV1 container color tags follow encoder overrides,
+  including range and AV1 HDR mastering/light levels. Manual color options also work with source color disabled.
+
 - **Correctness fixes: quoted arguments.** Encoder, audio, and mux extra arguments use one parser that removes
   double-quote grouping while preserving Windows paths, empty arguments, and escaped literal quotes.
 

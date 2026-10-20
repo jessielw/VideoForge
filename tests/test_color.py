@@ -5,9 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from videoforge.core.models import VideoColor, VideoInfo
 from videoforge.core.plan_io import from_json, to_json
-from videoforge.core.video.color import color_args, from_mediainfo, master_display
+from videoforge.core.video.color import color_args, effective_container_color, from_mediainfo, master_display
 from videoforge.core.video.encoders import encoder_command
 from videoforge.core.video.settings import Encoder, EncoderSettings
 
@@ -111,3 +113,58 @@ def test_old_probes_load_without_colour():
     del data["color"]
     assert from_json(VideoInfo, data).color == VideoColor()
     assert from_json(VideoInfo, to_json(VideoInfo(3840, 2160, color=HDR10))).color == HDR10
+
+
+@pytest.mark.parametrize("source_color", [False, True])
+def test_effective_svt_color_uses_last_override(source_color):
+    settings = EncoderSettings(
+        Encoder.SVTAV1,
+        source_color=source_color,
+        options={"color-primaries": "1", "color-range": "0"},
+        extra='--color-primaries "9" --color-range 1 --content-light 500,100',
+    )
+    found = effective_container_color(HDR10, settings)
+    assert (found.primaries, found.full_range, found.max_cll, found.max_fall) == (9, True, 500, 100)
+    settings.extra += " --color-primaries unrecognized --mastering-display unrecognized"
+    found = effective_container_color(HDR10, settings)
+    assert found.primaries is None and found.mastering is None
+
+
+def test_effective_vpx_color_names_codes_and_stream_specifiers():
+    settings = EncoderSettings(
+        Encoder.VP9,
+        options={"color_primaries": "bt709"},
+        extra="-color_primaries:v:0 9 -color_trc gamma22 -colorspace rgb -color_range pc",
+    )
+    found = effective_container_color(HDR10, settings)
+    assert (found.primaries, found.transfer, found.matrix, found.full_range) == (9, 4, 0, True)
+    assert found.mastering is None and found.max_cll == 0
+    settings.extra += " -color_range unknown"
+    assert effective_container_color(HDR10, settings).full_range is None
+
+
+def test_effective_hdr_range_matches_encoder_default():
+    color = VideoColor(master_display=P3_4000)
+    found = effective_container_color(color, EncoderSettings(Encoder.SVTAV1))
+    assert found.full_range is False and found.mastering.max_luminance == "4000"
+
+
+@pytest.mark.parametrize("container", ["mkv", "mp4"])
+def test_pipeline_mux_uses_effective_color(tmp_path, profile, container):
+    from test_pipeline import APP, make_plan, video_job
+
+    from videoforge.core.execute.mux import MuxSettings
+    from videoforge.core.pipeline.build import build_steps
+
+    plan = make_plan(tmp_path)
+    job = video_job(plan, tmp_path)
+    job.encoder = EncoderSettings(Encoder.SVTAV1, preset="12", extra="--color-primaries 9 --color-range 1")
+    plan.source.video.color = VideoColor("bt709", "bt709", "bt709", "limited")
+    plan.encode_path = job.video_output
+    job.mux = MuxSettings(container=container)
+    mux = build_steps(job, plan, profile, APP, tmp_path / f"out.{container}").steps[-1].argvs[0]
+    if container == "mkv":
+        assert mux[mux.index("--colour-primaries") + 1] == "0:9"
+        assert mux[mux.index("--colour-range") + 1] == "0:2"
+    else:
+        assert ":colr=nclx,9,1,1,1:" in mux[mux.index("-add") + 1]

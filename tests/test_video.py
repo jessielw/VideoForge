@@ -666,7 +666,8 @@ def test_vspipe_into_encoder(clip_file, tmp_path, encoder):
 
 @needs_vs
 @pytest.mark.parametrize("encoder", [Encoder.VP8, Encoder.VP9])
-def test_vspipe_into_libvpx_and_mux(clip_file, tmp_path, encoder):
+@pytest.mark.parametrize("override", [False, True])
+def test_vspipe_into_libvpx_and_mux(clip_file, tmp_path, encoder, override):
     """A real VP8 / VP9 encode (ffmpeg) with the chapters' keyframe forced, muxed to MKV and MP4: both come out
     with the anamorphic pixel aspect and the colour the IVF couldn't hold."""
     from conftest import plan_for, source
@@ -675,7 +676,7 @@ def test_vspipe_into_libvpx_and_mux(clip_file, tmp_path, encoder):
     from videoforge.core.config import default_vspipe
     from videoforge.core.execute import process
     from videoforge.core.execute.mux import mp4box_command, mux_command
-    from videoforge.core.video.color import container_codes
+    from videoforge.core.video.color import effective_container_color
 
     mkvmerge, mp4box = TOOLS / "MKVToolNix" / "mkvmerge.exe", shutil.which("MP4Box")
     if FFMPEG is None or not mkvmerge.exists() or mp4box is None:
@@ -686,6 +687,8 @@ def test_vspipe_into_libvpx_and_mux(clip_file, tmp_path, encoder):
     script = tmp_path / "video.vpy"
     script.write_text(build_script(VideoSettings(), clip_file, tmp_path, depth=depth), encoding="utf-8")
     enc = EncoderSettings(encoder=encoder, preset="8", crf=40, depth=depth)
+    if override:
+        enc.extra = "-color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range pc"
     out = tmp_path / output_name(enc)
     color = VideoColor("bt2020", "smpte2084", "bt2020nc", "limited")
     lines: list[str] = []
@@ -703,7 +706,7 @@ def test_vspipe_into_libvpx_and_mux(clip_file, tmp_path, encoder):
 
     plan = plan_for(source(name=str(clip_file)))
     plan.source.path, plan.encode_path = clip_file, out
-    sar, tags = Fraction(4, 3), container_codes(color)
+    sar, tags = Fraction(4, 3), effective_container_color(color, enc)
     mkv, mp4 = tmp_path / "out.mkv", tmp_path / "out.mp4"
     process.run([mux_command(plan, {}, mkv, str(mkvmerge), (), sar=sar, color=tags)], lines.append)
     process.run([mp4box_command(plan, {}, mp4, mp4box, (), sar=sar, color=tags)], lines.append)
@@ -711,11 +714,15 @@ def test_vspipe_into_libvpx_and_mux(clip_file, tmp_path, encoder):
         [video] = [t for t in MediaInfo.parse(str(file)).tracks if t.track_type == "Video"]
         assert video.format == encoder.value.upper() and video.frame_count == "48"
         assert float(video.display_aspect_ratio) == pytest.approx(320 * 4 / 3 / 180, abs=0.003)  # 4:3 pixels
-        assert (video.color_primaries, video.transfer_characteristics) == ("BT.2020", "PQ"), file
+        expected = ("BT.709", "BT.709") if override else ("BT.2020", "PQ")
+        assert (video.color_primaries, video.transfer_characteristics) == expected, file
+        if override:
+            assert video.color_range == "Full", file
 
 
 @needs_vs
-def test_vspipe_into_svtav1_and_mux(clip_file, tmp_path):
+@pytest.mark.parametrize("override", [False, True])
+def test_vspipe_into_svtav1_and_mux(clip_file, tmp_path, override):
     """A real SVT-AV1 encode of an HDR10 clip, the chapters' keyframe forced, muxed to MKV and MP4: both come out
     with the anamorphic pixel aspect, the colour and the HDR10 mastering display and light levels (the MKV's from
     the mux's tags, the MP4's from the stream), and the progress lines read."""
@@ -725,7 +732,7 @@ def test_vspipe_into_svtav1_and_mux(clip_file, tmp_path):
     from videoforge.core.config import default_vspipe
     from videoforge.core.execute import process
     from videoforge.core.execute.mux import mp4box_command, mux_command
-    from videoforge.core.video.color import container_codes
+    from videoforge.core.video.color import effective_container_color
 
     svt = TOOLS / "SvtAv1EncApp" / "SvtAv1EncApp.exe"
     mkvmerge, mp4box = TOOLS / "MKVToolNix" / "mkvmerge.exe", shutil.which("MP4Box")
@@ -736,6 +743,12 @@ def test_vspipe_into_svtav1_and_mux(clip_file, tmp_path):
     script = tmp_path / "video.vpy"
     script.write_text(build_script(VideoSettings(), clip_file, tmp_path, depth=10), encoding="utf-8")
     enc = EncoderSettings(encoder=Encoder.SVTAV1, preset="12", crf=40, depth=10)
+    if override:
+        enc.extra = (
+            "--color-primaries 1 --transfer-characteristics 1 --matrix-coefficients 1 --color-range 1 "
+            '--content-light 500,100 --mastering-display "G(0.265,0.69)B(0.15,0.06)R(0.68,0.32)'
+            'WP(0.3127,0.329)L(2000,0.005)"'
+        )
     out = tmp_path / output_name(enc)
     color = VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", 2, P3_1000, 1000, 400)
     lines: list[str] = []
@@ -751,7 +764,7 @@ def test_vspipe_into_svtav1_and_mux(clip_file, tmp_path):
 
     plan = plan_for(source(name=str(clip_file)))
     plan.source.path, plan.encode_path = clip_file, out
-    sar, tags = Fraction(4, 3), container_codes(color, hdr10=True)
+    sar, tags = Fraction(4, 3), effective_container_color(color, enc)
     mkv, mp4 = tmp_path / "out.mkv", tmp_path / "out.mp4"
     process.run([mux_command(plan, {}, mkv, str(mkvmerge), (), sar=sar, color=tags)], lines.append)
     process.run([mp4box_command(plan, {}, mp4, mp4box, (), sar=sar, color=tags)], lines.append)
@@ -759,11 +772,15 @@ def test_vspipe_into_svtav1_and_mux(clip_file, tmp_path):
         [video] = [t for t in MediaInfo.parse(str(file)).tracks if t.track_type == "Video"]
         assert video.format == "AV1" and video.frame_count == "48"
         assert float(video.display_aspect_ratio) == pytest.approx(320 * 4 / 3 / 180, abs=0.003)  # 4:3 pixels
-        assert (video.color_primaries, video.transfer_characteristics) == ("BT.2020", "PQ"), file
+        expected = ("BT.709", "BT.709") if override else ("BT.2020", "PQ")
+        assert (video.color_primaries, video.transfer_characteristics) == expected, file
+        if override:
+            assert video.color_range == "Full", file
         assert video.mastering_display_color_primaries == "Display P3", file
-        assert video.mastering_display_luminance == "min: 0.0050 cd/m2, max: 1000 cd/m2", file
+        max_nits = 2000 if override else 1000
+        assert video.mastering_display_luminance == f"min: 0.0050 cd/m2, max: {max_nits} cd/m2", file
         light = (video.maximum_content_light_level, video.maximum_frameaverage_light_level)
-        assert [n.split()[0] for n in light] == ["1000", "400"], file  # the MKV's without "cd/m2"
+        assert [n.split()[0] for n in light] == (["500", "100"] if override else ["1000", "400"]), file
 
 
 def test_manual_encode_defaults_are_fresh_copies(profile):

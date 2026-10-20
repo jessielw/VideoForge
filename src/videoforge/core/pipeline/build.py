@@ -37,7 +37,7 @@ from videoforge.core.job import JobSpec
 from videoforge.core.models import Plan, PlannedAudio, SubTrack, VideoColor, VideoInfo
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.video import burn as burn_in, hdr, info, remux, target, vfr
-from videoforge.core.video.color import container_codes
+from videoforge.core.video.color import effective_container_color
 from videoforge.core.video.encoders import (
     TOOLS,
     encoder_command,
@@ -573,8 +573,7 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
     sar, tags = None, None
     if spec.encodes_video and spec.encoder.encoder.ivf and video is not None:
         sar = spec.video.output_sar(video.width, video.height, video.sar)
-        av1 = spec.encoder.encoder is Encoder.SVTAV1
-        tags = container_codes(video.color, hdr10=av1) if spec.encoder.source_color else None
+        tags = effective_container_color(video.color, spec.encoder)
 
     def mux_step(fps: Fraction | None, stamps: Path | None) -> Step:
         try:

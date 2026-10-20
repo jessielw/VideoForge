@@ -12,12 +12,13 @@ boxes from the stream itself).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from fractions import Fraction
 import re
 from typing import Any
 
+from videoforge.core.arguments import split_args
 from videoforge.core.models import VideoColor
 from videoforge.core.video.settings import Encoder, EncoderSettings
 
@@ -351,4 +352,94 @@ def container_codes(color: VideoColor | None, hdr10: bool = False) -> ContainerC
         color.max_cll if hdr10 else 0,
         color.max_fall if hdr10 else 0,
     )
+    return None if found.empty else found
+
+
+def _code(value: str, names: dict[str, int]) -> int | None:
+    if value.isdigit():
+        return int(value)
+    return {"unknown": 2, "unspecified": 2, **names}.get(value.lower())
+
+
+def _svt_mastering(value: str) -> Mastering | None:
+    number = r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)"
+    pair = number + "," + number
+    match = re.fullmatch(rf"G\({pair}\)B\({pair}\)R\({pair}\)WP\({pair}\)L\({pair}\)", value)
+    if match is None:
+        return None
+    g = match.groups()
+    return Mastering((g[4], g[5]), (g[0], g[1]), (g[2], g[3]), (g[6], g[7]), g[8], g[9])
+
+
+def effective_container_color(color: VideoColor | None, settings: EncoderSettings) -> ContainerColor | None:
+    """Resolve IVF output tags from the same defaults, options and extra arguments the encoder receives.
+
+    Unknown explicit values clear that field rather than reviving the source's metadata. Explicit options
+    still apply when source_color is off. FFmpeg's video stream specifiers select the sole output stream.
+    """
+    av1 = settings.encoder is Encoder.SVTAV1
+    if not (av1 or settings.encoder.libvpx):
+        return None
+    args = color_args(color, settings)
+    for name, value in settings.options.items():
+        args += ["--" + name.lstrip("-")]
+        if value != "":
+            args.append(value)
+    args += split_args(settings.extra)
+    names = (
+        {
+            "color-primaries": "primaries",
+            "transfer-characteristics": "transfer",
+            "matrix-coefficients": "matrix",
+            "color-range": "full_range",
+        }
+        if av1
+        else {
+            "color_primaries": "primaries",
+            "color_trc": "transfer",
+            "colorspace": "matrix",
+            "color_range": "full_range",
+        }
+    )
+    codes = {
+        "primaries": PRIMARIES_CODE,
+        "transfer": TRANSFER_CODE | {v: TRANSFER_CODE[k] for k, v in FFMPEG_TRANSFER.items()},
+        "matrix": MATRIX_CODE | {v: MATRIX_CODE[k] for k, v in FFMPEG_MATRIX.items()},
+    }
+    ranges = (
+        {"0": False, "1": True}
+        if av1
+        else {
+            "1": False,
+            "2": True,
+            "tv": False,
+            "mpeg": False,
+            "pc": True,
+            "jpeg": True,
+        }
+    )
+    found = ContainerColor(None, None, None, None)
+    for i, arg in enumerate(args):
+        if not arg.startswith("-"):
+            continue
+        name, equals, value = arg.lstrip("-").partition("=")
+        if not av1:
+            name, _, stream = name.partition(":")
+            if stream not in ("", "v", "v:0", "0"):
+                continue
+        if not equals:
+            value = args[i + 1] if i + 1 < len(args) else ""
+        field = names.get(name)
+        if field == "full_range":
+            found = replace(found, full_range=ranges.get(value.lower()))
+        elif field:
+            found = replace(found, **{field: _code(value, codes[field])})
+        elif av1 and name == "mastering-display":
+            found = replace(found, mastering=_svt_mastering(value))
+        elif av1 and name == "content-light":
+            try:
+                cll, fall = (int(n) for n in value.split(","))
+            except ValueError:
+                cll = fall = 0
+            found = replace(found, max_cll=max(0, cll), max_fall=max(0, fall))
     return None if found.empty else found

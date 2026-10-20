@@ -48,6 +48,8 @@ src/videoforge/
                          before the job's options (vspipe's y4m carries no colour; a --no- option turns one off);
                          ffmpeg's -color_* for VP8 / VP9, SvtAv1EncApp's H.273 codes and HDR10 (in plain
                          numbers), and the H.273 codes (AV1's HDR10 too) the mux tags their container with
+                         (effective_container_color resolves defaults, options, and extra arguments in encoder
+                         order; unknown overrides clear the corresponding source tag)
       hdr.py             Dolby Vision / HDR10+ in the source (MediaInfo -> VideoInfo.hdr; FEL or MEL from a second
                          of the RPU); HDR10+ into x265 (hdr10plus_tool's JSON, --dhdr10-info) and Dolby Vision
                          as 8.1, or a profile 5 as 5 (dovi_tool's RPU, its L5 moved by the crop and resize); a
