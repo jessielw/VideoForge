@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Correctness fixes: MP4 subtitles.** Source SRT tracks are extracted and aligned before MP4Box imports
+  them, preserving the final cue's duration and timing when the video starts after zero.
+
 - **Correctness fixes: output color.** VP8, VP9, and AV1 container color tags follow encoder overrides,
   including range and AV1 HDR mastering/light levels. Manual color options also work with source color disabled.
 

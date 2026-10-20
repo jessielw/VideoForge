@@ -1095,8 +1095,9 @@ def test_real_job_end_to_end(tmp_path):
 
 @needs_tools
 @pytest.mark.skipif(shutil.which("MP4Box") is None, reason="needs MP4Box (GPAC) on PATH")
-def test_real_mp4_job_end_to_end(tmp_path):
-    """The same kind of source muxed to MP4: the source's chapters converted, an SRT as timed text."""
+@pytest.mark.parametrize(("embedded", "offset_ms"), [(False, 0), (True, 0), (True, 500)])
+def test_real_mp4_job_end_to_end(tmp_path, embedded, offset_ms):
+    """MP4 keeps both cue boundaries, including the last cue and a source's nonzero video origin."""
     from videoforge.core.config import load_app_config
     from videoforge.core.execute.mux import MuxSettings
     from videoforge.core.job import plan_spec, probe_spec
@@ -1123,10 +1124,21 @@ def test_real_mp4_job_end_to_end(tmp_path):
         check=True,
     )  # fmt: skip
     srt = tmp_path / "Clip.en.srt"
-    srt.write_text("1\n00:00:00,500 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    srt.write_text(
+        "1\n00:00:01,200 --> 00:00:02,000\nHello\n\n2\n00:00:02,400 --> 00:00:02,800\nLast\n",
+        encoding="utf-8",
+    )
+    if embedded:
+        original = tmp_path / "original.mkv"
+        src.replace(original)
+        subprocess.run(
+            [app.tools.mkvmerge, "-o", str(src), "--sync", f"0:{offset_ms}", str(original),
+             "--language", "0:eng", str(srt)],
+            check=True, capture_output=True,
+        )  # fmt: skip
 
     job = JobSpec(
-        inputs=JobInputs(src, subtitles=[srt]),
+        inputs=JobInputs(src, subtitles=[] if embedded else [srt]),
         profile="manual",
         output_dir=tmp_path / "out",
         qpf=False,
@@ -1148,6 +1160,16 @@ def test_real_mp4_job_end_to_end(tmp_path):
         "CHAPTER02NAME=Middle",
     ]
     assert out.has_chapters
+    cues = subprocess.run(
+        [FFMPEG, "-v", "error", "-i", str(result.output), "-map", "0:s:0", "-f", "srt", "-"],
+        check=True, capture_output=True, text=True,
+    ).stdout  # fmt: skip
+    boundaries = [line for line in cues.splitlines() if "-->" in line]
+    assert boundaries == (
+        ["00:00:00,700 --> 00:00:01,500", "00:00:01,900 --> 00:00:02,300"]
+        if offset_ms
+        else ["00:00:01,200 --> 00:00:02,000", "00:00:02,400 --> 00:00:02,800"]
+    )
 
 
 @needs_tools

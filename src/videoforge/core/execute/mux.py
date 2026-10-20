@@ -333,7 +333,8 @@ def mp4box_command(
     color: ContainerColor | None = None,
 ) -> list[str]:
     """MP4Box argv for a plan (the same inputs, timing, fps, sar and color as mux_command). chapters_path must
-    be OGM text; extra goes just before -new."""
+    be OGM text; source SRTs are extracted/aligned by build.mp4_subtitle_steps before import so the final
+    cue keeps its duration. extra goes just before -new."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
     video = plan.source.video

@@ -5,11 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-from conftest import audio, plan_for, source
+from conftest import audio, plan_for, source, sub
 
 from videoforge.core import tools
 from videoforge.core.config import AppConfig, Tools, with_tools
-from videoforge.core.models import AudioAction, AudioCodec as C, Severity
+from videoforge.core.models import AudioAction, AudioCodec as C, Severity, SubFormat
 from videoforge.core.tools import (
     TOOL_NAMES,
     TOOLS,
@@ -156,6 +156,27 @@ def test_encodes_need_their_tools(tmp_path):
     assert issues[0].message == "DDP (DEE) needs Dolby Encoding Engine: set it in Settings"
     plan.audio[1].action = AudioAction.COPY
     assert tool_issues(plan, tools) == []
+
+
+def test_mp4_source_srt_requires_extraction_tools(tmp_path, monkeypatch):
+    cfg = Tools(
+        mkvmerge="mkvmerge",
+        mkvextract="mkvextract",
+        mp4box="MP4Box",
+        deezy="deezy",
+        dee="dee",
+        truehdd="truehdd",
+        qaac="qaac",
+        ffmpeg="ffmpeg",
+    )
+    monkeypatch.setattr(tools, "locate", lambda name: "" if name == "mkvextract" else name)
+    plan = plan_for(source(subs=[sub(SubFormat.SRT, "en")]), source(name="E.mkv"))
+    issues = tool_issues(plan, cfg, "mp4")
+    assert len(issues) == 1 and issues[0].severity is Severity.BLOCK
+    assert "mkvextract" in issues[0].message
+    assert tool_issues(plan, cfg, "mkv") == []
+    plan.subs[0].source.external_path = tmp_path / "subtitle.srt"
+    assert tool_issues(plan, cfg, "mp4") == []
 
 
 def test_with_tools_layers_paths_and_brings_mkvpropedit(tmp_path):

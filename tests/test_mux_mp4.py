@@ -6,7 +6,9 @@ from fractions import Fraction
 from pathlib import Path
 
 from conftest import audio, plan_for, simulate_output, source, sub
+import pytest
 
+from videoforge.core.config import load_app_config
 from videoforge.core.execute import chapters as ogm
 from videoforge.core.execute.mux import MUXERS, MuxSettings, mp4box_command, mux_issues, muxer_for, split_args
 from videoforge.core.job import JobSpec
@@ -21,7 +23,7 @@ from videoforge.core.models import (
     TrackOverride,
     VideoInfo,
 )
-from videoforge.core.pipeline.build import output_path
+from videoforge.core.pipeline.build import build_steps, mp4_subtitle_steps, output_path
 from videoforge.core.video.color import ContainerColor
 from videoforge.profiles.manual import ManualProfile, output_matches_plan
 
@@ -95,7 +97,53 @@ def test_mp4box_command():
         "Movie.mkv#trackID=11:lang=en:group=2:name=English:disable:delay=-40:txtflags=C0000000",
     ]
     assert argv[argv.index("-chap") + 1] == str(Path("work/chapters_chapters.txt"))
-    assert argv[-4:] == ["-tmp", '"D:\\tmp dir"', "-new", "out.mp4.partial"]
+    assert argv[-4:] == ["-tmp", "D:\\tmp dir", "-new", "out.mp4.partial"]
+
+
+@pytest.mark.parametrize("start_ms", [0, 500])
+def test_mp4_pipeline_extracts_source_srt_with_one_timing_shift(tmp_path, start_ms):
+    plan = mp4_plan()
+    plan.source.video.start_ms = start_ms
+    original_sub = plan.subs[0]
+    app = load_app_config()
+    steps, prepared = mp4_subtitle_steps(plan, tmp_path, app)
+    assert len(steps) == (2 if start_ms else 1)
+    if start_ms:
+        argv = steps[0].argvs[0]
+        assert argv[argv.index("--sync") + 1] == f"{original_sub.source.id}:-500"
+        assert steps[1].inputs == steps[0].outputs
+    else:
+        assert steps[0].inputs == (plan.source.path,)
+    extracted = tmp_path / "subtitle.1.srt"
+    assert steps[-1].outputs == (extracted,)
+    assert prepared.subs[0].source.external_path == extracted
+    assert not plan.subs[0].source.is_external  # the UI/validation plan keeps the original source identity
+    assert prepared.subs[0].title == original_sub.title
+    assert prepared.subs[0].forced == original_sub.forced
+    spec = JobSpec(
+        inputs=JobInputs(plan.source.path, encode=plan.encode_path), profile="manual", mux=MuxSettings(container="mp4")
+    )
+    job = build_steps(spec, plan, ManualProfile(), app, tmp_path / "out.mp4")
+    assert "subs.1.extract" in [step.id for step in job.steps]
+    mux = job.steps[-1]
+    expected = spec.work_dir / "subtitle.1.srt"
+    assert expected in mux.inputs
+    sub_arg = adds(mux.argvs[0])[-1]
+    assert sub_arg == f"{expected}:lang=en:group=2:name=English:disable:txtflags=C0000000"
+    spec.mux.container = "mkv"
+    mkv = build_steps(spec, plan, ManualProfile(), app, tmp_path / "out.mkv")
+    assert not any(s.id.startswith("subs.") for s in mkv.steps)
+
+
+def test_mp4_leaves_external_srt_and_native_timed_text_inputs(tmp_path):
+    plan = mp4_plan([sub(F.TX3G, "en")])
+    plan.subs[0].source.format = F.TX3G
+    steps, prepared = mp4_subtitle_steps(plan, tmp_path, load_app_config())
+    assert steps == [] and prepared.subs == plan.subs
+    plan.subs[0].source.format = F.SRT
+    plan.subs[0].source.external_path = tmp_path / "external.srt"
+    steps, prepared = mp4_subtitle_steps(plan, tmp_path, load_app_config())
+    assert steps == [] and prepared.subs == plan.subs
 
 
 def test_mp4_issues():

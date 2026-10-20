@@ -315,6 +315,10 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
     flags warn, except an original flag carried from the source (most releases set it on every
     track: left out quietly); PGS/ASS/LPCM block.
     Chapters must be OGM text, so a chapter XML or the source's chapters are converted first.
+    Source SRT tracks are extracted to `subtitle.<position>.srt` before import (`subs.<position>.extract`,
+    with a remux for non-MKV sources or a timing shift). This avoids GPAC 2.4's MKV importer dropping the
+    final cue's duration. The extract uses the decoded video's zero origin; the mux's local plan treats
+    it as an external SRT with no additional delay. The original plan retains its source track identity.
   - The output check reads an MP4 for language, enabled (default) and format only. The language is
     compared as `lang.primary` (no region or script; nb / nn as no), since MP4Box writes a 3-letter
     ISO 639-2 code (`Muxer.carries_variants`); `mux.mp4_language` warns at plan time.

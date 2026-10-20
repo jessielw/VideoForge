@@ -34,7 +34,7 @@ from videoforge.core.execute.audio import audio_command, measure_argv, measure_p
 from videoforge.core.execute.mux import MUXERS, MuxError, frame_rate, split_args
 from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
-from videoforge.core.models import Plan, PlannedAudio, SubTrack, VideoColor, VideoInfo
+from videoforge.core.models import Plan, PlannedAudio, SubFormat, SubTrack, VideoColor, VideoInfo
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.video import burn as burn_in, hdr, info, remux, target, vfr
 from videoforge.core.video.color import effective_container_color
@@ -127,6 +127,46 @@ def mkvextract_input(
         weight=0.3,
     )
     return [step], out, 0
+
+
+def mp4_subtitle_steps(plan: Plan, work: Path, app: AppConfig) -> tuple[list[Step], Plan]:
+    """Extract source SRTs before MP4Box imports them: its MKV importer loses the last cue's duration.
+
+    Align the extract to the decoded video here; the mux must not shift it a second time.
+    Only the mux's local plan changes, preserving the source identities used by the UI and validation.
+    """
+    steps: list[Step] = []
+    subs = list(plan.subs)
+    source = plan.source.path
+    if source is None:
+        raise ToolError("The plan has no source file")
+    for pos, sub in enumerate(subs, 1):
+        track = sub.source
+        if track.is_external or track.format is not SubFormat.SRT:
+            continue
+        out = work / f"subtitle.{pos}.srt"
+        copied, mkv, tid = mkvextract_input(
+            app,
+            source,
+            "subtitles",
+            track.id,
+            out.with_suffix(".mks"),
+            f"subs.{pos}.remux",
+            burn_in.shift_ms(track, source, plan.source.video),
+        )
+        steps += copied
+        steps.append(
+            Step(
+                f"subs.{pos}.extract",
+                f"Subtitle {pos} for MP4 (mkvextract)",
+                argvs=(burn_in.extract_argv(app.tools.mkvextract, mkv, replace(track, id=tid), out),),
+                inputs=(mkv,),
+                outputs=(out,),
+                weight=0.5,
+            )
+        )
+        subs[pos - 1] = replace(sub, source=replace(track, id=-1, external_path=out, extracted_from=None, delay_ms=0))
+    return steps, replace(plan, subs=subs)
 
 
 def index_steps(
@@ -548,6 +588,9 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
     at = next((n for n, s in enumerate(steps) if s.id.startswith("video")), len(steps))
     steps[at:at] = audio
 
+    if container == "mp4":
+        subtitles, plan = mp4_subtitle_steps(plan, work, app)
+        steps += subtitles
     if container == "mp4" and (chapters := mp4_chapters_step(plan, work)) is not None:
         steps.append(chapters)
         plan = replace(plan, chapters_path=chapters.outputs[0])

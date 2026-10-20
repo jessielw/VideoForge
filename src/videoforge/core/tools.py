@@ -22,7 +22,7 @@ import subprocess
 from videoforge.core.config import Tools
 from videoforge.core.execute.audio import ENCODES
 from videoforge.core.execute.mux import MUXERS
-from videoforge.core.models import AudioAction, Issue, Plan, Severity
+from videoforge.core.models import AudioAction, Issue, Plan, Severity, SubFormat
 
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _VERSION = re.compile(r"\d+\.\d+|\br\d{2,}\b|\bv\d+\b", re.IGNORECASE)
@@ -142,7 +142,7 @@ def missing_for_encodes(tools: Tools) -> dict[AudioAction, list[str]]:
 
 def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]:
     """A BLOCK for each kind of audio encode the plan needs whose tools are missing, and for
-    the container's muxer."""
+    the container's muxer and subtitle extraction."""
     missing = missing_for_encodes(tools)
     issues = []
     muxer = MUXERS[container]
@@ -150,6 +150,16 @@ def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]
         issues.append(
             Issue(Severity.BLOCK, "tools.missing", f"{muxer.label} needs {_LABEL[muxer.tool]}: set it in Settings")
         )
+    if container == "mp4" and any(s.source.format is SubFormat.SRT and not s.source.is_external for s in plan.subs):
+        for tool in ("mkvmerge", "mkvextract"):
+            if not locate(getattr(tools, tool)):
+                issues.append(
+                    Issue(
+                        Severity.BLOCK,
+                        "tools.missing",
+                        f"Source SRT subtitles for MP4 need {tool}: set the MKVToolNix path in Settings",
+                    )
+                )
     for action in dict.fromkeys(a.action for a in plan.audio):
         if missing.get(action):
             issues.append(
