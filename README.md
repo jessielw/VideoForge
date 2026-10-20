@@ -14,7 +14,7 @@ It runs as one local process (FastAPI + a Svelte app) for one user: on Windows (
 source), or in Docker on Linux. Jobs survive restarts,
 and finished steps are skipped on a rerun.
 
-> **Status:** 0.1.0 beta. It works end to end, but expect changes. See [CHANGELOG.md](CHANGELOG.md).
+> **Status:** 0.1.0 EARLY beta. It works end to end, but expect changes. See [CHANGELOG.md](CHANGELOG.md).
 
 Not yet: sources other than MKV, MP4 and M2TS / TS (remux them to MKV first), GPU filters, a login (see
 [Docker](#docker-linux)), Dolby Vision 8.4 (HLG) (profile 8.1, a MEL and a FEL go into x265 encodes as 8.1, a
