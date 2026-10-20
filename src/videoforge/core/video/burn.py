@@ -77,9 +77,32 @@ def extract_argv(mkvextract: str, source: Path, track: SubTrack, out: Path) -> t
     return (mkvextract, "--ui-language", "en", "tracks", str(source), f"{track.id}:{out}")
 
 
+def files(path: Path, image_pair: bool = False) -> tuple[Path, ...]:
+    """A VobSub's index and bitmap payload are one input/output."""
+    return (path.with_suffix(".idx"), path.with_suffix(".sub")) if image_pair else (path,)
+
+
+def dependencies(track: SubTrack, work: Path) -> tuple[Path, ...]:
+    return files(file(track, work), track.format is SubFormat.VOBSUB)
+
+
+def external_stamp(track: SubTrack) -> str:
+    """A script/cache key for added subtitles, including an extract's original files."""
+    if track.external_path is None:
+        return ""
+    stamps = []
+    for path in files(track.external_path, track.format is SubFormat.VOBSUB):
+        try:
+            st = path.stat()
+            stamps.append((str(path), st.st_size, st.st_mtime_ns))
+        except OSError:
+            stamps.append((str(path), None, None))
+    return f"# Subtitle inputs: {stamps!r}"
+
+
 def present(track: SubTrack | None, work: Path) -> bool:
     """Whether the file to burn is there (a source track's once the index steps extracted it)."""
-    return track is None or file(track, work).is_file()
+    return track is None or all(p.is_file() for p in dependencies(track, work))
 
 
 def lines(track: SubTrack, work: Path) -> list[str]:

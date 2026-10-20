@@ -141,6 +141,8 @@ def script_parts(
     ]
     if stage == "source":
         return head, [], ["clip.set_output()"]
+    if burn is not None and (stamp := burn_in.external_stamp(burn)):
+        head.append(stamp)
     if el is not None:
         head += bake_lines(el, settings.source_filter, index_dir)
     tail = []

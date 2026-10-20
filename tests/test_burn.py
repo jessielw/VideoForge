@@ -189,3 +189,47 @@ def test_real_burn_cue_uses_video_origin(tmp_path):
     for frame, visible in ((17, False), (18, True), (37, True), (38, False)):
         with plain.get_frame(frame) as a, rendered.get_frame(frame) as b:
             assert bool(np.any(np.asarray(a[0]) != np.asarray(b[0]))) is visible
+
+
+@pytest.mark.parametrize("two_pass", [False, True])
+@pytest.mark.parametrize("fmt", [F.SRT, F.VOBSUB])
+def test_editing_burn_inputs_invalidates_video_and_preview(tmp_path, two_pass, fmt):
+    from test_pipeline import APP, make_plan, video_job
+
+    from videoforge.core.pipeline.build import build_steps
+    from videoforge.core.video.settings import RateControl
+
+    plan = make_plan(tmp_path)
+    job = video_job(plan, tmp_path)
+    if two_pass:
+        job.encoder.rate_control = RateControl.TWO_PASS
+    added = tmp_path / ("sub.idx" if fmt is F.VOBSUB else "sub.srt")
+    added.write_bytes(b"original")
+    payload = added.with_suffix(".sub") if fmt is F.VOBSUB else added
+    payload.write_bytes(b"subtitle payload")
+    plan.burn = sub(fmt, external=str(added))
+
+    def video_steps():
+        return [
+            s
+            for s in build_steps(job, plan, ManualProfile(), APP, tmp_path / "out.mkv").steps
+            if s.id == "video" or s.id.startswith("video.")
+        ]
+
+    old = [s.fingerprint() for s in video_steps()]
+    script = build_script(job.video, job.inputs.source, job.work_dir, burn=plan.burn)
+    payload.write_bytes(b"changed subtitle payload")
+    assert all(a != b.fingerprint() for a, b in zip(old, video_steps(), strict=True))
+    assert script != build_script(job.video, job.inputs.source, job.work_dir, burn=plan.burn)
+    assert burn.present(plan.burn, job.work_dir)
+    payload.unlink()
+    assert not burn.present(plan.burn, job.work_dir)
+
+
+def test_vobsub_extract_records_both_files(tmp_path):
+    from test_pipeline import APP
+
+    job = JobSpec(inputs=JobInputs(tmp_path / "source.mkv"), profile="manual")
+    track = sub(F.VOBSUB)
+    extract = next(s for s in index_steps(job, APP, None, track) if s.id == "burn.extract")
+    assert extract.outputs == (job.work_dir / "burn.10.idx", job.work_dir / "burn.10.sub")

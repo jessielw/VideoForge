@@ -123,7 +123,7 @@ def mkvextract_input(
         f"Copy the {what} track into an MKV (mkvmerge)",
         argvs=(remux.argv(app.tools.mkvmerge, source, kind, track, out, shift_ms),),
         outputs=(out,),
-        inputs=(source,),
+        inputs=burn_in.files(source, source.suffix.lower() == ".idx"),
         weight=0.3,
     )
     return [step], out, 0
@@ -190,7 +190,7 @@ def index_steps(
                 "burn.extract",
                 f"Subtitle to burn in (mkvextract): {burn_in.label(burn)}",
                 argvs=(burn_in.extract_argv(app.tools.mkvextract, mkv, replace(burn, id=track), sub),),
-                outputs=(sub,),
+                outputs=burn_in.dependencies(burn, work),
                 inputs=(mkv,),
                 weight=0.5,
             )
@@ -306,6 +306,8 @@ def video_steps(
     color = v.color if v is not None else None
     pipe = tuple(vspipe_command(app.tools.vspipe, script))
     shared = (script, source) + ((qpfile,) if qpfile else ())
+    if plan.burn is not None:
+        shared += burn_in.dependencies(plan.burn, work)
     hdr10plus = None
     if hdr.keeps_hdr10plus(v, enc):
         hdr10plus = work / hdr.HDR10PLUS_JSON

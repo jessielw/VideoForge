@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Correctness fixes: edited burn files.** Changing an external subtitle invalidates the video encode and
+  preview. VobSub's `.idx` and `.sub` files are tracked together for extraction, presence, and reuse.
+
 - **Correctness fixes: subtitle burn timing.** Source subtitles and identified external extracts are shifted
   to the first decoded video frame before rendering. Standalone subtitle files keep their own timing.
 
