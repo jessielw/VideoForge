@@ -29,7 +29,7 @@ TOOLS_README = """Put the tools here (or anywhere, and set their paths on the Se
   vs-plugins\\ already holds the VapourSynth plugins VideoForge bundles (source filters, common filters): add yours
   dovi_tool\\ and hdr10plus_tool\\ come with it (Dolby Vision and HDR10+ metadata)
   DeeZy\\deezy.exe   DEE\\dee.exe   truehdd\\truehdd.exe   qaac\\qaac64.exe   opus-tools\\opusenc.exe
-  ffmpeg and MP4Box are looked up on PATH unless set.
+  ffmpeg (and its ffprobe) and MP4Box are looked up on PATH unless set.
 
 See README.md, "Tools".
 """

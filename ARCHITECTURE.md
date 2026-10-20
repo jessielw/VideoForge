@@ -14,7 +14,8 @@ src/videoforge/
   core/                  The engine. Imports no web framework and no profile (a test enforces it).
     models.py            Tracks, Plan (the rules' output), Overrides, Issue
     probe.py, classify.py, lang.py, mediainfo_text.py, pairing.py
-    config.py            Tool paths (mkvmerge, x264, x265, vspipe, VS plugin folder, ...)
+    config.py            Tool paths (mkvmerge, x264, x265, vspipe, VS plugin folder, ...); mkvpropedit / mkvextract
+                         found next to mkvmerge and ffprobe next to ffmpeg unless set
     profile.py           Profile ABC: plan rules, checks, track properties, video defaults
     jobs.py              probe_inputs / plan_job
     job.py               JobSpec (what to build, persisted) + JobState (runtime, persisted)
@@ -207,12 +208,17 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
 - Sources other than MKV (`pairing.SOURCE_EXTENSIONS`: MP4, M2TS / TS), read straight from the file as StaxRip
   does (its source filters open them; it demuxes audio with ffmpeg or MP4Box, VideoForge's audio steps read the
   source with ffmpeg as for an MKV). `probe.py` joins mkvmerge and MediaInfo on the track number, which is the MP4
-  track ID or the TS PID there (kept in `AudioTrack.number` / `SubTrack.number`). mkvmerge has no frame duration
-  outside Matroska: `default_duration_ns` comes from MediaInfo's frame rate (23.976 -> 24000/1001); an x264 TS has
-  none in MediaInfo, so AutoQPF and the mux of a raw encode take the script's rate (`Step.refresh`), and MediaInfo
-  calls it VFR (its timestamps go through the VFR path). An audio delay is MediaInfo's Video_Delay (a TS's), else
-  the MP4 edit lists' Source_Delay (an empty edit delays a track, a skipped start doesn't); MediaInfo doesn't list
-  every edit list, so an MP4 delay it misses is lost on an encode (a copy keeps it: mkvmerge reads edit lists).
+  track ID or the TS PID there (kept in `AudioTrack.number` / `SubTrack.number`). ffprobe (`Tools.ffprobe`, its
+  stream headers) times these sources, joined on the number too (its `id`; two streams under a PID in mkvmerge's
+  order): a track's delay to the video is its `start_time` less the video's (`AudioTrack.delay_ms`,
+  `SubTrack.delay_ms`; a player's start: an MP4's edit lists applied, AAC priming at 0), a TS's video start
+  (`VideoInfo.start_ms`) its offset to the earliest stream, and `default_duration_ns` its average frame rate
+  (mkvmerge has none outside Matroska; a Blu-ray VC-1's `r_frame_rate` is the field rate). Without ffprobe:
+  MediaInfo's frame rate (23.976 -> 24000/1001), Video_Delay, else an MP4 edit list's Source_Delay where MediaInfo
+  lists it; an x264 TS then has no rate, so AutoQPF and the mux of a raw encode take the script's (`Step.refresh`).
+  MediaInfo calls an x264 TS VFR (its timestamps go through the VFR path). mkvmerge keeps a TS's offset to its
+  earliest stream, taken or not, but starts the earliest track it takes from an MP4 at 0: `mux._source_shift`
+  syncs an MP4 input's tracks by that one's delay (`SourceInfo.container`, mkvmerge's type).
   A Blu-ray TrueHD PID's AC-3 core is a track of its own in mkvmerge (and ffmpeg's `a:N`), under the same number;
   MediaInfo's one track is the TrueHD's, so the core takes mkvmerge's details (`AudioTrack.core`). MP4Box takes a
   TS track by PID, an MP4's by track ID (`mux._mp4_track`), and can't copy a core apart (`mux.mp4_core` BLOCK).

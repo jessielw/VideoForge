@@ -32,6 +32,7 @@ class Tools:
     truehdd: str
     qaac: str
     ffmpeg: str
+    ffprobe: str = "ffprobe"  # default: next to ffmpeg
     mkvpropedit: str = "mkvpropedit"  # default: next to mkvmerge
     mkvextract: str = "mkvextract"  # default: next to mkvmerge
     x264: str = "x264"
@@ -58,7 +59,8 @@ class AppConfig:
     tool_priority: Priority = Priority.NORMAL
 
 
-_MKVMERGE_SIBLINGS = ("mkvpropedit", "mkvextract")  # MKVToolNix's other tools: found next to mkvmerge
+# Tools found next to another unless set: MKVToolNix's next to mkvmerge, ffprobe next to ffmpeg.
+_SIBLINGS = {"mkvpropedit": "mkvmerge", "mkvextract": "mkvmerge", "ffprobe": "ffmpeg"}
 
 
 def _resolve_tool(value: str, base: Path) -> str:
@@ -87,15 +89,16 @@ def _merged(base: dict, over: dict) -> dict:
 
 def with_tools(cfg: AppConfig, paths: dict[str, str], base: Path = PROJECT_ROOT) -> AppConfig:
     """cfg with some tool paths replaced (the Settings page's; relative ones resolve against base).
-    A new mkvmerge brings the mkvpropedit and mkvextract next to it, unless those are set too."""
+    A new mkvmerge brings the mkvpropedit and mkvextract next to it (a new ffmpeg its ffprobe), unless those
+    are set too."""
     names = asdict(cfg.tools)
     for name, value in paths.items():
         if name in names and value:
             names[name] = _resolve_tool(value, base)
-    for tool in _MKVMERGE_SIBLINGS:
-        if paths.get("mkvmerge") and not paths.get(tool):
-            mkvmerge = Path(names["mkvmerge"])
-            sibling = mkvmerge.with_name(tool + mkvmerge.suffix)
+    for tool, beside in _SIBLINGS.items():
+        if paths.get(beside) and not paths.get(tool):
+            main = Path(names[beside])
+            sibling = main.with_name(tool + main.suffix)
             if sibling.is_file():
                 names[tool] = str(sibling)
     return replace(cfg, tools=Tools(**names))
@@ -109,9 +112,9 @@ def load_app_config(path: Path | None = None) -> AppConfig:
         data = _merged(data, tomllib.loads(local.read_text(encoding="utf-8")))
     base = path.parent
     names = {name: _resolve_tool(v, base) for name, v in data["tools"].items()}
-    for tool in _MKVMERGE_SIBLINGS:
-        if tool not in names:
-            sibling = Path(names["mkvmerge"]).with_name(tool + Path(names["mkvmerge"]).suffix)
+    for tool, beside in _SIBLINGS.items():
+        if tool not in names and beside in names:
+            sibling = Path(names[beside]).with_name(tool + Path(names[beside]).suffix)
             names[tool] = str(sibling) if sibling.is_file() else _resolve_tool(tool, base)
     if "vspipe" not in names:
         names["vspipe"] = default_vspipe()

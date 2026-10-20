@@ -38,6 +38,7 @@ missing. A bare name (`ffmpeg`, `MP4Box`) is looked up on `PATH`.
 | VapourSynth plugins | `tools/vs-plugins/` | source filters (FFMS2, the default; L-SMASH; BestSource) and any filters your scripts use: see [VapourSynth plugins](#vapoursynth-plugins) |
 | [MP4Box](https://gpac.io/) (GPAC) | `MP4Box` on `PATH` | MP4 output |
 | ffmpeg | `ffmpeg` on `PATH` | FLAC / Opus / AAC / AC-3 / E-AC-3 encodes, and decoding for the other audio encoders |
+| ffprobe | next to ffmpeg | an MP4 / TS source's timing (track starts, frame rate); without it, MediaInfo's |
 | [DeeZy](https://github.com/jessielw/DeeZy) + Dolby Encoding Engine | `tools/DeeZy/deezy.exe`, `tools/DEE/dee.exe` | DDP / DDP Atmos |
 | truehdd | `tools/truehdd/truehdd.exe` | DDP Atmos from TrueHD Atmos |
 | qaac | `tools/qaac/qaac64.exe` | AAC (Apple) |

@@ -116,9 +116,11 @@ source), or in Docker on Linux.
   keeps the source's attachments (an ASS subtitle's fonts) and global tags, as StaxRip does. MP4Box starts each
   track it copies at 0, so a copied track gets its delay to the video, as an encoded one does.
 - **MP4 and M2TS / TS sources.** A source can be an MKV, MP4 (.mp4, .m4v) or MPEG transport stream (.m2ts,
-  .mts, .ts), indexed straight from the file as in StaxRip. The frame rate comes from MediaInfo (mkvmerge has one
-  for an MKV only; 23.976 is taken as 24000/1001), a TS's audio delay from its timestamps and an MP4's from its
-  edit lists when MediaInfo lists them. A Blu-ray TrueHD track's AC-3 core is a track of its own (to copy into an
+  .mts, .ts), indexed straight from the file as in StaxRip. ffprobe (found next to ffmpeg) times it: each
+  track's start as a player starts it (a TS's timestamps, an MP4's edit lists, which MediaInfo doesn't always
+  list), for the audio's delay to the video, copied or encoded, and the exact frame rate (mkvmerge has one for an
+  MKV only). Without ffprobe, MediaInfo's (23.976 taken as 24000/1001). A Blu-ray TrueHD track's AC-3 core is a
+  track of its own (to copy into an
   MKV or encode; MP4Box can't copy it apart, so MP4 blocks that). MP4 output takes a TS track by its PID and an
   MP4's by its track ID. mkvextract reads Matroska only: a burned-in subtitle and a VFR source's timestamps are
   first copied into an MKV in the work folder (mkvmerge), which keeps the TS's timing. When MediaInfo gives a TS

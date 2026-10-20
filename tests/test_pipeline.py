@@ -1054,9 +1054,9 @@ def test_real_mp4_job_end_to_end(tmp_path):
 @needs_tools
 @pytest.mark.parametrize(("ext", "container"), [(".mp4", "mkv"), (".m2ts", "mkv"), (".m2ts", "mp4"), (".mp4", "mp4")])
 def test_real_mp4_and_ts_sources_run_end_to_end(tmp_path, ext, container):
-    """An MP4 or a TS source: one AC-3 track copied, one encoded to FLAC. The TS's audio starts 0.5 s after its
-    video, and still does in the output. MediaInfo gives an x264 TS no frame rate (it calls it VFR): AutoQPF takes
-    the script's, and its timestamps are copied out through an MKV."""
+    """An MP4 or a TS source whose audio starts 0.5 s after its video (an MP4's edit list MediaInfo doesn't list,
+    a TS's timestamps: ffprobe reads both): one AC-3 track copied, one encoded to FLAC, both still 0.5 s late in
+    the output. MediaInfo calls an x264 TS VFR: its timestamps are copied out through an MKV."""
     if container == "mp4" and shutil.which("MP4Box") is None:
         pytest.skip("needs MP4Box (GPAC) on PATH")
     ffprobe = shutil.which("ffprobe")
@@ -1071,7 +1071,7 @@ def test_real_mp4_and_ts_sources_run_end_to_end(tmp_path, ext, container):
     app = load_app_config()
     vsx.configure(app.tools.vs_plugins)
     vsx.ensure_vspipe(app.tools.vspipe)
-    src, delay = tmp_path / f"Movie.2020{ext}", 0.5 if ext == ".m2ts" else 0.0
+    src, delay = tmp_path / f"Movie.2020{ext}", 0.5
     video, sound = tmp_path / "video.mkv", tmp_path / "audio.mka"
     subprocess.run(
         [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=3:size=320x180:rate=24",

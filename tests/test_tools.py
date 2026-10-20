@@ -172,3 +172,10 @@ def test_with_tools_layers_paths_and_brings_mkvpropedit(tmp_path):
     assert cfg.tools.x264 == "x264"  # an empty value keeps the base
     assert cfg.tools.qaac == str(Path(tmp_path / "q.exe"))
     assert base.tools.mkvmerge == "mkvmerge"  # the base is untouched
+
+    (tmp_path / "ff").mkdir()
+    for exe in ("ffmpeg.exe", "ffprobe.exe"):
+        (tmp_path / "ff" / exe).write_bytes(b"")
+    cfg = with_tools(base, {"ffmpeg": "ff/ffmpeg.exe"}, tmp_path)
+    assert cfg.tools.ffprobe == str(tmp_path / "ff" / "ffprobe.exe")  # ffmpeg's comes along
+    assert with_tools(base, {"ffmpeg": "ff/ffmpeg.exe", "ffprobe": "fp"}, tmp_path).tools.ffprobe == "fp"

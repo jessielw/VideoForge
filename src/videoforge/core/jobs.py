@@ -120,7 +120,7 @@ def external_audio_tracks(paths: list[Path], mkvmerge: str) -> tuple[list[AudioT
 
 def probe_inputs(inputs: JobInputs, app: AppConfig) -> ProbedInputs:
     mkvmerge = app.tools.mkvmerge
-    source = probe(inputs.source, mkvmerge)
+    source = probe(inputs.source, mkvmerge, app.tools.ffprobe)
     v = source.video
     if v is not None and v.hdr.dv_profile == 7 and "EL" in v.hdr.dv_layers and locate(app.tools.dovi_tool):
         v.hdr.dv_el = hdr.read_el_type(inputs.source, app.tools)  # MediaInfo can't tell FEL from MEL

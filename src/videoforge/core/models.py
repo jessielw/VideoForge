@@ -126,6 +126,7 @@ class SubTrack:
     number: int | None = None  # the container's track number (MKV: mkvmerge id + 1, gMKVExtract "trackN")
     external_path: Path | None = None
     extracted_from: int | None = None  # source track number an external file was extracted from
+    delay_ms: int = 0  # its start's offset to the video's, outside Matroska (ffprobe's): an MP4's, for the mux
     # Classification hints from the external filename ({stem}.en.forced.srt etc.)
     tags: frozenset[str] = frozenset()
 
@@ -207,6 +208,7 @@ class SourceInfo:
     subs: list[SubTrack] = field(default_factory=list)
     has_chapters: bool = False
     attachments_bytes: int = 0  # the attachments' size (an ASS subtitle's fonts)
+    container: str = ""  # mkvmerge's container type ("Matroska", "MP4/QuickTime", ...); "" in older probes (MKV)
 
 
 # --- Job inputs ---------------------------------------------------------------

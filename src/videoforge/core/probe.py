@@ -3,6 +3,12 @@
 The two are joined on the track number (mkvmerge ``properties.number`` == MediaInfo ``track_id``: the MKV
 track number, the MP4 track ID, the TS PID). A Blu-ray TrueHD PID carries an AC-3 core that mkvmerge lists as
 a track of its own, under the same number; MediaInfo has one track for the PID, the TrueHD's.
+
+Outside Matroska, ffprobe (its stream headers: quick) gives the timing: each track's start, as a player starts
+it (an MP4's edit lists, a TS's timestamps), for the audio's delay to the video, and the exact frame rate.
+MediaInfo misses some MP4 edit lists, and has no frame rate for an x264 TS; it's the fallback without ffprobe.
+Its streams are joined on the number too (``id``), in mkvmerge's order (ffmpeg splits the AC-3 core out too).
+A TS's video start (``VideoInfo.start_ms``) is its offset to the earliest stream, from which mkvmerge times it.
 """
 
 from __future__ import annotations
@@ -26,8 +32,12 @@ from videoforge.core.classify import (
 from videoforge.core.models import AudioTrack, SourceInfo, SubTrack, VideoInfo
 from videoforge.core.video import hdr
 from videoforge.core.video.color import from_mediainfo
+from videoforge.core.video.remux import MATROSKA
 
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+TS = "MPEG transport stream"  # mkvmerge's container type for a TS / M2TS
 
 
 class ProbeError(RuntimeError):
@@ -49,6 +59,55 @@ def mkvmerge_identify(path: Path, mkvmerge: str) -> dict[str, Any]:
     if not data.get("container", {}).get("recognized", False):
         raise ProbeError(f"{path.name} is not a container mkvmerge recognizes")
     return data
+
+
+def ffprobe_streams(path: Path, ffprobe: str) -> list[dict[str, Any]]:
+    """ffprobe's streams (id, type, start time, frame rates); [] when it isn't there or can't read the file."""
+    entries = "stream=id,codec_type,start_time,avg_frame_rate,r_frame_rate"
+    try:
+        result = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries", entries, "-of", "json", str(path)],
+            capture_output=True,
+            check=False,
+            encoding="utf-8",
+            errors="replace",
+            creationflags=_NO_WINDOW,
+            timeout=120,
+        )
+        streams = json.loads(result.stdout).get("streams", []) if result.returncode == 0 else []
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return []
+    return streams if isinstance(streams, list) else []
+
+
+def _by_number(streams: list[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
+    """ffprobe's streams by track number (its id: "0x1100"), in its order."""
+    out: dict[int, list[dict[str, Any]]] = {}
+    for s in streams:
+        try:
+            out.setdefault(int(str(s.get("id")), 16), []).append(s)
+        except ValueError:
+            continue
+    return out
+
+
+def _start(stream: dict[str, Any] | None) -> float | None:
+    try:
+        return float(stream["start_time"]) if stream is not None else None
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _ff_rate(stream: dict[str, Any] | None) -> Fraction | None:
+    """ffprobe's frame rate: the average (a Blu-ray VC-1's r_frame_rate is the field rate), else the base one."""
+    for key in ("avg_frame_rate", "r_frame_rate"):
+        try:
+            rate = Fraction(str((stream or {}).get(key) or "0"))
+        except (ValueError, ZeroDivisionError):
+            continue
+        if rate > 0:
+            return rate
+    return None
 
 
 def _ms(ns: int | None) -> int:
@@ -74,17 +133,21 @@ def _int(value: Any) -> int | None:
 _NTSC = (24, 30, 48, 60, 120)  # the 1000/1001 rates MediaInfo writes rounded (23.976)
 
 
-def _frame_ns(mi: Any) -> int | None:
-    """The frame duration from MediaInfo's frame rate: an MP4's or a TS's (mkvmerge has one for an MKV only).
-    A rounded NTSC rate is taken as the exact one (23.976 -> 24000/1001), as mkvmerge would time it."""
-    try:
-        rate = Fraction(str(getattr(mi, "frame_rate", None) or 0))
-    except (ValueError, ZeroDivisionError):
-        return None
-    if rate <= 0:
+def _rate_ns(rate: Fraction | None) -> int | None:
+    """A frame rate's frame duration. A rounded NTSC rate is taken as the exact one (23.976 -> 24000/1001), as
+    mkvmerge would time it."""
+    if rate is None or rate <= 0:
         return None
     rate = next((Fraction(n * 1000, 1001) for n in _NTSC if abs(rate - Fraction(n * 1000, 1001)) < 0.002), rate)
     return round(1_000_000_000 / rate)
+
+
+def _frame_ns(mi: Any) -> int | None:
+    """The frame duration from MediaInfo's frame rate: an MP4's or a TS's (mkvmerge has one for an MKV only)."""
+    try:
+        return _rate_ns(Fraction(str(getattr(mi, "frame_rate", None) or 0)))
+    except (ValueError, ZeroDivisionError):
+        return None
 
 
 def _sar(width: int, height: int, props: dict[str, Any], mi: Any) -> Fraction:
@@ -105,8 +168,8 @@ def _sar(width: int, height: int, props: dict[str, Any], mi: Any) -> Fraction:
 
 
 def _delay(mi: Any, video_mi: Any) -> int:
-    """An audio track's delay to the video in ms: MediaInfo's (an MKV's, a TS's), else the tracks' MP4 edit lists
-    (Source_Delay). An empty edit starts a track late; a skipped start (B-frame reordering, encoder priming) is
+    """An audio track's delay to the video in ms, as MediaInfo has it (without ffprobe's start times): its
+    Video_Delay (an MKV's, a TS's), else the tracks' MP4 edit lists (Source_Delay), where it lists them. An empty edit starts a track late; a skipped start (B-frame reordering, encoder priming) is
     negative and starts it at 0, as a player shows it."""
     relative = getattr(mi, "delay_relative_to_video", None)
     if relative is not None:
@@ -117,8 +180,20 @@ def _delay(mi: Any, video_mi: Any) -> int:
     return max(edit, 0) - max(_int(getattr(video_mi, "source_delay", None)) or 0, 0)
 
 
-def probe(path: Path, mkvmerge: str) -> SourceInfo:
+def probe(path: Path, mkvmerge: str, ffprobe: str = "") -> SourceInfo:
+    """The source's tracks. With ffprobe, a source that isn't Matroska is timed by it too."""
     ident = mkvmerge_identify(path, mkvmerge)
+    streams = ffprobe_streams(path, ffprobe) if ffprobe and path.suffix.lower() not in MATROSKA else []
+    ff_tracks = _by_number(streams)
+    ff_video_start = _start(next((s for s in streams if s.get("codec_type") == "video"), None))
+    ff_starts = [t for t in (_start(s) for s in streams) if t is not None]
+    container = str(ident.get("container", {}).get("type") or "")
+
+    def ff_delay(stream: dict[str, Any] | None) -> int | None:
+        start = _start(stream)
+        return round((start - ff_video_start) * 1000) if start is not None and ff_video_start is not None else None
+
+    ff_seen: dict[int, int] = {}  # tracks taken so far per number (a TrueHD, then its AC-3 core)
     mi_all = MediaInfo.parse(str(path)).tracks
     mi_tracks = {t.track_id: t for t in mi_all if t.track_type in ("Video", "Audio", "Text") and t.track_id is not None}
     # A raw stream (.ac3, .flac, ...) has no track ids in MediaInfo: pair its audio tracks by order.
@@ -131,8 +206,15 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
 
     for track in ident.get("tracks", []):
         props = track.get("properties", {})
-        mi = mi_tracks.get(props.get("number"))
+        number = props.get("number")
+        mi = mi_tracks.get(number)
         kind = track.get("type")
+        ff = None
+        if isinstance(number, int):
+            taken = ff_seen.get(number, 0)
+            ff_seen[number] = taken + 1
+            same = ff_tracks.get(number, [])
+            ff = same[taken] if taken < len(same) else None
         language = lang.normalize(props.get("language_ietf") or props.get("language"))
         title = props.get("track_name") or ""
 
@@ -145,8 +227,10 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
             video = VideoInfo(
                 width=width,
                 height=height,
-                start_ms=_ms(props.get("minimum_timestamp")),
-                default_duration_ns=props.get("default_duration") or _frame_ns(mi),
+                start_ms=_ms(props.get("minimum_timestamp"))
+                if not (container == TS and ff_starts and ff_video_start is not None)
+                else round((ff_video_start - min(ff_starts)) * 1000),
+                default_duration_ns=props.get("default_duration") or _rate_ns(_ff_rate(ff)) or _frame_ns(mi),
                 frames=_int(getattr(mi, "frame_count", None)) or 0,
                 language=language,
                 sar_num=sar.numerator,
@@ -161,6 +245,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
             if mi is None and len(audio) < len(mi_audio) and mi_audio[len(audio)].track_id is None:
                 mi = mi_audio[len(audio)]
             pid = mi  # the stream's own: its delay holds for a core in it too
+            delay = ff_delay(ff)
             core = track["id"] in (props.get("multiplexed_tracks") or [])[1:]
             if core:
                 mi = None  # MediaInfo's track is the TrueHD's; mkvmerge's details are the core's
@@ -189,7 +274,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                     atmos=fmt.atmos,
                     dtsx=fmt.dtsx,
                     bitrate_kbps=round(bit_rate / 1000) if isinstance(bit_rate, int) else None,
-                    delay_ms=_delay(pid, mi_video),
+                    delay_ms=_delay(pid, mi_video) if delay is None else delay,
                     format_name=getattr(mi, "format", "") or track.get("codec", ""),
                     sample_rate=_int(getattr(mi, "sampling_rate", None)) or props.get("audio_sampling_frequency"),
                     bit_depth=(_int(getattr(mi, "bit_depth", None)) or props.get("audio_bits_per_sample"))
@@ -219,6 +304,7 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
                     element_count=int(count) if count else None,
                     size_bytes=_int(getattr(mi, "stream_size", None)),
                     number=props.get("number"),
+                    delay_ms=ff_delay(ff) or 0,
                 )
             )
 
@@ -230,4 +316,5 @@ def probe(path: Path, mkvmerge: str) -> SourceInfo:
         subs=subs,
         has_chapters=bool(ident.get("chapters")),
         attachments_bytes=sum(a.get("size") or 0 for a in ident.get("attachments", [])),
+        container=container,
     )

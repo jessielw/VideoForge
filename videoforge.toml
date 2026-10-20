@@ -14,6 +14,7 @@ truehdd = "tools/truehdd/truehdd.exe"
 qaac = "tools/qaac/qaac64.exe"
 opusenc = "tools/opus-tools/opusenc.exe"
 ffmpeg = "ffmpeg"
+# ffprobe (an MP4 / TS source's timing) is found next to ffmpeg unless set.
 x264 = "tools/x264/x264.exe"
 x265 = "tools/x265/x265.exe"
 # MP4 output (GPAC); tools/GPAC/mp4box.exe or on PATH.

@@ -7,7 +7,9 @@ audio file or copy of a track (Overrides.copies: mkvmerge takes a track once per
 input), and per external subtitle.
 
 Timing: the encode starts at 0. Source tracks are shifted by the source video's
-start offset so they line up with it. DeeZy output already carries the source's
+start offset so they line up with it (mkvmerge keeps an MKV's timestamps, and a TS's
+offset to its earliest stream, taken or not). From an MP4, mkvmerge starts the earliest
+track it takes at 0: those tracks go back by that one's delay to the video. DeeZy output already carries the source's
 "delay relative to video"; AAC starts at its first sample, so it gets the delay
 here. A copied track of an added audio file gets its own delay (e.g. from
 "DELAY 42ms" in its name).
@@ -116,6 +118,16 @@ def _sync(tid: int, ms: int) -> list[str]:
     return ["--sync", f"{tid}:{ms}"] if ms else []
 
 
+MP4 = "MP4/QuickTime"  # mkvmerge's container type for an MP4
+
+
+def _source_shift(plan: Plan, tracks: list[AudioTrack | SubTrack]) -> int:
+    """The --sync that lines up the source tracks one mkvmerge input takes with the encode."""
+    if plan.source.container == MP4:
+        return min((t.delay_ms for t in tracks), default=0)
+    return -(plan.source.video.start_ms if plan.source.video else 0)
+
+
 def mux_command(
     plan: Plan,
     encoded_audio: dict[int, Path],
@@ -183,10 +195,11 @@ def mux_command(
         if internal_subs
         else ["--no-subtitles"]
     )
+    shift = _source_shift(plan, [a.source for a in copied] + [s.source for s in internal_subs])
     for a in copied:
-        argv += _track_args(a.source.id, a) + _sync(a.source.id, -start_ms)
+        argv += _track_args(a.source.id, a) + _sync(a.source.id, shift)
     for s in internal_subs:
-        argv += _track_args(s.source.id, s) + _sync(s.source.id, -start_ms)
+        argv += _track_args(s.source.id, s) + _sync(s.source.id, shift)
     argv.append(str(plan.source.path))
 
     # 2+: encoded audio and external subtitles, one file each.
@@ -204,7 +217,7 @@ def mux_command(
                 "--audio-tracks",
                 str(tid),
             ]
-            shift = a.source.delay_ms if a.source.is_external else -start_ms
+            shift = a.source.delay_ms if a.source.is_external else _source_shift(plan, [a.source])
             argv += _track_args(tid, a) + _sync(tid, shift)
             argv.append(str(a.source.external_path or plan.source.path))
             audio_order.append(f"{file_id}:{tid}")

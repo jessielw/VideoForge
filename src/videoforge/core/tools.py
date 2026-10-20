@@ -53,6 +53,12 @@ TOOLS: tuple[ToolInfo, ...] = (
         "Decodes audio for the other encoders; its own FLAC, Opus, AAC, AC-3, E-AC-3",
         (("-version",),),
     ),
+    ToolInfo(
+        "ffprobe",
+        "ffprobe",
+        "Times an MP4 or TS source's tracks (their start, the frame rate); without it, MediaInfo's",
+        (("-version",),),
+    ),
     ToolInfo("qaac", "qaac", "AAC encoder (needs Apple's CoreAudioToolbox)", (("--check",),)),
     ToolInfo("opusenc", "opusenc", "Opus encoder (opus-tools)"),
     ToolInfo("deezy", "DeeZy", "Drives DEE for DDP and DDP Atmos encodes"),

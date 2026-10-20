@@ -8,8 +8,8 @@ from typing import Any
 from conftest import audio, plan_for, source
 
 from videoforge.core import probe as probe_mod
-from videoforge.core.execute.mux import mp4box_command, mux_issues
-from videoforge.core.models import AudioCodec as C, Severity, VideoInfo
+from videoforge.core.execute.mux import mp4box_command, mux_command, mux_issues
+from videoforge.core.models import AudioCodec as C, Overrides, Severity, VideoInfo
 from videoforge.core.pairing import MatchRules, discover, slot_files, sort_files
 
 RULES = MatchRules(encode_suffixes=("_job",), encode_extensions=(".h264", ".hevc"))
@@ -95,8 +95,46 @@ def test_an_m2ts_probe_times_its_video_and_splits_the_truehd_core(monkeypatch, t
     assert (ac3.codec, ac3.number, ac3.core) == (C.AC3, 4353, False)
 
 
+def test_ffprobe_times_a_ts_and_pairs_the_core_by_order(monkeypatch, tmp_path):
+    """ffprobe's start times give the delay (here the TrueHD PID 12 ms ahead of the video) and its average rate the
+    frame duration, over MediaInfo's; its streams pair by id, and two under one PID (a TrueHD, its core) by order."""
+    ident = {
+        "container": {"recognized": True, "type": "MPEG transport stream"},
+        "tracks": [
+            {"id": 0, "type": "video", "codec": "AVC", "properties": {"number": 4113, "pixel_dimensions": "1920x1080"}},
+            {"id": 1, "type": "audio", "codec": "TrueHD", "properties": {"number": 4352, "multiplexed_tracks": [1, 2]}},
+            {"id": 2, "type": "audio", "codec": "AC-3", "properties": {"number": 4352, "multiplexed_tracks": [1, 2]}},
+            {"id": 3, "type": "audio", "codec": "AC-3", "properties": {"number": 4353}},
+        ],
+    }
+    streams = [
+        {"id": "0x1011", "codec_type": "video", "start_time": "11.650667", "avg_frame_rate": "24000/1001"},
+        {"id": "0x1100", "codec_type": "audio", "start_time": "11.638667", "avg_frame_rate": "0/0"},
+        {"id": "0x1100", "codec_type": "audio", "start_time": "11.640667", "avg_frame_rate": "0/0"},
+        {"id": "0x1101", "codec_type": "audio", "start_time": "12.150667", "avg_frame_rate": "0/0"},
+    ]
+    tracks = [_Track(track_type="Video", track_id=4113, frame_rate_mode="VFR")]  # an x264 TS: no rate
+    monkeypatch.setattr(probe_mod, "mkvmerge_identify", lambda *_: ident)
+    monkeypatch.setattr(probe_mod.MediaInfo, "parse", lambda *_: _Track(tracks=tracks))
+    calls = []
+    monkeypatch.setattr(probe_mod, "ffprobe_streams", lambda path, ffprobe: calls.append(path) or streams)
+    info = probe_mod.probe(tmp_path / "Clip.ts", "mkvmerge", "ffprobe")
+    assert info.video is not None and info.video.default_duration_ns == 41708333
+    assert info.video.start_ms == 12 and info.container == "MPEG transport stream"  # the TrueHD's 12 ms first
+    assert [a.delay_ms for a in info.audio] == [-12, -10, 500]
+    # Without ffprobe (or for an MKV, which mkvmerge and MediaInfo time), MediaInfo's.
+    info = probe_mod.probe(tmp_path / "Clip.ts", "mkvmerge")
+    assert (
+        info.video is not None
+        and info.video.default_duration_ns is None
+        and [a.delay_ms for a in info.audio] == [0] * 3
+    )
+    probe_mod.probe(tmp_path / "Clip.mkv", "mkvmerge", "ffprobe")
+    assert calls == [tmp_path / "Clip.ts"]
+
+
 def test_an_mp4_audio_delay_comes_from_its_edit_lists():
-    """No Video_Delay in an MP4: an empty edit (+500) delays the audio; the video's skipped start (-80, its B-frame
+    """Without ffprobe, MediaInfo's: no Video_Delay in an MP4, an empty edit (+500) delays the audio; the video's skipped start (-80, its B-frame
     reorder) doesn't move it, nor does an AAC's priming (-21)."""
     video = _Track(source_delay="-80")
     assert probe_mod._delay(_Track(source_delay="500"), video) == 500
@@ -127,3 +165,24 @@ def test_mp4box_picks_an_m2ts_track_by_its_pid(tmp_path):
         (Severity.BLOCK, "mux.mp4_core")
     ]
     assert not [i for i in mux_issues(plan, "mkv") if i.code == "mux.mp4_core"]
+
+
+def test_mkvmerge_lines_up_an_mp4s_copied_tracks_by_their_delay(tmp_path):
+    """From an MP4, mkvmerge starts the earliest track it takes at 0: they go back by its delay to the video (here
+    0.5 and 0.8 s late). A TS keeps its offset to the earliest stream: its tracks shift by the video's from there."""
+    src = source([audio(C.AC3, "2.0", "en", index=0), audio(C.AC3, "2.0", "ja", index=1)], name="Movie.mp4")
+    src.path, src.container = tmp_path / "Movie.mp4", "MP4/QuickTime"
+    src.video = VideoInfo(1920, 1080, default_duration_ns=41708333)
+    src.audio[0].delay_ms, src.audio[1].delay_ms = 500, 800
+    plan = plan_for(src, source(name="enc.h264"), Overrides(copies=["id:2+1"]))
+    plan.encode_path = Path("enc.h264")
+
+    def syncs(argv: list[str]) -> list[str]:
+        return [argv[i + 1] for i, a in enumerate(argv) if a == "--sync"]
+
+    argv = mux_command(plan, {}, Path("out.mkv.partial"), "mkvmerge", (".h264",))
+    assert syncs(argv) == ["1:500", "2:500", "2:800"]  # the source's two tracks, then the copy's own input
+
+    src.container, src.video.start_ms = "MPEG transport stream", 12
+    argv = mux_command(plan, {}, Path("out.mkv.partial"), "mkvmerge", (".h264",))
+    assert syncs(argv) == ["1:-12", "2:-12", "2:-12"]
