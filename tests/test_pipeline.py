@@ -620,8 +620,8 @@ def test_cancel_token_follows_its_parent():
 
 # A tool that starts a child: both print their name, a count and their priority (Windows' class, else the nice
 # value) every 20 ms until killed.
-_TICKER = """
-import os, subprocess, sys, time
+_PRIORITY = """
+import os
 
 def priority():
     if os.name != "nt":
@@ -631,6 +631,11 @@ def priority():
     k.GetCurrentProcess.restype = ctypes.c_void_p
     k.GetPriorityClass.argtypes = [ctypes.c_void_p]
     return k.GetPriorityClass(k.GetCurrentProcess())
+"""
+_TICKER = (
+    _PRIORITY
+    + """
+import subprocess, sys, time
 
 role = sys.argv[1]
 if role == "parent":
@@ -641,8 +646,10 @@ while True:
     n += 1
     time.sleep(0.02)
 """
+)
 _IDLE = 0x40 if os.name == "nt" else 19
-_NORMAL = 0x20 if os.name == "nt" else 0
+# Priority.NORMAL leaves a tool at the one it inherits (CI runners may start us below normal)
+_INHERITED = int(subprocess.check_output([sys.executable, "-c", _PRIORITY + "print(priority())"]))
 
 
 class _Ticker:
@@ -721,7 +728,7 @@ def test_priority_reaches_a_tool_and_its_children(tmp_path):
     ticker = _Ticker(tmp_path, CancelToken())
     try:
         ticker.wait_for(ticker.both_since(0))
-        assert {p for _, p in ticker.lines} == {_NORMAL}
+        assert {p for _, p in ticker.lines} == {_INHERITED}
         ticker.token.set_priority(Priority.IDLE)
         assert ticker.token.priority is Priority.IDLE
         n = len(ticker.lines)
