@@ -125,6 +125,11 @@ Machine-specific settings (tool paths, default profile) go in `videoforge.local.
 `videoforge.toml`. Its tables are merged over the defaults. The Settings page's changes are kept in the
 app's database and win over both.
 
+Extra encoder, audio, and mux arguments use double quotes around values with spaces, for example
+`--chapters "C:\My Clips\chapters.txt"`. Backslashes stay literal except before a double quote:
+use `\"` for a literal quote and double trailing backslashes before a closing quote.
+This syntax is the same on Windows and Linux; apostrophes and shell operators are literal.
+
 ## A short tour
 
 - **New jobs:** add a source MKV, MP4 or M2TS (or a folder of episodes for a batch), plus subtitle files,

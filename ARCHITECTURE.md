@@ -16,6 +16,8 @@ src/videoforge/
     probe.py, classify.py, lang.py, mediainfo_text.py, pairing.py
     config.py            Tool paths (mkvmerge, x264, x265, vspipe, VS plugin folder, ...); mkvpropedit / mkvextract
                          found next to mkvmerge and ffprobe next to ffmpeg unless set
+    arguments.py         Extra tool arguments: Windows double-quote/backslash rules on every platform,
+                         passed as argv without a shell; apostrophes are literal, unclosed double quotes rejected
     profile.py           Profile ABC: plan rules, checks, track properties, video defaults
     jobs.py              probe_inputs / plan_job
     job.py               JobSpec (what to build, persisted) + JobState (runtime, persisted)

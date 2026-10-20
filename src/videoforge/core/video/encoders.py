@@ -18,8 +18,8 @@ from collections.abc import Sequence
 from fractions import Fraction
 from pathlib import Path
 import re
-import shlex
 
+from videoforge.core.arguments import split_args
 from videoforge.core.models import Issue, Severity, VideoColor, VideoInfo
 from videoforge.core.video.color import color_args, hdr10
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
@@ -121,7 +121,7 @@ def _setting(settings: EncoderSettings, name: str) -> str | None:
     for key, v in settings.options.items():
         if key.lstrip("-") == name:
             value = v
-    args = shlex.split(settings.extra, posix=False) if settings.extra.strip() else []
+    args = split_args(settings.extra)
     for i, arg in enumerate(args):
         flag, eq, v = arg.partition("=")
         if flag.startswith("--") and flag[2:] == name:
@@ -222,7 +222,7 @@ def encoder_command(
     if qpfile is not None:
         argv += ["--qpfile", str(qpfile)]
     if settings.extra.strip():
-        argv += shlex.split(settings.extra, posix=False)
+        argv += split_args(settings.extra)
     argv += ["--output", str(output), "-"]
     return argv
 
@@ -262,7 +262,7 @@ def ffmpeg_command(
     argv += _options(VP9_DEFAULTS if settings.encoder is Encoder.VP9 else {}, "-")
     argv += _options(settings.options, "-")
     if settings.extra.strip():
-        argv += shlex.split(settings.extra, posix=False)
+        argv += split_args(settings.extra)
     argv += ["-an", "-f", "null" if first else "ivf", str(output)]
     return argv
 
@@ -303,7 +303,7 @@ def svtav1_command(
     argv += ["--progress", "2"]
     argv += _options(settings.options)
     if settings.extra.strip():
-        argv += shlex.split(settings.extra, posix=False)
+        argv += split_args(settings.extra)
     argv += ["--output", str(output)]
     return argv
 

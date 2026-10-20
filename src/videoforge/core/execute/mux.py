@@ -30,10 +30,10 @@ from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
 import re
-import shlex
 from typing import Protocol
 
 from videoforge.core import lang
+from videoforge.core.arguments import split_args as split_args
 from videoforge.core.config import AppConfig
 from videoforge.core.execute.audio import delay_in_encode
 from videoforge.core.models import (
@@ -381,11 +381,6 @@ def mp4box_command(
         argv += ["-chap", str(plan.chapters_path)]
     argv += [*(extra or []), "-new", str(output)]
     return argv
-
-
-def split_args(text: str) -> list[str]:
-    """The user's extra arguments, split like a command line (Windows paths keep their backslashes)."""
-    return shlex.split(text, posix=False)
 
 
 @dataclass(slots=True)

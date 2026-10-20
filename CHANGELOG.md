@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Correctness fixes: quoted arguments.** Encoder, audio, and mux extra arguments use one parser that removes
+  double-quote grouping while preserving Windows paths, empty arguments, and escaped literal quotes.
+
 - **Correctness fixes: edited burn files.** Changing an external subtitle invalidates the video encode and
   preview. VobSub's `.idx` and `.sub` files are tracked together for extraction, presence, and reuse.
 

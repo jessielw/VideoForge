@@ -23,9 +23,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-import shlex
 import sys
 
+from videoforge.core.arguments import split_args
 from videoforge.core.config import Tools
 from videoforge.core.models import AudioAction, AudioCodec, Layout, PlannedAudio
 
@@ -696,7 +696,7 @@ def _opt(p: PlannedAudio, key: str, settings: AudioSettings | None = None) -> st
 
 
 def _extra_args(p: PlannedAudio) -> list[str]:
-    return shlex.split(p.options.get("extra", ""), posix=False)
+    return split_args(p.options.get("extra", ""))
 
 
 _FFMPEG_ARGS = {
