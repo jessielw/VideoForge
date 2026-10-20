@@ -212,7 +212,9 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   source frame) onto the clip; after a custom body; never at the `source` stage (auto crop). A source track gets
   a `burn.extract` step among the index steps (`mkvextract tracks` to `burn.<id>.<ext>` in the work folder), and
   `indexed()` waits for that file, so the preview (which opens only an indexed job) can draw it (from an MP4 or a
-  TS, `burn.remux` copies the track into `burn.<id>.mks` first: see below). The filter
+  TS, `burn.remux` copies the track into `burn.<id>.mks` first: see below). A nonzero timing offset also
+  uses this remux for MKV tracks and identified external extracts, with `--sync` aligning subtitle
+  timestamps to the decoded video's zero origin before extraction. Standalone added files stay as timed. The filter
   menu's `subtitle` category (after the crop) holds a plain `sub.TextFile` preset for a file typed in.
 - Sources other than MKV (`pairing.SOURCE_EXTENSIONS`: MP4, M2TS / TS), read straight from the file as StaxRip
   does (its source filters open them; it demuxes audio with ffmpeg or MP4Box, VideoForge's audio steps read the

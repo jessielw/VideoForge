@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Correctness fixes: subtitle burn timing.** Source subtitles and identified external extracts are shifted
+  to the first decoded video frame before rendering. Standalone subtitle files keep their own timing.
+
 - **Correctness fixes: VFR timing.** Extracted timestamps are normalized to the first video frame, keeping
   audio and subtitles aligned when the source video starts after zero.
 

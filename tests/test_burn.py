@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 
 from conftest import source, sub
+import pytest
 
 from videoforge.core.config import AppConfig, Tools
 from videoforge.core.job import JobSpec
@@ -19,6 +21,7 @@ from videoforge.core.models import (
     SubRule,
     TemplateSubs,
     TrackOverride,
+    VideoInfo,
 )
 from videoforge.core.pipeline.build import index_steps, indexed
 from videoforge.core.template import apply_subs
@@ -131,3 +134,58 @@ def test_a_templates_burn_rule_takes_the_first_track_it_matches():
     out = apply_subs(Overrides(), rules, [forced, full])
     assert out.tracks == {"id:10": BURN}
     assert out.order == ["id:11"]
+
+
+def test_source_burns_shift_but_standalone_files_do_not(tmp_path):
+    from test_pipeline import APP
+
+    job = JobSpec(inputs=JobInputs(tmp_path / "source.mkv"), profile="manual")
+    video = VideoInfo(640, 360, start_ms=500)
+    for fmt in (F.SRT, F.ASS, F.PGS, F.VOBSUB):
+        steps = index_steps(job, APP, video, sub(fmt))
+        remux = next(s for s in steps if s.id == "burn.remux")
+        assert remux.argvs[0][-3:] == ("--sync", "10:-500", str(job.inputs.source))
+    added = sub(F.SRT, external=str(tmp_path / "extracted.srt"))
+    assert burn.shift_ms(added, job.inputs.source, video) == 0
+    added.extracted_from = 2
+    assert burn.file(added, job.work_dir).parent == job.work_dir
+    steps = index_steps(job, APP, video, added)
+    assert next(s for s in steps if s.id == "burn.remux").argvs[0][-3:] == (
+        "--sync",
+        "0:-500",
+        str(added.external_path),
+    )
+
+
+def test_real_burn_cue_uses_video_origin(tmp_path):
+    from videoforge.core.config import load_app_config
+    from videoforge.core.probe import probe
+    from videoforge.core.video.vs import configure
+
+    app = load_app_config()
+    if not Path(app.tools.mkvmerge).is_file():
+        pytest.skip("needs MKVToolNix")
+    configure(app.tools.vs_plugins)
+    import numpy as np
+    import vapoursynth as vs
+
+    cue = tmp_path / "cue.srt"
+    cue.write_text("1\n00:00:01,200 --> 00:00:02,000\nTiming cue\n", encoding="utf-8")
+    src = tmp_path / "source.mkv"
+    subprocess.run([app.tools.mkvmerge, "-o", str(src), str(cue)], check=True, capture_output=True)
+    track = probe(src, app.tools.mkvmerge).subs[0]
+    job = JobSpec(inputs=JobInputs(src), profile="manual")
+    job.work_dir.mkdir()
+    steps = index_steps(job, app, VideoInfo(640, 360, start_ms=500), track)
+    for step in steps:
+        if step.id.startswith("burn."):
+            for argv in step.argvs:
+                subprocess.run(argv, check=True, capture_output=True)
+    assert "00:00:00,700 --> 00:00:01,500" in burn.file(track, job.work_dir).read_text(encoding="utf-8")
+    plain = vs.core.std.BlankClip(width=640, height=360, length=75, fpsnum=25, format=vs.YUV420P8)
+    namespace = {"core": vs.core, "clip": plain}
+    exec("\n".join(burn.lines(track, job.work_dir)), namespace)  # noqa: S102 - generated script
+    rendered = namespace["clip"]
+    for frame, visible in ((17, False), (18, True), (37, True), (38, False)):
+        with plain.get_frame(frame) as a, rendered.get_frame(frame) as b:
+            assert bool(np.any(np.asarray(a[0]) != np.asarray(b[0]))) is visible

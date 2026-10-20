@@ -111,17 +111,17 @@ def job_script(spec: JobSpec, video: VideoInfo | None, burn: SubTrack | None = N
 
 
 def mkvextract_input(
-    app: AppConfig, source: Path, kind: str, track: int, out: Path, step_id: str
+    app: AppConfig, source: Path, kind: str, track: int, out: Path, step_id: str, shift_ms: int = 0
 ) -> tuple[list[Step], Path, int]:
     """Where mkvextract reads a source's track: the source itself (an MKV), else out, an MKV of the track
     alone that the step returned writes first (core/video/remux.py). The file and the track's id in it."""
-    if not remux.needed(source):
+    if not remux.needed(source) and not shift_ms:
         return [], source, track
     what = "video" if kind == "video" else "subtitle"
     step = Step(
         step_id,
         f"Copy the {what} track into an MKV (mkvmerge)",
-        argvs=(remux.argv(app.tools.mkvmerge, source, kind, track, out),),
+        argvs=(remux.argv(app.tools.mkvmerge, source, kind, track, out, shift_ms),),
         outputs=(out,),
         inputs=(source,),
         weight=0.3,
@@ -170,9 +170,20 @@ def index_steps(
             ),
         ]
 
-    if burn is not None and burn.external_path is None:
+    if burn is not None and (burn.external_path is None or burn.extracted_from is not None):
         sub = burn_in.file(burn, work)
-        copied, mkv, track = mkvextract_input(app, source, "subtitles", burn.id, sub.with_suffix(".mks"), "burn.remux")
+        subtitle_source = burn.external_path or source
+        if burn.external_path is not None and burn.format in burn_in.IMAGE and sub.suffix == ".idx":
+            subtitle_source = subtitle_source.with_suffix(".idx")
+        copied, mkv, track = mkvextract_input(
+            app,
+            subtitle_source,
+            "subtitles",
+            0 if burn.external_path else burn.id,
+            sub.with_suffix(".mks"),
+            "burn.remux",
+            burn_in.shift_ms(burn, source, video),
+        )
         steps += copied
         steps.append(
             Step(

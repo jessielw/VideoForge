@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-from videoforge.core.models import Issue, Overrides, Severity, SubFormat, SubTrack, track_key
+from videoforge.core.models import Issue, Overrides, Severity, SubFormat, SubTrack, VideoInfo, track_key
 
 # What SubText reads, and the extension mkvextract's file takes (VobSub: it writes the .idx and its .sub).
 EXTENSIONS = {SubFormat.SRT: ".srt", SubFormat.ASS: ".ass", SubFormat.PGS: ".sup", SubFormat.VOBSUB: ".idx"}
@@ -57,10 +57,19 @@ def is_image(track: SubTrack) -> bool:
 
 def file(track: SubTrack, work: Path) -> Path:
     """The file the script reads: an added one where it is (a VobSub by its .idx), a source track's extract."""
-    if track.external_path is not None:
+    if track.external_path is not None and track.extracted_from is None:
         path = track.external_path
         return path.with_suffix(".idx") if track.format is SubFormat.VOBSUB else path
     return work / f"burn.{track.id}{EXTENSIONS.get(track.format, '.sub')}"
+
+
+def shift_ms(track: SubTrack, source: Path, video: VideoInfo | None) -> int:
+    """Shift a source subtitle to the decoded video's origin; MP4 remux starts its selected track at zero."""
+    if track.external_path is not None:
+        return -(video.start_ms if video else 0) if track.extracted_from is not None else 0
+    if source.suffix.lower() == ".mp4":
+        return track.delay_ms
+    return -(video.start_ms if video else 0)
 
 
 def extract_argv(mkvextract: str, source: Path, track: SubTrack, out: Path) -> tuple[str, ...]:

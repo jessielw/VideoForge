@@ -17,11 +17,12 @@ def needed(source: Path) -> bool:
     return source.suffix.lower() not in MATROSKA
 
 
-def argv(mkvmerge: str, source: Path, kind: str, track: int, out: Path) -> tuple[str, ...]:
+def argv(mkvmerge: str, source: Path, kind: str, track: int, out: Path, shift_ms: int = 0) -> tuple[str, ...]:
     """mkvmerge copying the source's track (kind: "video" or "subtitles", by mkvmerge id) alone into out."""
     pick = {
         "video": ("--video-tracks", str(track), "--no-subtitles"),
         "subtitles": ("--no-video", "--subtitle-tracks", str(track)),
     }[kind]
     rest = ("--no-audio", "--no-chapters", "--no-attachments", "--no-global-tags", "--no-track-tags")
-    return (mkvmerge, "--ui-language", "en", "--output", str(out), *pick, *rest, str(source))
+    sync = ("--sync", f"{track}:{shift_ms}") if shift_ms else ()
+    return (mkvmerge, "--ui-language", "en", "--output", str(out), *pick, *rest, *sync, str(source))
