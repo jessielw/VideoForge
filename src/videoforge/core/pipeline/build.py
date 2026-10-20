@@ -37,10 +37,11 @@ from videoforge.core.job import JobSpec
 from videoforge.core.models import Plan, PlannedAudio, SubTrack, VideoColor, VideoInfo
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.video import burn as burn_in, hdr, info, remux, target, vfr
-from videoforge.core.video.encoders import encoder_command, vspipe_command
+from videoforge.core.video.color import container_codes
+from videoforge.core.video.encoders import TOOLS, encoder_command, qpfile_frames, stats_path, vspipe_command
 from videoforge.core.video.qpf import make_qpf, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
-from videoforge.core.video.settings import Encoder, EncoderSettings, SourceFilter
+from videoforge.core.video.settings import EncoderSettings, SourceFilter
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -282,7 +283,7 @@ def video_steps(
         steps.append(chapters_step(source_fps))
         qpfile = files.qpfile
 
-    exe = app.tools.x265 if enc.encoder is Encoder.X265 else app.tools.x264
+    exe = getattr(app.tools, TOOLS[enc.encoder])
     sar = spec.video.output_sar(v.width, v.height, v.sar) if v is not None else None
     color = v.color if v is not None else None
     pipe = tuple(vspipe_command(app.tools.vspipe, script))
@@ -370,6 +371,10 @@ def video_steps(
         )
         return enc if found is None else replace(enc, bitrate_kbps=found.kbps)
 
+    # VP8 / VP9 (ffmpeg) force the qpfile's frames as keyframes: read when the encode's turn comes (the chapters
+    # step writes it), so the encode refreshes then.
+    keyframes = qpfile is not None and enc.encoder.libvpx
+
     def encodes(color: VideoColor | None) -> list[Step]:
         command = partial(
             encoder_command,
@@ -380,6 +385,7 @@ def video_steps(
             hdr10plus=hdr10plus,
             dolby_vision=dolby_vision,
             dv_profile=dv_profile,
+            keyframes=qpfile_frames(qpfile) if keyframes and qpfile is not None else (),
         )
         if enc.passes != 2:
             argv = command(enc, output=out)
@@ -394,7 +400,7 @@ def video_steps(
                     weight=60,
                 )
             ]
-        stats = work / "video.stats"
+        stats = stats_path(work, enc)
         first = command(sized(False), output=Path(os.devnull), pass_number=1, stats=stats)
         second = command(sized(True), output=out, pass_number=2, stats=stats)
         # A target size's pass 2 waits for the audio encodes (run_steps), whose files its bitrate counts.
@@ -421,11 +427,12 @@ def video_steps(
         ]
 
     fel = baked_el(spec, v) is not None and color is not None
-    if not fel and not target.applies(enc):
+    if not fel and not target.applies(enc) and not keyframes:
         return steps + encodes(color)
     # A baked FEL's HDR10 values come from the source's RPU, read when the encode's turn comes (the steps
     # before it extract the RPU); until then (the Encoder tab before a run) the source's. A target size's
-    # bitrate is worked out again then too: by the script's length and the files the steps before it wrote.
+    # bitrate is worked out again then too: by the script's length and the files the steps before it wrote; and
+    # a VP8 / VP9 encode's keyframes, by the qpfile.
     source_color, dovi_tool = color, app.tools.dovi_tool
 
     def fel_color() -> VideoColor | None:
@@ -526,9 +533,15 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
             return None, timestamps
         return found.fps, timestamps if timestamps is not None and vfr.fits(timestamps, found.frames) else None
 
+    # A VP8 / VP9 encode's stream has no pixel aspect and little colour: the mux tags the track with them.
+    sar, tags = None, None
+    if spec.encodes_video and spec.encoder.encoder.libvpx and video is not None:
+        sar = spec.video.output_sar(video.width, video.height, video.sar)
+        tags = container_codes(video.color) if spec.encoder.source_color else None
+
     def mux_step(fps: Fraction | None, stamps: Path | None) -> Step:
         try:
-            argv = tuple(muxer.command(plan, encoded, unfinished, app, extra, fps, stamps))
+            argv = tuple(muxer.command(plan, encoded, unfinished, app, extra, fps, stamps, sar=sar, color=tags))
         except MuxError:
             if fps is not None or not spec.encodes_video:
                 raise

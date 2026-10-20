@@ -6,6 +6,7 @@ in tools/vs-plugins and the encoders in tools/; they skip when those are missing
 
 from __future__ import annotations
 
+from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 import shutil
@@ -15,10 +16,21 @@ import numpy as np
 import pytest
 
 from videoforge.core.config import PROJECT_ROOT
-from videoforge.core.models import VideoColor
+from videoforge.core.models import VideoColor, VideoInfo
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video import crop as autocrop, vs as vsx
-from videoforge.core.video.encoders import encoder_command, output_name, progress, rate, vspipe_command
+from videoforge.core.video.encoders import (
+    VP8_CRF_CAP,
+    encoder_command,
+    issues as encoder_issues,
+    output_name,
+    progress,
+    progress_line,
+    qpfile_frames,
+    rate,
+    stats_path,
+    vspipe_command,
+)
 from videoforge.core.video.filters import PRESETS
 from videoforge.core.video.script import build_script, script_parts
 from videoforge.core.video.settings import (
@@ -166,6 +178,76 @@ def test_encode_keeps_the_pixel_aspect():
     assert "--sar" not in encoder_command("x265", EncoderSettings(Encoder.X265), output=Path("v.hevc"), sar=Fraction(1))
 
 
+def test_vp9_through_ffmpeg(tmp_path):
+    """VP9 runs as StaxRip's ffmpeg encoder writes it: -crf with -b:v 0, the preset as -cpu-used, its VP9
+    defaults before the job's options (which win: ffmpeg takes the last), the chapters' keyframes forced, into
+    an IVF."""
+    s = EncoderSettings(Encoder.VP9, crf=31.4, preset="2", depth=10, options={"tile-columns": "2"}, extra="-g 240")
+    color = VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", 2, P3_1000, 1000, 400)
+    argv = encoder_command("ffmpeg", s, frames=48, output=Path("v.ivf"), color=color, keyframes=[0, 24])
+    assert argv[:9] == ["ffmpeg", "-hide_banner", "-y", "-f", "yuv4mpegpipe", "-i", "-", "-c:v", "libvpx-vp9"]
+    assert argv[argv.index("-frames:v") + 1] == "48" and argv[argv.index("-cpu-used") + 1] == "2"
+    assert argv[argv.index("-crf") : argv.index("-crf") + 4] == ["-crf", "31", "-b:v", "0"]  # libvpx takes whole ones
+    assert argv[argv.index("-color_trc") + 1] == "smpte2084" and argv[argv.index("-colorspace") + 1] == "bt2020nc"
+    assert argv[argv.index("-color_range") + 1] == "tv" and "--master-display" not in argv
+    assert argv[argv.index("-force_key_frames") + 1] == "expr:eq(n,0)+eq(n,24)"
+    tiles = [i for i, a in enumerate(argv) if a == "-tile-columns"]
+    assert [argv[i + 1] for i in tiles] == ["6", "2"] and argv[argv.index("-row-mt") + 1] == "1"
+    assert argv[-6:] == ["-g", "240", "-an", "-f", "ivf", "v.ivf"]
+    assert "--sar" not in argv and output_name(s) == "video.ivf"
+
+    two = replace(s, rate_control=RateControl.TWO_PASS, bitrate_kbps=4000)
+    stats = stats_path(tmp_path, two)
+    assert stats.name == "video.stats-0.log"  # what ffmpeg writes for -passlogfile video.stats
+    first = encoder_command("ffmpeg", two, output=Path("NUL"), pass_number=1, stats=stats, keyframes=[0, 24])
+    assert first[first.index("-b:v") + 1] == "4000k" and first[first.index("-pass") + 1] == "1"
+    assert first[first.index("-passlogfile") + 1] == str(tmp_path / "video.stats")
+    assert first[-3:] == ["-f", "null", "NUL"]
+    # forced in pass 1 too, libvpx leaves them out of pass 2: the last pass only
+    assert "-force_key_frames" not in first
+    second = encoder_command("ffmpeg", two, output=Path("v.ivf"), pass_number=2, stats=stats, keyframes=[0, 24])
+    assert second[second.index("-force_key_frames") + 1] == "expr:eq(n,0)+eq(n,24)"
+    with pytest.raises(ValueError):
+        encoder_command("ffmpeg", two, output=Path("v.ivf"))
+    assert stats_path(tmp_path, EncoderSettings()).name == "video.stats"
+
+
+def test_vp8_and_issues():
+    vp8 = EncoderSettings(Encoder.VP8, preset="", rate_control=RateControl.ABR, bitrate_kbps=2500)
+    argv = encoder_command("ffmpeg", vp8, output=Path("v.ivf"), color=VideoColor("bt709", "bt470bg", "gbr", "full"))
+    assert argv[argv.index("-c:v") + 1] == "libvpx" and argv[argv.index("-b:v") + 1] == "2500k"
+    assert "-cpu-used" not in argv and "-tile-columns" not in argv  # VP9's defaults only
+    # ffmpeg's own names for these
+    assert argv[argv.index("-color_trc") + 1] == "gamma28" and argv[argv.index("-colorspace") + 1] == "rgb"
+    assert argv[argv.index("-color_range") + 1] == "pc"
+
+    # -b:v 0 is ffmpeg's 256 kbit/s cap on VP8's constrained quality: a ceiling it doesn't reach instead
+    crf = encoder_command("ffmpeg", replace(vp8, rate_control=RateControl.CRF, crf=20), output=Path("v.ivf"))
+    assert crf[crf.index("-crf") : crf.index("-crf") + 4] == ["-crf", "20", "-b:v", VP8_CRF_CAP]
+
+    assert encoder_issues(vp8, None) == []
+    codes = [i.code for i in encoder_issues(replace(vp8, depth=10, preset="slower"), None)]
+    assert codes == ["video.vp8_depth", "video.vpx_preset"]
+    assert [i.code for i in encoder_issues(replace(vp8, preset="4"), None)] == ["video.vp8_speed"]
+    assert encoder_issues(replace(vp8, preset="3"), None) == []
+    assert encoder_issues(replace(vp8, encoder=Encoder.VP9, preset="5"), None) == []  # VP8's alone
+    hdr10 = VideoInfo(
+        3840, 2160, color=VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", None, P3_1000, 1000, 400)
+    )
+    assert [i.code for i in encoder_issues(replace(vp8, encoder=Encoder.VP9, preset="-3"), hdr10)] == [
+        "video.vpx_hdr10"
+    ]
+    assert encoder_issues(replace(vp8, encoder=Encoder.VP9, source_color=False), hdr10) == []
+    assert encoder_issues(EncoderSettings(Encoder.X265, depth=10, preset="slower"), hdr10) == []
+
+
+def test_qpfile_frames(tmp_path):
+    qpf = tmp_path / "c.qpf"
+    assert qpfile_frames(qpf) == []  # not written yet
+    qpf.write_text("0 I\n1234 I -1\n\n5678 K\n", encoding="utf-8")
+    assert qpfile_frames(qpf) == [0, 1234, 5678]
+
+
 def test_progress_lines():
     assert progress("[x264] [ 12.5%] 125/1000 frames, 30.1 fps, 9000 kb/s, eta 0:00:29") == 0.125
     assert progress("[x265] [50.0%] 500/1000 frames, 4.12 fps") == 0.5
@@ -176,6 +258,9 @@ def test_progress_lines():
     patman = "[x264] [69.9%] 1006/1440 Frames @ 201.8 FPS | 5878.2 kb/s | 0:00:04 [-0:01:02] | 30.80 MB [44.09 MB]  "
     assert progress(patman) == pytest.approx(0.699)
     assert progress("[x265] 8 Frames @ 13.61 FPS | 48387 kb/s | 2.02 MB  ", frames=80) == 0.1
+    ffmpeg = "[ffmpeg] frame=  120 fps= 23 q=0.0 size=    1024KiB time=00:00:05.00 bitrate=1677.7kbits/s speed=0.96x"
+    assert progress(ffmpeg, frames=480) == 0.25 and progress(ffmpeg) is None and progress_line(ffmpeg)
+    assert not progress_line("[ffmpeg] size=    1024KiB time=00:00:05.00 bitrate= 192.0kbits/s speed=40x")  # audio
 
 
 def test_rate_lines():
@@ -188,6 +273,7 @@ def test_rate_lines():
     assert rate("[x265] 8 Frames @ 13.61 FPS | 48387 kb/s | 2.02 MB  ") == (13.61, None)
     assert rate("[vspipe] Frame: 50/200 (12.3 fps)") == (None, None)  # it reads ahead: not the encode's speed
     assert rate("[vspipe] Frame: 50/200") == (None, None)
+    assert rate("[ffmpeg] frame=  120 fps= 23.5 q=0.0 size=    1024KiB time=00:00:05.00") == (23.5, None)
 
 
 # --- auto-crop ----------------------------------------------------------------------
@@ -468,7 +554,7 @@ P3_1000 = "G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50)
 
 
 @needs_vs
-@pytest.mark.parametrize("encoder", list(Encoder))
+@pytest.mark.parametrize("encoder", [Encoder.X264, Encoder.X265])
 def test_vspipe_into_encoder(clip_file, tmp_path, encoder):
     from videoforge.core.config import default_vspipe
     from videoforge.core.execute import process
@@ -498,6 +584,56 @@ def test_vspipe_into_encoder(clip_file, tmp_path, encoder):
     if encoder is Encoder.X265:
         assert video.mastering_display_luminance == "min: 0.0050 cd/m2, max: 1000 cd/m2"
         assert video.maximum_content_light_level == "1000 cd/m2"
+
+
+@needs_vs
+@pytest.mark.parametrize("encoder", [Encoder.VP8, Encoder.VP9])
+def test_vspipe_into_libvpx_and_mux(clip_file, tmp_path, encoder):
+    """A real VP8 / VP9 encode (ffmpeg) with the chapters' keyframe forced, muxed to MKV and MP4: both come out
+    with the anamorphic pixel aspect and the colour the IVF couldn't hold."""
+    from conftest import plan_for, source
+    from pymediainfo import MediaInfo
+
+    from videoforge.core.config import default_vspipe
+    from videoforge.core.execute import process
+    from videoforge.core.execute.mux import mp4box_command, mux_command
+    from videoforge.core.video.color import container_codes
+
+    mkvmerge, mp4box = TOOLS / "MKVToolNix" / "mkvmerge.exe", shutil.which("MP4Box")
+    if FFMPEG is None or not mkvmerge.exists() or mp4box is None:
+        pytest.skip("needs ffmpeg, tools/MKVToolNix and MP4Box")
+    vspipe = default_vspipe()
+    vsx.ensure_vspipe(vspipe)
+    depth = 8 if encoder is Encoder.VP8 else 10
+    script = tmp_path / "video.vpy"
+    script.write_text(build_script(VideoSettings(), clip_file, tmp_path, depth=depth), encoding="utf-8")
+    enc = EncoderSettings(encoder=encoder, preset="8", crf=40, depth=depth)
+    out = tmp_path / output_name(enc)
+    color = VideoColor("bt2020", "smpte2084", "bt2020nc", "limited")
+    lines: list[str] = []
+    argv = encoder_command(FFMPEG, enc, frames=48, output=out, color=color, keyframes=[0, 31])
+    process.run([vspipe_command(vspipe, script), argv], lines.append)
+    assert any(rate(line)[0] is not None for line in lines if "frame=" in line)  # ffmpeg's fps
+    probe = subprocess.run(
+        [shutil.which("ffprobe") or "ffprobe", "-v", "error", "-select_streams", "v", "-show_entries",
+         "stream=codec_name,pix_fmt:frame=key_frame", "-of", "csv=p=0", str(out)],
+        capture_output=True, text=True, check=True,
+    ).stdout.split()  # fmt: skip
+    keys = [n for n, k in enumerate(line for line in probe if line in ("0", "1")) if k == "1"]
+    assert keys == [0, 31]
+    assert any(line.startswith(encoder.value) for line in probe)
+
+    plan = plan_for(source(name=str(clip_file)))
+    plan.source.path, plan.encode_path = clip_file, out
+    sar, tags = Fraction(4, 3), container_codes(color)
+    mkv, mp4 = tmp_path / "out.mkv", tmp_path / "out.mp4"
+    process.run([mux_command(plan, {}, mkv, str(mkvmerge), (), sar=sar, color=tags)], lines.append)
+    process.run([mp4box_command(plan, {}, mp4, mp4box, (), sar=sar, color=tags)], lines.append)
+    for file in (mkv, mp4):
+        [video] = [t for t in MediaInfo.parse(str(file)).tracks if t.track_type == "Video"]
+        assert video.format == encoder.value.upper() and video.frame_count == "48"
+        assert float(video.display_aspect_ratio) == pytest.approx(320 * 4 / 3 / 180, abs=0.003)  # 4:3 pixels
+        assert (video.color_primaries, video.transfer_characteristics) == ("BT.2020", "PQ"), file
 
 
 def test_manual_encode_defaults_are_fresh_copies(profile):

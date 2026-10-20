@@ -195,6 +195,14 @@ class VideoSettings:
 class Encoder(StrEnum):
     X264 = "x264"
     X265 = "x265"
+    VP8 = "vp8"  # ffmpeg's libvpx, as StaxRip encodes VP8 / VP9
+    VP9 = "vp9"
+
+    @property
+    def libvpx(self) -> bool:
+        """Encoded by ffmpeg (libvpx) into an IVF. The stream has no pixel aspect and little colour (VP9 the
+        matrix and the range, VP8 none): the mux writes them (encoders.py)."""
+        return self in (Encoder.VP8, Encoder.VP9)
 
 
 class RateControl(StrEnum):
@@ -211,8 +219,8 @@ class EncoderSettings:
     bitrate_kbps: int = 10000
     # 2-pass: the output file's size in MB (decimal), which sets the bitrate instead (core/video/target.py)
     target_mb: int | None = None
-    preset: str = "slower"
-    tune: str = ""
+    preset: str = "slower"  # VP8 / VP9: ffmpeg's -cpu-used (0 slowest)
+    tune: str = ""  # x264 / x265 only
     depth: int = 8  # output bit depth; the script converts to it
     # --name value pairs, in order; an empty value is a bare flag (e.g. "no-fast-pskip": "").
     options: dict[str, str] = field(default_factory=dict)

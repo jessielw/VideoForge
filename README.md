@@ -3,7 +3,8 @@
 An encode and mux job queue that runs in your browser, in the spirit of StaxRip. Queue a job or a
 batch of episodes, and each runs end to end:
 
-index → VapourSynth (crop, resize, filters) → x264 / x265 → audio → subtitles → mux (MKV or MP4) → validate
+index → VapourSynth (crop, resize, filters) → x264 / x265 / VP8 / VP9 → audio → subtitles → mux (MKV or MP4)
+→ validate
 
 It runs as one local process (FastAPI + a Svelte app) for one user: on Windows (portable zip or from
 source), or in Docker on Linux. Jobs survive restarts,
@@ -129,7 +130,7 @@ app's database and win over both.
   chapters, or an existing encode to reuse. Each job starts on a template.
 - **Queue:** the job list and each job's editor: **Video** (frame preview with zoom and crop overlay, auto
   crop, resize, filters, the generated VapourSynth script, which you can edit), **Encoder** (x264 / x265,
-  1 or 2 passes), **Audio** and **Subtitles** (keep, leave out, reorder, retitle, flag; copy or encode
+  VP8 / VP9 through ffmpeg; 1 or 2 passes), **Audio** and **Subtitles** (keep, leave out, reorder, retitle, flag; copy or encode
   each audio track, more than one output from one track), **Output** (folder, container, chapters, AutoQPF,
   label) and **Log**. Select several jobs to apply an edit or a template to all of them.
 - **Templates:** a job's whole setup without a file: video, crop mode (keep, the template's crop, or detect

@@ -226,8 +226,9 @@ def run_steps(
                         out(line)
                         if mark is not None:
                             shown[tool] = mark
-                    if frac is not None:
-                        # every line's: vspipe reads ahead, so the encoder's lines rarely move the fraction
+                    if frac is not None or mark is not None:
+                        # every progress line's: vspipe reads ahead, so the encoder's lines rarely move the
+                        # fraction (ffmpeg's never do: "frame= 123 fps= 24")
                         note_rate(i, line)
                     if frac is not None and frac - last >= 0.002:  # throttle progress events
                         last = frac

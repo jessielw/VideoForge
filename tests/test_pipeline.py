@@ -292,6 +292,38 @@ def test_failed_validation_is_the_last_step(profile, tmp_path):
     assert state.run[-1].status is StepStatus.FAILED and result.error.startswith("Step 4/4 · Validate: mkvmerge")
 
 
+def test_vp9_steps(profile, tmp_path):
+    """VP9 runs through ffmpeg into an IVF: its first pass writes ffmpeg's "-0.log", the chapters' qpfile becomes
+    forced keyframes once written (the encode refreshes when its turn comes), and the mux tags the pixel aspect
+    and colour."""
+    plan = make_plan(tmp_path)
+    plan.source.video.sar_num, plan.source.video.sar_den = 32, 27
+    plan.source.video.color = VideoColor("bt709", "bt709", "bt709", "limited")
+    job = JobSpec(
+        inputs=JobInputs(plan.source.path, subtitles=plan.inputs.subtitles),
+        profile="manual",
+        encoder=EncoderSettings(Encoder.VP9, rate_control=RateControl.TWO_PASS, bitrate_kbps=3000, preset="4"),
+        output_dir=tmp_path / "out",
+    )
+    plan.encode_path = job.video_output
+    assert job.video_output.name == "video.ivf"
+    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    steps = {s.id: s for s in built.steps}
+    pass1, pass2, mux = steps["video.pass1"], steps["video.pass2"], steps["mux"]
+    assert pass1.argvs[1][0] == APP.tools.ffmpeg and "libvpx-vp9" in pass1.argvs[1]
+    assert pass1.outputs == (job.work_dir / "video.stats-0.log",) and pass1.outputs[0] in pass2.inputs
+    assert "-force_key_frames" not in pass2.argvs[1] and pass2.refresh is not None  # no qpfile yet
+    qpfile = next(p for p in steps["chapters"].outputs if p.suffix == ".qpf")
+    qpfile.parent.mkdir(parents=True, exist_ok=True)
+    qpfile.write_text("0 I\n720 I\n", encoding="utf-8")
+    again = pass2.refresh()
+    assert again.argvs[1][again.argvs[1].index("-force_key_frames") + 1] == "expr:eq(n,0)+eq(n,720)"
+    argv = mux.argvs[0]
+    assert argv[argv.index("--aspect-ratio-factor") + 1] == "0:32/27"
+    assert argv[argv.index("--colour-primaries") + 1] == "0:1" and argv[argv.index("--colour-range") + 1] == "0:1"
+    assert "--default-duration" not in argv  # the IVF times itself
+
+
 def test_video_steps_two_pass(profile, tmp_path):
     plan = make_plan(tmp_path)
     job = JobSpec(

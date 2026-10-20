@@ -13,7 +13,7 @@ source), or in Docker on Linux.
 ### Added
 
 - **Job queue.** Queue a job or a batch of episodes (a folder of sources); each runs index → VapourSynth
-  script → x264 / x265 (1 or 2 passes) → audio → mux → validate. Jobs run one at a time and survive restarts;
+  script → x264 / x265 / VP8 / VP9 (1 or 2 passes) → audio → mux → validate. Jobs run one at a time and survive restarts;
   a rerun skips every step whose command and inputs haven't changed, so a crashed job resumes after its last
   finished step and a changed subtitle flag only muxes again. A job's audio encodes run alongside its video
   encode, up to 2 at once by default (Settings → Audio encodes; 0 runs them one by one). A running job shows
@@ -21,7 +21,7 @@ source), or in Docker on Linux.
   left, in the queue and the job's header.
 - **Pause and process priority.** The Queue's Pause suspends the running job's tools and the index lane's,
   children too (DeeZy's ffmpeg / DEE), until Resume; paused time doesn't count in a step's time or the job's
-  time left. Tools run at StaxRip's priorities: the video encode (x264 / x265 and the vspipe feeding it) below
+  time left. Tools run at StaxRip's priorities: the video encode (the encoder and the vspipe feeding it) below
   normal, other tools normal (Settings → Process priority, `[pipeline] encoder_priority` / `tool_priority`); the
   toolbar's gauge menu changes the running ones' for the rest of their run. On Linux it's a nice value.
 - **Reuse finished files.** When the jobs you start already have a finished video or audio encode in their work
@@ -115,7 +115,10 @@ source), or in Docker on Linux.
   preset for a file of your own (its lines to edit: a `style` for an SRT, say).
 - **Containers.** MKV (mkvmerge) and MP4 (MP4Box), each with a warning or a block for what it can't hold. MKV
   keeps the source's attachments (an ASS subtitle's fonts) and global tags, as StaxRip does. MP4Box starts each
-  track it copies at 0, so a copied track gets its delay to the video, as an encoded one does.
+  track it copies at 0, so a copied track gets its delay to the video, as an encoded one does. MP4 holds a
+  3-letter ISO 639-2 language (StaxRip writes the same): a region or script warns (es-419 is written as es), and
+  the output check compares the language alone (a Fallout MP4 with es-419, fr-CA, nb and zh-Hant subtitles no
+  longer comes out invalid). Basque, Galician, Kannada and Malayalam are known languages.
 - **MP4 and M2TS / TS sources.** A source can be an MKV, MP4 (.mp4, .m4v) or MPEG transport stream (.m2ts,
   .mts, .ts), indexed straight from the file as in StaxRip. ffprobe (found next to ffmpeg) times it: each
   track's start as a player starts it (a TS's timestamps, an MP4's edit lists, which MediaInfo doesn't always
@@ -127,6 +130,16 @@ source), or in Docker on Linux.
   first copied into an MKV in the work folder (mkvmerge), which keeps the TS's timing. When MediaInfo gives a TS
   no frame rate (an x264 TS) or no chapters (a TS's program menu), AutoQPF takes the script's frame rate and
   chapters every 5% of the runtime.
+- **VP8 / VP9.** Through ffmpeg's libvpx, as StaxRip's ffmpeg encoder does: CRF (`-crf` with `-b:v 0`, 0-63;
+  VP8 `-b:v 100M`, since ffmpeg reads VP8's `-b:v 0` as a 256 kbit/s cap, StaxRip's included), 1-pass bitrate or
+  2 passes (a target size too), the speed as `-cpu-used` (StaxRip's 0-6 list; VP8 at 4 and up warns: it puts a
+  keyframe on every 2nd-3rd frame after a scene cut), StaxRip's VP9
+  defaults (`-tile-columns 6 -frame-parallel 1 -auto-alt-ref 1 -lag-in-frames 25`, plus `-row-mt 1`) before the
+  job's `-options`; VP8 is 8-bit only, VP9 8 / 10 / 12-bit. The encode is an IVF that both muxers read as it is;
+  the chapters' keyframes are forced (`-force_key_frames`, from the qpfile); the pixel aspect and the colour the
+  stream doesn't hold (VP9 has only the matrix and the range) are tagged by the mux (`--aspect-ratio-factor`,
+  `--colour-*`; MP4Box `:par`, `:colr`). An HDR10 source's mastering display and light levels aren't carried
+  yet (a warning). The Docker image's FFmpeg now has libvpx (rebuild the plugins image).
 - **Templates.** A job's whole setup without a file: video, crop mode (keep, the template's, detect per job),
   encoder, container, AutoQPF, audio by position or by rules, subtitles by rules. Star one as the default
   for new jobs; apply one to a job or a batch.

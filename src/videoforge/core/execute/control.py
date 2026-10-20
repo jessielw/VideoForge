@@ -43,8 +43,8 @@ _NICE = {
     Priority.HIGH: -10,
 }
 
-# The video encoders (video/settings.Encoder): a command with one (and the vspipe piped into it) gets the
-# encoder priority, every other tool the tool priority.
+# The video encoders (video/settings.Encoder): a command with one, or with vspipe piped into a tool (ffmpeg's
+# VP8 / VP9), gets the encoder priority, every other tool the tool priority.
 ENCODERS = frozenset({"x264", "x265"})
 
 _warned = False

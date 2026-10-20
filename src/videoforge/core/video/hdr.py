@@ -226,7 +226,7 @@ def _dv_issues(
             Issue(
                 Severity.WARN,
                 "hdr.dv_profile5",
-                "Dolby Vision profile 5 has no HDR10 layer: without its RPU (x264, or Dolby Vision from the source "
+                "Dolby Vision profile 5 has no HDR10 layer: without its RPU (not x265, or Dolby Vision from the source "
                 "unticked) the encode's colours look wrong, unless the script maps them",
             )
         ]
@@ -234,7 +234,13 @@ def _dv_issues(
         return []
     untick = "or untick Dolby Vision from the source on the Encoder tab"
     if settings.encoder is not Encoder.X265:
-        return [Issue(Severity.WARN, "hdr.dv_x264", "x264 can't carry Dolby Vision: the encode keeps the HDR10 layer")]
+        return [
+            Issue(
+                Severity.WARN,
+                "hdr.dv_x264",
+                f"{settings.encoder.value} can't carry Dolby Vision: the encode keeps the HDR10 layer",
+            )
+        ]
     out = []
 
     def block(code: str, message: str) -> None:
@@ -289,7 +295,13 @@ def _hdr10plus_issues(video: VideoInfo, settings: EncoderSettings, tools: Tools 
         return []
     untick = "or untick HDR10+ from the source on the Encoder tab"
     if settings.encoder is not Encoder.X265:
-        return [Issue(Severity.WARN, "hdr.hdr10plus_x264", "x264 can't carry HDR10+: the encode keeps HDR10 only")]
+        return [
+            Issue(
+                Severity.WARN,
+                "hdr.hdr10plus_x264",
+                f"{settings.encoder.value} can't carry HDR10+: the encode keeps HDR10 only",
+            )
+        ]
     out = []
     if settings.depth < 10:
         out.append(

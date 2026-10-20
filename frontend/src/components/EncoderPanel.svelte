@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Encoder settings (x264 / x265): rate control, preset, tune, bit depth, --options, extra args.
+  // Encoder settings (x264 / x265, VP8 / VP9 through ffmpeg): rate control, preset, tune, bit depth, options, extra args.
   // Emits a fresh copy on every change; the parent decides when to save.
   import type { EncoderName, EncoderSettings, RateControl, SizeBudget, VideoHdr } from '../lib/types'
   import PlusIcon from '@lucide/svelte/icons/plus'
@@ -77,14 +77,29 @@
   })
 
   const HDR_TRANSFERS = ['smpte2084', 'arib-std-b67'] // PQ, HLG
-  const hdr = $derived(!!colorArgs && colorArgs.some((a, i) => colorArgs[i - 1] === '--transfer' && HDR_TRANSFERS.includes(a)))
+  const hdr = $derived(
+    !!colorArgs && colorArgs.some((a, i) => ['--transfer', '-color_trc'].includes(colorArgs[i - 1]) && HDR_TRANSFERS.includes(a)),
+  )
 
-  const PRESETS = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo']
+  const ENCODERS: [EncoderName, string][] = [['x264', 'x264'], ['x265', 'x265'], ['vp8', 'VP8'], ['vp9', 'VP9']]
+  // VP8 / VP9 run through ffmpeg (libvpx), as StaxRip's ffmpeg encoder does: its speed list is -cpu-used
+  const vpx = $derived(value.encoder === 'vp8' || value.encoder === 'vp9')
+  const X26X_PRESETS: [string, string][] = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'].map(
+    p => [p, p],
+  )
+  const VPX_PRESETS: [string, string][] = [['6', '6 - Fastest'], ['5', '5 - Faster'], ['4', '4 - Fast'], ['3', '3 - Medium'], ['2', '2 - Slow'], ['1', '1 - Slower'], ['0', '0 - Slowest']]
+  const PRESETS: Record<EncoderName, [string, string][]> = { x264: X26X_PRESETS, x265: X26X_PRESETS, vp8: VPX_PRESETS, vp9: VPX_PRESETS }
+  const DEFAULT_PRESET: Record<EncoderName, string> = { x264: 'slower', x265: 'slower', vp8: '1', vp9: '1' }
   const TUNES: Record<EncoderName, string[]> = {
     x264: ['film', 'animation', 'grain', 'stillimage', 'psnr', 'ssim', 'fastdecode', 'zerolatency'],
     x265: ['animation', 'grain', 'psnr', 'ssim', 'fastdecode', 'zerolatency'],
+    vp8: [],
+    vp9: [],
   }
-  const DEPTHS: Record<EncoderName, number[]> = { x264: [8, 10], x265: [8, 10, 12] }
+  const DEPTHS: Record<EncoderName, number[]> = { x264: [8, 10], x265: [8, 10, 12], vp8: [8], vp9: [8, 10, 12] }
+  // what encoders.VP9_DEFAULTS writes before the options (StaxRip's, plus row-mt)
+  const VP9_DEFAULTS = '-tile-columns 6 -frame-parallel 1 -auto-alt-ref 1 -lag-in-frames 25 -row-mt 1'
+  const dashes = $derived(vpx ? '-' : '--')
 
   let newKey = $state('')
   let newValue = $state('')
@@ -95,6 +110,8 @@
       const enc = v as EncoderName
       if (!TUNES[enc].includes(next.tune)) next.tune = ''
       if (!DEPTHS[enc].includes(next.depth)) next.depth = 8
+      if (next.preset && !PRESETS[enc].some(([p]) => p === next.preset)) next.preset = DEFAULT_PRESET[enc]
+      if (enc === 'vp8' || enc === 'vp9') next.crf = Math.min(63, Math.round(next.crf))
     }
     onchange(next)
   }
@@ -127,8 +144,8 @@
       value={value.encoder}
       onValueChange={v => v && set('encoder', v as EncoderName)}
     >
-      {#each ['x264', 'x265'] as enc (enc)}
-        <ToggleGroup.Item value={enc} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">{enc}</ToggleGroup.Item>
+      {#each ENCODERS as [enc, label] (enc)}
+        <ToggleGroup.Item value={enc} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">{label}</ToggleGroup.Item>
       {/each}
     </ToggleGroup.Root>
 
@@ -144,9 +161,9 @@
           class="w-24"
           type="number"
           aria-label="CRF"
-          step="0.5"
+          step={vpx ? 1 : 0.5}
           min="0"
-          max="51"
+          max={vpx ? 63 : 51}
           value={value.crf}
           onchange={e => set('crf', +(e.target as HTMLInputElement).value)}
         />
@@ -214,17 +231,19 @@
       </div>
     {/if}
 
-    <span class="section-label">Preset</span>
+    <span class="section-label">{vpx ? 'Speed' : 'Preset'}</span>
     <NativeSelect class="w-48" value={value.preset} aria-label="Preset" onchange={e => set('preset', e.currentTarget.value)}>
       <option value="">(encoder default)</option>
-      {#each PRESETS as p (p)}<option value={p}>{p}</option>{/each}
+      {#each PRESETS[value.encoder] as [p, label] (p)}<option value={p}>{label}</option>{/each}
     </NativeSelect>
 
-    <span class="section-label">Tune</span>
-    <NativeSelect class="w-48" value={value.tune} aria-label="Tune" onchange={e => set('tune', e.currentTarget.value)}>
-      <option value="">none</option>
-      {#each TUNES[value.encoder] as t (t)}<option value={t}>{t}</option>{/each}
-    </NativeSelect>
+    {#if TUNES[value.encoder].length}
+      <span class="section-label">Tune</span>
+      <NativeSelect class="w-48" value={value.tune} aria-label="Tune" onchange={e => set('tune', e.currentTarget.value)}>
+        <option value="">none</option>
+        {#each TUNES[value.encoder] as t (t)}<option value={t}>{t}</option>{/each}
+      </NativeSelect>
+    {/if}
 
     <span class="section-label">Bit depth</span>
     <NativeSelect class="w-24" value={value.depth} aria-label="Bit depth" onchange={e => set('depth', +e.currentTarget.value)}>
@@ -239,7 +258,13 @@
       <span class="block text-xs text-muted-foreground">
         Tags the encode with the source's colour description{value.encoder === 'x265' ? ' and HDR10 metadata' : ''}
         (vspipe passes none on){value.encoder === 'x265' ? ', with --repeat-headers --hrd --aud for HDR10 as StaxRip sets them' : ''}.
-        An option below with the same flag wins (--no-hrd turns one off). Untick it when the script changes the colours.
+        {#if vpx}
+          {value.encoder === 'vp9' ? 'VP9 holds the matrix and range in the stream' : 'VP8 holds none in the stream'}: the mux
+          tags the container with the colour (and the pixel aspect). An HDR10 mastering display and light levels aren't carried yet.
+        {:else}
+          An option below with the same flag wins (--no-hrd turns one off).
+        {/if}
+        Untick it when the script changes the colours.
       </span>
       {#if colorArgs !== undefined}
         {#if colorArgs === null}
@@ -272,7 +297,7 @@
         {:else if !hdr10plus}
           <span class="block text-xs text-muted-foreground">The source has no HDR10+.</span>
         {:else if value.encoder !== 'x265'}
-          <span class="mt-1 block text-xs text-warning">x264 can't carry HDR10+: the encode keeps HDR10 only.</span>
+          <span class="mt-1 block text-xs text-warning">{value.encoder} can't carry HDR10+: the encode keeps HDR10 only.</span>
         {:else}
           <code class="mt-1 block font-mono text-xs break-all {value.hdr10plus ? '' : 'text-muted-foreground line-through'}"
             >--dhdr10-info hdr10plus.json</code
@@ -303,7 +328,7 @@
         {:else if dv.dv_profile === 5 && (value.encoder !== 'x265' || !value.dolby_vision)}
           <span class="mt-1 block text-xs text-warning">Profile 5 has no HDR10 layer: without its RPU the encode's colours look wrong, unless the script maps them.</span>
         {:else if value.encoder !== 'x265'}
-          <span class="mt-1 block text-xs text-warning">x264 can't carry Dolby Vision: the encode keeps the HDR10 layer.</span>
+          <span class="mt-1 block text-xs text-warning">{value.encoder} can't carry Dolby Vision: the encode keeps the HDR10 layer.</span>
         {:else}
           <code class="mt-1 block font-mono text-xs break-all {value.dolby_vision ? '' : 'text-muted-foreground line-through'}"
             >--dolby-vision-profile {dv.dv_profile === 5 ? '5' : '8.1'} --dolby-vision-rpu dv_rpu.bin{levelVbv?.length ? ' ' + levelVbv.join(' ') : ''}</code
@@ -333,11 +358,18 @@
   </label>
 
   <div>
-    <div class="section-label mb-2">Options (--name value, in order; an empty value is a flag)</div>
+    <div class="section-label mb-2">Options ({dashes}name value, in order; an empty value is a flag)</div>
+    {#if value.encoder === 'vp9'}
+      <p class="mb-2 text-xs text-muted-foreground">
+        ffmpeg's libvpx-vp9 options. Before them, StaxRip's VP9 defaults (one set here wins): <code class="font-mono">{VP9_DEFAULTS}</code>
+      </p>
+    {:else if vpx}
+      <p class="mb-2 text-xs text-muted-foreground">ffmpeg's libvpx options.</p>
+    {/if}
     <div class="overflow-hidden rounded-lg border">
       {#each Object.entries(value.options) as [key, val] (key)}
         <div class="flex items-center gap-2 border-b border-border/60 px-2 py-1 last:border-b-0">
-          <span class="font-mono text-xs text-muted-foreground">--</span>
+          <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
           <Input
             class="w-44 font-mono text-xs"
             value={key}
@@ -347,7 +379,7 @@
           <Input
             class="flex-1 font-mono text-xs"
             value={val}
-            aria-label="--{key} value"
+            aria-label="{dashes}{key} value"
             placeholder="(flag)"
             onchange={e => setOption(key, (e.target as HTMLInputElement).value.trim())}
           />
@@ -357,7 +389,7 @@
         </div>
       {/each}
       <div class="flex items-center gap-2 bg-muted/50 px-2 py-1">
-        <span class="font-mono text-xs text-muted-foreground">--</span>
+        <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
         <Input class="w-44 font-mono text-xs" placeholder="name" aria-label="New option name" bind:value={newKey} onkeydown={e => e.key === 'Enter' && addOption()} />
         <Input class="flex-1 font-mono text-xs" placeholder="value" aria-label="New option value" bind:value={newValue} onkeydown={e => e.key === 'Enter' && addOption()} />
         <Button variant="ghost" size="icon-sm" onclick={addOption} aria-label="Add"><PlusIcon /></Button>

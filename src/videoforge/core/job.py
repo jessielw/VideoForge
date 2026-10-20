@@ -36,8 +36,7 @@ from videoforge.core.models import (
     VideoInfo,
 )
 from videoforge.core.tools import tool_issues
-from videoforge.core.video import hdr, target
-from videoforge.core.video.encoders import output_name
+from videoforge.core.video import encoders, hdr, target
 from videoforge.core.video.qpf import qpf_paths
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
 from videoforge.core.workdir import work_dir
@@ -106,7 +105,7 @@ class JobSpec:
 
     @property
     def video_output(self) -> Path:
-        return self.work_dir / output_name(self.encoder)
+        return self.work_dir / encoders.output_name(self.encoder)
 
     @property
     def makes_chapters(self) -> bool:
@@ -234,6 +233,7 @@ def plan_spec(spec: JobSpec, probed: ProbedInputs, profile: Profile, tools: Tool
         plan.issues += tool_issues(plan, tools, spec.container(profile))
     plan.issues += mux_issues(plan, spec.container(profile))
     if spec.encodes_video:
+        plan.issues += encoders.issues(spec.encoder, probed.source.video)
         plan.issues += hdr.issues(probed.source.video, spec.encoder, tools, spec.video)
         plan.issues += target.issues(spec.encoder, plan, spec.container(profile))
     return plan

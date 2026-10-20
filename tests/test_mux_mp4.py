@@ -22,6 +22,7 @@ from videoforge.core.models import (
     VideoInfo,
 )
 from videoforge.core.pipeline.build import output_path
+from videoforge.core.video.color import ContainerColor
 from videoforge.profiles.manual import ManualProfile, output_matches_plan
 
 RAW = (".h264", ".hevc")
@@ -58,6 +59,18 @@ def test_mp4box_raw_encode_takes_the_scripts_frame_rate():
     assert adds(argv)[0].startswith("enc.h264:fps=24000/1001:")
     argv = mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW)
     assert adds(argv)[0].startswith("enc.h264:fps=30000/1001:")
+
+
+def test_mp4box_vpx_encode_is_tagged():
+    """A VP8 / VP9 IVF is taken as it is (#video: it times itself), with its pixel aspect and a colr box (all four
+    values: 2 where the source gives none)."""
+    plan = mp4_plan()
+    plan.encode_path = Path("video.ivf")
+    color = ContainerColor(primaries=9, transfer=16, matrix=None, full_range=None)
+    argv = mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW, sar=Fraction(4, 3), color=color)
+    assert adds(argv)[0] == "video.ivf#video:par=4:3:colr=nclx,9,16,2,0:hdr=none:lang=en-US:name="
+    argv = mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW, sar=Fraction(1))
+    assert adds(argv)[0] == "video.ivf#video:hdr=none:lang=en-US:name="
 
 
 def test_mp4box_command():
@@ -131,6 +144,27 @@ def test_mp4_output_check():
     assert output_matches_plan(plan, out) == []
     out.audio[0].default = False  # the enabled flag is read back
     assert [i.code for i in output_matches_plan(plan, out)] == ["plan.audio"]
+
+
+def test_mp4_languages_are_3_letter_codes():
+    """MP4Box writes ISO 639-2 (StaxRip too): a region or script is left out (a warning), and the output check
+    compares the language alone. A Fallout sample read back es-419 as es, eu as baq, nb as no."""
+    tags = ["es-419", "eu", "nb", "zh-Hant", "en"]
+    plan = mp4_plan([sub(F.SRT, t, index=n) for n, t in enumerate(tags)])
+    warns = [i.message for i in mux_issues(plan, "mp4") if i.code == "mux.mp4_language"]
+    assert warns == [
+        "Subtitle 1: MP4 holds a 3-letter language code; es-419 is written as es",
+        "Subtitle 3: MP4 holds a 3-letter language code; nb is written as no",
+        "Subtitle 4: MP4 holds a 3-letter language code; zh-Hant is written as zh",
+    ]
+    out = simulate_output(plan, "Movie.mp4")
+    for t in [*out.audio, *out.subs]:
+        t.title, t.commentary, t.forced = "", False, False
+    for s, back in zip(out.subs, ["es", "baq", "no", "zh", "eng"], strict=True):
+        s.format, s.language = F.TX3G, back
+    assert output_matches_plan(plan, out) == []
+    out.subs[0].language = "fr"
+    assert [i.code for i in output_matches_plan(plan, out)] == ["plan.subs"]
 
 
 def test_chapters_as_ogm(tmp_path):

@@ -36,8 +36,8 @@ from videoforge.core.job import JobResult, JobSpec, JobState, StepRun, StepStatu
 from videoforge.core.models import AudioAction, Issue, Plan
 from videoforge.core.pairing import episode_token
 from videoforge.core.plan_io import to_json
+from videoforge.core.video.encoders import TOOLS
 from videoforge.core.video.qpf import qpf_paths
-from videoforge.core.video.settings import Encoder
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -305,7 +305,7 @@ def used_tools(spec: JobSpec, plan: Plan, container: str) -> list[str]:
     """The Tools fields a run uses (whose versions the record states)."""
     names: list[str] = []
     if spec.encodes_video:
-        names += ["vspipe", "x265" if spec.encoder.encoder is Encoder.X265 else "x264"]
+        names += ["vspipe", TOOLS[spec.encoder.encoder]]
     for a in plan.audio:
         if a.action is not AudioAction.COPY:
             names += ENCODES[a.action].tools

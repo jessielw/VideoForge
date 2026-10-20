@@ -33,6 +33,7 @@ import re
 import shlex
 from typing import Protocol
 
+from videoforge.core import lang
 from videoforge.core.config import AppConfig
 from videoforge.core.execute.audio import delay_in_encode
 from videoforge.core.models import (
@@ -49,6 +50,7 @@ from videoforge.core.models import (
     VideoInfo,
     track_key,
 )
+from videoforge.core.video.color import ContainerColor
 
 # Frame durations (ns) of common rates, so a raw stream gets an exact fraction
 # instead of a rounded nanosecond value.
@@ -137,11 +139,15 @@ def mux_command(
     extra: list[str] | None = None,
     fps: Fraction | None = None,
     timestamps: Path | None = None,
+    *,
+    sar: Fraction | None = None,
+    color: ContainerColor | None = None,
 ) -> list[str]:
     """mkvmerge argv for a plan. encoded_audio maps plan.audio positions to their encoded files;
     extra (the user's arguments) goes before the first input. fps is a raw encode's frame rate (the script's,
     which an IVTC or a double-rate deinterlace changed); without it, the source's. timestamps (a VFR source's,
-    core/video/vfr.py) time the encode instead."""
+    core/video/vfr.py) time the encode instead. sar and color tag an encode whose stream doesn't hold them (VP8 /
+    VP9): its pixel aspect, and its colour as H.273 code points."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
     video = plan.source.video
@@ -174,6 +180,15 @@ def mux_command(
             "--no-attachments",
             "--no-global-tags",
         ]
+    if sar is not None and sar != 1:
+        argv += ["--aspect-ratio-factor", f"0:{sar.numerator}/{sar.denominator}"]
+    for flag, code in (
+        ("--colour-matrix-coefficients", color.matrix if color else None),
+        ("--colour-range", None if color is None or color.full_range is None else 2 if color.full_range else 1),
+        ("--colour-transfer-characteristics", color.transfer if color else None),
+        ("--colour-primaries", color.primaries if color else None),
+    ):
+        argv += [flag, f"0:{code}"] if code is not None else []
     argv += [
         "--language",
         f"0:{video.language if video else 'und'}",
@@ -299,8 +314,11 @@ def mp4box_command(
     raw_extensions: tuple[str, ...],
     extra: list[str] | None = None,
     fps: Fraction | None = None,
+    *,
+    sar: Fraction | None = None,
+    color: ContainerColor | None = None,
 ) -> list[str]:
-    """MP4Box argv for a plan (the same inputs, timing and fps as mux_command). chapters_path must
+    """MP4Box argv for a plan (the same inputs, timing, fps, sar and color as mux_command). chapters_path must
     be OGM text; extra goes just before -new."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
@@ -309,8 +327,16 @@ def mp4box_command(
 
     argv: list[str] = [mp4box, "-noprog"]
     # the source's language; an empty handler name (MP4Box would write its own, e.g. "264:fps=24@GPAC..."); no HDR
-    # boxes (hdr=none): the stream's own SEI carries it, and MediaInfo would list it twice
+    # boxes (hdr=none): the stream's own SEI carries it, and MediaInfo would list it twice. A colr box takes all
+    # four values: 2 is "unspecified".
     opts = f":hdr=none:lang={video.language if video else 'und'}:name="
+    if color is not None:
+        codes = (color.primaries, color.transfer, color.matrix)
+        opts = (
+            f":colr=nclx,{','.join(str(2 if c is None else c) for c in codes)},{_flag(bool(color.full_range))}" + opts
+        )
+    if sar is not None and sar != 1:
+        opts = f":par={sar.numerator}:{sar.denominator}" + opts
     if plan.encode_path.suffix.lower() in raw_extensions:
         argv += ["-add", f"{plan.encode_path}:fps={_raw_rate(video, fps)}{opts}"]
     else:
@@ -361,6 +387,7 @@ class Muxer(Protocol):
     extension: str
     tool: str  # the Tools field it runs
     carries_titles: bool  # titles and every flag can be read back by the output check
+    carries_variants: bool  # a language's region / script (es-419, zh-Hant), not the language alone
 
     def command(
         self,
@@ -371,9 +398,13 @@ class Muxer(Protocol):
         extra: list[str] | None = None,
         fps: Fraction | None = None,
         timestamps: Path | None = None,
+        *,
+        sar: Fraction | None = None,
+        color: ContainerColor | None = None,
     ) -> list[str]:
         """fps: a raw encode's frame rate (the script's); None for the source's. timestamps: a VFR source's,
-        which time the encode instead (an MKV's; MP4Box takes none)."""
+        which time the encode instead (an MKV's; MP4Box takes none). sar and color: the pixel aspect and colour
+        an encode's stream doesn't hold (VP8 / VP9), for the container to tag."""
         ...
 
     def issues(self, plan: Plan) -> list[Issue]:
@@ -390,6 +421,7 @@ class MkvMerge:
     extension = ".mkv"
     tool = "mkvmerge"
     carries_titles = True
+    carries_variants = True
 
     def command(
         self,
@@ -400,9 +432,21 @@ class MkvMerge:
         extra: list[str] | None = None,
         fps: Fraction | None = None,
         timestamps: Path | None = None,
+        *,
+        sar: Fraction | None = None,
+        color: ContainerColor | None = None,
     ) -> list[str]:
         return mux_command(
-            plan, encoded_audio, output, app.tools.mkvmerge, app.matching.encode_extensions, extra, fps, timestamps
+            plan,
+            encoded_audio,
+            output,
+            app.tools.mkvmerge,
+            app.matching.encode_extensions,
+            extra,
+            fps,
+            timestamps,
+            sar=sar,
+            color=color,
         )
 
     def issues(self, plan: Plan) -> list[Issue]:
@@ -417,6 +461,7 @@ class Mp4Box:
     extension = ".mp4"
     tool = "mp4box"
     carries_titles = False  # mkvmerge doesn't read MP4 handler names or kinds back
+    carries_variants = False  # MP4Box writes the 3-letter ISO 639-2 code (StaxRip: ThreeLetterCode): es-419 is spa
 
     SUBS = (SubFormat.SRT, SubFormat.TX3G, SubFormat.VOBSUB)
 
@@ -429,8 +474,21 @@ class Mp4Box:
         extra: list[str] | None = None,
         fps: Fraction | None = None,
         timestamps: Path | None = None,
+        *,
+        sar: Fraction | None = None,
+        color: ContainerColor | None = None,
     ) -> list[str]:
-        return mp4box_command(plan, encoded_audio, output, app.tools.mp4box, app.matching.encode_extensions, extra, fps)
+        return mp4box_command(
+            plan,
+            encoded_audio,
+            output,
+            app.tools.mp4box,
+            app.matching.encode_extensions,
+            extra,
+            fps,
+            sar=sar,
+            color=color,
+        )
 
     def issues(self, plan: Plan) -> list[Issue]:
         issues: list[Issue] = []
@@ -490,6 +548,15 @@ class Mp4Box:
                             Severity.WARN,
                             "mux.mp4_flags",
                             f"{label} {i}: MP4 has no {', '.join(dropped)} flag; left out",
+                        )
+                    )
+                if lang.primary(t.language) != lang.normalize(t.language):
+                    issues.append(
+                        Issue(
+                            Severity.WARN,
+                            "mux.mp4_language",
+                            f"{label} {i}: MP4 holds a 3-letter language code; {t.language} is written as "
+                            f"{lang.primary(t.language)}",
                         )
                     )
                 if t.title and _mp4_title(t.title) != t.title:

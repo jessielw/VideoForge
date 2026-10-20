@@ -21,10 +21,12 @@ _LANGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "en": ("English", ("eng",)),
     "es": ("Spanish", ("spa",)),
     "et": ("Estonian", ("est",)),
+    "eu": ("Basque", ("baq", "eus")),
     "fa": ("Persian", ("per", "fas")),
     "fi": ("Finnish", ("fin",)),
     "fil": ("Filipino", ("fil", "tgl")),
     "fr": ("French", ("fre", "fra")),
+    "gl": ("Galician", ("glg",)),
     "he": ("Hebrew", ("heb",)),
     "hi": ("Hindi", ("hin",)),
     "hr": ("Croatian", ("hrv",)),
@@ -33,9 +35,11 @@ _LANGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "is": ("Icelandic", ("ice", "isl")),
     "it": ("Italian", ("ita",)),
     "ja": ("Japanese", ("jpn",)),
+    "kn": ("Kannada", ("kan",)),
     "ko": ("Korean", ("kor",)),
     "lt": ("Lithuanian", ("lit",)),
     "lv": ("Latvian", ("lav",)),
+    "ml": ("Malayalam", ("mal",)),
     "ms": ("Malay", ("may", "msa")),
     "nl": ("Dutch", ("dut", "nld")),
     "no": ("Norwegian", ("nor", "nob", "nno")),
@@ -169,6 +173,17 @@ def variant_from_title(base: str, title: str) -> str | None:
         if base_of(variant) == base and pattern.search(title):
             return variant
     return None
+
+
+# Individual languages a 3-letter ISO 639-2 field writes as their macrolanguage (MP4Box: nb -> nor)
+_MACRO = {"nb": "no", "nn": "no"}
+
+
+def primary(tag: str) -> str:
+    """The language alone, as a 3-letter ISO 639-2 field (an MP4's) holds it: es-419 -> es, zh-Hant -> zh,
+    nb -> no."""
+    head = normalize(tag).split("-")[0]
+    return _MACRO.get(head, head)
 
 
 def base_of(tag: str) -> str:

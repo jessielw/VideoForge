@@ -281,7 +281,8 @@ def _describe(language: str, title: str, flags: dict[str, bool]) -> str:
 
 def output_matches_plan(plan: Plan, output: SourceInfo) -> list[Issue]:
     """BLOCK where the muxed file's tracks (count, order, language, title, flags, format) differ from the plan.
-    An MP4 is checked for what it holds and can be read back: language, default (enabled) and format."""
+    An MP4 is checked for what it holds and can be read back: the language alone (no region or script), default
+    (enabled) and format."""
     issues: list[Issue] = []
     muxer = muxer_for(output.path or Path(output.name))
     keys = FLAG_KEYS if muxer.carries_titles else ("default",)
@@ -295,8 +296,9 @@ def output_matches_plan(plan: Plan, output: SourceInfo) -> list[Issue]:
             )
         for i, (want, got) in enumerate(zip(wanted, found, strict=False), 1):
             titles = muxer.carries_titles
-            w = (lang.normalize(want.language), want.title if titles else "", {k: getattr(want, k) for k in keys})
-            g = (lang.normalize(got.language), got.title if titles else "", {k: getattr(got, k) for k in keys})
+            language = lang.normalize if muxer.carries_variants else lang.primary
+            w = (language(want.language), want.title if titles else "", {k: getattr(want, k) for k in keys})
+            g = (language(got.language), got.title if titles else "", {k: getattr(got, k) for k in keys})
             if w != g:
                 issues.append(
                     Issue(

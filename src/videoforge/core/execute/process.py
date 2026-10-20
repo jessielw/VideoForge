@@ -195,7 +195,9 @@ def run(argvs: Sequence[Sequence[str]], log: LogFn, cancel: CancelToken | None =
     tools: list[control.ToolGroup] = []
     pumps: list[threading.Thread] = []
     tails: list[list[str]] = []
-    encoder = any(tool_name(argv) in control.ENCODERS for argv in argvs)
+    encoder = any(tool_name(argv) in control.ENCODERS for argv in argvs) or (
+        len(argvs) == 2 and tool_name(argvs[0]) == "vspipe"
+    )
 
     try:
         for i, argv in enumerate(argvs):

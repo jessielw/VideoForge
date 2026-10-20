@@ -1,12 +1,15 @@
-"""The source's colour description (MediaInfo) -> x264 / x265 flags.
+"""The source's colour description (MediaInfo) -> x264 / x265 / ffmpeg flags, and the container's tags.
 
 vspipe's y4m carries no colour information, so without these an encode is untagged and a player guesses
 (an HDR10 source plays washed out). The flags go before the job's options, so an option set there wins.
-x264 gets the VUI flags only (no HDR10 SEI); Dolby Vision isn't carried.
+x264 gets the VUI flags only (no HDR10 SEI); Dolby Vision isn't carried. A VP9 stream holds only the matrix
+and the range (VP8 none), so a VP8 / VP9 encode's colour is tagged by the mux too (container_codes); its HDR10
+mastering display and light levels aren't carried yet.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from fractions import Fraction
 import re
 from typing import Any
@@ -62,6 +65,56 @@ MATRIX = {
 }
 RANGE = {"Limited": "limited", "Full": "full"}
 X264_RANGE = {"limited": "tv", "full": "pc"}
+# x264's names ffmpeg spells otherwise
+FFMPEG_TRANSFER = {"bt470m": "gamma22", "bt470bg": "gamma28"}
+FFMPEG_MATRIX = {"gbr": "rgb"}
+
+# x264's names -> ITU-T H.273 code points, which the containers' colour tags take
+PRIMARIES_CODE = {
+    "bt709": 1,
+    "bt470m": 4,
+    "bt470bg": 5,
+    "smpte170m": 6,
+    "smpte240m": 7,
+    "film": 8,
+    "bt2020": 9,
+    "smpte428": 10,
+    "smpte431": 11,
+    "smpte432": 12,
+}
+TRANSFER_CODE = {
+    "bt709": 1,
+    "bt470m": 4,
+    "bt470bg": 5,
+    "smpte170m": 6,
+    "smpte240m": 7,
+    "linear": 8,
+    "log100": 9,
+    "log316": 10,
+    "iec61966-2-4": 11,
+    "bt1361e": 12,
+    "iec61966-2-1": 13,
+    "bt2020-10": 14,
+    "bt2020-12": 15,
+    "smpte2084": 16,
+    "smpte428": 17,
+    "arib-std-b67": 18,
+}
+MATRIX_CODE = {
+    "gbr": 0,
+    "bt709": 1,
+    "fcc": 4,
+    "bt470bg": 5,
+    "smpte170m": 6,
+    "smpte240m": 7,
+    "ycgco": 8,
+    "bt2020nc": 9,
+    "bt2020c": 10,
+    "smpte2085": 11,
+    "chroma-derived-nc": 12,
+    "chroma-derived-c": 13,
+    "ictcp": 14,
+}
 
 _D65 = ("0.3127", "0.3290")
 # A mastering display MediaInfo names: (red, green, blue, white point) as (x, y)
@@ -150,6 +203,8 @@ def color_args(color: VideoColor | None, settings: EncoderSettings) -> list[str]
     StaxRip's "Import VUI metadata")."""
     if color is None or not settings.source_color:
         return []
+    if settings.encoder.libvpx:
+        return _ffmpeg_args(color)
     x265 = settings.encoder is Encoder.X265
     args = []
     for flag, value in (
@@ -172,3 +227,47 @@ def color_args(color: VideoColor | None, settings: EncoderSettings) -> list[str]
     if hdr10(color, settings):
         args += [*HDR10_FLAGS, *([] if color.range else ["--range", "limited"])]
     return args
+
+
+def _ffmpeg_args(color: VideoColor) -> list[str]:
+    """ffmpeg's flags for the colour: libvpx-vp9 writes the matrix and the range into the stream, and the
+    others are kept on the stream for the log (the mux tags the container: container_codes)."""
+    args = []
+    for flag, value in (
+        ("-color_primaries", color.primaries),
+        ("-color_trc", FFMPEG_TRANSFER.get(color.transfer, color.transfer)),
+        ("-colorspace", FFMPEG_MATRIX.get(color.matrix, color.matrix)),
+    ):
+        if value:
+            args += [flag, value]
+    if color.range:
+        args += ["-color_range", X264_RANGE[color.range]]
+    return args
+
+
+@dataclass(frozen=True, slots=True)
+class ContainerColor:
+    """A colour description as H.273 code points (None: not given), for the container's tags."""
+
+    primaries: int | None
+    transfer: int | None
+    matrix: int | None
+    full_range: bool | None
+
+    @property
+    def empty(self) -> bool:
+        return self.primaries is None and self.transfer is None and self.matrix is None and self.full_range is None
+
+
+def container_codes(color: VideoColor | None) -> ContainerColor | None:
+    """The colour a VP8 / VP9 encode's container is tagged with (the stream holds little or none of it): None
+    when the source doesn't describe it."""
+    if color is None:
+        return None
+    found = ContainerColor(
+        PRIMARIES_CODE.get(color.primaries),
+        TRANSFER_CODE.get(color.transfer),
+        MATRIX_CODE.get(color.matrix),
+        {"limited": False, "full": True}.get(color.range),
+    )
+    return None if found.empty else found

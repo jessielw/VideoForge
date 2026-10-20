@@ -18,6 +18,7 @@ from videoforge.core.models import (
     TrackOverride,
     VideoInfo,
 )
+from videoforge.core.video.color import ContainerColor
 
 RAW = (".h264", ".hevc")
 OUT = Path("out.mkv")
@@ -112,6 +113,22 @@ def test_vfr_timestamps_time_the_encode():
     plan = aot_plan(encode="Show.S01E01_job.mkv")
     argv = mux_command(plan, encoded, OUT, "mkvmerge", RAW, timestamps=stamps)
     assert value(argv, "--timestamps") == [f"0:{stamps}"] and "--video-tracks" in argv
+
+
+def test_vpx_encode_is_tagged_with_its_aspect_and_colour():
+    """A VP8 / VP9 IVF holds no pixel aspect and little colour: the encode's input gets them (H.273 code points;
+    a value the source doesn't give is left out). The IVF times itself: no --default-duration."""
+    plan = aot_plan(encode="video.ivf")
+    encoded = {0: Path("a.m4a"), 1: Path("b.ec3")}
+    pq = ContainerColor(primaries=9, transfer=16, matrix=9, full_range=False)
+    argv = mux_command(plan, encoded, OUT, "mkvmerge", RAW, sar=Fraction(32, 27), color=pq)
+    assert value(argv, "--aspect-ratio-factor") == ["0:32/27"] and "--default-duration" not in argv
+    assert value(argv, "--colour-primaries") == ["0:9"] and value(argv, "--colour-transfer-characteristics") == ["0:16"]
+    assert value(argv, "--colour-matrix-coefficients") == ["0:9"] and value(argv, "--colour-range") == ["0:1"]
+    assert argv.index("--colour-primaries") < argv.index("video.ivf") and "--video-tracks" in argv
+    argv = mux_command(plan, encoded, OUT, "mkvmerge", RAW, sar=Fraction(1), color=ContainerColor(1, None, None, True))
+    assert "--aspect-ratio-factor" not in argv and value(argv, "--colour-range") == ["0:2"]
+    assert "--colour-transfer-characteristics" not in argv
 
 
 def test_source_attachments_and_global_tags_are_kept():

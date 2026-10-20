@@ -415,7 +415,7 @@
       <section class="space-y-3">
         <h2 class="font-medium">Process priority</h2>
         {#each [
-          { key: 'encoder_priority', label: 'Video encode', hint: 'x264 / x265 and the vspipe feeding it' },
+          { key: 'encoder_priority', label: 'Video encode', hint: 'the encoder (x264, x265, ffmpeg for VP8 / VP9) and the vspipe feeding it' },
           { key: 'tool_priority', label: 'Other tools', hint: 'audio encodes, the mux, indexing' },
         ] as const as row (row.key)}
           <label class="flex items-center gap-3 text-sm">

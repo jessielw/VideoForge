@@ -38,10 +38,12 @@ src/videoforge/
       preview.py         The preview worker: a child process holding the clips; JSON over stdin/stdout
       ffindex.py         FFMS2's index with progress, through the plugin's own ffms2.dll (ctypes)
       crop.py            Auto-crop detection (RGB lightness on sampled lines, read straight from YUV)
-      encoders.py        x264 / x265: settings -> argv (1 or 2 pass), progress parsing (fraction, fps, the encoder's eta)
+      encoders.py        x264 / x265, VP8 / VP9 (ffmpeg's libvpx, into an IVF): settings -> argv (1 or 2 pass),
+                         progress parsing (fraction, fps, the encoder's eta); a VP8 / VP9 job's issues
       color.py           The source's colour (MediaInfo -> VideoInfo.color) -> --colorprim/--transfer/... and
                          x265's HDR10 SEI with StaxRip's --repeat-headers --hrd --aud (and the VBV from --level-idc),
-                         before the job's options (vspipe's y4m carries no colour; a --no- option turns one off)
+                         before the job's options (vspipe's y4m carries no colour; a --no- option turns one off);
+                         ffmpeg's -color_* for VP8 / VP9, and the H.273 codes the mux tags their container with
       hdr.py             Dolby Vision / HDR10+ in the source (MediaInfo -> VideoInfo.hdr; FEL or MEL from a second
                          of the RPU); HDR10+ into x265 (hdr10plus_tool's JSON, --dhdr10-info) and Dolby Vision
                          as 8.1, or a profile 5 as 5 (dovi_tool's RPU, its L5 moved by the crop and resize); a
@@ -148,8 +150,8 @@ added, to one job, or to a batch; a template applied after a job's own edits rep
 ## Pipeline
 
 ```
-index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265, 1 or 2 passes) ─┬► mux ─► validate
-                                      └► audio encodes (up to N at once) ────────────┘
+index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265/ffmpeg, 1 or 2 passes) ─┬► mux ─► validate
+                                      └► audio encodes (up to N at once) ───────────────────┘
 ```
 
 - Each step writes only into the job's `<source>_tmp/` (the mux writes `<out>.partial`). The folder stays
@@ -226,6 +228,15 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   (`core/video/remux.py`, mkvmerge with the one track) before `burn.extract` / `timestamps`; mkvmerge keeps a TS's
   offset to its earliest stream, as the mux does. AutoQPF can't read a TS's program menu (a menu with no
   chapters): `qpf.make_qpf` writes chapters every 5% of MediaInfo's runtime and has AutoQPF read that file.
+- VP8 / VP9 (`core/video/encoders.py` `ffmpeg_command`): vspipe's y4m into `ffmpeg -c:v libvpx[-vp9] ... -f ivf
+  video.ivf`. The IVF is timed by the y4m's frame rate, so both muxers take it as a container (no fps); it holds
+  no pixel aspect and little colour (VP9: the matrix and range), so `build_steps` passes the encode's `sar` and
+  `color.container_codes` to the muxer (`--aspect-ratio-factor`, `--colour-*`; MP4Box `:par`, `:colr=nclx`).
+  ffmpeg runs VP8's `-crf` as constrained quality only and takes `-b:v 0` as its 256 kbit/s default, so VP8's
+  CRF sends `-b:v 100M` (`VP8_CRF_CAP`, a ceiling a 1080p sample didn't reach); VP9 keeps StaxRip's `-b:v 0`.
+  ffmpeg names its 2-pass log `<passlogfile>-0.log` (`encoders.stats_path`). There's no qpfile: the encode step
+  refreshes when its turn comes and forces the qpfile's frames as keyframes (`-force_key_frames expr:`). A pipe
+  from vspipe gets the encoder priority (`process.run`), so ffmpeg's audio encodes keep the tool priority.
 - HDR10+ (`core/video/hdr.py`, x265 with "HDR10+ from the source" on): before the video, `hdr10plus`
   (`ffmpeg ... -f hevc - | hdr10plus_tool extract`, StaxRip's command) writes `hdr10plus.json` to the work
   folder and `hdr10plus.check` compares its frames with the script's (`vspipe --info`): a trim, a frame-rate
@@ -276,7 +287,9 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
     flags warn, except an original flag carried from the source (most releases set it on every
     track: left out quietly); PGS/ASS/LPCM block.
     Chapters must be OGM text, so a chapter XML or the source's chapters are converted first.
-  - The output check reads an MP4 for language, enabled (default) and format only.
+  - The output check reads an MP4 for language, enabled (default) and format only. The language is
+    compared as `lang.primary` (no region or script; nb / nn as no), since MP4Box writes a 3-letter
+    ISO 639-2 code (`Muxer.carries_variants`); `mux.mp4_language` warns at plan time.
 
 ## Logs and job records
 

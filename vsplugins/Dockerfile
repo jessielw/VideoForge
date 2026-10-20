@@ -22,17 +22,18 @@ FROM ${PYTHON_IMAGE} AS base
 RUN apt-get update \
     && apt-get install -y --no-install-recommends autoconf automake build-essential ca-certificates cmake curl git \
         libtool nasm ninja-build pkg-config xz-utils \
-        libbz2-dev libdav1d-dev liblzma-dev libopus-dev zlib1g-dev \
+        libbz2-dev libdav1d-dev liblzma-dev libopus-dev libvpx-dev zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 ENV PKG_CONFIG_PATH=/opt/vf/lib/pkgconfig:/usr/local/lib/pkgconfig PATH=/opt/vf/bin:$PATH
 RUN echo /opt/vf/lib > /etc/ld.so.conf.d/vf.conf
 
-# --- FFmpeg (the CLI the app runs for audio, and the libraries the source filters and MP4Box use) -------
+# --- FFmpeg (the CLI the app runs for audio and VP8 / VP9, and the libraries the source filters and MP4Box use)
 ARG FFMPEG_VERSION
 RUN git clone -q --depth 1 --branch "${FFMPEG_VERSION}" https://github.com/FFmpeg/FFmpeg /src/ffmpeg \
     && cd /src/ffmpeg \
     && ./configure --prefix=/opt/vf --enable-shared --disable-static --disable-doc --disable-debug \
-        --disable-autodetect --enable-bzlib --enable-iconv --enable-libdav1d --enable-libopus --enable-lzma \
+        --disable-autodetect --enable-bzlib --enable-iconv --enable-libdav1d --enable-libopus --enable-libvpx \
+        --enable-lzma \
         --enable-zlib --disable-ffplay \
     && make -j"$(nproc)" && make install && ldconfig \
     && cd / && rm -rf /src/ffmpeg /opt/vf/share \

@@ -81,7 +81,7 @@ export interface VideoSettings {
   custom: string | null
 }
 
-export type EncoderName = 'x264' | 'x265'
+export type EncoderName = 'x264' | 'x265' | 'vp8' | 'vp9'
 export type RateControl = 'crf' | 'abr' | '2pass'
 
 export interface EncoderSettings {
@@ -90,8 +90,8 @@ export interface EncoderSettings {
   crf: number
   bitrate_kbps: number
   target_mb: number | null // 2-pass: the output's size in MB (decimal), which sets the bitrate instead
-  preset: string
-  tune: string
+  preset: string // VP8 / VP9: ffmpeg's -cpu-used (0 slowest)
+  tune: string // x264 / x265 only
   depth: number
   options: Record<string, string>
   extra: string
@@ -602,7 +602,7 @@ export interface ConfigState {
   parallel_audio_default: number // videoforge.toml's
   delete_work_dir: boolean // delete a done job's <source>_tmp/ (records and log copied to records_dir first)
   delete_work_dir_default: boolean // videoforge.toml's
-  encoder_priority: Priority // the video encode's (x264 / x265 and the vspipe feeding it)
+  encoder_priority: Priority // the video encode's (the encoder and the vspipe feeding it)
   encoder_priority_default: Priority // videoforge.toml's
   tool_priority: Priority // every other tool's
   tool_priority_default: Priority // videoforge.toml's
