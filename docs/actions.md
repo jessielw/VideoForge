@@ -1,4 +1,18 @@
-# Actions
+# Notifications and actions
+
+## Notifications
+
+On **Settings → Notifications**, add a named destination using an Apprise URL and select the events
+it should receive: job done, job failed, job cancelled, or queue finished. Use the destination's
+test control to check delivery before starting a long queue. Services include Discord, ntfy,
+Telegram, and email; see [Apprise's service documentation](https://github.com/caronc/apprise/wiki)
+for each URL format.
+
+Notifications run on their own worker, so a slow service does not hold up encoding. Failed sends
+are retried and logged by destination name. Destination URLs can contain credentials; keep them
+out of screenshots and shared logs. An invalid output is a job-failed notification.
+
+## Actions
 
 Settings → Actions: what VideoForge does after a job ends or the queue finishes. Each action has a
 kind, a target and the events it runs on (the same events as notifications: job done, job failed,

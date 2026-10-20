@@ -16,3 +16,7 @@ tools/
 # Local data
 videoforge.local.toml
 *.log
+
+# Generated documentation
+site/
+.cache/

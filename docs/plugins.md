@@ -4,7 +4,8 @@ A plugin is Python code that VideoForge calls when things happen: a job starts o
 finishes, a source is indexed. Use one when an [action](actions.md) isn't enough: talk to a server's
 API, read the job record, decide per job what to do.
 
-`examples/plugins/library_scan/` is a complete one (it asks Jellyfin to scan after jobs are done).
+[examples/plugins/library_scan](https://github.com/jessielw/VideoForge/tree/main/examples/plugins/library_scan)
+is a complete one (it asks Jellyfin to scan after jobs are done).
 
 ## A plugin
 

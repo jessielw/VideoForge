@@ -1,0 +1,58 @@
+# Templates
+
+A template saves a job setup without its source file. It can include video processing, encoder
+settings, container, AutoQPF, crop policy, and optional audio and subtitle selections.
+
+## Create and apply
+
+1. Configure a test job and check its output.
+2. Save its setup as a template, or create one on **Templates**.
+3. Choose whether the template should set audio and subtitle selections.
+4. Star a template to make it the default for new jobs.
+5. Apply it when adding jobs, or to selected jobs in the queue.
+
+Applying a template copies settings into each job. Verify one episode from a batch before running
+the rest, especially when the sources differ in resolution, languages, or channel layouts.
+
+## Crop policy
+
+| Policy | Behavior |
+| --- | --- |
+| Keep | Retain each job's current crop |
+| Fixed | Apply the template's crop to every job |
+| Auto | Detect crop separately for each source after it can be read |
+
+Choose Auto for sources whose borders vary. Fixed crop assumes the same border dimensions on every
+source. A job using an existing encode has no video to crop.
+
+## Audio by position
+
+Slot 1 applies to the first source audio track, slot 2 to the second, and so on. You can create
+several outputs from a slot. Slots beyond the source's tracks are ignored; choose what to do with
+tracks beyond the template's slots.
+
+Use position matching only when the source track order is consistent across the batch.
+
+## Audio by rules
+
+Rules can match language, original language, codec, channels, commentary, and audio description.
+**The first matching rule wins for each track.** Put specific rules before broad ones, and choose
+whether unmatched tracks should be kept or excluded.
+
+Template audio settings are fitted to the actual source. For example, an Atmos choice on a source
+without suitable TrueHD Atmos becomes plain DDP; unsupported layouts and bitrates fall back to
+compatible values. Manual choices in the job editor remain strict and can block an impossible encode.
+
+## Subtitle rules
+
+Subtitle rules match language, format, forced, SDH, and commentary traits. They cover source tracks
+and added subtitle files. As with audio, the first matching rule wins.
+
+A typical policy is forced English first and default, then full English, with other subtitles
+excluded. Check the flags and order on several episodes before using it for a season.
+
+## Templates and profiles
+
+A **profile** defines planning rules and output checks in Python. A **template** saves settings
+applied to a job. The built-in manual profile plus templates covers ordinary interactive use;
+custom release policies can use a [profile package](../development/profiles.md).

@@ -1,5 +1,9 @@
 # VideoForge
 
+[Documentation](https://jessielw.github.io/VideoForge/) ·
+[Getting started](https://jessielw.github.io/VideoForge/getting-started/) ·
+[Releases](https://github.com/jessielw/VideoForge/releases)
+
 An encode and mux job queue that runs in your browser, in the spirit of StaxRip. Queue a job or a
 batch of episodes, and each runs end to end:
 
@@ -178,6 +182,10 @@ Other profiles (for example a release group's rules) are separate Python package
 under the `videoforge.profiles` entry point group. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Development
+
+Documentation uses Zensical: `uv run --only-group docs --frozen zensical serve` previews it at
+http://localhost:8000; `uv run --only-group docs --frozen zensical build --clean --strict` builds it.
+See [Documentation and releases](docs/development/documentation.md) for the GitHub Pages workflow.
 
 `uv run videoforge serve --no-browser`, then `cd frontend && npm run dev` (http://localhost:5173, proxies
 `/api`). Tests: `uv run pytest -q` and `cd frontend && npm run check`. Checks: `uv run poe typecheck`

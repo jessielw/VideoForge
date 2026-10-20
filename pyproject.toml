@@ -25,6 +25,12 @@ dependencies = [
 [project.scripts]
 videoforge = "videoforge:main"
 
+[project.urls]
+Homepage = "https://github.com/jessielw/VideoForge"
+Documentation = "https://jessielw.github.io/VideoForge/"
+Source = "https://github.com/jessielw/VideoForge"
+Issues = "https://github.com/jessielw/VideoForge/issues"
+
 # Profiles (the rules a job is planned with). A group's profile is its own
 # package that adds an entry to this group.
 [project.entry-points."videoforge.profiles"]
@@ -50,6 +56,9 @@ requires = ["uv_build>=0.12.24,<0.13.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
+docs = [
+    "zensical>=0.0.71,<0.1.0",
+]
 dev = [
     "basedpyright>=1.40.2",
     "httpx>=0.28.1",  # fastapi.testclient
@@ -88,6 +97,8 @@ typeCheckingMode = "standard"
 pythonVersion = "3.12"
 
 [tool.poe.tasks]
+docs = "zensical serve"
+docs-build = "zensical build --clean --strict"
 typecheck = "basedpyright"
 lint = "ruff check ."
 lint-fix = "ruff check . --fix"

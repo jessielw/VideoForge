@@ -1,0 +1,103 @@
+[project]
+site_name = "VideoForge Docs"
+site_url = "https://jessielw.github.io/VideoForge/"
+site_description = "Install VideoForge, build an encode and mux queue, and automate your workflow."
+site_author = "jessielw"
+repo_url = "https://github.com/jessielw/VideoForge"
+repo_name = "jessielw/VideoForge"
+edit_uri = "edit/main/docs/"
+copyright = "Copyright &copy; jessielw · MIT License"
+exclude_docs = "audit-*.md"
+nav = [
+    { "Home" = "index.md" },
+    { "Getting started" = [
+        { "Overview" = "getting-started/index.md" },
+        { "Windows portable" = "getting-started/windows.md" },
+        { "Docker" = "getting-started/docker.md" },
+        { "From source" = "getting-started/source.md" },
+        { "Your first job" = "getting-started/first-job.md" },
+    ] },
+    { "Using VideoForge" = [
+        { "Queue and batch indexing" = "usage/queue.md" },
+        { "Video and filters" = "usage/video.md" },
+        { "Encoders and HDR" = "usage/encoders.md" },
+        { "Audio and subtitles" = "usage/tracks.md" },
+        { "Output and chapters" = "usage/output.md" },
+        { "Templates" = "usage/templates.md" },
+    ] },
+    { "Configuration" = [
+        { "Settings and configuration files" = "configuration/settings.md" },
+        { "Tools and VapourSynth plugins" = "configuration/tools.md" },
+        { "Notifications and actions" = "actions.md" },
+        { "Storage and backups" = "configuration/storage.md" },
+    ] },
+    { "Reference" = [
+        { "Troubleshooting" = "reference/troubleshooting.md" },
+        { "Command line" = "reference/cli.md" },
+        { "Job records and events" = "job-record.md" },
+        { "Changelog" = "reference/changelog.md" },
+    ] },
+    { "Development" = [
+        { "Contributing" = "development/contributing.md" },
+        { "Architecture" = "development/architecture.md" },
+        { "Profiles" = "development/profiles.md" },
+        { "Plugins" = "plugins.md" },
+        { "Documentation and releases" = "development/documentation.md" },
+    ] },
+]
+
+[project.theme]
+variant = "classic"
+language = "en"
+features = [
+    "navigation.instant",
+    "navigation.instant.progress",
+    "navigation.sections",
+    "navigation.indexes",
+    "navigation.top",
+    "navigation.tracking",
+    "content.code.copy",
+    "content.action.edit",
+    "search.highlight",
+    "search.share",
+]
+
+[project.theme.icon]
+logo = "material/movie-open-play"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "blue grey"
+accent = "indigo"
+toggle.icon = "material/weather-sunny"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "blue grey"
+accent = "indigo"
+toggle.icon = "material/weather-night"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions]
+admonition = {}
+attr_list = {}
+md_in_html = {}
+"pymdownx.details" = {}
+"pymdownx.superfences" = {}
+
+[project.markdown_extensions.toc]
+permalink = true
+
+[project.markdown_extensions."pymdownx.highlight"]
+anchor_linenums = true
+
+[project.markdown_extensions."pymdownx.snippets"]
+base_path = ["."]
+check_paths = true
+
+[project.validation]
+invalid_links = true
+invalid_link_anchors = true

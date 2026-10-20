@@ -185,7 +185,7 @@ source), or in Docker on Linux.
   contents go too).
 - **Logs and job records.** A text log in each job's work folder, an app log per session, and for each
   output a machine-readable record of how it was made plus a live event stream
-  ([docs/job-record.md](docs/job-record.md)). The encoders' and vspipe's progress lines are logged at every 1%
+  ([job record format](https://jessielw.github.io/VideoForge/job-record/)). The encoders' and vspipe's progress lines are logged at every 1%
   of the step (the progress bar sees them all), so a long encode keeps the job's first lines in its log.
 - **Settings.** Tool paths with a check for each, folder browser roots, the disk wait, Shut down. The version
   shows in the sidebar (and `/api/health`).

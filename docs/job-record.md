@@ -94,10 +94,13 @@ When VideoForge encoded the video:
   "source_filter": "ffms2",                // "ffms2" | "lsmash" | "bestsource"
   "crop": { "left": 0, "top": 140, "right": 0, "bottom": 140 },
   "resize": null,                          // or { "width", "height", "kernel" }
-  "filters": "",                           // extra script lines, as typed
+  "filters": [                             // enabled steps, in processing order
+    { "category": "crop", "name": "Crop", "script": "", "enabled": true },
+    { "category": "resize", "name": "Resize", "script": "", "enabled": true }
+  ],
   "custom_script": false,                  // true: the user wrote the script body
   "encoder": {
-    "name": "x264",                        // "x264" | "x265"
+    "name": "x264",                        // "x264" | "x265" | "vp8" | "vp9" | "svtav1"
     "rate_control": "crf",                 // "crf" | "abr" | "2pass"
     "crf": 18.0, "bitrate_kbps": 10000,    // the one rate_control uses counts
     "target_mb": null,                     // 2pass: the target size (MB) that set the bitrate (the commands carry it)
