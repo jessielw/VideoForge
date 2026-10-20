@@ -243,7 +243,8 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   as VP8 / VP9's (`Encoder.ivf`). The encode step refreshes when its turn comes: SvtAv1EncApp gets the script's
   frames (`--frames`, from the info step, as StaxRip passes them: it doesn't know a pipe's length) and,
   in CRF, the qpfile's frames as `--force-key-frames Nf,...` (`encoders.forces_keyframes`; with `--rc 1` it
-  refuses them). `color._svtav1_args` writes H.273 code points, AV1's chroma position (type 0 -> 1, type 2 -> 2)
+  refuses them). Two passes get `--undershoot-pct 5` (`SVTAV1_UNDERSHOOT`) unless the job's options or extra
+  arguments set it: SvtAv1EncApp's 25 lands 26-33% under `--tbr` on Fallout, 5 within 5.5%. `color._svtav1_args` writes H.273 code points, AV1's chroma position (type 0 -> 1, type 2 -> 2)
   and x265's mastering display units as plain numbers (`color.mastering`). The AV1 stream holds the colour and
   HDR10, but mkvmerge copies none of it to the track, so `container_codes(..., hdr10=True)` tags it
   (`--colour-*`, `--chromaticity-coordinates`, `--max-luminance`, `--max-content-light`, ...); MP4Box writes the

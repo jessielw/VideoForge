@@ -142,13 +142,13 @@ source), or in Docker on Linux.
   yet (a warning). The Docker image's FFmpeg now has libvpx (rebuild the plugins image).
 - **SVT-AV1.** SvtAv1EncApp, as StaxRip runs it (`tools/SvtAv1EncApp/SvtAv1EncApp.exe`; StaxRip ships Patman86's
   builds): CRF (`--rc 0 --crf`, 1-70 in quarter steps), 1-pass bitrate or 2 passes (`--rc 1 --tbr`, `--pass`;
-  a target size too, though SVT-AV1's 2-pass comes in under its bitrate: a Fallout sample 27% under, as with its
-  own `--passes 2`, so a target size warns), the preset (StaxRip's -1 to 13 list, 4 by default) and tune, 8 or
-  10-bit, `--progress 2` (whose lines the queue reads, frames a minute included). It's told the script's frames
+  a target size too), the preset (StaxRip's -1 to 13 list, 4 by default) and tune, 8 or 10-bit, `--progress 2`
+  (whose lines the queue reads, frames a minute included). Two passes add `--undershoot-pct 5` (StaxRip doesn't),
+  unless the options or extra arguments set it: at SvtAv1EncApp's 25 a Fallout sample came in 26% under the
+  bitrate (8 minutes of it, 33%; its own `--passes 2` the same), at 5 within 5.5%. It's told the script's frames
   (`--frames`, as StaxRip does: from a pipe it doesn't know the length). The source's colour goes in as H.273
   code points with the HDR10 mastering display (in plain numbers) and light levels, as StaxRip's SetMetaData
-  writes them; the
-  chapters' keyframes are forced (`--force-key-frames`, CRF only: SvtAv1EncApp refuses them with a bitrate, which
+  writes them; the chapters' keyframes are forced (`--force-key-frames`, CRF only: SvtAv1EncApp refuses them with a bitrate, which
   warns). The encode is an IVF: the MKV's track is tagged with its pixel aspect, colour and HDR10 (mkvmerge
   copies none of it from the stream); the MP4 gets `:par` and `:colr`, and MP4Box's mdcv / clli from the stream.
   HDR10+ and Dolby Vision stay x265's (a warning). The Docker image builds SvtAv1EncApp 4.2.0.

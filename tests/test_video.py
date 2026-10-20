@@ -272,6 +272,13 @@ def test_svtav1_command(tmp_path):
     assert first[first.index("--rc") : first.index("--rc") + 4] == ["--rc", "1", "--tbr", "4000"]
     assert first[first.index("--pass") : first.index("--pass") + 4] == ["--pass", "1", "--stats", "s"]
     assert "--force-key-frames" not in first and "--crf" not in first
+    assert first[first.index("--undershoot-pct") + 1] == "5"  # SVT-AV1's 25 came in 26-33% under --tbr
+    own = encoder_command(
+        "SvtAv1EncApp", replace(two, extra="--undershoot-pct 10"), output=Path("v.ivf"), pass_number=2, stats=Path("s")
+    )
+    assert own.count("--undershoot-pct") == 1 and own[own.index("--undershoot-pct") + 1] == "10"
+    abr = encoder_command("SvtAv1EncApp", replace(two, rate_control=RateControl.ABR), output=Path("v.ivf"))
+    assert "--undershoot-pct" not in abr
     with pytest.raises(ValueError):
         encoder_command("SvtAv1EncApp", two, output=Path("v.ivf"))
     # SDR: type 0 chroma ("left") is AV1's vertical; a stated range with no HDR10
@@ -293,8 +300,7 @@ def test_svtav1_issues():
     abr = replace(s, rate_control=RateControl.ABR, crf=99)  # the CRF isn't used
     assert [i.code for i in encoder_issues(abr, None, chapters=True)] == ["video.svtav1_keyframes"]
     assert encoder_issues(abr, None) == []
-    sized = replace(s, rate_control=RateControl.TWO_PASS, target_mb=500)
-    assert [i.code for i in encoder_issues(sized, None)] == ["video.svtav1_target"]
+    assert encoder_issues(replace(s, rate_control=RateControl.TWO_PASS, target_mb=500), None) == []
     hdr10 = VideoInfo(3840, 2160, color=VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", None, P3_1000, 1000))
     assert encoder_issues(s, hdr10) == []  # AV1 carries HDR10
 

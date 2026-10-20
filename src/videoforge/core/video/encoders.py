@@ -48,6 +48,7 @@ VP8_CRF_CAP = "100M"
 # SvtAv1EncApp's --preset and --crf ranges (13 fastest; CRF in quarter steps)
 SVTAV1_PRESETS = range(-1, 14)
 SVTAV1_CRF = (1, 70)
+SVTAV1_UNDERSHOOT = "5"  # a 2-pass encode's --undershoot-pct (svtav1_command)
 _PERCENT = re.compile(r"\[\s*(\d+(?:\.\d+)?)%\]")  # both encoders: "[ 12.3%] 1234/10000 frames, ..."
 # x265 without --frames: "1234 frames: 23.4 fps, ..." (Patman's mod: "1234 Frames @ 23.4 FPS | ...")
 _X265_FRAMES = re.compile(r"^\s*(\d+) frames(?::| @)", re.IGNORECASE)
@@ -280,7 +281,9 @@ def svtav1_command(
     """A SvtAv1EncApp run reading y4m from stdin, as StaxRip's SVT-AV1 encoder writes it: --rc 0 --crf for
     constant quality, --rc 1 --tbr (VBR) for a bitrate, --pass / --stats for two passes, --progress 2 (the
     progress lines progress() reads). The y4m gives the size, frame rate and bit depth. keyframes (the chapters')
-    are forced in CRF only (forces_keyframes)."""
+    are forced in CRF only (forces_keyframes). Two passes get --undershoot-pct 5 unless the options or extra
+    arguments set it: at its default (25) a Fallout sample came in 26% under --tbr (8 minutes of it, 33%), at 5
+    within 5.5%."""
     argv = [exe, "--input", "-"]
     argv += ["--frames", str(frames)] if frames else []
     argv += ["--preset", settings.preset] if settings.preset else []
@@ -293,6 +296,7 @@ def svtav1_command(
         if pass_number not in (1, 2) or stats is None:
             raise ValueError("A two-pass encode needs pass_number 1 or 2 and a stats file")
         argv += ["--pass", str(pass_number), "--stats", str(stats)]
+        argv += ["--undershoot-pct", SVTAV1_UNDERSHOOT] if _setting(settings, "undershoot-pct") is None else []
     argv += color_args(color, settings)
     if keyframes and forces_keyframes(settings):
         argv += ["--force-key-frames", ",".join(f"{n}f" for n in keyframes)]
@@ -309,7 +313,7 @@ def issues(settings: EncoderSettings, video: VideoInfo | None, chapters: bool = 
     number), VP8 at -cpu-used 4 and up puts keyframes on every 2nd-3rd frame after a scene cut (a Fallout sample:
     69-73 of 200 at 4-5, 3 at 0-3), and an HDR10 source's mastering display and light levels aren't carried (the
     transfer and primaries are). SVT-AV1: 8 or 10-bit, its preset and CRF ranges, and with chapters (the job makes
-    them) a bitrate can't force their keyframes; its 2-pass undershoots a target size."""
+    them) a bitrate can't force their keyframes."""
     if settings.encoder is Encoder.SVTAV1:
         return _svtav1_issues(settings, chapters)
     if not settings.encoder.libvpx:
@@ -376,15 +380,6 @@ def _svtav1_issues(settings: EncoderSettings, chapters: bool) -> list[Issue]:
                 Severity.WARN,
                 "video.svtav1_keyframes",
                 "SVT-AV1 forces keyframes in CRF only: with a bitrate, the chapters don't start on one",
-            )
-        )
-    if settings.rate_control is RateControl.TWO_PASS and settings.target_mb is not None:
-        out.append(
-            Issue(
-                Severity.WARN,
-                "video.svtav1_target",
-                "SVT-AV1's 2-pass comes in under its bitrate (a Fallout sample: 27% under, as with its own --passes 2): "
-                "the file will be smaller than the target size",
             )
         )
     return out
