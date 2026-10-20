@@ -160,13 +160,16 @@
   }
 </script>
 
-<fieldset class="space-y-4" {disabled}>
-  <div class="grid grid-cols-[9rem_1fr] items-center gap-x-4 gap-y-3">
+<fieldset class="@container/encoder min-w-0 space-y-4" {disabled}>
+  <!-- Respond to the panel's width: template cards can be narrow even in a wide window. -->
+  <div class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-4 gap-y-3 @min-[32rem]/encoder:grid-cols-[9rem_minmax(0,1fr)]">
     <span class="section-label">Encoder</span>
     <ToggleGroup.Root
       type="single"
       variant="outline"
-      class="w-fit"
+      spacing={1}
+      class="w-fit max-w-full flex-wrap"
+      aria-label="Encoder"
       {disabled}
       value={value.encoder}
       onValueChange={v => v && set('encoder', v as EncoderName)}
@@ -185,7 +188,7 @@
       </NativeSelect>
       {#if value.rate_control === 'crf'}
         <Input
-          class="w-24"
+          class="w-24 max-w-full"
           type="number"
           aria-label="CRF"
           step={vpx ? 1 : svt ? 0.25 : 0.5}
@@ -196,7 +199,7 @@
         />
       {:else if sized}
         <Input
-          class="w-28"
+          class="w-28 max-w-full"
           type="number"
           aria-label="Target size"
           list="target-sizes"
@@ -213,7 +216,7 @@
         </datalist>
       {:else}
         <Input
-          class="w-28"
+          class="w-28 max-w-full"
           type="number"
           aria-label="Bitrate"
           step="100"
@@ -236,7 +239,7 @@
       {/if}
     </div>
     {#if sized}
-      <span></span>
+      <span class="hidden @min-[32rem]/encoder:block"></span>
       <div class="text-xs text-muted-foreground">
         The video gets what the size leaves: less the audio, subtitles, attachments, HDR metadata and container overhead, over
         the length (StaxRip's sum). Pass 2 counts the encoded audio's files.
@@ -259,21 +262,21 @@
     {/if}
 
     <span class="section-label">{vpx ? 'Speed' : 'Preset'}</span>
-    <NativeSelect class="w-48" value={value.preset} aria-label="Preset" onchange={e => set('preset', e.currentTarget.value)}>
+    <NativeSelect class="w-48 max-w-full" value={value.preset} aria-label="Preset" onchange={e => set('preset', e.currentTarget.value)}>
       <option value="">(encoder default)</option>
       {#each PRESETS[value.encoder] as [p, label] (p)}<option value={p}>{label}</option>{/each}
     </NativeSelect>
 
     {#if TUNES[value.encoder].length}
       <span class="section-label">Tune</span>
-      <NativeSelect class="w-48" value={value.tune} aria-label="Tune" onchange={e => set('tune', e.currentTarget.value)}>
+      <NativeSelect class="w-full max-w-sm" value={value.tune} aria-label="Tune" onchange={e => set('tune', e.currentTarget.value)}>
         <option value="">none</option>
         {#each TUNES[value.encoder] as [t, label] (t)}<option value={t}>{label}</option>{/each}
       </NativeSelect>
     {/if}
 
     <span class="section-label">Bit depth</span>
-    <NativeSelect class="w-24" value={value.depth} aria-label="Bit depth" onchange={e => set('depth', +e.currentTarget.value)}>
+    <NativeSelect class="w-24 max-w-full" value={value.depth} aria-label="Bit depth" onchange={e => set('depth', +e.currentTarget.value)}>
       {#each DEPTHS[value.encoder] as d (d)}<option value={d}>{d}-bit</option>{/each}
     </NativeSelect>
   </div>
@@ -403,16 +406,16 @@
     {/if}
     <div class="overflow-hidden rounded-lg border">
       {#each Object.entries(value.options) as [key, val] (key)}
-        <div class="flex items-center gap-2 border-b border-border/60 px-2 py-1 last:border-b-0">
+        <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/60 px-2 py-1 last:border-b-0">
           <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
           <Input
-            class="w-44 font-mono text-xs"
+            class="min-w-0 font-mono text-xs"
             value={key}
             aria-label="Option name"
             onchange={e => setOption(key, val, (e.target as HTMLInputElement).value.trim().replace(/^-+/, ''))}
           />
           <Input
-            class="flex-1 font-mono text-xs"
+            class="min-w-0 font-mono text-xs"
             value={val}
             aria-label="{dashes}{key} value"
             placeholder="(flag)"
@@ -423,10 +426,10 @@
           </Button>
         </div>
       {/each}
-      <div class="flex items-center gap-2 bg-muted/50 px-2 py-1">
+      <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 bg-muted/50 px-2 py-1">
         <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
-        <Input class="w-44 font-mono text-xs" placeholder="name" aria-label="New option name" bind:value={newKey} onkeydown={e => e.key === 'Enter' && addOption()} />
-        <Input class="flex-1 font-mono text-xs" placeholder="value" aria-label="New option value" bind:value={newValue} onkeydown={e => e.key === 'Enter' && addOption()} />
+        <Input class="min-w-0 font-mono text-xs" placeholder="name" aria-label="New option name" bind:value={newKey} onkeydown={e => e.key === 'Enter' && addOption()} />
+        <Input class="min-w-0 font-mono text-xs" placeholder="value" aria-label="New option value" bind:value={newValue} onkeydown={e => e.key === 'Enter' && addOption()} />
         <Button variant="ghost" size="icon-sm" onclick={addOption} aria-label="Add"><PlusIcon /></Button>
       </div>
     </div>

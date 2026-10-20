@@ -197,7 +197,7 @@
         {/if}
       {:else if tab === 'output'}
         <div class="max-w-3xl space-y-5">
-          <div class="grid grid-cols-[8rem_1fr] items-center gap-3 text-sm">
+          <div class="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 text-sm">
             <span class="text-muted-foreground">Output folder</span>
             <div
               class="-m-1 flex gap-2 rounded-lg p-1 outline-none"
@@ -247,7 +247,8 @@
               <ToggleGroup.Root
                 type="single"
                 variant="outline"
-                class="w-fit"
+                spacing={1}
+                class="w-fit max-w-full flex-wrap"
                 disabled={!editable}
                 value={container?.id}
                 onValueChange={v => v && save({ mux: { ...job!.spec.mux, container: v } })}

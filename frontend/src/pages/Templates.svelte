@@ -226,10 +226,10 @@
         {#if readOnly}<p class="text-sm text-muted-foreground">The profile's own settings for a new job. Duplicate it to make your own.</p>{/if}
         {#if error}<p class="text-sm text-destructive">{error}</p>{/if}
 
-        <fieldset disabled={readOnly} class="grid gap-4 xl:grid-cols-2">
+        <fieldset disabled={readOnly} class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-2">
           <Card.Root class="gap-4 p-4">
             <span class="section-label">Video</span>
-            <label class="grid grid-cols-[7rem_1fr] items-center gap-2 text-sm">
+            <label class="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-2 text-sm">
               <span class="text-muted-foreground">Source filter</span>
               <NativeSelect
                 class="w-full"
@@ -244,7 +244,8 @@
               <ToggleGroup.Root
                 type="single"
                 variant="outline"
-                class="w-fit"
+                spacing={1}
+                class="w-fit max-w-full flex-wrap"
                 disabled={readOnly}
                 value={draft.crop_mode}
                 onValueChange={v => v && (draft!.crop_mode = v as CropMode)}
@@ -295,16 +296,17 @@
             </div>
           </Card.Root>
 
-          <div class="space-y-4">
-            <Card.Root class="gap-3 p-4">
+          <div class="min-w-0 space-y-4">
+            <Card.Root class="@container/output gap-3 p-4">
               <span class="section-label">Output</span>
-              <div class="grid grid-cols-[7rem_1fr] items-center gap-3 text-sm">
+              <div class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 text-sm @min-[26rem]/output:grid-cols-[7rem_minmax(0,1fr)]">
                 <span class="text-muted-foreground">Container</span>
                 {#if containers.length > 1}
                   <ToggleGroup.Root
                     type="single"
                     variant="outline"
-                    class="w-fit"
+                    spacing={1}
+                    class="w-fit max-w-full flex-wrap"
                     disabled={readOnly}
                     value={containers.some(c => c.id === draft?.mux.container) ? draft.mux.container : containers[0].id}
                     onValueChange={v => v && (draft!.mux.container = v)}
@@ -318,7 +320,7 @@
                 {/if}
                 <span class="text-muted-foreground">Extra arguments</span>
                 <Input class="font-mono text-xs" aria-label="Extra muxer arguments" placeholder="added to the muxer command as typed" bind:value={draft.mux.extra} />
-                <span></span>
+                <span class="hidden @min-[26rem]/output:block"></span>
                 <label class="flex items-center gap-2">
                   <Checkbox checked={draft.qpf} disabled={readOnly} onCheckedChange={v => (draft!.qpf = v)} />
                   AutoQPF: chapters from the source (or every 5%) and keyframes on them

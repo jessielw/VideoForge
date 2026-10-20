@@ -554,12 +554,13 @@
             </p>
           </Card.Root>
           {#if batchContainers.length > 1}
-            <Card.Root class="flex-row items-center gap-3 p-4">
+            <Card.Root class="flex-row flex-wrap items-center gap-3 p-4">
               <span class="text-sm">Container</span>
               <ToggleGroup.Root
                 type="single"
                 variant="outline"
-                class="w-fit"
+                spacing={1}
+                class="w-fit max-w-full flex-wrap"
                 value={batchSource.spec.mux.container || batchContainers[0].id}
                 onValueChange={v => v && applyContainer(v)}
               >
