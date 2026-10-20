@@ -238,7 +238,7 @@ def _dv_issues(
             Issue(
                 Severity.WARN,
                 "hdr.dv_x264",
-                f"{settings.encoder.value} can't carry Dolby Vision: the encode keeps the HDR10 layer",
+                f"{settings.encoder.label} can't carry Dolby Vision: the encode keeps the HDR10 layer",
             )
         ]
     out = []
@@ -299,7 +299,7 @@ def _hdr10plus_issues(video: VideoInfo, settings: EncoderSettings, tools: Tools 
             Issue(
                 Severity.WARN,
                 "hdr.hdr10plus_x264",
-                f"{settings.encoder.value} can't carry HDR10+: the encode keeps HDR10 only",
+                f"{settings.encoder.label} can't carry HDR10+: the encode keeps HDR10 only",
             )
         ]
     out = []

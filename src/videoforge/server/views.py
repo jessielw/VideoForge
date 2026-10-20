@@ -22,7 +22,7 @@ def encoder_label(enc: EncoderSettings) -> str:
         rc = f"2-pass {enc.target_mb} MB"
     else:
         rc = f"{'2-pass ' if enc.passes == 2 else ''}{enc.bitrate_kbps} kb/s"
-    return f"{enc.encoder.value} {rc}" + (f" {enc.depth}-bit" if enc.depth != 8 else "")
+    return f"{enc.encoder.label} {rc}" + (f" {enc.depth}-bit" if enc.depth != 8 else "")
 
 
 def issues(e: Entry) -> list[Issue]:

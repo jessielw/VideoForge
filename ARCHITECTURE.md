@@ -38,12 +38,14 @@ src/videoforge/
       preview.py         The preview worker: a child process holding the clips; JSON over stdin/stdout
       ffindex.py         FFMS2's index with progress, through the plugin's own ffms2.dll (ctypes)
       crop.py            Auto-crop detection (RGB lightness on sampled lines, read straight from YUV)
-      encoders.py        x264 / x265, VP8 / VP9 (ffmpeg's libvpx, into an IVF): settings -> argv (1 or 2 pass),
-                         progress parsing (fraction, fps, the encoder's eta); a VP8 / VP9 job's issues
+      encoders.py        x264 / x265, VP8 / VP9 (ffmpeg's libvpx, into an IVF), SVT-AV1 (SvtAv1EncApp, into an
+                         IVF): settings -> argv (1 or 2 pass), progress parsing (fraction, fps, the encoder's eta);
+                         a VP8 / VP9 / SVT-AV1 job's issues
       color.py           The source's colour (MediaInfo -> VideoInfo.color) -> --colorprim/--transfer/... and
                          x265's HDR10 SEI with StaxRip's --repeat-headers --hrd --aud (and the VBV from --level-idc),
                          before the job's options (vspipe's y4m carries no colour; a --no- option turns one off);
-                         ffmpeg's -color_* for VP8 / VP9, and the H.273 codes the mux tags their container with
+                         ffmpeg's -color_* for VP8 / VP9, SvtAv1EncApp's H.273 codes and HDR10 (in plain
+                         numbers), and the H.273 codes (AV1's HDR10 too) the mux tags their container with
       hdr.py             Dolby Vision / HDR10+ in the source (MediaInfo -> VideoInfo.hdr; FEL or MEL from a second
                          of the RPU); HDR10+ into x265 (hdr10plus_tool's JSON, --dhdr10-info) and Dolby Vision
                          as 8.1, or a profile 5 as 5 (dovi_tool's RPU, its L5 moved by the crop and resize); a
@@ -150,8 +152,8 @@ added, to one job, or to a batch; a template applied after a job's own edits rep
 ## Pipeline
 
 ```
-index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265/ffmpeg, 1 or 2 passes) ─┬► mux ─► validate
-                                      └► audio encodes (up to N at once) ───────────────────┘
+index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265/ffmpeg/SvtAv1EncApp, 1 or 2 passes) ─┬► mux ─► validate
+                                      └► audio encodes (up to N at once) ────────────────────────────────┘
 ```
 
 - Each step writes only into the job's `<source>_tmp/` (the mux writes `<out>.partial`). The folder stays
@@ -237,6 +239,17 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   ffmpeg names its 2-pass log `<passlogfile>-0.log` (`encoders.stats_path`). There's no qpfile: the encode step
   refreshes when its turn comes and forces the qpfile's frames as keyframes (`-force_key_frames expr:`). A pipe
   from vspipe gets the encoder priority (`process.run`), so ffmpeg's audio encodes keep the tool priority.
+- SVT-AV1 (`encoders.svtav1_command`): vspipe's y4m into `SvtAv1EncApp --input - ... --output video.ivf`, an IVF
+  as VP8 / VP9's (`Encoder.ivf`). The encode step refreshes when its turn comes: SvtAv1EncApp gets the script's
+  frames (`--frames`, from the info step, as StaxRip passes them: it doesn't know a pipe's length) and,
+  in CRF, the qpfile's frames as `--force-key-frames Nf,...` (`encoders.forces_keyframes`; with `--rc 1` it
+  refuses them). `color._svtav1_args` writes H.273 code points, AV1's chroma position (type 0 -> 1, type 2 -> 2)
+  and x265's mastering display units as plain numbers (`color.mastering`). The AV1 stream holds the colour and
+  HDR10, but mkvmerge copies none of it to the track, so `container_codes(..., hdr10=True)` tags it
+  (`--colour-*`, `--chromaticity-coordinates`, `--max-luminance`, `--max-content-light`, ...); MP4Box writes the
+  colr, mdcv and clli boxes from the stream, so an AV1 encode's HDR10 leaves `:hdr=none` out. `--progress 2`'s
+  lines ("Encoding: n/total Frames @ x fps|fpm ... [-h:mm:ss]", ANSI colours stripped by `process`) give the
+  fraction, fps and time left.
 - HDR10+ (`core/video/hdr.py`, x265 with "HDR10+ from the source" on): before the video, `hdr10plus`
   (`ffmpeg ... -f hevc - | hdr10plus_tool extract`, StaxRip's command) writes `hdr10plus.json` to the work
   folder and `hdr10plus.check` compares its frames with the script's (`vspipe --info`): a trim, a frame-rate

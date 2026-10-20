@@ -197,12 +197,23 @@ class Encoder(StrEnum):
     X265 = "x265"
     VP8 = "vp8"  # ffmpeg's libvpx, as StaxRip encodes VP8 / VP9
     VP9 = "vp9"
+    SVTAV1 = "svtav1"  # SvtAv1EncApp, as StaxRip's SVT-AV1 encoder
 
     @property
     def libvpx(self) -> bool:
         """Encoded by ffmpeg (libvpx) into an IVF. The stream has no pixel aspect and little colour (VP9 the
         matrix and the range, VP8 none): the mux writes them (encoders.py)."""
         return self in (Encoder.VP8, Encoder.VP9)
+
+    @property
+    def label(self) -> str:
+        """The name messages and the UI show."""
+        return {"vp8": "VP8", "vp9": "VP9", "svtav1": "SVT-AV1"}.get(self.value, self.value)
+
+    @property
+    def ivf(self) -> bool:
+        """Writes an IVF (VP8, VP9, AV1), whose stream has no pixel aspect: the mux tags it, with the colour."""
+        return self.libvpx or self is Encoder.SVTAV1
 
 
 class RateControl(StrEnum):
@@ -219,8 +230,8 @@ class EncoderSettings:
     bitrate_kbps: int = 10000
     # 2-pass: the output file's size in MB (decimal), which sets the bitrate instead (core/video/target.py)
     target_mb: int | None = None
-    preset: str = "slower"  # VP8 / VP9: ffmpeg's -cpu-used (0 slowest)
-    tune: str = ""  # x264 / x265 only
+    preset: str = "slower"  # VP8 / VP9: ffmpeg's -cpu-used (0 slowest); SVT-AV1: --preset (-1 to 13, 13 fastest)
+    tune: str = ""  # x264 / x265; SVT-AV1: --tune's number
     depth: int = 8  # output bit depth; the script converts to it
     # --name value pairs, in order; an empty value is a bare flag (e.g. "no-fast-pskip": "").
     options: dict[str, str] = field(default_factory=dict)

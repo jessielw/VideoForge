@@ -7,6 +7,7 @@ profile = "manual"
 mkvmerge = "mkvmerge"
 x264 = "x264"
 x265 = "x265"
+svtav1 = "SvtAv1EncApp"
 ffmpeg = "ffmpeg"
 opusenc = "opusenc"
 mp4box = "MP4Box"
@@ -39,7 +40,7 @@ parallel_audio = 2
 # its job records and log are copied to <data folder>/records first. The Settings page can change it.
 delete_work_dir = false
 # Process priority: idle, below_normal, normal, above_normal or high, as a nice value (raising one back
-# needs CAP_SYS_NICE). The video encode (x264 / x265 and the vspipe feeding it), and every other tool.
+# needs CAP_SYS_NICE). The video encode (the encoder and the vspipe feeding it), and every other tool.
 encoder_priority = "below_normal"
 tool_priority = "normal"
 

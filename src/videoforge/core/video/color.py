@@ -1,15 +1,19 @@
-"""The source's colour description (MediaInfo) -> x264 / x265 / ffmpeg flags, and the container's tags.
+"""The source's colour description (MediaInfo) -> x264 / x265 / ffmpeg / SvtAv1EncApp flags, and the container's
+tags.
 
 vspipe's y4m carries no colour information, so without these an encode is untagged and a player guesses
 (an HDR10 source plays washed out). The flags go before the job's options, so an option set there wins.
 x264 gets the VUI flags only (no HDR10 SEI); Dolby Vision isn't carried. A VP9 stream holds only the matrix
 and the range (VP8 none), so a VP8 / VP9 encode's colour is tagged by the mux too (container_codes); its HDR10
-mastering display and light levels aren't carried yet.
+mastering display and light levels aren't carried yet. An AV1 stream holds all of it (HDR10 in metadata OBUs),
+but mkvmerge copies none of it to the MKV's track: the mux tags that too (MP4Box writes its colr, mdcv and clli
+boxes from the stream itself).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from fractions import Fraction
 import re
 from typing import Any
@@ -128,6 +132,10 @@ _XY = re.compile(r"x=([\d.]+)\s+y=([\d.]+)")
 _LUMINANCE = re.compile(r"min:\s*([\d.]+)\s*cd/m2,\s*max:\s*([\d.]+)\s*cd/m2")
 _NUMBER = re.compile(r"[\d.]+")
 _TYPE = re.compile(r"Type (\d)")
+_X265_DISPLAY = re.compile(r"G\((\d+),(\d+)\)B\((\d+),(\d+)\)R\((\d+),(\d+)\)WP\((\d+),(\d+)\)L\((\d+),(\d+)\)")
+# H.273's chroma sample location type (MediaInfo's "Type n") -> AV1's chroma_sample_position: type 0 is "left"
+# (AV1's vertical, 1), type 2 "top left" (colocated, 2); AV1 has no others
+AV1_CHROMA_POSITION = {0: 1, 2: 2}
 
 
 def _text(track: Any, name: str) -> str:
@@ -155,6 +163,35 @@ def master_display(primaries: str, luminance: str) -> str:
     (r, g, b, wp) = [(_units(x, 50000), _units(y, 50000)) for x, y in points]
     low, high = _units(lum.group(1), 10000), _units(lum.group(2), 10000)
     return f"G({g[0]},{g[1]})B({b[0]},{b[1]})R({r[0]},{r[1]})WP({wp[0]},{wp[1]})L({high},{low})"
+
+
+def _decimal(units: int, per: int) -> str:
+    return f"{(Decimal(units) / per).normalize():f}"
+
+
+@dataclass(frozen=True, slots=True)
+class Mastering:
+    """A mastering display in plain numbers, as decimal strings: chromaticities (x, y), luminance in cd/m2."""
+
+    red: tuple[str, str]
+    green: tuple[str, str]
+    blue: tuple[str, str]
+    white: tuple[str, str]
+    max_luminance: str
+    min_luminance: str
+
+
+def mastering(master_display: str) -> Mastering | None:
+    """x265's --master-display (master_display's units) in plain numbers; None when it isn't one."""
+    m = _X265_DISPLAY.fullmatch(master_display)
+    if m is None:
+        return None
+    n = [int(g) for g in m.groups()]
+
+    def xy(i: int) -> tuple[str, str]:
+        return _decimal(n[i], 50000), _decimal(n[i + 1], 50000)
+
+    return Mastering(xy(4), xy(0), xy(2), xy(6), _decimal(n[8], 10000), _decimal(n[9], 10000))
 
 
 def _nits(track: Any, name: str) -> int:
@@ -205,6 +242,8 @@ def color_args(color: VideoColor | None, settings: EncoderSettings) -> list[str]
         return []
     if settings.encoder.libvpx:
         return _ffmpeg_args(color)
+    if settings.encoder is Encoder.SVTAV1:
+        return _svtav1_args(color)
     x265 = settings.encoder is Encoder.X265
     args = []
     for flag, value in (
@@ -245,23 +284,62 @@ def _ffmpeg_args(color: VideoColor) -> list[str]:
     return args
 
 
+def _svtav1_args(color: VideoColor) -> list[str]:
+    """SvtAv1EncApp's flags for the colour, as StaxRip's SetMetaData writes them: H.273 code points, the range
+    (0 limited, 1 full; limited when an HDR10 source doesn't say), the chroma position, and the HDR10 mastering
+    display (in plain numbers) and light levels."""
+    args = []
+    for flag, code in (
+        ("--color-primaries", PRIMARIES_CODE.get(color.primaries)),
+        ("--transfer-characteristics", TRANSFER_CODE.get(color.transfer)),
+        ("--matrix-coefficients", MATRIX_CODE.get(color.matrix)),
+        ("--chroma-sample-position", None if color.chroma_loc is None else AV1_CHROMA_POSITION.get(color.chroma_loc)),
+    ):
+        if code is not None:
+            args += [flag, str(code)]
+    display = mastering(color.master_display)
+    if color.range or display or color.max_cll or color.max_fall:
+        args += ["--color-range", "1" if color.range == "full" else "0"]
+    if display is not None:
+        d = display
+        args += [
+            "--mastering-display",
+            f"G({','.join(d.green)})B({','.join(d.blue)})R({','.join(d.red)})WP({','.join(d.white)})"
+            f"L({d.max_luminance},{d.min_luminance})",
+        ]
+    if color.max_cll or color.max_fall:
+        args += ["--content-light", f"{color.max_cll},{color.max_fall}"]
+    return args
+
+
 @dataclass(frozen=True, slots=True)
 class ContainerColor:
-    """A colour description as H.273 code points (None: not given), for the container's tags."""
+    """A colour description as H.273 code points (None: not given), for the container's tags; with an AV1 encode's
+    HDR10 values (mkvmerge writes them as the track's mastering metadata)."""
 
     primaries: int | None
     transfer: int | None
     matrix: int | None
     full_range: bool | None
+    mastering: Mastering | None = None
+    max_cll: int = 0
+    max_fall: int = 0
 
     @property
     def empty(self) -> bool:
-        return self.primaries is None and self.transfer is None and self.matrix is None and self.full_range is None
+        return (
+            self.primaries is None
+            and self.transfer is None
+            and self.matrix is None
+            and self.full_range is None
+            and self.mastering is None
+            and not (self.max_cll or self.max_fall)
+        )
 
 
-def container_codes(color: VideoColor | None) -> ContainerColor | None:
-    """The colour a VP8 / VP9 encode's container is tagged with (the stream holds little or none of it): None
-    when the source doesn't describe it."""
+def container_codes(color: VideoColor | None, hdr10: bool = False) -> ContainerColor | None:
+    """The colour a VP8 / VP9 / AV1 encode's container is tagged with (the stream holds little or none of it, or
+    mkvmerge doesn't copy it), with the HDR10 values when hdr10: None when the source doesn't describe it."""
     if color is None:
         return None
     found = ContainerColor(
@@ -269,5 +347,8 @@ def container_codes(color: VideoColor | None) -> ContainerColor | None:
         TRANSFER_CODE.get(color.transfer),
         MATRIX_CODE.get(color.matrix),
         {"limited": False, "full": True}.get(color.range),
+        mastering(color.master_display) if hdr10 else None,
+        color.max_cll if hdr10 else 0,
+        color.max_fall if hdr10 else 0,
     )
     return None if found.empty else found

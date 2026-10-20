@@ -3,8 +3,8 @@
 An encode and mux job queue that runs in your browser, in the spirit of StaxRip. Queue a job or a
 batch of episodes, and each runs end to end:
 
-index → VapourSynth (crop, resize, filters) → x264 / x265 / VP8 / VP9 → audio → subtitles → mux (MKV or MP4)
-→ validate
+index → VapourSynth (crop, resize, filters) → x264 / x265 / VP8 / VP9 / SVT-AV1 → audio → subtitles → mux (MKV
+or MP4) → validate
 
 It runs as one local process (FastAPI + a Svelte app) for one user: on Windows (portable zip or from
 source), or in Docker on Linux. Jobs survive restarts,
@@ -36,6 +36,7 @@ missing. A bare name (`ffmpeg`, `MP4Box`) is looked up on `PATH`.
 | --- | --- | --- |
 | [MKVToolNix](https://mkvtoolnix.download/) | `tools/MKVToolNix/mkvmerge.exe` | reading sources, MKV output |
 | x264, x265 | `tools/x264/x264.exe`, `tools/x265/x265.exe` | the video encode |
+| SvtAv1EncApp (SVT-AV1) | `tools/SvtAv1EncApp/SvtAv1EncApp.exe` | AV1 encodes ([Patman86's builds](https://github.com/Patman86/SVT-AV1-Mods-by-Patman/releases), as StaxRip ships, or [SVT-AV1](https://gitlab.com/AOMediaCodec/SVT-AV1)'s own) |
 | VapourSynth plugins | `tools/vs-plugins/` | source filters (FFMS2, the default; L-SMASH; BestSource) and any filters your scripts use: see [VapourSynth plugins](#vapoursynth-plugins) |
 | [MP4Box](https://gpac.io/) (GPAC) | `MP4Box` on `PATH` | MP4 output |
 | ffmpeg | `ffmpeg` on `PATH` | FLAC / Opus / AAC / AC-3 / E-AC-3 encodes, and decoding for the other audio encoders |
@@ -82,7 +83,7 @@ the log; `videoforge.cmd --help`). Build it yourself with `uv run python scripts
 
 ## Docker (Linux)
 
-The image (`ghcr.io/jessielw/videoforge`, amd64) carries the free tools: MKVToolNix, x264, x265, FFmpeg 9,
+The image (`ghcr.io/jessielw/videoforge`, amd64) carries the free tools: MKVToolNix, x264, x265, SVT-AV1, FFmpeg 9,
 MP4Box, opus-tools, DeeZy, truehdd, dovi_tool, hdr10plus_tool, Wine (for Windows tools), and the [VapourSynth plugins](#vapoursynth-plugins),
 built from source.
 Start from [compose.yaml](compose.yaml): set your media folder, then `docker compose up -d` and open
@@ -130,7 +131,7 @@ app's database and win over both.
   chapters, or an existing encode to reuse. Each job starts on a template.
 - **Queue:** the job list and each job's editor: **Video** (frame preview with zoom and crop overlay, auto
   crop, resize, filters, the generated VapourSynth script, which you can edit), **Encoder** (x264 / x265,
-  VP8 / VP9 through ffmpeg; 1 or 2 passes), **Audio** and **Subtitles** (keep, leave out, reorder, retitle, flag; copy or encode
+  VP8 / VP9 through ffmpeg, SVT-AV1; 1 or 2 passes), **Audio** and **Subtitles** (keep, leave out, reorder, retitle, flag; copy or encode
   each audio track, more than one output from one track), **Output** (folder, container, chapters, AutoQPF,
   label) and **Log**. Select several jobs to apply an edit or a template to all of them.
 - **Templates:** a job's whole setup without a file: video, crop mode (keep, the template's crop, or detect

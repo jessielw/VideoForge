@@ -37,6 +37,7 @@ class Tools:
     mkvextract: str = "mkvextract"  # default: next to mkvmerge
     x264: str = "x264"
     x265: str = "x265"
+    svtav1: str = "SvtAv1EncApp"
     opusenc: str = "opusenc"
     mp4box: str = "MP4Box"
     dovi_tool: str = "dovi_tool"  # Dolby Vision RPU extract / edit
@@ -54,7 +55,7 @@ class AppConfig:
     plugins: dict[str, dict] = field(default_factory=dict)  # [plugins.<id>]: each plugin's own settings
     parallel_audio: int = 2  # audio encodes run alongside a job's video, this many at once; 0 = one by one
     delete_work_dir: bool = False  # delete a job's <source>_tmp/ once it's done (its records are kept elsewhere)
-    # StaxRip's defaults: the video encode (x264 / x265 and the vspipe feeding it) below normal, other tools normal
+    # StaxRip's defaults: the video encode (the encoder and the vspipe feeding it) below normal, other tools normal
     encoder_priority: Priority = Priority.BELOW_NORMAL
     tool_priority: Priority = Priority.NORMAL
 

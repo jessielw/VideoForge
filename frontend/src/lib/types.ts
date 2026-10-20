@@ -81,7 +81,7 @@ export interface VideoSettings {
   custom: string | null
 }
 
-export type EncoderName = 'x264' | 'x265' | 'vp8' | 'vp9'
+export type EncoderName = 'x264' | 'x265' | 'vp8' | 'vp9' | 'svtav1'
 export type RateControl = 'crf' | 'abr' | '2pass'
 
 export interface EncoderSettings {
@@ -90,12 +90,12 @@ export interface EncoderSettings {
   crf: number
   bitrate_kbps: number
   target_mb: number | null // 2-pass: the output's size in MB (decimal), which sets the bitrate instead
-  preset: string // VP8 / VP9: ffmpeg's -cpu-used (0 slowest)
-  tune: string // x264 / x265 only
+  preset: string // VP8 / VP9: ffmpeg's -cpu-used (0 slowest); SVT-AV1: --preset (-1 to 13, 13 fastest)
+  tune: string // x264 / x265; SVT-AV1: --tune's number
   depth: number
   options: Record<string, string>
   extra: string
-  source_color: boolean // tag the encode with the source's colour description (and HDR10 metadata on x265)
+  source_color: boolean // tag the encode with the source's colour description (and HDR10 metadata on x265 / SVT-AV1)
   hdr10plus: boolean // carry a source's HDR10+ metadata into an x265 encode
   dolby_vision: boolean // carry a source's Dolby Vision (as profile 8.1) into an x265 encode
 }

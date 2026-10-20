@@ -18,7 +18,7 @@ from videoforge.core.models import (
     TrackOverride,
     VideoInfo,
 )
-from videoforge.core.video.color import ContainerColor
+from videoforge.core.video.color import ContainerColor, mastering
 
 RAW = (".h264", ".hevc")
 OUT = Path("out.mkv")
@@ -129,6 +129,21 @@ def test_vpx_encode_is_tagged_with_its_aspect_and_colour():
     argv = mux_command(plan, encoded, OUT, "mkvmerge", RAW, sar=Fraction(1), color=ContainerColor(1, None, None, True))
     assert "--aspect-ratio-factor" not in argv and value(argv, "--colour-range") == ["0:2"]
     assert "--colour-transfer-characteristics" not in argv
+    assert "--max-luminance" not in argv and "--max-content-light" not in argv
+
+
+def test_av1_encode_is_tagged_with_its_hdr10():
+    """mkvmerge copies none of an AV1 stream's colour to the track: the mux tags it, the HDR10 mastering display
+    (in plain numbers) and light levels included."""
+    plan = aot_plan(encode="video.ivf")
+    p3 = mastering("G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50)")
+    pq = ContainerColor(9, 16, 9, False, p3, 1000, 400)
+    argv = mux_command(plan, {0: Path("a.m4a"), 1: Path("b.ec3")}, OUT, "mkvmerge", RAW, color=pq)
+    assert value(argv, "--chromaticity-coordinates") == ["0:0.68,0.32,0.265,0.69,0.15,0.06"]
+    assert value(argv, "--white-colour-coordinates") == ["0:0.3127,0.329"]
+    assert value(argv, "--max-luminance") == ["0:1000"] and value(argv, "--min-luminance") == ["0:0.005"]
+    assert value(argv, "--max-content-light") == ["0:1000"] and value(argv, "--max-frame-light") == ["0:400"]
+    assert argv.index("--max-luminance") < argv.index("video.ivf")
 
 
 def test_source_attachments_and_global_tags_are_kept():

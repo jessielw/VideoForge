@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Encoder settings (x264 / x265, VP8 / VP9 through ffmpeg): rate control, preset, tune, bit depth, options, extra args.
+  // Encoder settings (x264 / x265, VP8 / VP9 through ffmpeg, SVT-AV1): rate control, preset, tune, bit depth, options, extra args.
   // Emits a fresh copy on every change; the parent decides when to save.
   import type { EncoderName, EncoderSettings, RateControl, SizeBudget, VideoHdr } from '../lib/types'
   import PlusIcon from '@lucide/svelte/icons/plus'
@@ -78,25 +78,51 @@
 
   const HDR_TRANSFERS = ['smpte2084', 'arib-std-b67'] // PQ, HLG
   const hdr = $derived(
-    !!colorArgs && colorArgs.some((a, i) => ['--transfer', '-color_trc'].includes(colorArgs[i - 1]) && HDR_TRANSFERS.includes(a)),
+    !!colorArgs &&
+      colorArgs.some(
+        (a, i) =>
+          (['--transfer', '-color_trc'].includes(colorArgs[i - 1]) && HDR_TRANSFERS.includes(a)) ||
+          (colorArgs[i - 1] === '--transfer-characteristics' && ['16', '18'].includes(a)), // SVT-AV1's H.273 codes
+      ),
   )
 
-  const ENCODERS: [EncoderName, string][] = [['x264', 'x264'], ['x265', 'x265'], ['vp8', 'VP8'], ['vp9', 'VP9']]
+  const ENCODERS: [EncoderName, string][] = [['x264', 'x264'], ['x265', 'x265'], ['vp8', 'VP8'], ['vp9', 'VP9'], ['svtav1', 'SVT-AV1']]
+  const encoderLabel = $derived(ENCODERS.find(([e]) => e === value.encoder)?.[1] ?? value.encoder)
   // VP8 / VP9 run through ffmpeg (libvpx), as StaxRip's ffmpeg encoder does: its speed list is -cpu-used
   const vpx = $derived(value.encoder === 'vp8' || value.encoder === 'vp9')
+  const svt = $derived(value.encoder === 'svtav1')
+  // SvtAv1EncApp's CRF range, in quarter steps (encoders.SVTAV1_CRF)
+  const SVT_CRF: [number, number] = [1, 70]
   const X26X_PRESETS: [string, string][] = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'].map(
     p => [p, p],
   )
   const VPX_PRESETS: [string, string][] = [['6', '6 - Fastest'], ['5', '5 - Faster'], ['4', '4 - Fast'], ['3', '3 - Medium'], ['2', '2 - Slow'], ['1', '1 - Slower'], ['0', '0 - Slowest']]
-  const PRESETS: Record<EncoderName, [string, string][]> = { x264: X26X_PRESETS, x265: X26X_PRESETS, vp8: VPX_PRESETS, vp9: VPX_PRESETS }
-  const DEFAULT_PRESET: Record<EncoderName, string> = { x264: 'slower', x265: 'slower', vp8: '1', vp9: '1' }
-  const TUNES: Record<EncoderName, string[]> = {
-    x264: ['film', 'animation', 'grain', 'stillimage', 'psnr', 'ssim', 'fastdecode', 'zerolatency'],
-    x265: ['animation', 'grain', 'psnr', 'ssim', 'fastdecode', 'zerolatency'],
+  // StaxRip's names for SvtAv1EncApp's presets 0-13 (-1 is for debugging), fastest first
+  const SVT_PRESETS: [string, string][] = [
+    'Slowest', 'Extreme Slow', 'Ultra Slow', 'Very Slow', 'Slower', 'Slow', 'Medium', 'Fast', 'Faster', 'Very Fast', 'Mega Fast',
+    'Ultra Fast', 'Extreme Fast', 'Fastest',
+  ]
+    .map((name, n): [string, string] => [String(n), `${n} - ${name}`])
+    .reverse()
+  const PRESETS: Record<EncoderName, [string, string][]> = {
+    x264: X26X_PRESETS,
+    x265: X26X_PRESETS,
+    vp8: VPX_PRESETS,
+    vp9: VPX_PRESETS,
+    svtav1: SVT_PRESETS,
+  }
+  const DEFAULT_PRESET: Record<EncoderName, string> = { x264: 'slower', x265: 'slower', vp8: '1', vp9: '1', svtav1: '4' }
+  const named = (names: string[]) => names.map((t): [string, string] => [t, t])
+  // [value, label]
+  const TUNES: Record<EncoderName, [string, string][]> = {
+    x264: named(['film', 'animation', 'grain', 'stillimage', 'psnr', 'ssim', 'fastdecode', 'zerolatency']),
+    x265: named(['animation', 'grain', 'psnr', 'ssim', 'fastdecode', 'zerolatency']),
     vp8: [],
     vp9: [],
+    // SvtAv1EncApp's --tune (1, PSNR, is its default)
+    svtav1: [['0', '0 - VQ'], ['1', '1 - PSNR'], ['2', '2 - SSIM'], ['3', '3 - Image quality'], ['4', '4 - MS-SSIM / SSIMULACRA2'], ['5', '5 - VMAF']],
   }
-  const DEPTHS: Record<EncoderName, number[]> = { x264: [8, 10], x265: [8, 10, 12], vp8: [8], vp9: [8, 10, 12] }
+  const DEPTHS: Record<EncoderName, number[]> = { x264: [8, 10], x265: [8, 10, 12], vp8: [8], vp9: [8, 10, 12], svtav1: [8, 10] }
   // what encoders.VP9_DEFAULTS writes before the options (StaxRip's, plus row-mt)
   const VP9_DEFAULTS = '-tile-columns 6 -frame-parallel 1 -auto-alt-ref 1 -lag-in-frames 25 -row-mt 1'
   const dashes = $derived(vpx ? '-' : '--')
@@ -108,10 +134,11 @@
     const next: EncoderSettings = { ...value, options: { ...value.options }, [key]: v }
     if (key === 'encoder') {
       const enc = v as EncoderName
-      if (!TUNES[enc].includes(next.tune)) next.tune = ''
+      if (!TUNES[enc].some(([t]) => t === next.tune)) next.tune = ''
       if (!DEPTHS[enc].includes(next.depth)) next.depth = 8
       if (next.preset && !PRESETS[enc].some(([p]) => p === next.preset)) next.preset = DEFAULT_PRESET[enc]
       if (enc === 'vp8' || enc === 'vp9') next.crf = Math.min(63, Math.round(next.crf))
+      if (enc === 'svtav1') next.crf = Math.min(SVT_CRF[1], Math.max(SVT_CRF[0], Math.round(next.crf * 4) / 4))
     }
     onchange(next)
   }
@@ -161,9 +188,9 @@
           class="w-24"
           type="number"
           aria-label="CRF"
-          step={vpx ? 1 : 0.5}
-          min="0"
-          max={vpx ? 63 : 51}
+          step={vpx ? 1 : svt ? 0.25 : 0.5}
+          min={svt ? SVT_CRF[0] : 0}
+          max={vpx ? 63 : svt ? SVT_CRF[1] : 51}
           value={value.crf}
           onchange={e => set('crf', +(e.target as HTMLInputElement).value)}
         />
@@ -241,7 +268,7 @@
       <span class="section-label">Tune</span>
       <NativeSelect class="w-48" value={value.tune} aria-label="Tune" onchange={e => set('tune', e.currentTarget.value)}>
         <option value="">none</option>
-        {#each TUNES[value.encoder] as t (t)}<option value={t}>{t}</option>{/each}
+        {#each TUNES[value.encoder] as [t, label] (t)}<option value={t}>{label}</option>{/each}
       </NativeSelect>
     {/if}
 
@@ -256,11 +283,14 @@
     <span class="min-w-0">
       Colour from the source
       <span class="block text-xs text-muted-foreground">
-        Tags the encode with the source's colour description{value.encoder === 'x265' ? ' and HDR10 metadata' : ''}
+        Tags the encode with the source's colour description{value.encoder === 'x265' || svt ? ' and HDR10 metadata' : ''}
         (vspipe passes none on){value.encoder === 'x265' ? ', with --repeat-headers --hrd --aud for HDR10 as StaxRip sets them' : ''}.
         {#if vpx}
           {value.encoder === 'vp9' ? 'VP9 holds the matrix and range in the stream' : 'VP8 holds none in the stream'}: the mux
           tags the container with the colour (and the pixel aspect). An HDR10 mastering display and light levels aren't carried yet.
+        {:else if svt}
+          AV1 holds them in the stream; the mux tags an MKV's track with them too (mkvmerge doesn't copy them), and the pixel
+          aspect. An option below with the same flag wins.
         {:else}
           An option below with the same flag wins (--no-hrd turns one off).
         {/if}
@@ -297,7 +327,7 @@
         {:else if !hdr10plus}
           <span class="block text-xs text-muted-foreground">The source has no HDR10+.</span>
         {:else if value.encoder !== 'x265'}
-          <span class="mt-1 block text-xs text-warning">{value.encoder} can't carry HDR10+: the encode keeps HDR10 only.</span>
+          <span class="mt-1 block text-xs text-warning">{encoderLabel} can't carry HDR10+: the encode keeps HDR10 only.</span>
         {:else}
           <code class="mt-1 block font-mono text-xs break-all {value.hdr10plus ? '' : 'text-muted-foreground line-through'}"
             >--dhdr10-info hdr10plus.json</code
@@ -328,7 +358,7 @@
         {:else if dv.dv_profile === 5 && (value.encoder !== 'x265' || !value.dolby_vision)}
           <span class="mt-1 block text-xs text-warning">Profile 5 has no HDR10 layer: without its RPU the encode's colours look wrong, unless the script maps them.</span>
         {:else if value.encoder !== 'x265'}
-          <span class="mt-1 block text-xs text-warning">{value.encoder} can't carry Dolby Vision: the encode keeps the HDR10 layer.</span>
+          <span class="mt-1 block text-xs text-warning">{encoderLabel} can't carry Dolby Vision: the encode keeps the HDR10 layer.</span>
         {:else}
           <code class="mt-1 block font-mono text-xs break-all {value.dolby_vision ? '' : 'text-muted-foreground line-through'}"
             >--dolby-vision-profile {dv.dv_profile === 5 ? '5' : '8.1'} --dolby-vision-rpu dv_rpu.bin{levelVbv?.length ? ' ' + levelVbv.join(' ') : ''}</code
@@ -365,6 +395,11 @@
       </p>
     {:else if vpx}
       <p class="mb-2 text-xs text-muted-foreground">ffmpeg's libvpx options.</p>
+    {:else if svt}
+      <p class="mb-2 text-xs text-muted-foreground">
+        SvtAv1EncApp's options (--enable-variance-boost 1, --film-grain 8, ...). Before them, <code class="font-mono">--progress 2</code>
+        (the progress the queue reads). The chapters' keyframes are forced in CRF only.
+      </p>
     {/if}
     <div class="overflow-hidden rounded-lg border">
       {#each Object.entries(value.options) as [key, val] (key)}

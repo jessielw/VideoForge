@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 # VideoForge in a container: the server and its free tools. The native ones (FFmpeg, MP4Box, x264, the
-# VapourSynth plugins) come from the plugins image (vsplugins/), built rarely; x265 is built here (with HDR10+);
-# MKVToolNix and opus-tools from Debian; DeeZy, truehdd, dovi_tool and hdr10plus_tool from their releases; Wine
-# for Windows tools. DEE, qaac and other tools of your own go in /tools (docker/entrypoint.sh).
+# VapourSynth plugins) come from the plugins image (vsplugins/), built rarely; x265 (with HDR10+) and SVT-AV1 are
+# built here; MKVToolNix and opus-tools from Debian; DeeZy, truehdd, dovi_tool and hdr10plus_tool from their
+# releases; Wine for Windows tools. DEE, qaac and other tools of your own go in /tools (docker/entrypoint.sh).
 # See README "Docker".
 #   docker build -t videoforge .                      (with the published plugins image)
 #   docker build -t videoforge-plugins vsplugins && docker build --build-arg PLUGINS_IMAGE=videoforge-plugins -t videoforge .
@@ -13,6 +13,8 @@ ARG DEEZY_VERSION=1.3.15
 # x265 from source: Debian's is built without HDR10+ (--dhdr10-info)
 ARG X265_VERSION=4.1
 ARG X265_SHA256=a31699c6a89806b74b0151e5e6a7df65de4b49050482fe5ebf8a4379d7af8f29
+# SVT-AV1's SvtAv1EncApp from its tag (Debian's is older)
+ARG SVTAV1_VERSION=v4.2.0
 ARG TRUEHDD_VERSION=0.6.2
 # quietvoid's Dolby Vision / HDR10+ tools (MIT): the versions scripts/fetch_tools.py takes for Windows
 ARG DOVI_TOOL_VERSION=2.3.4
@@ -56,6 +58,18 @@ RUN set -e; common="-DCMAKE_BUILD_TYPE=Release -DENABLE_HDR10_PLUS=ON -DCMAKE_PO
     cmake --build b8 -j"$(nproc)"; \
     install -m 0755 b8/x265 /x265
 
+# --- SVT-AV1 -------------------------------------------------------------------------------------------
+# SvtAv1EncApp, statically linked; git so its CMake reads the version from the tag
+FROM ${PYTHON_IMAGE} AS svtav1
+ARG SVTAV1_VERSION
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates cmake nasm g++ make git \
+    && rm -rf /var/lib/apt/lists/*
+RUN git clone -q --depth 1 --branch "${SVTAV1_VERSION}" https://gitlab.com/AOMediaCodec/SVT-AV1.git /src/svtav1 \
+    && cmake -S /src/svtav1 -B /src/b -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+    && cmake --build /src/b -j"$(nproc)" \
+    && install -m 0755 /src/svtav1/Bin/Release/SvtAv1EncApp /SvtAv1EncApp
+
 # --- release binaries ---------------------------------------------------------------------------------
 FROM ${PYTHON_IMAGE} AS downloads
 ARG DEEZY_VERSION
@@ -98,6 +112,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
 COPY --from=downloads /out/deezy-bin /usr/local/bin/deezy
 COPY --from=downloads /out/truehdd-bin /usr/local/bin/truehdd
 COPY --from=x265 /x265 /usr/local/bin/x265
+COPY --from=svtav1 /SvtAv1EncApp /usr/local/bin/SvtAv1EncApp
 COPY --from=downloads /out/dovi_tool-bin /usr/local/bin/dovi_tool
 COPY --from=downloads /out/hdr10plus_tool-bin /usr/local/bin/hdr10plus_tool
 # Wine for the Windows tools in /tools/wine (qaac, DEE's Windows build). Its DLLs lose their debug info

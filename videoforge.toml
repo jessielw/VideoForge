@@ -17,6 +17,8 @@ ffmpeg = "ffmpeg"
 # ffprobe (an MP4 / TS source's timing) is found next to ffmpeg unless set.
 x264 = "tools/x264/x264.exe"
 x265 = "tools/x265/x265.exe"
+# SVT-AV1 (StaxRip takes Patman86's builds of SvtAv1EncApp).
+svtav1 = "tools/SvtAv1EncApp/SvtAv1EncApp.exe"
 # MP4 output (GPAC); tools/GPAC/mp4box.exe or on PATH.
 mp4box = "MP4Box"
 # Dolby Vision and HDR10+ metadata (scripts/fetch_tools.py downloads both).

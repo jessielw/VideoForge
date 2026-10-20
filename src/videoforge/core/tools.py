@@ -45,6 +45,7 @@ TOOLS: tuple[ToolInfo, ...] = (
     ),
     ToolInfo("x264", "x264", "H.264 video encoder"),
     ToolInfo("x265", "x265", "HEVC video encoder"),
+    ToolInfo("svtav1", "SvtAv1EncApp", "AV1 video encoder (SVT-AV1)"),
     ToolInfo("mkvmerge", "mkvmerge", "Reads sources and muxes the output (MKVToolNix)"),
     ToolInfo("mp4box", "MP4Box", "Muxes MP4 output (GPAC)", (("-version",),)),
     ToolInfo(

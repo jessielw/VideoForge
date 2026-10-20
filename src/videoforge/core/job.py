@@ -233,7 +233,7 @@ def plan_spec(spec: JobSpec, probed: ProbedInputs, profile: Profile, tools: Tool
         plan.issues += tool_issues(plan, tools, spec.container(profile))
     plan.issues += mux_issues(plan, spec.container(profile))
     if spec.encodes_video:
-        plan.issues += encoders.issues(spec.encoder, probed.source.video)
+        plan.issues += encoders.issues(spec.encoder, probed.source.video, spec.makes_chapters)
         plan.issues += hdr.issues(probed.source.video, spec.encoder, tools, spec.video)
         plan.issues += target.issues(spec.encoder, plan, spec.container(profile))
     return plan

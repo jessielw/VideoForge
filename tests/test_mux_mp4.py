@@ -71,6 +71,10 @@ def test_mp4box_vpx_encode_is_tagged():
     assert adds(argv)[0] == "video.ivf#video:par=4:3:colr=nclx,9,16,2,0:hdr=none:lang=en-US:name="
     argv = mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW, sar=Fraction(1))
     assert adds(argv)[0] == "video.ivf#video:hdr=none:lang=en-US:name="
+    # an AV1 encode's HDR10: MP4Box writes its mdcv / clli boxes from the stream, which hdr=none would drop
+    av1 = ContainerColor(9, 16, 9, False, max_cll=1000, max_fall=400)
+    argv = mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW, color=av1)
+    assert adds(argv)[0] == "video.ivf#video:colr=nclx,9,16,9,0:lang=en-US:name="
 
 
 def test_mp4box_command():

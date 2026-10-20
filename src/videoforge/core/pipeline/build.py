@@ -38,10 +38,17 @@ from videoforge.core.models import Plan, PlannedAudio, SubTrack, VideoColor, Vid
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.video import burn as burn_in, hdr, info, remux, target, vfr
 from videoforge.core.video.color import container_codes
-from videoforge.core.video.encoders import TOOLS, encoder_command, qpfile_frames, stats_path, vspipe_command
+from videoforge.core.video.encoders import (
+    TOOLS,
+    encoder_command,
+    forces_keyframes,
+    qpfile_frames,
+    stats_path,
+    vspipe_command,
+)
 from videoforge.core.video.qpf import make_qpf, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
-from videoforge.core.video.settings import EncoderSettings, SourceFilter
+from videoforge.core.video.settings import Encoder, EncoderSettings, SourceFilter
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -357,7 +364,7 @@ def video_steps(
         ]
         shared += (rpu,)
     out = spec.video_output
-    name = enc.encoder.value
+    name = enc.encoder.label
     audio_files = tuple((encoded or {}).values())
 
     def sized(final: bool) -> EncoderSettings:
@@ -371,14 +378,19 @@ def video_steps(
         )
         return enc if found is None else replace(enc, bitrate_kbps=found.kbps)
 
-    # VP8 / VP9 (ffmpeg) force the qpfile's frames as keyframes: read when the encode's turn comes (the chapters
-    # step writes it), so the encode refreshes then.
-    keyframes = qpfile is not None and enc.encoder.libvpx
+    # VP8 / VP9 (ffmpeg) and SVT-AV1 force the qpfile's frames as keyframes: read when the encode's turn comes (the
+    # chapters step writes it), so the encode refreshes then.
+    keyframes = qpfile is not None and forces_keyframes(enc)
+    # SvtAv1EncApp doesn't know a pipe's length (its pass 2 printed no total): it's given the script's frames, as
+    # StaxRip gives them, once the info step has read them.
+    counts = enc.encoder is Encoder.SVTAV1
 
     def encodes(color: VideoColor | None) -> list[Step]:
+        found = info.read(info_file) if counts else None
         command = partial(
             encoder_command,
             exe,
+            frames=found.frames if found else None,
             qpfile=qpfile,
             sar=sar,
             color=color,
@@ -427,12 +439,12 @@ def video_steps(
         ]
 
     fel = baked_el(spec, v) is not None and color is not None
-    if not fel and not target.applies(enc) and not keyframes:
+    if not fel and not target.applies(enc) and not keyframes and not counts:
         return steps + encodes(color)
     # A baked FEL's HDR10 values come from the source's RPU, read when the encode's turn comes (the steps
     # before it extract the RPU); until then (the Encoder tab before a run) the source's. A target size's
-    # bitrate is worked out again then too: by the script's length and the files the steps before it wrote; and
-    # a VP8 / VP9 encode's keyframes, by the qpfile.
+    # bitrate is worked out again then too: by the script's length and the files the steps before it wrote; a
+    # VP8 / VP9 / SVT-AV1 encode's keyframes, by the qpfile; and SVT-AV1's frames, by the script's info.
     source_color, dovi_tool = color, app.tools.dovi_tool
 
     def fel_color() -> VideoColor | None:
@@ -533,11 +545,13 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
             return None, timestamps
         return found.fps, timestamps if timestamps is not None and vfr.fits(timestamps, found.frames) else None
 
-    # A VP8 / VP9 encode's stream has no pixel aspect and little colour: the mux tags the track with them.
+    # A VP8 / VP9 / AV1 encode's stream has no pixel aspect, and VP8 / VP9's little colour: the mux tags the track
+    # with them. An AV1 stream's colour and HDR10 are tagged too, which mkvmerge doesn't copy from it.
     sar, tags = None, None
-    if spec.encodes_video and spec.encoder.encoder.libvpx and video is not None:
+    if spec.encodes_video and spec.encoder.encoder.ivf and video is not None:
         sar = spec.video.output_sar(video.width, video.height, video.sar)
-        tags = container_codes(video.color) if spec.encoder.source_color else None
+        av1 = spec.encoder.encoder is Encoder.SVTAV1
+        tags = container_codes(video.color, hdr10=av1) if spec.encoder.source_color else None
 
     def mux_step(fps: Fraction | None, stamps: Path | None) -> Step:
         try:

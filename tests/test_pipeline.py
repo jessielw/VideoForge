@@ -324,6 +324,47 @@ def test_vp9_steps(profile, tmp_path):
     assert "--default-duration" not in argv  # the IVF times itself
 
 
+def test_svtav1_steps(profile, tmp_path):
+    """SVT-AV1 runs SvtAv1EncApp into an IVF: once the info step and the chapters step have written their files
+    (the encode refreshes when its turn comes), it's given the script's frames (its rate control needs the length)
+    and, in CRF, the qpfile's keyframes; the mux tags the pixel aspect, the colour and the HDR10."""
+    p3 = "G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50)"
+    plan = make_plan(tmp_path)
+    plan.source.video.sar_num, plan.source.video.sar_den = 32, 27
+    plan.source.video.color = VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", 2, p3, 1000, 400)
+    job = JobSpec(
+        inputs=JobInputs(plan.source.path, subtitles=plan.inputs.subtitles),
+        profile="manual",
+        encoder=EncoderSettings(Encoder.SVTAV1, crf=30, preset="6", depth=10),
+        output_dir=tmp_path / "out",
+    )
+    plan.encode_path = job.video_output
+    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    steps = {s.id: s for s in built.steps}
+    video, mux = steps["video"], steps["mux"]
+    assert video.argvs[1][0] == APP.tools.svtav1 and job.video_output.name == "video.ivf"
+    assert "--frames" not in video.argvs[1] and "--force-key-frames" not in video.argvs[1]  # not written yet
+    assert video.argvs[1][video.argvs[1].index("--mastering-display") + 1].startswith("G(0.265,0.69)")
+    job.work_dir.mkdir(parents=True, exist_ok=True)
+    info_file = job.work_dir / target.info.SCRIPT_INFO
+    info_file.write_text("Width: 1920\nHeight: 1080\nFrames: 1440\nFPS: 24000/1001\n", encoding="utf-8")
+    qpfile = next(p for p in steps["chapters"].outputs if p.suffix == ".qpf")
+    qpfile.write_text("0 I\n720 I\n", encoding="utf-8")
+    argv = video.refresh().argvs[1]
+    assert argv[argv.index("--frames") + 1] == "1440" and argv[argv.index("--force-key-frames") + 1] == "0f,720f"
+    argv = mux.argvs[0]
+    assert argv[argv.index("--aspect-ratio-factor") + 1] == "0:32/27"
+    assert argv[argv.index("--colour-transfer-characteristics") + 1] == "0:16"
+    assert argv[argv.index("--max-luminance") + 1] == "0:1000" and argv[argv.index("--max-frame-light") + 1] == "0:400"
+
+    # a bitrate: no forced keyframes (SvtAv1EncApp refuses them), still the frames
+    two = replace(job, encoder=replace(job.encoder, rate_control=RateControl.TWO_PASS, bitrate_kbps=3000))
+    steps = {s.id: s for s in build_steps(two, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    for k in ("video.pass1", "video.pass2"):
+        argv = steps[k].argvs[1]
+        assert argv[argv.index("--frames") + 1] == "1440" and "--force-key-frames" not in argv, k
+
+
 def test_video_steps_two_pass(profile, tmp_path):
     plan = make_plan(tmp_path)
     job = JobSpec(

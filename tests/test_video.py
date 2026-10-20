@@ -241,6 +241,64 @@ def test_vp8_and_issues():
     assert encoder_issues(EncoderSettings(Encoder.X265, depth=10, preset="slower"), hdr10) == []
 
 
+def test_svtav1_command(tmp_path):
+    """SVT-AV1 runs as StaxRip's SvtAv1EncApp: --rc 0 --crf (quarter steps), --progress 2 before the job's options,
+    the source's colour as H.273 code points with the HDR10 mastering display in plain numbers, the chapters'
+    keyframes forced (CRF only), into an IVF."""
+    s = EncoderSettings(Encoder.SVTAV1, crf=27.25, preset="6", tune="0", depth=10, options={"film-grain": "8"})
+    color = VideoColor("bt2020", "smpte2084", "bt2020nc", "", 2, P3_1000, 1000, 400)
+    argv = encoder_command("SvtAv1EncApp", s, frames=48, output=Path("v.ivf"), color=color, keyframes=[0, 24])
+    assert argv[:5] == ["SvtAv1EncApp", "--input", "-", "--frames", "48"]
+    assert argv[argv.index("--preset") + 1] == "6" and argv[argv.index("--tune") + 1] == "0"
+    assert argv[argv.index("--rc") : argv.index("--rc") + 4] == ["--rc", "0", "--crf", "27.25"]
+    assert (
+        argv[argv.index("--color-primaries") + 1] == "9" and argv[argv.index("--transfer-characteristics") + 1] == "16"
+    )
+    assert (
+        argv[argv.index("--matrix-coefficients") + 1] == "9" and argv[argv.index("--chroma-sample-position") + 1] == "2"
+    )
+    assert argv[argv.index("--color-range") + 1] == "0"  # an HDR10 source's range is limited unless it says
+    md = "G(0.265,0.69)B(0.15,0.06)R(0.68,0.32)WP(0.3127,0.329)L(1000,0.005)"
+    assert argv[argv.index("--mastering-display") + 1] == md
+    assert argv[argv.index("--content-light") + 1] == "1000,400"
+    assert argv[argv.index("--force-key-frames") + 1] == "0f,24f"
+    assert argv.index("--progress") < argv.index("--film-grain") and argv[-2:] == ["--output", "v.ivf"]
+    assert "--qpfile" not in encoder_command("SvtAv1EncApp", s, output=Path("v.ivf"), qpfile=tmp_path / "c.qpf")
+    assert output_name(s) == "video.ivf" and stats_path(tmp_path, s).name == "video.stats"
+
+    # a bitrate is VBR; SvtAv1EncApp refuses forced keyframes with it
+    two = replace(s, rate_control=RateControl.TWO_PASS, bitrate_kbps=4000)
+    first = encoder_command("SvtAv1EncApp", two, output=Path("NUL"), pass_number=1, stats=Path("s"), keyframes=[0, 24])
+    assert first[first.index("--rc") : first.index("--rc") + 4] == ["--rc", "1", "--tbr", "4000"]
+    assert first[first.index("--pass") : first.index("--pass") + 4] == ["--pass", "1", "--stats", "s"]
+    assert "--force-key-frames" not in first and "--crf" not in first
+    with pytest.raises(ValueError):
+        encoder_command("SvtAv1EncApp", two, output=Path("v.ivf"))
+    # SDR: type 0 chroma ("left") is AV1's vertical; a stated range with no HDR10
+    sdr = encoder_command(
+        "SvtAv1EncApp", s, output=Path("v.ivf"), color=VideoColor("bt709", "bt709", "bt709", "full", 0)
+    )
+    assert sdr[sdr.index("--chroma-sample-position") + 1] == "1" and sdr[sdr.index("--color-range") + 1] == "1"
+    assert "--mastering-display" not in sdr and "--content-light" not in sdr
+    assert "--color-range" not in encoder_command("SvtAv1EncApp", s, output=Path("v.ivf"), color=VideoColor("bt709"))
+
+
+def test_svtav1_issues():
+    s = EncoderSettings(Encoder.SVTAV1, crf=30, preset="4", depth=10)
+    assert encoder_issues(s, None, chapters=True) == []
+    codes = [i.code for i in encoder_issues(replace(s, depth=12, preset="slower", crf=80), None)]
+    assert codes == ["video.svtav1_depth", "video.svtav1_preset", "video.svtav1_crf"]
+    assert [i.code for i in encoder_issues(replace(s, preset="14"), None)] == ["video.svtav1_preset"]
+    assert encoder_issues(replace(s, preset="-1"), None) == encoder_issues(replace(s, preset=""), None) == []
+    abr = replace(s, rate_control=RateControl.ABR, crf=99)  # the CRF isn't used
+    assert [i.code for i in encoder_issues(abr, None, chapters=True)] == ["video.svtav1_keyframes"]
+    assert encoder_issues(abr, None) == []
+    sized = replace(s, rate_control=RateControl.TWO_PASS, target_mb=500)
+    assert [i.code for i in encoder_issues(sized, None)] == ["video.svtav1_target"]
+    hdr10 = VideoInfo(3840, 2160, color=VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", None, P3_1000, 1000))
+    assert encoder_issues(s, hdr10) == []  # AV1 carries HDR10
+
+
 def test_qpfile_frames(tmp_path):
     qpf = tmp_path / "c.qpf"
     assert qpfile_frames(qpf) == []  # not written yet
@@ -261,6 +319,14 @@ def test_progress_lines():
     ffmpeg = "[ffmpeg] frame=  120 fps= 23 q=0.0 size=    1024KiB time=00:00:05.00 bitrate=1677.7kbits/s speed=0.96x"
     assert progress(ffmpeg, frames=480) == 0.25 and progress(ffmpeg) is None and progress_line(ffmpeg)
     assert not progress_line("[ffmpeg] size=    1024KiB time=00:00:05.00 bitrate= 192.0kbits/s speed=40x")  # audio
+    # SvtAv1EncApp --progress 2 (colours stripped); without the total when it doesn't know the length
+    svt = "[svtav1encapp] Encoding:  360/1440 Frames @ 111.89 fps | 11863.40 kb/s | Size: 88.98 MB [88.98 MB] | Time: 0:00:13 [-0:00:39] "
+    assert progress(svt) == 0.25 and progress_line(svt)
+    assert (
+        progress("[svtav1encapp] Encoding:  360 Frames @ 149.40 fps | 1697.27 kb/s | Size: 12.72 MB", frames=720) == 0.5
+    )
+    assert progress("[svtav1encapp] Encoding:  360 Frames @ 149.40 fps | 1697.27 kb/s") is None
+    assert not progress_line("[svtav1encapp] Svt[info]: SVT [config]: preset / tune / pred struct : 8 / PSNR")
 
 
 def test_rate_lines():
@@ -274,6 +340,12 @@ def test_rate_lines():
     assert rate("[vspipe] Frame: 50/200 (12.3 fps)") == (None, None)  # it reads ahead: not the encode's speed
     assert rate("[vspipe] Frame: 50/200") == (None, None)
     assert rate("[ffmpeg] frame=  120 fps= 23.5 q=0.0 size=    1024KiB time=00:00:05.00") == (23.5, None)
+    svt = "[svtav1encapp] Encoding:  360/1440 Frames @ 111.89 fps | 11863.40 kb/s | Size: 88.98 MB [88.98 MB] | Time: 0:00:13 [-0:00:39] "
+    assert rate(svt) == (111.89, 39)
+    assert rate("[svtav1encapp] Encoding:    3/1440 Frames @ 30.00 fpm | 900.0 kb/s | Time: 0:00:06 [-0:47:54]") == (
+        0.5,
+        2874,
+    )
 
 
 # --- auto-crop ----------------------------------------------------------------------
@@ -634,6 +706,58 @@ def test_vspipe_into_libvpx_and_mux(clip_file, tmp_path, encoder):
         assert video.format == encoder.value.upper() and video.frame_count == "48"
         assert float(video.display_aspect_ratio) == pytest.approx(320 * 4 / 3 / 180, abs=0.003)  # 4:3 pixels
         assert (video.color_primaries, video.transfer_characteristics) == ("BT.2020", "PQ"), file
+
+
+@needs_vs
+def test_vspipe_into_svtav1_and_mux(clip_file, tmp_path):
+    """A real SVT-AV1 encode of an HDR10 clip, the chapters' keyframe forced, muxed to MKV and MP4: both come out
+    with the anamorphic pixel aspect, the colour and the HDR10 mastering display and light levels (the MKV's from
+    the mux's tags, the MP4's from the stream), and the progress lines read."""
+    from conftest import plan_for, source
+    from pymediainfo import MediaInfo
+
+    from videoforge.core.config import default_vspipe
+    from videoforge.core.execute import process
+    from videoforge.core.execute.mux import mp4box_command, mux_command
+    from videoforge.core.video.color import container_codes
+
+    svt = TOOLS / "SvtAv1EncApp" / "SvtAv1EncApp.exe"
+    mkvmerge, mp4box = TOOLS / "MKVToolNix" / "mkvmerge.exe", shutil.which("MP4Box")
+    if not svt.exists() or FFMPEG is None or not mkvmerge.exists() or mp4box is None:
+        pytest.skip("needs tools/SvtAv1EncApp, ffmpeg, tools/MKVToolNix and MP4Box")
+    vspipe = default_vspipe()
+    vsx.ensure_vspipe(vspipe)
+    script = tmp_path / "video.vpy"
+    script.write_text(build_script(VideoSettings(), clip_file, tmp_path, depth=10), encoding="utf-8")
+    enc = EncoderSettings(encoder=Encoder.SVTAV1, preset="12", crf=40, depth=10)
+    out = tmp_path / output_name(enc)
+    color = VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", 2, P3_1000, 1000, 400)
+    lines: list[str] = []
+    argv = encoder_command(str(svt), enc, frames=48, output=out, color=color, keyframes=[0, 31])
+    process.run([vspipe_command(vspipe, script), argv], lines.append)
+    assert any(progress(line) == 1.0 for line in lines if "Encoding:" in line)
+    probe = subprocess.run(
+        [shutil.which("ffprobe") or "ffprobe", "-v", "error", "-select_streams", "v", "-show_entries",
+         "packet=flags", "-of", "csv=p=0", str(out)],
+        capture_output=True, text=True, check=True,
+    ).stdout.split()  # fmt: skip
+    assert [n for n, f in enumerate(probe) if "K" in f] == [0, 31] and len(probe) == 48
+
+    plan = plan_for(source(name=str(clip_file)))
+    plan.source.path, plan.encode_path = clip_file, out
+    sar, tags = Fraction(4, 3), container_codes(color, hdr10=True)
+    mkv, mp4 = tmp_path / "out.mkv", tmp_path / "out.mp4"
+    process.run([mux_command(plan, {}, mkv, str(mkvmerge), (), sar=sar, color=tags)], lines.append)
+    process.run([mp4box_command(plan, {}, mp4, mp4box, (), sar=sar, color=tags)], lines.append)
+    for file in (mkv, mp4):
+        [video] = [t for t in MediaInfo.parse(str(file)).tracks if t.track_type == "Video"]
+        assert video.format == "AV1" and video.frame_count == "48"
+        assert float(video.display_aspect_ratio) == pytest.approx(320 * 4 / 3 / 180, abs=0.003)  # 4:3 pixels
+        assert (video.color_primaries, video.transfer_characteristics) == ("BT.2020", "PQ"), file
+        assert video.mastering_display_color_primaries == "Display P3", file
+        assert video.mastering_display_luminance == "min: 0.0050 cd/m2, max: 1000 cd/m2", file
+        light = (video.maximum_content_light_level, video.maximum_frameaverage_light_level)
+        assert [n.split()[0] for n in light] == ["1000", "400"], file  # the MKV's without "cd/m2"
 
 
 def test_manual_encode_defaults_are_fresh_copies(profile):

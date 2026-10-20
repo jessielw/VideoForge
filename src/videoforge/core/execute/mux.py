@@ -147,7 +147,8 @@ def mux_command(
     extra (the user's arguments) goes before the first input. fps is a raw encode's frame rate (the script's,
     which an IVTC or a double-rate deinterlace changed); without it, the source's. timestamps (a VFR source's,
     core/video/vfr.py) time the encode instead. sar and color tag an encode whose stream doesn't hold them (VP8 /
-    VP9): its pixel aspect, and its colour as H.273 code points."""
+    VP9), or whose stream mkvmerge doesn't read them from (AV1): its pixel aspect, its colour as H.273 code points,
+    and an AV1 encode's HDR10 mastering display and light levels."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
     video = plan.source.video
@@ -189,6 +190,19 @@ def mux_command(
         ("--colour-primaries", color.primaries if color else None),
     ):
         argv += [flag, f"0:{code}"] if code is not None else []
+    if color is not None and (m := color.mastering) is not None:
+        argv += [
+            "--chromaticity-coordinates",
+            "0:" + ",".join((*m.red, *m.green, *m.blue)),
+            "--white-colour-coordinates",
+            "0:" + ",".join(m.white),
+            "--max-luminance",
+            f"0:{m.max_luminance}",
+            "--min-luminance",
+            f"0:{m.min_luminance}",
+        ]
+    if color is not None and (color.max_cll or color.max_fall):
+        argv += ["--max-content-light", f"0:{color.max_cll}", "--max-frame-light", f"0:{color.max_fall}"]
     argv += [
         "--language",
         f"0:{video.language if video else 'und'}",
@@ -327,9 +341,11 @@ def mp4box_command(
 
     argv: list[str] = [mp4box, "-noprog"]
     # the source's language; an empty handler name (MP4Box would write its own, e.g. "264:fps=24@GPAC..."); no HDR
-    # boxes (hdr=none): the stream's own SEI carries it, and MediaInfo would list it twice. A colr box takes all
-    # four values: 2 is "unspecified".
-    opts = f":hdr=none:lang={video.language if video else 'und'}:name="
+    # boxes (hdr=none): the stream's own SEI carries it, and MediaInfo would list it twice. An AV1 encode's HDR10
+    # (color's mastering, light levels) keeps them: MP4Box writes mdcv / clli from its metadata OBUs, which MediaInfo
+    # doesn't read. A colr box takes all four values: 2 is "unspecified".
+    hdr10 = color is not None and (color.mastering is not None or bool(color.max_cll or color.max_fall))
+    opts = f"{'' if hdr10 else ':hdr=none'}:lang={video.language if video else 'und'}:name="
     if color is not None:
         codes = (color.primaries, color.transfer, color.matrix)
         opts = (
@@ -404,7 +420,7 @@ class Muxer(Protocol):
     ) -> list[str]:
         """fps: a raw encode's frame rate (the script's); None for the source's. timestamps: a VFR source's,
         which time the encode instead (an MKV's; MP4Box takes none). sar and color: the pixel aspect and colour
-        an encode's stream doesn't hold (VP8 / VP9), for the container to tag."""
+        an encode's stream doesn't hold (VP8 / VP9) or the muxer doesn't copy (AV1), for the container to tag."""
         ...
 
     def issues(self, plan: Plan) -> list[Issue]:

@@ -13,7 +13,7 @@ source), or in Docker on Linux.
 ### Added
 
 - **Job queue.** Queue a job or a batch of episodes (a folder of sources); each runs index → VapourSynth
-  script → x264 / x265 / VP8 / VP9 (1 or 2 passes) → audio → mux → validate. Jobs run one at a time and survive restarts;
+  script → x264 / x265 / VP8 / VP9 / SVT-AV1 (1 or 2 passes) → audio → mux → validate. Jobs run one at a time and survive restarts;
   a rerun skips every step whose command and inputs haven't changed, so a crashed job resumes after its last
   finished step and a changed subtitle flag only muxes again. A job's audio encodes run alongside its video
   encode, up to 2 at once by default (Settings → Audio encodes; 0 runs them one by one). A running job shows
@@ -140,6 +140,18 @@ source), or in Docker on Linux.
   stream doesn't hold (VP9 has only the matrix and the range) are tagged by the mux (`--aspect-ratio-factor`,
   `--colour-*`; MP4Box `:par`, `:colr`). An HDR10 source's mastering display and light levels aren't carried
   yet (a warning). The Docker image's FFmpeg now has libvpx (rebuild the plugins image).
+- **SVT-AV1.** SvtAv1EncApp, as StaxRip runs it (`tools/SvtAv1EncApp/SvtAv1EncApp.exe`; StaxRip ships Patman86's
+  builds): CRF (`--rc 0 --crf`, 1-70 in quarter steps), 1-pass bitrate or 2 passes (`--rc 1 --tbr`, `--pass`;
+  a target size too, though SVT-AV1's 2-pass comes in under its bitrate: a Fallout sample 27% under, as with its
+  own `--passes 2`, so a target size warns), the preset (StaxRip's -1 to 13 list, 4 by default) and tune, 8 or
+  10-bit, `--progress 2` (whose lines the queue reads, frames a minute included). It's told the script's frames
+  (`--frames`, as StaxRip does: from a pipe it doesn't know the length). The source's colour goes in as H.273
+  code points with the HDR10 mastering display (in plain numbers) and light levels, as StaxRip's SetMetaData
+  writes them; the
+  chapters' keyframes are forced (`--force-key-frames`, CRF only: SvtAv1EncApp refuses them with a bitrate, which
+  warns). The encode is an IVF: the MKV's track is tagged with its pixel aspect, colour and HDR10 (mkvmerge
+  copies none of it from the stream); the MP4 gets `:par` and `:colr`, and MP4Box's mdcv / clli from the stream.
+  HDR10+ and Dolby Vision stay x265's (a warning). The Docker image builds SvtAv1EncApp 4.2.0.
 - **Templates.** A job's whole setup without a file: video, crop mode (keep, the template's, detect per job),
   encoder, container, AutoQPF, audio by position or by rules, subtitles by rules. Star one as the default
   for new jobs; apply one to a job or a batch.
