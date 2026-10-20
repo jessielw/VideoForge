@@ -9,11 +9,27 @@ is muxed at a constant rate (a WARN, mux.Mp4Box.issues).
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 from videoforge.core.models import VideoInfo
 
 TIMESTAMPS = "timestamps.txt"  # in the work folder
+SOURCE_TIMESTAMPS = "timestamps.source.txt"
+
+
+def normalize(source: Path, output: Path) -> None:
+    """Put the first video frame at zero without changing any interval, including the final end time."""
+    values = [
+        Decimal(line.strip())
+        for line in source.read_text(encoding="utf-8-sig").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    if not values or any(not value.is_finite() for value in values):
+        raise ValueError("No valid video timestamps")
+    output.write_text(
+        "# timestamp format v2\n" + "".join(f"{value - values[0]:f}\n" for value in values), encoding="utf-8"
+    )
 
 
 def extract_argv(mkvextract: str, source: Path, track: int, out: Path) -> tuple[str, ...]:

@@ -198,7 +198,9 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
 - Variable frame rate (`core/video/vfr.py`, StaxRip's Demux.vb / Muxer.vb): a source MediaInfo calls VFR
   (`VideoInfo.vfr`; its `default_duration_ns` is only the first frame's, and BestSource reports an averaged
   rate) gets a `timestamps` step into an MKV: `mkvextract timestamps_v2` writes `timestamps.txt` (one line per
-  frame and the last one's end), and the mux takes `--timestamps 0:<file>` instead of `--default-duration`
+  frame and the last one's end). A `timestamps.normalize` step subtracts the first timestamp from every
+  entry, preserving intervals while using the same zero origin as the audio/subtitle shifts. The mux
+  takes `--timestamps 0:<file>` instead of `--default-duration`
   (a reused encode too). The mux's refresh keeps them while they fit the script's frame count; a script that
   drops or adds frames (an IVTC) is muxed at its own rate, and `length_warning` says so (its length then checked
   against MediaInfo's duration). MP4Box takes no timestamps file: `mux.mp4_vfr` WARN.

@@ -450,14 +450,16 @@ def test_a_vfr_source_keeps_its_timestamps(profile, tmp_path):
     step = {s.id: s for s in built.steps}
     ids = [s.id for s in built.steps]
     stamps = job.work_dir / "timestamps.txt"
-    argv = ("mkvextract", "--ui-language", "en", "timestamps_v2", str(plan.source.path), f"0:{stamps}")
-    assert step["timestamps"].argvs == (argv,) and step["timestamps"].outputs == (stamps,)
+    raw_stamps = job.work_dir / "timestamps.source.txt"
+    argv = ("mkvextract", "--ui-language", "en", "timestamps_v2", str(plan.source.path), f"0:{raw_stamps}")
+    assert step["timestamps"].argvs == (argv,) and step["timestamps"].outputs == (raw_stamps,)
     assert ids.index("script.info") < ids.index("timestamps") < ids.index("video")
     mux = step["mux"].argvs[0]
     assert mux[mux.index("--timestamps") + 1] == f"0:{stamps}" and "--default-duration" not in mux  # before a run
 
     job.work_dir.mkdir(parents=True)
     FakeRunner()([argv], lambda _: None, None)  # 240 timestamps
+    step["timestamps.normalize"].call(lambda _: None)
     info_file = job.work_dir / "video.info.txt"
     info_file.write_text(FakeRunner.script_info, encoding="utf-8")  # 240 frames: they fit
     mux = step["mux"].refresh().argvs[0]
@@ -491,7 +493,7 @@ def test_a_vfr_mp4_source_is_copied_into_an_mkv_for_its_timestamps(profile, tmp_
     built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
     step = {s.id: s for s in built.steps}
     ids = [s.id for s in built.steps]
-    mkv, stamps = job.work_dir / "timestamps.mkv", job.work_dir / "timestamps.txt"
+    mkv, stamps = job.work_dir / "timestamps.mkv", job.work_dir / "timestamps.source.txt"
     assert ids.index("timestamps.remux") + 1 == ids.index("timestamps")
     remux = step["timestamps.remux"].argvs[0]
     assert remux[:5] == (APP.tools.mkvmerge, "--ui-language", "en", "--output", str(mkv))
@@ -962,7 +964,9 @@ def test_real_decimated_job_keeps_the_scripts_frame_rate(tmp_path):
 
 
 @needs_tools
-def test_real_vfr_job_keeps_the_sources_timestamps(tmp_path):
+@pytest.mark.parametrize("offset", [0, 500])
+@pytest.mark.parametrize("encode_audio", [False, True])
+def test_real_vfr_job_keeps_the_sources_timestamps(tmp_path, offset, encode_audio):
     """A VFR source (5 s at 23.976 fps, then 4 s at 29.97): the output's timestamps are the source's (StaxRip's
     mkvextract timestamps_v2 + --timestamps), not a constant averaged rate."""
     from videoforge.core.config import load_app_config
@@ -987,9 +991,11 @@ def test_real_vfr_job_keeps_the_sources_timestamps(tmp_path):
     )  # fmt: skip
     ms = [i * 1001 / 24 if i < 120 else 120 * 1001 / 24 + (i - 120) * 1001 / 30 for i in range(240)]
     given = tmp_path / "given.txt"
-    given.write_text("# timestamp format v2\n" + "".join(f"{t:.6f}\n" for t in ms), encoding="utf-8")
+    given.write_text("# timestamp format v2\n" + "".join(f"{t + offset:.6f}\n" for t in ms), encoding="utf-8")
+    subtitle = tmp_path / "cue.srt"
+    subtitle.write_text("1\n00:00:01,200 --> 00:00:02,000\nTiming cue\n", encoding="utf-8")
     subprocess.run(
-        [app.tools.mkvmerge, "-q", "-o", str(src), "--timestamps", f"0:{given}", str(raw), str(tmp_path / "audio.m4a")],
+        [app.tools.mkvmerge, "-q", "-o", str(src), "--timestamps", f"0:{given}", str(raw), str(tmp_path / "audio.m4a"), str(subtitle)],
         check=True,
     )  # fmt: skip
     job = JobSpec(
@@ -1003,6 +1009,9 @@ def test_real_vfr_job_keeps_the_sources_timestamps(tmp_path):
     assert plan.source.video is not None and plan.source.video.vfr
     assert not plan.blocked, plan.issues
 
+    if encode_audio:
+        plan.audio[0].action = AudioAction.FLAC
+        plan.audio[0].out_codec = C.FLAC
     lines: list[str] = []
     result = run_job(job, plan, profile, app, log=lines.append)
     assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
@@ -1019,8 +1028,18 @@ def test_real_vfr_job_keeps_the_sources_timestamps(tmp_path):
         int(source_stamps[1]) - int(source_stamps[0]) == 42 and int(source_stamps[200]) - int(source_stamps[199]) == 33
     )
     output_stamps = timestamps(result.output)
-    assert output_stamps[:240] == source_stamps[:240]  # every frame's
-    assert float(output_stamps[240]) == pytest.approx(float(source_stamps[240]), abs=1)  # the end: sub-ms rounding
+    assert [float(t) for t in output_stamps[:240]] == [float(t) - offset for t in source_stamps[:240]]
+    assert float(output_stamps[240]) == pytest.approx(float(source_stamps[240]) - offset, abs=1)
+    from videoforge.core.probe import probe
+
+    output_info = probe(result.output, app.tools.mkvmerge)
+    cue = tmp_path / "output.srt"
+    subprocess.run(
+        [app.tools.mkvextract, str(result.output), "tracks", f"{output_info.subs[0].id}:{cue}"],
+        check=True,
+        capture_output=True,
+    )
+    assert ("00:00:00,700" if offset else "00:00:01,200") in cue.read_text(encoding="utf-8")
 
 
 @needs_tools

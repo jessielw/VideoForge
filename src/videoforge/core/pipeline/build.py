@@ -512,16 +512,26 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
         copied, mkv, track = mkvextract_input(
             app, plan.source.path, "video", video.id, timestamps.with_suffix(".mkv"), "timestamps.remux"
         )
-        argv = vfr.extract_argv(app.tools.mkvextract, mkv, track, timestamps)
+        raw_timestamps = work / vfr.SOURCE_TIMESTAMPS
+        argv = vfr.extract_argv(app.tools.mkvextract, mkv, track, raw_timestamps)
         stamps = Step(
             "timestamps",
             "Source timestamps (mkvextract)",
             argvs=(argv,),
-            outputs=(timestamps,),
+            outputs=(raw_timestamps,),
             inputs=(mkv,),
             weight=0.5,
         )
-        audio[0:0] = [*copied, stamps]
+        normalized = Step(
+            "timestamps.normalize",
+            "Align video timestamps to the first frame",
+            call=lambda _log: vfr.normalize(raw_timestamps, timestamps),
+            inputs=(raw_timestamps,),
+            outputs=(timestamps,),
+            key="zero-origin-v1",
+            weight=0.01,
+        )
+        audio[0:0] = [*copied, stamps, normalized]
     at = next((n for n, s in enumerate(steps) if s.id.startswith("video")), len(steps))
     steps[at:at] = audio
 

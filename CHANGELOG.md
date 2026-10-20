@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Correctness fixes: VFR timing.** Extracted timestamps are normalized to the first video frame, keeping
+  audio and subtitles aligned when the source video starts after zero.
+
 - **Correctness fixes: completed files.** Resume and explicit reuse check the completed file's size and
   modification time. An output replaced or truncated by another job is no longer accepted from an old
   job record; old records without file stamps are revalidated through the work folder or rebuilt.
