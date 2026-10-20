@@ -3,6 +3,8 @@ note of finished files (for any job on the source)."""
 
 from __future__ import annotations
 
+import os
+
 from conftest import simulate_output
 import pytest
 from test_pipeline import APP, FakeRunner, make_plan, tools_called, video_job
@@ -38,7 +40,8 @@ def test_another_jobs_completed_output_is_not_current(profile, tmp_path):
     assert "x264" in run(job, plan, profile, state)
 
 
-def test_output_identity_survives_serialization(tmp_path):
+@pytest.mark.parametrize("changed_field", ["size", "mtime"])
+def test_output_identity_survives_serialization(tmp_path, changed_field):
     from videoforge.core.job import StepRecord
     from videoforge.core.plan_io import from_json, to_json
 
@@ -49,7 +52,11 @@ def test_output_identity_survives_serialization(tmp_path):
     record.capture_outputs()
     restored = from_json(StepRecord, to_json(record))
     assert restored.outputs_match([output])
-    output.write_bytes(b"replaced")
+    original = output.stat()
+    output.write_bytes(b"replacement" if changed_field == "size" else b"replaced")
+    # Test each stored field independently; rapid Windows writes can keep the same timestamp.
+    mtime_ns = original.st_mtime_ns + (2_000_000_000 if changed_field == "mtime" else 0)
+    os.utime(output, ns=(original.st_atime_ns, mtime_ns))
     assert not restored.outputs_match([output])
 
 
