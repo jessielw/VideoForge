@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Output file checks.** A job whose output file already exists warns that the run replaces it, and
+  two jobs that would write the same file are blocked until one gets a label, name or folder of its own.
+
 - **Interlaced source warning.** The probe reads MediaInfo's scan type and field order; an interlaced
   source whose filter chain has no IVTC or deinterlacer warns before the run, and the Video tab shows it.
 

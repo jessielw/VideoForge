@@ -19,6 +19,10 @@ Show.S01E01.subbed.mkv
 The label is part of the output identity and the associated record names. Profiles can also
 control the base output name.
 
+Two jobs that would write the same file are both blocked until one gets a label, another output
+name, or another folder; a job already queued or running keeps its file. A job whose output file
+already exists (and wasn't written by its own last run) warns that the run replaces it.
+
 ## Chapters and AutoQPF
 
 Jobs can use source chapters, an added chapter file, or AutoQPF-generated chapters.

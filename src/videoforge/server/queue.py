@@ -19,13 +19,14 @@ finished steps, so a rerun only redoes what the edit touched.
 
 from __future__ import annotations
 
-from collections import deque
+from collections import defaultdict, deque
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 import logging
+import os
 from pathlib import Path
 import sqlite3
 import threading
@@ -53,7 +54,17 @@ from videoforge.core.job import (
     probe_spec,
 )
 from videoforge.core.jobs import ProbedInputs, external_tracks
-from videoforge.core.models import AudioMatch, JobInputs, Overrides, Plan, Severity, SubTrack, VideoInfo, track_key
+from videoforge.core.models import (
+    AudioMatch,
+    Issue,
+    JobInputs,
+    Overrides,
+    Plan,
+    Severity,
+    SubTrack,
+    VideoInfo,
+    track_key,
+)
 from videoforge.core.notify import Sender, send as notify_send
 from videoforge.core.pipeline.build import index_steps, job_output
 from videoforge.core.pipeline.reuse import ReuseOffer, reuse_offers
@@ -75,6 +86,21 @@ _PROGRESS_INTERVAL = 0.25  # seconds between progress events per job
 _ETA_AFTER = (0.01, 5.0)  # a job's time left is guessed once this run moved overall this far, for this long
 logger = logging.getLogger(__name__)
 LANE_SETTING = "index_lane"  # the store's record of the lane: job ids in order, the one being indexed first
+
+
+_OUTFILE = ("outfile.shared", "outfile.exists")  # JobQueue._refresh_outputs' issue codes
+
+
+def _same_file(path: Path | None) -> str:
+    """A path as the file system compares it (Windows: case-insensitive), without touching the disk."""
+    return os.path.normcase(os.path.abspath(path)) if path is not None else ""
+
+
+def _exists(path: Path) -> bool:
+    try:
+        return path.exists()
+    except OSError:  # an unreachable share
+        return False
 
 
 class JobView(StrEnum):
@@ -468,6 +494,58 @@ class JobQueue:
                 e.spec.overrides.original_language = e.plan.original_language
         except Exception as ex:  # a profile bug shouldn't take the queue down
             e.plan, e.probe_error = None, f"Planning failed: {type(ex).__name__}: {ex}"
+        self._refresh_outputs([e])
+
+    def _refresh_outputs(self, fresh: Iterable[Entry] = ()) -> None:
+        """Under the lock: each planned job's issues about the file it writes, as StaxRip's assistant warns of
+        them. Two jobs writing one file block (the idle ones: a queued or running job keeps its file), and a file
+        that is already there, and isn't the job's own last output, warns. The fresh jobs (just planned) have
+        their file looked at again; the others keep what their last look found."""
+        fresh_ids = {e.id for e in fresh}
+        outputs: dict[str, Path] = {}
+        for e in self.entries():
+            if e.plan is None:
+                continue
+            try:
+                path = job_output(e.spec, e.plan, self.profile(e))
+            except Exception as ex:  # a profile's naming bug shows when the job runs
+                logger.debug("%s: no output path (%s)", e.spec.name, ex)
+                continue
+            if path is not None:
+                outputs[e.id] = path
+        sharing: dict[str, list[Entry]] = defaultdict(list)
+        for e in self.entries():
+            if e.id in outputs:
+                sharing[_same_file(outputs[e.id])].append(e)
+        for e in self.entries():
+            if e.plan is None or e.running:
+                continue
+            old = [i for i in e.plan.issues if i.code in _OUTFILE]
+            new: list[Issue] = []
+            path = outputs.get(e.id)
+            others = [o for o in sharing[_same_file(path)] if o is not e] if path is not None else []
+            if others and not e.busy:
+                names = ", ".join(dict.fromkeys(o.spec.name for o in others))
+                new.append(
+                    Issue(
+                        Severity.BLOCK,
+                        "outfile.shared",
+                        f"Another job ({names}) writes the same file, {path.name if path else ''}: give one a "
+                        "label (Output tab), or another output name or folder",
+                    )
+                )
+            if e.id not in fresh_ids:
+                new += [i for i in old if i.code == "outfile.exists"]
+            elif (
+                path is not None
+                and _exists(path)
+                and not (e.state.output is not None and _same_file(e.state.output) == _same_file(path))
+            ):
+                new.append(Issue(Severity.WARN, "outfile.exists", f"{path} already exists: the run replaces it"))
+            if new != old:
+                e.plan.issues = [i for i in e.plan.issues if i.code not in _OUTFILE] + new
+                if e.id not in fresh_ids:  # the caller announces its own
+                    self._changed(e)
 
     def replan_all(self) -> None:
         """Plan every probed, idle job again (e.g. a tool path changed: missing tools block)."""
@@ -564,6 +642,8 @@ class JobQueue:
                 self._order.remove(job_id)
                 self.store.delete_job(job_id)
                 removed.append(job_id)
+            if removed:
+                self._refresh_outputs()
         if removed and self.services.release_preview is not None:
             self.services.release_preview(removed)  # their work folders may be deleted next
         for job_id in removed:
@@ -849,6 +929,7 @@ class JobQueue:
         with self._lock:
             e.running, e.progress = False, None
             self._save(e)
+            self._refresh_outputs([e])  # its output is its own now; jobs it held back may run
         self._changed(e)
         self._index_wake.set()  # a job held back for this one's disk may go
         if not self._closing:  # a shutdown's cancel isn't news: the job resumes on the next start

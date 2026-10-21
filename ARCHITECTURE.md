@@ -164,6 +164,11 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   after the run (a rerun reuses it) unless `AppConfig.delete_work_dir` is on: then the queue deletes a done
   job's folder (`JobQueue._clean_up`, after `keep_records`) before `JobFinished` goes out, so the event's
   record is the kept copy. Removing jobs can delete theirs too (`JobQueue.delete_work_dirs`).
+- The output file (`JobQueue._refresh_outputs`, StaxRip's "The target file already exists"): after each
+  replan, a removal and a run, the queue compares every planned job's output path (case-insensitive on
+  Windows). Idle jobs sharing one are `outfile.shared` BLOCKs (a queued or running job keeps its file); a file
+  already there that isn't the job's own last output is an `outfile.exists` WARN, looked at again only when
+  that job is replanned. They're added to the job's plan issues, so status, enqueue and the run's skip follow.
 - The audio encodes are background steps (`Step.background`): `run_steps` starts them on up to
   `AppConfig.parallel_audio` threads (videoforge.toml `[pipeline]`, Settings → Audio encodes; default 2)
   once the index is done (it reads the whole source too), and goes on with the video. A step waits for

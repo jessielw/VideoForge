@@ -213,6 +213,37 @@ def test_add_inspect_and_edit(tmp_path):
         assert manual["id"] == "manual" and manual["default"] and manual["defaults"]["encoder"]["crf"] == 18
 
 
+def test_two_jobs_writing_one_file_block_and_an_existing_file_warns(tmp_path):
+    """As StaxRip's assistant: a target file that's already there warns; two jobs with one output block."""
+    make_files(tmp_path, "S01E01", "S01E02")
+    (tmp_path / "out").mkdir()
+    (tmp_path / "out" / "Show.S01E01.mkv").write_bytes(b"old")
+    with make_client(tmp_path) as client:
+        one, two = add(client, tmp_path)
+        job = wait_for(client, one, "warn")
+        assert [i["code"] for i in job["issues"]] == ["outfile.exists"]
+        assert wait_for(client, two, "ready", "warn")["issues"] == []
+
+        client.patch(f"/api/jobs/{two}", json={"output_name": "Show.S01E01"})
+        for job_id, other in ((one, "Show.S01E02.mkv"), (two, "Show.S01E01.mkv")):
+            job = client.get(f"/api/jobs/{job_id}").json()
+            assert job["status"] == "blocked" and job["issues"][0]["code"] == "outfile.shared"
+            assert other in job["issues"][0]["message"]
+        assert client.post("/api/queue/enqueue", json={"ids": [one, two]}).json()["enqueued"] == []
+
+        client.patch(f"/api/jobs/{two}", json={"label": "dubbed"})  # Show.S01E01.dubbed.mkv
+        assert client.get(f"/api/jobs/{two}").json()["issues"] == []
+        assert [i["code"] for i in client.get(f"/api/jobs/{one}").json()["issues"]] == ["outfile.exists"]
+
+        client.patch(f"/api/jobs/{two}", json={"label": ""})
+        client.post("/api/jobs/remove", json={"ids": [two]})
+        assert [i["code"] for i in client.get(f"/api/jobs/{one}").json()["issues"]] == ["outfile.exists"]
+        client.post("/api/queue/start", json={"ids": [one]})
+        wait_for(client, one, "done")
+        client.patch(f"/api/jobs/{one}", json={"label": ""})  # back to ready: its own output is no warning
+        assert client.get(f"/api/jobs/{one}").json()["issues"] == []
+
+
 def test_files_added_to_a_job(tmp_path):
     make_files(tmp_path)
     extra = tmp_path / "extra"
