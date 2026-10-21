@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Opening or reconnecting during a run restores job details, step statuses and logs. Snapshot event
+  boundaries retain newer live updates without duplicating log lines; failed log loads offer Retry.
+
 - Waiting jobs can be unqueued from the selection toolbar or editor without removing their settings
   or files. Running jobs remain separate from this action.
 

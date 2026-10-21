@@ -3,6 +3,7 @@
   // The running step and a failed one open by themselves; the others on click. "Full log"
   // shows every line of the job as one text, as before.
   import { api } from '../lib/api'
+  import { mergeSteps } from '../lib/logSnapshot'
   import { app } from '../lib/state.svelte'
   import type { StepRun, StepStatus } from '../lib/types'
   import CheckIcon from '@lucide/svelte/icons/check'
@@ -28,34 +29,38 @@
   let open = $state<Record<string, boolean>>({})
   let showAll = $state<Record<string, boolean>>({})
   let full = $state<string[]>([])
-  let fullSince = $state(0)
+  let cursor = $state(0)
+  let error = $state('')
+  let requestSeq = 0
   let copied = $state('')
 
   // The snapshot: on opening a job, and when a run ends. During a run the step events keep
   // app.runs current, and a refetch could overwrite them with an older list.
   async function load(id: string) {
-    const steps = await api.steps(id).catch(() => null)
-    if (!steps || id !== jobId) return
+    const request = ++requestSeq
+    const started = app.logSeq
+    let snapshot
+    try { snapshot = await api.logSnapshot(id) }
+    catch (e) { if (request === requestSeq) error = e instanceof Error ? e.message : String(e); return }
+    if (request !== requestSeq || id !== jobId) return
+    if ((app.runStarts[id] ?? 0) > started) { void load(id); return }
+    const { steps } = snapshot
     since = app.logSeq
+    cursor = snapshot.seq
+    full = snapshot.lines
+    error = ''
     base = Object.fromEntries(steps.map(s => [s.id, s.lines]))
     partial = Object.fromEntries(steps.map(s => [s.id, s.partial]))
-    app.runs[id] = steps.map(({ lines: _l, partial: _p, ...s }) => s)
+    app.runs[id] = mergeSteps(steps, app.runs[id] ?? [], app.stepVersions[id] ?? {}, cursor)
     loaded = true
   }
 
   $effect(() => {
     const id = jobId
-    if (!running) load(id)
-  })
-
-  $effect(() => {
-    if (view === 'full') {
-      const id = jobId
-      api.log(id).then(r => {
-        full = r.lines
-        fullSince = app.logSeq
-      })
-    }
+    void running
+    void app.connectionVersion
+    loaded = false
+    void load(id)
   })
 
   // A run that started after the snapshot replaces it: its lines all come live.
@@ -67,7 +72,7 @@
     const from = fresh ? runStart : since
     const out: Record<string, string[]> = {}
     for (const l of app.log) {
-      if (l.seq > from && l.job === jobId && l.step) (out[l.step] ??= []).push(l.line)
+      if ((fresh ? l.seq > from : (l.remoteSeq ?? 0) > cursor) && l.job === jobId && l.step) (out[l.step] ??= []).push(l.line)
     }
     return out
   })
@@ -77,7 +82,7 @@
   }
 
   const fullLines = $derived(
-    view === 'full' ? [...full, ...app.log.filter(l => l.job === jobId && l.seq > fullSince).map(l => l.line)] : [],
+    view === 'full' ? [...full, ...app.log.filter(l => l.job === jobId && (l.remoteSeq ?? 0) > cursor).map(l => l.line)] : [],
   )
 
   const LOOK: Record<StepStatus, { icon: typeof CheckIcon; tone: string; text: string }> = {
@@ -124,6 +129,7 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col gap-3">
+  {#if error}<div role="alert" class="text-sm text-destructive">Couldn't load the log: {error} <Button size="sm" onclick={() => load(jobId)}>Retry</Button></div>{/if}
   <div class="flex items-center gap-3">
     <Tabs.Root bind:value={view}>
       <Tabs.List>

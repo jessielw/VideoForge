@@ -152,6 +152,7 @@ class Entry:
     log: deque[str] = field(default_factory=lambda: deque(maxlen=LOG_LINES))
     # The last run's output per step (in memory; state.run keeps only each step's tail).
     step_lines: dict[str, deque[str]] = field(default_factory=dict)
+    event_seq: int = 0  # log/step snapshot boundary, per job and server lifetime
 
     @property
     def id(self) -> str:
@@ -915,9 +916,16 @@ class JobQueue:
             index = next((i for i, r in enumerate(e.state.run) if r is run), -1)
             recorder.step(run, index, len(e.state.run))
             # index 0 pending = a new run's list starts (the browser drops the last run's)
-            self.events.publish(
-                "step", id=e.id, index=index, total=len(e.state.run), step=step_json(run, with_tail=False)
-            )
+            with self._lock:
+                e.event_seq += 1
+                self.events.publish(
+                    "step",
+                    id=e.id,
+                    seq=e.event_seq,
+                    index=index,
+                    total=len(e.state.run),
+                    step=step_json(run, with_tail=False),
+                )
 
         def step_log(run: StepRun, line: str) -> None:
             self._log(e, line, log_file, step=run.id)
@@ -1276,15 +1284,21 @@ class JobQueue:
 
     def _log(self, e: Entry, line: str, file=None, step: str | None = None) -> None:
         """step: the step whose output it is (several run at once while audio encodes run beside the video)."""
-        e.log.append(line)
+        with self._lock:
+            e.log.append(line)
+            if step is not None:
+                e.step_lines.setdefault(step, deque(maxlen=STEP_LINES)).append(line)
+            e.event_seq += 1
+            self.events.publish("log", id=e.id, seq=e.event_seq, line=line, step=step)
         if file is not None:
             try:
                 file.write(f"{datetime.now():%H:%M:%S} {line}\n")
             except OSError:
                 pass
-        if step is not None:
-            e.step_lines.setdefault(step, deque(maxlen=STEP_LINES)).append(line)
-        self.events.publish("log", id=e.id, line=line, step=step)
+
+    def log_snapshot(self, e: Entry) -> dict[str, Any]:
+        with self._lock:
+            return {"seq": e.event_seq, "steps": self.step_output(e), "lines": list(e.log)}
 
     def step_output(self, e: Entry) -> list[dict[str, Any]]:
         """The last run's steps with their output: all of it while it's in memory, else the saved tail."""

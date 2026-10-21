@@ -127,6 +127,30 @@ def test_health_gives_the_version(tmp_path):
     assert make_client(tmp_path).get("/api/health").json() == {"ok": True, "version": version()}
 
 
+def test_running_log_snapshot_has_steps_lines_and_event_boundary(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path, run=FakeRun(block=True)) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        client.post("/api/queue/start", json={"ids": [job]})
+        wait_for(client, job, "running")
+        q = client.app.state.queue
+        entry = q.get(job)
+        assert entry is not None
+        deadline = time.monotonic() + 5
+        while not entry.step_lines.get("video") and time.monotonic() < deadline:
+            time.sleep(0.01)
+        q._log(entry, "snapshot boundary", step="video")
+        snapshot = client.get(f"/api/jobs/{job}/log-snapshot").json()
+        assert 0 < snapshot["seq"] <= entry.event_seq
+        assert "snapshot boundary" in snapshot["lines"]
+        assert snapshot["steps"][0]["status"] == "running"
+        assert "snapshot boundary" in snapshot["steps"][0]["lines"]
+        q._log(entry, "after snapshot", step="video")
+        assert entry.event_seq > snapshot["seq"]
+        client.post("/api/queue/cancel")
+
+
 def wait_for(client: TestClient, job_id: str, *statuses: str, timeout: float = 5) -> dict:
     end = time.monotonic() + timeout
     while time.monotonic() < end:

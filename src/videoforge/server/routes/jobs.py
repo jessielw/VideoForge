@@ -315,3 +315,9 @@ def job_steps(request: Request, job_id: str) -> list[dict[str, Any]]:
     """The last run's steps: command line, status, exit code, time, error and output lines."""
     q = queue_of(request)
     return q.step_output(_entry(q, job_id))
+
+
+@router.get("/jobs/{job_id}/log-snapshot")
+def log_snapshot(request: Request, job_id: str) -> dict[str, Any]:
+    q = queue_of(request)
+    return q.log_snapshot(_entry(q, job_id))

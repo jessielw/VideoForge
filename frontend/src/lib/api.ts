@@ -169,6 +169,7 @@ export const api = {
   log: (id: string) => get<{ lines: string[] }>(`/api/jobs/${id}/log`),
   commands: (id: string) => get<CommandStep[]>(`/api/jobs/${id}/commands`),
   steps: (id: string) => get<StepOutput[]>(`/api/jobs/${id}/steps`),
+  logSnapshot: (id: string) => get<{ seq: number; steps: StepOutput[]; lines: string[] }>(`/api/jobs/${id}/log-snapshot`),
 
   queue: () => get<QueueState>('/api/queue'),
   // reuse: per job, the offered sections to keep (the others are made again); jobs left out reuse as always

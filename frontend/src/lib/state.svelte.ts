@@ -8,6 +8,7 @@ import { keepVideoViews } from './videoView.svelte'
 const MAX_LOG = 20000
 
 export interface LogLine {
+  remoteSeq?: number
   seq: number // increasing; a view that fetched a snapshot takes the lines after it
   job: string | null // job id; null for app messages
   step: string | null // the step it came from (its header and job messages: null)
@@ -22,12 +23,14 @@ class AppState {
   profiles = $state<Profile[]>([])
   log = $state<LogLine[]>([])
   connected = $state(false)
+  connectionVersion = $state(0)
   /** Shut down from the page: no reconnecting, the app shows that it stopped. */
   stopped = $state(false)
   // Bumped per job whenever the server says it changed; open editors refetch on it.
   versions = $state<Record<string, number>>({})
   // Each job's last run, step by step, kept current by `step` events.
   runs = $state<Record<string, StepRun[]>>({})
+  stepVersions: Record<string, Record<string, number>> = {}
   runStarts = $state<Record<string, number>>({}) // logSeq when each job's latest run began
   logSeq = 0
   encodes = $state<AudioEncodeInfo[]>([])
@@ -143,8 +146,8 @@ class AppState {
     this.versions[id] = (this.versions[id] ?? 0) + 1
   }
 
-  addLog(line: string, job: string | null = null, step: string | null = null): void {
-    this.log.push({ seq: ++this.logSeq, job, step, line })
+  addLog(line: string, job: string | null = null, step: string | null = null, remoteSeq?: number): void {
+    this.log.push({ seq: ++this.logSeq, job, step, line, remoteSeq })
     if (this.log.length > MAX_LOG) this.log.splice(0, this.log.length - MAX_LOG)
   }
 
@@ -153,6 +156,12 @@ class AppState {
     const ws = new WebSocket(`${proto}://${location.host}/api/events`)
     this.#socket = ws
     ws.onopen = () => {
+      this.log = this.log.filter(line => line.job === null)
+      this.runs = {}
+      this.runStarts = {}
+      this.stepVersions = {}
+      this.connectionVersion++
+      for (const job of this.jobs) this.#bump(job.id)
       this.connected = true
       this.#retry = 500
       this.#scheduleRefresh()
@@ -201,12 +210,14 @@ class AppState {
         break
       }
       case 'log':
-        this.addLog(event.line as string, event.id as string, (event.step as string | null) ?? null)
+        this.addLog(event.line as string, event.id as string, (event.step as string | null) ?? null, event.seq as number)
         break
       case 'step': {
         const id = event.id as string
         const index = event.index as number
         const step = event.step as StepRun
+        this.stepVersions[id] ??= {}
+        this.stepVersions[id][step.id] = event.seq as number
         if (index < 0) break
         // A new run announces its whole list, pending, from index 0.
         if (index === 0 && step.status === 'pending') {
