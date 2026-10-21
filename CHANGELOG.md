@@ -12,6 +12,15 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Templates and Settings use the available page width, with columns adapting to the panel's width.
+  New jobs scrolls in short/zoomed windows instead of clipping its form or footer; file slots reflow
+  when there is less room.
+
+- Queue search by name/source path, status filters with counts, and pages of 100 jobs. Matching-job
+  selection spans pages; hidden selections and batch-action scope are explicit. Keyboard focus
+  follows list/rail changes, narrow layouts reflow, and selected rows retain readable contrast.
+  Mounted browser tests cover a 10,000-job queue, keyboard interaction, reflow, and accessibility.
+
 - Templates can be shared as versioned JSON files, individually or as a bundle of selected templates.
   The export picker includes Select all, Clear selection, and a selected count. Import previews
   settings and included scripts, supports selecting templates, and keeps existing setups with

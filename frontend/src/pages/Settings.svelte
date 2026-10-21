@@ -280,30 +280,30 @@
   }
 </script>
 
-<div class="h-full overflow-auto p-6">
-  <div class="max-w-5xl space-y-8">
-    <header class="flex items-center gap-3">
+<div class="@container/settings h-full overflow-auto p-6">
+  <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8 @min-[80rem]/settings:grid-cols-2">
+    <header class="col-span-full flex flex-wrap items-center gap-3">
       <h1 class="text-xl font-semibold">Settings</h1>
       <span class="text-sm text-muted-foreground">Saved as you go; used by new jobs and runs.</span>
       {#if pending}<span class="text-sm text-muted-foreground">{saveError ? 'Unsaved changes' : 'Saving…'}</span>{/if}
     </header>
 
-    {#if error}<div class="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>{/if}
+    {#if error}<div class="col-span-full rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>{/if}
     {#if saveError}
-      <div role="alert" class="space-y-2 text-sm text-destructive">
+      <div role="alert" class="col-span-full space-y-2 text-sm text-destructive">
         <p>Changes are not saved: {saveError}</p>
         <Button onclick={() => recoverSaves()}>Retry saves</Button>
         <Button variant="outline" onclick={() => recoverSaves(true)}>Discard unsaved changes</Button>
       </div>
     {/if}
     {#each config?.restart ?? [] as note (note)}
-      <div class="rounded-md border border-warning/50 bg-warning/10 p-3 text-sm text-warning">{note}</div>
+      <div class="col-span-full rounded-md border border-warning/50 bg-warning/10 p-3 text-sm text-warning">{note}</div>
     {/each}
 
     {#if !config}
       <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
     {:else}
-      <section class="space-y-3">
+      <section class="col-span-full min-w-0 space-y-3">
         <div class="flex items-center gap-3">
           <h2 class="font-medium">Tools</h2>
           <span class="text-xs text-muted-foreground">A bare name (e.g. ffmpeg) is looked up on PATH.</span>
@@ -450,8 +450,8 @@
           { key: 'tool_priority', label: 'Other tools', hint: 'audio encodes, the mux, indexing' },
         ] as const as row (row.key)}
           <label class="flex items-center gap-3 text-sm">
-            <span class="w-28 text-muted-foreground">{row.label}</span>
-            <NativeSelect value={config[row.key]} onchange={e => {
+            <span class="w-28 shrink-0 text-muted-foreground">{row.label}</span>
+            <NativeSelect class="shrink-0" value={config[row.key]} onchange={e => {
                 const v = e.currentTarget.value as Priority
                 change({ [row.key]: v === config?.[`${row.key}_default`] ? null : v })
               }}>
@@ -504,7 +504,7 @@
         </div>
       {/snippet}
 
-      <section class="space-y-3">
+      <section class="col-span-full min-w-0 space-y-3">
         <div class="flex items-center gap-3">
           <h2 class="font-medium">Notifications</h2>
           <span class="text-xs text-muted-foreground">
@@ -565,7 +565,7 @@
         </div>
       </section>
 
-      <section class="space-y-3">
+      <section class="col-span-full min-w-0 space-y-3">
         <div class="flex items-center gap-3">
           <h2 class="font-medium">Actions</h2>
           <span class="text-xs text-muted-foreground">
@@ -660,7 +660,7 @@
         </details>
       </section>
 
-      <section class="space-y-3">
+      <section class="col-span-full min-w-0 space-y-3">
         <div class="flex items-center gap-3">
           <h2 class="font-medium">Plugins</h2>
           <span class="min-w-0 truncate text-xs text-muted-foreground">
@@ -710,7 +710,7 @@
       </section>
     {/if}
 
-    <section class="space-y-3">
+    <section class="col-span-full min-w-0 space-y-3">
       <h2 class="font-medium">VideoForge</h2>
       <div class="flex flex-wrap items-center gap-3 text-sm">
         <Button variant="outline" class="text-destructive hover:text-destructive" onclick={() => (confirmStop = true)}>

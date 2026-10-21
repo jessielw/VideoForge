@@ -18,6 +18,32 @@ Import previews link to existing jobs. They keep those jobs' settings unless you
 and show added, kept and unmatched counts with details. Drafts survive navigation and refresh in
 the same browser tab.
 
+## Find and select jobs
+
+Search matches job names and source paths, ignoring case. Every word must match somewhere in
+the name or path. Combine it with a status filter; status counts reflect the current search.
+The list shows 100 matching jobs per page, in queue order. **Previous** and **Next** change pages
+without changing the selection or the run order.
+
+**Select matching jobs** selects every match across pages. Ctrl/Cmd+A does the same when a job
+row has focus; it keeps its usual text-selection behavior in Search. Use arrows or Home/End to
+move between matching jobs, including across pages. Shift extends a selection, Ctrl/Cmd-click
+toggles a row, and dragging selects a range of matching rows. Tab leaves the row group after one
+stop instead of visiting every job.
+
+Selections survive filters and live status changes. The count identifies jobs hidden by filters;
+**Clear selection** clears all selected jobs. **Run selected**, Index with a selection, and the
+other selected-job actions include selections on other pages and hidden by filters. **Start queue**
+uses the full queue, and Index without a selection uses all jobs. Move up/down changes positions
+in the full queue, including across filtered-out neighbors.
+
+On small windows, opening one job collapses the list to a rail. **Show the queue list** opens
+search and filters over the editor; Escape closes it and restores focus to the opener. At widths
+below 640 CSS pixels, navigation also collapses and the list fills the available width. Short
+windows allow scrolling to reach queue controls.
+
+## Start a run
+
 **Start queue** runs already queued jobs, or ready jobs if none are queued. Completed jobs and
 failed/cancelled runs are left alone; select them and use **Run selected** to rerun or retry explicitly.
 Start and Index wait for pending editor saves. Failed saves offer **Retry saves** or **Discard

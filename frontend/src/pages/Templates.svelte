@@ -229,9 +229,9 @@
     </div>
   </section>
 
-  <section class="min-w-0 flex-1 overflow-auto">
+  <section class="@container/template-editor min-w-0 flex-1 overflow-auto">
     {#if draft && opened}
-      <div class="max-w-4xl space-y-4 p-6">
+      <div class="space-y-4 p-6">
         <header class="flex flex-wrap items-center gap-2">
           <Input class="max-w-sm text-base font-semibold" aria-label="Template name" bind:value={draftName} disabled={readOnly} />
           {#if dirty}<span class="text-xs text-warning">{opened.name === null ? 'Not saved yet' : 'Unsaved changes'}</span>{/if}
@@ -246,7 +246,7 @@
         {#if readOnly}<p class="text-sm text-muted-foreground">The profile's own settings for a new job. Duplicate it to make your own.</p>{/if}
         {#if error}<p class="text-sm text-destructive">{error}</p>{/if}
 
-        <fieldset disabled={readOnly} class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-2">
+        <fieldset disabled={readOnly} class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 @min-[56rem]/template-editor:grid-cols-2">
           <Card.Root class="gap-4 p-4">
             <span class="section-label">Video</span>
             <label class="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-2 text-sm">

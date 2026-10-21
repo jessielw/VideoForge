@@ -145,13 +145,13 @@
 <svelte:window onbeforeunload={() => persist()} />
 
 <div class="flex h-full flex-col gap-4 overflow-auto p-6">
-  <header class="flex items-center gap-3">
+  <header class="flex shrink-0 flex-wrap items-center gap-3">
     <h1 class="text-xl font-semibold">New jobs</h1>
     <span class="text-sm text-muted-foreground">One job per source; a folder of episodes makes a batch.</span>
   </header>
 
   {#if completion}
-    <section class="space-y-2 rounded-lg border p-4 text-sm" aria-label="Import results">
+    <section class="shrink-0 space-y-2 rounded-lg border p-4 text-sm" aria-label="Import results">
       <p role="status" class="font-medium">Added {completion.added.length} · Kept existing {completion.skipped.length} · Unmatched {completion.unmatched.length}</p>
       {#if completion.skipped.length || completion.unmatched.length || !completion.added.length}
         <p class="text-muted-foreground">Your input draft is retained below. Review existing jobs or correct unmatched files before trying again.</p>
@@ -176,14 +176,14 @@
     </section>
   {/if}
 
-  <Card.Root class="gap-3 p-4">
-    <div class="grid grid-cols-[8rem_1fr] items-center gap-3">
+  <Card.Root class="@container/import shrink-0 gap-3 p-4">
+    <div class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 @min-[40rem]/import:grid-cols-[8rem_minmax(0,1fr)]">
       <div class="text-sm text-muted-foreground">Profile</div>
       <div class="flex flex-wrap items-center gap-3">
         <NativeSelect bind:value={profile} aria-label="Profile">
           {#each app.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
         </NativeSelect>
-        <label class="flex items-center gap-2 text-sm text-muted-foreground">
+        <label class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           Original language
           <Input class="w-44" list="languages" placeholder="Guess from audio" bind:value={language} />
         </label>
@@ -193,14 +193,14 @@
       </div>
       <div class="text-sm text-muted-foreground">Template</div>
       <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-        <NativeSelect aria-label="Template" value={template?.name ?? ''} onchange={e => (templateName = e.currentTarget.value)}>
+        <NativeSelect class="min-w-0 max-w-full" aria-label="Template" value={template?.name ?? ''} onchange={e => (templateName = e.currentTarget.value)}>
           {#each templateChoices as c (`${c.builtin}:${c.name}`)}
             <option value={c.name}>{c.name}{c.name === app.defaultTemplate(profile) ? ' (default)' : ''}</option>
           {/each}
         </NativeSelect>
         <button class="underline underline-offset-2" onclick={() => router.go('templates')}>Edit templates…</button>
         {#if containers.length > 1}
-          <label class="flex items-center gap-2">
+          <label class="flex flex-wrap items-center gap-2">
             Container
             <NativeSelect bind:value={container}>
               {#each containers as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
@@ -250,8 +250,8 @@
     <PathSlot label="Output folder" hint="Where the muxed releases go" bind:paths={output} mode="folder" />
   </Card.Root>
 
-  <Card.Root class="min-h-48 flex-1 gap-0 py-0">
-    <div class="flex items-center gap-3 border-b px-4 py-2">
+  <Card.Root class="min-h-48 flex-1 shrink-0 gap-0 py-0">
+    <div class="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2">
       <h2 class="font-medium">Matched files</h2>
       <span class="text-sm text-muted-foreground">
         {#if matching}Matching…{:else if result}{result.jobs.length} job(s){result.unmatched.length
@@ -300,7 +300,7 @@
     </div>
   </Card.Root>
 
-  <footer class="flex items-center gap-3">
+  <footer class="flex shrink-0 flex-wrap items-center gap-3">
     {#if error}<span class="text-sm text-destructive">{error}</span>{/if}
     <Button variant="outline" class="ml-auto" onclick={() => (sources = encodes = subtitles = chapters = [])}>Clear</Button>
     <Button disabled={!result?.jobs.length || matching || settledKey !== inputKey || adding || !output.length} onclick={add}>

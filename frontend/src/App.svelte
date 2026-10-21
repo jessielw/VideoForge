@@ -35,6 +35,7 @@
     void app.start()
   })
 
+  const navCollapsed = $derived(layout.navCollapsed || layout.small)
   const running = $derived(app.jobs.find(j => j.status === 'running'))
 </script>
 
@@ -52,10 +53,10 @@
 {/if}
 
 <div class="flex h-full">
-  <nav class="flex {layout.navCollapsed ? 'w-14' : 'w-48'} shrink-0 flex-col border-r bg-card">
-    <div class="flex items-center gap-2 py-4 {layout.navCollapsed ? 'justify-center' : 'px-4'}">
+  <nav class="flex {navCollapsed ? 'w-14' : 'w-48'} shrink-0 flex-col overflow-y-auto border-r bg-card" aria-label="Main navigation">
+    <div class="flex items-center gap-2 py-4 {navCollapsed ? 'justify-center' : 'px-4'}">
       <img src="/favicon.svg" alt="" class="size-6" title={app.version ? `VideoForge ${app.version}` : undefined} />
-      {#if !layout.navCollapsed}
+      {#if !navCollapsed}
         <span class="text-base font-semibold tracking-wide">VideoForge</span>
         {#if app.version}<span class="text-xs text-muted-foreground tabular-nums">{app.version}</span>{/if}
       {/if}
@@ -64,18 +65,19 @@
       {#each NAV as item (item.page)}
         <Button
           variant="ghost"
-          class="relative justify-start gap-3 {layout.navCollapsed ? 'justify-center px-0' : 'px-3'}
+          class="relative justify-start gap-3 {navCollapsed ? 'justify-center px-0' : 'px-3'}
             {router.page === item.page ? 'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary' : 'text-muted-foreground'}"
           aria-current={router.page === item.page ? 'page' : undefined}
+          aria-label={item.label}
           onclick={() => router.go(item.page)}
-          title={layout.navCollapsed ? item.label : undefined}
+          title={navCollapsed ? item.label : undefined}
         >
           <item.icon class="size-[18px]" />
-          {#if !layout.navCollapsed}{item.label}{/if}
+          {#if !navCollapsed}{item.label}{/if}
           {#if item.page === 'queue' && app.jobs.length}
             <Badge
               variant="secondary"
-              class="tabular-nums {layout.navCollapsed ? 'absolute -top-1 -right-1 h-4 px-1 text-[10px]' : 'ml-auto'}"
+              class="tabular-nums {navCollapsed ? 'absolute -top-1 -right-1 h-4 px-1 text-[10px]' : 'ml-auto'}"
               >{app.jobs.length}</Badge
             >
           {/if}
@@ -83,19 +85,20 @@
       {/each}
     </div>
 
-    <div class="mt-auto flex flex-col gap-0.5 px-2 pb-1 {layout.navCollapsed ? 'items-center' : ''}">
-      <ThemeToggle compact={layout.navCollapsed} />
+    <div class="mt-auto flex flex-col gap-0.5 px-2 pb-1 {navCollapsed ? 'items-center' : ''}">
+      <ThemeToggle compact={navCollapsed} />
       <Button
         variant="ghost"
-        size={layout.navCollapsed ? 'icon' : 'default'}
-        class="text-muted-foreground {layout.navCollapsed ? '' : 'justify-start gap-3 px-3'}"
+        size={navCollapsed ? 'icon' : 'default'}
+        class="text-muted-foreground max-sm:hidden {navCollapsed ? '' : 'justify-start gap-3 px-3'}"
         onclick={() => (layout.navCollapsed = !layout.navCollapsed)}
-        title={layout.navCollapsed ? 'Expand the menu' : 'Collapse the menu'}
+        title={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}
+        aria-label={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}
       >
-        {#if layout.navCollapsed}<PanelLeftOpenIcon />{:else}<PanelLeftCloseIcon />Collapse{/if}
+        {#if navCollapsed}<PanelLeftOpenIcon />{:else}<PanelLeftCloseIcon />Collapse{/if}
       </Button>
     </div>
-    {#if layout.navCollapsed}
+    {#if navCollapsed}
       <div class="flex flex-col items-center gap-1 border-t py-3 text-xs">
         {#if running}
           <span class="text-info" title="Running {running.name}{running.progress ? `: ${running.progress.step}` : ''}"

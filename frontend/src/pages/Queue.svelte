@@ -2,6 +2,9 @@
   // The queue: jobs on the left (click, Ctrl/Shift-click, drag across rows, Shift+arrows or Ctrl+A to
   // select several), the selected job's editor on the right, or a batch panel when several are selected.
   import EncoderPanel from '../components/EncoderPanel.svelte'
+  import { tick, onDestroy } from 'svelte'
+  import { Input } from '$lib/components/ui/input'
+  import { matchingJobs, queuePage, queueRange, QUEUE_PAGE_SIZE } from '../lib/queueView'
   import { saves } from '../lib/saves'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
@@ -34,11 +37,70 @@
   import { router } from '../lib/router.svelte'
   import { layout } from '../lib/layout.svelte'
   import { app } from '../lib/state.svelte'
-  import type { EncoderSettings, JobDetail, Priority, ReuseJob } from '../lib/types'
+  import type { EncoderSettings, JobDetail, Priority, ReuseJob, Status } from '../lib/types'
 
   let selected = $state<string[]>([])
   let anchor = $state<string | null>(null)
-  const waitingSelected = $derived(selected.filter(id => app.jobs.some(job => job.id === id && job.status === 'queued')))
+  let query = $state('')
+  let status = $state<Status | ''>('')
+  let page = $state(0)
+  const searched = $derived(matchingJobs(app.jobs, query))
+  const counts = $derived.by(() => {
+    const result = new Map<Status, number>()
+    for (const job of searched) result.set(job.status, (result.get(job.status) ?? 0) + 1)
+    return result
+  })
+  const matching = $derived(status ? searched.filter(job => job.status === status) : searched)
+  const matchingIds = $derived(matching.map(job => job.id))
+  const matchingSet = $derived(new Set(matchingIds))
+  const selectedSet = $derived(new Set(selected))
+  const hiddenSelected = $derived(selected.filter(id => !matchingSet.has(id)).length)
+  const currentPage = $derived(queuePage(matching.length, page))
+  const pageJobs = $derived(matching.slice(currentPage * QUEUE_PAGE_SIZE, (currentPage + 1) * QUEUE_PAGE_SIZE))
+  const tabStop = $derived(pageJobs.find(job => job.id === cursor)?.id ?? pageJobs.find(job => selectedSet.has(job.id))?.id ?? pageJobs[0]?.id)
+  const waitingSelected = $derived(app.jobs.filter(job => selectedSet.has(job.id) && job.status === 'queued').map(job => job.id))
+
+  function filterChanged() {
+    page = 0
+    anchor = null
+    cursor = null
+    dragEnd()
+    listEl?.querySelector('[data-scroller]')?.scrollTo(0, 0)
+  }
+
+  function clearFilters() {
+    query = ''
+    status = ''
+    filterChanged()
+  }
+
+  async function changePage(next: number) {
+    page = queuePage(matching.length, next)
+    await tick()
+    const scroller = (peek || !rail ? listEl : railEl)?.querySelector<HTMLElement>('[data-scroller]')
+    scroller?.scrollTo(0, 0)
+    scroller?.querySelector<HTMLElement>('[data-job]')?.focus()
+  }
+
+  async function focusJob(id: string) {
+    await tick()
+    const surface = peek || !rail ? listEl : railEl
+    const row = Array.from(surface?.querySelectorAll<HTMLElement>('[data-job]') ?? []).find(row => row.dataset.job === id)
+    row?.focus()
+    row?.scrollIntoView({ block: 'nearest' })
+  }
+
+  async function clearSelection() {
+    select([])
+    await tick()
+    if (rail) railEl?.querySelector<HTMLElement>('button')?.focus()
+    else listEl?.querySelector<HTMLInputElement>('input[type="search"]')?.focus()
+  }
+
+  function selectMatching() {
+    select(matchingIds)
+    if (matchingIds.length === 1) void focusJob(matchingIds[0])
+  }
 
   async function unqueue() {
     const ids = [...waitingSelected]
@@ -50,13 +112,33 @@
   // The routed job is selected once it's in the list (the prune below would undo it otherwise).
   $effect(() => {
     const id = router.jobId
-    if (id && !selected.includes(id) && app.jobs.some(j => j.id === id)) selected = [id]
+    if (id && !selected.includes(id) && app.jobs.some(j => j.id === id)) {
+      selected = [id]
+      query = ''
+      status = ''
+      page = Math.floor(app.jobs.findIndex(j => j.id === id) / QUEUE_PAGE_SIZE)
+    }
   })
 
   // Forget jobs that are gone.
   $effect(() => {
     const ids = new Set(app.jobs.map(j => j.id))
     if (selected.some(id => !ids.has(id))) selected = selected.filter(id => ids.has(id))
+  })
+
+  // A live status change can remove the focused row from the current filter.
+  $effect.pre(() => {
+    const ids = matchingSet
+    const focused = document.activeElement as HTMLElement | null
+    if (focused?.dataset.job && !ids.has(focused.dataset.job) &&
+      (listEl?.contains(focused) || railEl?.contains(focused))) {
+      tick().then(() => {
+        const surface = peek || !rail ? listEl : railEl
+        const target = surface?.querySelector<HTMLElement>('[data-job][tabindex="0"]')
+          ?? surface?.querySelector<HTMLElement>('input[type="search"], button')
+        target?.focus()
+      })
+    }
   })
 
   let cursor = $state<string | null>(null) // the moving end of a Shift+arrow range
@@ -67,9 +149,7 @@
   }
 
   function between(from: string, to: string): string[] {
-    const ids = app.jobs.map(j => j.id)
-    const [a, b] = [ids.indexOf(from), ids.indexOf(to)].sort((x, y) => x - y)
-    return ids.slice(a, b + 1)
+    return queueRange(matchingIds, from, to)
   }
 
   // Drag across rows (or rail chips) to select them; Ctrl adds them to the selection. The list scrolls
@@ -96,7 +176,7 @@
     if (id && (drag.moved || id !== drag.from)) {
       drag.moved = true
       const range = new Set([...drag.base, ...between(drag.from, id)])
-      const ids = app.jobs.map(j => j.id).filter(j => range.has(j))
+      const ids = app.jobs.filter(j => range.has(j.id)).map(j => j.id)
       if (ids.length !== selected.length || ids.some((j, i) => j !== selected[i])) select(ids)
       anchor = drag.from
       cursor = id
@@ -115,17 +195,20 @@
     }
     drag = null
   }
+  onDestroy(dragEnd)
 
   // Up/Down (Home/End) move the selection, with Shift they stretch it from the anchor; Ctrl+A selects all.
-  function keys(e: KeyboardEvent) {
-    const ids = app.jobs.map(j => j.id)
+  async function keys(e: KeyboardEvent) {
+    const ids = matchingIds
     if (!ids.length) return
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
       e.preventDefault()
       select(ids)
       return
     }
-    const at = ids.indexOf(cursor ?? anchor ?? selected.at(-1) ?? ids[0])
+    const target = (e.target as HTMLElement).closest<HTMLElement>('[data-job]')?.dataset.job
+    if (!target) return
+    const at = Math.max(0, ids.indexOf(target))
     const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: ids.length - 1 }[e.key]
     if (to === undefined || e.ctrlKey || e.altKey || e.metaKey) return
     e.preventDefault()
@@ -136,18 +219,15 @@
       anchor = id
       select([id])
     }
-    const row = (e.currentTarget as HTMLElement).querySelector<HTMLElement>(`[data-job="${id}"]`)
-    row?.focus()
-    row?.scrollIntoView({ block: 'nearest' })
+    page = Math.floor(ids.indexOf(id) / QUEUE_PAGE_SIZE)
+    await focusJob(id)
   }
 
   function click(e: MouseEvent, id: string) {
     if (dragged) return
     cursor = id
     if (e.shiftKey && anchor) {
-      const ids = app.jobs.map(j => j.id)
-      const [a, b] = [ids.indexOf(anchor), ids.indexOf(id)].sort((x, y) => x - y)
-      selected = ids.slice(a, b + 1)
+      selected = between(anchor, id)
     } else if (e.ctrlKey || e.metaKey) {
       selected = selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]
       anchor = id
@@ -157,6 +237,7 @@
       peek = false
     }
     router.go('queue', selected.length === 1 ? selected[0] : null)
+    void focusJob(id)
   }
 
   async function act(fn: () => Promise<unknown>) {
@@ -287,11 +368,13 @@
   function showList() {
     layout.queueCollapsed = false
     if (layout.narrow && single !== null) peek = true
+    tick().then(() => listEl?.querySelector<HTMLInputElement>('input[type="search"]')?.focus())
   }
 
   function hideList() {
     if (peek) peek = false
     else layout.queueCollapsed = true
+    tick().then(() => railEl?.querySelector<HTMLElement>('button')?.focus())
   }
 
   function outside(e: PointerEvent) {
@@ -372,7 +455,7 @@
   onpointercancel={dragEnd}
   onkeydown={e => {
     if (peek && e.key === 'Escape') {
-      peek = false
+      hideList()
       e.stopPropagation()
     }
   }}
@@ -381,31 +464,36 @@
 <div class="relative flex h-full">
   {#if rail}
     <!-- The list as a rail: one chip per job (its place, coloured by status). -->
-    <section bind:this={railEl} class="flex w-14 shrink-0 flex-col items-center border-r border-border">
+    <section bind:this={railEl} class="flex w-14 shrink-0 flex-col items-center border-r border-border" aria-label="Queue rail" inert={peek}>
       <Button
         variant="ghost"
         size="icon"
         class="my-2"
-        onclick={() => (peek ? (peek = false) : showList())}
+        onclick={showList}
         title={layout.narrow && single !== null ? 'Show the queue list (over the editor: the window is narrow)' : 'Show the queue list'}
         aria-label="Show the queue list"
         aria-expanded={peek}
       >
         <PanelLeftOpenIcon />
       </Button>
-      <!-- svelte-ignore a11y_no_static_element_interactions (the arrow keys of the chips inside) -->
-      <div data-scroller class="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-auto border-t border-border py-2 select-none" onkeydown={keys}>
-        {#each app.jobs as job, i (job.id)}
+      <span class="pb-1 text-[10px] text-muted-foreground" title={`${matching.length} matching jobs of ${app.jobs.length}`}>{matching.length}</span>
+      <div data-scroller role="group" aria-label="Matching jobs" class="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-auto border-t border-border py-2 select-none">
+        {#each pageJobs as job, i (job.id)}
           <button
             data-job={job.id}
-            class="relative flex h-9 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border text-xs
-              {selected.includes(job.id) ? 'border-primary bg-primary/15' : 'hover:bg-accent'}
+            aria-label={`${job.name}: ${STATUS_LABEL[job.status]}`}
+            aria-pressed={selectedSet.has(job.id)}
+            tabindex={job.id === tabStop ? 0 : -1}
+            onfocus={() => cursor = job.id}
+            onkeydown={keys}
+            class="relative flex h-9 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border text-xs focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring
+              {selectedSet.has(job.id) ? 'border-primary bg-card' : 'hover:bg-accent'}
               {STATUS_TONE[job.status]}"
             onpointerdown={e => dragStart(e, job.id)}
             onclick={e => click(e, job.id)}
             title="{job.name}: {STATUS_LABEL[job.status]}{job.issue ? ` (${job.issue})` : ''}"
           >
-            {i + 1}
+            {currentPage * QUEUE_PAGE_SIZE + i + 1}
             {#if (job.status === 'running' || job.status === 'indexing') && job.progress}
               <span class="absolute inset-x-0 bottom-0 h-1 bg-muted">
                 <span class="block h-full bg-info" style="width:{job.progress.overall * 100}%"></span>
@@ -414,16 +502,20 @@
           </button>
         {/each}
       </div>
+      {#if matching.length > QUEUE_PAGE_SIZE}
+        <Button variant="ghost" size="icon" disabled={currentPage === 0} aria-label="Previous queue page" onclick={() => changePage(currentPage - 1)}><ArrowUpIcon /></Button>
+        <Button variant="ghost" size="icon" disabled={(currentPage + 1) * QUEUE_PAGE_SIZE >= matching.length} aria-label="Next queue page" onclick={() => changePage(currentPage + 1)}><ArrowDownIcon /></Button>
+      {/if}
     </section>
     {#if peek}{@render list('absolute inset-y-0 left-14 z-30 w-[28rem] max-w-[calc(100%-3.5rem)] bg-background shadow-xl')}{/if}
   {:else}
-    {@render list('w-[28rem] shrink-0')}
+    {@render list('w-[28rem] max-w-full shrink-0 max-sm:w-full')}
   {/if}
 
 {#snippet list(cls: string)}
-  <section bind:this={listEl} class="flex flex-col border-r border-border {cls}" aria-label="Queue list">
-    <div class="flex flex-wrap items-center gap-1 border-b border-border p-2">
-      <Button variant="ghost" size="icon" onclick={hideList} title={peek ? 'Hide the list (Esc)' : 'Collapse the list, for more room'}>
+  <section bind:this={listEl} class="flex min-w-0 flex-col overflow-y-auto border-r border-border {cls}" aria-label="Queue list">
+    <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-border p-2">
+      <Button variant="ghost" size="icon" onclick={hideList} aria-label={peek ? 'Hide the queue list' : 'Collapse the queue list'} title={peek ? 'Hide the list (Esc)' : 'Collapse the list, for more room'}>
         <PanelLeftCloseIcon />
       </Button>
       {#if app.queue.running}
@@ -432,7 +524,7 @@
         </Button>
         <Button variant="outline" onclick={() => act(api.cancel)} title="Cancel the running job"><SquareIcon />Cancel</Button>
       {:else}
-        <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())} title={`Start ${startJobs.map(j => j.name).join(', ')}. Completed jobs and retries require Run selected.`}>
+        <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())} title={`Start ${startJobs.length} jobs across the full queue. Completed jobs and retries require Run selected.`}>
           <PlayIcon />Start queue ({startJobs.length})
         </Button>
       {/if}
@@ -465,7 +557,7 @@
         </DropdownMenu.Root>
       {/if}
       <Button variant="outline" disabled={starting || !selected.length} onclick={() => act(() => run(selected))} title="Queue the selected jobs and start">
-        <PlayIcon />Run selected
+        <PlayIcon />Run selected ({selected.length})
       </Button>
       {#if waitingSelected.length}
         <Button variant="outline" onclick={() => act(unqueue)} title="Remove waiting jobs from the run; keep their settings and files">Unqueue ({waitingSelected.length})</Button>
@@ -476,14 +568,14 @@
         </Button>
       {/if}
       <span class="flex-1"></span>
-      <Button variant="ghost" size="icon" disabled={!app.jobs.length} onclick={() => select(app.jobs.map(j => j.id))}
-        title="Select all (Ctrl+A)" aria-label="Select all"><ListChecksIcon /></Button>
+      <Button variant="ghost" size="icon" disabled={!matching.length} onclick={selectMatching}
+        title={`Select all ${matching.length} matching jobs across pages (Ctrl+A in the list)`} aria-label="Select matching jobs"><ListChecksIcon /></Button>
       <Button variant="ghost" size="icon" disabled={!toIndex} onclick={() => index(indexTarget)}
         title="Index {selected.length ? 'the selected jobs' : 'every job'} not indexed yet ({toIndex}): one at a time, each gets its work folder, script and source index, and nothing else, so its video opens at once (runs next to the queue)"
         aria-label={selected.length ? 'Index the selected jobs' : 'Index every job not indexed yet'}><DatabaseZapIcon /></Button>
-      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => move(-1)} title="Move up"><ArrowUpIcon /></Button>
-      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => move(1)} title="Move down"><ArrowDownIcon /></Button>
-      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => act(() => api.reprobe(selected))} title="Probe again">
+      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => move(-1)} title="Move up in the full queue" aria-label="Move selected jobs up"><ArrowUpIcon /></Button>
+      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => move(1)} title="Move down in the full queue" aria-label="Move selected jobs down"><ArrowDownIcon /></Button>
+      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => act(() => api.reprobe(selected))} title="Probe again" aria-label="Probe selected jobs again">
         <RefreshCwIcon />
       </Button>
       <DropdownMenu.Root>
@@ -501,6 +593,23 @@
       </DropdownMenu.Root>
     </div>
 
+    <div class="shrink-0 space-y-2 border-b border-border p-2">
+      <Input type="search" aria-label="Search jobs by name or source path" placeholder="Search name or source path" value={query} oninput={e => { query = e.currentTarget.value; filterChanged() }} />
+      <div class="flex flex-wrap items-center gap-2">
+        <NativeSelect aria-label="Filter jobs by status" value={status} onchange={e => { status = e.currentTarget.value as Status | ''; filterChanged() }}>
+          <option value="">All statuses ({searched.length})</option>
+          {#each Object.entries(STATUS_LABEL) as [value, label] (value)}
+            <option value={value}>{label} ({counts.get(value as Status) ?? 0})</option>
+          {/each}
+        </NativeSelect>
+        {#if query || status}<Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>{/if}
+      </div>
+      <p role="status" class="text-xs text-muted-foreground">{matching.length} of {app.jobs.length} jobs match. {selected.length} selected{hiddenSelected ? ` (${hiddenSelected} hidden by filters)` : ''}.</p>
+      {#if selected.length}<Button variant="outline" size="sm" onclick={clearSelection}>Clear selection</Button>{/if}
+      <p class="text-xs text-muted-foreground">Start queue uses all waiting jobs. Selected actions include selections on other pages and hidden by filters. Index uses {selected.length ? `${selected.length} selected jobs` : `all ${app.jobs.length} jobs`}.</p>
+      <p id="queue-keys" class="text-xs text-muted-foreground">Arrows/Home/End navigate; Shift extends selection; Ctrl/Cmd+A selects matching jobs across pages.</p>
+    </div>
+
     {#if saveError}
       <div role="alert" class="space-y-2 border-b p-3 text-sm text-destructive">
         <p>Changes are not saved: {saveError}. Start is blocked until resolved.</p>
@@ -508,13 +617,16 @@
         <Button size="sm" variant="outline" onclick={() => saves.discard()}>Discard unsaved changes</Button>
       </div>
     {/if}
-    <!-- svelte-ignore a11y_no_static_element_interactions (the arrow keys of the rows inside) -->
-    <div data-scroller class="min-h-0 flex-1 overflow-auto select-none" onkeydown={keys}>
-      {#each app.jobs as job (job.id)}
+    <div data-scroller role="group" aria-label="Matching jobs" aria-describedby="queue-keys" class="min-h-24 flex-1 overflow-auto select-none">
+      {#each pageJobs as job (job.id)}
         <button
           data-job={job.id}
-          class="block w-full border-b border-border/60 px-3 py-2 text-left
-            {selected.includes(job.id) ? 'bg-primary/15' : 'hover:bg-accent'}"
+          aria-pressed={selectedSet.has(job.id)}
+          tabindex={job.id === tabStop ? 0 : -1}
+          onfocus={() => cursor = job.id}
+          onkeydown={keys}
+          class="block w-full border-b border-border/60 px-3 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring
+            {selectedSet.has(job.id) ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]' : 'hover:bg-accent'}"
           onpointerdown={e => dragStart(e, job.id)}
           onclick={e => click(e, job.id)}
         >
@@ -567,14 +679,25 @@
         </button>
       {:else}
         <div class="p-6 text-center text-muted-foreground">
-          No jobs yet. <Button variant="link" class="h-auto p-0" onclick={() => router.go('new')}>Add some</Button>.
+          {#if app.jobs.length}
+            No jobs match these filters. <Button variant="link" class="h-auto p-0" onclick={clearFilters}>Clear filters</Button>.
+          {:else}
+            No jobs yet. <Button variant="link" class="h-auto p-0" onclick={() => router.go('new')}>Add some</Button>.
+          {/if}
         </div>
       {/each}
+    </div>
+    <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t p-2 text-xs">
+      <span>Showing {matching.length ? currentPage * QUEUE_PAGE_SIZE + 1 : 0}–{Math.min((currentPage + 1) * QUEUE_PAGE_SIZE, matching.length)} of {matching.length}</span>
+      <div class="flex gap-1">
+        <Button variant="outline" size="sm" disabled={currentPage === 0} aria-label="Previous queue page" onclick={() => changePage(currentPage - 1)}>Previous</Button>
+        <Button variant="outline" size="sm" disabled={(currentPage + 1) * QUEUE_PAGE_SIZE >= matching.length} aria-label="Next queue page" onclick={() => changePage(currentPage + 1)}>Next</Button>
+      </div>
     </div>
   </section>
 {/snippet}
 
-  <section class="min-w-0 flex-1 overflow-auto">
+  <section class="min-w-0 flex-1 overflow-auto {layout.small && !rail ? 'hidden' : ''}" inert={peek} aria-label="Job settings">
     {#if single}
       {#key single}<JobEditor jobId={single} />{/key}
     {:else if selected.length > 1}

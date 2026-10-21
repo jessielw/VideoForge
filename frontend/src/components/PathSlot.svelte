@@ -30,10 +30,10 @@
   }
 </script>
 
-<div class="grid grid-cols-[8rem_1fr_auto] items-start gap-3">
-  <div class="pt-1.5 text-sm text-muted-foreground">{label}</div>
+<div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 @min-[40rem]/import:grid-cols-[8rem_minmax(0,1fr)_auto]">
+  <div class="col-span-2 pt-1.5 text-sm text-muted-foreground @min-[40rem]/import:col-span-1">{label}</div>
   <div
-    class="flex min-h-8 flex-wrap gap-1.5 rounded-lg border border-input px-2 py-1 outline-none focus-visible:border-ring
+    class="flex min-h-8 min-w-0 flex-wrap gap-1.5 rounded-lg border border-input px-2 py-1 outline-none focus-visible:border-ring
       focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
     role="list"
     aria-label={label}
@@ -41,7 +41,7 @@
     use:pathDrop={{ rule: { mode: mode === 'folder' ? 'folder' : 'files', extensions, label }, accept: add }}
   >
     {#each paths as p (p)}
-      <span class="flex items-center gap-1 rounded-md bg-muted py-0.5 pr-1 pl-2 text-xs" title={p} role="listitem">
+      <span class="flex min-w-0 max-w-full items-center gap-1 rounded-md bg-muted py-0.5 pr-1 pl-2 text-xs break-all" title={p} role="listitem">
         {basename(p)}{p.match(/[\\/]$/) || !p.match(/\.[a-z0-9]+$/i) ? '\\' : ''}
         <button
           class="rounded-sm text-muted-foreground hover:text-destructive"
