@@ -1,17 +1,18 @@
 <script lang="ts">
   // New jobs: profile + language, input slots, output folder, live match preview, Add to queue.
-  import { onMount } from 'svelte'
+  import { onMount, untrack } from 'svelte'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import { Button } from '$lib/components/ui/button'
   import * as Card from '$lib/components/ui/card'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import PathSlot from '../components/PathSlot.svelte'
+  import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
   import { api } from '../lib/api'
   import { basename, debounce, LANGUAGES } from '../lib/format'
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
-  import type { MatchResult } from '../lib/types'
+  import { ENCODERS, type EncoderSettings, type MatchResult } from '../lib/types'
 
   let profile = $state('')
   let language = $state('')
@@ -26,19 +27,27 @@
   let adding = $state(false)
   // The template (by name; the profile's starred one first) and the container it sets, which can
   // be changed here.
-  let templateName = $state('')
+  let templateName = $state<string | null>(null)
+  let encoder = $state<EncoderSettings | null>(null)
   let container = $state('')
   const templateChoices = $derived(app.presetChoices('template', profile))
-  const template = $derived(templateChoices.find(c => c.name === templateName) ?? templateChoices[0])
+  const template = $derived(templateChoices.find(c => c.name === (templateName ?? app.defaultTemplate(profile))) ?? templateChoices[0])
+  const templateKey = $derived(JSON.stringify([profile, template?.name]))
   const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
 
   $effect(() => {
-    // a profile switch (or the presets loading) starts on that profile's default template
-    templateName = app.defaultTemplate(profile)
+    // A manual selection survives preset saves; a profile switch starts on its default.
+    void profile
+    templateName = null
   })
   $effect(() => {
-    const own = template?.data.mux.container
-    container = containers.some(c => c.id === own) ? own! : (containers[0]?.id ?? '')
+    // Switching templates resets the override, but saving/renaming an encoder preset does not.
+    void templateKey
+    untrack(() => {
+      encoder = template ? structuredClone($state.snapshot(template.data.encoder)) : null
+      const own = template?.data.mux.container
+      container = containers.some(c => c.id === own) ? own! : (containers[0]?.id ?? '')
+    })
   })
 
   const takesSubs = $derived(app.profiles.find(p => p.id === profile)?.external_subtitles ?? true)
@@ -93,7 +102,11 @@
         ...slots(),
         original_language: language || null,
         output_dir: output[0] ?? null,
-        template: template && { ...$state.snapshot(template.data), mux: { ...template.data.mux, container } },
+        template: template && {
+          ...$state.snapshot(template.data),
+          encoder: $state.snapshot(encoder ?? template.data.encoder),
+          mux: { ...template.data.mux, container },
+        },
       })
       for (const name of r.skipped) app.addLog(`Skipped ${name}: it is queued or running`)
       for (const p of r.unmatched) app.addLog(`Not matched to any source: ${p}`)
@@ -153,6 +166,17 @@
           <span>Crop {c.left}/{c.top}/{c.right}/{c.bottom} on every job</span>
         {/if}
       </div>
+      {#if encoder}
+        <div class="text-sm text-muted-foreground">Encoder preset</div>
+        <div class="min-w-0 space-y-2">
+          <div class="flex flex-wrap items-center gap-3">
+            <EncoderPresetMenu {profile} current={encoder} apply={value => { encoder = value }} />
+            <span class="text-xs text-muted-foreground">{ENCODERS.find(([id]) => id === encoder?.encoder)?.[1]} · {encoder.depth}-bit</span>
+            <button class="text-xs underline underline-offset-2" onclick={() => { encoder = structuredClone($state.snapshot(template.data.encoder)) }}>Use template settings</button>
+          </div>
+          <p class="text-xs text-muted-foreground">Changes encoder settings only. Resize and filters come from the template.</p>
+        </div>
+      {/if}
     </div>
     <PathSlot
       label="Sources"

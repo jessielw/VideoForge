@@ -328,7 +328,7 @@
               </div>
             </Card.Root>
             <Card.Root class="p-4">
-              <EncoderPanel value={draft.encoder} disabled={readOnly} onchange={v => (draft!.encoder = v)} />
+              <EncoderPanel {profile} value={draft.encoder} disabled={readOnly} onchange={v => (draft!.encoder = v)} />
             </Card.Root>
           </div>
         </fieldset>

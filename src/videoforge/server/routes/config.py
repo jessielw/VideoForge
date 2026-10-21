@@ -211,6 +211,8 @@ def encoders(request: Request) -> list[dict[str, Any]]:
             "layouts": [str(x) for x in e.layouts],
             "bitrates": None if e.bitrates is None else {str(c): k for c, k in e.bitrates.items()},
             "bitrate_choices": list(e.bitrate_choices),
+            "bitrate_range": e.bitrate_range,
+            "per_channel_max": e.per_channel_max,
             "vbr_default": e.vbr_default,
             "default_max": str(e.default_max) if e.default_max else None,
             "missing": missing[e.action],

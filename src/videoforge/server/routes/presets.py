@@ -11,26 +11,47 @@ jobs added with no settings of their own get it.
 from __future__ import annotations
 
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Body, HTTPException, Request
+from pydantic import BaseModel, Field
 
+from videoforge.core.audio_preset import AudioPresetSettings
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template import Template
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
 
 router = APIRouter(prefix="/api/presets")
-KINDS: dict[str, type] = {"video": VideoSettings, "encoder": EncoderSettings, "template": Template}
+KINDS: dict[str, type] = {
+    "video": VideoSettings,
+    "encoder": EncoderSettings,
+    "audio": AudioPresetSettings,
+    "template": Template,
+}
 MAX_NAME = 80
 DEFAULTS = "template_defaults"  # setting: {profile id: template name}
 
 
+class GroupedPresetBody(BaseModel):
+    name: str | None = None  # storage identity; omitted when creating a preset
+    label: str = Field(min_length=1, max_length=MAX_NAME)
+    group: list[str] = Field(default_factory=list, max_length=8)
+    data: dict[str, Any]
+
+
 def _all(request: Request) -> dict[str, Any]:
     store = request.app.state.store
-    out: dict[str, Any] = {
-        kind: [{"name": n, "data": _upgraded(kind, d)} for n, d in store.presets(kind).items()] for kind in KINDS
-    }
+    out: dict[str, Any] = {kind: [_entry(kind, n, d) for n, d in store.presets(kind).items()] for kind in KINDS}
     out["template_defaults"] = template_defaults(store)
     return out
+
+
+def _entry(kind: str, name: str, data: Any) -> dict[str, Any]:
+    # Grouped presets wrap their settings in the existing JSON column. Older flat
+    # presets stay readable without a database migration; metadata never enters a job's settings.
+    if kind in ("encoder", "audio") and "settings" in data:
+        return {"name": name, "label": data["label"], "group": data["group"], "data": _upgraded(kind, data["settings"])}
+    return {"name": name, "data": _upgraded(kind, data)}
 
 
 def _upgraded(kind: str, data: Any) -> Any:
@@ -106,7 +127,50 @@ def set_template_default(request: Request, profile_id: str, body: dict[str, Any]
 
 @router.put("/{kind}/{name}")
 def save_preset(request: Request, kind: str, name: str, data: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    request.app.state.store.save_preset(kind, _check_name(name), normalize(kind, data))
+    store = request.app.state.store
+    name = _check_name(name)
+    settings = normalize(kind, data)
+    old = store.presets(kind).get(name, {})
+    if kind in ("encoder", "audio") and "settings" in old:
+        settings = {**old, "settings": settings}
+    store.save_preset(kind, name, settings)
+    return _all(request)
+
+
+@router.post("/encoder")
+def save_encoder_preset(request: Request, body: GroupedPresetBody) -> dict[str, Any]:
+    """Create or update an encoder preset. Names can repeat in different encoders or folders."""
+    return _save_grouped(request, "encoder", body)
+
+
+@router.post("/audio")
+def save_audio_preset(request: Request, body: GroupedPresetBody) -> dict[str, Any]:
+    """Create or update an audio preset without track titles, languages, flags, or timing."""
+    return _save_grouped(request, "audio", body)
+
+
+def _save_grouped(request: Request, kind: str, body: GroupedPresetBody) -> dict[str, Any]:
+    label = _check_name(body.label)
+    group = [_check_name(part) for part in body.group]
+    if any("/" in part for part in group):
+        raise HTTPException(422, "A folder name cannot contain /")
+    data = normalize(kind, body.data)
+    store = request.app.state.store
+    saved = store.presets(kind)
+    if body.name is not None and body.name not in saved:
+        raise HTTPException(404, f"No {kind} preset {body.name!r}")
+    parent = "encoder" if kind == "encoder" else "action"
+    for name, record in saved.items():
+        entry = _entry(kind, name, record)
+        if (
+            name != body.name
+            and entry.get("label", name) == label
+            and entry.get("group", []) == group
+            and entry["data"][parent] == data[parent]
+        ):
+            raise HTTPException(409, f"An {kind} preset with this name already exists in this folder")
+    name = body.name if body.name is not None else uuid4().hex
+    store.save_preset(kind, name, {"label": label, "group": group, "settings": data})
     return _all(request)
 
 
@@ -121,7 +185,10 @@ def rename_preset(request: Request, kind: str, name: str, body: dict[str, Any] =
         raise HTTPException(404, f"No {kind} preset {name!r}")
     if to != name:
         defaults = template_defaults(store) if kind == "template" else {}
-        store.save_preset(kind, to, saved[name])
+        data = saved[name]
+        if kind in ("encoder", "audio") and "settings" in data:
+            data = {**data, "label": to}
+        store.save_preset(kind, to, data)
         store.delete_preset(kind, name)
         for pid, n in defaults.items():
             if n == name:

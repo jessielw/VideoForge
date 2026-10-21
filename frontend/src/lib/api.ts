@@ -2,6 +2,7 @@
 import type {
   ActionSetting,
   AudioEncodeInfo,
+  AudioPresetSettings,
   ClipInfo,
   CommandStep,
   DirContents,
@@ -91,6 +92,10 @@ export const api = {
   filterPresets: () => get<FilterPreset[]>('/api/filter-presets'),
   savePreset: (kind: PresetKind, name: string, data: unknown) =>
     request<Presets>('PUT', `/api/presets/${kind}/${encodeURIComponent(name)}`, data),
+  saveEncoderPreset: (preset: { name?: string; label: string; group: string[]; data: EncoderSettings }) =>
+    post<Presets>('/api/presets/encoder', preset),
+  saveAudioPreset: (preset: { name?: string; label: string; group: string[]; data: AudioPresetSettings }) =>
+    post<Presets>('/api/presets/audio', preset),
   deletePreset: (kind: PresetKind, name: string) => request<Presets>('DELETE', `/api/presets/${kind}/${encodeURIComponent(name)}`),
   renamePreset: (kind: PresetKind, name: string, to: string) =>
     post<Presets>(`/api/presets/${kind}/${encodeURIComponent(name)}/rename`, { to }),

@@ -12,6 +12,8 @@
   import type { AudioAction, AudioEncodeInfo, AudioTrack, EncodeOptionInfo, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
   import FileBrowser from './FileBrowser.svelte'
   import SubtitleSelectionMenu from './SubtitleSelectionMenu.svelte'
+  import AudioPresetMenu from './AudioPresetMenu.svelte'
+  import { applyAudioPreset, audioPresetSettings } from '../lib/audioPresets'
   import { selectSubtitles } from '../lib/subtitleSelection'
   import { drops, pathDrop } from '../lib/dropPaths.svelte'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
@@ -510,6 +512,8 @@
         {@const layoutMark = mark(t, o => o?.layout)}
         {@const bitrateMark = mark(t, o => o?.bitrate_kbps)}
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-3 py-2 text-sm">
+          <AudioPresetMenu current={audioPresetSettings(ov)} source={t} disabled={!editable}
+            apply={preset => editTrack(t, value => Object.assign(value, applyAudioPreset(value, preset)))} />
           <NativeSelect
             value={action}
             class={actionMark ? SELECT_MARK[actionMark] : ''}

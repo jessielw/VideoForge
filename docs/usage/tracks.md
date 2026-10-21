@@ -33,6 +33,38 @@ an encoded compatibility track. Each encoded output is a separate reusable step.
 Audio encodes run alongside the video once indexing is complete. **Settings** controls how many
 run at once; see [pipeline settings](../configuration/settings.md#pipeline-settings).
 
+## Audio presets
+
+Use **Audio preset** on any audio output to load a saved encoder, channels, bitrate, and encoder
+options. Common configurations such as **AC-3 → 5.1 640 kb/s** are available immediately, along
+with encoder defaults and Copy. Browse by encoder, or search within it.
+
+1. Open **Audio preset → Manage presets…**. Choose a preset on the left, or **New from current settings**.
+2. Set its name, optional folder, encoder, channels, and bitrate on the right. Expand **Advanced
+   settings** for normalization, quality controls, and extra arguments supported by that encoder.
+3. Choose **Save preset** to update the library, or **Save new preset** to save your own copy of a
+   built-in configuration. A folder such as `Surround / Compatibility` creates nested groups.
+
+Saving does not change the output. **Apply to this output** applies the edited configuration and
+closes the dialog without saving it to the library. **Cancel** discards the open draft. Rename or move
+a preset by editing its name and folder; a new draft with an existing name and folder offers **Replace preset**.
+Unsaved changes are checked before switching presets or closing with Escape or the close button.
+Use **Duplicate** to create a variation of a selected preset without updating the original.
+
+Audio presets are also available for every primary and extra output in template audio slots and
+rules. The same preset name can exist under different encoders or folders. Templates and jobs
+keep copies, so editing or deleting a saved preset does not change existing setups.
+
+Applying a preset preserves the track's language, title, flags, inclusion, timing, and position.
+It replaces encoder options rather than keeping options from a previous encoder. Copy clears
+encoding settings and copies the source audio.
+
+In the compact picker for an individual track, incompatible choices are disabled with a reason: for example, a 5.1
+preset cannot upmix stereo, Atmos needs TrueHD Atmos, and required tools must be installed.
+The manager allows editing these presets for other sources, while disabling **Apply to this output**
+until they fit the current track. DDP retains its supported 5.0-to-5.1 treatment. Template outputs have no source yet, so their
+presets are fitted to each track when applied, following the existing [template audio rules](templates.md#audio-by-rules).
+
 ## External files
 
 Add subtitle files with the job. Pairing can also scan beside the source and one folder below it

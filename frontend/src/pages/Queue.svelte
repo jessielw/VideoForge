@@ -572,7 +572,7 @@
             </Card.Root>
           {/if}
           <Card.Root class="p-4">
-            <EncoderPanel value={batchSource.spec.encoder} onchange={applyEncoder} />
+            <EncoderPanel profile={batchSource.profile} value={batchSource.spec.encoder} onchange={applyEncoder} />
           </Card.Root>
           <Card.Root class="flex-row items-center gap-3 p-4">
             <span class="text-sm">

@@ -815,6 +815,7 @@ def test_presets(tmp_path):
         assert client.get("/api/presets").json() == {
             "video": [],
             "encoder": [],
+            "audio": [],
             "template": [],
             "template_defaults": {},
         }
@@ -833,13 +834,122 @@ def test_presets(tmp_path):
         assert "crop" not in vid["data"] and vid["data"]["resize"]["kernel"] == "Spline36"
         assert [f["category"] for f in vid["data"]["filters"]] == ["crop", "resize", "custom"]  # the old text, upgraded
 
-        assert client.put("/api/presets/audio/x", json={}).status_code == 404
+        assert client.put("/api/presets/unknown/x", json={}).status_code == 404
         assert client.put("/api/presets/encoder/%20", json={}).status_code == 422
         assert client.put("/api/presets/encoder/bad", json={"rate_control": "nope"}).status_code == 422
 
     with make_client(tmp_path) as client:  # kept across a restart
         assert [p["name"] for p in client.get("/api/presets").json()["encoder"]] == ["Fast x265"]
         assert client.delete("/api/presets/encoder/Fast x265").json()["encoder"] == []
+
+
+def test_grouped_encoder_presets(tmp_path):
+    """Folders and display names are separate from settings and stable storage identities."""
+    settings = {"encoder": "x264", "tune": "grain", "extra": "--deblock -1:-1", "options": {"aq-strength": "0.8"}}
+    with make_client(tmp_path) as client:
+        legacy = client.put("/api/presets/encoder/Old grain", json=settings).json()["encoder"][0]
+        assert "group" not in legacy and "label" not in legacy
+        first = {"label": "Film", "group": ["1080p", "SDR"], "data": settings}
+        listed = client.post("/api/presets/encoder", json=first).json()["encoder"]
+        film = next(p for p in listed if p.get("label") == "Film")
+        assert film["group"] == ["1080p", "SDR"] and film["name"] != "Film"
+        assert film["data"] == legacy["data"]  # metadata never enters encoder settings
+
+        # The same leaf name can occur in other folders and under other encoders.
+        assert client.post("/api/presets/encoder", json=first | {"group": ["2160p", "HDR10"]}).status_code == 200
+        assert (
+            client.post("/api/presets/encoder", json=first | {"data": settings | {"encoder": "x265"}}).status_code
+            == 200
+        )
+        assert client.post("/api/presets/encoder", json=first).status_code == 409
+
+        # Moving/renaming keeps its identity; a collision does not overwrite either entry.
+        moved = first | {"name": film["name"], "label": " Grain ", "group": [" 1080p ", " SDR "]}
+        listed = client.post("/api/presets/encoder", json=moved).json()["encoder"]
+        grain = next(p for p in listed if p["name"] == film["name"])
+        assert grain["label"] == "Grain" and grain["group"] == first["group"] and grain["data"] == film["data"]
+        assert (
+            client.post("/api/presets/encoder", json=moved | {"label": "Film", "group": ["2160p", "HDR10"]}).status_code
+            == 409
+        )
+
+        # Old clients can update settings without discarding the new organization.
+        listed = client.put(f"/api/presets/encoder/{grain['name']}", json=settings | {"crf": 21}).json()["encoder"]
+        grain = next(p for p in listed if p["name"] == grain["name"])
+        assert grain["label"] == "Grain" and grain["group"] == first["group"] and grain["data"]["crf"] == 21
+        # Existing flat presets can be moved into folders without replacing their identity.
+        listed = client.post(
+            "/api/presets/encoder",
+            json={"name": "Old grain", "label": "Animation", "group": ["1080p", "SDR"], "data": settings},
+        ).json()["encoder"]
+        assert next(p for p in listed if p["name"] == "Old grain")["label"] == "Animation"
+
+    with make_client(tmp_path) as client:
+        saved = client.get("/api/presets").json()["encoder"]
+        assert len(saved) == 4
+        assert next(p for p in saved if p["name"] == grain["name"]) == grain
+        renamed = client.post(f"/api/presets/encoder/{grain['name']}/rename", json={"to": "Renamed"})
+        assert renamed.status_code == 200
+        entry = next(p for p in renamed.json()["encoder"] if p["name"] == "Renamed")
+        assert entry["label"] == "Renamed" and entry["group"] == first["group"]
+        assert len(client.delete("/api/presets/encoder/Renamed").json()["encoder"]) == 3
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"label": " "},
+        {"label": "x" * 81},
+        {"group": [""]},
+        {"group": [" "]},
+        {"group": ["x" * 81]},
+        {"group": ["1080p/SDR"]},
+        {"group": ["nested"] * 9},
+        {"group": "1080p"},
+        {"data": {"encoder": "unknown"}},
+        {"data": {"rate_control": "unknown"}},
+    ],
+)
+def test_grouped_encoder_preset_validation(tmp_path, changes):
+    with make_client(tmp_path) as client:
+        body = {"label": "Film", "group": [], "data": {"encoder": "x264"}}
+        assert client.post("/api/presets/encoder", json=body | changes).status_code == 422
+        assert client.get("/api/presets").json()["encoder"] == []
+        assert client.post("/api/presets/encoder", json=body | {"name": "missing"}).status_code == 404
+
+
+def test_encoder_preset_settings_are_snapshots(tmp_path):
+    """New jobs and saved templates retain settings when a preset is edited or deleted."""
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        body = {
+            "label": "Grain",
+            "group": ["1080p", "SDR"],
+            "data": {"encoder": "x264", "crf": 17, "tune": "grain", "options": {"aq-strength": "0.8"}},
+        }
+        (preset,) = client.post("/api/presets/encoder", json=body).json()["encoder"]
+        template = {
+            "video": {"resize": {"width": 1280, "height": 720}},
+            "encoder": preset["data"],
+            "mux": {"container": "mkv", "extra": "--disable-track-statistics-tags"},
+            "qpf": False,
+        }
+        (saved,) = client.put("/api/presets/template/Group", json=template).json()["template"]
+        (job_id,) = add(client, tmp_path, template=saved["data"])
+        before = wait_for(client, job_id, "ready", "warn")["spec"]
+        assert before["encoder"] == preset["data"]
+        assert before["video"]["resize"]["width"] == 1280 and not before["qpf"]
+
+        client.post("/api/presets/encoder", json=body | {"name": preset["name"], "data": {"crf": 25}})
+        client.delete(f"/api/presets/encoder/{preset['name']}")
+        assert client.get(f"/api/jobs/{job_id}").json()["spec"]["encoder"] == before["encoder"]
+        assert client.get("/api/presets").json()["template"][0] == saved
+
+        # Applying a different encoder configuration changes no other part of the job.
+        settings = before["encoder"] | {"crf": 20, "tune": "animation", "extra": "--deblock 1:1"}
+        assert client.patch(f"/api/jobs/{job_id}", json={"encoder": settings}).status_code == 200
+        after = client.get(f"/api/jobs/{job_id}").json()["spec"]
+        assert after == before | {"encoder": settings}
 
 
 def test_keep_ar_resize_is_fitted_on_the_server(tmp_path):

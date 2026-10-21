@@ -82,6 +82,7 @@ export interface VideoSettings {
 }
 
 export type EncoderName = 'x264' | 'x265' | 'vp8' | 'vp9' | 'svtav1'
+export const ENCODERS: [EncoderName, string][] = [['x264', 'x264'], ['x265', 'x265'], ['vp8', 'VP8'], ['vp9', 'VP9'], ['svtav1', 'SVT-AV1']]
 export type RateControl = 'crf' | 'abr' | '2pass'
 
 export interface EncoderSettings {
@@ -172,6 +173,8 @@ export interface AudioEncodeInfo {
   layouts: string[]
   bitrates: Record<string, number> | null // default kb/s by channels; null = lossless (no bitrate)
   bitrate_choices: number[] // only these, when not empty
+  bitrate_range: [number, number] | null
+  per_channel_max: number | null
   vbr_default: boolean // no bitrate = the encoder's quality VBR
   default_max: string | null
   missing: string[] // tools it lacks ([] = it can run)
@@ -201,6 +204,14 @@ export interface TrackOverride {
   layout: string | null // "2.0", "5.1", ...
   options: Record<string, string> // the encode's own settings (AudioEncodeInfo.options keys)
   burn?: boolean | null // subtitles: burned into the video instead of muxed (one per job)
+}
+
+// Reusable compression settings only; source metadata stays on each output track.
+export type AudioPresetSettings = {
+  action: AudioAction
+  layout: string | null
+  bitrate_kbps: number | null
+  options: Record<string, string>
 }
 
 export interface Overrides {
@@ -445,6 +456,8 @@ export interface ContainerInfo {
 export type VideoPresetData = Omit<VideoSettings, 'crop'>
 export interface Preset<T> {
   name: string
+  label?: string // encoder presets: display name, independent of storage identity
+  group?: string[] // encoder presets: folders within the parent encoder
   data: T
 }
 // A job's whole run (src/videoforge/core/template.py). video.crop is used when crop_mode is 'fixed'.
@@ -503,10 +516,11 @@ export interface TemplateSubs {
 export interface Presets {
   video: Preset<VideoPresetData>[]
   encoder: Preset<EncoderSettings>[]
+  audio: Preset<AudioPresetSettings>[]
   template: Preset<Template>[]
   template_defaults: Record<string, string> // profile id -> its default template's name
 }
-export type PresetKind = 'video' | 'encoder' | 'template'
+export type PresetKind = 'video' | 'encoder' | 'audio' | 'template'
 
 // A tool's process priority (a nice value on Linux).
 export type Priority = 'idle' | 'below_normal' | 'normal' | 'above_normal' | 'high'

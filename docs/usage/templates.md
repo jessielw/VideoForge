@@ -14,6 +14,11 @@ settings, container, AutoQPF, crop policy, and optional audio and subtitle selec
 Applying a template copies settings into each job. Verify one episode from a batch before running
 the rest, especially when the sources differ in resolution, languages, or channel layouts.
 
+Use **Encoder preset** to choose a saved compression configuration while editing a template, or
+override just the encoder in New jobs. Presets are organized under each encoder with optional nested
+folders; see [saved encoder presets](encoders.md#saved-encoder-presets). Templates store a copy of
+the selected settings, so later preset edits do not alter saved templates or queued jobs.
+
 ## Crop policy
 
 | Policy | Behavior |
@@ -26,6 +31,10 @@ Choose Auto for sources whose borders vary. Fixed crop assumes the same border d
 source. A job using an existing encode has no video to crop.
 
 ## Audio by position
+
+Each primary or extra audio output has an **Audio preset** picker for reusable encoder, channels,
+bitrate, and encoder options. It preserves the output's title and flags and the slot's or rule's
+matching settings; see [audio presets](tracks.md#audio-presets).
 
 Slot 1 applies to the first source audio track, slot 2 to the second, and so on. You can create
 several outputs from a slot. Slots beyond the source's tracks are ignored; choose what to do with

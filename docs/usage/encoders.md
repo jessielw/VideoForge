@@ -16,6 +16,38 @@ and additional arguments. It also shows source color and HDR information for the
 VideoForge muxes the encoded stream into the chosen MKV or MP4 container. Encoder availability
 depends on the tool paths and installed builds; inspect **Settings** if an encoder is unavailable.
 
+## Saved encoder presets
+
+Use **Encoder preset** in a job's Encoder tab, the template editor, or New jobs to select a saved
+encoder configuration. The same picker is available when editing selected jobs as a batch.
+
+The compact picker is for quick selection. Choose **Manage presets…** to open the larger editor:
+
+1. Select a preset on the left, or choose **New from current settings**.
+2. Edit its name, folder, encoder, quality, speed, and bit depth on the right. Expand
+   **Advanced settings and HDR** for structured options, extra arguments, and metadata settings.
+3. Choose **Save preset** to update the library, or **Save new preset** to create a copy of a
+   built-in configuration. Use `/` in the folder field for nesting, such as `1080p / SDR`.
+
+Saving does not change the current job or template. **Apply encoder settings** applies the edited
+configuration and closes the dialog; it does not save library changes. **Cancel** discards the open
+draft. Switching presets with unsaved edits offers Save, Discard, or Keep editing.
+
+Names can repeat in different folders or under different encoders. Edit the name or folder in the
+manager to rename or move a preset. A new draft matching an existing name, encoder, and folder offers
+**Replace preset**; renaming another preset onto it is rejected. Older presets appear at their encoder's root.
+Use **Duplicate** to create a variation of any selected preset, including its current draft edits.
+
+Start New jobs with a template, then optionally select an encoder preset. This changes only the
+encoder settings; resize, filters, audio, subtitles, and container remain as configured by the template
+or job. A folder named `1080p` does not resize video, and a folder named `Dolby Vision` does not
+enable metadata preservation: configure those settings explicitly. **Use template settings** clears
+the encoder override. Selecting a different template starts with that template's encoder settings.
+
+Templates and jobs keep copies of the applied settings. Updating or deleting a saved preset does
+not change them. The picker shows **Custom / modified** when the settings match no available preset.
+The encoder's **Speed preset** (`slow`, `slower`, etc.) is separate from these saved configurations.
+
 ## Rate control
 
 - **CRF:** select quality and let output size vary with the source.

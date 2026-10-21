@@ -12,6 +12,18 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Preset manager dialogs.** Audio and video pickers keep quick selection in a compact popup.
+  Manage presets opens a shared dialog with folder browsing and editable encoder settings,
+  separate Save and Apply actions, and protection for unsaved edits.
+
+- **Audio presets.** Pick common or saved encoder/channel/bitrate configurations on individual
+  audio outputs and template slots/rules. Source-incompatible choices show a reason; saved presets
+  support folders, search, and rename/move while preserving each track's metadata.
+
+- **Grouped encoder presets.** Save named configurations under each encoder with nested folders,
+  search, rename/move, and repeated names across folders. Pick them in job, template, batch, and
+  New jobs editors; selections copy encoder settings while keeping the rest of the setup.
+
 - **Correctness fixes: MP4 subtitles.** Source SRT tracks are extracted and aligned before MP4Box imports
   them, preserving the final cue's duration and timing when the video starts after zero.
 
