@@ -10,6 +10,7 @@ jobs added with no settings of their own get it.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from uuid import uuid4
 
@@ -19,6 +20,7 @@ from pydantic import BaseModel, Field
 from videoforge.core.audio_preset import AudioPresetSettings
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template import Template
+from videoforge.core.template_io import MAX_BYTES, MAX_NAME, read_bundle
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
 from videoforge.core.video.starters import starters
 
@@ -29,7 +31,6 @@ KINDS: dict[str, type] = {
     "audio": AudioPresetSettings,
     "template": Template,
 }
-MAX_NAME = 80
 DEFAULTS = "template_defaults"  # setting: {profile id: template name}
 
 
@@ -112,6 +113,46 @@ def normalize(kind: str, data: Any) -> dict[str, Any]:
 @router.get("")
 def list_presets(request: Request) -> dict[str, Any]:
     return _all(request)
+
+
+async def _bundle(request: Request) -> dict[str, Any]:
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > MAX_BYTES:
+            raise HTTPException(413, "Template files must be 5 MiB or smaller")
+    try:
+        return read_bundle(json.loads(raw))
+    except (ValueError, RecursionError) as ex:
+        raise HTTPException(422, f"Invalid template file: {ex}") from None
+
+
+@router.post("/templates/export")
+async def export_templates(request: Request) -> dict[str, Any]:
+    """Export saved templates, built-in defaults, or the editor's unsaved settings."""
+    return await _bundle(request)
+
+
+@router.post("/templates/preview")
+async def preview_templates(request: Request) -> dict[str, Any]:
+    bundle = await _bundle(request)
+    names = _import_names(request, bundle, preview=True)
+    return {"bundle": bundle, "names": names}
+
+
+@router.post("/templates/import")
+async def import_templates(request: Request) -> dict[str, Any]:
+    bundle = await _bundle(request)
+    names = _import_names(request, bundle)
+    return {"presets": _all(request), "names": names}
+
+
+def _import_names(request: Request, bundle: dict[str, Any], *, preview: bool = False) -> list[str]:
+    state = request.app.state
+    reserved = tuple(f"{state.queue.profiles(pid).name} defaults" for pid in state.profile_ids)
+    return state.store.import_presets(
+        "template", bundle["templates"], max_name=MAX_NAME, preview=preview, reserved=reserved
+    )
 
 
 @router.put("/template-default/{profile_id}")

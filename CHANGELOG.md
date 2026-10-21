@@ -12,6 +12,11 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Templates can be shared as versioned JSON files, individually or as a bundle of selected templates.
+  The export picker includes Select all, Clear selection, and a selected count. Import previews
+  settings and included scripts, supports selecting templates, and keeps existing setups with
+  numbered copies for matching names. Invalid files are rejected before anything is saved.
+
 - Imports show a persistent Added / Kept existing / Unmatched summary with reasons and links to
   existing jobs. Partial or zero-add imports retain their input draft for correction.
 

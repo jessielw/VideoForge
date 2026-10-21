@@ -29,6 +29,7 @@ import type {
   ScriptCheck,
   ScriptParts,
   Template,
+  TemplateBundle,
   VideoSettings,
 } from './types'
 
@@ -90,6 +91,9 @@ export const api = {
   health: () => get<{ ok: boolean; version: string }>('/api/health'),
   profiles:() => get<Profile[]>('/api/profiles'),
   presets: () => get<Presets>('/api/presets'),
+  exportTemplates: (bundle: TemplateBundle) => post<TemplateBundle>('/api/presets/templates/export', bundle),
+  previewTemplates: (bundle: unknown) => post<{ bundle: TemplateBundle; names: string[] }>('/api/presets/templates/preview', bundle),
+  importTemplates: (bundle: TemplateBundle) => post<{ presets: Presets; names: string[] }>('/api/presets/templates/import', bundle),
   filterPresets: () => get<FilterPreset[]>('/api/filter-presets'),
   savePreset: (kind: PresetKind, name: string, data: unknown) =>
     request<Presets>('PUT', `/api/presets/${kind}/${encodeURIComponent(name)}`, data),

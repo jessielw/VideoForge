@@ -476,6 +476,11 @@ export interface Template {
   audio: TemplateAudio | null // null: the template leaves each job's audio alone
   subs?: TemplateSubs | null // null (or missing, from before subtitle rules): ... and its subtitles
 }
+export interface TemplateBundle {
+  format: 'videoforge.templates'
+  version: 1
+  templates: { name: string; data: Template }[]
+}
 // A template's audio (source tracks only), by position or by rules. Position: slot n is for the
 // source's nth audio track (extra slots are ignored). Rules: each track takes the first rule it
 // matches (empty lists and null = any; commentary/AD by flag or title); a first_only rule goes to the

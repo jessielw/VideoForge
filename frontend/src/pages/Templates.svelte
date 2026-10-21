@@ -22,6 +22,7 @@
   import ResizeEditor from '../components/ResizeEditor.svelte'
   import TemplateAudioEditor from '../components/TemplateAudioEditor.svelte'
   import TemplateSubsEditor from '../components/TemplateSubsEditor.svelte'
+  import TemplateTransfer from '../components/TemplateTransfer.svelte'
   import { api } from '../lib/api'
   import { drafts } from '../lib/drafts'
   import { router } from '../lib/router.svelte'
@@ -222,8 +223,9 @@
         </li>
       {/each}
     </ul>
-    <div class="border-t p-2">
+    <div class="space-y-2 border-t p-2">
       <Button variant="outline" class="w-full" onclick={() => request(startNew)}><PlusIcon />New template</Button>
+      <TemplateTransfer current={draft ? { name: draftName.trim(), data: draft } : null} disabled={busy} />
     </div>
   </section>
 

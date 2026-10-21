@@ -125,3 +125,44 @@ class Store:
     def delete_preset(self, kind: str, name: str) -> None:
         with self._lock:
             self._db.execute("DELETE FROM presets WHERE kind = ? AND name = ?", (kind, name))
+
+    def import_presets(
+        self,
+        kind: str,
+        entries: list[dict[str, Any]],
+        *,
+        max_name: int,
+        preview: bool = False,
+        reserved: tuple[str, ...] = (),
+    ) -> list[str]:
+        """Add a whole bundle atomically, keeping both copies when names collide.
+
+        Allocate names under the write lock as well as during preview: another browser may
+        have saved a preset since the preview. Never overwrite an existing preset.
+        """
+        with self._lock:
+            names = {row[0] for row in self._db.execute("SELECT name FROM presets WHERE kind = ?", (kind,))}
+            names.update(reserved)
+            added = []
+            for entry in entries:
+                base = entry["name"]
+                name = base
+                i = 2
+                while name in names:
+                    suffix = f" ({i})"
+                    name = base[: max_name - len(suffix)] + suffix
+                    i += 1
+                names.add(name)
+                added.append(name)
+            if not preview:
+                self._db.execute("BEGIN")
+                try:
+                    self._db.executemany(
+                        "INSERT INTO presets (kind, name, data) VALUES (?, ?, ?)",
+                        [(kind, name, json.dumps(entry["data"])) for name, entry in zip(added, entries, strict=True)],
+                    )
+                    self._db.execute("COMMIT")
+                except Exception:
+                    self._db.execute("ROLLBACK")
+                    raise
+        return added
