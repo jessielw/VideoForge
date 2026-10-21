@@ -55,11 +55,19 @@
 </script>
 
 <!--
-Discriminated Unions + Destructing (required for bindable) do not
-get along, so we shut typescript up by casting `value` to `never`.
+Single-choice groups always keep their selection. Reject the empty value at
+the binding so the primitive cannot clear its internal state before the caller
+handles the change. Multiple-choice groups can still deselect every item.
+The cast accommodates the primitive's discriminated value types.
 -->
 <ToggleGroupPrimitive.Root
-	bind:value={value as never}
+	bind:value={
+		() => value as never,
+		(next) => {
+			if (restProps.type === "single" && next === "") return;
+			value = next;
+		}
+	}
 	bind:ref
 	{orientation}
 	data-slot="toggle-group"
