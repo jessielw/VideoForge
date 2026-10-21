@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Waiting jobs can be unqueued from the selection toolbar or editor without removing their settings
+  or files. Running jobs remain separate from this action.
+
 - Rapid Settings edits build on the current draft and save in order. Older replies cannot roll back
   newer notification, action, plugin or tool changes; failed writes offer Retry or Discard.
 

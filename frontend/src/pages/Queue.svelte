@@ -38,6 +38,14 @@
 
   let selected = $state<string[]>([])
   let anchor = $state<string | null>(null)
+  const waitingSelected = $derived(selected.filter(id => app.jobs.some(job => job.id === id && job.status === 'queued')))
+
+  async function unqueue() {
+    const ids = [...waitingSelected]
+    await api.dequeue(ids)
+    await app.refreshJobs()
+    toast.success(`Unqueued ${ids.length} waiting job${ids.length === 1 ? '' : 's'}`, { description: 'Jobs and their settings remain in the list for editing.' })
+  }
 
   // The routed job is selected once it's in the list (the prune below would undo it otherwise).
   $effect(() => {
@@ -449,6 +457,9 @@
       <Button variant="outline" disabled={starting || !selected.length} onclick={() => act(() => run(selected))} title="Queue the selected jobs and start">
         <PlayIcon />Run selected
       </Button>
+      {#if waitingSelected.length}
+        <Button variant="outline" onclick={() => act(unqueue)} title="Remove waiting jobs from the run; keep their settings and files">Unqueue ({waitingSelected.length})</Button>
+      {/if}
       {#if indexing}
         <Button variant="outline" onclick={() => act(() => app.stopIndexing())} title="Stop indexing: cancel the job being indexed and the ones waiting">
           <DatabaseXIcon />Stop indexing

@@ -118,6 +118,9 @@
         <span class="text-sm {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
         <span class="text-sm text-muted-foreground">· {job.profile} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span>
         {#if !editable}<Badge variant="outline" class="border-info/40 bg-info/10 text-info">locked while {job.status}</Badge>{/if}
+        {#if job.status === 'queued'}
+          <Button size="sm" variant="outline" onclick={() => api.dequeue([jobId]).then(() => load()).catch(e => toast.error(e.message))}>Unqueue to edit</Button>
+        {/if}
         <TemplateMenu
           profile={job.profile}
           spec={job.spec}
