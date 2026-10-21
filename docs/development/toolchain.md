@@ -2,8 +2,10 @@
 
 Developer setup (`scripts/setup_windows.py`) and portable packaging (`scripts/build_portable.py`)
 use the same tool inventory (`scripts/tools.toml`), plugin inventory (`vsplugins/manifest.toml`),
-fetchers and smoke checks. Native provisioning supports Windows x64. Linux uses the Docker image;
-multi-platform Docker and macOS validation are separate follow-up work.
+fetchers and smoke checks. Native provisioning supports Windows x64. Linux amd64 uses the Docker image.
+ARM64 images, macOS packaging and macOS Docker validation are deferred. Linux ARM64 and macOS users can
+attempt a [self-managed source setup](../getting-started/source.md#macos-and-arm64), supplying compatible
+tools and compiling plugins as needed; full feature parity and end-to-end validation are not claimed.
 
 ## Provision and inspect
 

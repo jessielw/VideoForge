@@ -25,7 +25,8 @@ profile 5 as 5; a FEL's enhancement layer is baked into the picture).
 The [Windows portable build](#portable-build-windows) and the [Docker image](#docker-linux) include
 the application and free toolchain. DEE and Apple CoreAudioToolbox remain user supplied. From source:
 
-- Windows (or Linux), Python 3.12+ and [uv](https://docs.astral.sh/uv/)
+- Windows or Linux; macOS and Linux ARM64 source setups are experimental and self-managed (see below)
+- Python 3.12+ and [uv](https://docs.astral.sh/uv/)
 - Node.js (to build the web app)
 - The tools below. VapourSynth itself and `vspipe` come with the `vapoursynth` Python package, and
   MediaInfo with `pymediainfo`; nothing to install for those.
@@ -133,8 +134,12 @@ uv run videoforge serve --window
 ```
 
 This installs the locked Python extras, builds the frontend and verifies the provisioned tools/plugins.
-For Linux, use Docker, or provide compatible tools/plugins and configure their paths yourself. A manual
-source installation is:
+For Linux amd64, use Docker, or provide compatible tools/plugins and configure their paths yourself.
+Linux ARM64 and macOS users can attempt a self-managed source installation with native tools and
+plugins they install or compile. Packaged ARM/macOS support and multi-platform Docker work are deferred;
+full feature parity is not validated. See the [macOS/ARM64 source guide](docs/getting-started/source.md#macos-and-arm64)
+for architecture requirements, tool-path overrides, plugin loading and H.264/H.265 validation.
+A manual source installation is:
 
 ```
 git clone https://github.com/jessielw/VideoForge

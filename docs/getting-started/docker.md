@@ -4,6 +4,14 @@ The Linux **amd64** image is `ghcr.io/jessielw/videoforge`. It contains the appl
 media tools: MKVToolNix, x264, x265, SVT-AV1, FFmpeg, MP4Box, opus-tools, DeeZy, truehdd, HDR metadata
 tools, Wine, and the bundled VapourSynth plugins.
 
+## Platform support
+
+The published image targets `linux/amd64`. ARM64 images and macOS Docker validation are deferred;
+running this image through emulation on Apple Silicon does not establish compatibility or performance
+for all tools, Wine encoders or CPU-specific plugins.
+For a self-managed native installation with your own tools and compiled plugins, see
+[macOS and ARM64 from source](source.md#macos-and-arm64).
+
 ## Start with Compose
 
 1. Save [compose.yaml](https://github.com/jessielw/VideoForge/blob/main/compose.yaml) in a new folder.

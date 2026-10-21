@@ -10,6 +10,9 @@ Choose an installation, check the tools it needs, and run one job before adding 
 | [Docker on Linux](docker.md) | Application, frontend, free media tools, VapourSynth and plugins, Wine | Writable media and data folders; DEE or qaac if you use them |
 | [From source](source.md) | Application source | Python 3.12+, uv, Node.js, and media tools |
 
+Linux ARM64 and macOS are [experimental, self-managed source setups](source.md#macos-and-arm64).
+Users supply compatible tools and plugins; packaged support and Docker validation are deferred.
+
 ## Before the first job
 
 1. Open **Settings** and check the paths for MKVToolNix, your encoder, and VapourSynth plugins.

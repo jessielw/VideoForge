@@ -14,6 +14,11 @@ missing. A bare name (`ffmpeg`, `MP4Box`) is looked up on `PATH`.
 The bundled FFmpeg and MP4Box defaults take priority when present. Existing source setups can still
 use those two programs on `PATH` until they provision the bundle. Custom explicit paths remain explicit.
 
+On macOS or Linux ARM64, supply native tools and plugins and override the Windows defaults. See the
+[self-managed source guide](../getting-started/source.md#macos-and-arm64) for a configuration example,
+plugin build constraints and validation steps. The fetchers below provision Windows x64 binaries;
+`fetch_plugins.py --no-plugins` can fetch just the platform-independent Python scripts.
+
 | Tool | Default path | Needed for |
 | --- | --- | --- |
 | [MKVToolNix](https://mkvtoolnix.download/) | `tools/MKVToolNix/mkvmerge.exe` | reading sources, MKV output |
