@@ -139,8 +139,8 @@ def _changes(body: dict[str, Any]) -> dict[str, Any]:
         changes["encoder"] = from_json(EncoderSettings, body["encoder"])
     if "overrides" in body:
         changes["overrides"] = from_json(Overrides, body["overrides"])
-    if body.get("output_dir"):
-        changes["output_dir"] = Path(body["output_dir"])
+    if "output_dir" in body:
+        changes["output_dir"] = Path(body["output_dir"]) if body["output_dir"] else None
     if "qpf" in body:
         changes["qpf"] = bool(body["qpf"])
     if "mux" in body:

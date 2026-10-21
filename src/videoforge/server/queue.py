@@ -89,7 +89,7 @@ logger = logging.getLogger(__name__)
 LANE_SETTING = "index_lane"  # the store's record of the lane: job ids in order, the one being indexed first
 
 
-_OUTFILE = ("outfile.shared", "outfile.exists")  # JobQueue._refresh_outputs' issue codes
+_OUTFILE = ("outfile.shared", "outfile.exists", "outfile.missing")  # JobQueue._refresh_outputs' issue codes
 
 
 def _same_file(path: Path | None) -> str:
@@ -126,6 +126,10 @@ class JobView(StrEnum):
 
 class Busy(RuntimeError):
     """The job is queued or running, so it can't be edited or removed."""
+
+
+class _Unchanged(StrEnum):
+    VALUE = "unchanged"
 
 
 @dataclass(eq=False)
@@ -530,6 +534,8 @@ class JobQueue:
                 continue
             old = [i for i in e.plan.issues if i.code in _OUTFILE]
             new: list[Issue] = []
+            if e.spec.output_dir is None:
+                new.append(Issue(Severity.BLOCK, "outfile.missing", "Choose an output folder in the Output tab"))
             path = outputs.get(e.id)
             others = [o for o in sharing[_same_file(path)] if o is not e] if path is not None else []
             if others and not e.busy:
@@ -579,7 +585,7 @@ class JobQueue:
         video: VideoSettings | None = None,
         encoder: EncoderSettings | None = None,
         overrides: Overrides | None = None,
-        output_dir: Path | None = None,
+        output_dir: Path | None | _Unchanged = _Unchanged.VALUE,
         qpf: bool | None = None,
         profile: str | None = None,
         inputs: JobInputs | None = None,
@@ -622,7 +628,7 @@ class JobQueue:
                 s.encoder = encoder
             if overrides is not None:
                 s.overrides = overrides
-            if output_dir is not None:
+            if not isinstance(output_dir, _Unchanged):
                 s.output_dir = output_dir
             if qpf is not None:
                 s.qpf = qpf

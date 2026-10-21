@@ -127,6 +127,20 @@ def test_health_gives_the_version(tmp_path):
     assert make_client(tmp_path).get("/api/health").json() == {"ok": True, "version": version()}
 
 
+def test_output_directory_can_be_cleared_but_omission_keeps_it(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        before = wait_for(client, job, "ready", "warn")
+        changed = client.patch(f"/api/jobs/{job}", json={"label": "keep-folder"}).json()
+        assert changed["spec"]["output_dir"] == before["spec"]["output_dir"]
+        cleared = client.patch(f"/api/jobs/{job}", json={"output_dir": None}).json()
+        assert cleared["spec"]["output_dir"] is None
+        assert cleared["status"] == "blocked"
+        restored = client.patch(f"/api/jobs/{job}", json={"output_dir": str(tmp_path / "out")}).json()
+        assert restored["status"] in {"ready", "warn"}
+
+
 def test_batch_crop_continues_after_busy_and_preserves_other_video_settings(tmp_path):
     from dataclasses import replace
 

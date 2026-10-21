@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Clearing a job's output folder now saves the empty value and blocks the job until a folder is set.
+  Edits that omit the folder keep its current value.
+
 - Server controls and WebSockets reject unexpected browser origins, and requests validate Host.
   Local access remains supported; `--allow-host` and `--allow-origin` configure explicit proxy access.
 
