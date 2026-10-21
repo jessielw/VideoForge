@@ -2,6 +2,7 @@
   // One job, StaxRip-style: issues on top, then Video | Encoder | Audio | Subtitles | Output | Log.
   // Changes save straight away (the server replans); a queued, running or indexing job is read-only.
   import { api, type SpecChanges } from '../lib/api'
+  import { saves } from '../lib/saves'
   import { basename, duration, SEVERITY_TONE, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type { CommandStep, JobDetail } from '../lib/types'
@@ -40,7 +41,6 @@
   // are dropped: they'd undo the newer edits. The last reply is the job.
   let pending = $state(0)
   let edits = 0
-  let chain: Promise<unknown> = Promise.resolve()
 
   async function load() {
     const at = edits
@@ -76,8 +76,9 @@
     }
     edits++
     pending++
-    const send = chain.then(() => api.update(jobId, changes))
-    chain = send.catch(() => {})
+    const id = jobId
+    const snapshot = structuredClone($state.snapshot(changes))
+    const send = saves.add(() => api.update(id, snapshot))
     return send.then(
       reply => {
         if (--pending === 0) job = reply

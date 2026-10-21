@@ -13,7 +13,8 @@
   // that only change when the content does; otherwise each save would remount the preview.
   // Opening a job never indexes its source: until it's indexed the preview is an index panel (Index
   // now puts the job first in the queue's index lane, one job at a time; it's locked meanwhile).
-  import { untrack } from 'svelte'
+  import { onDestroy, untrack } from 'svelte'
+  import { saves } from '../lib/saves'
   import { toast } from 'svelte-sonner'
   import { api } from '../lib/api'
   import { app } from '../lib/state.svelte'
@@ -81,6 +82,7 @@
 
   async function indexNow() {
     try {
+      await saves.flush()
       const r = await api.index([jobId], true)
       if (!r.taken.length) toast.info('Not indexed', { description: 'A queued or running job is indexed by its run.' })
     } catch (e) {
@@ -182,6 +184,7 @@
     const before = refreshSeq
     if (dirty && editable) {
       clearTimeout(timer)
+      queued = false
       video.custom = vv.body
       adoptNext = true
       saving = true
@@ -211,7 +214,13 @@
     // A keep-AR resize follows the crop at once (the server fits it the same way on save).
     if (video.resize) video.resize = fitted(video.resize, resizeIn)
     queued = true
-    timer = setTimeout(async () => {
+    timer = setTimeout(flushEdit, delay)
+  }
+
+  function flushEdit() {
+    if (!queued) return
+    clearTimeout(timer)
+    void (async () => {
       queued = false
       saving = true
       try {
@@ -221,8 +230,9 @@
       } finally {
         saving = false
       }
-    }, delay)
+    })()
   }
+  onDestroy(saves.register(flushEdit))
 
   // Render the frame (and its info) again with the saved settings.
   function refreshPreview() {

@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Starting or indexing a job waits for pending editor saves, including debounced video edits. Failed
+  writes pause later edits and offer Retry or Discard before Start can proceed.
+
 - **Drafts survive navigation.** New jobs and template drafts are retained per browser tab across
   navigation and refresh. Leaving or replacing an edited template offers Save, Discard or Stay.
 

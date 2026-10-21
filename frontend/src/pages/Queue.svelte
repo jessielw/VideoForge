@@ -2,6 +2,7 @@
   // The queue: jobs on the left (click, Ctrl/Shift-click, drag across rows, Shift+arrows or Ctrl+A to
   // select several), the selected job's editor on the right, or a batch panel when several are selected.
   import EncoderPanel from '../components/EncoderPanel.svelte'
+  import { saves } from '../lib/saves'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import CropIcon from '@lucide/svelte/icons/crop'
@@ -162,18 +163,26 @@
   let reuseJobs = $state<ReuseJob[]>([])
   let reuseIds = $state<string[] | undefined>()
   let reuseOpen = $state(false)
+  let starting = $state(false)
+  let saveError = $state('')
+  $effect(() => saves.subscribe(error => { saveError = error }))
 
   async function run(ids?: string[]) {
+    if (starting) return
+    starting = true
+    try {
+    await saves.flush()
     const { jobs } = await api.reuse(ids)
-    if (!jobs.length) return api.start(ids)
+    if (!jobs.length) return await api.start(ids)
     reuseJobs = jobs
     reuseIds = ids
     reuseOpen = true
+    } finally { starting = false }
   }
 
   function startReusing(reuse: Record<string, string[]>) {
     reuseOpen = false
-    act(() => api.start(reuseIds, reuse))
+    act(async () => { await saves.flush(); await api.start(reuseIds, reuse) })
   }
 
   async function move(step: number) {
@@ -405,7 +414,7 @@
         </Button>
         <Button variant="outline" onclick={() => act(api.cancel)} title="Cancel the running job"><SquareIcon />Cancel</Button>
       {:else}
-        <Button disabled={!startJobs.length} onclick={() => act(() => run())} title={`Start ${startJobs.map(j => j.name).join(', ')}. Completed jobs and retries require Run selected.`}>
+        <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())} title={`Start ${startJobs.map(j => j.name).join(', ')}. Completed jobs and retries require Run selected.`}>
           <PlayIcon />Start queue ({startJobs.length})
         </Button>
       {/if}
@@ -437,7 +446,7 @@
           </DropdownMenu.Content>
         </DropdownMenu.Root>
       {/if}
-      <Button variant="outline" disabled={!selected.length} onclick={() => act(() => run(selected))} title="Queue the selected jobs and start">
+      <Button variant="outline" disabled={starting || !selected.length} onclick={() => act(() => run(selected))} title="Queue the selected jobs and start">
         <PlayIcon />Run selected
       </Button>
       {#if indexing}
@@ -471,6 +480,13 @@
       </DropdownMenu.Root>
     </div>
 
+    {#if saveError}
+      <div role="alert" class="space-y-2 border-b p-3 text-sm text-destructive">
+        <p>Changes are not saved: {saveError}. Start is blocked until resolved.</p>
+        <Button size="sm" onclick={() => act(() => saves.retry())}>Retry saves</Button>
+        <Button size="sm" variant="outline" onclick={() => saves.discard()}>Discard unsaved changes</Button>
+      </div>
+    {/if}
     <!-- svelte-ignore a11y_no_static_element_interactions (the arrow keys of the rows inside) -->
     <div data-scroller class="min-h-0 flex-1 overflow-auto select-none" onkeydown={keys}>
       {#each app.jobs as job (job.id)}
