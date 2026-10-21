@@ -17,7 +17,8 @@
   import { app } from '../lib/state.svelte'
   import { ENCODERS, type EncoderSettings, type MatchResult } from '../lib/types'
 
-  type Draft = { profile: string; language: string; sources: string[]; encodes: string[]; subtitles: string[]; chapters: string[]; output: string[]; templateName: string | null; encoder: EncoderSettings | null; container: string }
+  type ImportResult = Awaited<ReturnType<typeof api.addJobs>>
+  type Draft = { profile: string; language: string; sources: string[]; encodes: string[]; subtitles: string[]; chapters: string[]; output: string[]; templateName: string | null; encoder: EncoderSettings | null; container: string; completion?: ImportResult | null }
   const restored = drafts.read<Draft>('new-jobs')
   let profile = $state(restored?.profile ?? '')
   let language = $state(restored?.language ?? '')
@@ -31,6 +32,7 @@
   let error = $state('')
   let adding = $state(false)
   let replacements = $state<string[]>([])
+  let completion = $state<ImportResult | null>(restored?.completion ?? null)
   // The template (by name; the profile's starred one first) and the container it sets, which can
   // be changed here.
   let templateName = $state<string | null>(restored?.templateName ?? null)
@@ -44,7 +46,7 @@
 
   function persist() {
     drafts.write('new-jobs', $state.snapshot({ profile, language, sources, encodes, subtitles, chapters, output,
-      templateName: template?.name ?? templateName, encoder, container }))
+      templateName: template?.name ?? templateName, encoder, container, completion }))
   }
   onDestroy(persist)
   const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
@@ -108,6 +110,7 @@
   async function add() {
     if (adding || matching || !result?.jobs.length || settledKey !== inputKey) return
     adding = true
+    const submittedKey = settledKey
     error = ''
     try {
       const r = await api.addJobs({
@@ -123,11 +126,14 @@
       })
       for (const name of r.skipped) app.addLog(`Kept existing job: ${name}`)
       for (const p of r.unmatched) app.addLog(`Not matched to any source: ${p}`)
-      sources = encodes = subtitles = chapters = []
-      result = null
+      completion = r
+      if (r.added.length && !r.skipped.length && !r.unmatched.length && inputKey === submittedKey) {
+        sources = encodes = subtitles = chapters = []
+        result = null
+      }
       replacements = []
+      persist()
       await app.refreshJobs()
-      router.go('queue', r.added[0] ?? null)
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {
@@ -143,6 +149,32 @@
     <h1 class="text-xl font-semibold">New jobs</h1>
     <span class="text-sm text-muted-foreground">One job per source; a folder of episodes makes a batch.</span>
   </header>
+
+  {#if completion}
+    <section class="space-y-2 rounded-lg border p-4 text-sm" aria-label="Import results">
+      <p role="status" class="font-medium">Added {completion.added.length} · Kept existing {completion.skipped.length} · Unmatched {completion.unmatched.length}</p>
+      {#if completion.skipped.length || completion.unmatched.length || !completion.added.length}
+        <p class="text-muted-foreground">Your input draft is retained below. Review existing jobs or correct unmatched files before trying again.</p>
+      {/if}
+      {#if completion.kept.length || completion.unmatched.length}
+        <details open={!completion.added.length}>
+          <summary class="cursor-pointer">Review skipped and unmatched files</summary>
+          <ul class="mt-2 space-y-2">
+            {#each completion.kept as kept}
+              <li><span title={kept.source}>{kept.name}: {kept.reason}.</span>
+                {#if kept.id}<Button size="sm" variant="link" onclick={() => router.go('queue', kept.id)}>Open existing job</Button>{/if}
+              </li>
+            {/each}
+            {#each completion.unmatched as path}
+              <li class="break-all">{path}: no matching source. Add its source or correct the filename.</li>
+            {/each}
+          </ul>
+        </details>
+      {/if}
+      <Button size="sm" onclick={() => router.go('queue', completion?.added[0] ?? null)}>Open queue</Button>
+      <Button size="sm" variant="ghost" onclick={() => { completion = null; persist() }}>Dismiss results</Button>
+    </section>
+  {/if}
 
   <Card.Root class="gap-3 p-4">
     <div class="grid grid-cols-[8rem_1fr] items-center gap-3">

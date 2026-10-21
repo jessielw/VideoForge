@@ -150,7 +150,7 @@ export const api = {
       template?: Template
     },
   ) =>
-    post<{ added: string[]; skipped: string[]; unmatched: string[] }>('/api/jobs', body),
+    post<{ added: string[]; skipped: string[]; unmatched: string[]; kept: { source: string; id: string | null; name: string; status: string | null; reason: string }[] }>('/api/jobs', body),
 
   jobs: () => get<JobSummary[]>('/api/jobs'),
   job: (id: string) => get<JobDetail>(`/api/jobs/${id}`),

@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Imports show a persistent Added / Kept existing / Unmatched summary with reasons and links to
+  existing jobs. Partial or zero-add imports retain their input draft for correction.
+
 - Clearing a job's output folder now saves the empty value and blocks the job until a folder is set.
   Edits that omit the folder keep its current value.
 

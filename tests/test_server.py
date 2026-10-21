@@ -127,6 +127,31 @@ def test_health_gives_the_version(tmp_path):
     assert make_client(tmp_path).get("/api/health").json() == {"ok": True, "version": version()}
 
 
+def test_partial_and_zero_imports_explain_kept_jobs(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        original = add(client, tmp_path)[0]
+        wait_for(client, original, "ready", "warn")
+        client.post("/api/queue/enqueue", json={"ids": [original]})
+        make_files(tmp_path, "S01E02")
+        unmatched = tmp_path / "unrelated.en.srt"
+        unmatched.write_text("subtitle", encoding="utf-8")
+        payload = {
+            "sources": [str(tmp_path / "src")],
+            "subtitles": [str(unmatched)],
+            "output_dir": str(tmp_path / "out"),
+        }
+        result = client.post("/api/jobs", json=payload).json()
+        assert len(result["added"]) == 1
+        assert result["kept"][0]["id"] == original
+        assert result["kept"][0]["status"] == "queued"
+        assert "settings were kept" in result["kept"][0]["reason"]
+        assert result["unmatched"] == [str(unmatched)]
+        again = client.post("/api/jobs", json=payload).json()
+        assert again["added"] == []
+        assert len(again["kept"]) == 2
+
+
 def test_output_directory_can_be_cleared_but_omission_keeps_it(tmp_path):
     make_files(tmp_path)
     with make_client(tmp_path) as client:

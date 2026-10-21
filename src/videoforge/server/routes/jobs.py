@@ -92,9 +92,27 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         replace_existing=body.get("replace_existing") or [],
     )
     left = result.unmatched
+    added_sources = {e.spec.inputs.source for e in added}
+    kept = []
+    for inputs in result.jobs:
+        if inputs.source in added_sources:
+            continue
+        existing = q._find_source(inputs.source)
+        kept.append(
+            {
+                "source": str(inputs.source),
+                "id": existing.id if existing else None,
+                "name": existing.spec.name if existing else inputs.source.name,
+                "status": existing.status if existing else None,
+                "reason": f"Existing job is {existing.status}; settings were kept"
+                if existing
+                else "Source was not added; match again to review it",
+            }
+        )
     return {
         "added": [e.id for e in added],
         "skipped": skipped,
+        "kept": kept,
         "unmatched": [str(p) for p in left.encodes + left.subtitles + left.chapters],
     }
 
