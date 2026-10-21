@@ -24,6 +24,8 @@ class AppState {
   log = $state<LogLine[]>([])
   connected = $state(false)
   connectionVersion = $state(0)
+  connection = $state<'connecting' | 'retrying' | 'offline' | 'connected'>('connecting')
+  connectionError = $state('')
   /** Shut down from the page: no reconnecting, the app shows that it stopped. */
   stopped = $state(false)
   // Bumped per job whenever the server says it changed; open editors refetch on it.
@@ -41,6 +43,8 @@ class AppState {
   #socket: WebSocket | null = null
   #refreshTimer: ReturnType<typeof setTimeout> | null = null
   #retry = 500
+  #retryTimer: ReturnType<typeof setTimeout> | null = null
+  #starting: Promise<void> | null = null
 
   // The audio encodes, with the tools each one lacks.
   async loadEncoders(): Promise<void> {
@@ -90,17 +94,37 @@ class AppState {
     return this.jobs.find(j => j.id === id)?.name ?? id
   }
 
-  async start(): Promise<void> {
-    this.profiles = await api.profiles()
-    api.health().then(
-      h => (this.version = h.version),
-      () => {},
-    )
-    this.loadEncoders()
-    this.loadPresets()
-    this.loadFilterPresets()
-    await this.refreshJobs()
-    this.connect()
+  start(): Promise<void> {
+    if (this.#starting || this.stopped) return this.#starting ?? Promise.resolve()
+    if (this.#retryTimer) clearTimeout(this.#retryTimer)
+    this.#retryTimer = null
+    this.connection = this.connectionError ? 'retrying' : 'connecting'
+    this.#starting = (async () => {
+      try {
+        const [profiles, presets, filters, encodes, health] = await Promise.all([
+          api.profiles(), api.presets(), api.filterPresets(), api.encoders(), api.health(),
+        ])
+        await this.refreshJobs()
+        this.profiles = profiles
+        this.presets = presets
+        this.filterPresets = filters
+        this.encodes = encodes
+        this.version = health.version
+        this.connectionError = ''
+        this.connect()
+      } catch (e) {
+        this.connectionError = e instanceof Error ? e.message : String(e)
+        this.connection = 'offline'
+        this.#scheduleRetry()
+      }
+    })().finally(() => { this.#starting = null })
+    return this.#starting
+  }
+
+  #scheduleRetry(): void {
+    if (this.stopped || this.#retryTimer) return
+    this.#retryTimer = setTimeout(() => { this.#retryTimer = null; void this.start() }, this.#retry)
+    this.#retry = Math.min(this.#retry * 2, 8000)
   }
 
   async refreshJobs(): Promise<void> {
@@ -152,6 +176,7 @@ class AppState {
   }
 
   connect(): void {
+    if (this.#socket || this.stopped) return
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(`${proto}://${location.host}/api/events`)
     this.#socket = ws
@@ -163,6 +188,8 @@ class AppState {
       this.connectionVersion++
       for (const job of this.jobs) this.#bump(job.id)
       this.connected = true
+      this.connection = 'connected'
+      this.connectionError = ''
       this.#retry = 500
       this.#scheduleRefresh()
     }
@@ -170,8 +197,9 @@ class AppState {
       this.connected = false
       this.#socket = null
       if (this.stopped) return
-      setTimeout(() => this.connect(), this.#retry)
-      this.#retry = Math.min(this.#retry * 2, 8000)
+      this.connection = 'offline'
+      this.connectionError = 'Connection lost. Retrying automatically.'
+      this.#scheduleRetry()
     }
     ws.onmessage = msg => this.#handle(JSON.parse(msg.data))
   }

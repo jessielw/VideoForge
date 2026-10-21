@@ -30,11 +30,9 @@
     { page: 'settings', label: 'Settings', icon: SettingsIcon },
   ]
 
-  let startError = $state('')
-
   onMount(() => {
     installDrops()
-    app.start().catch(e => (startError = String(e)))
+    void app.start()
   })
 
   const running = $derived(app.jobs.find(j => j.status === 'running'))
@@ -129,11 +127,13 @@
   </nav>
 
   <main class="min-w-0 flex-1 overflow-hidden">
-    {#if startError}
+    {#if app.connectionError}
       <div class="m-6 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
-        Couldn't reach the VideoForge server: {startError}
+        Couldn't reach the VideoForge server: {app.connectionError}
+        <Button class="ml-3" variant="outline" disabled={app.connection === 'retrying'} onclick={() => app.start()}>Retry now</Button>
       </div>
-    {:else if router.page === 'new'}
+    {/if}
+    {#if router.page === 'new'}
       <NewJobs />
     {:else if router.page === 'queue'}
       <Queue />

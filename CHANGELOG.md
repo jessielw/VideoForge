@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Initial connection failures retry automatically with capped backoff and a Retry now button. Each
+  reconnect reloads required catalogs, and the sidebar distinguishes connecting, retrying and offline.
+
 - Opening or reconnecting during a run restores job details, step statuses and logs. Snapshot event
   boundaries retain newer live updates without duplicating log lines; failed log loads offer Retry.
 
