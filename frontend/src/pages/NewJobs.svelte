@@ -1,6 +1,6 @@
 <script lang="ts">
   // New jobs: profile + language, input slots, output folder, live match preview, Add to queue.
-  import { onMount, untrack } from 'svelte'
+  import { onDestroy, onMount, untrack } from 'svelte'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import { Button } from '$lib/components/ui/button'
   import { Checkbox } from '$lib/components/ui/checkbox'
@@ -10,18 +10,21 @@
   import PathSlot from '../components/PathSlot.svelte'
   import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
   import { api } from '../lib/api'
+  import { drafts } from '../lib/drafts'
   import { basename, debounce, LANGUAGES } from '../lib/format'
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
   import { ENCODERS, type EncoderSettings, type MatchResult } from '../lib/types'
 
-  let profile = $state('')
-  let language = $state('')
-  let sources = $state<string[]>([])
-  let encodes = $state<string[]>([])
-  let subtitles = $state<string[]>([])
-  let chapters = $state<string[]>([])
-  let output = $state<string[]>([])
+  type Draft = { profile: string; language: string; sources: string[]; encodes: string[]; subtitles: string[]; chapters: string[]; output: string[]; templateName: string | null; encoder: EncoderSettings | null; container: string }
+  const restored = drafts.read<Draft>('new-jobs')
+  let profile = $state(restored?.profile ?? '')
+  let language = $state(restored?.language ?? '')
+  let sources = $state<string[]>(restored?.sources ?? [])
+  let encodes = $state<string[]>(restored?.encodes ?? [])
+  let subtitles = $state<string[]>(restored?.subtitles ?? [])
+  let chapters = $state<string[]>(restored?.chapters ?? [])
+  let output = $state<string[]>(restored?.output ?? [])
   let result = $state<MatchResult | null>(null)
   let matching = $state(false)
   let error = $state('')
@@ -29,22 +32,30 @@
   let replacements = $state<string[]>([])
   // The template (by name; the profile's starred one first) and the container it sets, which can
   // be changed here.
-  let templateName = $state<string | null>(null)
-  let encoder = $state<EncoderSettings | null>(null)
-  let container = $state('')
+  let templateName = $state<string | null>(restored?.templateName ?? null)
+  let encoder = $state<EncoderSettings | null>(restored?.encoder ?? null)
+  let container = $state(restored?.container ?? '')
   const templateChoices = $derived(app.presetChoices('template', profile))
   const template = $derived(templateChoices.find(c => c.name === (templateName ?? app.defaultTemplate(profile))) ?? templateChoices[0])
-  const templateKey = $derived(JSON.stringify([profile, template?.name]))
+  const templateKey = $derived(JSON.stringify([profile, templateName ?? app.defaultTemplate(profile)]))
+  let previousProfile = restored?.profile ?? ''
+  let appliedKey = restored ? JSON.stringify([restored.profile, restored.templateName]) : ''
+
+  function persist() {
+    drafts.write('new-jobs', $state.snapshot({ profile, language, sources, encodes, subtitles, chapters, output,
+      templateName: template?.name ?? templateName, encoder, container }))
+  }
+  onDestroy(persist)
   const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
 
   $effect(() => {
     // A manual selection survives preset saves; a profile switch starts on its default.
-    void profile
-    templateName = null
+    if (profile !== previousProfile) { previousProfile = profile; templateName = null }
   })
   $effect(() => {
     // Switching templates resets the override, but saving/renaming an encoder preset does not.
-    void templateKey
+    if (!template || template.name !== (templateName ?? app.defaultTemplate(profile)) || templateKey === appliedKey) return
+    appliedKey = templateKey
     untrack(() => {
       encoder = template ? structuredClone($state.snapshot(template.data.encoder)) : null
       const own = template?.data.mux.container
@@ -55,9 +66,9 @@
   const takesSubs = $derived(app.profiles.find(p => p.id === profile)?.external_subtitles ?? true)
 
   onMount(async () => {
-    profile = app.defaultProfile?.id ?? ''
+    if (!profile) profile = app.defaultProfile?.id ?? ''
     const s = await api.settings().catch(() => null)
-    if (s?.output_dir) output = [s.output_dir]
+    if (s?.output_dir && !output.length) output = [s.output_dir]
   })
 
   $effect(() => {
@@ -125,6 +136,8 @@
     }
   }
 </script>
+
+<svelte:window onbeforeunload={() => persist()} />
 
 <div class="flex h-full flex-col gap-4 overflow-auto p-6">
   <header class="flex items-center gap-3">

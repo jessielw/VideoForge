@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Drafts survive navigation.** New jobs and template drafts are retained per browser tab across
+  navigation and refresh. Leaving or replacing an edited template offers Save, Discard or Stay.
+
 - **Validate before publishing.** Muxed candidates pass validation before replacing a finished file.
   Unmanaged existing outputs default to Stop; the Output tab offers Skip, Rename and Replace. Files
   appearing or changing during a run are kept, and rejected candidates remain available for inspection.

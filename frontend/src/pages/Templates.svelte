@@ -3,6 +3,7 @@
   // once and picked when adding jobs. Each profile's own defaults are built in; star a template to
   // make it the profile's default (New jobs starts on it). A job's Template menu saves one from a job.
   import { toast } from 'svelte-sonner'
+  import { onDestroy } from 'svelte'
   import CopyIcon from '@lucide/svelte/icons/copy'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import SaveIcon from '@lucide/svelte/icons/save'
@@ -10,6 +11,7 @@
   import Trash2Icon from '@lucide/svelte/icons/trash-2'
   import { Button } from '$lib/components/ui/button'
   import * as Card from '$lib/components/ui/card'
+  import * as Dialog from '$lib/components/ui/dialog'
   import { Checkbox } from '$lib/components/ui/checkbox'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
@@ -21,6 +23,8 @@
   import TemplateAudioEditor from '../components/TemplateAudioEditor.svelte'
   import TemplateSubsEditor from '../components/TemplateSubsEditor.svelte'
   import { api } from '../lib/api'
+  import { drafts } from '../lib/drafts'
+  import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
   import { SOURCE_FILTERS, type CropMode, type SourceFilter, type Template } from '../lib/types'
 
@@ -28,11 +32,12 @@
   // What the editor holds: the saved template it started from (name null = not saved yet).
   type Open = { name: string | null; builtin: boolean; data: Template }
 
-  let profile = $state('')
-  let opened = $state<Open | null>(null)
-  let draft = $state<Template | null>(null)
-  let draftName = $state('')
-  let pending = $state<Choice | null>(null) // a switch waiting on unsaved changes
+  const restored = drafts.read<{ profile: string; opened: Open | null; draft: Template | null; draftName: string }>('templates')
+  let profile = $state(restored?.profile ?? '')
+  let opened = $state<Open | null>(restored?.opened ?? null)
+  let draft = $state<Template | null>(restored?.draft ?? null)
+  let draftName = $state(restored?.draftName ?? '')
+  let pending = $state<(() => void) | null>(null)
   let busy = $state(false)
   let error = $state('')
 
@@ -56,6 +61,18 @@
   const dirty = $derived(
     !!opened && !!draft && !opened.builtin && (opened.name === null || draftName.trim() !== opened.name || canon(draft) !== canon(opened.data)),
   )
+
+  function persist() { drafts.write('templates', $state.snapshot({ profile, opened, draft, draftName })) }
+  function request(proceed: () => void) {
+    if (busy) return
+    if (dirty) pending = proceed
+    else proceed()
+  }
+  $effect(() => {
+    router.guard = request
+    return () => { if (router.guard === request) router.guard = null }
+  })
+  onDestroy(persist)
 
   $effect(() => {
     if (!profile && app.defaultProfile) profile = app.defaultProfile.id
@@ -81,8 +98,7 @@
   }
 
   function pick(c: Choice) {
-    if (dirty) pending = c
-    else open(c)
+    request(() => open(c))
   }
 
   function unique(base: string): string {
@@ -157,12 +173,18 @@
 
   async function resolve(action: 'save' | 'discard' | 'stay') {
     const next = pending
-    pending = null
-    if (action === 'stay' || !next) return
+    if (action === 'stay' || !next) { pending = null; return }
     if (action === 'save' && !(await save())) return
-    open(next)
+    if (action === 'discard' && opened) {
+      if (opened.name === null) { opened = null; draft = null; draftName = '' }
+      else { draft = copy(opened.data); draftName = opened.name }
+    }
+    pending = null
+    next()
   }
 </script>
+
+<svelte:window onbeforeunload={e => { persist(); if (dirty) { e.preventDefault(); e.returnValue = '' } }} />
 
 <div class="flex h-full">
   <section class="flex w-72 shrink-0 flex-col border-r">
@@ -170,7 +192,10 @@
       <h1 class="text-xl font-semibold">Templates</h1>
       <label class="flex items-center gap-2 text-sm text-muted-foreground">
         Profile
-        <NativeSelect class="min-w-0 flex-1" aria-label="Profile" bind:value={profile}>
+        <NativeSelect class="min-w-0 flex-1" aria-label="Profile" value={profile} onchange={e => {
+          const next = e.currentTarget.value
+          request(() => { profile = next; opened = null })
+        }}>
           {#each app.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
         </NativeSelect>
       </label>
@@ -197,21 +222,13 @@
       {/each}
     </ul>
     <div class="border-t p-2">
-      <Button variant="outline" class="w-full" onclick={startNew}><PlusIcon />New template</Button>
+      <Button variant="outline" class="w-full" onclick={() => request(startNew)}><PlusIcon />New template</Button>
     </div>
   </section>
 
   <section class="min-w-0 flex-1 overflow-auto">
     {#if draft && opened}
       <div class="max-w-4xl space-y-4 p-6">
-        {#if pending}
-          <div class="flex flex-wrap items-center gap-2 rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm" role="alert">
-            <span class="mr-auto">Unsaved changes to {draftName}.</span>
-            <Button size="sm" onclick={() => resolve('save')}>Save</Button>
-            <Button size="sm" variant="outline" onclick={() => resolve('discard')}>Discard</Button>
-            <Button size="sm" variant="ghost" onclick={() => resolve('stay')}>Keep editing</Button>
-          </div>
-        {/if}
         <header class="flex flex-wrap items-center gap-2">
           <Input class="max-w-sm text-base font-semibold" aria-label="Template name" bind:value={draftName} disabled={readOnly} />
           {#if dirty}<span class="text-xs text-warning">{opened.name === null ? 'Not saved yet' : 'Unsaved changes'}</span>{/if}
@@ -356,3 +373,18 @@
     {/if}
   </section>
 </div>
+
+<Dialog.Root open={pending !== null} onOpenChange={open => { if (!open && !busy) pending = null }}>
+  <Dialog.Content>
+    <Dialog.Header>
+      <Dialog.Title>Save changes to {draftName}?</Dialog.Title>
+      <Dialog.Description>Save this template before continuing, discard the edits, or stay here.</Dialog.Description>
+    </Dialog.Header>
+    {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
+    <Dialog.Footer>
+      <Button variant="ghost" disabled={busy} onclick={() => resolve('stay')}>Stay</Button>
+      <Button variant="outline" disabled={busy} onclick={() => resolve('discard')}>Discard</Button>
+      <Button disabled={busy} onclick={() => resolve('save')}>Save</Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
