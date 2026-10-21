@@ -1,8 +1,8 @@
 """User presets for a job's video processing and its encoder, and templates (core.template: the
 whole run's settings), saved in the store.
 
-Each profile's own defaults are the built-in presets (the UI has them from /api/profiles);
-these are the user's, on top. A video preset holds the source filter, resize, filter chain
+Each profile's own defaults are the built-in presets (the UI has them from /api/profiles), with the
+starter encoder presets (core.video.starters, listed here); these are the user's, on top. A video preset holds the source filter, resize, filter chain
 and custom body, not the crop: that belongs to each source (a template says what to do with it).
 Each profile can have one of the user's templates as its default: New jobs starts on it, and
 jobs added with no settings of their own get it.
@@ -20,6 +20,7 @@ from videoforge.core.audio_preset import AudioPresetSettings
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template import Template
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
+from videoforge.core.video.starters import starters
 
 router = APIRouter(prefix="/api/presets")
 KINDS: dict[str, type] = {
@@ -43,6 +44,7 @@ def _all(request: Request) -> dict[str, Any]:
     store = request.app.state.store
     out: dict[str, Any] = {kind: [_entry(kind, n, d) for n, d in store.presets(kind).items()] for kind in KINDS}
     out["template_defaults"] = template_defaults(store)
+    out["encoder_starters"] = [{"name": s.name, "label": s.label, "data": to_json(s.settings)} for s in starters()]
     return out
 
 

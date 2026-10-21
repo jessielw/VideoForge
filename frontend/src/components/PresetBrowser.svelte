@@ -76,7 +76,7 @@
             <span class="block text-xs text-muted-foreground">{summary(c.data)}</span>
             {#if reason}<span class="block text-xs text-warning">{reason}</span>{/if}
           </span>
-          {#if c.builtin}<span class="text-xs text-muted-foreground">{builtinLabel}</span>{/if}
+          {#if c.builtin}<span class="text-xs text-muted-foreground">{c.badge ?? builtinLabel}</span>{/if}
         </button>
       </li>
     {/each}

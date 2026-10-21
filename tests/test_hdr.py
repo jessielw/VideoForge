@@ -21,6 +21,7 @@ from videoforge.core.video.settings import (
     Resize,
     VideoSettings,
 )
+from videoforge.core.video.starters import starters
 
 # The FEL test file (a UHD Blu-ray remux), as MediaInfo 25 reads it
 P7_FEL = SimpleNamespace(
@@ -172,3 +173,15 @@ def test_dolby_vision_x265_args():
 )
 def test_level_vbv(options, extra, vbv):
     assert level_vbv(EncoderSettings(encoder=Encoder.X265, options=options, extra=extra)) == vbv
+
+
+def test_starter_presets():
+    """The starters build commands; the Dolby Vision one keeps DV on and fills x265's VBV from its level."""
+    by_name = {s.name: s.settings for s in starters()}
+    dv = encoder_command("x265", by_name["x265-dv"], output=Path("v.hevc"), dolby_vision=Path("rpu.bin"))
+    assert dv[dv.index("--vbv-maxrate") + 1] == dv[dv.index("--vbv-bufsize") + 1] == "160000"
+    assert by_name["x265-dv"].dolby_vision and not by_name["x265-hdr10"].dolby_vision
+    for s in by_name.values():
+        argv = encoder_command(s.encoder.value, s, output=Path("v"))
+        assert s.depth == 10 and s.preset in argv
+    assert starters()[0].settings is not starters()[0].settings  # fresh copies

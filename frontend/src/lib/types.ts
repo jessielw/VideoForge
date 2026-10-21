@@ -456,7 +456,7 @@ export interface ContainerInfo {
   tool: string
 }
 
-// A user preset (the built-in ones are each profile's defaults). Video presets have no crop.
+// A user preset (the built-in ones are each profile's defaults and the encoder starters). Video presets have no crop.
 export type VideoPresetData = Omit<VideoSettings, 'crop'>
 export interface Preset<T> {
   name: string
@@ -523,6 +523,7 @@ export interface Presets {
   audio: Preset<AudioPresetSettings>[]
   template: Preset<Template>[]
   template_defaults: Record<string, string> // profile id -> its default template's name
+  encoder_starters: Preset<EncoderSettings>[] // built in for every profile (core/video/starters.py)
 }
 export type PresetKind = 'video' | 'encoder' | 'audio' | 'template'
 

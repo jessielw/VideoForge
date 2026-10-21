@@ -31,7 +31,7 @@ class AppState {
   runStarts = $state<Record<string, number>>({}) // logSeq when each job's latest run began
   logSeq = 0
   encodes = $state<AudioEncodeInfo[]>([])
-  presets = $state<Presets>({ video: [], encoder: [], audio: [], template: [], template_defaults: {} })
+  presets = $state<Presets>({ video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] })
   filterPresets = $state<FilterPreset[]>([])
   version = $state('') // the server's, for bug reports
 
@@ -64,11 +64,12 @@ class AppState {
     }
   }
 
-  // A kind's presets for a profile: its defaults first (built in), then the user's.
-  presetChoices<K extends PresetKind>(kind: K, profileId: string): (Preset<PresetData<K>> & { builtin: boolean })[] {
+  // A kind's presets for a profile: its defaults first (built in), the encoder starters, then the user's.
+  presetChoices<K extends PresetKind>(kind: K, profileId: string): (Preset<PresetData<K>> & { builtin: boolean; badge?: string })[] {
     const p = this.profiles.find(x => x.id === profileId)
     const own = p && kind !== 'audio' ? [{ name: `${p.name} defaults`, data: p.defaults[kind as keyof Profile['defaults']] as unknown as PresetData<K>, builtin: true }] : []
-    return [...own, ...(this.presets[kind] as Preset<PresetData<K>>[]).map(x => ({ ...x, builtin: false }))]
+    const starters = kind === 'encoder' ? (this.presets.encoder_starters ?? []).map(x => ({ ...x, data: x.data as unknown as PresetData<K>, builtin: true, badge: 'starter' })) : []
+    return [...own, ...starters, ...(this.presets[kind] as Preset<PresetData<K>>[]).map(x => ({ ...x, builtin: false }))]
   }
 
   // The name of the template New jobs starts on: the user's starred one, else the profile's own.

@@ -12,6 +12,10 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Starter encoder presets.** Every encoder preset picker now offers x265 SDR (CRF 20), x265 HDR10 /
+  HDR10+ (CRF 18), x265 Dolby Vision (CRF 18, `--level-idc 5.1`, which fills the VBV Dolby Vision needs)
+  and SVT-AV1 (CRF 30, preset 4), all 10-bit, next to the profile's own defaults. Save a copy to change one.
+
 - **Audio sync correction.** Each audio track in the track editor has a Sync field (ms, + later,
   − earlier) on top of its own delay, applied at the mux so the encode isn't made again. A track more
   than 2 seconds off the video warns.

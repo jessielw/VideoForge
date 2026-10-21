@@ -38,6 +38,19 @@ manager to rename or move a preset. A new draft matching an existing name, encod
 **Replace preset**; renaming another preset onto it is rejected. Older presets appear at their encoder's root.
 Use **Duplicate** to create a variation of any selected preset, including its current draft edits.
 
+Built-in choices are marked **profile** (the profile's own defaults) or **starter**. The starters,
+all 10-bit:
+
+| Starter | Settings |
+| --- | --- |
+| x265 SDR | CRF 20, `slow`; HDR10+ and Dolby Vision off |
+| x265 HDR10 / HDR10+ | CRF 18, `slow`; Dolby Vision off |
+| x265 Dolby Vision | CRF 18, `slow`, `--level-idc 5.1`: the level fills the VBV that Dolby Vision requires |
+| SVT-AV1 | CRF 30, preset 4 |
+
+A starter's name says what it is tuned for. Source color and HDR10 metadata are carried whenever
+**Colour from the source** is on, whichever preset is picked. Save a starter as your own preset to change it.
+
 Start New jobs with a template, then optionally select an encoder preset. This changes only the
 encoder settings; resize, filters, audio, subtitles, and container remain as configured by the template
 or job. A folder named `1080p` does not resize video, and a folder named `Dolby Vision` does not

@@ -190,7 +190,7 @@
         {#if draft}
           <div class="mb-5 space-y-3 border-b pb-4">
             <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>{draft.name ? 'Saved preset' : selected ? `${builtinLabel} · save as your own preset` : 'New preset'}</span>
+              <span>{draft.name ? 'Saved preset' : selected ? `${choices.find(c => presetKey(c) === selected)?.badge ?? builtinLabel} · save as your own preset` : 'New preset'}</span>
               {#if dirty}<span class="text-warning">Unsaved changes</span>{/if}
               <div class="ml-auto flex items-center gap-1">
                 <Button variant="ghost" size="sm" disabled={busy} onclick={duplicate}><CopyIcon />Duplicate</Button>

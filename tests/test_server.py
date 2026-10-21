@@ -856,7 +856,11 @@ def test_settings_page_config(tmp_path):
 
 def test_presets(tmp_path):
     with make_client(tmp_path) as client:
-        assert client.get("/api/presets").json() == {
+        listed = client.get("/api/presets").json()
+        starters = listed.pop("encoder_starters")
+        assert [s["name"] for s in starters] == ["x265-sdr", "x265-hdr10", "x265-dv", "svtav1-10bit"]
+        assert starters[2]["data"]["options"] == {"level-idc": "5.1"} and starters[2]["data"]["dolby_vision"]
+        assert listed == {
             "video": [],
             "encoder": [],
             "audio": [],

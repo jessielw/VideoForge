@@ -1,6 +1,6 @@
 import type { Preset } from './types'
 
-export type PresetChoice<T> = Preset<T> & { builtin: boolean }
+export type PresetChoice<T> = Preset<T> & { builtin: boolean; badge?: string } // badge: a built-in's tag in place of the menu's builtinLabel
 export type PresetDraft<T> = { name?: string; label: string; folder: string; data: T }
 
 export const presetKey = <T,>(choice: PresetChoice<T>) => `${choice.builtin}:${choice.name}`
