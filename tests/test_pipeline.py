@@ -846,6 +846,32 @@ def test_probe_reads_the_pixel_aspect(tmp_path, ext):
 
 
 @needs_tools
+def test_real_plan_warns_on_an_unlisted_option(tmp_path):
+    """A mistyped x264 option warns in the plan (x264's --fullhelp), before anything runs; a real one doesn't."""
+    from videoforge.core.config import load_app_config
+    from videoforge.core.job import plan_spec, probe_spec
+    from videoforge.profiles import get_profile
+
+    app = load_app_config()
+    src = tmp_path / "clip.mkv"
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=1:size=320x240:rate=24",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-y", str(src)],
+        check=True,
+    )  # fmt: skip
+    job = JobSpec(
+        inputs=JobInputs(src),
+        profile="manual",
+        output_dir=tmp_path / "out",
+        encoder=EncoderSettings(preset="ultrafast", options={"bframes": "4", "bfrmaes": "4"}),
+        qpf=False,
+    )
+    plan = plan_spec(job, probe_spec(job, app), get_profile("manual"), app.tools)
+    unknown = [i for i in plan.issues if i.code == "video.option_unknown"]
+    assert len(unknown) == 1 and "--bfrmaes: did you mean --bframes?" in unknown[0].message, plan.issues
+
+
+@needs_tools
 @pytest.mark.parametrize(("keep_ar", "container"), [(False, "mkv"), (True, "mkv"), (False, "mp4")])
 def test_real_anamorphic_job_keeps_its_shape(tmp_path, keep_ar, container):
     """A 16:9 DVD (720x480, 32:27 pixels), cropped: as it is, the encode keeps the pixel aspect; resized

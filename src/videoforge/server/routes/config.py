@@ -24,7 +24,8 @@ from videoforge.core.execute.control import Priority
 from videoforge.core.notify import DEFAULT_EVENTS, EVENT_LABELS, Destination
 from videoforge.core.plan_io import to_json
 from videoforge.core.tools import TOOL_NAMES, TOOLS, check, detect, missing_for_encodes
-from videoforge.core.video import vs as vsx
+from videoforge.core.video import options as video_options, vs as vsx
+from videoforge.core.video.settings import Encoder
 from videoforge.plugins.loader import describe as describe_plugins
 from videoforge.profiles import default_profile_id
 from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
@@ -232,6 +233,17 @@ def encoders(request: Request) -> list[dict[str, Any]]:
         }
         for e in ENCODES.values()
     ]
+
+
+@router.get("/video-options/{encoder}")
+def encoder_options(request: Request, encoder: Encoder) -> dict[str, Any]:
+    """The option names a video encoder takes, from its own help (the Encoder tab's suggestions and checks):
+    [] when the encoder isn't found or lists none."""
+    known = video_options.known_options(encoder, request.app.state.config.tools)
+    return {
+        "dashes": video_options.dashes(encoder),
+        "options": [{"name": k, "help": v} for k, v in sorted(known.items())],
+    }
 
 
 @router.get("/tools")

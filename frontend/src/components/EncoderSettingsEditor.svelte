@@ -2,7 +2,7 @@
   // Encoder settings (x264 / x265, VP8 / VP9 through ffmpeg, SVT-AV1): rate control, preset, tune, bit depth, options, extra args.
   // Emits a fresh copy on every change; the parent decides when to save.
   import { ENCODERS, type EncoderName, type EncoderSettings, type RateControl, type SizeBudget, type VideoHdr } from '../lib/types'
-  import type { Snippet } from 'svelte'
+  import { untrack, type Snippet } from 'svelte'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import XIcon from '@lucide/svelte/icons/x'
   import { Button } from '$lib/components/ui/button'
@@ -10,6 +10,8 @@
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
+  import { api } from '../lib/api'
+  import { extraFlags, unknownHint, type OptionHelp } from '../lib/encoderOptions'
 
   // colorArgs: the job's source's colour flags for this encoder; hdr10plus: whether the source has HDR10+; dv: its
   // Dolby Vision (false: none); budget: where a 2-pass target size goes (the job editor; null until probed or
@@ -131,8 +133,25 @@
   const VP9_DEFAULTS = '-tile-columns 6 -frame-parallel 1 -auto-alt-ref 1 -lag-in-frames 25 -row-mt 1'
   const dashes = $derived(vpx ? '-' : '--')
 
+  // its own state: an open={...} attribute was set again on each edit, which closed the section (preset manager)
+  let advancedOpen = $state(untrack(() => !advancedCollapsed))
   let newKey = $state('')
   let newValue = $state('')
+
+  // The encoder's option names from its own help (one request per encoder for the page's life): suggestions, what
+  // each option does, and a hint when the encoder doesn't list one (the plan warns too)
+  const uid = $props.id()
+  let known = $state<OptionHelp | null>(null)
+  $effect(() => {
+    const enc = value.encoder
+    known = null
+    let current = true
+    loadOptions(enc).then(m => { if (current) known = m }, () => {})
+    return () => { current = false }
+  })
+  const hint = (name: string) => unknownHint(name, known, dashes, encoderLabel)
+  const extraHints = $derived(extraFlags(value.extra, dashes).map(hint).filter(Boolean))
+  const newName = $derived(newKey.trim().replace(/^-+/, ''))
 
   function set<K extends keyof EncoderSettings>(key: K, v: EncoderSettings[K]) {
     const next: EncoderSettings = { ...value, options: { ...value.options }, [key]: v }
@@ -161,6 +180,20 @@
     if (!key) return
     onchange({ ...value, options: { ...value.options, [key]: newValue.trim() } })
     newKey = newValue = ''
+  }
+</script>
+
+<script lang="ts" module>
+  import type { EncoderName as Name } from '../lib/types'
+  const optionLists = new Map<Name, Promise<OptionHelp>>()
+  function loadOptions(encoder: Name): Promise<OptionHelp> {
+    let p = optionLists.get(encoder)
+    if (!p) {
+      p = api.videoOptions(encoder).then(r => new Map(r.options.map(o => [o.name, o.help])))
+      p.catch(() => optionLists.delete(encoder)) // try again next time
+      optionLists.set(encoder, p)
+    }
+    return p
   }
 </script>
 
@@ -290,7 +323,7 @@
     </NativeSelect>
   </div>
 
-  <details open={!advancedCollapsed} class="rounded-lg border p-3">
+  <details bind:open={advancedOpen} class="rounded-lg border p-3">
     <summary class="cursor-pointer text-sm font-medium">Advanced settings and HDR</summary>
     <div class="space-y-4 pt-4">
   <label class="flex items-start gap-3 text-sm">
@@ -416,13 +449,19 @@
         (the progress the queue reads). The chapters' keyframes are forced in CRF only.
       </p>
     {/if}
+    <datalist id="{uid}-options">
+      {#each [...(known ?? new Map()).entries()] as [name, help] (name)}<option value={name}>{help}</option>{/each}
+    </datalist>
     <div class="overflow-hidden rounded-lg border">
       {#each Object.entries(value.options) as [key, val] (key)}
-        <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/60 px-2 py-1 last:border-b-0">
+        {@const warn = hint(key)}
+        <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 border-b border-border/60 px-2 py-1 last:border-b-0">
           <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
           <Input
-            class="min-w-0 font-mono text-xs"
+            class="min-w-0 font-mono text-xs {warn ? 'border-warning' : ''}"
             value={key}
+            list="{uid}-options"
+            title={known?.get(key) || undefined}
             aria-label="Option name"
             onchange={e => setOption(key, val, (e.target as HTMLInputElement).value.trim().replace(/^-+/, ''))}
           />
@@ -436,13 +475,23 @@
           <Button variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" onclick={() => setOption(key, null)} aria-label="Remove">
             <XIcon />
           </Button>
+          {#if warn}
+            <p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{warn}</p>
+          {:else if known?.get(key)}
+            <p class="col-start-2 col-end-5 truncate pb-0.5 text-xs text-muted-foreground" title={known.get(key)}>{known.get(key)}</p>
+          {/if}
         </div>
       {/each}
-      <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 bg-muted/50 px-2 py-1">
+      <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 bg-muted/50 px-2 py-1">
         <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
-        <Input class="min-w-0 font-mono text-xs" placeholder="name" aria-label="New option name" bind:value={newKey} onkeydown={e => e.key === 'Enter' && addOption()} />
+        <Input class="min-w-0 font-mono text-xs" placeholder="name" aria-label="New option name" list="{uid}-options" bind:value={newKey} onkeydown={e => e.key === 'Enter' && addOption()} />
         <Input class="min-w-0 font-mono text-xs" placeholder="value" aria-label="New option value" bind:value={newValue} onkeydown={e => e.key === 'Enter' && addOption()} />
         <Button variant="ghost" size="icon-sm" onclick={addOption} aria-label="Add"><PlusIcon /></Button>
+        {#if newName && hint(newName)}
+          <p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{hint(newName)}</p>
+        {:else if newName && known?.get(newName)}
+          <p class="col-start-2 col-end-5 truncate pb-0.5 text-xs text-muted-foreground" title={known.get(newName)}>{known.get(newName)}</p>
+        {/if}
       </div>
     </div>
   </div>
@@ -455,6 +504,7 @@
       placeholder="appended as typed"
       onchange={e => set('extra', (e.target as HTMLInputElement).value)}
     />
+    {#each extraHints as warn (warn)}<span class="mt-1 block text-xs text-warning">{warn}</span>{/each}
   </label>
     </div>
   </details>

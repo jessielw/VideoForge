@@ -9,6 +9,7 @@ import type {
   ConfigState,
   Crop,
   DirListing,
+  EncoderName,
   EncoderSettings,
   FilterPreset,
   JobDetail,
@@ -118,6 +119,9 @@ export const api = {
     request<ConfigState>('PUT', '/api/config', changes),
   testNotification: (url: string) => post<{ ok: boolean }>('/api/config/notifications/test', { url }),
   toolChecks: () => get<ToolCheck[]>('/api/config/tools'),
+  // a video encoder's option names from its own help ([] when it isn't found)
+  videoOptions: (encoder: EncoderName) =>
+    get<{ dashes: string; options: { name: string; help: string }[] }>(`/api/config/video-options/${encoder}`),
   encoders: () => get<AudioEncodeInfo[]>('/api/config/encoders'),
   checkTool: (name: string, path: string) => post<ToolCheck>('/api/config/tools/check', { name, path }),
   settings: () => get<{ output_dir: string; last_dir: string }>('/api/settings'),

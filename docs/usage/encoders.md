@@ -77,6 +77,12 @@ Structured options and extra arguments are applied after generated defaults. Ove
 the color metadata carried by the encoded stream and container. Inspect the generated command
 when using advanced flags.
 
+The option name field suggests the names the configured encoder lists in its own help (x264 and x265
+`--fullhelp`, SvtAv1EncApp `--help`, ffmpeg's libvpx and codec options) and shows what each one does.
+A name the encoder doesn't list, in the options or the extra arguments, shows a warning with the
+nearest listed name, and the job gets an `video.option_unknown` warning before it runs. It is a
+warning only: some builds take options their help leaves out. Short flags (`-p`) aren't checked.
+
 Values with spaces use double quotes:
 
 ```text

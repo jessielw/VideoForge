@@ -12,6 +12,11 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Encoder option help and checks.** The Encoder tab's option names come with suggestions and a line
+  on what each does, read from the encoder's own help. A mistyped option (in the options or the extra
+  arguments) warns with the nearest real name before the run, instead of failing when the encoder starts.
+  Also fixed: editing an encoder preset in the preset manager closed its Advanced section.
+
 - **Starter encoder presets.** Every encoder preset picker now offers x265 SDR (CRF 20), x265 HDR10 /
   HDR10+ (CRF 18), x265 Dolby Vision (CRF 18, `--level-idc 5.1`, which fills the VBV Dolby Vision needs)
   and SVT-AV1 (CRF 30, preset 4), all 10-bit, next to the profile's own defaults. Save a copy to change one.

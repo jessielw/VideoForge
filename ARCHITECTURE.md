@@ -61,6 +61,8 @@ src/videoforge/
                          extracted with the index); out of the mux (plan.burn)
       target.py          A 2-pass target size -> the video bitrate (StaxRip's Calc.GetVideoBitrate): what the size
                          leaves after the audio, subtitles, attachments, HDR metadata and overhead, over the length
+      options.py         Each video encoder's option names from its own help (cached per executable): the
+                         Encoder tab's suggestions, and video.option_unknown for a name it doesn't list
       starters.py        Starter encoder presets (x265 SDR / HDR10 / Dolby Vision, SVT-AV1), built in next to
                          each profile's defaults in every encoder preset picker (/api/presets)
     execute/             audio.py, mux.py, chapters.py, process.py (external tools, piping, cancel), jobobject.py (tools end with the server, Windows)
