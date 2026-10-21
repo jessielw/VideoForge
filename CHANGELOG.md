@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Batch crop merges each eligible job's crop without replacing its other video settings, continues
+  past busy/missing/imported jobs, and reports accurate updated/skipped/failed counts and reasons.
+
 - Initial connection failures retry automatically with capped backoff and a Retry now button. Each
   reconnect reloads required catalogs, and the sidebar distinguishes connecting, retrying and offline.
 

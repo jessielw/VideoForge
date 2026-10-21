@@ -717,6 +717,25 @@ class JobQueue:
         self._queue_changed()
         return queued
 
+    def apply_crop(self, ids: Iterable[str], crop: Crop) -> dict[str, Any]:
+        updated: list[str] = []
+        skipped: dict[str, str] = {}
+        failed: dict[str, str] = {}
+        for job_id in dict.fromkeys(ids):
+            with self._lock:
+                try:
+                    entry = self.get(job_id)
+                    if entry.spec.inputs.encode is not None:
+                        skipped[job_id] = "Uses an imported encode"
+                        continue
+                    self.update(job_id, video=replace(entry.spec.video, crop=crop))
+                    updated.append(job_id)
+                except Busy as ex:
+                    skipped[job_id] = str(ex)
+                except (KeyError, ValueError, OSError) as ex:
+                    failed[job_id] = str(ex)
+        return {"updated": updated, "skipped": skipped, "failed": failed}
+
     def dequeue(self, ids: Iterable[str]) -> None:
         with self._lock:
             for job_id in ids:

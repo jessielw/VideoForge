@@ -15,7 +15,7 @@ from videoforge.core.pairing import AUDIO_EXTENSIONS, SUB_FORMATS, match_files, 
 from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template import Template
-from videoforge.core.video.settings import EncoderSettings, VideoSettings
+from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.core.workdir import work_dir_size
 from videoforge.server.queue import LOG_LINES, Busy, JobQueue
 from videoforge.server.routes.presets import default_template
@@ -102,6 +102,11 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
 @router.get("/jobs")
 def list_jobs(request: Request) -> list[dict[str, Any]]:
     return [summary(e) for e in queue_of(request).entries()]
+
+
+@router.post("/jobs/apply-crop")
+def apply_crop(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    return queue_of(request).apply_crop(body.get("ids") or [], from_json(Crop, body.get("crop") or {}))
 
 
 @router.get("/jobs/{job_id}")

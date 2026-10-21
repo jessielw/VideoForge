@@ -157,6 +157,8 @@ export const api = {
   update: (id: string, changes: SpecChanges) => patch<JobDetail>(`/api/jobs/${id}`, changes),
   apply: (ids: string[], changes: SpecChanges) =>
     post<{ updated: string[]; skipped: string[] }>('/api/jobs/apply', { ids, ...changes }),
+  applyCrop: (ids: string[], crop: Crop) =>
+    post<{ updated: string[]; skipped: Record<string, string>; failed: Record<string, string> }>('/api/jobs/apply-crop', { ids, crop }),
   remove: (ids: string[], workDirs = false) =>
     post<{ removed: string[]; deleted: string[]; kept: Record<string, string> }>('/api/jobs/remove', {
       ids,

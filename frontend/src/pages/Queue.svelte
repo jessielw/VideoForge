@@ -305,8 +305,10 @@
   // --- batch panel ---
   let batchSource = $state<JobDetail | null>(null)
   $effect(() => {
-    if (selected.length > 1) api.job(selected[0]).then(j => (batchSource = j))
-    else batchSource = null
+    let current = true
+    batchSource = null
+    if (selected.length > 1) api.job(selected[0]).then(j => { if (current) batchSource = j }).catch(e => { if (current) toast.error(e.message) })
+    return () => { current = false }
   })
 
   async function applyEncoder(encoder: EncoderSettings) {
@@ -327,10 +329,12 @@
   async function applyTemplate() {
     if (!picked) return
     const name = picked.name
+    const ids = [...selected]
     await act(async () => {
-      const r = await api.apply(selected, { template: $state.snapshot(picked.data) })
+      const r = await api.apply(ids, { template: $state.snapshot(picked.data) })
       toast.success(`Template ${name} applied to ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''))
-      batchSource = await api.job(selected[0])
+      const fresh = await api.job(ids[0])
+      if (selected.length > 1 && selected[0] === ids[0]) batchSource = fresh
     })
   }
 
@@ -347,10 +351,15 @@
   async function applyCrop() {
     if (!batchSource) return
     const crop = batchSource.spec.video.crop
+    const ids = [...selected]
     await act(async () => {
-      const jobs = await Promise.all(selected.map(id => api.job(id)))
-      for (const j of jobs) if (j.spec.inputs.encode === null) await api.update(j.id, { video: { ...j.spec.video, crop } })
-      toast.success(`Crop ${crop.left}/${crop.top}/${crop.right}/${crop.bottom} applied to ${jobs.length} job(s)`)
+      await saves.flush()
+      const r = await api.applyCrop(ids, crop)
+      const reasons = Object.entries({ ...r.skipped, ...r.failed }).map(([id, reason]) => `${app.jobName(id)}: ${reason}`).join('\n')
+      const message = `Crop: ${r.updated.length} updated, ${Object.keys(r.skipped).length} skipped, ${Object.keys(r.failed).length} failed`
+      if (Object.keys(r.failed).length) toast.error(message, { description: reasons })
+      else if (Object.keys(r.skipped).length) toast.warning(message, { description: reasons })
+      else toast.success(message)
     })
   }
 </script>

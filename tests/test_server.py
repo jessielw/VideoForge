@@ -127,6 +127,30 @@ def test_health_gives_the_version(tmp_path):
     assert make_client(tmp_path).get("/api/health").json() == {"ok": True, "version": version()}
 
 
+def test_batch_crop_continues_after_busy_and_preserves_other_video_settings(tmp_path):
+    from dataclasses import replace
+
+    make_files(tmp_path, "S01E01", "S01E02", "S01E03", "S01E04")
+    with make_client(tmp_path) as client:
+        ids = add(client, tmp_path)
+        for job in ids:
+            wait_for(client, job, "ready", "warn")
+        client.post("/api/queue/enqueue", json={"ids": [ids[0]]})
+        imported = client.app.state.queue.get(ids[2])
+        imported.spec.inputs = replace(imported.spec.inputs, encode=tmp_path / "encode.mkv")
+        before = client.get(f"/api/jobs/{ids[1]}").json()["spec"]["video"]
+        result = client.post(
+            "/api/jobs/apply-crop", json={"ids": ids + ["missing"], "crop": {"left": 2, "right": 2}}
+        ).json()
+        assert result["updated"] == [ids[1], ids[3]]
+        assert ids[0] in result["skipped"]
+        assert result["skipped"][ids[2]] == "Uses an imported encode"
+        assert "missing" in result["failed"]
+        after = client.get(f"/api/jobs/{ids[1]}").json()["spec"]["video"]
+        assert after["crop"]["left"] == 2
+        assert {k: v for k, v in after.items() if k != "crop"} == {k: v for k, v in before.items() if k != "crop"}
+
+
 def test_running_log_snapshot_has_steps_lines_and_event_boundary(tmp_path):
     make_files(tmp_path)
     with make_client(tmp_path, run=FakeRun(block=True)) as client:
