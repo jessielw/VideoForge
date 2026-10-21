@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Rapid Settings edits build on the current draft and save in order. Older replies cannot roll back
+  newer notification, action, plugin or tool changes; failed writes offer Retry or Discard.
+
 - Starting or indexing a job waits for pending editor saves, including debounced video edits. Failed
   writes pause later edits and offer Retry or Discard before Start can proceed.
 

@@ -23,6 +23,8 @@
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import { api } from '../lib/api'
+  import { configDraft } from '../lib/configDraft'
+  import { saves } from '../lib/saves'
   import { drops } from '../lib/dropPaths.svelte'
   import { PRIORITY_LABEL } from '../lib/format'
   import { app } from '../lib/state.svelte'
@@ -42,6 +44,9 @@
   let checks = $state<Record<string, ToolCheck>>({})
   let checking = $state<Record<string, boolean>>({})
   let error = $state('')
+  let pending = $state(0)
+  let saveError = $state('')
+  $effect(() => saves.subscribe(message => { saveError = message }))
   let newRoot = $state('')
   let browse = $state<
     { kind: 'tool'; tool: ToolSetting } | { kind: 'root' } | { kind: 'action'; index: number | 'draft' } | null
@@ -60,6 +65,7 @@
 
   onMount(async () => {
     try {
+      await saves.flush()
       config = await api.config()
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
@@ -70,10 +76,16 @@
   })
 
   async function change(changes: Parameters<typeof api.saveConfig>[0]): Promise<boolean> {
+    if (!config) return false
+    const snapshot = structuredClone($state.snapshot(changes))
+    config = configDraft(config, snapshot)
+    pending++
     try {
-      config = await api.saveConfig(changes)
+      const reply = await saves.add(() => api.saveConfig(snapshot))
+      if (--pending === 0) config = reply
       return true
     } catch (e) {
+      if (--pending === 0) config = await api.config().catch(() => config)
       toast.error("Couldn't save the settings", { description: e instanceof Error ? e.message : String(e) })
       return false
     }
@@ -262,9 +274,17 @@
     <header class="flex items-center gap-3">
       <h1 class="text-xl font-semibold">Settings</h1>
       <span class="text-sm text-muted-foreground">Saved as you go; used by new jobs and runs.</span>
+      {#if pending}<span class="text-sm text-muted-foreground">{saveError ? 'Unsaved changes' : 'Saving…'}</span>{/if}
     </header>
 
     {#if error}<div class="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>{/if}
+    {#if saveError}
+      <div role="alert" class="space-y-2 text-sm text-destructive">
+        <p>Changes are not saved: {saveError}</p>
+        <Button onclick={() => saves.retry().catch(e => toast.error(e.message))}>Retry saves</Button>
+        <Button variant="outline" onclick={() => saves.discard()}>Discard unsaved changes</Button>
+      </div>
+    {/if}
     {#each config?.restart ?? [] as note (note)}
       <div class="rounded-md border border-warning/50 bg-warning/10 p-3 text-sm text-warning">{note}</div>
     {/each}
