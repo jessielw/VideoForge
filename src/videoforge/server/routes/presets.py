@@ -18,6 +18,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from videoforge.core.audio_preset import AudioPresetSettings
+from videoforge.core.encoder_io import read_encoder_bundle
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template import Template
 from videoforge.core.template_io import MAX_BYTES, MAX_NAME, read_bundle
@@ -115,16 +116,37 @@ def list_presets(request: Request) -> dict[str, Any]:
     return _all(request)
 
 
-async def _bundle(request: Request) -> dict[str, Any]:
+async def _bundle(request: Request, *, encoder: bool = False) -> dict[str, Any]:
+    label = "Encoder preset" if encoder else "Template"
     raw = bytearray()
     async for chunk in request.stream():
         raw.extend(chunk)
         if len(raw) > MAX_BYTES:
-            raise HTTPException(413, "Template files must be 5 MiB or smaller")
+            raise HTTPException(413, f"{label} files must be 5 MiB or smaller")
     try:
-        return read_bundle(json.loads(raw))
+        reader = read_encoder_bundle if encoder else read_bundle
+        return reader(json.loads(raw))
     except (ValueError, RecursionError) as ex:
-        raise HTTPException(422, f"Invalid template file: {ex}") from None
+        raise HTTPException(422, f"Invalid {label.lower()} file: {ex}") from None
+
+
+@router.post("/encoders/export")
+async def export_encoders(request: Request) -> dict[str, Any]:
+    return await _bundle(request, encoder=True)
+
+
+@router.post("/encoders/preview")
+async def preview_encoders(request: Request) -> dict[str, Any]:
+    bundle = await _bundle(request, encoder=True)
+    names = request.app.state.store.import_encoder_presets(bundle["encoders"], max_name=MAX_NAME, preview=True)
+    return {"bundle": bundle, "names": names}
+
+
+@router.post("/encoders/import")
+async def import_encoders(request: Request) -> dict[str, Any]:
+    bundle = await _bundle(request, encoder=True)
+    names = request.app.state.store.import_encoder_presets(bundle["encoders"], max_name=MAX_NAME)
+    return {"presets": _all(request), "names": names}
 
 
 @router.post("/templates/export")

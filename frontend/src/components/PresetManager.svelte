@@ -13,7 +13,7 @@
 
   let { title, current, choices, parents, parentOf, summary, editor, apply, savePreset, removePreset,
     onclose, onapplied, nameExample, folderExample, folderHint, builtinLabel = 'built-in',
-    problem = () => '', applyLabel = 'Apply settings', initialSelected = null }: {
+    problem = () => '', applyLabel = 'Apply settings', initialSelected = null, transfer }: {
     title: string
     current: T
     choices: PresetChoice<T>[]
@@ -33,6 +33,7 @@
     problem?: (data: T) => string
     applyLabel?: string
     initialSelected?: string | null
+    transfer?: Snippet<[PresetDraft<T> | null, boolean]>
   } = $props()
 
   type Pending = { kind: 'choice'; choice: PresetChoice<T> } | { kind: 'new' } | { kind: 'close' }
@@ -76,10 +77,12 @@
     encoder = parentOf(choice.data)
     path = [...(choice.group ?? [])]
   }
-  function startNew() {
-    setDraft(newPresetDraft($state.snapshot(current) as T), null)
-    encoder = parentOf(current)
-    path = []
+  function startNew(fromEditor = false) {
+    const data = fromEditor && draft ? draft.data : current
+    const folder = fromEditor && draft ? draft.folder : ''
+    setDraft(newPresetDraft($state.snapshot(data) as T, folder), null)
+    encoder = parentOf(data)
+    path = folderParts(folder)
     search = ''
   }
   function duplicate() {
@@ -90,7 +93,7 @@
   }
   function proceed(action: Pending) {
     if (action.kind === 'choice') openChoice(action.choice)
-    else if (action.kind === 'new') startNew()
+    else if (action.kind === 'new') startNew(true)
     else onclose()
   }
   function request(action: Pending) {
@@ -181,6 +184,7 @@
     <div class="min-h-0 flex-1 overflow-y-auto md:grid md:grid-cols-[18rem_minmax(0,1fr)] md:grid-rows-1 md:overflow-hidden">
       <aside class="flex h-72 min-h-0 flex-col gap-3 overflow-y-auto border-b p-4 md:h-auto md:border-r md:border-b-0">
         <Button variant="outline" class="w-full shrink-0" disabled={busy} onclick={() => request({ kind: 'new' })}><PlusIcon />New from current settings</Button>
+        {#if transfer}{@render transfer(draft, busy)}{/if}
         <div class="flex min-h-52 flex-1 flex-col">
           <PresetBrowser {title} {choices} {parents} {parentOf} {summary} {problem} {builtinLabel} allowIncompatible
             bind:encoder bind:path bind:search {selected} disabled={busy} onselect={choice => request({ kind: 'choice', choice })} />

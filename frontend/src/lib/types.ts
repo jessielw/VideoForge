@@ -481,6 +481,11 @@ export interface TemplateBundle {
   version: 1
   templates: { name: string; data: Template }[]
 }
+export interface EncoderBundle {
+  format: 'videoforge.encoders'
+  version: 1
+  encoders: { label: string; group: string[]; data: EncoderSettings }[]
+}
 // A template's audio (source tracks only), by position or by rules. Position: slot n is for the
 // source's nth audio track (extra slots are ignored). Rules: each track takes the first rule it
 // matches (empty lists and null = any; commentary/AD by flag or title); a first_only rule goes to the

@@ -1,6 +1,7 @@
 <script lang="ts">
   import GroupedPresetMenu from './GroupedPresetMenu.svelte'
   import EncoderSettingsEditor from './EncoderSettingsEditor.svelte'
+  import EncoderTransfer from './EncoderTransfer.svelte'
   import { api } from '../lib/api'
   import { app } from '../lib/state.svelte'
   import { ENCODERS, type EncoderSettings } from '../lib/types'
@@ -33,4 +34,5 @@
   applyLabel="Apply encoder settings"
 >
   {#snippet editor(value, onchange)}<EncoderSettingsEditor {value} {onchange} advancedCollapsed />{/snippet}
+  {#snippet transfer(current, disabled)}<EncoderTransfer {current} {disabled} />{/snippet}
 </GroupedPresetMenu>

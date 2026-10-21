@@ -37,6 +37,14 @@ Names can repeat in different folders or under different encoders. Edit the name
 manager to rename or move a preset. A new draft matching an existing name, encoder, and folder offers
 **Replace preset**; renaming another preset onto it is rejected. Older presets appear at their encoder's root.
 Use **Duplicate** to create a variation of any selected preset, including its current draft edits.
+**New from current settings** also copies the settings and folder open in the editor, with a blank name.
+
+Use **Import** and **Export…** in the manager to share encoder presets as a VideoForge JSON file.
+Export one or several saved presets, or choose **Export current settings** to include the open
+configuration's unsaved edits, including built-in configurations. Files preserve encoder settings,
+names, and nested folders. Import previews the file and lets you choose which presets to add.
+Existing presets are kept; a matching name in the same encoder and folder gets a numbered copy.
+Importing does not apply settings to jobs or templates. Files support up to 500 presets and 5 MiB.
 
 Built-in choices are marked **profile** (the profile's own defaults) or **starter**. The starters,
 all 10-bit:

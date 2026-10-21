@@ -25,7 +25,7 @@ def _hints(cls: type) -> dict[str, Any]:
     return get_type_hints(cls)
 
 
-def _check(tp: Any, value: Any, path: str) -> None:
+def check_settings(tp: Any, value: Any, path: str) -> None:
     """Check imported JSON before the forgiving persistence decoder fills in defaults.
 
     Unknown fields are rejected so sharing with an older app cannot silently lose settings.
@@ -36,7 +36,7 @@ def _check(tp: Any, value: Any, path: str) -> None:
         if value is None and type(None) in args:
             return
         (inner,) = [a for a in args if a is not type(None)]
-        return _check(inner, value, path)
+        return check_settings(inner, value, path)
     if tp is Layout or (isinstance(tp, type) and issubclass(tp, Enum)):
         if not isinstance(value, str):
             raise ValueError(f"{path}: expected text")
@@ -50,18 +50,18 @@ def _check(tp: Any, value: Any, path: str) -> None:
         for key, item in value.items():
             if key not in hints:
                 raise ValueError(f"{path}.{key}: unknown setting; check the VideoForge version")
-            _check(hints[key], item, f"{path}.{key}")
+            check_settings(hints[key], item, f"{path}.{key}")
     elif origin is list:
         if not isinstance(value, list):
             raise ValueError(f"{path}: expected a list")
         for i, item in enumerate(value):
-            _check(args[0], item, f"{path}[{i + 1}]")
+            check_settings(args[0], item, f"{path}[{i + 1}]")
     elif origin is dict:
         if not isinstance(value, dict):
             raise ValueError(f"{path}: expected an object")
         for key, item in value.items():
-            _check(args[0], key, path)
-            _check(args[1], item, f"{path}.{key}")
+            check_settings(args[0], key, path)
+            check_settings(args[1], item, f"{path}.{key}")
     elif tp is float:
         if type(value) not in (int, float) or not math.isfinite(value):
             raise ValueError(f"{path}: expected a finite number")
@@ -88,7 +88,7 @@ def read_bundle(doc: Any) -> dict[str, Any]:
         if not isinstance(name, str) or not 1 <= len(name.strip()) <= MAX_NAME:
             raise ValueError(f"Template {i}: a name needs 1 to {MAX_NAME} characters")
         try:
-            _check(Template, entry["data"], f"Template {i}")
+            check_settings(Template, entry["data"], f"Template {i}")
             data = to_json(from_json(Template, entry["data"]))
         except (TypeError, ValueError, KeyError, AttributeError, OverflowError) as ex:
             raise ValueError(f"Invalid template {name!r}: {ex}") from None

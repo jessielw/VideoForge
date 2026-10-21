@@ -6,11 +6,11 @@
   import * as Popover from '$lib/components/ui/popover'
   import PresetBrowser from './PresetBrowser.svelte'
   import PresetManager from './PresetManager.svelte'
-  import { matchingPreset, presetKey, presetLabel, type PresetChoice } from '../lib/presetDraft'
+  import { matchingPreset, presetKey, presetLabel, type PresetChoice, type PresetDraft } from '../lib/presetDraft'
 
   let { title, current, choices, parents, parentOf, summary, apply, savePreset, removePreset, editor,
     folderExample, nameExample, folderHint = 'Use / for nested folders.', builtinLabel = 'built-in',
-    problem = () => '', showTitle = false, applyLabel = 'Apply settings', disabled = false }: {
+    problem = () => '', showTitle = false, applyLabel = 'Apply settings', disabled = false, transfer }: {
     title: string
     current: T
     choices: PresetChoice<T>[]
@@ -29,6 +29,7 @@
     showTitle?: boolean
     applyLabel?: string
     disabled?: boolean
+    transfer?: Snippet<[PresetDraft<T> | null, boolean]>
   } = $props()
 
   let open = $state(false)
@@ -98,7 +99,7 @@
 
 {#if managerOpen}
   <PresetManager {title} {current} {choices} {parents} {parentOf} {summary} {problem} {builtinLabel} {editor}
-    {nameExample} {folderExample} {folderHint} {apply} {savePreset} {removePreset} {applyLabel}
+    {nameExample} {folderExample} {folderHint} {apply} {savePreset} {removePreset} {applyLabel} {transfer}
     initialSelected={matched ? presetKey(matched) : null}
     onclose={closeManager} onapplied={key => (selected = key)} />
 {/if}

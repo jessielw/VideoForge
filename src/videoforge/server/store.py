@@ -13,6 +13,7 @@ from pathlib import Path
 import sqlite3
 import threading
 from typing import Any
+from uuid import uuid4
 
 from videoforge.core.job import JobSpec, JobState
 from videoforge.core.plan_io import from_json, to_json
@@ -166,3 +167,36 @@ class Store:
                     self._db.execute("ROLLBACK")
                     raise
         return added
+
+    def import_encoder_presets(
+        self, entries: list[dict[str, Any]], *, max_name: int, preview: bool = False
+    ) -> list[str]:
+        """Keep folders and allocate display names per encoder/folder under the write lock."""
+        with self._lock:
+            records = self._db.execute("SELECT name, data FROM presets WHERE kind = 'encoder'").fetchall()
+            used = set()
+            for name, raw in records:
+                record = json.loads(raw)
+                settings = record.get("settings", record)
+                used.add((settings.get("encoder", "x264"), tuple(record.get("group", [])), record.get("label", name)))
+            labels, rows = [], []
+            for entry in entries:
+                base, group, data = entry["label"], entry["group"], entry["data"]
+                label = base
+                i = 2
+                while (data["encoder"], tuple(group), label) in used:
+                    suffix = f" ({i})"
+                    label = base[: max_name - len(suffix)] + suffix
+                    i += 1
+                used.add((data["encoder"], tuple(group), label))
+                labels.append(label)
+                rows.append(("encoder", uuid4().hex, json.dumps({"label": label, "group": group, "settings": data})))
+            if not preview:
+                self._db.execute("BEGIN")
+                try:
+                    self._db.executemany("INSERT INTO presets (kind, name, data) VALUES (?, ?, ?)", rows)
+                    self._db.execute("COMMIT")
+                except Exception:
+                    self._db.execute("ROLLBACK")
+                    raise
+        return labels
