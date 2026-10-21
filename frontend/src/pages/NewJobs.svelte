@@ -11,7 +11,8 @@
   import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
   import { api } from '../lib/api'
   import { drafts } from '../lib/drafts'
-  import { basename, debounce, LANGUAGES } from '../lib/format'
+  import { basename, LANGUAGES } from '../lib/format'
+  import { LatestRequest } from '../lib/latestRequest'
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
   import { ENCODERS, type EncoderSettings, type MatchResult } from '../lib/types'
@@ -83,36 +84,34 @@
     profile,
   })
 
-  const rematch = debounce(async () => {
-    if (!sources.length) {
-      result = null
-      matching = false
-      return
-    }
-    try {
-      result = await api.match(slots())
-      error = ''
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e)
-      result = null
-    } finally {
-      matching = false
-    }
-  }, 250)
+  const matches = new LatestRequest()
+  let settledKey = $state('')
+  const inputKey = $derived(JSON.stringify(slots()))
 
   $effect(() => {
-    // re-run when any slot or the profile changes
-    void [sources.length, encodes.length, subtitles.length, chapters.length, profile, takesSubs]
+    const key = inputKey
+    const snapshot = JSON.parse(key)
+    result = null
+    settledKey = ''
     matching = sources.length > 0
-    rematch()
+    const timer = setTimeout(async () => {
+      if (!snapshot.sources.length) return
+      const response = await matches.run(() => api.match(snapshot))
+      if (!response) return
+      if ('value' in response) { result = response.value; settledKey = key; error = '' }
+      else error = response.error
+      matching = false
+    }, 250)
+    return () => { clearTimeout(timer); matches.invalidate() }
   })
 
   async function add() {
+    if (adding || matching || !result?.jobs.length || settledKey !== inputKey) return
     adding = true
     error = ''
     try {
       const r = await api.addJobs({
-        ...slots(),
+        ...JSON.parse(settledKey),
         replace_existing: replacements,
         original_language: language || null,
         output_dir: output[0] ?? null,
@@ -272,7 +271,7 @@
   <footer class="flex items-center gap-3">
     {#if error}<span class="text-sm text-destructive">{error}</span>{/if}
     <Button variant="outline" class="ml-auto" onclick={() => (sources = encodes = subtitles = chapters = [])}>Clear</Button>
-    <Button disabled={!result?.jobs.length || adding || !output.length} onclick={add}>
+    <Button disabled={!result?.jobs.length || matching || settledKey !== inputKey || adding || !output.length} onclick={add}>
       <PlusIcon />Add {result?.jobs.length ? `${result.jobs.length} job(s)` : ''} to queue
     </Button>
   </footer>

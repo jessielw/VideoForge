@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Import matching discards stale responses, including failures, and Add uses only the settled input
+  revision shown in the preview. Changing any path disables Add until the new match completes.
+
 - Batch crop merges each eligible job's crop without replacing its other video settings, continues
   past busy/missing/imported jobs, and reports accurate updated/skipped/failed counts and reasons.
 
