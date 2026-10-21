@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Predictable queue starts.** Start queue runs waiting work only, with its job count shown. Completed,
+  failed and cancelled jobs run again only when explicitly selected with Run selected.
+
 - **Safer work-folder cleanup.** Manual deletion previews paths and sizes and requires confirmation.
   Records and logs are archived before both manual and automatic cleanup; archive failure keeps the
   working files. Queue-only removal offers Undo with the job's settings and order preserved.

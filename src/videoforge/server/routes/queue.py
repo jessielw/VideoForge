@@ -60,7 +60,7 @@ def start(request: Request, body: dict[str, Any] | None = Body(None)) -> dict[st
     if reuse := (body or {}).get("reuse"):
         q.choose_reuse(reuse)
     ids = (body or {}).get("ids")
-    if ids or not any(e.queued for e in q.entries()):
+    if ids is not None or not any(e.queued for e in q.entries()):
         q.enqueue(ids)
     q.start()
     return q.queue_state()

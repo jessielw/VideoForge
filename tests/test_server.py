@@ -1682,3 +1682,31 @@ def test_undo_removal_restores_edits_and_order(tmp_path):
         assert [j["id"] for j in client.get("/api/jobs").json()] == ids
         assert client.get(f"/api/jobs/{ids[1]}").json()["spec"]["label"] == "custom"
         assert client.post("/api/jobs/restore", json={"ids": ids[:2]}).json() == {"restored": []}
+
+
+def test_default_start_does_not_rerun_completed_jobs(tmp_path):
+    make_files(tmp_path)
+    runner = FakeRun()
+    with make_client(tmp_path, run=runner) as client:
+        first = add(client, tmp_path)[0]
+        wait_for(client, first, "ready", "warn")
+        client.post("/api/queue/start", json={})
+        client.app.state.queue.wait(5)
+        wait_for(client, first, "done")
+        make_files(tmp_path, "S01E02")
+        second = add(client, tmp_path, sources=[str(tmp_path / "src/Show.S01E02.mkv")])[0]
+        wait_for(client, second, "ready", "warn")
+        q = client.app.state.queue
+        assert [e.id for e in q.start_targets()] == [second]
+        assert q.start_targets([]) == []
+        client.post("/api/queue/start", json={})
+        q.wait(5)
+        assert runner.runs == ["Show.S01E01.mkv", "Show.S01E02.mkv"]
+        client.post("/api/queue/start", json={"ids": [first]})
+        q.wait(5)
+        assert runner.runs[-1] == "Show.S01E01.mkv" and len(runner.runs) == 3
+        for status in (JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.INVALID):
+            q.get(first).state.status = status
+            assert q.start_targets() == []
+            assert q.enqueue() == []
+            assert q.start_targets([first]) == [q.get(first)]

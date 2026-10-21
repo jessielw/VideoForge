@@ -684,12 +684,12 @@ class JobQueue:
     # --- running -----------------------------------------------------------------------
 
     def enqueue(self, ids: Iterable[str] | None = None) -> list[str]:
-        """Queue the given jobs (default: every runnable one), in queue order."""
+        """Queue explicit runnable jobs, or only pending work by default. Retries/reruns are explicit."""
         wanted = set(ids) if ids is not None else None
         queued = []
         with self._lock:
             for e in self.entries():
-                if (wanted is None or e.id in wanted) and e.runnable:
+                if (e.state.status is None if wanted is None else e.id in wanted) and e.runnable:
                     e.queued = True
                     e.index_queued = e.index_now = e.index_held = False  # the run indexes it first anyway
                     e.state.status, e.state.error = None, ""
@@ -716,11 +716,11 @@ class JobQueue:
         queued ones, or every runnable one when none is queued (as the start route queues them)."""
         with self._lock:
             entries = self.entries()
-            if ids:
+            if ids is not None:
                 wanted = set(ids)
                 return [e for e in entries if e.id in wanted and (e.runnable or e.queued)]
             queued = [e for e in entries if e.queued]
-            return queued or [e for e in entries if e.runnable]
+            return queued or [e for e in entries if e.runnable and e.state.status is None]
 
     def reuse_offers(self, e: Entry) -> list[ReuseOffer]:
         """The finished files e's next run could reuse (core/pipeline/reuse.py); [] when it can't be built."""

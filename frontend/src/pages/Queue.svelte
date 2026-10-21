@@ -281,7 +281,9 @@
     if (peek && !listEl?.contains(t) && !railEl?.contains(t)) peek = false
   }
 
-  const runnable = $derived(app.jobs.some(j => ['ready', 'warn', 'queued'].includes(j.status)))
+  const startJobs = $derived(app.jobs.some(j => j.status === 'queued')
+    ? app.jobs.filter(j => j.status === 'queued')
+    : app.jobs.filter(j => ['ready', 'warn'].includes(j.status)))
 
   // --- batch panel ---
   let batchSource = $state<JobDetail | null>(null)
@@ -403,8 +405,8 @@
         </Button>
         <Button variant="outline" onclick={() => act(api.cancel)} title="Cancel the running job"><SquareIcon />Cancel</Button>
       {:else}
-        <Button disabled={!runnable} onclick={() => act(() => run())} title="Run every ready job in order">
-          <PlayIcon />Start queue
+        <Button disabled={!startJobs.length} onclick={() => act(() => run())} title={`Start ${startJobs.map(j => j.name).join(', ')}. Completed jobs and retries require Run selected.`}>
+          <PlayIcon />Start queue ({startJobs.length})
         </Button>
       {/if}
       {#if working || app.queue.paused}

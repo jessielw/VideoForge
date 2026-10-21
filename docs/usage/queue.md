@@ -13,6 +13,8 @@ preview and later encoding.
 5. Use **Run selected** for a subset or **Start queue** for the queued jobs.
 
 Each job gets its own settings. Changing one job does not silently change the others.
+**Start queue** runs already queued jobs, or ready jobs if none are queued. Completed jobs and
+failed/cancelled runs are left alone; select them and use **Run selected** to rerun or retry explicitly.
 For episodes with different track orders, prefer template rules over track positions.
 
 ## Batch indexing
