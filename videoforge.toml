@@ -13,15 +13,15 @@ dee = "tools/DEE/dee.exe"
 truehdd = "tools/truehdd/truehdd.exe"
 qaac = "tools/qaac/qaac64.exe"
 opusenc = "tools/opus-tools/opusenc.exe"
-ffmpeg = "ffmpeg"
+ffmpeg = "tools/ffmpeg/bin/ffmpeg.exe"
 # ffprobe (an MP4 / TS source's timing) is found next to ffmpeg unless set.
 x264 = "tools/x264/x264.exe"
 x265 = "tools/x265/x265.exe"
 # SVT-AV1 (StaxRip takes Patman86's builds of SvtAv1EncApp).
 svtav1 = "tools/SvtAv1EncApp/SvtAv1EncApp.exe"
-# MP4 output (GPAC); tools/GPAC/mp4box.exe or on PATH.
-mp4box = "MP4Box"
-# Dolby Vision and HDR10+ metadata (scripts/fetch_tools.py downloads both).
+# MP4 output (GPAC). All free Windows tools come from scripts/fetch_tools.py.
+mp4box = "tools/GPAC/mp4box.exe"
+# Dolby Vision and HDR10+ metadata.
 dovi_tool = "tools/dovi_tool/dovi_tool.exe"
 hdr10plus_tool = "tools/hdr10plus_tool/hdr10plus_tool.exe"
 # VapourSynth plugins (bestsource, lsmas, ffms2, filters). vspipe comes with the

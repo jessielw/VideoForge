@@ -1,0 +1,280 @@
+# Windows x64 runtime inventory shared by developer setup and portable releases.
+# Pin every binary and notice. Add separate platform tables for future Linux provisioning.
+schema = 1
+platform = "windows-x64"
+
+[[external]]
+name = "VapourSynth / vspipe"
+provides = ["vspipe"]
+provider = "Python dependency: vapoursynth (uv.lock)"
+
+[[external]]
+name = "VapourSynth plugins and filter scripts"
+provides = ["vs_plugins"]
+provider = "vsplugins/manifest.toml, fetch_plugins.py and the filters extra"
+
+[[external]]
+name = "MediaInfo"
+provides = []
+provider = "Python dependency: pymediainfo (uv.lock), including its Windows library"
+
+[[external]]
+name = "Dolby Encoding Engine"
+provides = ["dee"]
+provider = "User supplied: tools/DEE/dee.exe and its license; required for DeeZy DDP / Atmos"
+
+[[external]]
+name = "Apple CoreAudioToolbox"
+provides = []
+provider = "User supplied: tools/qaac/QTfiles64/; required for qaac AAC encoding"
+
+[[tool]]
+name = "mkvtoolnix"
+version = "103.0"
+license = "GPL-2.0-or-later; dependency notices in doc/licenses"
+source = "https://mkvtoolnix.download/sources/mkvtoolnix-103.0.tar.xz"
+purpose = "Source probing, extraction, MKV muxing and metadata edits"
+[tool.windows]
+url = "https://mkvtoolnix.download/windows/releases/103.0/mkvtoolnix-64-bit-103.0.7z"
+sha256 = "01d76dbfdbd5615d9e02f69b0710d1429a902d47a98c8eee33bd884c4fcb3cbf"
+directory = "MKVToolNix"
+prefix = "mkvtoolnix"
+include = ["mkvmerge.exe", "mkvextract.exe", "mkvpropedit.exe", "doc/COPYING.txt", "doc/licenses/*"]
+executables = { mkvmerge = "mkvmerge.exe", mkvextract = "mkvextract.exe", mkvpropedit = "mkvpropedit.exe" }
+
+[[tool]]
+name = "ffmpeg"
+version = "9.0.2"
+license = "GPL-3.0-or-later (Gyan essentials build); see LICENSE and README.txt"
+source = "https://github.com/GyanD/codexffmpeg/releases/tag/9.0.2"
+purpose = "Audio decoding/encoding, VP8/VP9 encoding and source timing"
+[tool.windows]
+url = "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.7z"
+sha256 = "4705843ccaaf54257c16ad90f3e952ece33c17df964ecf7bfdbb0f49c7171077"
+directory = "ffmpeg"
+prefix = "ffmpeg-9.0.2-essentials_build"
+include = ["bin/ffmpeg.exe", "bin/ffprobe.exe", "LICENSE", "README.txt"]
+executables = { ffmpeg = "bin/ffmpeg.exe", ffprobe = "bin/ffprobe.exe" }
+args = ["-version"]
+
+[[tool]]
+name = "mp4box"
+version = "26.07"
+license = "LGPL-2.1-or-later; see License.txt and upstream dependency licenses"
+source = "https://github.com/gpac/gpac/tree/v26.07.0"
+purpose = "MP4 muxing; includes companion DLLs extracted from the official installer"
+[tool.windows]
+url = "https://download.tsi.telecom-paristech.fr/gpac/release/26.07/gpac-26.07-rev0-ga07cbfff-master-x64.exe"
+sha256 = "f4503b9b11453fde2908a2ea2a096d673b3a3037b15508986d45ddbf24b50cfb"
+directory = "GPAC"
+prefix = ""
+include = ["mp4box.exe", "*.dll", "License.txt", "ReadMe.txt"]
+executables = { mp4box = "mp4box.exe" }
+args = ["-version"]
+
+[[tool]]
+name = "x264"
+version = "0.165.3223+44"
+license = "GPL-2.0-or-later"
+source = "https://github.com/Patman86/x264-Mod-by-Patman/tree/0.165.3223%2B44"
+purpose = "H.264 encoding, 8/10-bit (Patman gcc build)"
+[tool.windows]
+url = "https://github.com/Patman86/x264-Mod-by-Patman/releases/download/0.165.3223%2B44/x264-0.165.3223%2B44-518da5b-.Mod-by-Patman.-x64-gcc16.1.0.7z"
+sha256 = "844fac678d2adebf7b37cedc7173f40f3cb90fc7ee55d0e1f36be82ee8486743"
+directory = "x264"
+prefix = ""
+include = ["x264.exe"]
+executables = { x264 = "x264.exe" }
+[[tool.notice]]
+file = "COPYING"
+url = "https://raw.githubusercontent.com/Patman86/x264-Mod-by-Patman/0.165.3223%2B44/COPYING"
+sha256 = "32b1062f7da84967e7019d01ab805935caa7ab7321a7ced0e30ebe75e5df1670"
+
+[[tool]]
+name = "x265"
+version = "3.6+30 aMod (baseline multilib gcc13.2.0)"
+license = "GPL-2.0-or-later"
+source = "https://github.com/DJATOM/x265-aMod/tree/3.6%2B30"
+purpose = "HEVC 8/10/12-bit encoding with HDR10+ and Dolby Vision; newer reviewed builds lacked HDR10+"
+[tool.windows]
+url = "https://github.com/DJATOM/x265-aMod/releases/download/3.6%2B30/x265-x64-v3.6%2B30-aMod-gcc13.2.0-multilib%2Bopt.7z"
+sha256 = "96b9fe008d6c34ad4d12ebc668db98c094173c962989d2f9f940c51569e01898"
+directory = "x265"
+files = { "x265.exe" = "x265-x64-v3.6+30-aMod-gcc13.2.0.exe" }
+executables = { x265 = "x265.exe" }
+[[tool.notice]]
+file = "COPYING"
+url = "https://raw.githubusercontent.com/DJATOM/x265-aMod/3.6%2B30/COPYING"
+sha256 = "d8afb1bcc7a2cfc603683b168d6987ef0a48e59e0da3693bf55c5d33b67e2b49"
+
+[[tool]]
+name = "svtav1"
+version = "2026-07-20"
+license = "BSD-3-Clause-Clear; see LICENSE.md"
+source = "https://github.com/Patman86/SVT-AV1-Mods-by-Patman/releases/tag/2026-07-20"
+purpose = "AV1 encoding (standard SVT-AV1 4.2.0+15+86, Patman gcc build)"
+[tool.windows]
+url = "https://github.com/Patman86/SVT-AV1-Mods-by-Patman/releases/download/2026-07-20/SVT-AV1-EncApp-v4.2.0%2B15%2B86-1393de3cd-.Mod-by-Patman.-x64-gcc16.1.0.7z"
+sha256 = "ff992a4d66185019c897d97c764a28a28edc06444a9775b88da5e80523e8caa4"
+directory = "SvtAv1EncApp"
+prefix = ""
+include = ["SvtAv1EncApp.exe", "LICENSE.md", "README.md"]
+executables = { svtav1 = "SvtAv1EncApp.exe" }
+
+[[tool]]
+name = "opusenc"
+version = "0.2-52-g5f894e9 / libopus 1.6.1-11-g788cc89"
+license = "BSD-style; see COPYING.opus-tools, COPYING.opus and dependency notices"
+source = "https://opus-codec.org/downloads/"
+purpose = "Opus encoding (RareWares x64 gcc build, libopus 1.6.1; FFmpeg also provides libopus)"
+[tool.windows]
+url = "https://www.rarewares.org/files/opus/opus-tools-0.2-52-g5f894e9%28using%20libopus%201.6.1-11-g788cc89%29-x64.zip"
+sha256 = "e6ed867d539f609da32f4780af70fffe2ed75a2a7a9751d42537341ca7995a09"
+directory = "opus-tools"
+prefix = ""
+include = ["opusenc.exe"]
+executables = { opusenc = "opusenc.exe" }
+
+[[tool.notice]]
+file = "COPYING.opus-tools"
+url = "https://raw.githubusercontent.com/xiph/opus-tools/5f894e9/COPYING"
+sha256 = "c28016e58544119d6b93aea28297d040f17dcef7a9f548d3e6a4d0b558c5d248"
+
+[[tool.notice]]
+file = "COPYING.opus"
+url = "https://raw.githubusercontent.com/xiph/opus/788cc89/COPYING"
+sha256 = "01e1167d54a096d123cf6dfbbeb19587278845c6481d2d66d545669846079551"
+
+[[tool.notice]]
+file = "COPYING.opusenc"
+url = "https://raw.githubusercontent.com/xiph/libopusenc/v0.3/COPYING"
+sha256 = "93b17ab56b8230127fea532be0dcb4e6d71e66ab5e8ce5d6ae8785d7288b164f"
+
+[[tool.notice]]
+file = "COPYING.ogg"
+url = "https://raw.githubusercontent.com/xiph/ogg/v1.3.6/COPYING"
+sha256 = "d2ab5758336489da61c12cc5bb757da5339c4ae9001f9bb0562b4370249af814"
+
+[[tool.notice]]
+file = "COPYING.FLAC"
+url = "https://raw.githubusercontent.com/xiph/flac/1.5.0/COPYING.Xiph"
+sha256 = "7866ee98760fc1f0156b4fe6bf530257e02be487ab3fd94e2b63799dd32d6b2c"
+
+[[tool]]
+name = "deezy"
+version = "1.3.15"
+license = "MIT"
+source = "https://github.com/jessielw/DeeZy/tree/1.3.15"
+purpose = "DEE frontend; DEE and its license remain user supplied"
+[tool.windows]
+url = "https://github.com/jessielw/DeeZy/releases/download/1.3.15/deezy-windows-x64.exe.zip"
+sha256 = "d763a3312e24923cf9bc6802ed49e62172ac0597b43d60bb334d8086fe608be4"
+directory = "DeeZy"
+prefix = ""
+include = ["deezy.exe"]
+executables = { deezy = "deezy.exe" }
+[[tool.notice]]
+file = "LICENSE"
+url = "https://raw.githubusercontent.com/jessielw/DeeZy/1.3.15/LICENSE"
+sha256 = "4f4f2823a6b2644d049561528371bea1dca2022e5611069b5a60e254c954e4ce"
+
+[[tool]]
+name = "truehdd"
+version = "0.6.2"
+license = "Apache-2.0"
+source = "https://github.com/truehdd/truehdd/tree/0.6.2"
+purpose = "TrueHD Atmos decoding for DeeZy / DEE"
+[tool.windows]
+url = "https://github.com/truehdd/truehdd/releases/download/0.6.2/truehdd-0.6.2-x86_64-pc-windows-msvc.zip"
+sha256 = "d1c1920d2da8aec42ffe1c6df1d653dd0dc51c77a576df8704c666bf008e156e"
+directory = "truehdd"
+prefix = ""
+include = ["truehdd.exe"]
+executables = { truehdd = "truehdd.exe" }
+[[tool.notice]]
+file = "LICENSE"
+url = "https://raw.githubusercontent.com/truehdd/truehdd/0.6.2/LICENSE"
+sha256 = "0b137648922ebbb5e5d1188ec08b5e2e7873e7eab282d039d8db740cba5bd805"
+
+[[tool]]
+name = "qaac"
+version = "v3.07"
+license = "Public domain and dependency licenses; see COPYING"
+source = "https://github.com/nu774/qaac/tree/v3.07"
+purpose = "Apple AAC frontend; CoreAudioToolbox remains user supplied"
+[tool.windows]
+url = "https://github.com/nu774/qaac/releases/download/v3.07/qaac_3.07.zip"
+sha256 = "1fb3ab4aa81725e2607ac1b31afa0e13d2617ee6eb5900f5070c092f5271cbb3"
+directory = "qaac"
+prefix = "qaac_3.07/x64"
+include = ["qaac64.exe", "libsoxr64.dll"]
+executables = { qaac = "qaac64.exe" }
+args = ["--help"] # --check needs the user-supplied Apple runtime.
+[[tool.notice]]
+file = "COPYING"
+url = "https://raw.githubusercontent.com/nu774/qaac/v3.07/COPYING"
+sha256 = "ef1d7d9b16c7017851fac1e812113d0ddf50f98ba86916b994be433d90b8d187"
+
+[[tool]]
+name = "dovi_tool"
+version = "2.3.4"
+license = "MIT"
+source = "https://github.com/quietvoid/dovi_tool/tree/2.3.4"
+purpose = "Dolby Vision metadata"
+[tool.windows]
+url = "https://github.com/quietvoid/dovi_tool/releases/download/2.3.4/dovi_tool-2.3.4-x86_64-pc-windows-msvc.zip"
+sha256 = "0d9733d311dfe49f9dca0c350f7e6d978182673d333c6f07f7365daf9e6c81eb"
+directory = "dovi_tool"
+prefix = ""
+include = ["dovi_tool.exe"]
+executables = { dovi_tool = "dovi_tool.exe" }
+[[tool.notice]]
+file = "LICENSE"
+url = "https://raw.githubusercontent.com/quietvoid/dovi_tool/2.3.4/LICENSE"
+sha256 = "e9d76c149b1176de4aa0202cfb6a4a266a0c4cb71959f429d670c3a857f95e52"
+
+[[tool]]
+name = "hdr10plus_tool"
+version = "1.7.2"
+license = "MIT"
+source = "https://github.com/quietvoid/hdr10plus_tool/tree/1.7.2"
+purpose = "HDR10+ metadata"
+[tool.windows]
+url = "https://github.com/quietvoid/hdr10plus_tool/releases/download/1.7.2/hdr10plus_tool-1.7.2-x86_64-pc-windows-msvc.zip"
+sha256 = "82b2d560073941b14c6511a431f429e33e134e5caefb60d7e8f6f6e6da8e16ba"
+directory = "hdr10plus_tool"
+prefix = ""
+include = ["hdr10plus_tool.exe"]
+executables = { hdr10plus_tool = "hdr10plus_tool.exe" }
+[[tool.notice]]
+file = "LICENSE"
+url = "https://raw.githubusercontent.com/quietvoid/hdr10plus_tool/1.7.2/LICENSE"
+sha256 = "f35d4515dd8d81c7996af2b20e9605561d1af0c21bc12ba7cc4fa4c60aed2178"
+
+# App-local copies only: never runs the redistributable installer or requires administrator rights.
+# Offsets identify the attached cabinet in this exact checksummed Burn bundle.
+[[tool]]
+name = "vcruntime"
+version = "14.51.36231.0 x64"
+license = "Microsoft Visual Studio redistributable license; see LICENSE.rtf"
+source = "https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files"
+purpose = "App-local Microsoft C++ runtime dependencies for tools, plugins and the bundled Python"
+[tool.windows]
+url = "https://download.visualstudio.microsoft.com/download/pr/c1bd4f2c-3672-468e-8480-7ed419dbb641/90E48ADE404E4576D023ABFA374F323555F233982A8805EA9AC63DCA9491A16B/VC_redist.x64.exe"
+sha256 = "90e48ade404e4576d023abfa374f323555f233982a8805ea9ac63dca9491a16b"
+directory = "runtime"
+executables = {}
+container = { offset = 685168, size = 18084433, member = "a4" }
+installer_files = { "LICENSE.rtf" = "u4" }
+# Destinations of native executables and dynamically loaded plugins.
+deploy = ["GPAC", "dovi_tool", "hdr10plus_tool", "truehdd", "vs-plugins"]
+[tool.windows.files]
+"concrt140.dll" = "concrt140.dll_amd64"
+"msvcp140.dll" = "msvcp140.dll_amd64"
+"msvcp140_1.dll" = "msvcp140_1.dll_amd64"
+"msvcp140_2.dll" = "msvcp140_2.dll_amd64"
+"msvcp140_atomic_wait.dll" = "msvcp140_atomic_wait.dll_amd64"
+"msvcp140_codecvt_ids.dll" = "msvcp140_codecvt_ids.dll_amd64"
+"vcruntime140.dll" = "vcruntime140.dll_amd64"
+"vcruntime140_1.dll" = "vcruntime140_1.dll_amd64"
+"vcruntime140_threads.dll" = "vcruntime140_threads.dll_amd64"

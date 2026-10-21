@@ -8,31 +8,33 @@ uses Node.js 22. You also need the [media tools](../configuration/tools.md) for 
 ```sh
 git clone https://github.com/jessielw/VideoForge.git
 cd VideoForge
+```
+
+VapourSynth and `vspipe` come with the Python dependency; MediaInfo comes with `pymediainfo`.
+On Windows x64, run the complete setup from the checkout:
+
+```powershell
+uv run python scripts/setup_windows.py
+```
+
+This installs the desktop and filter extras, fetches pinned tools and companion libraries, builds the
+frontend, and verifies indexing, preview decoding, video/audio encoding and MKV/MP4 muxing. Repeat runs
+reuse checksummed downloads and repair missing tool files. Use `--skip-frontend` to retain an existing build.
+Only DEE and Apple's CoreAudioToolbox remain user supplied for their optional encoders.
+
+For individual components or an inventory, see [Tools](../configuration/tools.md).
+The native provisioners support Windows x64. For Linux, use the [Docker image](docker.md), or supply
+compatible Linux tools and plugins yourself. Native macOS provisioning is not provided.
+
+For a manual source installation with tools you provide, install Python dependencies and the frontend:
+
+```sh
 uv sync
 cd frontend
 npm ci
 npm run build
 cd ..
 ```
-
-VapourSynth and `vspipe` come with the Python dependency; MediaInfo comes with `pymediainfo`.
-You still need source-filter plugins and external encoders.
-
-On Windows, download the bundled plugin set and install the packaged filter scripts:
-
-```sh
-uv run python scripts/fetch_plugins.py
-uv sync --extra filters
-```
-
-To download the HDR metadata tools:
-
-```sh
-uv run python scripts/fetch_tools.py
-```
-
-The plugin fetcher downloads Windows builds. For Linux, the [Docker image](docker.md) provides a
-complete toolchain, or you can supply compatible Linux tools and plugins yourself.
 
 ## Run in the browser
 

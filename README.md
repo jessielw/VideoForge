@@ -22,8 +22,8 @@ profile 5 as 5; a FEL's enhancement layer is baked into the picture).
 
 ## Requirements
 
-The [portable build](#portable-build-windows) and the [Docker image](#docker-linux) carry everything but
-the tools. From source:
+The [Windows portable build](#portable-build-windows) and the [Docker image](#docker-linux) include
+the application and free toolchain. DEE and Apple CoreAudioToolbox remain user supplied. From source:
 
 - Windows (or Linux), Python 3.12+ and [uv](https://docs.astral.sh/uv/)
 - Node.js (to build the web app)
@@ -32,7 +32,11 @@ the tools. From source:
 
 ## Tools
 
-Put the tools in `tools/` (git-ignored) as below, or point to them elsewhere: in `videoforge.toml` /
+The Windows portable release includes the free tools below. From a Windows source checkout,
+`uv run python scripts/setup_windows.py` provisions them, their plugins and the frontend, then runs
+media smoke checks. Only DEE and Apple CoreAudioToolbox remain user supplied for their optional encoders.
+
+Tools live in `tools/` (git-ignored) as below. Point to custom installations elsewhere: in `videoforge.toml` /
 `videoforge.local.toml`, or on the **Settings** page, which shows each path, checks it and reports what's
 missing. A bare name (`ffmpeg`, `MP4Box`) is looked up on `PATH`.
 
@@ -42,17 +46,23 @@ missing. A bare name (`ffmpeg`, `MP4Box`) is looked up on `PATH`.
 | x264, x265 | `tools/x264/x264.exe`, `tools/x265/x265.exe` | the video encode |
 | SvtAv1EncApp (SVT-AV1) | `tools/SvtAv1EncApp/SvtAv1EncApp.exe` | AV1 encodes ([Patman86's builds](https://github.com/Patman86/SVT-AV1-Mods-by-Patman/releases), as StaxRip ships, or [SVT-AV1](https://gitlab.com/AOMediaCodec/SVT-AV1)'s own) |
 | VapourSynth plugins | `tools/vs-plugins/` | source filters (FFMS2, the default; L-SMASH; BestSource) and any filters your scripts use: see [VapourSynth plugins](#vapoursynth-plugins) |
-| [MP4Box](https://gpac.io/) (GPAC) | `MP4Box` on `PATH` | MP4 output |
-| ffmpeg | `ffmpeg` on `PATH` | FLAC / Opus / AAC / AC-3 / E-AC-3 encodes, and decoding for the other audio encoders |
+| [MP4Box](https://gpac.io/) (GPAC) | `tools/GPAC/mp4box.exe` | MP4 output |
+| ffmpeg | `tools/ffmpeg/bin/ffmpeg.exe` | FLAC / Opus / AAC / AC-3 / E-AC-3 encodes, and decoding for the other audio encoders |
 | ffprobe | next to ffmpeg | an MP4 / TS source's timing (track starts, frame rate); without it, MediaInfo's |
 | [DeeZy](https://github.com/jessielw/DeeZy) + Dolby Encoding Engine | `tools/DeeZy/deezy.exe`, `tools/DEE/dee.exe` | DDP / DDP Atmos |
 | truehdd | `tools/truehdd/truehdd.exe` | DDP Atmos from TrueHD Atmos |
 | qaac | `tools/qaac/qaac64.exe` | AAC (Apple) |
 | opus-tools | `tools/opus-tools/opusenc.exe` | Opus (opusenc) |
-| [dovi_tool](https://github.com/quietvoid/dovi_tool), [hdr10plus_tool](https://github.com/quietvoid/hdr10plus_tool) | `tools/dovi_tool/dovi_tool.exe`, `tools/hdr10plus_tool/hdr10plus_tool.exe` | Dolby Vision and HDR10+ metadata (`uv run python scripts/fetch_tools.py` downloads both; the portable build and the image have them) |
+| [dovi_tool](https://github.com/quietvoid/dovi_tool), [hdr10plus_tool](https://github.com/quietvoid/hdr10plus_tool) | `tools/dovi_tool/dovi_tool.exe`, `tools/hdr10plus_tool/hdr10plus_tool.exe` | Dolby Vision and HDR10+ metadata (bundled; `scripts/fetch_tools.py` provisions all free Windows tools) |
 
-Only MKVToolNix, an encoder and the source filter plugin are needed to start; the audio tools are only
-needed for the encodes that use them (copying a track needs none).
+The qaac frontend and its resampler are bundled; its Apple runtime is supplied separately in
+`tools/qaac/QTfiles64/`. DeeZy is bundled; DEE and its license go in `tools/DEE/`. FFmpeg AAC needs neither.
+
+Inspect the pinned inventory with `uv run python scripts/fetch_tools.py --list`. Fetch selected packages
+with `--only x264 x265`, or recheck the complete toolchain with
+`uv run python scripts/verify_toolchain.py --smoke`. Downloads and installed-file hashes are verified;
+repeat provisioning repairs missing files and preserves unrelated files. `tools/THIRD_PARTY.md` records
+versions, source/build links and licenses. See [toolchain maintenance](docs/development/toolchain.md).
 
 ## VapourSynth plugins
 
@@ -79,11 +89,15 @@ and RFS, and znedi3 stand in. Plugins of your own go in `tools/vs-plugins/` (`/t
 
 ## Portable build (Windows)
 
-Unpack `VideoForge-<version>-windows-x64.zip` anywhere, put the tools in its `tools/` (or set their paths on
-the Settings page; the VapourSynth plugins are already in `tools/vs-plugins/`), and run `VideoForge.exe`: VideoForge in its own window, with a tray icon. It carries its
-own Python, so nothing else is installed. `videoforge.cmd` is the console way in (`videoforge.cmd serve` shows
-the log; `videoforge.cmd --help`). Build it yourself with `uv run python scripts/build_portable.py` (writes
-`build/portable/`).
+Unpack `VideoForge-<version>-windows-x64.zip` and run `VideoForge.exe`. The application, Python,
+frontend, free tools, VapourSynth plugins and Microsoft C++ runtime DLLs are included. The desktop window
+uses Windows Edge WebView2; `videoforge.cmd serve` opens the browser instead. Optional DEE and its license
+go in `tools/DEE/`; Apple's runtime for qaac goes in `tools/qaac/QTfiles64/`.
+
+`videoforge.cmd` is the console entry point (`videoforge.cmd serve` shows the log;
+`videoforge.cmd --help`). Build a release with `uv run python scripts/build_portable.py` (writes
+`build/portable/`). The builder verifies the shipped runtime, indexing, preview decoding, video/audio
+encoding and MKV/MP4 muxing before creating the ZIP.
 
 ## Docker (Linux)
 
@@ -110,6 +124,17 @@ http://127.0.0.1:8765.
   vsplugins`, then `docker build --build-arg PLUGINS_IMAGE=videoforge-plugins -t videoforge .`.
 
 ## Quick start (from source)
+
+On Windows x64, install uv, Git and Node.js, clone the repo, then run:
+
+```powershell
+uv run python scripts/setup_windows.py
+uv run videoforge serve --window
+```
+
+This installs the locked Python extras, builds the frontend and verifies the provisioned tools/plugins.
+For Linux, use Docker, or provide compatible tools/plugins and configure their paths yourself. A manual
+source installation is:
 
 ```
 git clone https://github.com/jessielw/VideoForge

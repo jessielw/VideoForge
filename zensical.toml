@@ -39,6 +39,7 @@ nav = [
     ] },
     { "Development" = [
         { "Contributing" = "development/contributing.md" },
+        { "Windows toolchain" = "development/toolchain.md" },
         { "Architecture" = "development/architecture.md" },
         { "Profiles" = "development/profiles.md" },
         { "Plugins" = "plugins.md" },

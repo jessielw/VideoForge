@@ -3,11 +3,12 @@
     uv run python scripts/build_portable.py [--skip-frontend] [--out build/portable]
 
 The folder holds a standalone Python (the python-build-standalone build uv installs) with VideoForge and its
-locked dependencies installed in it, the built frontend, videoforge.toml, an empty tools/, and VideoForge.exe,
+locked dependencies installed in it, the built frontend, videoforge.toml, the free tools, and VideoForge.exe,
 which runs `python -m videoforge serve --window` with VIDEOFORGE_ROOT set to the folder. A real Python is the
 point: vspipe embeds it, and the preview worker is `python -m`. Unpacked anywhere, it runs from there. The
 VapourSynth plugins and filter scripts of vsplugins/manifest.toml come with it (scripts/fetch_plugins.py), and
-dovi_tool and hdr10plus_tool (scripts/fetch_tools.py).
+the tools in scripts/tools.toml (scripts/fetch_tools.py). The bundled runtime must pass the media
+smoke checks before a zip is produced. DEE and Apple CoreAudioToolbox remain user supplied.
 """
 
 from __future__ import annotations
@@ -23,15 +24,16 @@ ROOT = Path(__file__).resolve().parents[1]
 PYTHON = "3.12"
 CSC = Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe")
 
-TOOLS_README = """Put the tools here (or anywhere, and set their paths on the Settings page):
+TOOLS_README = """The free tools and VapourSynth plugins are already included.
+See THIRD_PARTY.md for versions, sources and licenses; keep the bundled notices.
 
-  MKVToolNix\\mkvmerge.exe   x264\\x264.exe   x265\\x265.exe
-  vs-plugins\\ already holds the VapourSynth plugins VideoForge bundles (source filters, common filters): add yours
-  dovi_tool\\ and hdr10plus_tool\\ come with it (Dolby Vision and HDR10+ metadata)
-  DeeZy\\deezy.exe   DEE\\dee.exe   truehdd\\truehdd.exe   qaac\\qaac64.exe   opus-tools\\opusenc.exe
-  ffmpeg (and its ffprobe) and MP4Box are looked up on PATH unless set.
+You supply these only for features that need them:
+  DEE\\dee.exe and its license: Dolby Encoding Engine for DDP / Atmos through DeeZy.
+  qaac\\QTfiles64\\: Apple's CoreAudioToolbox runtime for qaac AAC encoding.
+The qaac frontend and libsoxr64.dll are included; FFmpeg AAC works without Apple's runtime.
 
-See README.md, "Tools".
+Set custom paths on the Settings page. Other tools/plugins may be added alongside the bundle.
+Recheck the tools: runtime\\python.exe scripts\\verify_toolchain.py --smoke (from the app folder).
 """
 
 CONSOLE_CMD = """@echo off
@@ -61,7 +63,7 @@ def frontend() -> Path:
 
 def standalone_python(cache: Path, dest: Path) -> Path:
     """uv's standalone CPython, copied to dest; returns its python.exe."""
-    run("uv", "python", "install", PYTHON, "--install-dir", cache)
+    run("uv", "python", "install", PYTHON, "--install-dir", cache, "--no-bin", "--no-registry")
     found = sorted(p for p in cache.glob(f"cpython-{PYTHON}.*-windows-x86_64-none") if p.is_dir())
     if not found:
         sys.exit(f"no CPython {PYTHON} in {cache}")
@@ -76,7 +78,7 @@ def install(python: Path, work: Path) -> None:
     reqs = work / "requirements.txt"
     run(
         "uv", "export", "--frozen", "--no-dev", "--extra", "desktop", "--extra", "filters", "--no-hashes",
-        "--no-emit-project", "--no-header", "--output-file", reqs,
+        "--no-emit-project", "--no-header", "--quiet", "--output-file", reqs,
     )  # fmt: skip
     run("uv", "pip", "install", "--python", python, "--link-mode", "copy", "--requirement", reqs)
     run("uv", "pip", "install", "--python", python, "--link-mode", "copy", "--no-deps", "--reinstall-package",
@@ -121,9 +123,17 @@ def main() -> int:
     (folder / "tools").mkdir()
     run(sys.executable, ROOT / "scripts" / "fetch_plugins.py", "--plugins", folder / "tools" / "vs-plugins",
         "--scripts", folder / "runtime" / "Lib" / "site-packages")  # fmt: skip
-    run(sys.executable, ROOT / "scripts" / "fetch_tools.py", "--tools", folder / "tools")
+    run(sys.executable, ROOT / "scripts" / "fetch_tools.py", "--tools", folder / "tools",
+        "--runtime-dir", folder / "runtime")  # fmt: skip
     (folder / "tools" / "README.txt").write_text(TOOLS_README.replace("\n", "\r\n"), encoding="utf-8")
+    (folder / "scripts").mkdir()
+    for name in ("artifacts.py", "fetch_tools.py", "verify_toolchain.py", "tools.toml"):
+        shutil.copy2(ROOT / "scripts" / name, folder / "scripts" / name)
+    (folder / "vsplugins").mkdir()
+    shutil.copy2(ROOT / "vsplugins" / "manifest.toml", folder / "vsplugins" / "manifest.toml")
     launcher(python, folder, work)
+    # Use the shipped Python and copied verification code; no developer Python or tools on PATH.
+    run(python, folder / "scripts" / "verify_toolchain.py", "--smoke", cwd=folder)
 
     zip_base = out / f"VideoForge-{version()}-windows-x64"
     archive = shutil.make_archive(str(zip_base), "zip", out, folder.name)

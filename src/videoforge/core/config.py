@@ -62,13 +62,16 @@ class AppConfig:
 
 # Tools found next to another unless set: MKVToolNix's next to mkvmerge, ffprobe next to ffmpeg.
 _SIBLINGS = {"mkvpropedit": "mkvmerge", "mkvextract": "mkvmerge", "ffprobe": "ffmpeg"}
+# Existing source checkouts may use PATH before running the new provisioner. Only
+# these bundled defaults fall back; an explicitly configured custom path must stay explicit.
+_BUNDLED_FALLBACKS = {"tools/ffmpeg/bin/ffmpeg.exe": "ffmpeg", "tools/GPAC/mp4box.exe": "MP4Box"}
 
 
 def _resolve_tool(value: str, base: Path) -> str:
     candidate = base / value
     if candidate.exists():
         return str(candidate)
-    found = shutil.which(value)
+    found = shutil.which(_BUNDLED_FALLBACKS.get(value.replace("\\", "/"), value))
     return found or value
 
 

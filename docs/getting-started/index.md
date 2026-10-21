@@ -6,7 +6,7 @@ Choose an installation, check the tools it needs, and run one job before adding 
 
 | Installation | Included | You supply |
 | --- | --- | --- |
-| [Windows portable](windows.md) | Application, Python, frontend, VapourSynth plugins, HDR metadata tools | MKVToolNix, your video encoder, and any extra audio tools |
+| [Windows portable](windows.md) | Application, Python, frontend, free media tools, VapourSynth/plugins and C++ runtime DLLs | DEE and its license, or Apple's runtime for qaac, if used |
 | [Docker on Linux](docker.md) | Application, frontend, free media tools, VapourSynth and plugins, Wine | Writable media and data folders; DEE or qaac if you use them |
 | [From source](source.md) | Application source | Python 3.12+, uv, Node.js, and media tools |
 

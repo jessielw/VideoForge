@@ -54,7 +54,8 @@ jobs:
             exit 1
           fi
 
-      - name: Build
+      # The builder verifies the shipped runtime and toolchain before creating the zip.
+      - name: Build and verify portable toolchain
         run: python scripts/build_portable.py
 
       - name: Upload artifact

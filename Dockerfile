@@ -133,6 +133,7 @@ COPY pyproject.toml uv.lock README.md LICENSE ./
 RUN uv sync --frozen --no-dev --extra filters --no-install-project
 COPY vsplugins/manifest.toml vsplugins/manifest.toml
 COPY scripts/fetch_plugins.py scripts/fetch_plugins.py
+COPY scripts/artifacts.py scripts/artifacts.py
 # The plugins are the vapoursynth package's own plugins folder (always loaded); the filter scripts
 # (havsfunc, mvsfunc) go in site-packages. Then every plugin in the manifest has to load.
 RUN site="$(.venv/bin/python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" \
