@@ -11,7 +11,7 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import { api } from '../lib/api'
-  import { extraFlags, unknownHint, type OptionHelp } from '../lib/encoderOptions'
+  import { extraFlags, parseOptions, unknownHint, type OptionHelp } from '../lib/encoderOptions'
 
   // colorArgs: the job's source's colour flags for this encoder; hdr10plus: whether the source has HDR10+; dv: its
   // Dolby Vision (false: none); budget: where a 2-pass target size goes (the job editor; null until probed or
@@ -151,7 +151,7 @@
   })
   const hint = (name: string) => unknownHint(name, known, dashes, encoderLabel)
   const extraHints = $derived(extraFlags(value.extra, dashes).map(hint).filter(Boolean))
-  const newName = $derived(newKey.trim().replace(/^-+/, ''))
+  const newName = $derived(/\s|=/.test(newKey.trim()) ? '' : newKey.trim().replace(/^-+/, '')) // one name typed
 
   function set<K extends keyof EncoderSettings>(key: K, v: EncoderSettings[K]) {
     const next: EncoderSettings = { ...value, options: { ...value.options }, [key]: v }
@@ -175,10 +175,15 @@
     onchange({ ...value, options: Object.fromEntries(entries) })
   }
 
+  // One option, or a pasted command line ("--ref 4 --bframes 8 --no-sao"): a row each, an option already there
+  // keeps its place with the new value. What can't be a row (short flags, stray values) is named, not added.
+  let notAdded = $state('')
   function addOption() {
-    const key = newKey.trim().replace(/^-+/, '')
-    if (!key) return
-    onchange({ ...value, options: { ...value.options, [key]: newValue.trim() } })
+    const { pairs, skipped } = parseOptions(newKey, dashes)
+    if (pairs.length === 1 && !pairs[0][1]) pairs[0][1] = newValue.trim()
+    notAdded = skipped.length ? `Not added: ${skipped.join(' ')} (short flags and values with no option: Extra arguments)` : ''
+    if (!pairs.length) return
+    onchange({ ...value, options: { ...value.options, ...Object.fromEntries(pairs) } })
     newKey = newValue = ''
   }
 </script>
@@ -484,7 +489,7 @@
       {/each}
       <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 bg-muted/50 px-2 py-1">
         <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
-        <Input class="min-w-0 font-mono text-xs" placeholder="name" aria-label="New option name" list="{uid}-options" bind:value={newKey} onkeydown={e => e.key === 'Enter' && addOption()} />
+        <Input class="min-w-0 font-mono text-xs" placeholder="name, or paste {dashes}ref 4 {dashes}bframes 8" title="One option name, or a whole command line: Enter adds a row for each option" aria-label="New option name" list="{uid}-options" bind:value={newKey} oninput={() => (notAdded = '')} onkeydown={e => e.key === 'Enter' && addOption()} />
         <Input class="min-w-0 font-mono text-xs" placeholder="value" aria-label="New option value" bind:value={newValue} onkeydown={e => e.key === 'Enter' && addOption()} />
         <Button variant="ghost" size="icon-sm" onclick={addOption} aria-label="Add"><PlusIcon /></Button>
         {#if newName && hint(newName)}
@@ -492,6 +497,7 @@
         {:else if newName && known?.get(newName)}
           <p class="col-start-2 col-end-5 truncate pb-0.5 text-xs text-muted-foreground" title={known.get(newName)}>{known.get(newName)}</p>
         {/if}
+        {#if notAdded}<p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{notAdded}</p>{/if}
       </div>
     </div>
   </div>

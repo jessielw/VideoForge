@@ -83,6 +83,11 @@ A name the encoder doesn't list, in the options or the extra arguments, shows a 
 nearest listed name, and the job gets an `video.option_unknown` warning before it runs. It is a
 warning only: some builds take options their help leaves out. Short flags (`-p`) aren't checked.
 
+To add several options at once, paste a command line such as `--ref 4 --bframes 8 --no-sao` into
+the new option's name field and press Enter: each option becomes a row (`--name=value` works too),
+and an option already in the list takes the new value in place. Short flags and values with no
+option before them aren't added; the field names them, for **Extra arguments**.
+
 Values with spaces use double quotes:
 
 ```text

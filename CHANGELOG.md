@@ -15,6 +15,7 @@ source), or in Docker on Linux.
 - **Encoder option help and checks.** The Encoder tab's option names come with suggestions and a line
   on what each does, read from the encoder's own help. A mistyped option (in the options or the extra
   arguments) warns with the nearest real name before the run, instead of failing when the encoder starts.
+  A pasted command line (`--ref 4 --bframes 8 --no-sao`) in the new option field adds a row per option.
   Also fixed: editing an encoder preset in the preset manager closed its Advanced section.
 
 - **Starter encoder presets.** Every encoder preset picker now offers x265 SDR (CRF 20), x265 HDR10 /
