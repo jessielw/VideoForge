@@ -15,6 +15,7 @@ from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template import Template
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
+from videoforge.core.workdir import work_dir_size
 from videoforge.server.queue import LOG_LINES, Busy, JobQueue
 from videoforge.server.routes.presets import default_template
 from videoforge.server.views import detail, summary
@@ -222,6 +223,27 @@ def remove_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str,
     removed = q.remove(body.get("ids") or [])
     deleted, kept = q.delete_work_dirs(sources[i] for i in removed) if body.get("work_dirs") else ([], {})
     return {"removed": removed, "deleted": deleted, "kept": kept}
+
+
+@router.post("/jobs/removal-preview")
+def removal_preview(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    q = queue_of(request)
+    folders = []
+    for job_id in dict.fromkeys(body.get("ids") or []):
+        e = _entry(q, job_id)
+        error = "Job is queued, running or indexing" if e.busy or e.indexing else ""
+        size = None
+        try:
+            size = work_dir_size(e.spec.inputs.source)
+        except OSError as ex:
+            error = str(ex)
+        folders.append({"id": e.id, "path": str(e.spec.work_dir), "bytes": size, "error": error})
+    return {"folders": folders}
+
+
+@router.post("/jobs/restore")
+def restore_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    return {"restored": queue_of(request).restore(body.get("ids") or [])}
 
 
 @router.delete("/jobs/{job_id}")

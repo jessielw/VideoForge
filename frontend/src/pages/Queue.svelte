@@ -22,13 +22,14 @@
   import { toast } from 'svelte-sonner'
   import { Button } from '$lib/components/ui/button'
   import * as Card from '$lib/components/ui/card'
+  import * as Dialog from '$lib/components/ui/dialog'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import JobEditor from '../components/JobEditor.svelte'
   import ReuseDialog from '../components/ReuseDialog.svelte'
   import { api } from '../lib/api'
-  import { percent, PRIORITY_LABEL, progressTimes, STATUS_LABEL, STATUS_TONE } from '../lib/format'
+  import { bytes, percent, PRIORITY_LABEL, progressTimes, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { router } from '../lib/router.svelte'
   import { layout } from '../lib/layout.svelte'
   import { app } from '../lib/state.svelte'
@@ -186,10 +187,25 @@
   }
 
   // workDirs: their <source>_tmp folders go too (one another job in the queue shares is kept)
-  async function remove(workDirs = false) {
+  let removal = $state<Awaited<ReturnType<typeof api.removalPreview>> | null>(null)
+  let removing = $state(false)
+
+  async function confirmRemoval() {
+    await act(async () => { removal = await api.removalPreview([...selected]) })
+  }
+
+  async function remove(workDirs = false, ids = [...selected]) {
+    removing = true
     await act(async () => {
-      const r = await api.remove(selected, workDirs)
-      if (r.removed.length < selected.length) toast.info('Queued, running or indexing jobs were kept')
+      const r = await api.remove(ids, workDirs)
+      if (r.removed.length < ids.length) toast.info('Queued, running or indexing jobs were kept')
+      if (!workDirs && r.removed.length) toast.success(`Removed ${r.removed.length} job(s)`, {
+        action: { label: 'Undo', onClick: () => act(async () => {
+          const restored = await api.restore(r.removed)
+          await app.refreshJobs()
+          toast.info(`Restored ${restored.restored.length} job(s)`)
+        }) },
+      })
       const kept = Object.entries(r.kept)
       if (r.deleted.length) toast.info(`Deleted ${r.deleted.length} work folder${r.deleted.length > 1 ? 's' : ''}`)
       if (kept.length) {
@@ -199,7 +215,9 @@
       }
       selected = []
       router.go('queue')
+      removal = null
     })
+    removing = false
   }
 
   // The index lane: each job's work folder, script and source index, one job at a time, nothing else.
@@ -444,7 +462,7 @@
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" class="w-auto">
           <DropdownMenu.Item onSelect={() => remove()}>Remove from the queue</DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={() => remove(true)} title="Also delete each job's work folder next to its source (<source>_tmp: index, encodes, log)">
+          <DropdownMenu.Item onSelect={confirmRemoval} title="Review the work folders before deleting their intermediate files">
             Remove and delete work folders
           </DropdownMenu.Item>
         </DropdownMenu.Content>
@@ -590,3 +608,21 @@
 </div>
 
 <ReuseDialog bind:open={reuseOpen} jobs={reuseJobs} onstart={startReusing} />
+
+<Dialog.Root open={removal !== null} onOpenChange={open => { if (!open && !removing) removal = null }}>
+  <Dialog.Content>
+    <Dialog.Header>
+      <Dialog.Title>Remove jobs and delete working files?</Dialog.Title>
+      <Dialog.Description>Records and logs are archived first. Indexes, scripts and intermediate encodes are permanently deleted; a rerun must recreate them. Finished output files are kept.</Dialog.Description>
+    </Dialog.Header>
+    <div class="max-h-64 space-y-3 overflow-auto text-sm">
+      {#each removal?.folders ?? [] as folder (folder.id)}
+        <div><code class="break-all">{folder.path}</code><div class="text-muted-foreground">{folder.bytes === null ? 'Size unavailable' : bytes(folder.bytes)}{folder.error ? ` · ${folder.error}` : ''}</div></div>
+      {/each}
+    </div>
+    <Dialog.Footer>
+      <Button variant="outline" disabled={removing} onclick={() => removal = null}>Cancel</Button>
+      <Button variant="destructive" disabled={removing} onclick={() => remove(true, removal?.folders.map(f => f.id) ?? [])}>{removing ? 'Removing…' : 'Remove and delete'}</Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>

@@ -161,6 +161,8 @@ export const api = {
       ids,
       work_dirs: workDirs,
     }),
+  removalPreview: (ids: string[]) => post<{ folders: { id: string; path: string; bytes: number | null; error: string }[] }>('/api/jobs/removal-preview', { ids }),
+  restore: (ids: string[]) => post<{ restored: string[] }>('/api/jobs/restore', { ids }),
   reorder: (ids: string[]) => post<{ ids: string[] }>('/api/jobs/reorder', { ids }),
   reprobe: (ids: string[]) => post('/api/jobs/reprobe', { ids }),
   log: (id: string) => get<{ lines: string[] }>(`/api/jobs/${id}/log`),

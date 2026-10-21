@@ -12,6 +12,10 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Safer work-folder cleanup.** Manual deletion previews paths and sizes and requires confirmation.
+  Records and logs are archived before both manual and automatic cleanup; archive failure keeps the
+  working files. Queue-only removal offers Undo with the job's settings and order preserved.
+
 - **Encoder option help and checks.** The Encoder tab's option names come with suggestions and a line
   on what each does, read from the encoder's own help. A mistyped option (in the options or the extra
   arguments) warns with the nearest real name before the run, instead of failing when the encoder starts.

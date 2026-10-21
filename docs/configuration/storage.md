@@ -42,9 +42,11 @@ to the final output. Jobs sharing a source use that source's work location.
 text log are copied to the data folder's `records/` first. Per-output `.jsonl` files are not archived
 there; the queue-wide event stream still has the same events until it rotates.
 
-The Queue's **Remove → Remove and delete work folders** also removes working files. Keep a work
-folder if you expect to reuse its encodes. Removing intermediate files means the affected steps
-must run again.
+The Queue's **Remove → Remove and delete work folders** shows the folders and their sizes for
+confirmation, then archives the same records and log before removing working files. If archiving
+fails, the folder is kept and the error is shown. Keep a work folder if you expect to reuse its
+encodes. Removing intermediate files means the affected steps must run again. Queue-only removal
+offers **Undo** while this server session remains open (the latest 100 removed jobs are retained).
 
 ## Back up
 

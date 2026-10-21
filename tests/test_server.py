@@ -656,6 +656,8 @@ def test_work_folders(tmp_path):
         r = client.post("/api/jobs/remove", json={"ids": [one, three], "work_dirs": True}).json()
         assert r == {"removed": [one, three], "deleted": [str(work[one])], "kept": {}}  # three never had one
         assert not work[one].exists()
+        assert (records / "Show.S01E01.mkv.videoforge.json").is_file()
+        assert "Job complete:" in (records / "Show.S01E01.mkv.videoforge.log").read_text("utf-8")
         assert client.post("/api/jobs/remove", json={"ids": [two]}).json()["deleted"] == []
     with make_client(tmp_path) as client:  # kept across a restart
         assert client.get("/api/config").json()["delete_work_dir"] is True
@@ -1644,3 +1646,39 @@ def test_the_page_is_never_served_stale(tmp_path):
         for path in ("/", "/queue"):
             r = client.get(path)
             assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
+
+
+def test_manual_cleanup_keeps_work_on_archive_failure(tmp_path, monkeypatch):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        folder = work_dir(tmp_path / "src/Show.S01E01.mkv")
+        folder.mkdir(exist_ok=True)
+        (folder / "videoforge.log").write_text("keep me")
+        preview = client.post("/api/jobs/removal-preview", json={"ids": [job]}).json()["folders"]
+        assert preview == [{"id": job, "path": str(folder), "bytes": 7, "error": ""}]
+
+        def fail(*args):
+            raise OSError("archive unavailable")
+
+        monkeypatch.setattr("videoforge.core.workdir.keep_records", fail)
+        response = client.post("/api/jobs/remove", json={"ids": [job], "work_dirs": True}).json()
+        assert response["deleted"] == []
+        assert "archive unavailable" in response["kept"][str(folder)]
+        assert (folder / "videoforge.log").read_text() == "keep me"
+
+
+def test_undo_removal_restores_edits_and_order(tmp_path):
+    make_files(tmp_path, "S01E01", "S01E02", "S01E03")
+    with make_client(tmp_path) as client:
+        ids = add(client, tmp_path)
+        for job in ids:
+            wait_for(client, job, "ready", "warn")
+        client.patch(f"/api/jobs/{ids[1]}", json={"label": "custom"})
+        client.post("/api/jobs/remove", json={"ids": ids[:2]})
+        response = client.post("/api/jobs/restore", json={"ids": ids[:2]})
+        assert set(response.json()["restored"]) == set(ids[:2])
+        assert [j["id"] for j in client.get("/api/jobs").json()] == ids
+        assert client.get(f"/api/jobs/{ids[1]}").json()["spec"]["label"] == "custom"
+        assert client.post("/api/jobs/restore", json={"ids": ids[:2]}).json() == {"restored": []}

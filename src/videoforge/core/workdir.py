@@ -37,6 +37,30 @@ def remove_work_dir(source: Path) -> bool:
     return True
 
 
+def clean_work_dir(source: Path, records_dir: Path | None) -> dict[str, Path]:
+    """Archive provenance before deleting working files. An archive failure leaves the folder intact."""
+    if records_dir is None:
+        raise OSError("No records folder configured; working files were kept")
+    kept = keep_records(source, records_dir)
+    remove_work_dir(source)
+    return kept
+
+
+def work_dir_size(source: Path) -> int:
+    """Size for the cleanup confirmation; never descend into linked folders."""
+
+    def failed(error: OSError) -> None:
+        raise error
+
+    if not work_dir(source).exists():
+        return 0
+    size = 0
+    for here, dirs, files in os.walk(work_dir(source), onerror=failed):
+        dirs[:] = [d for d in dirs if not (p := Path(here, d)).is_symlink() and not p.is_junction()]
+        size += sum(Path(here, name).lstat().st_size for name in files)
+    return size
+
+
 @dataclass(frozen=True, slots=True)
 class FinishedFile:
     """A file a step wrote and finished, as it was then: a file whose size or mtime changed since doesn't count."""

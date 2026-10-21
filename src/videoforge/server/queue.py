@@ -76,7 +76,7 @@ from videoforge.core.record import JsonLines, RunRecorder, event
 from videoforge.core.template import Template, apply_audio, apply_subs, template_choice
 from videoforge.core.tools import versions as tool_versions
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
-from videoforge.core.workdir import keep_records, remove_work_dir, work_dir
+from videoforge.core.workdir import clean_work_dir, work_dir
 from videoforge.server.events import EventHub
 from videoforge.server.store import Store
 
@@ -241,6 +241,7 @@ class JobQueue:
         # What a run did, for notifications, actions and plugins (core/events.py); the hub above is the browser's.
         self.bus = bus or EventBus()
         self._entries: dict[str, Entry] = {}
+        self._removed: dict[str, tuple[Entry, int]] = {}  # last 100 removals, undo until server restart
         self._order: list[str] = []
         self._lock = threading.RLock()
         self._probes = ThreadPoolExecutor(max_workers=probe_workers, thread_name_prefix="probe")
@@ -638,6 +639,9 @@ class JobQueue:
                 e = self._entries.get(job_id)
                 if e is None or e.busy or e.indexing:
                     continue
+                self._removed[job_id] = (e, self._order.index(job_id))
+                while len(self._removed) > 100:
+                    del self._removed[next(iter(self._removed))]
                 del self._entries[job_id]
                 self._order.remove(job_id)
                 self.store.delete_job(job_id)
@@ -649,6 +653,26 @@ class JobQueue:
         for job_id in removed:
             self.events.publish("job.removed", id=job_id)
         return removed
+
+    def restore(self, ids: Iterable[str]) -> list[str]:
+        """Undo queue removal without replacing another job on the same source."""
+        restored = []
+        with self._lock:
+            for job_id in reversed(list(ids)):
+                found = self._removed.get(job_id)
+                if found is None or self._find_source(found[0].spec.inputs.source) is not None:
+                    continue
+                e, position = self._removed.pop(job_id)
+                e.queued = e.index_queued = e.index_now = e.index_held = False
+                self._entries[job_id] = e
+                self._order.insert(min(position, len(self._order)), job_id)
+                self._replan(e)
+                self._save(e)
+                restored.append(job_id)
+            self.store.reorder(self._order)
+        for job_id in restored:
+            self.events.publish("job.added", id=job_id)
+        return restored
 
     def reorder(self, ids: list[str]) -> None:
         with self._lock:
@@ -984,8 +1008,7 @@ class JobQueue:
             return record
         source = e.spec.inputs.source
         try:
-            kept = keep_records(source, self.records_dir) if self.records_dir is not None else {}
-            remove_work_dir(source)
+            kept = clean_work_dir(source, self.records_dir)
         except OSError as ex:
             self._log(e, f"Work folder not deleted: {ex}")
             return record
@@ -1005,14 +1028,14 @@ class JobQueue:
                 continue
             with self._lock:
                 shared = self._find_source(source)
-            if shared is not None:
-                kept[str(folder)] = f"{shared.spec.name} uses it too"
-                continue
-            try:
-                remove_work_dir(source)
-            except OSError as ex:
-                kept[str(folder)] = str(ex)
-                continue
+                if shared is not None:
+                    kept[str(folder)] = f"{shared.spec.name} uses it too"
+                    continue
+                try:
+                    clean_work_dir(source, self.records_dir)
+                except OSError as ex:
+                    kept[str(folder)] = str(ex)
+                    continue
             deleted.append(str(folder))
             logger.info("Work folder deleted: %s", folder)
         return deleted, kept
