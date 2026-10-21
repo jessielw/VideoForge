@@ -6,6 +6,7 @@ Inspect the plan after changing the container or supplying an existing video enc
 ## Folder, container, and label
 
 Choose **MKV** or **MP4** and a writable destination. MKV uses MKVToolNix; MP4 uses MP4Box.
+Clearing the output folder saves that empty value and blocks the job until a folder is chosen.
 An output is written as `<output>.partial`, validated, then published. A rejected candidate is kept
 as `<name>.unpublished-<id>.<container>` for inspection, and the previous finished file stays intact.
 

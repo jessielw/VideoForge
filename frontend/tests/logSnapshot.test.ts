@@ -8,4 +8,5 @@ test('a snapshot hydrates missing steps while preserving events received after i
   const live = [{ id: 'video', status: 'done' }] as StepRun[]
   assert.deepEqual(mergeSteps(old, live, { video: 12 }, 10).map(s => s.status), ['done', 'done'])
   assert.deepEqual(mergeSteps(old, live, { video: 9 }, 10), old)
+  assert.deepEqual(mergeSteps([], live, { video: 12 }, 10), live)
 })

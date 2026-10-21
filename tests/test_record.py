@@ -9,7 +9,7 @@ from conftest import simulate_output
 from test_pipeline import APP, FakeRunner, make_plan
 
 from videoforge.core.execute.process import Cancelled
-from videoforge.core.job import JobState, JobStatus
+from videoforge.core.job import JobState, JobStatus, OutputPolicy
 from videoforge.core.pipeline.build import job_output
 from videoforge.core.pipeline.run import run_job, spec_from_plan
 from videoforge.core.record import SCHEMA, JsonLines, RunRecorder, read_record, record_path
@@ -19,10 +19,18 @@ def lines(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
-def run(profile, tmp_path: Path, runner=None, label: str = "dubbed", queue: JsonLines | None = None):
+def run(
+    profile,
+    tmp_path: Path,
+    runner=None,
+    label: str = "dubbed",
+    queue: JsonLines | None = None,
+    output_policy=OutputPolicy.STOP,
+):
     plan = make_plan(tmp_path)
     spec = spec_from_plan(plan, tmp_path / "out")
     spec.label = label
+    spec.output_policy = output_policy
     state = JobState()
     output = job_output(spec, plan, profile)
     rec = RunRecorder(
@@ -55,8 +63,15 @@ def test_a_finished_run_writes_its_record_and_events(profile, tmp_path):
     assert kinds[0] == "run.started" and kinds[-1] == "run.finished"
     steps = [(e["event"], e["step"]) for e in events[1:-1]]
     assert steps == [
-        (kind, step) for step in ("audio.1", "audio.2", "mux", "validate") for kind in ("step.started", "step.finished")
-    ]
+        ("step.started", "audio.1"),
+        ("step.finished", "audio.1"),
+        ("step.started", "audio.2"),
+        ("step.finished", "audio.2"),
+        ("step.started", "mux"),
+        ("step.started", "validate"),
+        ("step.finished", "validate"),
+        ("step.finished", "mux"),
+    ]  # validation finishes before mux publication can finish
     assert events[0]["output"] == str(output) and events[0]["label"] == "dubbed"
     assert events[2]["status"] == "done" and events[2]["n"] == 1 and events[2]["total"] == 4
     assert events[-1]["status"] == "done" and events[-1]["record"] == str(rec.record_file)
@@ -111,7 +126,9 @@ def test_a_failed_run_keeps_the_last_record(profile, tmp_path):
     _, output, _, first = run(profile, tmp_path)
     assert first.record_file is not None
     before = first.record_file.read_text(encoding="utf-8")
-    _, _, result, rec = run(profile, tmp_path, runner=FakeRunner(fail_on="mkvmerge"))
+    _, _, result, rec = run(
+        profile, tmp_path, runner=FakeRunner(fail_on="mkvmerge"), output_policy=OutputPolicy.REPLACE
+    )
     assert result.status is JobStatus.FAILED and rec.record_file is None
     assert first.record_file.read_text(encoding="utf-8") == before  # it still describes the file that's there
     events = lines(first.record_file.with_suffix(".jsonl"))

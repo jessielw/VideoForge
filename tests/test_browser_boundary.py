@@ -30,7 +30,10 @@ def client():
 def test_foreign_origins_cannot_control_or_subscribe(origin):
     with client() as c:
         assert c.post("/control", headers={"Origin": origin}).status_code == 403
-        with pytest.raises(WebSocketDisconnect) as ex, c.websocket_connect("ws://127.0.0.1:8765/events", headers={"Origin": origin}):
+        with (
+            pytest.raises(WebSocketDisconnect) as ex,
+            c.websocket_connect("ws://127.0.0.1:8765/events", headers={"Origin": origin}),
+        ):
             pass
         assert ex.value.code == 1008
 

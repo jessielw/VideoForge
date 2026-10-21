@@ -109,6 +109,8 @@ def test_keep_reuses_a_video_made_with_other_settings(profile, tmp_path):
 
 
 def test_a_new_job_on_the_source_finds_the_finished_files(profile, tmp_path):
+    from videoforge.core.job import OutputPolicy
+
     plan = make_plan(tmp_path)
     job = video_job(plan, tmp_path)
     run(job, plan, profile, JobState())
@@ -117,6 +119,7 @@ def test_a_new_job_on_the_source_finds_the_finished_files(profile, tmp_path):
     found = offers(job, plan, profile, fresh)
     assert set(found) == {"video", "audio.1", "audio.2"} and all(o.current for o in found.values())
     fresh.keep = [s for o in found.values() for s in o.steps]
+    job.output_policy = OutputPolicy.REPLACE  # replacing a different job's final output is explicit
     assert "x264" not in run(job, plan, profile, fresh)
 
     job.video_output.write_bytes(b"something else")  # changed since: not offered to a job without a record

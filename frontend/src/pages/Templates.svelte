@@ -135,14 +135,15 @@
       return false
     }
     busy = true
+    const saved = copy(draft)
     try {
       if (opened.name && opened.name !== name) app.presets = await api.renamePreset('template', opened.name, name)
-      app.presets = await api.savePreset('template', name, copy(draft))
-      opened = { name, builtin: false, data: copy(draft) }
-      draftName = name
+      app.presets = await api.savePreset('template', name, saved)
+      opened = { name, builtin: false, data: saved }
+      if (draftName.trim() === name) draftName = name
       error = ''
       toast.success(`Saved ${name}`)
-      return true
+      return draftName.trim() === name && canon(draft) === canon(saved)
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
       return false

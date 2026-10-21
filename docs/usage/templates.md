@@ -3,6 +3,9 @@
 A template saves a job setup without its source file. It can include video processing, encoder
 settings, container, AutoQPF, crop policy, and optional audio and subtitle selections.
 
+Template drafts survive navigation and refresh in the same browser tab. Leaving an edited template,
+switching profiles, or starting another template offers **Save**, **Discard**, or **Stay**.
+
 ## Create and apply
 
 1. Configure a test job and check its output.

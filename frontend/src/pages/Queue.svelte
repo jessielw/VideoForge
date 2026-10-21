@@ -253,6 +253,7 @@
       return
     }
     await act(async () => {
+      await saves.flush()
       const r = await api.index(todo)
       const left = todo.length - r.taken.length
       const out = left ? `${left} left out (queued, running, already indexing, or reusing an encode).` : ''

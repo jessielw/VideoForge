@@ -41,16 +41,19 @@
   // are dropped: they'd undo the newer edits. The last reply is the job.
   let pending = $state(0)
   let edits = 0
+  let loadSeq = 0
 
   async function load() {
+    const request = ++loadSeq
+    const id = jobId
     const at = edits
     try {
-      const fresh = await api.job(jobId)
-      if (pending || at !== edits) return
+      const fresh = await api.job(id)
+      if (request !== loadSeq || id !== jobId || pending || at !== edits) return
       job = fresh
       error = ''
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e)
+      if (request === loadSeq && id === jobId) error = e instanceof Error ? e.message : String(e)
     }
   }
 

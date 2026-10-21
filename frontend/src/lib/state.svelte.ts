@@ -250,7 +250,7 @@ class AppState {
         // A new run announces its whole list, pending, from index 0.
         if (index === 0 && step.status === 'pending') {
           this.runs[id] = []
-          this.runStarts[id] = this.logSeq
+          this.runStarts[id] = ++this.logSeq
         }
         this.runs[id] ??= []
         const list = this.runs[id]

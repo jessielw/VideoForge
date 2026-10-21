@@ -7,7 +7,8 @@ MKVToolNix, your encoder, and the source-filter plugin.
 
 Open **New jobs**, add an MKV, MP4, or M2TS / TS file, and choose the template to start from.
 You can also add external subtitles, chapters, or an existing video encode to reuse.
-Add the job to the queue and open its editor.
+Add the job, review the import summary, and choose **Open queue** to open its editor. Partial imports
+retain the input draft and explain which existing jobs were kept or files were unmatched.
 
 ## 2. Index and inspect video
 
@@ -39,7 +40,8 @@ has no completed encodes to reuse.
 ## 5. Check the result
 
 Wait for **done**, open the finished file, and check picture, audio, subtitles, and chapters.
-An **invalid** result means the file was written but failed an output check; inspect the issues.
+An **invalid** result means the candidate failed an output check; inspect the issues and the retained
+unpublished file. The previously finished output stays intact.
 A **failed** result means a step did not complete; inspect the last failed step in **Log**.
 
 Once the test works, save the settings as a [template](../usage/templates.md) for future jobs.

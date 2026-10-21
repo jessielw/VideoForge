@@ -13,8 +13,16 @@ preview and later encoding.
 5. Use **Run selected** for a subset or **Start queue** for the queued jobs.
 
 Each job gets its own settings. Changing one job does not silently change the others.
+Import previews link to existing jobs. They keep those jobs' settings unless you explicitly choose
+**Replace and reset its edits**; busy jobs cannot be replaced. Partial imports retain the input draft
+and show added, kept and unmatched counts with details. Drafts survive navigation and refresh in
+the same browser tab.
+
 **Start queue** runs already queued jobs, or ready jobs if none are queued. Completed jobs and
 failed/cancelled runs are left alone; select them and use **Run selected** to rerun or retry explicitly.
+Start and Index wait for pending editor saves. Failed saves offer **Retry saves** or **Discard
+unsaved changes** before work can start. Batch crop reports updated, skipped and failed jobs;
+imported encodes and busy jobs are skipped without stopping later eligible jobs.
 For episodes with different track orders, prefer template rules over track positions.
 
 ## Batch indexing
@@ -38,6 +46,9 @@ Stopping the queue after the current job leaves the remaining jobs queued. Cance
 the running work. When VideoForge shuts down, its child tools stop too; a partially encoded stream
 is not a finished reusable step.
 
+Use **Unqueue** on selected waiting jobs, or **Unqueue to edit** in the editor, to unlock their
+settings without removing the jobs or files. This does not cancel a running job.
+
 ## Reuse completed work
 
 Before rerunning a job, **Start queue** and **Run selected** show the available completed video and
@@ -53,10 +64,14 @@ continuing inside its bitstream.
 | Status | Meaning | Next step |
 | --- | --- | --- |
 | Done | Output was muxed and passed its output checks | Inspect playback |
-| Invalid | Output exists but failed an output check | Read the output issues |
+| Invalid | Candidate failed an output check; existing finished output was kept | Inspect issues and the unpublished file |
 | Failed | A tool or pipeline step failed | Read the last failed step in Log |
-| Skipped | The job could not run, for example because its plan was blocked | Resolve the planning issues |
+| Skipped | The job was skipped by planning or its existing-output policy | Review planning issues and the Output tab |
 | Cancelled | The run was interrupted | Rerun and review reuse choices |
 
 Use the job's **Log** tab for one job, or the **Log** page for all jobs. For persistent paths and
 cleanup, see [Storage and backups](../configuration/storage.md).
+
+Opening the Log tab during a run restores its history and live steps. Reconnecting refreshes job
+details and log snapshots. Initial connection failures retry automatically; **Retry now** retries
+immediately, including the required catalogs.

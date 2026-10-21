@@ -91,6 +91,17 @@
     }
   }
 
+  async function recoverSaves(discard = false) {
+    try {
+      if (discard) saves.discard()
+      else await saves.retry()
+      config = await api.config()
+      error = ''
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   async function setParallelAudio(input: HTMLInputElement) {
     if (!config) return
     const { parallel_audio: now, parallel_audio_default: fallback } = config
@@ -281,8 +292,8 @@
     {#if saveError}
       <div role="alert" class="space-y-2 text-sm text-destructive">
         <p>Changes are not saved: {saveError}</p>
-        <Button onclick={() => saves.retry().catch(e => toast.error(e.message))}>Retry saves</Button>
-        <Button variant="outline" onclick={() => saves.discard()}>Discard unsaved changes</Button>
+        <Button onclick={() => recoverSaves()}>Retry saves</Button>
+        <Button variant="outline" onclick={() => recoverSaves(true)}>Discard unsaved changes</Button>
       </div>
     {/if}
     {#each config?.restart ?? [] as note (note)}
