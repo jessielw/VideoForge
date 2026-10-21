@@ -9,6 +9,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 
 from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import ToolError
+from videoforge.core.job import OutputPolicy
 from videoforge.core.models import JobInputs, Overrides
 from videoforge.core.pairing import AUDIO_EXTENSIONS, SUB_FORMATS, match_files, slot_files
 from videoforge.core.pipeline.build import build_steps, output_path
@@ -123,6 +124,8 @@ def _default_template(request: Request, body: dict[str, Any]) -> Template | None
 
 def _changes(body: dict[str, Any]) -> dict[str, Any]:
     changes: dict[str, Any] = {}
+    if "output_policy" in body:
+        changes["output_policy"] = OutputPolicy(body["output_policy"])
     if body.get("template"):
         changes["template"] = _template(body)
     if "video" in body:

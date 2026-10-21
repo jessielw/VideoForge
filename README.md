@@ -167,7 +167,9 @@ This syntax is the same on Windows and Linux; apostrophes and shell operators ar
   of them (the video, each audio encode) to reuse and which to make again. To clean up: Settings → Work folders deletes a job's folder once it's done (the records and log
   are copied to `records/` in the data folder first), or remove jobs with Remove → "Remove and delete work
   folders".
-- **The output folder:** the finished file (written as `<output>.partial`, renamed when the mux is done).
+- **The output folder:** the finished file (written as `<output>.partial`, validated before publishing).
+  Existing unmanaged files default to Stop; Output offers Skip, Rename or Replace. Rejected candidates
+  are kept with an `.unpublished-<id>` name for inspection.
 - **The data folder, `%APPDATA%\VideoForge`** (or `--data-dir`): `videoforge.db` (the queue, templates,
   settings), `logs/` (an app log per session, the newest 50 kept, and `events.jsonl` with every job's
   events) and `records/` (the job records and logs of deleted work folders, the newest 100 kept).

@@ -158,7 +158,7 @@ _STATUS_STYLE = {
 
 def cmd_run(args: argparse.Namespace) -> int:
     from videoforge.core.execute.process import CancelToken
-    from videoforge.core.job import JobStatus
+    from videoforge.core.job import JobStatus, OutputPolicy
     from videoforge.core.pipeline.run import run_plan
     from videoforge.core.plan_io import load_plans
 
@@ -188,6 +188,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 progress=progress,
                 log=log,
                 cancel=cancel,
+                output_policy=OutputPolicy(args.existing_output),
             )
         except KeyboardInterrupt:
             console.print("[yellow]Interrupted[/]")
@@ -299,6 +300,12 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("run", help="encode and mux the plans in a plan.json, then validate each output")
     p.add_argument("plan", type=Path, help="plan.json from `videoforge plan --out`")
     p.add_argument("--out-dir", type=Path, required=True, help="folder for the muxed releases")
+    p.add_argument(
+        "--existing-output",
+        choices=("stop", "skip", "rename", "replace"),
+        default="stop",
+        help="what to do if an unmanaged output already exists (default: stop)",
+    )
     p.add_argument("--only", nargs="*", help="only run plans whose source name contains one of these")
     p.add_argument("-v", "--verbose", action="store_true", help="show tool output")
     p.set_defaults(func=cmd_run)

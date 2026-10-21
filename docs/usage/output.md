@@ -6,7 +6,8 @@ Inspect the plan after changing the container or supplying an existing video enc
 ## Folder, container, and label
 
 Choose **MKV** or **MP4** and a writable destination. MKV uses MKVToolNix; MP4 uses MP4Box.
-An output is written as `<output>.partial` and renamed after muxing completes.
+An output is written as `<output>.partial`, validated, then published. A rejected candidate is kept
+as `<name>.unpublished-<id>.<container>` for inspection, and the previous finished file stays intact.
 
 A job label distinguishes outputs made from the same source:
 
@@ -21,7 +22,10 @@ control the base output name.
 
 Two jobs that would write the same file are both blocked until one gets a label, another output
 name, or another folder; a job already queued or running keeps its file. A job whose output file
-already exists (and wasn't written by its own last run) warns that the run replaces it.
+already exists warns with the selected **Existing output** policy: Stop (default), Skip, Rename to
+a numbered filename, or Replace after validation. Verified results from the same job can be reused
+or replaced on an explicit rerun. A file appearing or changing during the run prevents publication;
+the candidate is kept for inspection. The CLI offers the same choices with `--existing-output`.
 
 ## Chapters and AutoQPF
 

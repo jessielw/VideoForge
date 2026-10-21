@@ -22,7 +22,7 @@ from videoforge.core.execute import process
 from videoforge.core.execute.control import Priority
 from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import Cancelled, CancelToken, ToolError
-from videoforge.core.job import JobSpec, JobState, JobStatus, StepStatus
+from videoforge.core.job import JobSpec, JobState, JobStatus, OutputPolicy, StepStatus
 from videoforge.core.models import (
     AudioAction,
     AudioCodec as C,
@@ -182,7 +182,9 @@ def test_stale_output_does_not_pass_for_a_new_one(profile, tmp_path):
     """A step's outputs are deleted before it runs, so a tool that writes nothing fails."""
     plan = make_plan(tmp_path)
     run_plan(plan, tmp_path / "out", profile, APP, runner=FakeRunner(), prober=lambda *_: simulate_output(plan))
-    again = run_plan(plan, tmp_path / "out", profile, APP, runner=lambda *_: None)  # no state: nothing reused
+    again = run_plan(
+        plan, tmp_path / "out", profile, APP, output_policy=OutputPolicy.REPLACE, runner=lambda *_: None
+    )  # no state: nothing reused
     assert again.status is JobStatus.FAILED and "was not written" in again.error
 
 
@@ -1518,6 +1520,8 @@ def test_hdr10plus_is_carried_into_x265(profile, tmp_path, monkeypatch):
     )
     assert result.status is JobStatus.DONE, result.error
 
+    # Explicitly replace the earlier test output, while checking validation.
+    job.output_policy = OutputPolicy.REPLACE
     # the output lost it: invalid
     lost = replace(simulate_output(plan), video=replace(plan.source.video, hdr=VideoHdr()))
     result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: lost)
@@ -1599,6 +1603,8 @@ def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
     assert result.status is JobStatus.DONE, result.error
     assert edits == [(source_rpu, job.video.crop, "8.1")]
 
+    # Explicitly replace the earlier test output, while checking validation.
+    job.output_policy = OutputPolicy.REPLACE
     # the output lost it: invalid
     lost = replace(simulate_output(plan), video=replace(plan.source.video, hdr=VideoHdr()))
     result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: lost)
@@ -1643,6 +1649,7 @@ def test_dolby_vision_profile_5_stays_profile_5(profile, tmp_path, monkeypatch):
     result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: carried)
     assert result.status is JobStatus.DONE, result.error
     assert edits == ["5"]
+    job.output_policy = OutputPolicy.REPLACE
     as_81 = replace(simulate_output(plan), video=replace(video, hdr=VideoHdr(dv_profile=8, dv_compat=1)))
     result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: as_81)
     assert result.status is JobStatus.INVALID
@@ -1780,3 +1787,60 @@ def test_fel_is_baked_into_the_encode(profile, tmp_path, monkeypatch, source_fil
     result = run_job(job, plan, profile, APP, state=state, runner=runner, prober=lambda *_: carried)
     assert result.status is JobStatus.DONE, result.error
     assert "x265" not in tools_called(runner)
+
+
+@pytest.mark.parametrize("policy", list(OutputPolicy))
+def test_existing_output_policy(profile, tmp_path, policy):
+    plan = make_plan(tmp_path)
+    out = tmp_path / "out/Show.S01E01.mkv"
+    out.parent.mkdir()
+    out.write_bytes(b"previous good output")
+    runner = FakeRunner()
+    result = run_plan(
+        plan, out.parent, profile, APP, output_policy=policy, runner=runner, prober=lambda *_: simulate_output(plan)
+    )
+    if policy in (OutputPolicy.STOP, OutputPolicy.SKIP):
+        assert result.status is (JobStatus.FAILED if policy is OutputPolicy.STOP else JobStatus.SKIPPED)
+        assert not runner.calls
+    else:
+        assert result.status is JobStatus.DONE, result.error
+        assert result.output.name == ("Show.S01E01.2.mkv" if policy is OutputPolicy.RENAME else out.name)
+    if policy is not OutputPolicy.REPLACE:
+        assert out.read_bytes() == b"previous good output"
+
+
+def test_invalid_replacement_preserves_good_output(profile, tmp_path):
+    plan = make_plan(tmp_path)
+    out = tmp_path / "out/Show.S01E01.mkv"
+    out.parent.mkdir()
+    out.write_bytes(b"previous good output")
+    bad = simulate_output(plan)
+    bad.subs[0].title = "Wrong"
+    result = run_plan(
+        plan, out.parent, profile, APP, output_policy=OutputPolicy.REPLACE, runner=FakeRunner(), prober=lambda *_: bad
+    )
+    assert result.status is JobStatus.INVALID
+    assert out.read_bytes() == b"previous good output"
+    assert result.output != out and result.output.is_file()
+    assert ".unpublished-" in result.output.name
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_output_changed_during_run_is_never_replaced(profile, tmp_path, existing):
+    plan = make_plan(tmp_path)
+    out = tmp_path / "out/Show.S01E01.mkv"
+    out.parent.mkdir()
+    if existing:
+        out.write_bytes(b"old output")
+
+    def probe_candidate(path, _tool):
+        assert path.suffix == ".partial"
+        out.write_bytes(b"another application's output")
+        return simulate_output(plan)
+
+    result = run_plan(
+        plan, out.parent, profile, APP, output_policy=OutputPolicy.REPLACE, runner=FakeRunner(), prober=probe_candidate
+    )
+    assert result.status is JobStatus.FAILED and "changed during" in result.error
+    assert out.read_bytes() == b"another application's output"
+    assert result.output != out and result.output.is_file()

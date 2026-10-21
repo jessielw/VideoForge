@@ -225,6 +225,17 @@
               disabled={!editable}
               onchange={e => save({ output_name: (e.target as HTMLInputElement).value.trim() })}
             />
+            <label for="output-policy" class="text-muted-foreground">Existing output</label>
+            <div class="space-y-1">
+              <NativeSelect id="output-policy" disabled={!editable} value={job.spec.output_policy}
+                onchange={e => save({ output_policy: e.currentTarget.value as JobDetail['spec']['output_policy'] })}>
+                <option value="stop">Stop and keep the existing file</option>
+                <option value="skip">Skip this job</option>
+                <option value="rename">Use a new numbered filename</option>
+                <option value="replace">Replace after validation</option>
+              </NativeSelect>
+              <p class="text-xs text-muted-foreground">Applies to files outside this job's verified results. An output changed during a run is always kept.</p>
+            </div>
             <span class="text-muted-foreground">Label</span>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Input

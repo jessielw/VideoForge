@@ -80,7 +80,7 @@ export interface InputChanges {
   encode?: string | null
 }
 
-export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides' | 'output_dir' | 'qpf' | 'profile' | 'mux' | 'label' | 'output_name'>> & {
+export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides' | 'output_dir' | 'output_policy' | 'qpf' | 'profile' | 'mux' | 'label' | 'output_name'>> & {
   inputs?: InputChanges
   template?: Template // applied first: the whole run's settings
   container?: string // the container alone; the job keeps its extra muxer arguments

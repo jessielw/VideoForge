@@ -55,6 +55,13 @@ class JobStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class OutputPolicy(StrEnum):
+    STOP = "stop"
+    SKIP = "skip"
+    RENAME = "rename"
+    REPLACE = "replace"
+
+
 @dataclass(slots=True)
 class JobResult:
     plan: Plan
@@ -89,6 +96,7 @@ class JobSpec:
     output_name: str = ""
     # Tells runs of one source apart (e.g. "dubbed"): added to the output name, and in the job record.
     label: str = ""
+    output_policy: OutputPolicy = OutputPolicy.STOP
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
     @property

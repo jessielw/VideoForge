@@ -247,6 +247,7 @@ export interface JobSpec {
   encoder: EncoderSettings
   qpf: boolean
   output_dir: string | null
+  output_policy: 'stop' | 'skip' | 'rename' | 'replace'
   mux: MuxSettings
   autocrop: boolean // the crop is detected once the source can be read (a template's auto crop)
   audio_template: TemplateAudio | null // a template's audio, waiting for the source's tracks

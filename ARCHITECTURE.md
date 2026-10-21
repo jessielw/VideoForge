@@ -172,7 +172,11 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   replan, a removal and a run, the queue compares every planned job's output path (case-insensitive on
   Windows). Idle jobs sharing one are `outfile.shared` BLOCKs (a queued or running job keeps its file); a file
   already there that isn't the job's own last output is an `outfile.exists` WARN, looked at again only when
-  that job is replanned. They're added to the job's plan issues, so status, enqueue and the run's skip follow.
+  that job is replanned. The runner also checks the destination before work and publication. Unmanaged
+  existing outputs use JobSpec.output_policy (stop/skip/rename/replace); verified same-job results can
+  be rerun. Mux finalization validates the candidate before replacing the destination, preserving a
+  rejected or conflicted candidate under a unique unpublished name. New output publication refuses
+  an existing target (Windows rename; POSIX hard link). A filesystem without that operation fails safely.
 - The audio encodes are background steps (`Step.background`): `run_steps` starts them on up to
   `AppConfig.parallel_audio` threads (videoforge.toml `[pipeline]`, Settings → Audio encodes; default 2)
   once the index is done (it reads the whole source too), and goes on with the video. A step waits for

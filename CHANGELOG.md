@@ -12,6 +12,10 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Validate before publishing.** Muxed candidates pass validation before replacing a finished file.
+  Unmanaged existing outputs default to Stop; the Output tab offers Skip, Rename and Replace. Files
+  appearing or changing during a run are kept, and rejected candidates remain available for inspection.
+
 - **Duplicate imports keep existing jobs.** The match preview links to existing jobs. Replacing one
   requires selecting “Replace and reset its edits”; busy jobs remain protected.
 

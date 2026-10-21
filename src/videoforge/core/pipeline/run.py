@@ -7,14 +7,17 @@ server's queue worker and the CLI drive the same code.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
+import os
 from pathlib import Path
 import time
 from typing import TYPE_CHECKING
+import uuid
 
 from videoforge.core.config import AppConfig
 from videoforge.core.execute import process
 from videoforge.core.execute.process import Cancelled, CancelToken, LogFn, ToolError
-from videoforge.core.job import JobResult, JobSpec, JobState, JobStatus, StepRecord, StepRun, StepStatus
+from videoforge.core.job import JobResult, JobSpec, JobState, JobStatus, OutputPolicy, StepRecord, StepRun, StepStatus
 from videoforge.core.models import JobInputs, Plan, Severity, SourceInfo
 from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.pipeline.steps import ProgressFn, Runner, run_steps
@@ -27,6 +30,18 @@ if TYPE_CHECKING:
     from videoforge.core.profile import Profile
 
 Prober = Callable[[Path, str], SourceInfo]
+
+
+class _InvalidOutput(Exception):
+    pass
+
+
+def _identity(path: Path) -> tuple[int, int, int] | None:
+    try:
+        stat = path.stat()
+        return stat.st_size, stat.st_mtime_ns, stat.st_ino
+    except FileNotFoundError:
+        return None
 
 
 def missing_inputs(spec: JobSpec) -> list[Path]:
@@ -70,7 +85,10 @@ def run_job(
 
 def _failed_step(state: JobState, error: str) -> str:
     """The error, led by the step it happened in (1-based, of all steps)."""
-    for n, r in enumerate(state.run, 1):
+    ordered = list(enumerate(state.run, 1))
+    if state.run and state.run[-1].id == "validate" and state.run[-1].status is StepStatus.FAILED:
+        ordered.reverse()
+    for n, r in ordered:
         if r.status in (StepStatus.FAILED, StepStatus.RUNNING):
             where = f"Step {n}/{len(state.run)} · {r.label}"
             return f"{where}: {error.removeprefix(r.label + ': ')}"
@@ -96,14 +114,78 @@ def _run(
 
     work = spec.work_dir
     encoded: dict[int, Path] = {}
+    rejected: Path | None = None
+    validate = StepRun("validate", "Validate")
+    issues = []
 
     def result(status: JobStatus, **kw) -> JobResult:
         return JobResult(plan, status, work_dir=work, encoded_audio=encoded, **kw)
 
     try:
-        built = build_steps(spec, plan, profile, app, output)
+        original = _identity(output)
+        own = state.steps.get("mux")
+        owned = own is not None and own.outputs_match([output])
+        if original is not None and not owned:
+            if spec.output_policy is OutputPolicy.STOP:
+                return result(
+                    JobStatus.FAILED,
+                    error=f"Output already exists: {output}. Choose Skip, Rename or Replace in Output.",
+                )
+            if spec.output_policy is OutputPolicy.SKIP:
+                return result(JobStatus.SKIPPED, error=f"Kept existing output: {output}")
+            if spec.output_policy is OutputPolicy.RENAME:
+                base = output
+                number = 2
+                while output.exists():
+                    output = base.with_name(f"{base.stem}.{number}{base.suffix}")
+                    number += 1
+                original = None
+
+        def validate_output(path: Path) -> None:
+            nonlocal issues
+            validate.status = StepStatus.RUNNING
+            on_step(validate)
+            log("== Validate")
+            started = time.monotonic()
+            # Probe temporary bytes, but validate the intended container/name (e.g. MP4, not .partial).
+            found = replace(prober(path, app.tools.mkvmerge), path=output, name=output.name)
+            issues = profile.validate_output(plan, found)
+            if spec.encodes_video:
+                issues += hdr.output_issues(plan.source.video, spec.encoder, found)
+                issues += info.length_issues(plan.source.video, info.read(work / info.SCRIPT_INFO))
+            blocking = [i.message for i in issues if i.severity is Severity.BLOCK]
+            for issue in issues:
+                validate.log(f"{issue.severity.value}: {issue.message}")
+            validate.status = StepStatus.FAILED if blocking else StepStatus.DONE
+            validate.error, validate.seconds = "; ".join(blocking), round(time.monotonic() - started, 1)
+            on_step(validate)
+            if blocking:
+                raise _InvalidOutput(validate.error)
+
+        def publish(candidate: Path, target: Path) -> None:
+            nonlocal rejected
+            try:
+                validate_output(candidate)
+                if _identity(target) != original:
+                    raise OSError(f"Output changed during the run; kept the existing file: {target}")
+                if original is None:
+                    # An exclusive publication: even a file appearing after the check cannot be overwritten.
+                    if os.name == "nt":
+                        candidate.rename(target)  # Windows rename refuses an existing target
+                    else:
+                        os.link(candidate, target)
+                        candidate.unlink()
+                else:
+                    candidate.replace(target)
+            except Exception:
+                if candidate.exists():
+                    rejected = target.with_name(f"{target.stem}.unpublished-{uuid.uuid4().hex[:8]}{target.suffix}")
+                    candidate.rename(rejected)
+                    log(f"Unpublished output kept for inspection: {rejected}")
+                raise
+
+        built = build_steps(spec, plan, profile, app, output, publish=publish)
         encoded = built.encoded_audio
-        validate = StepRun("validate", "Validate")
         state.run = [s.to_run() for s in built.steps] + [validate]
         for r in state.run:
             on_step(r)
@@ -130,22 +212,11 @@ def _run(
             parallel=app.parallel_audio,
             keep=keep,
         )
-        validate.status = StepStatus.RUNNING
-        on_step(validate)
-        log("== Validate")
-        started = time.monotonic()
-        found = prober(output, app.tools.mkvmerge)
-        issues = profile.validate_output(plan, found)
-        if spec.encodes_video:
-            issues += hdr.output_issues(plan.source.video, spec.encoder, found)
-            issues += info.length_issues(plan.source.video, info.read(work / info.SCRIPT_INFO))
-        blocking = [i.message for i in issues if i.severity is Severity.BLOCK]
-        for i in issues:
-            validate.log(f"{i.severity.value}: {i.message}")
-        validate.status = StepStatus.FAILED if blocking else StepStatus.DONE
-        validate.error, validate.seconds = "; ".join(blocking), round(time.monotonic() - started, 1)
-        on_step(validate)
-        return result(JobStatus.INVALID if blocking else JobStatus.DONE, output=output, issues=issues)
+        if validate.status is StepStatus.PENDING:  # the final file itself was reused
+            validate_output(output)
+        return result(JobStatus.DONE, output=output, issues=issues)
+    except _InvalidOutput:
+        return result(JobStatus.INVALID, output=rejected or output, issues=issues, error=validate.error)
     except Cancelled:
         return result(JobStatus.CANCELLED, error="Cancelled")
     except (ToolError, OSError, ValueError) as e:
@@ -153,7 +224,7 @@ def _run(
             if r.status is StepStatus.RUNNING:
                 r.status, r.error = StepStatus.FAILED, str(e)
                 on_step(r)
-        return result(JobStatus.FAILED, error=_failed_step(state, str(e)))
+        return result(JobStatus.FAILED, output=rejected, error=_failed_step(state, str(e)))
     finally:
         output.with_name(output.name + ".partial").unlink(missing_ok=True)
 
@@ -173,6 +244,16 @@ def spec_from_plan(plan: Plan, out_dir: Path) -> JobSpec:
     return JobSpec(inputs=inputs, profile=plan.profile, overrides=plan.overrides, output_dir=out_dir)
 
 
-def run_plan(plan: Plan, out_dir: Path, profile: Profile, app: AppConfig, **kwargs) -> JobResult:
+def run_plan(
+    plan: Plan,
+    out_dir: Path,
+    profile: Profile,
+    app: AppConfig,
+    *,
+    output_policy: OutputPolicy = OutputPolicy.STOP,
+    **kwargs,
+) -> JobResult:
     """Run a ready-made plan (plan.json; the encode already exists)."""
-    return run_job(spec_from_plan(plan, out_dir), plan, profile, app, **kwargs)
+    spec = spec_from_plan(plan, out_dir)
+    spec.output_policy = output_policy
+    return run_job(spec, plan, profile, app, **kwargs)

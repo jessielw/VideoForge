@@ -19,7 +19,7 @@ an existing encode has no script/index/chapters/video steps.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
 from functools import partial
@@ -511,7 +511,15 @@ def video_steps(
     return steps + [refreshed(k) for k in range(len(encodes(color)))]
 
 
-def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, output: Path) -> JobSteps:
+def build_steps(
+    spec: JobSpec,
+    plan: Plan,
+    profile: Profile,
+    app: AppConfig,
+    output: Path,
+    *,
+    publish: Callable[[Path, Path], None] | None = None,
+) -> JobSteps:
     if plan.source.path is None:
         raise ToolError("The plan has no source file")
     work = spec.work_dir
@@ -632,7 +640,7 @@ def build_steps(spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, out
             outputs=(output,),
             writes=(unfinished,),
             inputs=(*mux_inputs, *((stamps,) if stamps else ())),
-            finalize=lambda: unfinished.replace(output),
+            finalize=lambda: publish(unfinished, output) if publish else unfinished.replace(output),
             weight=3,
             refresh=(lambda: mux_step(*timing())) if spec.encodes_video else None,
         )

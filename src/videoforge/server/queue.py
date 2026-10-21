@@ -45,6 +45,7 @@ from videoforge.core.job import (
     JobSpec,
     JobState,
     JobStatus,
+    OutputPolicy,
     StepRecord,
     StepRun,
     StepStatus,
@@ -547,7 +548,13 @@ class JobQueue:
                 and _exists(path)
                 and not (e.state.output is not None and _same_file(e.state.output) == _same_file(path))
             ):
-                new.append(Issue(Severity.WARN, "outfile.exists", f"{path} already exists: the run replaces it"))
+                new.append(
+                    Issue(
+                        Severity.WARN,
+                        "outfile.exists",
+                        f"{path} already exists: {e.spec.output_policy.value} (Output tab)",
+                    )
+                )
             if new != old:
                 e.plan.issues = [i for i in e.plan.issues if i.code not in _OUTFILE] + new
                 if e.id not in fresh_ids:  # the caller announces its own
@@ -580,6 +587,7 @@ class JobQueue:
         template: Template | None = None,
         label: str | None = None,
         output_name: str | None = None,
+        output_policy: OutputPolicy | None = None,
     ) -> Entry:
         """Change a job's settings and replan: the template first, then the given settings (container
         alone keeps the job's extra muxer arguments). New inputs (added subtitle files, chapters) are
@@ -625,6 +633,8 @@ class JobQueue:
                 s.label = clean_label(label)
             if output_name is not None:
                 s.output_name = clean_output_name(output_name)
+            if output_policy is not None:
+                s.output_policy = output_policy
             e.state.status, e.state.error, e.state.issues = None, "", []
             if not reprobe:
                 self._apply_tracks(e)
