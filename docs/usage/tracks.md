@@ -30,6 +30,14 @@ suitable TrueHD Atmos source. Manually chosen settings that cannot be satisfied 
 You can make more than one output from a source audio track, for example a copied original plus
 an encoded compatibility track. Each encoded output is a separate reusable step.
 
+### Fix an out-of-sync track
+
+Each audio track has a **Sync** field in milliseconds: a positive value plays the track later, a
+negative one earlier. It is added to the track's own delay (shown in its details) and applied when
+muxing, so changing it does not encode the track again. A negative value drops the audio before
+the video's first frame. A track that ends up more than 2 seconds off the video warns, which often
+means the wrong file or a wrong value.
+
 Audio encodes run alongside the video once indexing is complete. **Settings** controls how many
 run at once; see [pipeline settings](../configuration/settings.md#pipeline-settings).
 

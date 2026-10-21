@@ -204,6 +204,7 @@ export interface TrackOverride {
   layout: string | null // "2.0", "5.1", ...
   options: Record<string, string> // the encode's own settings (AudioEncodeInfo.options keys)
   burn?: boolean | null // subtitles: burned into the video instead of muxed (one per job)
+  sync_ms?: number | null // audio: + later, - earlier, on top of the track's own delay (applied at the mux)
 }
 
 // Reusable compression settings only; source metadata stays on each output track.
@@ -326,6 +327,7 @@ export interface PlannedAudio {
   commentary: boolean
   original: boolean
   options: Record<string, string> // the encode's settings, defaults filled in
+  sync_ms?: number // the override's sync correction
 }
 
 export interface PlannedSub {

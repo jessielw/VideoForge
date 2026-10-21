@@ -139,7 +139,8 @@ export function isEmpty(ov: TrackOverride): boolean {
     ov.action === null &&
     ov.bitrate_kbps === null &&
     ov.layout === null &&
-    !Object.keys(ov.options ?? {}).length
+    !Object.keys(ov.options ?? {}).length &&
+    !ov.sync_ms
   )
 }
 

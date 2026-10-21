@@ -159,4 +159,27 @@ def plan_job(
         plan.issues += burn.issues(marked)
     if inputs.encode is not None and inputs.encode_state is EncodeState.IN_PROGRESS:
         plan.issues.insert(0, Issue(Severity.BLOCK, "pair.encoding", f"{inputs.encode.name} is still encoding"))
+    plan.issues += apply_sync(plan, overrides)
     return plan
+
+
+HIGH_DELAY_MS = 2000  # StaxRip's: a delay beyond it suggests a sync problem
+
+
+def apply_sync(plan: Plan, overrides: Overrides) -> list[Issue]:
+    """Each output audio track's sync correction from its override (for every profile: it's a correction of the
+    source, not a policy), and a warning for a track that ends up further than HIGH_DELAY_MS off the video."""
+    issues = []
+    for a in plan.audio:
+        ov = overrides.tracks.get(track_key(a.source))
+        a.sync_ms = (ov.sync_ms or 0) if ov is not None else 0
+        delay = a.source.delay_ms + a.sync_ms
+        if abs(delay) > HIGH_DELAY_MS:
+            issues.append(
+                Issue(
+                    Severity.WARN,
+                    "audio.delay",
+                    f"{a.title or a.language}: a delay of {delay:+d} ms to the video is unusually high: check its sync",
+                )
+            )
+    return issues

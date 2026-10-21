@@ -226,7 +226,7 @@ def mux_command(
     )
     shift = _source_shift(plan, [a.source for a in copied] + [s.source for s in internal_subs])
     for a in copied:
-        argv += _track_args(a.source.id, a) + _sync(a.source.id, shift)
+        argv += _track_args(a.source.id, a) + _sync(a.source.id, shift + a.sync_ms)
     for s in internal_subs:
         argv += _track_args(s.source.id, s) + _sync(s.source.id, shift)
     argv.append(str(plan.source.path))
@@ -247,7 +247,7 @@ def mux_command(
                 str(tid),
             ]
             shift = a.source.delay_ms if a.source.is_external else _source_shift(plan, [a.source])
-            argv += _track_args(tid, a) + _sync(tid, shift)
+            argv += _track_args(tid, a) + _sync(tid, shift + a.sync_ms)
             argv.append(str(a.source.external_path or plan.source.path))
             audio_order.append(f"{file_id}:{tid}")
             file_id += 1
@@ -259,8 +259,7 @@ def mux_command(
         if path is None:
             raise MuxError(f"No encoded file for audio {pos + 1} ({a.title})")
         argv += _track_args(0, a)
-        if not delay_in_encode(a.action):
-            argv += _sync(0, a.source.delay_ms)
+        argv += _sync(0, (0 if delay_in_encode(a.action) else a.source.delay_ms) + a.sync_ms)
         argv.append(str(path))
         audio_order.append(f"{file_id}:0")
         file_id += 1
@@ -363,12 +362,12 @@ def mp4box_command(
         if a.action is AudioAction.COPY:
             # MP4Box starts every track it takes at 0: a copied track gets its delay to the video back here.
             track = f"{a.source.external_path}#trackID={a.source.id + 1}" if a.source.is_external else None
-            argv += ["-add", (track or _mp4_track(plan, a.source)) + _mp4_options(a, 1, a.source.delay_ms)]
+            argv += ["-add", (track or _mp4_track(plan, a.source)) + _mp4_options(a, 1, a.source.delay_ms + a.sync_ms)]
             continue
         encoded = encoded_audio.get(pos)
         if encoded is None:
             raise MuxError(f"No encoded file for audio {pos + 1} ({a.title})")
-        delay = 0 if delay_in_encode(a.action) else a.source.delay_ms
+        delay = (0 if delay_in_encode(a.action) else a.source.delay_ms) + a.sync_ms
         argv += ["-add", str(encoded) + _mp4_options(a, 1, delay)]
 
     for s in plan.subs:

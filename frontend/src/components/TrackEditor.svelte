@@ -254,6 +254,10 @@
   const changedOptions = (t: AudioTrack, e: AudioEncodeInfo) =>
     e.options.filter(o => ovOf(t)?.options?.[o.key] !== undefined).length
   const setLayout = (t: AudioTrack, v: string) => editTrack(t, ov => (ov.layout = v || null))
+  function setSync(t: AudioTrack, v: string) {
+    const n = Math.round(Number(v))
+    editTrack(t, ov => (ov.sync_ms = v.trim() && Number.isFinite(n) && n ? n : null))
+  }
   function setBitrate(t: AudioTrack, v: string) {
     const n = Math.round(+v)
     editTrack(t, ov => (ov.bitrate_kbps = v.trim() && n > 0 ? n : null))
@@ -511,6 +515,7 @@
         {@const actionMark = mark(t, o => o?.action)}
         {@const layoutMark = mark(t, o => o?.layout)}
         {@const bitrateMark = mark(t, o => o?.bitrate_kbps)}
+        {@const syncMark = mark(t, o => o?.sync_ms)}
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-3 py-2 text-sm">
           <AudioPresetMenu current={audioPresetSettings(ov)} source={t} disabled={!editable}
             apply={preset => editTrack(t, value => Object.assign(value, applyAudioPreset(value, preset)))} />
@@ -566,6 +571,21 @@
               {/if}kb/s
             </label>
           {/if}
+          <label
+            class="flex items-center gap-1.5 text-muted-foreground"
+            title="Move this track: + later, − earlier, on top of its own delay{t.delay_ms ? ` (${t.delay_ms > 0 ? '+' : ''}${t.delay_ms} ms)` : ''}. Only the mux changes: an encode isn't made again."
+          >
+            Sync
+            <Input
+              class="w-20 {syncMark ? INPUT_MARK[syncMark] : ''}"
+              type="number"
+              step="1"
+              placeholder="0"
+              value={ov?.sync_ms ?? ''}
+              aria-label="Sync (ms)"
+              onchange={e => setSync(t, e.currentTarget.value)}
+            />ms
+          </label>
           {#if enc?.options.length}
             {@const changed = changedOptions(t, enc)}
             <Button

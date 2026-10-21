@@ -8,7 +8,8 @@ from pathlib import Path
 from conftest import audio, plan_for, source, sub
 import pytest
 
-from videoforge.core.execute.mux import MuxError, _frame_rate, mux_command
+from videoforge.core.execute.mux import MuxError, _frame_rate, mp4box_command, mux_command
+from videoforge.core.jobs import apply_sync
 from videoforge.core.models import (
     AudioAction,
     AudioCodec as C,
@@ -17,6 +18,7 @@ from videoforge.core.models import (
     SubFormat as F,
     TrackOverride,
     VideoInfo,
+    track_key,
 )
 from videoforge.core.video.color import ContainerColor, mastering
 
@@ -199,6 +201,31 @@ def test_copied_audio_keeps_container_delay_without_sync():
     argv = mux_command(plan, {}, OUT, "mkvmerge", RAW)
     assert value(argv, "--audio-tracks") == [str(src.audio[0].id)]
     assert "--sync" not in argv  # mkvmerge carries the copied track's own timestamps
+
+
+def test_sync_moves_a_track_on_top_of_its_own_delay():
+    """The track editor's Sync (StaxRip's audio Delay field): added at the mux, to copies and encodes alike, so
+    the encode isn't made again; a track that ends up more than 2 s off the video warns, as StaxRip does."""
+    plan = aot_plan()  # Japanese AAC: delay -7 at the mux; English DDP: DeeZy applies its 12
+    a0, a1 = plan.audio
+    sync = {track_key(a0.source): TrackOverride(sync_ms=200), track_key(a1.source): TrackOverride(sync_ms=-40)}
+    assert apply_sync(plan, Overrides(tracks=sync)) == []
+    encoded = {0: Path("a.m4a"), 1: Path("b.eac3")}
+    assert value(mux_command(plan, encoded, OUT, "mkvmerge", RAW), "--sync", "0:") == ["0:193", "0:-40"]
+    mp4 = value(mp4box_command(plan, encoded, Path("out.mp4.partial"), "MP4Box", RAW), "-add")
+    assert mp4[1].endswith(":delay=193") and mp4[2].endswith(":delay=-40")
+
+    src = source([audio(C.AC3, "5.1", "en", index=0)], name="Movie.mkv")
+    src.video = VideoInfo(1920, 1080, default_duration_ns=41708333)
+    src.audio[0].delay_ms = 1900
+    plan = plan_for(src, source(name="Movie_job.h264"))
+    plan.encode_path = Path("Movie_job.h264")
+    key = track_key(src.audio[0])
+    assert [i.code for i in apply_sync(plan, Overrides(tracks={key: TrackOverride(sync_ms=150)}))] == ["audio.delay"]
+    argv = mux_command(plan, {}, OUT, "mkvmerge", RAW)
+    assert value(argv, "--sync") == [f"{src.audio[0].id}:150"]  # the copy keeps its own 1900 as it is
+    assert value(mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW), "-add")[1].endswith(":delay=2050")
+    assert apply_sync(plan, Overrides()) == [] and plan.audio[0].sync_ms == 0
 
 
 def test_missing_encoded_audio_fails():

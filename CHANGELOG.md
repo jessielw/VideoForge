@@ -12,6 +12,10 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Audio sync correction.** Each audio track in the track editor has a Sync field (ms, + later,
+  − earlier) on top of its own delay, applied at the mux so the encode isn't made again. A track more
+  than 2 seconds off the video warns.
+
 - **Output file checks.** A job whose output file already exists warns that the run replaces it, and
   two jobs that would write the same file are blocked until one gets a label, name or folder of its own.
 

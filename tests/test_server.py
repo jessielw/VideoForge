@@ -244,6 +244,19 @@ def test_two_jobs_writing_one_file_block_and_an_existing_file_warns(tmp_path):
         assert client.get(f"/api/jobs/{one}").json()["issues"] == []
 
 
+def test_audio_sync_reaches_the_plan_and_the_mux(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        (job_id,) = add(client, tmp_path)
+        job = wait_for(client, job_id, "ready", "warn")
+        key = job["tracks"]["audio"][1]["key"]
+        overrides = job["spec"]["overrides"] | {"tracks": {key: {"sync_ms": -250}}}
+        job = client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides}).json()
+        assert [a["sync_ms"] for a in job["plan"]["audio"]] == [0, -250]
+        mux = client.get(f"/api/jobs/{job_id}/commands").json()[-1]["command"]
+        assert f"--sync {key.removeprefix('id:')}:-250" in mux
+
+
 def test_files_added_to_a_job(tmp_path):
     make_files(tmp_path)
     extra = tmp_path / "extra"

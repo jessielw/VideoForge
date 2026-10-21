@@ -276,6 +276,9 @@ class PlannedAudio:
     original: bool = False
     visual_impaired: bool = False
     options: dict[str, str] = field(default_factory=dict)  # the encode's settings, defaults filled in
+    # The user's sync correction (TrackOverride.sync_ms): + later, - earlier, on top of the track's own delay.
+    # The mux applies it, so changing it doesn't encode the track again.
+    sync_ms: int = 0
 
 
 @dataclass(slots=True)
@@ -323,6 +326,9 @@ class TrackOverride:
     options: dict[str, str] = field(default_factory=dict)  # the encode's own settings (execute.audio.EncodeOption keys)
     # Subtitles: burned into the video instead of muxed (core.video.burn; one per job).
     burn: bool | None = None
+    # Audio: move the track by this many ms (+ later, - earlier) on top of its own delay, as StaxRip's audio
+    # Delay field corrects an out-of-sync track. Applied by the engine (jobs.plan_job), whatever the profile.
+    sync_ms: int | None = None
 
     @property
     def empty(self) -> bool:
@@ -336,6 +342,7 @@ class TrackOverride:
             and self.bitrate_kbps is None
             and self.layout is None
             and not self.options
+            and not self.sync_ms
         )
 
 

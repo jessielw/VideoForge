@@ -246,6 +246,11 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   MediaInfo calls an x264 TS VFR (its timestamps go through the VFR path). mkvmerge keeps a TS's offset to its
   earliest stream, taken or not, but starts the earliest track it takes from an MP4 at 0: `mux._source_shift`
   syncs an MP4 input's tracks by that one's delay (`SourceInfo.container`, mkvmerge's type).
+- Audio sync correction (StaxRip's audio Delay field): `TrackOverride.sync_ms` (+ later, - earlier) becomes
+  `PlannedAudio.sync_ms` in `jobs.apply_sync`, after the profile's plan, so every profile gets it. The mux adds
+  it to whatever timing the track already gets (an MKV copy's `--sync`, an encode's delay, MP4Box `:delay=`);
+  the audio encode's fingerprint doesn't change. A track more than 2 s off the video (its delay plus the
+  correction, StaxRip's threshold) is an `audio.delay` WARN.
   A Blu-ray TrueHD PID's AC-3 core is a track of its own in mkvmerge (and ffmpeg's `a:N`), under the same number;
   MediaInfo's one track is the TrueHD's, so the core takes mkvmerge's details (`AudioTrack.core`). MP4Box takes a
   TS track by PID, an MP4's by track ID (`mux._mp4_track`), and can't copy a core apart (`mux.mp4_core` BLOCK).
