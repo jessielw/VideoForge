@@ -57,8 +57,16 @@ def match(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Preview what Add would create from the given files and folders."""
     result = _match(request, body)
     left = result.unmatched
+    q = queue_of(request)
     return {
-        "jobs": [to_json(j) for j in result.jobs],
+        "jobs": [
+            to_json(j)
+            | {
+                "existing_id": existing.id if (existing := q._find_source(j.source)) else None,
+                "existing_status": existing.status if existing else None,
+            }
+            for j in result.jobs
+        ],
         "unmatched": [str(p) for p in left.encodes + left.subtitles + left.chapters],
     }
 
@@ -80,6 +88,7 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         video=from_json(VideoSettings, body["video"]) if body.get("video") else None,
         encoder=from_json(EncoderSettings, body["encoder"]) if body.get("encoder") else None,
         template=_template(body) or _default_template(request, body),
+        replace_existing=body.get("replace_existing") or [],
     )
     left = result.unmatched
     return {

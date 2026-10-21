@@ -3,6 +3,7 @@
   import { onMount, untrack } from 'svelte'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import { Button } from '$lib/components/ui/button'
+  import { Checkbox } from '$lib/components/ui/checkbox'
   import * as Card from '$lib/components/ui/card'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
@@ -25,6 +26,7 @@
   let matching = $state(false)
   let error = $state('')
   let adding = $state(false)
+  let replacements = $state<string[]>([])
   // The template (by name; the profile's starred one first) and the container it sets, which can
   // be changed here.
   let templateName = $state<string | null>(null)
@@ -100,6 +102,7 @@
     try {
       const r = await api.addJobs({
         ...slots(),
+        replace_existing: replacements,
         original_language: language || null,
         output_dir: output[0] ?? null,
         template: template && {
@@ -108,10 +111,11 @@
           mux: { ...template.data.mux, container },
         },
       })
-      for (const name of r.skipped) app.addLog(`Skipped ${name}: it is queued or running`)
+      for (const name of r.skipped) app.addLog(`Kept existing job: ${name}`)
       for (const p of r.unmatched) app.addLog(`Not matched to any source: ${p}`)
       sources = encodes = subtitles = chapters = []
       result = null
+      replacements = []
       await app.refreshJobs()
       router.go('queue', r.added[0] ?? null)
     } catch (e) {
@@ -220,7 +224,20 @@
           <tbody>
             {#each result.jobs as j (j.source)}
               <tr class="border-t border-border/60">
-                <td class="px-4 py-1.5" title={j.source}>{basename(j.source)}</td>
+                <td class="px-4 py-1.5" title={j.source}>
+                  {basename(j.source)}
+                  {#if j.existing_id}
+                    <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <button class="underline" onclick={() => router.go('queue', j.existing_id)}>Open existing job</button>
+                      {#if ['queued', 'running', 'indexing'].includes(j.existing_status ?? '')}
+                        <span>Kept: {j.existing_status}</span>
+                      {:else}
+                        <label class="flex items-center gap-1"><Checkbox checked={replacements.includes(j.existing_id)}
+                          onCheckedChange={on => { replacements = on ? [...replacements, j.existing_id!] : replacements.filter(id => id !== j.existing_id) }} />Replace and reset its edits</label>
+                      {/if}
+                    </div>
+                  {/if}
+                </td>
                 <td class={j.encode ? (j.encode_state === 'in_progress' ? 'text-warning' : '') : 'text-primary'}>
                   {j.encode ? basename(j.encode) + (j.encode_state === 'in_progress' ? ' (still encoding)' : '') : 'encode with VapourSynth'}
                 </td>

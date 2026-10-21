@@ -559,6 +559,8 @@ export interface ReuseJob {
 }
 
 export interface MatchedJob {
+  existing_id: string | null
+  existing_status: string | null
   source: string
   encode: string | null
   subtitles: string[]

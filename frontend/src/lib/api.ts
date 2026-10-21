@@ -143,6 +143,7 @@ export const api = {
   addJobs: (
     body: InputSlots & {
       original_language: string | null
+      replace_existing?: string[]
       output_dir: string | null
       video?: Partial<VideoSettings>
       encoder?: EncoderSettings

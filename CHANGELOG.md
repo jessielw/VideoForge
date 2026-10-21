@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Duplicate imports keep existing jobs.** The match preview links to existing jobs. Replacing one
+  requires selecting “Replace and reset its edits”; busy jobs remain protected.
+
 - **Predictable queue starts.** Start queue runs waiting work only, with its job count shown. Completed,
   failed and cancelled jobs run again only when explicitly selected with Run selected.
 

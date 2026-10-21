@@ -345,41 +345,46 @@ class JobQueue:
         video: VideoSettings | None = None,
         encoder: EncoderSettings | None = None,
         template: Template | None = None,
+        replace_existing: Iterable[str] = (),
     ) -> tuple[list[Entry], list[str]]:
         """One job per matched source, starting from the profile's video defaults, or the template,
-        then the given settings. A source already in the queue is set up again unless it is queued or running.
+        then the given settings. A source already in the queue is kept unless its exact job ID is explicitly replaced.
         Returns (new jobs, names skipped because they are busy)."""
         profile = self.profiles(profile_id)
+        replacements = set(replace_existing)
         added, skipped = [], []
-        for inputs in found:
-            existing = self._find_source(inputs.source)
-            if existing is not None:
-                if existing.busy:
-                    skipped.append(existing.spec.name)
-                    continue
-                self.remove([existing.id])
-            v, enc = profile.video_defaults()
-            spec = JobSpec(
-                inputs=inputs,
-                profile=profile_id,
-                overrides=Overrides(original_language=original_language),
-                video=v,
-                encoder=enc,
-                output_dir=output_dir,
-            )
-            if template is not None:
-                template.apply(spec)
-            if video:
-                spec.video = _copy(video)
-            if encoder:
-                spec.encoder = _copy(encoder)
-            e = Entry(spec, JobState())
-            with self._lock:
-                self._entries[e.id] = e
-                self._order.append(e.id)
-            self._save(e)
-            added.append(e)
-            self.events.publish("job.added", id=e.id)
+        with self._lock:
+            for inputs in found:
+                existing = self._find_source(inputs.source)
+                if existing is not None:
+                    if existing.id not in replacements or existing.busy or existing.indexing:
+                        skipped.append(existing.spec.name)
+                        continue
+                    if not self.remove([existing.id]):
+                        skipped.append(existing.spec.name)
+                        continue
+                v, enc = profile.video_defaults()
+                spec = JobSpec(
+                    inputs=inputs,
+                    profile=profile_id,
+                    overrides=Overrides(original_language=original_language),
+                    video=v,
+                    encoder=enc,
+                    output_dir=output_dir,
+                )
+                if template is not None:
+                    template.apply(spec)
+                if video:
+                    spec.video = _copy(video)
+                if encoder:
+                    spec.encoder = _copy(encoder)
+                e = Entry(spec, JobState())
+                with self._lock:
+                    self._entries[e.id] = e
+                    self._order.append(e.id)
+                self._save(e)
+                added.append(e)
+                self.events.publish("job.added", id=e.id)
         self.probe([e.id for e in added])
         return added, skipped
 

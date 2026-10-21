@@ -1101,7 +1101,13 @@ def test_templates(tmp_path):
         (new,) = add(client, tmp_path, sources=[str(tmp_path / "src" / "Show.S01E01.mkv")])
         spec = client.get(f"/api/jobs/{new}").json()["spec"]
         assert spec["encoder"]["encoder"] == "x265" and spec["video"]["crop"]["left"] == 4
-        (own,) = add(client, tmp_path, sources=[str(tmp_path / "src" / "Show.S01E01.mkv")], encoder={"crf": 20})
+        (own,) = add(
+            client,
+            tmp_path,
+            sources=[str(tmp_path / "src" / "Show.S01E01.mkv")],
+            encoder={"crf": 20},
+            replace_existing=[new],
+        )
         assert client.get(f"/api/jobs/{own}").json()["spec"]["encoder"]["encoder"] == "x264"  # its own settings
         assert client.delete("/api/presets/template/Show 1080p").json()["template_defaults"] == {}
 
@@ -1710,3 +1716,23 @@ def test_default_start_does_not_rerun_completed_jobs(tmp_path):
             assert q.start_targets() == []
             assert q.enqueue() == []
             assert q.start_targets([first]) == [q.get(first)]
+
+
+def test_reimport_preserves_existing_job_unless_explicitly_replaced(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        client.patch(f"/api/jobs/{job}", json={"label": "custom"})
+        preview = client.post("/api/match", json={"sources": [str(tmp_path / "src")]}).json()
+        assert preview["jobs"][0]["existing_id"] == job
+        assert add(client, tmp_path) == []
+        assert client.get(f"/api/jobs/{job}").json()["spec"]["label"] == "custom"
+        client.post("/api/queue/enqueue", json={"ids": [job]})
+        assert add(client, tmp_path, replace_existing=[job]) == []
+        client.post("/api/queue/dequeue", json={"ids": [job]})
+        replacement = add(client, tmp_path, replace_existing=[job])[0]
+        assert replacement != job
+        assert client.get(f"/api/jobs/{job}").status_code == 404
+        assert client.get(f"/api/jobs/{replacement}").json()["spec"]["label"] == ""
+        assert add(client, tmp_path, replace_existing=[job]) == []  # stale preview cannot replace new edits
