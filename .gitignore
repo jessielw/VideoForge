@@ -12,6 +12,7 @@ wheels/
 # Secrets and licensed/vendored binaries (DEE ships a license file)
 .env
 tools/
+scraps/
 
 # Local data
 videoforge.local.toml
