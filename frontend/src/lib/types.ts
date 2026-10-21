@@ -362,6 +362,8 @@ export interface Tracks {
     sar_num: number // the pixel aspect ratio (not 1:1 on an anamorphic source)
     sar_den: number
     vfr?: boolean // a variable frame rate: an MKV keeps the source's timestamps
+    scan_type?: string // MediaInfo's: Progressive, Interlaced, MBAFF, PAFF; absent or '' = not read
+    scan_order?: string // TFF, BFF, 2:3 Pulldown, ...
     color: VideoColor
     hdr?: VideoHdr // absent on a job probed before it was read
   } | null

@@ -317,6 +317,7 @@
   const SIDES: (keyof Crop)[] = ['left', 'top', 'right', 'bottom']
   // The source's HDR formats (HDR10, HDR10+, Dolby Vision ...), for the HDR section
   const hdr = $derived(job.tracks?.video ? hdrFormats(job.tracks.video.color, job.tracks.video.hdr) : [])
+  const interlaced = $derived(['Interlaced', 'MBAFF', 'PAFF'].includes(job.tracks?.video?.scan_type ?? ''))
 </script>
 
 <svelte:window {onkeydown} />
@@ -498,6 +499,14 @@
       />
       <!-- min-w-0: a fieldset is as wide as its widest content by default, which ran past the panel. -->
       <fieldset disabled={!editable} class="min-w-0 space-y-5">
+        {#if interlaced}
+          {@const v = job.tracks?.video}
+          <section class="space-y-1">
+            <span class="section-label">Scan</span>
+            <p class="text-sm">{v?.scan_type}{v?.scan_order ? ` · ${v.scan_order}` : ''}</p>
+            <p class="text-xs text-muted-foreground">Stored as fields: add IVTC or a deinterlacer from the Field filters, unless the preview shows no combing.</p>
+          </section>
+        {/if}
         {#if hdr.length}
           <section class="space-y-1">
             <span class="section-label">HDR</span>

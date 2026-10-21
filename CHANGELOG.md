@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Interlaced source warning.** The probe reads MediaInfo's scan type and field order; an interlaced
+  source whose filter chain has no IVTC or deinterlacer warns before the run, and the Video tab shows it.
+
 - **Preset manager dialogs.** Audio and video pickers keep quick selection in a compact popup.
   Manage presets opens a shared dialog with folder browsing and editable encoder settings,
   separate Save and Apply actions, and protection for unsaved edits.

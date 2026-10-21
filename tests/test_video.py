@@ -31,7 +31,7 @@ from videoforge.core.video.encoders import (
     stats_path,
     vspipe_command,
 )
-from videoforge.core.video.filters import PRESETS
+from videoforge.core.video.filters import PRESETS, field_issues
 from videoforge.core.video.script import build_script, script_parts
 from videoforge.core.video.settings import (
     Crop,
@@ -500,6 +500,23 @@ def test_filter_presets():
     families: dict[str, FilterCategory] = {}
     for p in PRESETS:
         assert families.setdefault(p.family, p.category) is p.category
+
+
+def test_an_interlaced_source_without_a_field_filter_warns():
+    """StaxRip shows MediaInfo's scan type; an interlaced source the chain doesn't deinterlace warns."""
+    video = VideoInfo(1920, 1080, scan_type="Interlaced", scan_order="TFF")
+    issues = field_issues(video, VideoSettings())
+    assert [i.code for i in issues] == ["video.interlaced"] and "top field first" in issues[0].message
+    mbaff = field_issues(replace(video, scan_type="MBAFF", scan_order="BFF"), VideoSettings())
+    assert "(MBAFF, bottom field first)" in mbaff[0].message
+    bwdif = next(p for p in PRESETS if p.family == "Bwdif")
+    assert field_issues(video, VideoSettings(filters=[bwdif.step()])) == []
+    off = bwdif.step()
+    off.enabled = False
+    assert [i.code for i in field_issues(video, VideoSettings(filters=[off]))] == ["video.interlaced"]
+    assert field_issues(video, VideoSettings(custom="clip = src")) == []  # its own lines aren't read
+    for progressive in ("Progressive", ""):  # "": probed before the scan type was read
+        assert field_issues(replace(video, scan_type=progressive), VideoSettings()) == []
 
 
 @pytest.mark.parametrize("preset", [p for p in PRESETS if p.script], ids=lambda p: p.name)

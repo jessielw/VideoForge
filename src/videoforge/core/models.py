@@ -193,6 +193,15 @@ class VideoInfo:
     # and the encode is timed by the source's own timestamps (core/video/vfr.py).
     vfr: bool = False
     duration_ms: int = 0  # the video's length (MediaInfo); 0 = not known
+    # MediaInfo's ScanType (Progressive, Interlaced, MBAFF, PAFF) and ScanOrder (TFF, BFF, 2:3 Pulldown, ...),
+    # as StaxRip shows them; "" = not read (a job probed before they were).
+    scan_type: str = ""
+    scan_order: str = ""
+
+    @property
+    def interlaced(self) -> bool:
+        """Stored as fields: the picture combs unless the script deinterlaces or field-matches it."""
+        return self.scan_type in ("Interlaced", "MBAFF", "PAFF")
 
     @property
     def sar(self) -> Fraction:

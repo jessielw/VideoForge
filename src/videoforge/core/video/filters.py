@@ -10,9 +10,33 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from videoforge.core.video.settings import FilterCategory, FilterStep
+from videoforge.core.models import Issue, Severity, VideoInfo
+from videoforge.core.video.settings import FilterCategory, FilterStep, VideoSettings
 
 C = FilterCategory
+_ORDER = {"TFF": "top field first", "BFF": "bottom field first"}
+
+
+def field_issues(video: VideoInfo | None, settings: VideoSettings) -> list[Issue]:
+    """An interlaced source with no field step in the chain: the encode would keep its combing. StaxRip shows
+    the scan type and leaves it to the user; this says so before the run. A custom body isn't read (it may
+    deinterlace in its own lines)."""
+    if video is None or not video.interlaced or settings.custom is not None:
+        return []
+    if any(s.category is C.FIELD and s.enabled for s in settings.filters):
+        return []
+    how = ", ".join(
+        x for x in (video.scan_type if video.scan_type != "Interlaced" else "", _ORDER.get(video.scan_order, "")) if x
+    )
+    return [
+        Issue(
+            Severity.WARN,
+            "video.interlaced",
+            f"The source is interlaced{f' ({how})' if how else ''} and the filter chain doesn't deinterlace it: add IVTC (telecined "
+            "film) or a deinterlacer (QTGMC, Bwdif) from the Field filters, or check the preview for combing "
+            "(some progressive video is stored as interlaced)",
+        )
+    ]
 
 
 @dataclass(frozen=True, slots=True)

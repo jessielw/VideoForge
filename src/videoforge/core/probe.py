@@ -240,6 +240,8 @@ def probe(path: Path, mkvmerge: str, ffprobe: str = "") -> SourceInfo:
                 id=track["id"],
                 vfr=getattr(mi, "frame_rate_mode", None) == "VFR",
                 duration_ms=_int(getattr(mi, "duration", None)) or 0,
+                scan_type=str(getattr(mi, "scan_type", None) or ""),
+                scan_order=str(getattr(mi, "scan_order", None) or ""),
             )
         elif kind == "audio":
             if mi is None and len(audio) < len(mi_audio) and mi_audio[len(audio)].track_id is None:

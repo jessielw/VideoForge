@@ -33,6 +33,14 @@ Review the chain when combining restoration, denoising, resizing, debanding, and
 All bundled filters run on the CPU. Each filter still needs its compatible plugin or Python script.
 For the shipped set and API compatibility, see the [plugin list](../configuration/tools.md#bundled-vapoursynth-plugins).
 
+## Interlaced sources
+
+When MediaInfo reports the source as interlaced (Interlaced, MBAFF, or PAFF), the Video tab shows
+its scan type and field order. A job whose chain has no enabled Field filter warns before the run.
+Add **IVTC** for telecined film or a deinterlacer (**QTGMC**, **Bwdif**) and set its field order
+to match. Some progressive video is stored as interlaced: if the preview shows no combing, the
+warning can be ignored. A custom script body is not checked.
+
 ## Custom VapourSynth code
 
 The editor exposes the generated script. Custom processing reads `src` and assigns the result to

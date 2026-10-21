@@ -199,6 +199,10 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   source's (MediaInfo's frame count x the frame duration) beyond 3 frames would put the source's audio,
   subtitles and chapters out of step: `length_warning` shows on the Video tab (the output clip's info) and the
   validate step adds it as a `video.length` WARN.
+- Interlaced sources (`filters.field_issues`): the probe keeps MediaInfo's ScanType / ScanOrder
+  (`VideoInfo.scan_type` / `scan_order`, as StaxRip shows them). Interlaced, MBAFF or PAFF with no enabled
+  field step in the chain is a `video.interlaced` WARN (the field order in its message); a custom body isn't
+  read. Some progressive video is flagged interlaced, so it only warns.
 - Variable frame rate (`core/video/vfr.py`, StaxRip's Demux.vb / Muxer.vb): a source MediaInfo calls VFR
   (`VideoInfo.vfr`; its `default_duration_ns` is only the first frame's, and BestSource reports an averaged
   rate) gets a `timestamps` step into an MKV: `mkvextract timestamps_v2` writes `timestamps.txt` (one line per

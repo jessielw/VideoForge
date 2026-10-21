@@ -72,7 +72,15 @@ def test_an_m2ts_probe_times_its_video_and_splits_the_truehd_core(monkeypatch, t
         ],
     }
     tracks = [
-        _Track(track_type="Video", track_id=4113, format="VC-1", frame_rate="23.976", frame_count="31612"),
+        _Track(
+            track_type="Video",
+            track_id=4113,
+            format="VC-1",
+            frame_rate="23.976",
+            frame_count="31612",
+            scan_type="Interlaced",
+            scan_order="TFF",
+        ),
         _Track(
             track_type="Audio",
             track_id=4352,
@@ -88,6 +96,7 @@ def test_an_m2ts_probe_times_its_video_and_splits_the_truehd_core(monkeypatch, t
     monkeypatch.setattr(probe_mod.MediaInfo, "parse", lambda *_: _Track(tracks=tracks))
     info = probe_mod.probe(tmp_path / "00005.m2ts", "mkvmerge")
     assert info.video is not None and info.video.default_duration_ns == 41708333 and info.video.frames == 31612
+    assert (info.video.scan_type, info.video.scan_order, info.video.interlaced) == ("Interlaced", "TFF", True)
     truehd, core, ac3 = info.audio
     assert (truehd.codec, truehd.number, truehd.core, truehd.size_bytes) == (C.TRUEHD, 4352, False, 73835104)
     assert (core.codec, core.number, core.core, core.size_bytes) == (C.AC3, 4352, True, None)
