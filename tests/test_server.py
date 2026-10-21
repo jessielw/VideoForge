@@ -118,7 +118,7 @@ def make_client(tmp_path: Path, run=None, detect_crop=None, runner=None, send=No
         services=services,
         setup_vapoursynth=False,
     )
-    return TestClient(app)
+    return TestClient(app, base_url="http://127.0.0.1:8765")
 
 
 def test_health_gives_the_version(tmp_path):
@@ -372,7 +372,7 @@ def test_queue_runs_jobs_and_streams_events(tmp_path):
         ids = add(client, tmp_path)
         for i in ids:
             wait_for(client, i, "ready", "warn")
-        with client.websocket_connect("/api/events") as ws:
+        with client.websocket_connect("ws://127.0.0.1:8765/api/events") as ws:
             assert ws.receive_json()["type"] == "hello"
             assert client.post("/api/queue/start").json()["running"] in (True, False)
             seen, events = set(), []
@@ -1696,7 +1696,7 @@ def test_the_page_is_never_served_stale(tmp_path):
         services=Services(probe=fake_probe, run=FakeRun()),
         setup_vapoursynth=False,
     )
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
         for path in ("/", "/queue"):
             r = client.get(path)
             assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"

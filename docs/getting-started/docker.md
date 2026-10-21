@@ -67,6 +67,11 @@ reach that port run jobs and modify settings.
 On Unraid, add a port mapping for container port **8765**. Without a published port, the application
 cannot be reached outside the container. Restrict access to that published port or use an authenticated proxy.
 
+For a LAN address or proxy hostname, add `--allow-host <hostname-or-IP>` to the serve command. If the
+proxy changes Host or terminates TLS, also add `--allow-origin https://<public-hostname>` (include a
+nonstandard port when used). See [Serve options](../reference/cli.md#serve). Binding to `0.0.0.0`
+alone does not permit arbitrary browser hosts.
+
 Command actions are disabled in the Docker configuration. Their opt-in setting is documented under
 [Actions](../actions.md#commands).
 

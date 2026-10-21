@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Server controls and WebSockets reject unexpected browser origins, and requests validate Host.
+  Local access remains supported; `--allow-host` and `--allow-origin` configure explicit proxy access.
+
 - Import matching discards stale responses, including failures, and Add uses only the settled input
   revision shown in the preview. Changing any path disables Add until the new match completes.
 

@@ -30,6 +30,8 @@ class ServerSettings:
     roots: list[Path] = field(default_factory=default_roots)  # what the folder browser offers
     frontend_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "frontend" / "dist")
     probe_workers: int = 2  # concurrent probes (sources are often on a network share)
+    allowed_hosts: list[str] = field(default_factory=list)  # extra exact hostnames, without ports
+    allowed_origins: list[str] = field(default_factory=list)  # proxy/dev origins when Host is rewritten
 
     @property
     def db_path(self) -> Path:

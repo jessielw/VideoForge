@@ -27,6 +27,7 @@ from videoforge.core.record import QUEUE_EVENTS, QUEUE_EVENTS_MAX, JsonLines, ev
 from videoforge.core.video import vs as vsx
 from videoforge.core.video.preview import Preview
 from videoforge.plugins.loader import PluginHost, load_plugins
+from videoforge.server.boundary import BrowserBoundary
 from videoforge.server.events import EventHub
 from videoforge.server.queue import JobQueue, Services
 from videoforge.server.routes import config, jobs, presets, queue, system, video
@@ -114,6 +115,10 @@ def create_app(
             queue_events.close()
 
     app = FastAPI(title="VideoForge", lifespan=lifespan)
+    hosts = ["localhost", "127.0.0.1", "::1", *settings.allowed_hosts]
+    if settings.host not in {"0.0.0.0", "::"}:  # noqa: S104 (a comparison)
+        hosts.append(settings.host)
+    app.add_middleware(BrowserBoundary, hosts=hosts, origins=settings.allowed_origins)
     app.state.settings = settings
     app.state.base_config = base
     app.state.default_roots = default_roots

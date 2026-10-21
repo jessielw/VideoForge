@@ -236,7 +236,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
     from videoforge.server.app import create_app
     from videoforge.server.settings import ServerSettings
 
-    settings = ServerSettings(host=args.host, port=args.port)
+    settings = ServerSettings(
+        host=args.host, port=args.port, allowed_hosts=args.allow_host, allowed_origins=args.allow_origin
+    )
     if args.data_dir:
         settings.data_dir = args.data_dir
     url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"  # noqa: S104 (a comparison)
@@ -313,6 +315,15 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("serve", help="start the web app (http://127.0.0.1:8765) and open it in the browser")
     p.add_argument("--host", default="127.0.0.1", help="interface to listen on (default: this machine only)")
     p.add_argument("--port", type=int, default=8765)
+    p.add_argument(
+        "--allow-host", action="append", default=[], help="additional exact UI hostname/IP (repeatable, no port)"
+    )
+    p.add_argument(
+        "--allow-origin",
+        action="append",
+        default=[],
+        help="additional browser origin for a proxy that rewrites Host (repeatable)",
+    )
     p.add_argument("--no-browser", action="store_true", help="don't open the browser")
     p.add_argument(
         "--window",

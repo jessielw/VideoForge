@@ -18,12 +18,30 @@ uv run videoforge serve --no-browser --port 8765
 | --- | --- |
 | `--host` | Listening interface; default `127.0.0.1` |
 | `--port` | Listening port; default `8765` |
+| `--allow-host` | Additional exact UI hostname or IP, without port; repeatable |
+| `--allow-origin` | Additional browser origin such as `https://video.example`; repeatable |
 | `--no-browser` | Do not open a browser automatically |
 | `--window` | Open the desktop window; requires the `desktop` extra |
 | `--data-dir` | Override the queue and application data folder |
 
 The server has no login. Changing the host to `0.0.0.0` makes it listen beyond loopback; provide
 your own access control if remote users can reach it.
+
+Requests must use `localhost`, `127.0.0.1`, `::1`, the concrete listening address, or an explicit
+`--allow-host`. Wildcard listening addresses do not allow arbitrary Host headers. Browser mutations
+and WebSockets must be same-origin, or use an explicit `--allow-origin`. Originless CLI/desktop
+requests remain supported. These checks do not add authentication.
+
+Vite's default proxy preserves Host, so `http://localhost:5173` works without extra flags. For an
+authenticated reverse proxy, allow its public hostname and, if it rewrites Host or terminates TLS,
+its browser origin:
+
+```sh
+uv run videoforge serve --no-browser --allow-host video.example --allow-origin https://video.example
+```
+
+Forward WebSocket upgrades too. Configure the public address explicitly; forwarded Host headers
+alone never expand the allowlist.
 
 ## Plan
 
