@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 import sys
 import textwrap
 import threading
@@ -133,3 +134,23 @@ def test_the_example_plugin_loads():
 
     report = load_plugins(PROJECT_ROOT / "examples" / "plugins")
     assert [p.id for p in report.loaded] == ["event_logger", "library_scan"] and not report.failures
+
+
+def test_release_examples_package_without_app_dependencies_and_are_installable(tmp_path):
+    from videoforge.core.config import PROJECT_ROOT
+    from videoforge.plugins.manager import read_package
+
+    script = PROJECT_ROOT / "scripts" / "build_plugin_examples.py"
+    output = tmp_path / "assets"
+    command = [sys.executable, "-S", str(script), "--output-dir", str(output)]
+    # -S disables site-packages: the release job must work without installing VideoForge or executing a plugin.
+    subprocess.run(command, check=True, capture_output=True)
+    first = {path.name: path.read_bytes() for path in output.glob("*.zip")}
+    assert set(first) == {"VideoForge-plugin-event_logger-1.0.zip", "VideoForge-plugin-library_scan-1.0.zip"}
+    for name, raw in first.items():
+        package = read_package(raw)
+        assert package.manifest.id in name
+        assert set(package.files) == {"README.md", "videoforge-plugin.toml", f"{package.manifest.module}.py"}
+        assert b"Install and configure" in package.files["README.md"]
+    subprocess.run(command, check=True, capture_output=True)
+    assert first == {path.name: path.read_bytes() for path in output.glob("*.zip")}

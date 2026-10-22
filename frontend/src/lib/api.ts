@@ -135,11 +135,11 @@ export const api = {
   installPlugin: (file: File, revision: string, replace: boolean) =>
     pluginZip<PluginInventory>(`/api/plugins/import?${new URLSearchParams({ revision, replace: String(replace) })}`, file),
   removePlugin: (id: string, revision: string) =>
-    request<PluginInventory>('DELETE', `/api/plugins/${encodeURIComponent(id)}?${new URLSearchParams({ revision })}`),
+    post<PluginInventory>('/api/plugins/remove', { id, revision }),
   enablePlugin: (id: string, enabled: boolean) =>
-    request<PluginInventory>('PUT', `/api/plugins/${encodeURIComponent(id)}/enabled`, { enabled }),
+    request<PluginInventory>('PUT', '/api/plugins/enabled', { id, enabled }),
   pluginSettings: (id: string, values: Record<string, unknown>, reset: string[] = []) =>
-    request<PluginInventory>('PUT', `/api/plugins/${encodeURIComponent(id)}/settings`, { values, reset }),
+    request<PluginInventory>('PUT', '/api/plugins/settings', { id, values, reset }),
   exportConfiguration: () => get<ConfigurationBundle>('/api/configuration/export'),
   exportPresetPack: (bundle: PresetPack) => post<PresetPack>('/api/preset-packs/export', bundle),
   previewPresetPack: (bundle: unknown) => post<PresetPackPreview>('/api/preset-packs/preview', bundle),

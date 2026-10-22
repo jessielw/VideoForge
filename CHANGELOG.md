@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Readable Event logger and Jellyfin Library scan examples include setup guides. Releases attach
+  installable example plugin ZIPs generated from the same source folders.
+
 - Settings can install and replace Python plugin ZIPs, edit declared plugin options, and remove
   folder plugins. File changes and settings activate on restart; settings and plugin data survive
   replacement and removal. ZIP previews do not execute code. Configuration format version 2 includes

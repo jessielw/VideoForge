@@ -13,6 +13,37 @@ from videoforge.server.routes.config import _state, apply_settings
 router = APIRouter(prefix="/api/plugins")
 
 
+def _identified(body: dict) -> tuple[str, dict]:
+    """Keep arbitrary plugin ids out of URLs: names such as event_logger match privacy filters."""
+    pid = body.get("id")
+    if not isinstance(pid, str) or not pid:
+        raise HTTPException(422, "id must be a non-empty plugin id")
+    return pid, {key: value for key, value in body.items() if key != "id"}
+
+
+@router.put("/enabled")
+def set_enabled(request: Request, body: dict = Body(...)) -> dict:  # noqa: B008
+    _allowed(request)
+    pid, values = _identified(body)
+    return enable(request, pid, values)
+
+
+@router.put("/settings")
+def set_settings(request: Request, body: dict = Body(...)) -> dict:  # noqa: B008
+    _allowed(request)
+    pid, values = _identified(body)
+    return save_settings(request, pid, values)
+
+
+@router.post("/remove")
+def remove_identified(request: Request, body: dict = Body(...)) -> dict:  # noqa: B008
+    _allowed(request)
+    pid, values = _identified(body)
+    if set(values) != {"revision"} or not isinstance(values["revision"], str):
+        raise HTTPException(422, "revision must be the plugin revision from its details")
+    return remove(request, pid, values["revision"])
+
+
 def _allowed(request: Request) -> None:
     if not request.app.state.settings.can_manage_plugins:
         raise HTTPException(

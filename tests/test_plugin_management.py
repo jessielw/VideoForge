@@ -394,6 +394,49 @@ def test_invalid_staging_metadata_does_not_prevent_server_start(tmp_path):
         assert client.get("/api/plugins").json()["failures"]
 
 
+def test_event_logger_controls_use_ids_in_json_and_preserve_restart_behavior(tmp_path):
+    raw = plugin_zip(pid="event_logger", settings=FIELDS)
+    with make_client(tmp_path) as client:
+        assert client.post("/api/plugins/import?revision=absent", content=raw).status_code == 200
+    with make_client(tmp_path) as client:
+        for enabled in (False, True):
+            response = client.put("/api/plugins/enabled", json={"id": "event_logger", "enabled": enabled})
+            assert response.status_code == 200, response.text
+            item = response.json()["items"][0]
+            assert item["enabled"] is enabled and item["running"]
+            assert ("event_logger" in client.app.state.saved.disabled_plugins) is not enabled
+        response = client.put("/api/plugins/settings", json={"id": "event_logger", "values": {"count": 4}})
+        assert response.status_code == 200, response.text
+        assert response.json()["items"][0]["values"]["count"] == 4
+        assert client.app.state.saved.plugin_settings["event_logger"] == {"count": 4}
+        revision = response.json()["items"][0]["revision"]
+        response = client.post("/api/plugins/remove", json={"id": "event_logger", "revision": revision})
+        assert response.status_code == 200, response.text
+        assert response.json()["items"][0]["pending"] == "remove"
+    with make_client(tmp_path) as client:
+        assert client.get("/api/plugins").json()["items"] == []
+        assert client.app.state.saved.plugin_settings["event_logger"] == {"count": 4}
+
+
+@pytest.mark.parametrize(
+    "path,method,body",
+    [
+        ("/enabled", "put", {"enabled": True}),
+        ("/enabled", "put", {"id": 4, "enabled": True}),
+        ("/enabled", "put", {"id": "example", "enabled": "yes"}),
+        ("/settings", "put", {"values": {}}),
+        ("/remove", "post", {"id": "example"}),
+        ("/remove", "post", {"id": "example", "revision": 4}),
+    ],
+)
+def test_id_in_body_endpoints_validate_requests_and_obey_management_gate(tmp_path, path, method, body):
+    with make_client(tmp_path) as client:
+        send = getattr(client, method)
+        assert send("/api/plugins" + path, json=body).status_code == 422
+        client.app.state.settings.plugin_management = False
+        assert send("/api/plugins" + path, json=body).status_code == 403
+
+
 def test_each_plugin_gets_independent_snapshots_and_slow_handlers_do_not_block(tmp_path):
     bus = EventBus()
     blocked, release = threading.Event(), threading.Event()

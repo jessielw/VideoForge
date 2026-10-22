@@ -5,7 +5,10 @@ finishes, a source is indexed. Use one when an [action](actions.md) isn't enough
 API, read the job record, decide per job what to do.
 
 [examples/plugins/library_scan](https://github.com/jessielw/VideoForge/tree/main/examples/plugins/library_scan)
-is a complete one (it asks Jellyfin to scan after jobs are done).
+is a complete one (it asks Jellyfin to scan after jobs are done). Browse the
+[example collection](https://github.com/jessielw/VideoForge/tree/main/examples/plugins) for readable
+source and setup instructions. Matching [releases](https://github.com/jessielw/VideoForge/releases)
+include an installable `VideoForge-plugin-<id>-<version>.zip` for each example.
 
 ## Install and configure
 
@@ -137,6 +140,9 @@ OS and CPU architecture. Vendored imports share the process and are not isolated
 
 [examples/plugins/event_logger](https://github.com/jessielw/VideoForge/tree/main/examples/plugins/event_logger)
 is a minimal starting point demonstrating all four slots. ZIP its manifest and `event_logger.py` to try it.
+To build all repository examples with their READMEs, run `python scripts/build_plugin_examples.py`
+from the repository root. The resulting ZIPs are written to `build/plugin-examples/`; the release
+workflow generates them from the same source folders.
 
 ## What you get
 

@@ -1,6 +1,6 @@
 name: Release
 
-# A version tag (0.1.0, as in pyproject.toml; no "v") builds the portable zip and opens a draft release with
+# A version tag (0.1.0, as in pyproject.toml; no "v") builds the portable and example plugin ZIPs and opens a draft release with
 # the version's CHANGELOG.md section. Publishing the draft is done by hand.
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to draft the release for (e.g. 0.1.0); empty builds the zip only"
+        description: "Tag to draft the release for (e.g. 0.1.0); empty builds artifacts only"
         required: false
         type: string
 
@@ -66,9 +66,32 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  plugin-examples:
+    name: Example plugin ZIPs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Package example plugins
+        run: python scripts/build_plugin_examples.py
+
+      - name: Upload example plugin ZIPs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: plugin-examples
+          path: build/plugin-examples/VideoForge-plugin-*.zip
+          if-no-files-found: error
+          retention-days: 7
+
   release:
     name: Draft release
-    needs: portable
+    needs: [portable, plugin-examples]
     if: github.event_name == 'push' || inputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
@@ -98,7 +121,7 @@ jobs:
           fi
           cat notes.md
 
-      - name: Download the zip
+      - name: Download release assets
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           path: artifacts
