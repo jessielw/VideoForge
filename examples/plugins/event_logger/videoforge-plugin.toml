@@ -1,0 +1,11 @@
+id = "event_logger"
+module = "event_logger"
+name = "Event logger"
+version = "1.0"
+description = "A minimal plugin demonstrating all four event slots."
+api_version = 1
+
+[[settings]]
+key = "prefix"
+label = "Log prefix"
+default = "Event logger"

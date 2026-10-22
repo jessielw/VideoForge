@@ -18,27 +18,24 @@ from __future__ import annotations
 
 from collections.abc import Callable, Collection, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from importlib import machinery, metadata, util
 import logging
 from pathlib import Path
 import sys
-import tomllib
+import threading
 from typing import Any
 
 from videoforge.core.events import EventBus
 from videoforge.plugins import API_VERSION, Hook, Plugin, PluginContext
+from videoforge.plugins.manifest import MANIFEST, Manifest, PluginError, read_manifest
 
 logger = logging.getLogger(__name__)
 
-MANIFEST = "videoforge-plugin.toml"
 ENTRY_POINT_GROUP = "videoforge.plugins"
 VENDOR = "vendor"
-
-
-class PluginError(Exception):
-    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,32 +67,6 @@ class PluginReport:
     disabled: tuple[SkippedPlugin, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class Manifest:
-    id: str
-    module: str
-    object: str = "plugin"
-
-
-def read_manifest(path: Path) -> Manifest:
-    """Raises PluginError naming what's wrong."""
-    try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as ex:
-        raise PluginError(f"Can't read {MANIFEST}: {ex}") from None
-    values: dict[str, str] = {}
-    for key, default in (("id", None), ("module", None), ("object", "plugin")):
-        value = data.get(key, default)
-        if not isinstance(value, str) or not value.strip():
-            raise PluginError(f"{MANIFEST} needs `{key}`, a non-empty string")
-        values[key] = value.strip()
-    if not values["module"].isidentifier():
-        raise PluginError(f"{MANIFEST}: `module` must be a top-level module or package name (no dots)")
-    if not values["object"].isidentifier():
-        raise PluginError(f"{MANIFEST}: `object` must be a Python name")
-    return Manifest(values["id"], values["module"], values["object"])
-
-
 def load_plugins(folder: Path | None, disabled: Collection[str] = ()) -> PluginReport:
     loaded: list[LoadedPlugin] = []
     failures: list[PluginFailure] = []
@@ -103,10 +74,13 @@ def load_plugins(folder: Path | None, disabled: Collection[str] = ()) -> PluginR
     taken: set[str] = set()
 
     def add(pid: str, source: str, load: Callable[[], Plugin]) -> None:
-        if pid in taken:
+        if not pid or pid in {".", ".."} or any(c in pid for c in "/\\:\0"):
+            failures.append(PluginFailure(source, "Plugin id must be a single folder name", pid))
+            return
+        if pid.casefold() in taken:
             failures.append(PluginFailure(source, f"The id {pid!r} is taken by a plugin loaded before it", pid))
             return
-        taken.add(pid)
+        taken.add(pid.casefold())
         if pid in disabled:
             skipped.append(SkippedPlugin(pid, source))
             return
@@ -207,19 +181,22 @@ class PluginHost:
         job_log: Callable[[str, str], None] | None = None,
     ) -> None:
         self.report = report
+        self.failures: dict[str, str] = {}
+        self.setup_failed: set[str] = set()
+        self._failure_lock = threading.Lock()
         self._pools: dict[str, ThreadPoolExecutor] = {}
         self._unsubscribe: list[Callable[[], None]] = []
         for p in report.loaded:
             ctx = PluginContext(
                 id=p.id,
                 data_dir=data_dir / p.id,
-                settings=dict((settings or {}).get(p.id, {})),
+                settings=deepcopy(dict((settings or {}).get(p.id, {}))),
                 log=logging.getLogger(f"videoforge.plugin.{p.id}"),
                 job_log=job_log or (lambda _job, _line: None),
             )
             pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"plugin-{p.id}")
             self._pools[p.id] = pool
-            pool.submit(self._call, p.id, "setup", partial(_setup, ctx, p.plugin.setup))
+            pool.submit(self._call, p.id, "setup", partial(_setup, ctx, p.plugin.setup, p.source))
             for kind, hook in p.plugin.hooks().items():
                 self._unsubscribe.append(bus.subscribe(self._submitter(p.id, hook, ctx), kind, name=f"plugin {p.id}"))
 
@@ -227,16 +204,31 @@ class PluginHost:
         pool = self._pools[pid]
 
         def submit(event: Any) -> None:
-            pool.submit(self._call, pid, type(event).__name__, lambda: hook(event, ctx))
+            snapshot = deepcopy(event)
+
+            def run() -> None:
+                if not self._call(pid, type(event).__name__, lambda: hook(snapshot, ctx)):
+                    spec = getattr(snapshot, "spec", None)
+                    if spec is not None:
+                        ctx.job_log(spec.id, f"Plugin {pid} failed on {type(event).__name__}; see the application log")
+
+            pool.submit(run)
 
         return submit
 
-    @staticmethod
-    def _call(pid: str, what: str, fn: Callable[[], object]) -> None:
+    def _call(self, pid: str, what: str, fn: Callable[[], object]) -> bool:
+        if what != "setup" and pid in self.setup_failed:
+            return True  # setup failure is already reported; don't call an uninitialised plugin
         try:
             fn()
-        except Exception:  # the plugin's bug: logged, and the next event still comes
+        except (Exception, SystemExit) as ex:  # plugin exits must not kill its worker
+            with self._failure_lock:
+                self.failures[pid] = f"{what}: {str(ex) or type(ex).__name__}"
+                if what == "setup":
+                    self.setup_failed.add(pid)
             logger.exception("Plugin %s failed on %s", pid, what)
+            return False
+        return True
 
     def wait(self) -> None:
         """Until every plugin call made so far has returned."""
@@ -250,7 +242,10 @@ class PluginHost:
             pool.shutdown(wait=False)
 
 
-def _setup(ctx: PluginContext, setup: Callable[[PluginContext], object] | None) -> None:
+def _setup(ctx: PluginContext, setup: Callable[[PluginContext], object] | None, source: str = "") -> None:
+    manifest = Path(source) / MANIFEST
+    if manifest.is_file():
+        read_manifest(manifest).validate_settings(dict(ctx.settings))
     ctx.data_dir.mkdir(parents=True, exist_ok=True)
     if setup is not None:
         setup(ctx)

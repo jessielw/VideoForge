@@ -34,6 +34,8 @@ router = APIRouter(prefix="/api/config")
 RESTART_FOR: dict[str, str] = {  # setting -> why VideoForge needs a restart for it
     "plugins": "Plugins switched on or off load (or stop loading) when VideoForge starts again.",
     "configuration": "Imported plugin settings take effect when VideoForge starts again.",
+    "plugin_files": "Installed, replaced or removed plugins take effect when VideoForge starts again.",
+    "plugin_settings": "Plugin settings take effect when VideoForge starts again.",
 }
 
 
@@ -160,7 +162,17 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         disabled = sorted({str(i) for i in body["disabled_plugins"] or []})
 
     new = SavedSettings(
-        tools, roots, profile, waits, destinations, actions, disabled, parallel, delete_work, **priorities
+        tools,
+        roots,
+        profile,
+        waits,
+        destinations,
+        actions,
+        disabled,
+        parallel,
+        delete_work,
+        plugin_settings=saved.plugin_settings,
+        **priorities,
     )
     new.save(s.store)
     apply_settings(request, new)
@@ -180,6 +192,10 @@ def apply_settings(request: Request, new: SavedSettings) -> None:
         s.restart_for.add("plugins")
     else:
         s.restart_for.discard("plugins")
+    if new.plugin_settings != s.plugin_settings_at_start:
+        s.restart_for.add("plugin_settings")
+    else:
+        s.restart_for.discard("plugin_settings")
     s.default_profile = default_profile_id(new.profile or s.base_config.profile, s.profile_ids)
     cfg = new.app_config(s.base_config, s.default_profile)
     s.config = cfg

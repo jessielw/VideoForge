@@ -10,6 +10,8 @@ import type {
   ConfigState,
   ConfigurationBundle,
   ConfigurationPreview,
+  PluginInventory,
+  PluginPreview,
   Crop,
   DirListing,
   EncoderName,
@@ -67,6 +69,15 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return (await res.json()) as T
 }
 
+async function pluginZip<T>(path: string, file: File): Promise<T> {
+  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: file })
+  if (!res.ok) {
+    const error = await res.json().catch(() => null)
+    throw new ApiError(res.status, error?.detail ?? `${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<T>
+}
+
 const get = <T>(path: string) => request<T>('GET', path)
 const post = <T>(path: string, body: unknown = {}) => request<T>('POST', path, body)
 const patch = <T>(path: string, body: unknown) => request<T>('PATCH', path, body)
@@ -119,6 +130,16 @@ export const api = {
   setTemplateDefault: (profile: string, name: string | null) =>
     request<Presets>('PUT', `/api/presets/template-default/${encodeURIComponent(profile)}`, { name }),
   config: () => get<ConfigState>('/api/config'),
+  plugins: () => get<PluginInventory>('/api/plugins'),
+  previewPlugin: (file: File) => pluginZip<PluginPreview>('/api/plugins/preview', file),
+  installPlugin: (file: File, revision: string, replace: boolean) =>
+    pluginZip<PluginInventory>(`/api/plugins/import?${new URLSearchParams({ revision, replace: String(replace) })}`, file),
+  removePlugin: (id: string, revision: string) =>
+    request<PluginInventory>('DELETE', `/api/plugins/${encodeURIComponent(id)}?${new URLSearchParams({ revision })}`),
+  enablePlugin: (id: string, enabled: boolean) =>
+    request<PluginInventory>('PUT', `/api/plugins/${encodeURIComponent(id)}/enabled`, { enabled }),
+  pluginSettings: (id: string, values: Record<string, unknown>, reset: string[] = []) =>
+    request<PluginInventory>('PUT', `/api/plugins/${encodeURIComponent(id)}/settings`, { values, reset }),
   exportConfiguration: () => get<ConfigurationBundle>('/api/configuration/export'),
   exportPresetPack: (bundle: PresetPack) => post<PresetPack>('/api/preset-packs/export', bundle),
   previewPresetPack: (bundle: unknown) => post<PresetPackPreview>('/api/preset-packs/preview', bundle),

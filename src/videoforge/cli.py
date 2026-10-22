@@ -237,7 +237,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
     from videoforge.server.settings import ServerSettings
 
     settings = ServerSettings(
-        host=args.host, port=args.port, allowed_hosts=args.allow_host, allowed_origins=args.allow_origin
+        host=args.host,
+        port=args.port,
+        allowed_hosts=args.allow_host,
+        allowed_origins=args.allow_origin,
+        plugin_management=args.plugin_management,
     )
     if args.data_dir:
         settings.data_dir = args.data_dir
@@ -325,6 +329,12 @@ def main(argv: list[str] | None = None) -> int:
         help="additional browser origin for a proxy that rewrites Host (repeatable)",
     )
     p.add_argument("--no-browser", action="store_true", help="don't open the browser")
+    p.add_argument(
+        "--plugin-management",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="allow plugin ZIP installation, removal and configuration (default: loopback bindings only)",
+    )
     p.add_argument(
         "--window",
         action="store_true",

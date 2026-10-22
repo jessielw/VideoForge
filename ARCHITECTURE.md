@@ -80,7 +80,9 @@ src/videoforge/
       reuse.py           A job's finished files by section (video, each audio), for the Reuse dialog
   plugins/               The plugin API (__init__: Plugin, PluginContext, the events; docs/plugins.md) and loader.py:
                          <data dir>/plugins/<id>/videoforge-plugin.toml + `videoforge.plugins` entry points, each
-                         plugin run on its own thread off the bus
+                         plugin run on its own thread off the bus. manifest.py validates declarative metadata
+                         and settings; manager.py validates ZIPs without importing code, stages file changes
+                         in plugin-staging/, and applies recoverable directory swaps before startup discovery.
   profiles/              Registry: the `videoforge.profiles` entry points (id = "module:Class")
     manual.py            The built-in profile: every track in source order, copied; the user's
                          overrides exclude, reorder, retitle and flag tracks; output checked against the plan

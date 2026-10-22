@@ -14,7 +14,7 @@ from videoforge.server.routes.presets import KINDS
 from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
 
 FORMAT = "videoforge.configuration"
-VERSION = 1
+VERSION = 2
 MAX_BYTES = 20 * 1024 * 1024
 BASE_KEY = "configuration_base"
 SETTING_KEYS = tuple(f.name for f in fields(SavedSettings))
@@ -35,7 +35,7 @@ def _name(value: Any, path: str, *, limit: int = MAX_NAME) -> str:
 def read_configuration(doc: Any) -> dict[str, Any]:
     if not isinstance(doc, dict) or doc.get("format") != FORMAT:
         raise ValueError("Choose a VideoForge configuration export (.json)")
-    if type(doc.get("version")) is not int or doc["version"] != VERSION:
+    if type(doc.get("version")) is not int or doc["version"] not in (1, VERSION):
         raise ValueError(f"Unsupported configuration version; this app supports version {VERSION}")
     _object(
         doc,
@@ -51,9 +51,15 @@ def read_configuration(doc: Any) -> dict[str, Any]:
         raise ValueError(f"parallel_audio: a whole number from 0 to {MAX_PARALLEL_AUDIO}")
     if not isinstance(application.plugins, dict) or any(not isinstance(v, dict) for v in application.plugins.values()):
         raise ValueError("Plugin settings must be objects")
-    _object(doc["settings"], set(SETTING_KEYS), "Saved settings")
-    check_settings(SavedSettings, doc["settings"], "Saved settings")
-    settings = from_json(SavedSettings, doc["settings"])
+    saved_values = doc["settings"]
+    if doc["version"] == 1:
+        _object(saved_values, set(SETTING_KEYS) - {"plugin_settings"}, "Saved settings")
+        saved_values = saved_values | {"plugin_settings": {}}
+    _object(saved_values, set(SETTING_KEYS), "Saved settings")
+    check_settings(SavedSettings, saved_values, "Saved settings")
+    settings = from_json(SavedSettings, saved_values)
+    if any(not isinstance(value, dict) for value in settings.plugin_settings.values()):
+        raise ValueError("Plugin settings must be objects")
     if settings.tools.keys() - TOOL_NAMES:
         raise ValueError("Unknown tool paths; check the VideoForge version")
     if settings.parallel_audio is not None and not 0 <= settings.parallel_audio <= MAX_PARALLEL_AUDIO:

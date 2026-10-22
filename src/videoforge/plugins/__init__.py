@@ -54,7 +54,7 @@ class PluginContext:
 
     id: str
     data_dir: Path  # <data dir>/plugin-data/<id>: the plugin's own files (made when it loads)
-    settings: Mapping[str, Any]  # videoforge.toml's [plugins.<id>] table ({} when there is none)
+    settings: Mapping[str, Any]  # manifest defaults, then [plugins.<id>], then saved UI overrides
     log: logging.Logger  # the app log, under "videoforge.plugin.<id>"
     job_log: Callable[[str, str], None]  # (job id, line): a line in that job's log (shown in the browser)
 

@@ -121,7 +121,7 @@ def test_restore_empty_libraries_preserves_jobs_and_queue_bookkeeping(tmp_path):
     "location,value",
     [
         (("version",), True),
-        (("version",), 2),
+        (("version",), 3),
         (("settings", "parallel_audio"), True),
         (("settings", "parallel_audio"), 99),
         (("settings", "actions"), [{"name": "bad"}]),

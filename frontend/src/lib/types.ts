@@ -495,9 +495,9 @@ export interface AudioBundle {
 }
 export interface ConfigurationBundle {
   format: 'videoforge.configuration'
-  version: 1
+  version: 1 | 2
   application: Record<string, unknown> & { allow_commands: boolean }
-  settings: Record<string, unknown> & { notifications: NotificationDestination[]; actions: ActionSetting[]; disabled_plugins: string[] }
+  settings: Record<string, unknown> & { notifications: NotificationDestination[]; actions: ActionSetting[]; disabled_plugins: string[]; plugin_settings?: Record<string, Record<string, unknown>> }
   folders: { output_dir: string; last_dir: string }
   presets: { template: Preset<Template>[]; video: Preset<VideoPresetData>[]; encoder: Preset<EncoderSettings>[]; audio: Preset<AudioPresetSettings>[] }
   template_defaults: Record<string, string>
@@ -705,6 +705,49 @@ export interface PluginInfo {
   source: string // its folder, or the entry point
   events: string[] // the event types it handles
   enabled: boolean
+}
+
+export interface PluginSetting {
+  key: string
+  label: string
+  type: 'text' | 'password' | 'checkbox' | 'integer' | 'choice'
+  help: string
+  required: boolean
+  default: string | boolean | number | null
+  choices: string[]
+}
+
+export interface ManagedPlugin {
+  id: string
+  name: string
+  version: string
+  description: string
+  source: string
+  settings: PluginSetting[]
+  values: Record<string, string | boolean | number>
+  configured_passwords: string[]
+  removable: boolean
+  revision: string
+  pending: 'install' | 'replace' | 'remove' | null
+  enabled: boolean
+  running: boolean
+  running_version: string | null
+  events: string[]
+  error: string | null
+}
+
+export interface PluginInventory {
+  folder: string
+  items: ManagedPlugin[]
+  failures: string[]
+  management_enabled: boolean
+  restart: string[]
+}
+
+export interface PluginPreview {
+  plugin: { id: string; name: string; version: string; description: string; api_version: number; settings: PluginSetting[] }
+  current: { id: string; name: string; version: string } | null
+  revision: string
 }
 
 export interface PluginsState {

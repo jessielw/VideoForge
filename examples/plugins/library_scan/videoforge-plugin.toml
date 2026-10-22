@@ -1,4 +1,28 @@
 # A VideoForge plugin: copy this folder into <data dir>/plugins/ (%APPDATA%\VideoForge\plugins on Windows).
 id = "library_scan"
 module = "library_scan"
+name = "Library scan"
+version = "1.0"
+description = "Ask Jellyfin to scan its libraries after jobs finish."
+api_version = 1
 # object = "plugin"  # the name of the Plugin in the module (this is the default)
+
+[[settings]]
+key = "url"
+label = "Jellyfin server URL"
+help = "For example, http://localhost:8096"
+required = true
+
+[[settings]]
+key = "api_key"
+label = "Jellyfin API key"
+type = "password"
+help = "Create a key in Jellyfin Dashboard > API Keys."
+required = true
+
+[[settings]]
+key = "when"
+label = "Scan after"
+type = "choice"
+choices = ["job", "queue"]
+default = "queue"

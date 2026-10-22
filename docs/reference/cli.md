@@ -23,6 +23,7 @@ uv run videoforge serve --no-browser --port 8765
 | `--no-browser` | Do not open a browser automatically |
 | `--window` | Open the desktop window; requires the `desktop` extra |
 | `--data-dir` | Override the queue and application data folder |
+| `--plugin-management` / `--no-plugin-management` | Allow or disable plugin ZIP installation, removal and configuration; defaults to enabled for loopback bindings only |
 
 The server has no login. Changing the host to `0.0.0.0` makes it listen beyond loopback; provide
 your own access control if remote users can reach it.

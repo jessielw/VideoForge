@@ -93,8 +93,9 @@ Suffixes match existing video encodes to source stems; episode names can also ma
 `[actions] commands = true` permits command actions; Docker ships with it disabled. The full command
 and webhook behavior is described under [Notifications and actions](../actions.md).
 
-Plugin configuration uses one table per plugin, such as `[plugins.library_scan]`. The plugin decides
-the meaning of its keys. See [Plugins](../plugins.md).
+Install plugin ZIPs, enable or disable plugins, and edit declared plugin options under **Settings → Plugins**.
+File changes and plugin settings apply after restart. TOML tables such as `[plugins.library_scan]`
+remain supported; saved form values override them. See [Plugins](../plugins.md).
 
 ## Listening address and data folder
 

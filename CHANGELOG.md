@@ -12,6 +12,11 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Settings can install and replace Python plugin ZIPs, edit declared plugin options, and remove
+  folder plugins. File changes and settings activate on restart; settings and plugin data survive
+  replacement and removal. ZIP previews do not execute code. Configuration format version 2 includes
+  saved plugin options and continues to read version 1 backups.
+
 - Optional PGS zlib compression for the MKV muxer, disabled by default. Job output settings and
   templates control compression for embedded and added PGS subtitles.
 

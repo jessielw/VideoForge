@@ -33,6 +33,7 @@ async function layoutFixture(page: Page) {
       '/api/presets': { video: [], encoder: [], audio: [], template: [{ name: 'Hallowed 1080p CEL', data: template }], template_defaults: { manual: 'Hallowed 1080p CEL' }, encoder_starters: [] },
       '/api/filter-presets': [], '/api/config/encoders': [], '/api/config/video-options/x264': { dashes: '--', options: [] },
       '/api/settings': { output_dir: 'D:\\Output', last_dir: '' }, '/api/config': config, '/api/config/tools': [],
+      '/api/plugins': { folder: 'plugins', items: [], failures: [], management_enabled: true, restart: [] },
     }
     if (!(path in responses)) throw new Error(`Unexpected layout fixture request: ${path}`)
     await route.fulfill({ json: responses[path] })

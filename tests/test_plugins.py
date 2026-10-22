@@ -132,4 +132,4 @@ def test_the_example_plugin_loads():
     from videoforge.core.config import PROJECT_ROOT
 
     report = load_plugins(PROJECT_ROOT / "examples" / "plugins")
-    assert [p.id for p in report.loaded] == ["library_scan"] and not report.failures
+    assert [p.id for p in report.loaded] == ["event_logger", "library_scan"] and not report.failures

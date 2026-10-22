@@ -1,6 +1,6 @@
 """Example plugin: ask Jellyfin to scan its libraries when a job's output is done.
 
-Settings go in videoforge.toml (or videoforge.local.toml):
+Configure it in Settings -> Plugins, or in videoforge.toml (or videoforge.local.toml):
 
     [plugins.library_scan]
     url = "http://localhost:8096"
@@ -17,7 +17,7 @@ from videoforge.plugins import JobFinished, JobStatus, Plugin, PluginContext, Qu
 
 def setup(ctx: PluginContext) -> None:
     if not ctx.settings.get("url") or not ctx.settings.get("api_key"):
-        ctx.log.warning("Set url and api_key under [plugins.%s] in videoforge.toml", ctx.id)
+        ctx.log.warning("Configure url and api_key in Settings -> Plugins, or [plugins.%s] in videoforge.toml", ctx.id)
 
 
 def scan(ctx: PluginContext) -> str | None:

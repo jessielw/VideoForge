@@ -22,6 +22,7 @@ The data folder contains:
 | `records/` | Preserved job records and text logs from cleaned work folders |
 | `plugins/` | Installed folder-based plugins |
 | `plugin-data/` | Files owned by individual plugins |
+| `plugin-staging/` | Pending plugin file changes, applied on the next start |
 
 The newest **50 application session logs** are kept. The queue-wide event stream rolls over at
 **10 MB**, retaining three rotated files. Archived records and text logs retain the newest **100
@@ -75,6 +76,9 @@ to keep it. The restore is atomic and preserves template default references. Emp
 backup clear that library. Existing jobs keep their own settings. Unavailable profiles and browser
 roots are reported; install missing profiles and check paths when moving between machines. Plugin
 configuration changes require a restart.
+New exports use configuration format version 2, including saved plugin form values. Version 1 backups
+remain readable and restore an empty set of plugin UI overrides. Plugin staging and the startup
+permission to manage plugins are not transferred.
 The template editor and New jobs preset selections reset to the imported defaults; selected source
 files in the New jobs form are kept.
 

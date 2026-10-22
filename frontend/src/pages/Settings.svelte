@@ -8,12 +8,12 @@
   import FileBrowser from '../components/FileBrowser.svelte'
   import ConfigurationTransfer from '../components/ConfigurationTransfer.svelte'
   import PresetPackTransfer from '../components/PresetPackTransfer.svelte'
+  import PluginManager from '../components/PluginManager.svelte'
   import AudioPresetMenu from '../components/AudioPresetMenu.svelte'
   import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import CheckIcon from '@lucide/svelte/icons/check'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
-  import PlugIcon from '@lucide/svelte/icons/plug'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import PowerIcon from '@lucide/svelte/icons/power'
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
@@ -45,6 +45,7 @@
   } from '../lib/types'
 
   let config = $state<ConfigState | null>(null)
+  let pluginRefresh = $state(0)
   let checks = $state<Record<string, ToolCheck>>({})
   let checking = $state<Record<string, boolean>>({})
   let error = $state('')
@@ -259,13 +260,6 @@
     setActions(list)
   }
 
-  // --- plugins: switched on or off for the next start ---
-  function setPlugin(id: string, on: boolean) {
-    if (!config) return
-    const off = [...config.plugins.loaded, ...config.plugins.disabled].filter(p => !p.enabled).map(p => p.id)
-    change({ disabled_plugins: on ? off.filter(x => x !== id) : [...off.filter(x => x !== id), id] })
-  }
-
   // --- shutting down from the page ---
   let confirmStop = $state(false)
   let stopping = $state(false)
@@ -318,7 +312,7 @@
     {#if !config}
       <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
     {:else}
-      <ConfigurationTransfer disabled={pending > 0 || !!saveError} onimported={value => { config = value; checks = {}; checkAll() }} />
+      <ConfigurationTransfer disabled={pending > 0 || !!saveError} onimported={value => { config = value; pluginRefresh++; checks = {}; checkAll() }} />
       <PresetPackTransfer disabled={pending > 0 || !!saveError} />
       <section class="col-span-full min-w-0 space-y-3">
         <div class="flex items-center gap-3">
@@ -677,54 +671,7 @@
         </details>
       </section>
 
-      <section class="col-span-full min-w-0 space-y-3">
-        <div class="flex items-center gap-3">
-          <h2 class="font-medium">Plugins</h2>
-          <span class="min-w-0 truncate text-xs text-muted-foreground">
-            Python code that acts on what VideoForge does: a folder each in <code>{config.plugins.folder}</code>, or an installed
-            package.
-          </span>
-        </div>
-        <div class="divide-y divide-border/60 rounded-xl border bg-card">
-          {#each config.plugins.loaded as p (p.id)}
-            <div class="flex min-w-0 items-start gap-3 px-4 py-3 {p.enabled ? '' : 'opacity-60'}">
-              <Checkbox class="mt-0.5" checked={p.enabled} aria-label="Load {p.name}" onCheckedChange={v => setPlugin(p.id, v)} />
-              <div class="min-w-0 flex-1 space-y-0.5">
-                <div class="flex items-baseline gap-2 text-sm">
-                  <span class="font-medium">{p.name}</span>
-                  {#if p.version}<span class="text-xs text-muted-foreground">{p.version}</span>{/if}
-                  <code class="text-xs text-muted-foreground">{p.id}</code>
-                </div>
-                {#if p.description}<div class="text-xs">{p.description}</div>{/if}
-                <div class="truncate text-xs text-muted-foreground" title={p.source}>
-                  {p.events.length ? `On ${p.events.join(', ')}` : 'No events'} · {p.source}
-                </div>
-              </div>
-            </div>
-          {/each}
-          {#each config.plugins.disabled as p (p.id)}
-            <div class="flex min-w-0 items-center gap-3 px-4 py-3 opacity-60">
-              <Checkbox checked={p.enabled} aria-label="Load {p.id}" onCheckedChange={v => setPlugin(p.id, v)} />
-              <code class="text-sm">{p.id}</code>
-              <span class="truncate text-xs text-muted-foreground" title={p.source}>switched off, not loaded · {p.source}</span>
-            </div>
-          {/each}
-          {#each config.plugins.failures as f (f.source)}
-            <div class="flex min-w-0 items-start gap-3 px-4 py-3 text-xs">
-              <XIcon class="mt-0.5 size-3.5 shrink-0 text-destructive" />
-              <div class="min-w-0">
-                <div class="text-destructive">{f.id ? `${f.id}: ` : ''}didn't load: {f.reason}</div>
-                <div class="truncate text-muted-foreground" title={f.source}>{f.source}</div>
-              </div>
-            </div>
-          {/each}
-          {#if !config.plugins.loaded.length && !config.plugins.disabled.length && !config.plugins.failures.length}
-            <div class="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
-              <PlugIcon class="size-3.5" />No plugins installed.
-            </div>
-          {/if}
-        </div>
-      </section>
+      <PluginManager refreshKey={pluginRefresh} onupdated={value => { config = value }} />
     {/if}
 
     <section class="col-span-full min-w-0 space-y-3">

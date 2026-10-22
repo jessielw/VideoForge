@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+import ipaddress
 import os
 from pathlib import Path
 import string
@@ -33,6 +34,18 @@ class ServerSettings:
     probe_workers: int = 2  # concurrent probes (sources are often on a network share)
     allowed_hosts: list[str] = field(default_factory=list)  # extra exact hostnames, without ports
     allowed_origins: list[str] = field(default_factory=list)  # proxy/dev origins when Host is rewritten
+    plugin_management: bool | None = None  # None: enable only for a loopback binding; never part of a backup
+
+    @property
+    def can_manage_plugins(self) -> bool:
+        if self.plugin_management is not None:
+            return self.plugin_management
+        if self.host == "localhost":
+            return True
+        try:
+            return ipaddress.ip_address(self.host).is_loopback
+        except ValueError:
+            return False
 
     @property
     def db_path(self) -> Path:
@@ -70,6 +83,7 @@ class SavedSettings:
     delete_work_dir: bool | None = None  # delete a done job's work folder; None = videoforge.toml's
     encoder_priority: Priority | None = None  # the video encode's process priority; None = videoforge.toml's
     tool_priority: Priority | None = None  # every other tool's; None = videoforge.toml's
+    plugin_settings: dict[str, dict] = field(default_factory=dict)
 
     @classmethod
     def load(cls, store) -> SavedSettings:
@@ -86,6 +100,7 @@ class SavedSettings:
             store.get_setting("delete_work_dir"),
             _priority(store.get_setting("encoder_priority")),
             _priority(store.get_setting("tool_priority")),
+            store.get_setting("plugin_settings") or {},
         )
 
     def save(self, store) -> None:

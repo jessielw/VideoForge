@@ -28,10 +28,21 @@ from videoforge.core.record import QUEUE_EVENTS, QUEUE_EVENTS_MAX, JsonLines, ev
 from videoforge.core.video import vs as vsx
 from videoforge.core.video.preview import Preview
 from videoforge.plugins.loader import PluginHost, load_plugins
+from videoforge.plugins.manager import PluginManager
 from videoforge.server.boundary import BrowserBoundary
 from videoforge.server.events import EventHub
 from videoforge.server.queue import JobQueue, Services
-from videoforge.server.routes import config, configuration, jobs, preset_packs, presets, queue, system, video
+from videoforge.server.routes import (
+    config,
+    configuration,
+    jobs,
+    plugins as plugin_routes,
+    preset_packs,
+    presets,
+    queue,
+    system,
+    video,
+)
 from videoforge.server.settings import SavedSettings, ServerSettings
 from videoforge.server.store import Store
 
@@ -92,9 +103,12 @@ def create_app(
         report=lambda kind, **fields: queue_events.write(event(kind, **fields)),
     )
     bus.subscribe(actions.on_event, JobFinished, QueueFinished, name="actions")
+    plugin_manager = PluginManager(settings.data_dir)
+    plugin_manager.apply_pending()
     plugin_report = load_plugins(settings.plugins_dir, saved.disabled_plugins)
+    plugin_settings = plugin_manager.effective_settings(base.plugins, saved.plugin_settings)
     plugins = PluginHost(
-        plugin_report, bus, data_dir=settings.plugin_data_dir, settings=base.plugins, job_log=job_queue.job_log
+        plugin_report, bus, data_dir=settings.plugin_data_dir, settings=plugin_settings, job_log=job_queue.job_log
     )
 
     @asynccontextmanager
@@ -134,11 +148,13 @@ def create_app(
     app.state.notifier = notifier
     app.state.actions = actions
     app.state.plugins = plugins
+    app.state.plugin_manager = plugin_manager
+    app.state.plugin_settings_at_start = saved.plugin_settings
     app.state.plugins_off_at_start = frozenset(saved.disabled_plugins)
     app.state.preview = preview
     app.state.profile_ids = ids
     app.state.default_profile = default
-    for module in (jobs, queue, video, system, config, presets, configuration, preset_packs):
+    for module in (jobs, queue, video, system, config, presets, configuration, preset_packs, plugin_routes):
         app.include_router(module.router)
     _mount_frontend(app, settings)
     return app

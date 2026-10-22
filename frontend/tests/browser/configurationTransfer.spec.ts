@@ -26,7 +26,7 @@ async function fixture(page: Page) {
     action_kinds: [{ id: 'move', label: 'Move output' }, { id: 'command', label: 'Run command' }],
     action_tokens: { job: {}, queue: {} }, allow_commands: false, plugins: { folder: 'plugins', loaded: [], disabled: [], failures: [] },
   }
-  const bundle: ConfigurationBundle = { format: 'videoforge.configuration', version: 1,
+  const bundle: ConfigurationBundle = { format: 'videoforge.configuration', version: 2,
     application: { allow_commands: false }, settings: { notifications: [], actions: [], disabled_plugins: [], parallel_audio: 4 },
     folders: { output_dir: 'D:\\Output', last_dir: 'D:\\Media' },
     presets: { template: [{ name: 'Film', data: template }], video: [],
@@ -59,7 +59,7 @@ async function fixture(page: Page) {
     } else if (path === '/api/configuration/export') await route.fulfill({ json: bundle })
     else if (path === '/api/configuration/preview') {
       const data: ConfigurationBundle = request.postDataJSON()
-      if (data.version !== 1) {
+      if (data.version !== 1 && data.version !== 2) {
         await route.fulfill({ status: 422, json: { detail: 'Unsupported configuration version' } })
         return
       }
@@ -72,7 +72,7 @@ async function fixture(page: Page) {
     } else {
       const responses: Record<string, unknown> = { '/api/jobs': [], '/api/profiles': [profile], '/api/presets': presets,
         '/api/health': { ok: true, version: 'test' }, '/api/filter-presets': [], '/api/config/encoders': [],
-        '/api/config': config, '/api/config/tools': [], '/api/config/video-options/x264': { dashes: '--', options: [] } }
+        '/api/config': config, '/api/plugins': { folder: 'plugins', items: [], failures: [], management_enabled: true, restart: [] }, '/api/config/tools': [], '/api/config/video-options/x264': { dashes: '--', options: [] } }
       if (!(path in responses)) throw new Error(`Unexpected configuration fixture request: ${path}`)
       await route.fulfill({ json: responses[path] })
     }
@@ -151,7 +151,7 @@ test('invalid files and cancelled imports leave settings untouched', async ({ pa
   const file = dialog.locator('input[type=file]')
   await file.setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{bad') })
   await expect(dialog.getByRole('alert')).toContainText('not valid JSON')
-  await file.setInputFiles({ name: 'future.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...bundle, version: 2 })) })
+  await file.setInputFiles({ name: 'future.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...bundle, version: 3 })) })
   await expect(dialog.getByRole('alert')).toContainText('Unsupported configuration version')
   await expect(dialog.getByRole('button', { name: 'Import configuration', exact: true })).toBeDisabled()
   await file.setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(bundle)) })
