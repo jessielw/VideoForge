@@ -25,61 +25,88 @@
     disabled?: boolean
   } = $props()
 
-  const parentChoices = $derived(choices.filter(c => parentOf(c.data) === encoder))
+  const parentChoices = $derived(choices.filter(c => !encoder || parentOf(c.data) === encoder))
   const query = $derived(search.trim().toLocaleLowerCase())
-  const folders = $derived([...new Set(parentChoices.filter(c => (c.group ?? []).length > path.length
+  const encoderLabel = (data: T) => parents.find(([id]) => id === parentOf(data))?.[1] ?? parentOf(data)
+  const folders = $derived([...new Set(parentChoices.filter(c => !c.builtin && (c.group ?? []).length > path.length
     && canonical((c.group ?? []).slice(0, path.length)) === canonical(path)).map(c => c.group![path.length]))]
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })))
   const visible = $derived(parentChoices.filter(c => query
-    ? [...(c.group ?? []), presetLabel(c)].join(' / ').toLocaleLowerCase().includes(query)
-    : canonical(c.group ?? []) === canonical(path))
-    .sort((a, b) => Number(b.builtin) - Number(a.builtin) || presetLabel(a).localeCompare(presetLabel(b))))
+    ? [...(c.group ?? []), presetLabel(c), parentOf(c.data), encoderLabel(c.data), summary(c.data)].join(' / ').toLocaleLowerCase().includes(query)
+    : c.builtin ? !path.length : canonical(c.group ?? []) === canonical(path)))
+  const saved = $derived(visible.filter(c => !c.builtin)
+    .sort((a, b) => presetLabel(a).localeCompare(presetLabel(b), undefined, { numeric: true })
+      || encoderLabel(a.data).localeCompare(encoderLabel(b.data))))
+  const builtins = $derived(visible.filter(c => c.builtin))
 </script>
 
+{#snippet choiceRow(c: PresetChoice<T>)}
+  {@const reason = problem(c.data)}
+  <li>
+    <button class="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent disabled:opacity-60 {presetKey(c) === selected ? 'bg-accent' : ''}"
+      disabled={disabled || (!allowIncompatible && !!reason)} title={reason || undefined}
+      aria-current={presetKey(c) === selected ? 'true' : undefined} onclick={() => onselect(c)}>
+      <span class="w-4 shrink-0">{#if presetKey(c) === selected}<CheckIcon class="size-4 text-primary" />{/if}</span>
+      <span class="min-w-0 flex-1">
+        <span class="block break-words">{presetLabel(c)}</span>
+        {#if query && c.group?.length}<span class="block break-words text-xs text-muted-foreground">{c.group.join(' / ')}</span>{/if}
+        <span class="block break-words text-xs text-muted-foreground">{encoderLabel(c.data)} · {summary(c.data)}</span>
+        {#if reason}<span class="block break-words text-xs text-warning">{reason}</span>{/if}
+      </span>
+      {#if c.builtin}<span class="shrink-0 text-xs text-muted-foreground">{c.badge ?? builtinLabel}</span>{/if}
+    </button>
+  </li>
+{/snippet}
+
 <div class="flex min-h-0 flex-1 flex-col gap-3">
+  <Input class="shrink-0" aria-label="Search {title.toLowerCase()} presets" placeholder={encoder ? 'Search presets…' : 'Search all presets…'} bind:value={search} {disabled} />
   <label class="flex shrink-0 items-center gap-3 text-sm">
     Encoder
-    <NativeSelect class="min-w-0 flex-1" aria-label="Browse {title.toLowerCase()} presets" value={encoder} {disabled}
-      onchange={e => { encoder = e.currentTarget.value; path = []; search = '' }}>
+    <NativeSelect class="min-w-0 flex-1" aria-label="Filter {title.toLowerCase()} presets by encoder" value={encoder} {disabled}
+      onchange={e => { encoder = e.currentTarget.value; path = [] }}>
+      <option value="">All encoders</option>
       {#each parents as [id, label] (id)}<option value={id}>{label}</option>{/each}
     </NativeSelect>
   </label>
-  <Input class="shrink-0" aria-label="Search {title.toLowerCase()} presets" placeholder="Search presets…" bind:value={search} {disabled} />
-  {#if !query}
+  {#if !query && path.length}
     <nav class="flex shrink-0 flex-wrap items-center gap-1 text-xs" aria-label="Preset folders">
-      <button class="rounded px-1 py-0.5 hover:bg-accent" {disabled} onclick={() => (path = [])}>{parents.find(([id]) => id === encoder)?.[1] ?? encoder}</button>
+      <button class="rounded px-1 py-0.5 hover:bg-accent" {disabled} onclick={() => (path = [])}>My presets</button>
       {#each path as part, i (i)}
         <ChevronRightIcon class="size-3 shrink-0" />
-        <button class="rounded px-1 py-0.5 hover:bg-accent" {disabled} onclick={() => (path = path.slice(0, i + 1))}>{part}</button>
+        <button class="min-w-0 break-words rounded px-1 py-0.5 hover:bg-accent" {disabled} onclick={() => (path = path.slice(0, i + 1))}>{part}</button>
       {/each}
     </nav>
   {/if}
-  <ul class="min-h-0 flex-1 overflow-y-auto overscroll-contain" aria-label="{title} preset choices">
-    {#if !query}
-      {#each folders as part (part)}
-        <li>
-          <button class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent" {disabled} onclick={() => (path = [...path, part])}>
-            <FolderIcon class="size-4 shrink-0 text-muted-foreground" /><span class="min-w-0 flex-1 break-words">{part}</span><ChevronRightIcon class="size-4" />
-          </button>
-        </li>
-      {/each}
+  <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain">
+    {#if saved.length || (!query && folders.length)}
+      <section aria-label="My presets">
+        <h3 class="px-2 pb-1 text-xs font-medium text-muted-foreground">My presets</h3>
+        <ul aria-label="My {title.toLowerCase()} presets">
+          {#if !query}
+            {#each folders as part (part)}
+              <li>
+                <button class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent" {disabled} onclick={() => (path = [...path, part])}>
+                  <FolderIcon class="size-4 shrink-0 text-muted-foreground" /><span class="min-w-0 flex-1 break-words">{part}</span><ChevronRightIcon class="size-4 shrink-0" />
+                </button>
+              </li>
+            {/each}
+          {/if}
+          {#each saved as c (presetKey(c))}{@render choiceRow(c)}{/each}
+        </ul>
+      </section>
     {/if}
-    {#each visible as c (presetKey(c))}
-      {@const reason = problem(c.data)}
-      <li>
-        <button class="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent disabled:opacity-60 {presetKey(c) === selected ? 'bg-accent' : ''}"
-          disabled={disabled || (!allowIncompatible && !!reason)} title={reason || undefined} onclick={() => onselect(c)}>
-          <span class="w-4 shrink-0">{#if presetKey(c) === selected}<CheckIcon class="size-4 text-primary" />{/if}</span>
-          <span class="min-w-0 flex-1">
-            <span class="block break-words">{presetLabel(c)}</span>
-            {#if query && c.group?.length}<span class="block text-xs text-muted-foreground">{c.group.join(' / ')}</span>{/if}
-            <span class="block text-xs text-muted-foreground">{summary(c.data)}</span>
-            {#if reason}<span class="block text-xs text-warning">{reason}</span>{/if}
-          </span>
-          {#if c.builtin}<span class="text-xs text-muted-foreground">{c.badge ?? builtinLabel}</span>{/if}
-        </button>
-      </li>
-    {/each}
-    {#if !visible.length && (query || !folders.length)}<li class="px-2 py-3 text-xs text-muted-foreground">No presets here. Use Manage presets to create one.</li>{/if}
-  </ul>
+    {#if builtins.length}
+      <section aria-label="Built-in presets">
+        <h3 class="px-2 pb-1 text-xs font-medium text-muted-foreground">Built-in</h3>
+        <ul aria-label="Built-in {title.toLowerCase()} presets">
+          {#each builtins as c (presetKey(c))}{@render choiceRow(c)}{/each}
+        </ul>
+      </section>
+    {/if}
+    {#if !visible.length && (query || !folders.length)}
+      <p class="px-2 py-3 text-xs text-muted-foreground" role="status">
+        {query ? 'No presets match your search.' : path.length ? 'No presets in this folder.' : encoder ? 'No presets for this encoder.' : 'No presets available.'}
+      </p>
+    {/if}
+  </div>
 </div>

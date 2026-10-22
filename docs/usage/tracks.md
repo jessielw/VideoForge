@@ -54,7 +54,10 @@ run at once; see [pipeline settings](../configuration/settings.md#pipeline-setti
 
 Use **Audio preset** on any audio output to load a saved encoder, channels, bitrate, and encoder
 options. Common configurations such as **AC-3 → 5.1 640 kb/s** are available immediately, along
-with encoder defaults and Copy. Browse by encoder, or search within it.
+with encoder defaults and Copy. The picker opens with **My presets** and your folders above the
+built-in choices, across all encoders. Selecting a preset applies its encoder and settings together.
+Search by name, folder, encoder, or settings across the library, or narrow the results with the
+optional **Encoder** filter. The preset manager uses the same browser.
 
 1. Open **Audio preset → Manage presets…**. Choose a preset on the left, or **New from current settings**.
 2. Set its name, optional folder, encoder, channels, and bitrate on the right. Expand **Advanced

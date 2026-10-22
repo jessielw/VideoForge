@@ -12,6 +12,10 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Audio and video encoder preset pickers show **My presets** and custom folders first across all
+  encoders. Search spans folders and encoders, with an optional encoder filter. The same browser
+  is available in preset managers, including Settings.
+
 - Audio **Delay** fields show the total delay, initially filled with the detected source delay.
   Entering zero cancels that delay; clearing the field restores it. Existing saved corrections
   retain their timing.

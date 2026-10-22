@@ -49,8 +49,8 @@
   function setOpen(value: boolean) {
     open = value
     if (value) {
-      encoder = parentOf(current)
-      path = [...(matched?.group ?? [])]
+      encoder = ''
+      path = []
       search = error = ''
     }
   }

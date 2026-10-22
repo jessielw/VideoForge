@@ -21,7 +21,10 @@ depends on the tool paths and installed builds; inspect **Settings** if an encod
 Use **Encoder preset** in a job's Encoder tab, the template editor, or New jobs to select a saved
 encoder configuration. The same picker is available when editing selected jobs as a batch.
 
-The compact picker is for quick selection. Choose **Manage presets…** to open the larger editor:
+The compact picker opens with **My presets** and your folders above the built-in configurations,
+across all encoders. Select a preset to apply its encoder and settings together. Search by name,
+folder, encoder, or settings across the library, or use the **Encoder** filter to narrow the results.
+The manager uses the same browser. Choose **Manage presets…** to open the larger editor:
 
 1. Select a preset on the left, or choose **New from current settings**.
 2. Edit its name, folder, encoder, quality, speed, and bit depth on the right. Expand
@@ -35,7 +38,8 @@ draft. Switching presets with unsaved edits offers Save, Discard, or Keep editin
 
 Names can repeat in different folders or under different encoders. Edit the name or folder in the
 manager to rename or move a preset. A new draft matching an existing name, encoder, and folder offers
-**Replace preset**; renaming another preset onto it is rejected. Older presets appear at their encoder's root.
+**Replace preset**; renaming another preset onto it is rejected. Older presets without folders appear
+directly under **My presets**.
 Use **Duplicate** to create a variation of any selected preset, including its current draft edits.
 **New from current settings** also copies the settings and folder open in the editor, with a blank name.
 

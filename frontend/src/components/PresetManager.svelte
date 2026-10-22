@@ -75,15 +75,11 @@
   }
   function openChoice(choice: PresetChoice<T>) {
     setDraft(draftFromChoice(structuredClone($state.snapshot(choice)) as PresetChoice<T>), presetKey(choice))
-    encoder = parentOf(choice.data)
-    path = [...(choice.group ?? [])]
   }
   function startNew(fromEditor = false) {
     const data = fromEditor && draft ? draft.data : current
     const folder = fromEditor && draft ? draft.folder : ''
     setDraft(newPresetDraft($state.snapshot(data) as T, folder), null)
-    encoder = parentOf(data)
-    path = folderParts(folder)
     search = ''
   }
   function duplicate() {
