@@ -50,6 +50,43 @@ offers **Undo** while this server session remains open (the latest 100 removed j
 
 ## Back up
 
+### Share templates and presets
+
+Use **Settings → Preset sharing → Export presets…** to choose templates, video encoder presets,
+audio encoder presets, and video processing presets for a group. The resulting preset pack keeps
+display names, nested folders, and encoding settings. It excludes application settings, tool paths,
+saved folder choices, notification URLs, actions, plugin configuration, and default selections.
+
+Use **Import presets…** in the same panel to preview and select entries from a pack. Imports add
+presets without replacing existing ones or changing local settings and defaults. Matching names
+in the same encoder and folder get numbered copies. Review any custom scripts and extra arguments
+before sharing: user-authored text is preserved and can contain private paths or values.
+
+### Full configuration backup
+
+For a configuration-only backup, open **Settings → Configuration backup → Export configuration**.
+One JSON file includes all saved templates, video processing presets, video and audio encoder
+presets (with names and folders), default template selections, app settings, tool paths, folder
+choices, notifications, actions, pairing rules, and plugin configuration and switches.
+
+Use **Import configuration…** in the same panel to preview the libraries and included scripts and
+actions before replacing your configuration. Export your current configuration first if you want
+to keep it. The restore is atomic and preserves template default references. Empty libraries in a
+backup clear that library. Existing jobs keep their own settings. Unavailable profiles and browser
+roots are reported; install missing profiles and check paths when moving between machines. Plugin
+configuration changes require a restart.
+The template editor and New jobs preset selections reset to the imported defaults; selected source
+files in the New jobs form are kept.
+
+Configuration files support up to 20 MiB and 5,000 presets in each library. They can contain
+credentials embedded in notification URLs, action targets, or plugin settings, plus scripts and
+command actions; keep backups private and review files before importing them. Exporting and
+previewing never execute included code.
+The file excludes jobs, logs, media, work folders, installed tools, plugin code and plugin-owned files,
+browser-local drafts, and server launch options such as host, port, and data directory.
+
+To back up the queue and all application files as well:
+
 1. Stop VideoForge, or stop the Docker service with `docker compose stop`.
 2. Copy the entire data folder to your backup location.
 3. Copy `videoforge.local.toml`, any custom configuration, and your Compose file separately.

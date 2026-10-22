@@ -3,9 +3,11 @@
   // may show, the profile new jobs start with, whether batch indexing waits for an encode's disk, where
   // notifications go (Apprise URLs), the actions run after a job or the queue ends, and which plugins load.
   // Each change saves at once and is used by
-  // new jobs and runs; videoforge.toml stays the default underneath ("Reset" goes back to it).
+  // new jobs and runs; Reset goes back to the server's configuration defaults.
   import { onMount } from 'svelte'
   import FileBrowser from '../components/FileBrowser.svelte'
+  import ConfigurationTransfer from '../components/ConfigurationTransfer.svelte'
+  import PresetPackTransfer from '../components/PresetPackTransfer.svelte'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import CheckIcon from '@lucide/svelte/icons/check'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
@@ -303,6 +305,8 @@
     {#if !config}
       <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
     {:else}
+      <ConfigurationTransfer disabled={pending > 0 || !!saveError} onimported={value => { config = value; checks = {}; checkAll() }} />
+      <PresetPackTransfer disabled={pending > 0 || !!saveError} />
       <section class="col-span-full min-w-0 space-y-3">
         <div class="flex items-center gap-3">
           <h2 class="font-medium">Tools</h2>
@@ -333,7 +337,7 @@
                   variant="ghost"
                   size="sm"
                   disabled={!t.custom}
-                  title="Back to videoforge.toml's: {t.default || '(none)'}"
+                  title="Back to the default: {t.default || '(none)'}"
                   onclick={() => setTool(t, '')}>Reset</Button
                 >
               </div>
@@ -400,7 +404,7 @@
           <NativeSelect value={config.profile} onchange={e => setProfile(e.currentTarget.value)}>
             {#each config.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
           </NativeSelect>
-          <span class="text-xs text-muted-foreground">videoforge.toml says: {config.profile_default}</span>
+          <span class="text-xs text-muted-foreground">Default: {config.profile_default}</span>
         </label>
       </section>
 
@@ -437,7 +441,7 @@
             At once, beside the video encode
             <span class="block text-xs text-muted-foreground">
               A job's audio encodes start once its source is indexed and run while the video encodes; the mux waits for
-              them. 0 encodes them one by one, before the video. videoforge.toml says: {config.parallel_audio_default}
+              them. 0 encodes them one by one, before the video. Default: {config.parallel_audio_default}
             </span>
           </span>
         </label>
@@ -458,7 +462,7 @@
               {#each config.priorities as p (p)}<option value={p}>{PRIORITY_LABEL[p]}</option>{/each}
             </NativeSelect>
             <span class="text-xs text-muted-foreground">
-              {row.hint}. videoforge.toml says: {PRIORITY_LABEL[config[`${row.key}_default`]]}
+              {row.hint}. Default: {PRIORITY_LABEL[config[`${row.key}_default`]]}
             </span>
           </label>
         {/each}
@@ -481,7 +485,7 @@
             <span class="block text-xs text-muted-foreground">
               The <code>&lt;source&gt;_tmp</code> folder next to the source (index, encodes, log) is deleted after the
               job succeeds; its job records and log are copied to {config.records_dir} first (the newest 100 kept). A job
-              that fails or is cancelled keeps it, to resume from. videoforge.toml says:
+              that fails or is cancelled keeps it, to resume from. Default:
               {config.delete_work_dir_default ? 'on' : 'off'}
             </span>
           </span>
@@ -575,7 +579,7 @@
         </div>
         {#if !config.allow_commands}
           <p class="text-xs text-warning">
-            Commands are off: set <code>commands = true</code> under <code>[actions]</code> in videoforge.toml to let them run
+            Command actions are disabled by the current server configuration
             (the page has no login, so only if no one else can reach it).
           </p>
         {/if}

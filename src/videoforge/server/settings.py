@@ -11,6 +11,7 @@ from videoforge.core.actions import Action, load_actions
 from videoforge.core.config import PROJECT_ROOT, AppConfig, app_data_dir, with_tools
 from videoforge.core.execute.control import Priority
 from videoforge.core.notify import Destination, load_destinations
+from videoforge.core.plan_io import to_json
 
 MAX_PARALLEL_AUDIO = 8  # the Settings page's limit on audio encodes at once
 
@@ -88,17 +89,7 @@ class SavedSettings:
         )
 
     def save(self, store) -> None:
-        store.set_setting("tools", self.tools)
-        store.set_setting("roots", self.roots)
-        store.set_setting("profile", self.profile)
-        store.set_setting("index_waits_for_disk", self.index_waits_for_disk)
-        store.set_setting("notifications", [d.to_json() for d in self.notifications])
-        store.set_setting("actions", [a.to_json() for a in self.actions])
-        store.set_setting("disabled_plugins", self.disabled_plugins)
-        store.set_setting("parallel_audio", self.parallel_audio)
-        store.set_setting("delete_work_dir", self.delete_work_dir)
-        store.set_setting("encoder_priority", self.encoder_priority)
-        store.set_setting("tool_priority", self.tool_priority)
+        store.set_settings(to_json(self))
 
     def app_config(self, base: AppConfig, profile: str) -> AppConfig:
         """base (videoforge.toml) with these settings over it."""

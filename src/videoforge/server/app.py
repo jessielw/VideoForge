@@ -22,6 +22,7 @@ from videoforge.core.actions import ActionRunner
 from videoforge.core.config import AppConfig, load_app_config
 from videoforge.core.events import EventBus, JobFinished, QueueFinished
 from videoforge.core.notify import Notifier
+from videoforge.core.plan_io import from_json
 from videoforge.core.profile import Profile
 from videoforge.core.record import QUEUE_EVENTS, QUEUE_EVENTS_MAX, JsonLines, event
 from videoforge.core.video import vs as vsx
@@ -30,7 +31,7 @@ from videoforge.plugins.loader import PluginHost, load_plugins
 from videoforge.server.boundary import BrowserBoundary
 from videoforge.server.events import EventHub
 from videoforge.server.queue import JobQueue, Services
-from videoforge.server.routes import config, jobs, presets, queue, system, video
+from videoforge.server.routes import config, configuration, jobs, preset_packs, presets, queue, system, video
 from videoforge.server.settings import SavedSettings, ServerSettings
 from videoforge.server.store import Store
 
@@ -54,6 +55,8 @@ def create_app(
     services = services or Services()
 
     store = Store(settings.db_path)
+    if restored_base := store.get_setting("configuration_base"):
+        base = from_json(AppConfig, restored_base)
     saved = SavedSettings.load(store)
     default = default_profile_id(saved.profile or base.profile, ids)
     cfg = saved.app_config(base, default)
@@ -135,7 +138,7 @@ def create_app(
     app.state.preview = preview
     app.state.profile_ids = ids
     app.state.default_profile = default
-    for module in (jobs, queue, video, system, config, presets):
+    for module in (jobs, queue, video, system, config, presets, configuration, preset_packs):
         app.include_router(module.router)
     _mount_frontend(app, settings)
     return app

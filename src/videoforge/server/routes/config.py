@@ -33,6 +33,7 @@ from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
 router = APIRouter(prefix="/api/config")
 RESTART_FOR: dict[str, str] = {  # setting -> why VideoForge needs a restart for it
     "plugins": "Plugins switched on or off load (or stop loading) when VideoForge starts again.",
+    "configuration": "Imported plugin settings take effect when VideoForge starts again.",
 }
 
 
@@ -158,24 +159,32 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     if "disabled_plugins" in body:
         disabled = sorted({str(i) for i in body["disabled_plugins"] or []})
 
-    before = s.config.tools
     new = SavedSettings(
         tools, roots, profile, waits, destinations, actions, disabled, parallel, delete_work, **priorities
     )
     new.save(s.store)
+    apply_settings(request, new)
+    return _state(request)
+
+
+def apply_settings(request: Request, new: SavedSettings) -> None:
+    """Apply validated, persisted settings to the running services."""
+    s = request.app.state
+    before = s.config.tools
     s.saved = new
-    s.queue.set_index_waits_for_disk(waits)
-    s.notifier.destinations = destinations
-    s.actions.actions = actions
-    if frozenset(disabled) != s.plugins_off_at_start:
+    s.queue.set_index_waits_for_disk(new.index_waits_for_disk)
+    s.notifier.destinations = new.notifications
+    s.actions.actions = new.actions
+    s.actions.allow_commands = s.base_config.allow_commands
+    if frozenset(new.disabled_plugins) != s.plugins_off_at_start:
         s.restart_for.add("plugins")
     else:
         s.restart_for.discard("plugins")
-    s.default_profile = default_profile_id(profile or s.base_config.profile, s.profile_ids)
+    s.default_profile = default_profile_id(new.profile or s.base_config.profile, s.profile_ids)
     cfg = new.app_config(s.base_config, s.default_profile)
     s.config = cfg
     s.queue.app = cfg  # new probes and runs use it; a running job keeps the one it started with
-    s.settings.roots = [Path(r) for r in roots] if roots else list(s.default_roots)
+    s.settings.roots = [Path(r) for r in new.roots] if new.roots else list(s.default_roots)
     if cfg.tools != before:
         s.queue.replan_all()  # an encode whose tool went missing (or came back) blocks (or unblocks)
     if cfg.tools.vs_plugins != before.vs_plugins:
@@ -184,7 +193,6 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     if cfg.tools.vspipe != before.vspipe:
         with suppress(Exception):  # a broken vspipe shows in the tools check
             vsx.ensure_vspipe(cfg.tools.vspipe)
-    return _state(request)
 
 
 @router.post("/notifications/test")

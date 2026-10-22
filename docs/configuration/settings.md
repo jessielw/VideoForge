@@ -10,10 +10,16 @@ For settings available in both places, the application uses these layers in orde
 
 1. `videoforge.toml`: shipped defaults in the application folder.
 2. `videoforge.local.toml`: machine-specific overrides beside that file; tables merge recursively.
-3. Saved **Settings** values in `videoforge.db`: override the file defaults for the server.
+3. An imported configuration backup, if present: supplies restored server defaults, including pairing
+   and plugin settings. The TOML files themselves are not rewritten.
+4. Saved **Settings** values in `videoforge.db`: override those defaults for the server.
 
-Reset a setting in the UI to return to its file default. Editing a TOML file does not override an
+Reset a setting in the UI to return to its default (from the imported backup, if one was restored).
+Editing a TOML file does not override an imported configuration or an
 existing saved UI value. Restart VideoForge after editing a configuration file.
+
+Use **Settings → Configuration backup** to export or import the complete server configuration and
+all preset libraries without creating a job. See [Storage and backups](storage.md#back-up).
 
 The command-line `plan`, `run`, and `validate` commands load file configuration; server UI overrides
 are not a replacement for their file configuration.

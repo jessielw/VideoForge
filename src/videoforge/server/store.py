@@ -112,6 +112,44 @@ class Store:
         with self._lock:
             self._db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, json.dumps(value)))
 
+    def set_settings(self, settings: dict[str, Any]) -> None:
+        rows = [(key, json.dumps(value)) for key, value in settings.items()]
+        with self._lock:
+            self._db.execute("BEGIN")
+            try:
+                self._db.executemany("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", rows)
+                self._db.execute("COMMIT")
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
+
+    def configuration_snapshot(self, keys: tuple[str, ...], kinds: tuple[str, ...]) -> dict[str, Any]:
+        """Read a consistent settings/library snapshot without queue data."""
+        with self._lock:
+            settings = dict(self._db.execute("SELECT key, value FROM settings"))
+            presets = {kind: {} for kind in kinds}
+            for kind, name, data in self._db.execute("SELECT kind, name, data FROM presets ORDER BY kind, name"):
+                if kind in presets:
+                    presets[kind][name] = json.loads(data)
+            return {"settings": {k: json.loads(settings[k]) for k in keys if k in settings}, "presets": presets}
+
+    def restore_configuration(self, settings: dict[str, Any], presets: dict[str, dict[str, Any]]) -> None:
+        """Replace the represented configuration atomically; preserve jobs and queue bookkeeping."""
+        setting_rows = [(key, json.dumps(value)) for key, value in settings.items()]
+        preset_rows = [
+            (kind, name, json.dumps(data)) for kind, entries in presets.items() for name, data in entries.items()
+        ]
+        with self._lock:
+            self._db.execute("BEGIN")
+            try:
+                self._db.executemany("DELETE FROM presets WHERE kind = ?", [(kind,) for kind in presets])
+                self._db.executemany("INSERT INTO presets (kind, name, data) VALUES (?, ?, ?)", preset_rows)
+                self._db.executemany("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", setting_rows)
+                self._db.execute("COMMIT")
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
+
     def presets(self, kind: str) -> dict[str, Any]:
         with self._lock:
             rows = self._db.execute("SELECT name, data FROM presets WHERE kind = ? ORDER BY name", (kind,)).fetchall()
@@ -171,26 +209,48 @@ class Store:
     def import_encoder_presets(
         self, entries: list[dict[str, Any]], *, max_name: int, preview: bool = False
     ) -> list[str]:
-        """Keep folders and allocate display names per encoder/folder under the write lock."""
+        return self.import_preset_pack({"encoder": entries}, max_name=max_name, preview=preview)["encoder"]
+
+    def import_preset_pack(
+        self,
+        libraries: dict[str, list[dict[str, Any]]],
+        *,
+        max_name: int,
+        preview: bool = False,
+        reserved: dict[str, tuple[str, ...]] | None = None,
+    ) -> dict[str, list[str]]:
+        """Add every library atomically, allocating fresh identities and nonconflicting labels."""
         with self._lock:
-            records = self._db.execute("SELECT name, data FROM presets WHERE kind = 'encoder'").fetchall()
-            used = set()
-            for name, raw in records:
-                record = json.loads(raw)
-                settings = record.get("settings", record)
-                used.add((settings.get("encoder", "x264"), tuple(record.get("group", [])), record.get("label", name)))
-            labels, rows = [], []
-            for entry in entries:
-                base, group, data = entry["label"], entry["group"], entry["data"]
-                label = base
-                i = 2
-                while (data["encoder"], tuple(group), label) in used:
-                    suffix = f" ({i})"
-                    label = base[: max_name - len(suffix)] + suffix
-                    i += 1
-                used.add((data["encoder"], tuple(group), label))
-                labels.append(label)
-                rows.append(("encoder", uuid4().hex, json.dumps({"label": label, "group": group, "settings": data})))
+            names, rows = {}, []
+            for kind, entries in libraries.items():
+                grouped = kind in ("encoder", "audio")
+                parent = "encoder" if kind == "encoder" else "action"
+                records = self._db.execute("SELECT name, data FROM presets WHERE kind = ?", (kind,)).fetchall()
+                used = set()
+                for name, raw in records:
+                    record = json.loads(raw)
+                    settings = record.get("settings", record)
+                    scope = (
+                        (settings.get(parent, "x264" if kind == "encoder" else "copy"), tuple(record.get("group", [])))
+                        if grouped
+                        else ()
+                    )
+                    used.add((*scope, record.get("label", name) if grouped else name))
+                used.update((name,) for name in (reserved or {}).get(kind, ()))
+                names[kind] = []
+                for entry in entries:
+                    base, data = entry["label" if grouped else "name"], entry["data"]
+                    group = entry.get("group", [])
+                    scope = (data[parent], tuple(group)) if grouped else ()
+                    label, i = base, 2
+                    while (*scope, label) in used:
+                        suffix = f" ({i})"
+                        label = base[: max_name - len(suffix)] + suffix
+                        i += 1
+                    used.add((*scope, label))
+                    names[kind].append(label)
+                    record = {"label": label, "group": group, "settings": data} if grouped else data
+                    rows.append((kind, uuid4().hex if grouped else label, json.dumps(record)))
             if not preview:
                 self._db.execute("BEGIN")
                 try:
@@ -199,4 +259,4 @@ class Store:
                 except Exception:
                     self._db.execute("ROLLBACK")
                     raise
-        return labels
+        return names

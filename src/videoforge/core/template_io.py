@@ -51,7 +51,7 @@ def check_settings(tp: Any, value: Any, path: str) -> None:
             if key not in hints:
                 raise ValueError(f"{path}.{key}: unknown setting; check the VideoForge version")
             check_settings(hints[key], item, f"{path}.{key}")
-    elif origin is list:
+    elif origin in (list, tuple, frozenset):
         if not isinstance(value, list):
             raise ValueError(f"{path}: expected a list")
         for i, item in enumerate(value):

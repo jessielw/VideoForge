@@ -12,7 +12,7 @@ export function templateFilename(name: string): string {
   return `${safe || 'templates'}.videoforge.json`
 }
 
-export function templateScripts(data: Template): { name: string; script: string }[] {
+export function templateScripts(data: { video: Pick<Template['video'], 'filters' | 'custom'> }): { name: string; script: string }[] {
   const scripts = data.video.filters.filter(f => f.script.trim()).map(f => ({ name: f.name, script: f.script }))
   if (data.video.custom !== null) scripts.unshift({ name: 'Custom script body', script: data.video.custom })
   return scripts

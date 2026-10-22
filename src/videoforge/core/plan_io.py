@@ -45,7 +45,7 @@ def to_json(value: Any) -> Any:
         return str(value)
     if isinstance(value, frozenset):
         return sorted(to_json(v) for v in value)
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [to_json(v) for v in value]
     if isinstance(value, dict):
         return {k: to_json(v) for k, v in value.items()}
@@ -63,6 +63,8 @@ def from_json(tp: Any, value: Any) -> Any:
         return from_json(inner, value)
     if origin is list:
         return [from_json(args[0], v) for v in value]
+    if origin is tuple:
+        return tuple(from_json(args[0], v) for v in value)
     if origin is frozenset:
         return frozenset(from_json(args[0], v) for v in value)
     if origin is dict:

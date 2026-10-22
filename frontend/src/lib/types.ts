@@ -486,6 +486,35 @@ export interface EncoderBundle {
   version: 1
   encoders: { label: string; group: string[]; data: EncoderSettings }[]
 }
+export interface ConfigurationBundle {
+  format: 'videoforge.configuration'
+  version: 1
+  application: Record<string, unknown> & { allow_commands: boolean }
+  settings: Record<string, unknown> & { notifications: NotificationDestination[]; actions: ActionSetting[]; disabled_plugins: string[] }
+  folders: { output_dir: string; last_dir: string }
+  presets: { template: Preset<Template>[]; video: Preset<VideoPresetData>[]; encoder: Preset<EncoderSettings>[]; audio: Preset<AudioPresetSettings>[] }
+  template_defaults: Record<string, string>
+}
+export interface ConfigurationPreview {
+  bundle: ConfigurationBundle
+  counts: Record<PresetKind, number>
+  current_counts: Record<PresetKind, number>
+  warnings: string[]
+}
+export interface PresetPack {
+  format: 'videoforge.presets'
+  version: 1
+  presets: {
+    template: { name: string; data: Template }[]
+    video: { name: string; data: VideoPresetData }[]
+    encoder: { label: string; group: string[]; data: EncoderSettings }[]
+    audio: { label: string; group: string[]; data: AudioPresetSettings }[]
+  }
+}
+export interface PresetPackPreview {
+  bundle: PresetPack
+  names: Record<PresetKind, string[]>
+}
 // A template's audio (source tracks only), by position or by rules. Position: slot n is for the
 // source's nth audio track (extra slots are ignored). Rules: each track takes the first rule it
 // matches (empty lists and null = any; commentary/AD by flag or title); a first_only rule goes to the

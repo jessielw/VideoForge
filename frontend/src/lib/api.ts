@@ -7,6 +7,8 @@ import type {
   CommandStep,
   DirContents,
   ConfigState,
+  ConfigurationBundle,
+  ConfigurationPreview,
   Crop,
   DirListing,
   EncoderName,
@@ -21,6 +23,8 @@ import type {
   PathKind,
   PresetKind,
   Presets,
+  PresetPack,
+  PresetPackPreview,
   Priority,
   Profile,
   QueueState,
@@ -111,6 +115,12 @@ export const api = {
   setTemplateDefault: (profile: string, name: string | null) =>
     request<Presets>('PUT', `/api/presets/template-default/${encodeURIComponent(profile)}`, { name }),
   config: () => get<ConfigState>('/api/config'),
+  exportConfiguration: () => get<ConfigurationBundle>('/api/configuration/export'),
+  exportPresetPack: (bundle: PresetPack) => post<PresetPack>('/api/preset-packs/export', bundle),
+  previewPresetPack: (bundle: unknown) => post<PresetPackPreview>('/api/preset-packs/preview', bundle),
+  importPresetPack: (bundle: PresetPack) => post<{ presets: Presets; names: Record<PresetKind, string[]> }>('/api/preset-packs/import', bundle),
+  previewConfiguration: (bundle: unknown) => post<ConfigurationPreview>('/api/configuration/preview', bundle),
+  importConfiguration: (bundle: ConfigurationBundle) => post<{ config: ConfigState; presets: Presets; warnings: string[] }>('/api/configuration/import', bundle),
   saveConfig: (changes: {
     tools?: Record<string, string | null>
     roots?: string[] | null
