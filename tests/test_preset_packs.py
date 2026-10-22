@@ -53,11 +53,13 @@ def test_share_selected_libraries_without_private_configuration_and_import_on_an
         raw = json.dumps(configuration)
         assert all(secret in raw for secret in ("PLUGIN_SECRET", "NOTIFICATION_SECRET", "ACTION_SECRET"))
         doc = portable(configuration)
+        doc["presets"]["audio"][0]["data"]["title"] = "Bob"
         # Export only the reusable settings, not this group's complete library.
         doc["presets"]["video"] = []
         response = sender.post("/api/preset-packs/export", json=doc)
         assert response.status_code == 200, response.text
         shared = response.json()
+        assert shared["presets"]["audio"][0]["data"]["title"] == "Bob"
         assert set(shared) == {"format", "version", "presets"}
         raw = json.dumps(shared)
         assert all(
