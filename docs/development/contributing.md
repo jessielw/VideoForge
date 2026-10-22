@@ -47,6 +47,13 @@ npm run check
 npm run build
 ```
 
+The app on port **8765**, including the desktop window, serves `frontend/dist`. After editing
+the frontend, run `npm run build` and reload that app to see the changes. Port **5173** serves
+the source directly through Vite during development.
+
+Run browser tests with `npm run test:browser`. To check the built app, build first and set
+`PLAYWRIGHT_PREVIEW=1` before running the browser tests (PowerShell: `$env:PLAYWRIGHT_PREVIEW = '1'`).
+
 ## Extension points
 
 Use a [profile](profiles.md) for track planning and release checks. Use an [action](../actions.md)

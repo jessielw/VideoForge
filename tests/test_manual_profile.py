@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from conftest import audio, plan_for, simulate_output, source, sub
+import pytest
 
 from videoforge.core.jobs import ProbedInputs
 from videoforge.core.models import (
@@ -136,6 +137,34 @@ def test_audio_encode_overrides_layout_and_bitrate():
         str(encoded([audio(C.TRUEHD, "7.1", index=0)], id_1=TrackOverride(action=AudioAction.DDP)).audio[0].out_layout)
         == "7.1"
     )
+
+
+def test_ddp_bluray_defaults_and_mode_validation():
+    tracks = [audio(C.TRUEHD, "7.1", index=0)]
+    plan = encoded(tracks, id_1=TrackOverride(action=AudioAction.DDP, options={"ddp_mode": "bluray"}))
+    assert not plan.issues
+    assert plan.audio[0].out_layout == Layout(7, 1)
+    assert plan.audio[0].bitrate_kbps == 1280
+    assert plan.audio[0].options["ddp_mode"] == "bluray"
+    standard = encoded(tracks, id_1=TrackOverride(action=AudioAction.DDP))
+    assert standard.audio[0].options["ddp_mode"] == "standard"
+    assert standard.audio[0].bitrate_kbps == 1024
+    bad = encoded(tracks, id_1=TrackOverride(action=AudioAction.DDP, options={"ddp_mode": "auto"}))
+    assert bad.blocked and [i.code for i in bad.issues] == ["audio.option"]
+
+
+@pytest.mark.parametrize("source_layout, output_layout", [("5.0", None), ("5.1", None), ("2.0", None), ("7.1", "5.1")])
+def test_ddp_bluray_blocks_incompatible_layouts(source_layout, output_layout):
+    plan = encoded(
+        [audio(C.TRUEHD, source_layout, index=0)],
+        id_1=TrackOverride(
+            action=AudioAction.DDP,
+            layout=Layout.parse(output_layout) if output_layout else None,
+            options={"ddp_mode": "bluray"},
+        ),
+    )
+    assert plan.blocked
+    assert any(i.code in {"audio.upmix", "audio.layout"} for i in plan.issues)
 
 
 def test_impossible_audio_encodes_block():

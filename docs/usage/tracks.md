@@ -27,15 +27,24 @@ rules instead of offering the full manual editor.
 The editor exposes each encoder's supported layouts and bitrates. An Atmos encode requires a
 suitable TrueHD Atmos source. Manually chosen settings that cannot be satisfied block the plan.
 
+For **DDP (DEE)**, open the track's **Settings** and select **DDP mode → Standard / Blu-ray**.
+Standard is the default. Blu-ray uses DeeZy's `ddp-bluray` encoder, requires a source with at least
+eight channels and 7.1 output, and defaults to 1280 kb/s when bitrate is automatic. Bitrate never
+switches the mode automatically. The mode is saved with audio presets and template outputs under
+**Advanced settings**. When a template is fitted to a source with fewer than eight channels, it
+uses Standard DDP and the source's default layout and bitrate.
+
 You can make more than one output from a source audio track, for example a copied original plus
 an encoded compatibility track. Each encoded output is a separate reusable step.
 
-### Fix an out-of-sync track
+### Adjust audio delay
 
-Each audio track has a **Sync** field in milliseconds: a positive value plays the track later, a
-negative one earlier. It is added to the track's own delay (shown in its details) and applied when
-muxing, so changing it does not encode the track again. A negative value drops the audio before
-the video's first frame. A track that ends up more than 2 seconds off the video warns, which often
+Each audio track has a **Delay** field showing its total delay relative to video in milliseconds:
+a positive value plays the track later, a negative one earlier. It starts with the detected source
+delay, so a track detected at +24 ms shows **24**. Entering **0** cancels that delay; clearing the
+field restores the detected delay. Changes are applied when muxing, so changing Delay does not
+encode the track again. A negative value drops the audio before the video's first frame.
+A track that ends up more than 2 seconds off the video warns, which often
 means the wrong file or a wrong value.
 
 Audio encodes run alongside the video once indexing is complete. **Settings** controls how many

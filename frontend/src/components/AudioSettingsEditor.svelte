@@ -2,6 +2,7 @@
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import { shownOptions } from '../lib/format'
+  import { audioEncodeLayouts } from '../lib/audioPresets'
   import { app } from '../lib/state.svelte'
   import type { AudioAction, AudioPresetSettings, EncodeOptionInfo } from '../lib/types'
 
@@ -23,7 +24,7 @@
     const v = raw.trim()
     if (v === option.default || (!v && !option.choices.length && !option.range)) delete options[option.key]
     else options[option.key] = v
-    set({ options })
+    set({ options, ...(option.key === 'ddp_mode' && v === 'bluray' && value.layout !== '7.1' ? { layout: null } : {}) })
   }
 </script>
 
@@ -35,22 +36,22 @@
       <span class="block">Optional. A custom title is restored whenever this preset is selected.</span>
     </label>
   {/if}
-  <div class="flex flex-wrap items-center gap-3">
-    <label class="space-y-1 text-xs text-muted-foreground">Encoder
+  <div class="flex flex-wrap items-end gap-3">
+    <label class="grid gap-1 text-xs text-muted-foreground">Encoder
       <NativeSelect value={value.action} aria-label="Copy or encode" onchange={e => set({ action: e.currentTarget.value as AudioAction, layout: null, bitrate_kbps: null, options: {} })}>
         <option value="copy">Copy</option>
         {#each app.encodes as e (e.id)}<option value={e.id}>{e.label}{e.missing.length ? ` (needs ${e.missing.join(', ')})` : ''}</option>{/each}
       </NativeSelect>
     </label>
     {#if enc}
-      <label class="space-y-1 text-xs text-muted-foreground">Channels
+      <label class="grid gap-1 text-xs text-muted-foreground">Channels
         <NativeSelect value={value.layout ?? ''} aria-label="Channels" onchange={e => set({ layout: e.currentTarget.value || null })}>
           <option value="">Auto</option>
-          {#each enc.layouts as layout (layout)}<option value={layout}>{layout}</option>{/each}
+          {#each audioEncodeLayouts(enc, value.options) as layout (layout)}<option value={layout}>{layout}</option>{/each}
         </NativeSelect>
       </label>
       {#if enc.bitrates !== null}
-        <label class="space-y-1 text-xs text-muted-foreground">Bitrate (kb/s)
+        <label class="grid gap-1 text-xs text-muted-foreground">Bitrate (kb/s)
           {#if enc.bitrate_choices.length}
             <NativeSelect value={value.bitrate_kbps ?? ''} aria-label="Bitrate" onchange={e => set({ bitrate_kbps: e.currentTarget.value ? Number(e.currentTarget.value) : null })}>
               <option value="">Auto</option>

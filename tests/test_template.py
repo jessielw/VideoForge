@@ -140,6 +140,19 @@ def test_audio_slots_fit_each_track():
     assert fit_audio(copied, stereo) == copied  # nothing to fit on a copy
 
 
+def test_ddp_bluray_templates_persist_mode_and_fit_smaller_sources():
+    ov = TrackOverride(action=AudioAction.DDP, layout=Layout(7, 1), bitrate_kbps=1536, options={"ddp_mode": "bluray"})
+    template = Template(audio=TemplateAudio(slots=[AudioSlot(ov)]))
+    restored = from_json(Template, to_json(template))
+    assert restored.audio.slots[0].track.options == {"ddp_mode": "bluray"}
+    assert fit_audio(ov, audio(AudioCodec.TRUEHD, "7.1")) == ov
+    for layout in ("2.0", "5.0", "5.1"):
+        fitted = fit_audio(ov, audio(AudioCodec.FLAC, layout))
+        assert fitted.options["ddp_mode"] == "standard"
+        assert fitted.layout is None and fitted.bitrate_kbps is None
+    assert ov.options == {"ddp_mode": "bluray"}  # fitting never edits the saved template
+
+
 def test_sub_rules_match_language_format_and_traits():
     forced_by_title = sub(SubFormat.PGS, "en", "English (Forced)")
     sdh = sub(SubFormat.SRT, "en-US", "English SDH", index=1)

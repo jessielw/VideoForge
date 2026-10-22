@@ -13,7 +13,7 @@
   import FileBrowser from './FileBrowser.svelte'
   import SubtitleSelectionMenu from './SubtitleSelectionMenu.svelte'
   import AudioPresetMenu from './AudioPresetMenu.svelte'
-  import { applyAudioPreset, audioPresetSettings } from '../lib/audioPresets'
+  import { applyAudioPreset, audioEncodeLayouts, audioPresetSettings } from '../lib/audioPresets'
   import { selectSubtitles } from '../lib/subtitleSelection'
   import { drops, pathDrop } from '../lib/dropPaths.svelte'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
@@ -233,7 +233,7 @@
 
   // The layouts an encode can make from this track: no upmix (DDP's 5.0 -> 5.1 aside).
   function layoutChoices(t: AudioTrack, e: AudioEncodeInfo): string[] {
-    return e.layouts.filter(l => channels(l) <= channels(t.layout) || (e.id === 'ddp' && t.layout === '5.0' && l === '5.1'))
+    return audioEncodeLayouts(e, ovOf(t)?.options).filter(l => channels(l) <= channels(t.layout) || (e.id === 'ddp' && t.layout === '5.0' && l === '5.1'))
   }
 
   const setAction = (t: AudioTrack, a: AudioAction) =>
@@ -250,13 +250,21 @@
       ov.options ??= {}
       if (v.trim() === o.default || !v.trim() && !o.choices.length && !o.range) delete ov.options[o.key]
       else ov.options[o.key] = v.trim()
+      if (o.key === 'ddp_mode' && v.trim() === 'bluray' && ov.layout !== '7.1') ov.layout = null
     })
   const changedOptions = (t: AudioTrack, e: AudioEncodeInfo) =>
     e.options.filter(o => ovOf(t)?.options?.[o.key] !== undefined).length
   const setLayout = (t: AudioTrack, v: string) => editTrack(t, ov => (ov.layout = v || null))
-  function setSync(t: AudioTrack, v: string) {
+  function setDelay(t: AudioTrack, input: HTMLInputElement) {
+    const v = input.value
     const n = Math.round(Number(v))
-    editTrack(t, ov => (ov.sync_ms = v.trim() && Number.isFinite(n) && n ? n : null))
+    // Show the total delay, but keep the saved correction relative to the source so its
+    // timestamps (or an encoder's built-in delay) aren't applied a second time.
+    const correction = v.trim() && Number.isFinite(n) ? n - t.delay_ms : 0
+    // Restore the visible value even when clearing an already unmodified delay; its
+    // saved value doesn't change, so Svelte otherwise leaves the input blank.
+    input.value = String(t.delay_ms + correction)
+    editTrack(t, ov => (ov.sync_ms = correction || null))
   }
   function setBitrate(t: AudioTrack, v: string) {
     const n = Math.round(+v)
@@ -515,7 +523,7 @@
         {@const actionMark = mark(t, o => o?.action)}
         {@const layoutMark = mark(t, o => o?.layout)}
         {@const bitrateMark = mark(t, o => o?.bitrate_kbps)}
-        {@const syncMark = mark(t, o => o?.sync_ms)}
+        {@const delayMark = mark(t, o => o?.sync_ms)}
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-3 py-2 text-sm">
           <AudioPresetMenu current={audioPresetSettings(ov)} source={t} disabled={!editable}
             apply={preset => editTrack(t, value => Object.assign(value, applyAudioPreset(value, preset)))} />
@@ -573,17 +581,17 @@
           {/if}
           <label
             class="flex items-center gap-1.5 text-muted-foreground"
-            title="Move this track: + later, − earlier, on top of its own delay{t.delay_ms ? ` (${t.delay_ms > 0 ? '+' : ''}${t.delay_ms} ms)` : ''}. Only the mux changes: an encode isn't made again."
+            title="Total delay relative to video: + later, − earlier. Detected delay: {t.delay_ms > 0 ? '+' : ''}{t.delay_ms} ms. Clear to restore the detected delay. Only the mux changes: an encode isn't made again."
           >
-            Sync
+            Delay
             <Input
-              class="w-20 {syncMark ? INPUT_MARK[syncMark] : ''}"
+              class="w-20 {delayMark ? INPUT_MARK[delayMark] : ''}"
               type="number"
               step="1"
-              placeholder="0"
-              value={ov?.sync_ms ?? ''}
-              aria-label="Sync (ms)"
-              onchange={e => setSync(t, e.currentTarget.value)}
+              placeholder={String(t.delay_ms)}
+              value={t.delay_ms + (ov?.sync_ms ?? 0)}
+              aria-label="Delay (ms)"
+              onchange={e => setDelay(t, e.currentTarget)}
             />ms
           </label>
           {#if enc?.options.length}

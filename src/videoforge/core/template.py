@@ -126,6 +126,10 @@ def fit_audio(ov: TrackOverride, track: AudioTrack) -> TrackOverride:
     enc = ENCODES.get(out.action) if out.action else None
     if enc is None:  # copied
         return out
+    if out.action is AudioAction.DDP and out.options.get("ddp_mode") == "bluray" and track.layout.channels < 8:
+        out.options["ddp_mode"] = "standard"
+        out.layout, out.bitrate_kbps = None, None
+    enc = enc.configured(out.options)
     if out.layout and (out.layout not in enc.layouts or enc.upmixes(track.layout, out.layout)):
         out.layout, out.bitrate_kbps = None, None
     if out.bitrate_kbps and enc.bitrate_problem(out.bitrate_kbps, out.layout or enc.default_layout(track.layout)):

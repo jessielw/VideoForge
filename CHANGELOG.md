@@ -12,6 +12,13 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Audio **Delay** fields show the total delay, initially filled with the detected source delay.
+  Entering zero cancels that delay; clearing the field restores it. Existing saved corrections
+  retain their timing.
+
+- DDP mode selection for DeeZy: Standard (default) or Blu-ray, retained in audio presets and
+  templates. Blu-ray uses `ddp-bluray`, requires 7.1 output, and defaults to 1280 kb/s.
+
 - Readable Event logger and Jellyfin Library scan examples include setup guides. Releases attach
   installable example plugin ZIPs generated from the same source folders.
 
@@ -93,10 +100,6 @@ source), or in Docker on Linux.
 - **Starter encoder presets.** Every encoder preset picker now offers x265 SDR (CRF 20), x265 HDR10 /
   HDR10+ (CRF 18), x265 Dolby Vision (CRF 18, `--level-idc 5.1`, which fills the VBV Dolby Vision needs)
   and SVT-AV1 (CRF 30, preset 4), all 10-bit, next to the profile's own defaults. Save a copy to change one.
-
-- **Audio sync correction.** Each audio track in the track editor has a Sync field (ms, + later,
-  − earlier) on top of its own delay, applied at the mux so the encode isn't made again. A track more
-  than 2 seconds off the video warns.
 
 - **Output file checks.** A job whose output file already exists warns that the run replaces it, and
   two jobs that would write the same file are blocked until one gets a label, name or folder of its own.

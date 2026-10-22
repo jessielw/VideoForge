@@ -223,7 +223,7 @@ def test_copied_audio_keeps_container_delay_without_sync():
 
 
 def test_sync_moves_a_track_on_top_of_its_own_delay():
-    """The track editor's Sync (StaxRip's audio Delay field): added at the mux, to copies and encodes alike, so
+    """The track editor's Delay correction: added at the mux, to copies and encodes alike, so
     the encode isn't made again; a track that ends up more than 2 s off the video warns, as StaxRip does."""
     plan = aot_plan()  # Japanese AAC: delay -7 at the mux; English DDP: DeeZy applies its 12
     a0, a1 = plan.audio

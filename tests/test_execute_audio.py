@@ -72,6 +72,18 @@ def test_ddp_71():
     assert "--channels=8" in argv and "--bitrate=1280" in argv
 
 
+@pytest.mark.parametrize("mode, encoder", [(None, "ddp"), ("standard", "ddp"), ("bluray", "ddp-bluray")])
+def test_ddp_mode_selects_command_independently_of_bitrate(mode, encoder):
+    p = planned(C.TRUEHD, "7.1", A.DDP, bitrate=1536)
+    if mode:
+        p.options = {"ddp_mode": mode}
+    (argv,) = command(p).argvs
+    assert argv[:3] == ("deezy", "encode", encoder)
+    assert "--channels=8" in argv and "--bitrate=1536" in argv
+    assert "--upmix-50-to-51" not in argv
+    assert not any(a.startswith("--ddp-mode") for a in argv)
+
+
 def test_atmos():
     (argv,) = command(planned(C.TRUEHD, "7.1", A.ATMOS, "5.1", 1024, atmos=True)).argvs
     assert argv[:3] == ("deezy", "encode", "atmos")

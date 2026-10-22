@@ -26,6 +26,16 @@ class AudioPresetSettings:
                 raise ValueError("Copy does not take channels, bitrate, or encoder options")
             return
         enc = ENCODES[self.action]
+        if any(not isinstance(v, str) for v in self.options.values()):
+            raise ValueError("Encoder option values must be text")
+        unknown = self.options.keys() - {o.key for o in enc.options}
+        if unknown:
+            raise ValueError(f"Unknown {enc.label} options: {', '.join(sorted(unknown))}")
+        options, problems = enc.resolve_options(self.options)
+        if problems:
+            raise ValueError("; ".join(problems))
+        self.options = {k: v.strip() for k, v in self.options.items()}
+        enc = enc.configured(options)
         if self.layout is not None and self.layout not in enc.layouts:
             raise ValueError(f"{enc.label} does not support {self.layout}")
         if self.bitrate_kbps is not None:
@@ -36,12 +46,3 @@ class AudioPresetSettings:
             layout = self.layout or max(enc.layouts, key=lambda lay: lay.channels)
             if problem := enc.bitrate_problem(self.bitrate_kbps, layout):
                 raise ValueError(problem)
-        if any(not isinstance(v, str) for v in self.options.values()):
-            raise ValueError("Encoder option values must be text")
-        unknown = self.options.keys() - {o.key for o in enc.options}
-        if unknown:
-            raise ValueError(f"Unknown {enc.label} options: {', '.join(sorted(unknown))}")
-        _, problems = enc.resolve_options(self.options)
-        if problems:
-            raise ValueError("; ".join(problems))
-        self.options = {k: v.strip() for k, v in self.options.items()}

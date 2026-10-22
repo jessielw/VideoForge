@@ -21,7 +21,7 @@ pass. The measure runs the encode's own downmix first, so the level it reads is 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import sys
 
@@ -150,6 +150,12 @@ class AudioEncode:
     delay_in_encode: bool = False  # it applies the source delay itself, so the mux must not
     options: tuple[EncodeOption, ...] = ()
 
+    def configured(self, options: Mapping[str, str]) -> AudioEncode:
+        """The layouts and defaults for the selected encoder mode."""
+        if self.action is AudioAction.DDP and options.get("ddp_mode") == "bluray":
+            return replace(self, layouts=_layouts("7.1"), bitrates={8: 1280})
+        return self
+
     def resolve_options(
         self, given: dict[str, str], defaults: dict[str, str] | None = None
     ) -> tuple[dict[str, str], list[str]]:
@@ -179,7 +185,12 @@ class AudioEncode:
 
     def upmix_50(self, source: Layout, layout: Layout) -> bool:
         """True for DDP's 5.1 from a 5.0 source, the one upmix allowed (DeeZy adds the LFE)."""
-        return self.action is AudioAction.DDP and source == Layout(5, 0) and layout == Layout(5, 1)
+        return (
+            self.action is AudioAction.DDP
+            and source == Layout(5, 0)
+            and layout == Layout(5, 1)
+            and layout in self.layouts
+        )
 
     def upmixes(self, source: Layout, layout: Layout) -> bool:
         """True when this layout needs channels the source doesn't have."""
@@ -219,6 +230,13 @@ ENCODES: dict[AudioAction, AudioEncode] = {
             bitrates={1: 192, 2: 256, 6: 640, 8: 1024},
             delay_in_encode=True,
             options=(
+                EncodeOption(
+                    "ddp_mode",
+                    "DDP mode",
+                    "standard",
+                    choices=(("standard", "Standard"), ("bluray", "Blu-ray")),
+                    help="Blu-ray requires 7.1 output; auto bitrate is 1280 kb/s",
+                ),
                 *_DEEZY,
                 EncodeOption(
                     "stereo_downmix",
@@ -562,7 +580,8 @@ def _deezy(
     if planned.action is AudioAction.ATMOS:
         mode = ("encode", "atmos", f"--atmos-mode={_opt(planned, 'atmos_mode', settings)}")
     else:
-        mode = ("encode", "ddp", f"--channels={planned.out_layout.channels}")
+        encoder = "ddp-bluray" if _opt(planned, "ddp_mode") == "bluray" else "ddp"
+        mode = ("encode", encoder, f"--channels={planned.out_layout.channels}")
         if planned.upmix_50:
             mode += ("--upmix-50-to-51",)
     chosen = ()

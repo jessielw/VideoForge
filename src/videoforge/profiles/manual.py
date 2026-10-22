@@ -114,6 +114,7 @@ def audio_output(
         ov.options if ov else {}, (settings or AudioSettings()).option_defaults(action)
     )
     issues += [Issue(Severity.BLOCK, "audio.option", f"Audio #{t.id}: {p}") for p in problems]
+    enc = enc.configured(options)
     if action is AudioAction.ATMOS:
         if not (t.atmos and t.codec is AudioCodec.TRUEHD):
             issues.append(

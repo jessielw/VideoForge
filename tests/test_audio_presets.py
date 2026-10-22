@@ -74,6 +74,8 @@ def test_audio_preset_folders_and_metadata(tmp_path):
         {"action": "ac3", "options": {"dialnorm": -27}},
         {"action": "ac3", "options": {"unknown": "value"}},
         {"action": "aac", "options": {"quality": "128"}},
+        {"action": "ddp", "options": {"ddp_mode": "auto"}},
+        {"action": "ddp", "layout": "5.1", "options": {"ddp_mode": " bluray "}},
     ],
 )
 def test_invalid_audio_presets_are_rejected(tmp_path, data):
@@ -116,3 +118,20 @@ def test_audio_encoder_limits_are_exposed_for_source_compatibility(tmp_path):
         assert encodes["opus"]["per_channel_max"] == 256
         assert encodes["opus"]["bitrate_range"] == [6, 2048]
         assert encodes["ac3"]["bitrate_choices"][-1] == 640
+        mode = next(o for o in encodes["ddp"]["options"] if o["key"] == "ddp_mode")
+        assert mode["default"] == "standard"
+        assert mode["choices"] == [{"value": "standard", "label": "Standard"}, {"value": "bluray", "label": "Blu-ray"}]
+
+
+def test_ddp_bluray_preset_persists_and_checks_layout(tmp_path):
+    data = {"action": "ddp", "layout": "7.1", "bitrate_kbps": 1536, "options": {"ddp_mode": "bluray"}}
+    with make_client(tmp_path) as client:
+        response = client.post("/api/presets/audio", json={"label": "Blu-ray", "data": data})
+        assert response.status_code == 200, response.text
+        (saved,) = response.json()["audio"]
+        assert saved["data"]["options"] == {"ddp_mode": "bluray"}
+        for layout in ("1.0", "2.0", "5.1"):
+            response = client.post("/api/presets/audio", json={"label": "Invalid", "data": data | {"layout": layout}})
+            assert response.status_code == 422
+    with make_client(tmp_path) as client:
+        assert client.get("/api/presets").json()["audio"] == [saved]

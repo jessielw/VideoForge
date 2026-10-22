@@ -21,9 +21,13 @@ async function fixture(page: Page) {
   const profile: Profile = { id: 'manual', name: 'Manual', default: true, container: 'mkv',
     containers: [{ id: 'mkv', label: 'MKV', extension: '.mkv', tool: 'mkvmerge' }], external_subtitles: true,
     track_editor: true, track_properties: [], defaults: { video: template.video, encoder: template.encoder, template } }
-  const enc: AudioEncodeInfo = { id: 'ddp', label: 'DDP (DEE)', codec: 'eac3', layouts: ['2.0', '5.1'],
-    bitrates: { '2': 256, '6': 640 }, bitrate_choices: [], bitrate_range: null, per_channel_max: null,
-    vbr_default: false, default_max: null, missing: [], options: [] }
+  const enc: AudioEncodeInfo = { id: 'ddp', label: 'DDP (DEE)', codec: 'eac3', layouts: ['2.0', '5.1', '7.1'],
+    bitrates: { '2': 256, '6': 640, '8': 1024 }, bitrate_choices: [], bitrate_range: null, per_channel_max: null,
+    vbr_default: false, default_max: null, missing: [], options: [
+      { key: 'ddp_mode', label: 'DDP mode', default: 'standard',
+        choices: [{ value: 'standard', label: 'Standard' }, { value: 'bluray', label: 'Blu-ray' }],
+        help: 'Blu-ray requires 7.1 output; auto bitrate is 1280 kb/s', range: null, step: 1, when: null },
+    ] }
   const presets: Presets = { video: [], encoder: [], audio: [structuredClone(saved)],
     template: [{ name: 'Current template', data: template }], template_defaults: { manual: 'Current template' }, encoder_starters: [] }
   await page.routeWebSocket('**/api/events', () => {})
@@ -83,6 +87,30 @@ test('saved titles apply, remain editable, and survive saving and selecting agai
   await page.getByRole('textbox', { name: 'Search audio presets' }).fill('Surround')
   await page.getByRole('button', { name: /Surround/ }).click()
   await expect(output.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Bob edited')
+  expect(errors).toEqual([])
+})
+
+test('DDP mode saves in presets and applies to template outputs with mode-specific channels', async ({ page }) => {
+  const { output, openManager, errors } = await fixture(page)
+  const manager = await openManager()
+  await manager.getByRole('textbox', { name: 'Search audio presets' }).fill('Surround')
+  await manager.getByRole('button', { name: /Surround/ }).click()
+  await manager.getByText('Advanced settings', { exact: false }).click()
+  await expect(manager.getByLabel('DDP mode', { exact: true })).toHaveValue('standard')
+  await manager.getByLabel('DDP mode', { exact: true }).selectOption('bluray')
+  await expect(manager.getByRole('combobox', { name: 'Channels', exact: true })).toHaveValue('')
+  await expect(manager.getByRole('combobox', { name: 'Channels', exact: true }).locator('option')).toHaveText(['Auto', '7.1'])
+  await manager.getByRole('spinbutton', { name: 'Bitrate', exact: true }).fill('')
+  await manager.getByRole('spinbutton', { name: 'Bitrate', exact: true }).blur()
+  await manager.getByRole('button', { name: 'Save preset', exact: true }).click()
+  await manager.getByRole('button', { name: 'Apply to this output', exact: true }).click()
+  await output.getByText('Advanced settings', { exact: false }).click()
+  await expect(output.getByLabel('DDP mode', { exact: true })).toHaveValue('bluray')
+  await expect(output.getByRole('combobox', { name: 'Channels', exact: true }).locator('option')).toHaveText(['Auto', '7.1'])
+  const reopened = await openManager()
+  await reopened.getByRole('textbox', { name: 'Search audio presets' }).fill('Surround')
+  await reopened.getByRole('button', { name: /Surround/ }).click()
+  await expect(reopened.getByLabel('DDP mode', { exact: true })).toHaveValue('bluray')
   expect(errors).toEqual([])
 })
 

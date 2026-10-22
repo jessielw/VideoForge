@@ -49,6 +49,18 @@ test('Atmos requires TrueHD Atmos when applying directly to a source', () => {
   assert.equal(audioPresetProblem(setting, encodes), '') // templates fit it to each source later
 })
 
+test('DDP Blu-ray requires 7.1 even for auto channels and the 5.0 upmix exception', () => {
+  const setting: AudioPresetSettings = { ...preset, layout: null, bitrate_kbps: 1536, options: { ddp_mode: 'bluray' } }
+  assert.equal(audioPresetProblem(setting, encodes, source('7.1')), '')
+  assert.equal(audioPresetProblem(setting, encodes), '')
+  for (const layout of ['2.0', '5.0', '5.1']) {
+    assert.match(audioPresetProblem(setting, encodes, source(layout)), /more channels/)
+    assert.match(audioPresetProblem({ ...setting, layout }, encodes), /does not support/)
+  }
+  const applied = applyAudioPreset({ ...preset, flags: {} }, setting)
+  assert.equal(audioPresetSettings(applied).options.ddp_mode, 'bluray')
+})
+
 test('automatic output layouts still enforce bitrate limits for the actual source', () => {
   const setting = { ...preset, action: 'opus', layout: null, bitrate_kbps: 384 } as AudioPresetSettings
   assert.match(audioPresetProblem(setting, encodes, source('1.0')), /exceeds the limit/)

@@ -3,6 +3,10 @@ import type { AudioEncodeInfo, AudioPresetSettings, AudioTrack, Preset, TrackOve
 export const channels = (layout: string) => layout.split('.').reduce((sum, part) => sum + Number(part), 0)
 const copySettings = (): AudioPresetSettings => ({ action: 'copy', layout: null, bitrate_kbps: null, options: {}, title: null })
 
+export function audioEncodeLayouts(enc: AudioEncodeInfo, options: Record<string, string> = {}): string[] {
+  return enc.id === 'ddp' && options.ddp_mode === 'bluray' ? ['7.1'] : enc.layouts
+}
+
 export function audioPresetSettings(value?: Partial<TrackOverride>): AudioPresetSettings {
   const title = { title: value?.title ?? null }
   if (!value?.action || value.action === 'copy') return { ...copySettings(), ...title }
@@ -17,7 +21,7 @@ export function applyAudioPreset(value: TrackOverride, preset: AudioPresetSettin
 }
 
 function defaultLayout(enc: AudioEncodeInfo, source: string): string {
-  if (enc.id === 'ddp' && source === '5.0') return '5.1'
+  if (enc.id === 'ddp' && source === '5.0' && enc.layouts.includes('5.1')) return '5.1'
   const cap = enc.default_max ? Math.min(channels(source), channels(enc.default_max)) : channels(source)
   const fits = enc.layouts.filter(layout => channels(layout) <= cap)
   if (fits.includes(source)) return source
@@ -28,9 +32,10 @@ export function audioPresetProblem(settings: AudioPresetSettings, encodes: Audio
   if (settings.action === 'copy') return ''
   const enc = encodes.find(e => e.id === settings.action)
   if (!enc) return 'Encoder information is unavailable'
-  if (settings.layout && !enc.layouts.includes(settings.layout)) return `${enc.label} does not support ${settings.layout}`
+  const layouts = audioEncodeLayouts(enc, settings.options)
+  if (settings.layout && !layouts.includes(settings.layout)) return `${enc.label} does not support ${settings.layout} in this mode`
   if (source && settings.action === 'atmos' && !(source.codec === 'truehd' && source.atmos)) return 'Requires a TrueHD Atmos source'
-  const layout = settings.layout ?? (source ? defaultLayout(enc, source.layout) : null)
+  const layout = settings.layout ?? (source ? defaultLayout({ ...enc, layouts }, source.layout) : null)
   if (source && layout && channels(layout) > channels(source.layout)
     && !(enc.id === 'ddp' && source.layout === '5.0' && layout === '5.1')) return `${layout} requires more channels than this ${source.layout} source`
   const bitrate = settings.bitrate_kbps
