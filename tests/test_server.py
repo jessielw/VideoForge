@@ -1134,7 +1134,7 @@ def test_templates(tmp_path):
             assert job["status"] != "blocked", job["issues"] if "issues" in job else job["plan"]["issues"]
             spec = job["spec"]
             assert spec["encoder"]["encoder"] == "x265" and spec["encoder"]["crf"] == 16
-            assert spec["mux"] == {"container": "mkv", "extra": "-x"} and spec["qpf"] is False
+            assert spec["mux"] == {"container": "mkv", "extra": "-x", "pgs_zlib": False} and spec["qpf"] is False
             assert [(f["category"], f["script"]) for f in spec["video"]["filters"]] == [  # the old text, upgraded
                 ("crop", ""),
                 ("resize", ""),
@@ -1151,8 +1151,8 @@ def test_templates(tmp_path):
         client.patch(f"/api/jobs/{ids[0]}", json={"mux": {"container": "mp4", "extra": "-y"}})
         client.post("/api/jobs/apply", json={"ids": ids, "container": "mkv"})
         assert [client.get(f"/api/jobs/{i}").json()["spec"]["mux"] for i in ids] == [
-            {"container": "mkv", "extra": "-y"},
-            {"container": "mkv", "extra": "-x"},
+            {"container": "mkv", "extra": "-y", "pgs_zlib": False},
+            {"container": "mkv", "extra": "-x", "pgs_zlib": False},
         ]
 
         # Auto again, held: the job shows it, can't be queued, and a hand crop meanwhile wins.
