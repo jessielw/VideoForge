@@ -6,11 +6,12 @@
   import { app } from '../lib/state.svelte'
   import { ENCODERS, type EncoderSettings } from '../lib/types'
 
-  let { profile, current, apply, disabled = false }: {
+  let { profile, current, apply, disabled = false, manageOnly = false }: {
     profile: string
     current: EncoderSettings
     apply: (settings: EncoderSettings) => void | Promise<void>
     disabled?: boolean
+    manageOnly?: boolean
   } = $props()
 
   const summary = (data: EncoderSettings) => {
@@ -21,7 +22,7 @@
 </script>
 
 <GroupedPresetMenu
-  title="Encoder" {current} {apply} {disabled}
+  title="Encoder" {current} {apply} {disabled} {manageOnly}
   choices={app.presetChoices('encoder', profile)} parents={ENCODERS}
   parentOf={data => data.encoder} {summary} builtinLabel="profile"
   nameExample="Grain" folderExample="1080p / SDR"

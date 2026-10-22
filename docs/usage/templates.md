@@ -66,8 +66,9 @@ source. A job using an existing encode has no video to crop.
 ## Audio by position
 
 Each primary or extra audio output has an **Audio preset** picker for reusable encoder, channels,
-bitrate, and encoder options. It preserves the output's title and flags and the slot's or rule's
-matching settings; see [audio presets](tracks.md#audio-presets).
+bitrate, encoder options, and an optional custom track title. Presets without a custom title keep
+the output's title. Flags and the slot's or rule's matching settings stay as they are;
+see [audio presets](tracks.md#audio-presets).
 
 Slot 1 applies to the first source audio track, slot 2 to the second, and so on. You can create
 several outputs from a slot. Slots beyond the source's tracks are ignored; choose what to do with

@@ -10,7 +10,7 @@
 
   let { title, current, choices, parents, parentOf, summary, apply, savePreset, removePreset, editor,
     folderExample, nameExample, folderHint = 'Use / for nested folders.', builtinLabel = 'built-in',
-    problem = () => '', showTitle = false, applyLabel = 'Apply settings', disabled = false, transfer }: {
+    problem = () => '', showTitle = false, applyLabel = 'Apply settings', disabled = false, transfer, manageOnly = false }: {
     title: string
     current: T
     choices: PresetChoice<T>[]
@@ -29,6 +29,7 @@
     showTitle?: boolean
     applyLabel?: string
     disabled?: boolean
+    manageOnly?: boolean
     transfer?: Snippet<[PresetDraft<T> | null, boolean]>
   } = $props()
 
@@ -76,6 +77,9 @@
   }
 </script>
 
+{#if manageOnly}
+  <Button bind:ref={trigger} variant="outline" {disabled} onclick={() => (managerOpen = true)}><SettingsIcon />Manage {title === 'Audio' ? 'audio' : 'video encoder'} presets</Button>
+{:else}
 <Popover.Root {open} onOpenChange={setOpen}>
   <Popover.Trigger {disabled} title={currentLabel}>
     {#snippet child({ props })}
@@ -96,10 +100,11 @@
     </div>
   </Popover.Content>
 </Popover.Root>
+{/if}
 
 {#if managerOpen}
   <PresetManager {title} {current} {choices} {parents} {parentOf} {summary} {problem} {builtinLabel} {editor}
-    {nameExample} {folderExample} {folderHint} {apply} {savePreset} {removePreset} {applyLabel} {transfer}
+    {nameExample} {folderExample} {folderHint} {apply} {savePreset} {removePreset} {applyLabel} {transfer} {manageOnly}
     initialSelected={matched ? presetKey(matched) : null}
     onclose={closeManager} onapplied={key => (selected = key)} />
 {/if}

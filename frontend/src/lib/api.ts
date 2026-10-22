@@ -2,6 +2,7 @@
 import type {
   ActionSetting,
   AudioEncodeInfo,
+  AudioBundle,
   AudioPresetSettings,
   ClipInfo,
   CommandStep,
@@ -96,6 +97,9 @@ export const api = {
   health: () => get<{ ok: boolean; version: string }>('/api/health'),
   profiles:() => get<Profile[]>('/api/profiles'),
   presets: () => get<Presets>('/api/presets'),
+  exportAudio: (bundle: AudioBundle) => post<AudioBundle>('/api/presets/audio/export', bundle),
+  previewAudio: (bundle: unknown) => post<{ bundle: AudioBundle; names: string[] }>('/api/presets/audio/preview', bundle),
+  importAudio: (bundle: AudioBundle) => post<{ presets: Presets; names: string[] }>('/api/presets/audio/import', bundle),
   exportEncoders: (bundle: EncoderBundle) => post<EncoderBundle>('/api/presets/encoders/export', bundle),
   previewEncoders: (bundle: unknown) => post<{ bundle: EncoderBundle; names: string[] }>('/api/presets/encoders/preview', bundle),
   importEncoders: (bundle: EncoderBundle) => post<{ presets: Presets; names: string[] }>('/api/presets/encoders/import', bundle),

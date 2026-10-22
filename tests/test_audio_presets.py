@@ -14,7 +14,7 @@ def test_audio_preset_folders_and_metadata(tmp_path):
             "bitrate_kbps": 640,
             "options": {"dialnorm": "-27", "extra": "-cutoff 18000"},
             "language": "en",
-            "title": "Do not save this",
+            "title": "Bob",
             "flags": {"default": True},
             "exclude": True,
             "delay_ms": 250,
@@ -24,7 +24,8 @@ def test_audio_preset_folders_and_metadata(tmp_path):
         response = client.post("/api/presets/audio", json=body)
         assert response.status_code == 200, response.text
         (preset,) = response.json()["audio"]
-        assert set(preset["data"]) == {"action", "layout", "bitrate_kbps", "options"}
+        assert set(preset["data"]) == {"action", "layout", "bitrate_kbps", "options", "title"}
+        assert preset["data"]["title"] == "Bob"
         assert preset["data"]["options"] == body["data"]["options"]
         assert client.post("/api/presets/audio", json=body).status_code == 409
         assert client.post("/api/presets/audio", json=body | {"group": ["Other"]}).status_code == 200
@@ -55,6 +56,7 @@ def test_audio_preset_folders_and_metadata(tmp_path):
 @pytest.mark.parametrize(
     "data",
     [
+        {"action": "copy", "title": 42},
         {"action": "unknown"},
         {"action": "ac3", "layout": "7.1"},
         {"action": "ac3", "layout": "invalid"},

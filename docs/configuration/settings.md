@@ -4,6 +4,10 @@ Use **Settings** for tool paths, the default profile, folder browser roots, inde
 parallel audio, priorities, cleanup, notifications, actions, and plugin switches. Changes save
 immediately to the application database.
 
+Use **Settings → Encoder presets** to manage audio and video encoder libraries without opening a
+job or template. Both managers support folders, editing, duplication, import, and export, including
+the open draft's unsaved settings. Saving a library preset leaves existing jobs and templates as they are.
+
 ## Configuration precedence
 
 For settings available in both places, the application uses these layers in order:

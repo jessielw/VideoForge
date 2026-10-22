@@ -82,6 +82,19 @@ def test_audio_track_ids_pick_and_order_audio():
     assert [a.source.id for a in plan.audio] == [2, 1]
 
 
+def test_audio_titles_inherit_each_source_and_custom_titles_survive_encoding():
+    tracks = [
+        audio(C.TRUEHD, "7.1", "en", index=0, title="Original audio"),
+        audio(C.AC3, "2.0", "en", index=1, title="Commentary"),
+    ]
+    original = plan_for(source(tracks), source(name="Movie_job.mkv"))
+    assert [a.title for a in original.audio] == ["Original audio", "Commentary"]
+    overrides = Overrides(tracks={"id:1": TrackOverride(action=AudioAction.DDP, title="Bob", layout=Layout(5, 1))})
+    custom = plan_for(source(tracks), source(name="Movie_job.mkv"), overrides)
+    assert [a.title for a in custom.audio] == ["Bob", "Commentary"]
+    assert custom.audio[0].action is AudioAction.DDP
+
+
 def encoded(tracks: list, **overrides: TrackOverride):
     """The plan's audio for these source tracks, with overrides keyed by "id:<n>" as id_<n>."""
     ov = Overrides(tracks={k.replace("_", ":"): v for k, v in overrides.items()})

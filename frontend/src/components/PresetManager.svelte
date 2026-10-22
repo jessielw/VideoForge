@@ -13,7 +13,7 @@
 
   let { title, current, choices, parents, parentOf, summary, editor, apply, savePreset, removePreset,
     onclose, onapplied, nameExample, folderExample, folderHint, builtinLabel = 'built-in',
-    problem = () => '', applyLabel = 'Apply settings', initialSelected = null, transfer }: {
+    problem = () => '', applyLabel = 'Apply settings', initialSelected = null, transfer, manageOnly = false }: {
     title: string
     current: T
     choices: PresetChoice<T>[]
@@ -34,6 +34,7 @@
     applyLabel?: string
     initialSelected?: string | null
     transfer?: Snippet<[PresetDraft<T> | null, boolean]>
+    manageOnly?: boolean
   } = $props()
 
   type Pending = { kind: 'choice'; choice: PresetChoice<T> } | { kind: 'new' } | { kind: 'close' }
@@ -178,12 +179,12 @@
   >
     <Dialog.Header class="relative shrink-0 border-b p-4 pr-14">
       <Dialog.Title>{title} presets</Dialog.Title>
-      <Dialog.Description>Edit and save library presets here. Apply settings separately to the current job or template.</Dialog.Description>
+      <Dialog.Description>{manageOnly ? 'Edit and save library presets here.' : 'Edit and save library presets here. Apply settings separately to the current job or template.'}</Dialog.Description>
       <Button variant="ghost" size="icon-sm" class="absolute top-3 right-3" aria-label="Close preset manager" disabled={busy} onclick={() => request({ kind: 'close' })}><XIcon /></Button>
     </Dialog.Header>
     <div class="min-h-0 flex-1 overflow-y-auto md:grid md:grid-cols-[18rem_minmax(0,1fr)] md:grid-rows-1 md:overflow-hidden">
       <aside class="flex h-72 min-h-0 flex-col gap-3 overflow-y-auto border-b p-4 md:h-auto md:border-r md:border-b-0">
-        <Button variant="outline" class="w-full shrink-0" disabled={busy} onclick={() => request({ kind: 'new' })}><PlusIcon />New from current settings</Button>
+        <Button variant="outline" class="w-full shrink-0" disabled={busy} onclick={() => request({ kind: 'new' })}><PlusIcon />{manageOnly ? 'New preset' : 'New from current settings'}</Button>
         {#if transfer}{@render transfer(draft, busy)}{/if}
         <div class="flex min-h-52 flex-1 flex-col">
           <PresetBrowser {title} {choices} {parents} {parentOf} {summary} {problem} {builtinLabel} allowIncompatible
@@ -237,9 +238,9 @@
       </div>
     {/if}
     <footer class="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-muted/30 p-4">
-      <Button variant="ghost" disabled={busy} onclick={onclose}>Cancel</Button>
+      <Button variant="ghost" disabled={busy} onclick={() => manageOnly ? request({ kind: 'close' }) : onclose()}>{manageOnly ? 'Close' : 'Cancel'}</Button>
       <Button variant="outline" disabled={busy || !draft?.label.trim() || (!!draft.name && !dirty)} onclick={save}><SaveIcon />{replacement ? 'Replace preset' : draft?.name ? 'Save preset' : 'Save new preset'}</Button>
-      <Button disabled={busy || !draft || !!applyProblem} onclick={applyDraft}>{applyLabel}</Button>
+      {#if !manageOnly}<Button disabled={busy || !draft || !!applyProblem} onclick={applyDraft}>{applyLabel}</Button>{/if}
     </footer>
   </Dialog.Content>
 </Dialog.Root>

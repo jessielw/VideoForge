@@ -8,6 +8,8 @@
   import FileBrowser from '../components/FileBrowser.svelte'
   import ConfigurationTransfer from '../components/ConfigurationTransfer.svelte'
   import PresetPackTransfer from '../components/PresetPackTransfer.svelte'
+  import AudioPresetMenu from '../components/AudioPresetMenu.svelte'
+  import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import CheckIcon from '@lucide/svelte/icons/check'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
@@ -301,6 +303,17 @@
     {#each config?.restart ?? [] as note (note)}
       <div class="col-span-full rounded-md border border-warning/50 bg-warning/10 p-3 text-sm text-warning">{note}</div>
     {/each}
+
+    <section class="col-span-full space-y-3">
+      <h2 class="font-medium">Encoder presets</h2>
+      <p class="text-sm text-muted-foreground">Create, edit, organize, import, and export presets without opening a job or template.</p>
+      <div class="flex flex-wrap gap-2">
+        {#if app.defaultProfile}
+          <EncoderPresetMenu profile={app.defaultProfile.id} current={app.defaultProfile.defaults.encoder} apply={() => {}} manageOnly />
+        {/if}
+        <AudioPresetMenu current={{ action: 'copy', layout: null, bitrate_kbps: null, options: {} }} apply={() => {}} manageOnly />
+      </div>
+    </section>
 
     {#if !config}
       <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>

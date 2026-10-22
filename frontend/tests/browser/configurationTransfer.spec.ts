@@ -92,6 +92,22 @@ test('exports the whole configuration from Settings with an empty queue', async 
   expect(errors).toEqual([])
 })
 
+test('audio and video encoder libraries open from Settings with an empty queue', async ({ page }, testInfo) => {
+  const { errors } = await fixture(page)
+  for (const [button, title] of [['Manage audio presets', 'Audio presets'], ['Manage video encoder presets', 'Encoder presets']]) {
+    await page.getByRole('button', { name: button, exact: true }).click()
+    const manager = page.getByRole('dialog', { name: title, exact: true })
+    await expect(manager).toBeVisible()
+    await expect(manager.getByRole('button', { name: 'New preset', exact: true })).toBeVisible()
+    await expect(manager.getByRole('button', { name: /Apply/ })).toHaveCount(0)
+    await page.screenshot({ path: testInfo.outputPath(`${title.replaceAll(' ', '-')}.png`) })
+    await manager.getByRole('button', { name: 'Close', exact: true }).click()
+    await expect(manager).not.toBeVisible()
+    await expect(page.getByRole('button', { name: button, exact: true })).toBeFocused()
+  }
+  expect(errors).toEqual([])
+})
+
 test('previews all libraries and requires replacement confirmation before importing', async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     sessionStorage.setItem('videoforge.draft.templates', JSON.stringify({ version: 1, value: { draftName: 'Outdated' } }))

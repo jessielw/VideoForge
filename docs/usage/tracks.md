@@ -63,7 +63,17 @@ Audio presets are also available for every primary and extra output in template 
 rules. The same preset name can exist under different encoders or folders. Templates and jobs
 keep copies, so editing or deleting a saved preset does not change existing setups.
 
-Applying a preset preserves the track's language, title, flags, inclusion, timing, and position.
+Audio titles start with each selected source track's title and can be edited. A preset's optional
+**Track title** saves a custom output name: a DDP 5.1 preset with the title `Bob` restores `Bob`
+whenever selected. Leaving that field blank keeps the output's current title, or its source title
+when no custom title has been set. Templates retain custom titles for primary and extra outputs.
+
+Open **Settings → Encoder presets → Manage audio presets** to manage the same library without
+a job. **Import**, **Export…**, and **Export current settings** share audio preset JSON files,
+including custom titles, encoder options, and folders. Import previews name conflicts and creates
+numbered copies instead of replacing saved presets; you can select which entries to import or export.
+
+Applying a preset preserves the track's language, flags, inclusion, timing, and position.
 It replaces encoder options rather than keeping options from a previous encoder. Copy clears
 encoding settings and copies the source audio.
 

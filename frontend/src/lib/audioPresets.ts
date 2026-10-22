@@ -1,17 +1,19 @@
 import type { AudioEncodeInfo, AudioPresetSettings, AudioTrack, Preset, TrackOverride } from './types'
 
 export const channels = (layout: string) => layout.split('.').reduce((sum, part) => sum + Number(part), 0)
-const copySettings = (): AudioPresetSettings => ({ action: 'copy', layout: null, bitrate_kbps: null, options: {} })
+const copySettings = (): AudioPresetSettings => ({ action: 'copy', layout: null, bitrate_kbps: null, options: {}, title: null })
 
 export function audioPresetSettings(value?: Partial<TrackOverride>): AudioPresetSettings {
-  if (!value?.action || value.action === 'copy') return copySettings()
-  return { action: value.action, layout: value.layout ?? null, bitrate_kbps: value.bitrate_kbps ?? null, options: { ...value.options } }
+  const title = { title: value?.title ?? null }
+  if (!value?.action || value.action === 'copy') return { ...copySettings(), ...title }
+  return { action: value.action, layout: value.layout ?? null, bitrate_kbps: value.bitrate_kbps ?? null, options: { ...value.options }, ...title }
 }
 
 export function applyAudioPreset(value: TrackOverride, preset: AudioPresetSettings): TrackOverride {
   const settings = preset.action === 'copy' ? copySettings() : preset
   return { ...value, action: settings.action,
-    layout: settings.layout, bitrate_kbps: settings.bitrate_kbps, options: { ...settings.options } }
+    layout: settings.layout, bitrate_kbps: settings.bitrate_kbps, options: { ...settings.options },
+    ...(preset.title != null ? { title: preset.title } : {}) }
 }
 
 function defaultLayout(enc: AudioEncodeInfo, source: string): string {
@@ -48,12 +50,12 @@ export function audioPresetDefaults(encodes: AudioEncodeInfo[]): (Preset<AudioPr
   const choices = [{ name: 'copy', label: 'Copy', data: copySettings(), builtin: true }]
   for (const enc of encodes) {
     choices.push({ name: `${enc.id}:auto`, label: 'Encoder defaults',
-      data: { action: enc.id, layout: null, bitrate_kbps: null, options: {} }, builtin: true })
+      data: { action: enc.id, layout: null, bitrate_kbps: null, options: {}, title: null }, builtin: true })
     for (const layout of enc.layouts) {
       const rates = Object.keys(enc.bitrates ?? {}).map(Number).sort((a, b) => Math.abs(a - channels(layout)) - Math.abs(b - channels(layout)) || a - b)
       const bitrate = enc.bitrates && !enc.vbr_default ? enc.bitrates[String(rates[0])] ?? null : null
       choices.push({ name: `${enc.id}:${layout}`, label: `${layout} ${bitrate ? `${bitrate} kb/s` : enc.bitrates === null ? 'lossless' : enc.vbr_default ? 'VBR' : 'auto bitrate'}`,
-        data: { action: enc.id, layout, bitrate_kbps: bitrate, options: {} }, builtin: true })
+        data: { action: enc.id, layout, bitrate_kbps: bitrate, options: {}, title: null }, builtin: true })
     }
   }
   return choices

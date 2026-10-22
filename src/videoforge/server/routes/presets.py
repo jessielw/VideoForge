@@ -17,6 +17,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from videoforge.core.audio_io import read_audio_bundle
 from videoforge.core.audio_preset import AudioPresetSettings
 from videoforge.core.encoder_io import read_encoder_bundle
 from videoforge.core.plan_io import from_json, to_json
@@ -116,18 +117,37 @@ def list_presets(request: Request) -> dict[str, Any]:
     return _all(request)
 
 
-async def _bundle(request: Request, *, encoder: bool = False) -> dict[str, Any]:
-    label = "Encoder preset" if encoder else "Template"
+async def _bundle(request: Request, *, encoder: bool = False, audio: bool = False) -> dict[str, Any]:
+    label = "Audio preset" if audio else "Encoder preset" if encoder else "Template"
     raw = bytearray()
     async for chunk in request.stream():
         raw.extend(chunk)
         if len(raw) > MAX_BYTES:
             raise HTTPException(413, f"{label} files must be 5 MiB or smaller")
     try:
-        reader = read_encoder_bundle if encoder else read_bundle
+        reader = read_audio_bundle if audio else read_encoder_bundle if encoder else read_bundle
         return reader(json.loads(raw))
     except (ValueError, RecursionError) as ex:
         raise HTTPException(422, f"Invalid {label.lower()} file: {ex}") from None
+
+
+@router.post("/audio/export")
+async def export_audio(request: Request) -> dict[str, Any]:
+    return await _bundle(request, audio=True)
+
+
+@router.post("/audio/preview")
+async def preview_audio(request: Request) -> dict[str, Any]:
+    bundle = await _bundle(request, audio=True)
+    names = request.app.state.store.import_preset_pack({"audio": bundle["audio"]}, max_name=MAX_NAME, preview=True)
+    return {"bundle": bundle, "names": names["audio"]}
+
+
+@router.post("/audio/import")
+async def import_audio(request: Request) -> dict[str, Any]:
+    bundle = await _bundle(request, audio=True)
+    names = request.app.state.store.import_preset_pack({"audio": bundle["audio"]}, max_name=MAX_NAME)
+    return {"presets": _all(request), "names": names["audio"]}
 
 
 @router.post("/encoders/export")
@@ -210,7 +230,7 @@ def save_encoder_preset(request: Request, body: GroupedPresetBody) -> dict[str, 
 
 @router.post("/audio")
 def save_audio_preset(request: Request, body: GroupedPresetBody) -> dict[str, Any]:
-    """Create or update an audio preset without track titles, languages, flags, or timing."""
+    """Create or update an audio preset with an optional custom title, without languages, flags, or timing."""
     return _save_grouped(request, "audio", body)
 
 

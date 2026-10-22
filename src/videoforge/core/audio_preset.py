@@ -1,4 +1,4 @@
-"""Reusable audio encoding settings, independent of a source track's metadata."""
+"""Reusable audio encoding settings with an optional custom output title."""
 
 from __future__ import annotations
 
@@ -14,8 +14,13 @@ class AudioPresetSettings:
     layout: Layout | None = None
     bitrate_kbps: int | None = None
     options: dict[str, str] = field(default_factory=dict)
+    title: str | None = None
 
     def __post_init__(self) -> None:
+        if self.title is not None and not isinstance(self.title, str):
+            raise ValueError("Track title must be text")
+        if self.title is not None:
+            self.title = self.title.strip() or None
         if self.action is AudioAction.COPY:
             if self.layout is not None or self.bitrate_kbps is not None or self.options:
                 raise ValueError("Copy does not take channels, bitrate, or encoder options")

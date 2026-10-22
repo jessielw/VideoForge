@@ -5,10 +5,11 @@
   import { app } from '../lib/state.svelte'
   import type { AudioAction, AudioPresetSettings, EncodeOptionInfo } from '../lib/types'
 
-  let { value, onchange, disabled = false }: {
+  let { value, onchange, disabled = false, editTitle = false }: {
     value: AudioPresetSettings
     onchange: (value: AudioPresetSettings) => void
     disabled?: boolean
+    editTitle?: boolean
   } = $props()
   const uid = $props.id()
   const enc = $derived(app.encodes.find(e => e.id === value.action))
@@ -27,6 +28,13 @@
 </script>
 
 <fieldset class="min-w-0 space-y-4" {disabled}>
+  {#if editTitle}
+    <label class="block space-y-1 text-xs text-muted-foreground">Track title
+      <Input aria-label="Track title" placeholder="Keep the track's title" value={value.title ?? ''}
+        onchange={e => set({ title: e.currentTarget.value.trim() || null })} />
+      <span class="block">Optional. A custom title is restored whenever this preset is selected.</span>
+    </label>
+  {/if}
   <div class="flex flex-wrap items-center gap-3">
     <label class="space-y-1 text-xs text-muted-foreground">Encoder
       <NativeSelect value={value.action} aria-label="Copy or encode" onchange={e => set({ action: e.currentTarget.value as AudioAction, layout: null, bitrate_kbps: null, options: {} })}>

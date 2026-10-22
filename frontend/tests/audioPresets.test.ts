@@ -15,9 +15,10 @@ const encodes = [ddp, opus, ac3, atmos]
 const source = (layout: string, codec = 'flac', atmos = false) => ({ layout, codec, atmos }) as AudioTrack
 const preset: AudioPresetSettings = { action: 'ddp', layout: '5.1', bitrate_kbps: 640, options: { dialnorm: '-27' } }
 
-test('saving audio settings excludes metadata and takes an independent options copy', () => {
+test('saving audio settings includes custom titles, excludes other metadata and takes an independent options copy', () => {
   const settings = audioPresetSettings({ ...preset, title: 'Original', language: 'ja', flags: { default: true }, exclude: true })
-  assert.deepEqual(Object.keys(settings).sort(), ['action', 'bitrate_kbps', 'layout', 'options'])
+  assert.deepEqual(Object.keys(settings).sort(), ['action', 'bitrate_kbps', 'layout', 'options', 'title'])
+  assert.equal(settings.title, 'Original')
   settings.options.dialnorm = '-25'
   assert.equal(preset.options.dialnorm, '-27')
 })
@@ -71,4 +72,14 @@ test('built-ins provide 5.1 640 kb/s and source-independent encoder defaults', (
   assert.equal(surround.data.bitrate_kbps, 640)
   assert.equal(choices.find(c => c.data.action === 'ddp' && c.label === 'Encoder defaults')!.data.layout, null)
   assert.equal(new Set(choices.map(c => c.name)).size, choices.length)
+})
+
+
+test('custom preset titles override output titles for encode and copy; untitled presets preserve edits', () => {
+  const track = { ...preset, title: 'Source title', language: 'en', flags: {} } as TrackOverride
+  assert.equal(applyAudioPreset(track, { ...preset, title: 'Bob' }).title, 'Bob')
+  assert.equal(applyAudioPreset(track, { ...preset, action: 'copy', title: 'Bob' }).title, 'Bob')
+  assert.equal(applyAudioPreset(track, { ...preset, title: null }).title, 'Source title')
+  assert.equal(audioPresetSettings({ ...track, action: 'copy', title: 'Bob' }).title, 'Bob')
+  assert.equal(audioPresetSettings().title, null)
 })

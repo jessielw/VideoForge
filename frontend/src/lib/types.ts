@@ -207,8 +207,9 @@ export interface TrackOverride {
   sync_ms?: number | null // audio: + later, - earlier, on top of the track's own delay (applied at the mux)
 }
 
-// Reusable compression settings only; source metadata stays on each output track.
+// Reusable compression settings and an optional custom output title.
 export type AudioPresetSettings = {
+  title?: string | null
   action: AudioAction
   layout: string | null
   bitrate_kbps: number | null
@@ -485,6 +486,11 @@ export interface EncoderBundle {
   format: 'videoforge.encoders'
   version: 1
   encoders: { label: string; group: string[]; data: EncoderSettings }[]
+}
+export interface AudioBundle {
+  format: 'videoforge.audio'
+  version: 1
+  audio: { label: string; group: string[]; data: AudioPresetSettings }[]
 }
 export interface ConfigurationBundle {
   format: 'videoforge.configuration'
