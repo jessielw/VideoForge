@@ -276,6 +276,17 @@
             {:else}
               <span>{container?.label ?? job.spec.mux.container}</span>
             {/if}
+            {#if container?.id === 'mkv'}
+              <span class="text-muted-foreground">PGS compression</span>
+              <label class="flex items-center gap-2">
+                <Checkbox
+                  checked={job.spec.mux.pgs_zlib ?? false}
+                  disabled={!editable}
+                  onCheckedChange={v => save({ mux: { ...job!.spec.mux, pgs_zlib: v } })}
+                />
+                Compress PGS subtitles with zlib
+              </label>
+            {/if}
             <span class="text-muted-foreground">Extra arguments</span>
             <Input
               class="font-mono text-xs"

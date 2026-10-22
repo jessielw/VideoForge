@@ -25,6 +25,7 @@ from videoforge.core.models import (
     TemplateSubs,
     TrackOverride,
 )
+from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template import (
     CropMode,
     Template,
@@ -41,6 +42,17 @@ def spec(encode: Path | None = None) -> JobSpec:
     return JobSpec(
         JobInputs(Path("Show.S01E01.mkv"), encode=encode), "manual", video=VideoSettings(crop=Crop(0, 140, 0, 140))
     )
+
+
+def test_pgs_compression_persists_in_templates_and_jobs():
+    legacy = from_json(Template, {"mux": {"container": "mkv", "extra": ""}})
+    assert legacy.mux.pgs_zlib is False
+    template = Template(mux=MuxSettings(pgs_zlib=True))
+    restored = from_json(Template, to_json(template))
+    job = spec()
+    restored.apply(job)
+    assert from_json(JobSpec, to_json(job)).mux.pgs_zlib is True
+    assert job.mux is not restored.mux
 
 
 def test_keep_fixed_and_auto_crop():

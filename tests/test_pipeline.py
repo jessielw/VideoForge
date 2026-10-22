@@ -94,6 +94,23 @@ def make_plan(root: Path):
     return plan
 
 
+def test_pgs_compression_changes_only_the_mux_step(profile, tmp_path):
+    plan = make_plan(tmp_path)
+    job = JobSpec(inputs=plan.inputs, profile="manual")
+    output = tmp_path / "out.mkv"
+    before = {s.id: s for s in build_steps(job, plan, profile, APP, output).steps}
+    job.mux.pgs_zlib = True
+    after = {s.id: s for s in build_steps(job, plan, profile, APP, output).steps}
+    argv = after["mux"].argvs[0]
+    assert argv[argv.index("--compression") + 1] == "10:zlib"
+    assert before["mux"].fingerprint() != after["mux"].fingerprint()
+    for key in before.keys() - {"mux"}:
+        assert before[key].fingerprint() == after[key].fingerprint()
+    job.mux.container = "mp4"
+    mp4 = build_steps(job, plan, profile, APP, tmp_path / "out.mp4")
+    assert "--compression" not in next(s for s in mp4.steps if s.id == "mux").argvs[0]
+
+
 class FakeRunner:
     """Writes each command's output (and x264 stats) file, like the real tools would."""
 

@@ -628,7 +628,11 @@ def build_steps(
 
     def mux_step(fps: Fraction | None, stamps: Path | None) -> Step:
         try:
-            argv = tuple(muxer.command(plan, encoded, unfinished, app, extra, fps, stamps, sar=sar, color=tags))
+            argv = tuple(
+                muxer.command(
+                    plan, encoded, unfinished, app, extra, fps, stamps, sar=sar, color=tags, pgs_zlib=spec.mux.pgs_zlib
+                )
+            )
         except MuxError:
             if fps is not None or not spec.encodes_video:
                 raise

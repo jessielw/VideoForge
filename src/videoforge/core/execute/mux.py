@@ -142,13 +142,15 @@ def mux_command(
     *,
     sar: Fraction | None = None,
     color: ContainerColor | None = None,
+    pgs_zlib: bool = False,
 ) -> list[str]:
     """mkvmerge argv for a plan. encoded_audio maps plan.audio positions to their encoded files;
     extra (the user's arguments) goes before the first input. fps is a raw encode's frame rate (the script's,
     which an IVTC or a double-rate deinterlace changed); without it, the source's. timestamps (a VFR source's,
     core/video/vfr.py) time the encode instead. sar and color tag an encode whose stream doesn't hold them (VP8 /
     VP9), or whose stream mkvmerge doesn't read them from (AV1): its pixel aspect, its colour as H.273 code points,
-    and an AV1 encode's HDR10 mastering display and light levels."""
+    and an AV1 encode's HDR10 mastering display and light levels. pgs_zlib enables lossless zlib compression
+    for PGS subtitles; otherwise their compression is explicitly disabled."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
     video = plan.source.video
@@ -229,6 +231,8 @@ def mux_command(
         argv += _track_args(a.source.id, a) + _sync(a.source.id, shift + a.sync_ms)
     for s in internal_subs:
         argv += _track_args(s.source.id, s) + _sync(s.source.id, shift)
+        if s.source.format is SubFormat.PGS:
+            argv += ["--compression", f"{s.source.id}:{'zlib' if pgs_zlib else 'none'}"]
     argv.append(str(plan.source.path))
 
     # 2+: encoded audio and external subtitles, one file each.
@@ -271,6 +275,8 @@ def mux_command(
             continue
         argv += ["--sub-charset", "0:UTF-8"]
         argv += _track_args(0, s)
+        if s.source.format is SubFormat.PGS:
+            argv += ["--compression", f"0:{'zlib' if pgs_zlib else 'none'}"]
         if s.source.extracted_from is not None:
             argv += _sync(0, -start_ms)
         argv.append(str(s.source.external_path))
@@ -385,10 +391,11 @@ def mp4box_command(
 
 @dataclass(slots=True)
 class MuxSettings:
-    """A job's muxer: the container ("" = the profile's) and extra arguments for its tool."""
+    """A job's muxer: container ("" = the profile's), extra arguments and MKV PGS compression."""
 
     container: str = ""
     extra: str = ""
+    pgs_zlib: bool = False
 
 
 class Muxer(Protocol):
@@ -412,6 +419,7 @@ class Muxer(Protocol):
         *,
         sar: Fraction | None = None,
         color: ContainerColor | None = None,
+        pgs_zlib: bool = False,
     ) -> list[str]:
         """fps: a raw encode's frame rate (the script's); None for the source's. timestamps: a VFR source's,
         which time the encode instead (an MKV's; MP4Box takes none). sar and color: the pixel aspect and colour
@@ -446,6 +454,7 @@ class MkvMerge:
         *,
         sar: Fraction | None = None,
         color: ContainerColor | None = None,
+        pgs_zlib: bool = False,
     ) -> list[str]:
         return mux_command(
             plan,
@@ -458,6 +467,7 @@ class MkvMerge:
             timestamps,
             sar=sar,
             color=color,
+            pgs_zlib=pgs_zlib,
         )
 
     def issues(self, plan: Plan) -> list[Issue]:
@@ -488,6 +498,7 @@ class Mp4Box:
         *,
         sar: Fraction | None = None,
         color: ContainerColor | None = None,
+        pgs_zlib: bool = False,
     ) -> list[str]:
         return mp4box_command(
             plan,

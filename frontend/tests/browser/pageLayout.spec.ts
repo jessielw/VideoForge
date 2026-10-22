@@ -7,7 +7,7 @@ async function layoutFixture(page: Page) {
   const template: Template = {
     video: { source_filter: 'ffms2', crop: { left: 0, top: 0, right: 0, bottom: 0 }, resize: null, filters: [], custom: null },
     encoder: { encoder: 'x264', rate_control: '2pass', crf: 18, bitrate_kbps: 8000, target_mb: null, preset: 'veryslow', tune: '', depth: 8, options: {}, extra: '', source_color: true, hdr10plus: false, dolby_vision: false },
-    mux: { container: 'mkv', extra: '' }, qpf: true, crop_mode: 'keep', audio: null, subs: null,
+    mux: { container: 'mkv', extra: '', pgs_zlib: false }, qpf: true, crop_mode: 'keep', audio: null, subs: null,
   }
   const profile: Profile = {
     id: 'manual', name: 'Manual', default: true, container: 'mkv',
@@ -39,6 +39,26 @@ async function layoutFixture(page: Page) {
   })
   return errors
 }
+
+test('Templates saves optional PGS compression and only shows it for MKV', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  let saved: Template | null = null
+  await page.route('**/api/presets/template/*', async route => {
+    saved = route.request().postDataJSON() as Template
+    await route.fulfill({ json: { video: [], encoder: [], audio: [], template: [{ name: 'Hallowed 1080p CEL', data: saved }], template_defaults: {}, encoder_starters: [] } })
+  })
+  await page.goto('/#/templates')
+  const compression = page.getByRole('checkbox', { name: 'Compress PGS subtitles with zlib' })
+  await expect(compression).not.toBeChecked()
+  await compression.check()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect.poll(() => saved?.mux.pgs_zlib).toBe(true)
+  await page.getByRole('radio', { name: 'MP4 (MP4Box)', exact: true }).click()
+  await expect(compression).toHaveCount(0)
+  await page.getByRole('radio', { name: 'MKV (mkvmerge)', exact: true }).click()
+  await expect(compression).toBeChecked()
+  expect(errors).toEqual([])
+})
 
 for (const route of ['templates', 'settings']) {
   test(`${route} uses the available editor width on large windows`, async ({ page }, testInfo) => {

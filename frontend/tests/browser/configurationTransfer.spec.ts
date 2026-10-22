@@ -12,7 +12,7 @@ async function fixture(page: Page) {
   const template: Template = {
     video: { source_filter: 'ffms2', crop: { left: 0, top: 0, right: 0, bottom: 0 }, resize: null, filters: [], custom: 'clip = src' },
     encoder: { encoder: 'x264', rate_control: 'crf', crf: 18, bitrate_kbps: 8000, target_mb: null, preset: 'slow', tune: '', depth: 8, options: {}, extra: '', source_color: true, hdr10plus: false, dolby_vision: false },
-    mux: { container: 'mkv', extra: '' }, qpf: true, crop_mode: 'keep', audio: null, subs: null,
+    mux: { container: 'mkv', extra: '', pgs_zlib: false }, qpf: true, crop_mode: 'keep', audio: null, subs: null,
   }
   const profile: Profile = { id: 'manual', name: 'Manual', default: true, container: 'mkv',
     containers: [{ id: 'mkv', label: 'MKV', extension: '.mkv', tool: 'mkvmerge' }], external_subtitles: true,

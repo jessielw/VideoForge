@@ -90,6 +90,25 @@ def test_aot_layout():
     assert value(argv, "--sync") == ["0:-7"]
 
 
+@pytest.mark.parametrize("pgs_zlib", [False, True])
+def test_pgs_compression_is_scoped_to_each_input(pgs_zlib):
+    plan = aot_plan()
+    external = sub(F.PGS, "de", external="subs/German.sup")
+    plan.subs += plan_for(source(), external_subs=[external]).subs
+    encoded = {0: Path("a.m4a"), 1: Path("b.ec3")}
+    argv = mux_command(plan, encoded, OUT, "mkvmerge", RAW, pgs_zlib=pgs_zlib)
+    method = "zlib" if pgs_zlib else "none"
+    assert value(argv, "--compression") == [f"10:{method}", f"0:{method}"]
+    source_end = argv.index(str(plan.source.path))
+    external_end = argv.index(str(external.external_path))
+    compression = [i for i, arg in enumerate(argv) if arg == "--compression"]
+    assert argv.index(str(plan.encode_path)) < compression[0] < source_end
+    assert argv.index(str(encoded[1])) < compression[1] < external_end
+    # Omitting the option must disable mkvmerge's default PGS compression too.
+    if not pgs_zlib:
+        assert mux_command(plan, encoded, OUT, "mkvmerge", RAW) == argv
+
+
 def test_raw_encode_is_timed_by_the_scripts_frame_rate():
     """An IVTC made 23.976 fps of a 29.97 source: the encode is timed by the script (StaxRip's
     p.Script.GetCachedFrameRate), the source's rate only without one."""

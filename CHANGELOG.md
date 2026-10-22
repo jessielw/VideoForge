@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Optional PGS zlib compression for the MKV muxer, disabled by default. Job output settings and
+  templates control compression for embedded and added PGS subtitles.
+
 - Templates and Settings use the available page width, with columns adapting to the panel's width.
   New jobs scrolls in short/zoomed windows instead of clipping its form or footer; file slots reflow
   when there is less room.

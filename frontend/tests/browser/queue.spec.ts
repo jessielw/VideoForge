@@ -18,7 +18,7 @@ async function queueFixture(page: Page, count = 10_000, statuses: Status[] = ['r
       id: job.id, profile: 'manual', inputs: { source: job.source, encode: null, subtitles: [], chapters: null, encode_state: '', audio: [] },
       video: { source_filter: 'ffms2', crop: { left: 0, top: 0, right: 0, bottom: 0 }, resize: null, filters: [], custom: null },
       encoder: { encoder: 'x265', rate_control: 'crf', crf: 18, bitrate_kbps: 0, target_mb: null, preset: 'medium', tune: '', depth: 10, options: {}, extra: '', source_color: true, hdr10plus: false, dolby_vision: false },
-      mux: { container: 'mkv', extra: '' }, overrides: { original_language: null, audio_track_ids: null, tracks: {}, order: null, copies: [] },
+      mux: { container: 'mkv', extra: '', pgs_zlib: false }, overrides: { original_language: null, audio_track_ids: null, tracks: {}, order: null, copies: [] },
       qpf: false, output_dir: null, output_policy: 'stop', autocrop: false, audio_template: null, subs_template: null,
       audio_from_template: null, subs_from_template: null, output_name: '', label: '',
     },

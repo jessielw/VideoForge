@@ -53,6 +53,7 @@
   const starred = $derived(app.defaultTemplate(profile))
   const userNames = $derived(new Set(app.presets.template.map(t => t.name)))
   const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
+  const container = $derived(containers.find(c => c.id === draft?.mux.container) ?? containers[0])
   // templates are shared; a profile without a track editor ignores their audio and subtitles
   const trackEditor = $derived(app.profiles.find(p => p.id === profile)?.track_editor ?? false)
   const trackFlags = $derived(app.profiles.find(p => p.id === profile)?.track_properties ?? [])
@@ -337,6 +338,13 @@
                   </ToggleGroup.Root>
                 {:else}
                   <span>{containers[0]?.label ?? '—'}{draft.mux.container && draft.mux.container !== containers[0]?.id ? ` (this profile can't make ${draft.mux.container.toUpperCase()})` : ''}</span>
+                {/if}
+                {#if container?.id === 'mkv'}
+                  <span class="text-muted-foreground">PGS compression</span>
+                  <label class="flex items-center gap-2">
+                    <Checkbox checked={draft.mux.pgs_zlib ?? false} disabled={readOnly} onCheckedChange={v => (draft!.mux.pgs_zlib = v)} />
+                    Compress PGS subtitles with zlib
+                  </label>
                 {/if}
                 <span class="text-muted-foreground">Extra arguments</span>
                 <Input class="font-mono text-xs" aria-label="Extra muxer arguments" placeholder="added to the muxer command as typed" bind:value={draft.mux.extra} />

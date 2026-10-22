@@ -260,10 +260,11 @@ export interface JobSpec {
   id: string
 }
 
-// The job's muxer: container ('' = the profile's) and extra arguments for its tool, as typed.
+// The job's muxer: container ('' = the profile's), extra arguments and MKV PGS compression.
 export interface MuxSettings {
   container: string
   extra: string
+  pgs_zlib: boolean
 }
 
 export interface AudioTrack {
