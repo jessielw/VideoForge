@@ -576,7 +576,7 @@ class OverlapRunner(FakeRunner):
 def test_audio_encodes_run_beside_the_video(profile, tmp_path):
     plan = make_plan(tmp_path)
     job = video_job(plan, tmp_path)
-    runner = OverlapRunner(waits={"x264": {"qaac64", "deezy"}, "qaac64": {"x264"}, "deezy": {"x264"}})
+    runner = OverlapRunner(waits={"x264": {"qaac64", "deezy"}, "qaac64": {"x264", "deezy"}, "deezy": {"x264", "qaac64"}})
     state, events = JobState(), []
     app = replace(APP, parallel_audio=2)
     prober = lambda *_: simulate_output(plan)
@@ -611,7 +611,7 @@ def test_a_target_size_sets_the_two_pass_bitrate(profile, tmp_path):
     before = target.budget(10, plan, "mkv", None)
     assert before is not None and bitrate(step["video.pass1"]) == bitrate(step["video.pass2"]) == before.kbps
 
-    runner = OverlapRunner(waits={"x264": {"qaac64", "deezy"}, "qaac64": {"x264"}, "deezy": {"x264"}})
+    runner = OverlapRunner(waits={"x264": {"qaac64", "deezy"}, "qaac64": {"x264", "deezy"}, "deezy": {"x264", "qaac64"}})
     app = replace(APP, parallel_audio=2)
     result = run_job(job, plan, profile, app, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
     assert result.status is JobStatus.DONE, result.error
