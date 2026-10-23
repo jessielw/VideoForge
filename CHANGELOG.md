@@ -12,6 +12,17 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Duplicate** on the Queue copies the selected jobs, each right after its original with a label of
+  its own, for a second output from the same source with a few settings changed. The copy reuses the
+  source index and every encode whose settings it kept. Labels now show in the queue list and the
+  job header, and search matches them.
+
+- Each job keeps its files in its own folder in the source's work folder, named by its label
+  (`main/` without one): its script, encodes, chapters, log and records. Files from the source alone
+  (index, HDR metadata) stay shared at the top. A job whose encode would match another job's links
+  that file into its folder instead of encoding again. Actions get `{job_dir}`, and records a
+  `job_dir` field. Work folders made before this keep their files, but jobs encode again once.
+
 - Audio and video encoder preset pickers show **My presets** and custom folders first across all
   encoders. Search spans folders and encoders, with an optional encoder filter. The same browser
   is available in preset managers, including Settings.

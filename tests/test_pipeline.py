@@ -165,7 +165,7 @@ def test_run_plan_happy_path(profile, tmp_path):
     assert any(0 < e.fraction < 1 for e in events)  # progress from the tools' output
     assert events[-1].overall == pytest.approx(1.0) and "== Validate" in lines
     assert not list((tmp_path / "out").glob("*.partial"))
-    work = tmp_path / "Show.S01E01.mkv_tmp"  # the encodes stay in <source>_tmp for fix mode
+    work = tmp_path / "Show.S01E01.mkv_tmp" / "main"  # the encodes stay in the job's folder for fix mode
     assert result.work_dir == work and sorted(result.encoded_audio) == [0, 1]
     assert all(p.parent == work and p.is_file() for p in result.encoded_audio.values())
 
@@ -330,7 +330,7 @@ def test_vp9_steps(profile, tmp_path):
     steps = {s.id: s for s in built.steps}
     pass1, pass2, mux = steps["video.pass1"], steps["video.pass2"], steps["mux"]
     assert pass1.argvs[1][0] == APP.tools.ffmpeg and "libvpx-vp9" in pass1.argvs[1]
-    assert pass1.outputs == (job.work_dir / "video.stats-0.log",) and pass1.outputs[0] in pass2.inputs
+    assert pass1.outputs == (job.job_dir / "video.stats-0.log",) and pass1.outputs[0] in pass2.inputs
     assert "-force_key_frames" not in pass2.argvs[1] and pass2.refresh is not None  # no qpfile yet
     qpfile = next(p for p in steps["chapters"].outputs if p.suffix == ".qpf")
     qpfile.parent.mkdir(parents=True, exist_ok=True)
@@ -364,8 +364,8 @@ def test_svtav1_steps(profile, tmp_path):
     assert video.argvs[1][0] == APP.tools.svtav1 and job.video_output.name == "video.ivf"
     assert "--frames" not in video.argvs[1] and "--force-key-frames" not in video.argvs[1]  # not written yet
     assert video.argvs[1][video.argvs[1].index("--mastering-display") + 1].startswith("G(0.265,0.69)")
-    job.work_dir.mkdir(parents=True, exist_ok=True)
-    info_file = job.work_dir / target.info.SCRIPT_INFO
+    job.job_dir.mkdir(parents=True, exist_ok=True)
+    info_file = job.job_dir / target.info.SCRIPT_INFO
     info_file.write_text("Width: 1920\nHeight: 1080\nFrames: 1440\nFPS: 24000/1001\n", encoding="utf-8")
     qpfile = next(p for p in steps["chapters"].outputs if p.suffix == ".qpf")
     qpfile.write_text("0 I\n720 I\n", encoding="utf-8")
@@ -402,13 +402,13 @@ def test_video_steps_two_pass(profile, tmp_path):
     assert pass1.argvs[0][:4] == ("vspipe", "-c", "y4m", "-p")
     assert "--pass" in pass1.argvs[1] and os.devnull in pass1.argvs[1]
     assert pass2.argvs[1][-3:] == ("--output", str(job.video_output), "-")
-    assert job.work_dir / "video.stats" in pass2.inputs  # pass 1 again means pass 2 again
+    assert job.job_dir / "video.stats" in pass2.inputs  # pass 1 again means pass 2 again
 
     runner = FakeRunner()
     state = JobState()
     result = run_job(job, plan, profile, APP, state=state, runner=runner, prober=lambda *_: simulate_output(plan))
     assert result.status is JobStatus.DONE, result.error
-    assert "core.std.Crop(clip, left=0, right=0, top=140, bottom=140)" in (job.work_dir / "video.vpy").read_text()
+    assert "core.std.Crop(clip, left=0, right=0, top=140, bottom=140)" in (job.job_dir / "video.vpy").read_text()
     # FFMS2 (the default) is indexed by core/video/ffindex.py, with progress
     assert tools_called(runner) == ["python", "vspipe", "qaac64", "deezy", "x264", "x264", "mkvmerge"]
     assert runner.calls[0][0][1:3] == ["-m", "videoforge.core.video.ffindex"]
@@ -437,14 +437,14 @@ def test_the_encode_is_timed_by_the_scripts_frame_rate(profile, tmp_path):
     ids = [s.id for s in built.steps]
     assert ids.index("index") < ids.index("script.info") < ids.index("chapters")
     assert step["script.info"].argvs == (
-        ("vspipe", "--info", str(job.work_dir / "video.vpy"), str(job.work_dir / "video.info.txt")),
+        ("vspipe", "--info", str(job.job_dir / "video.vpy"), str(job.job_dir / "video.info.txt")),
     )
     mux = step["mux"].argvs[0]
     assert mux[mux.index("--default-duration") + 1] == "0:30000/1001p"  # before a run: the source's
     assert step["chapters"].key == "30000/1001"
 
-    job.work_dir.mkdir(parents=True)
-    (job.work_dir / "video.info.txt").write_text(FakeRunner.script_info, encoding="utf-8")
+    job.job_dir.mkdir(parents=True)
+    (job.job_dir / "video.info.txt").write_text(FakeRunner.script_info, encoding="utf-8")
     mux = step["mux"].refresh().argvs[0]  # once the info step has run
     assert mux[mux.index("--default-duration") + 1] == "0:24000/1001p"
     assert step["chapters"].refresh().key == "24000/1001"
@@ -476,10 +476,10 @@ def test_a_vfr_source_keeps_its_timestamps(profile, tmp_path):
     mux = step["mux"].argvs[0]
     assert mux[mux.index("--timestamps") + 1] == f"0:{stamps}" and "--default-duration" not in mux  # before a run
 
-    job.work_dir.mkdir(parents=True)
+    job.job_dir.mkdir(parents=True)
     FakeRunner()([argv], lambda _: None, None)  # 240 timestamps
     step["timestamps.normalize"].call(lambda _: None)
-    info_file = job.work_dir / "video.info.txt"
+    info_file = job.job_dir / "video.info.txt"
     info_file.write_text(FakeRunner.script_info, encoding="utf-8")  # 240 frames: they fit
     mux = step["mux"].refresh().argvs[0]
     assert mux[mux.index("--timestamps") + 1] == f"0:{stamps}" and "--default-duration" not in mux
@@ -617,7 +617,7 @@ def test_a_target_size_sets_the_two_pass_bitrate(profile, tmp_path):
     assert result.status is JobStatus.DONE, result.error
     assert any({"qaac64", "deezy", "x264"} <= t for t in runner.together)  # pass 1 beside the audio
     encodes = [c[1] for c in runner.calls if Path(c[-1][0]).stem == "x264"]
-    found = target.info.read(job.work_dir / target.info.SCRIPT_INFO)
+    found = target.info.read(job.job_dir / target.info.SCRIPT_INFO)
     planned = target.budget(10, plan, "mkv", found)
     encoded = target.budget(10, plan, "mkv", found, built.encoded_audio)
     assert planned is not None and encoded is not None and planned.kbps != encoded.kbps
@@ -1004,7 +1004,7 @@ def test_real_decimated_job_keeps_the_scripts_frame_rate(tmp_path):
     assert out.video is not None and out.video.default_duration_ns == pytest.approx(1e9 / 24, abs=2)
     assert out.video.frames == 72  # 3 s at 24 fps
     assert [a["file_name"] for a in mkvmerge_identify(result.output, app.tools.mkvmerge)["attachments"]] == ["Font.ttf"]
-    qpf = (job.work_dir / "chapters.qpf").read_text().split()
+    qpf = (job.job_dir / "chapters.qpf").read_text().split()
     assert "36" in qpf and "45" not in qpf  # chapter 2 at 1.5 s: frame 36 at 24 fps (45 at the source's 30)
 
 
@@ -1126,7 +1126,7 @@ def test_real_job_end_to_end(tmp_path):
     profile = get_profile("manual")
     plan = plan_spec(job, probe_spec(job, app), profile)
     assert not plan.blocked, plan.issues
-    assert plan.encode_path == job.video_output and plan.chapters_path == job.work_dir / "chapters_chapters.txt"
+    assert plan.encode_path == job.video_output and plan.chapters_path == job.job_dir / "chapters_chapters.txt"
 
     lines: list[str] = []
     result = run_job(job, plan, profile, app, log=lines.append)
@@ -1134,7 +1134,7 @@ def test_real_job_end_to_end(tmp_path):
     out = probe(result.output, app.tools.mkvmerge)
     assert (out.video.width, out.video.height) == (320, 136)
     assert [a.language for a in out.audio] == ["en"] and len(out.subs) == 1 and out.has_chapters
-    qpf = (job.work_dir / "chapters.qpf").read_text().split()
+    qpf = (job.job_dir / "chapters.qpf").read_text().split()
     assert qpf[:2] == ["0", "K"] and "36" in qpf  # chapter 2 at 1.5 s = frame 36
 
 
@@ -1200,7 +1200,7 @@ def test_real_mp4_job_end_to_end(tmp_path, embedded, offset_ms):
     assert result.output == tmp_path / "out" / "Clip.mp4"
     out = probe(result.output, app.tools.mkvmerge)
     assert [a.language for a in out.audio] == ["en"] and [s.format for s in out.subs] == [SubFormat.TX3G]
-    assert (job.work_dir / "chapters_mp4.txt").read_text().splitlines()[2:4] == [
+    assert (job.job_dir / "chapters_mp4.txt").read_text().splitlines()[2:4] == [
         "CHAPTER02=00:00:01.500",
         "CHAPTER02NAME=Middle",
     ]
@@ -1291,7 +1291,7 @@ def test_real_mp4_and_ts_sources_run_end_to_end(tmp_path, ext, container):
     assert [float(s["start_time"]) for s in streams[1:]] == pytest.approx([delay, delay], abs=0.05)
     if container == "mp4":
         assert streams[0]["nb_frames"] == "72"
-    assert (job.work_dir / "chapters.qpf").read_text().split()[:2] == ["0", "K"]
+    assert (job.job_dir / "chapters.qpf").read_text().split()[:2] == ["0", "K"]
 
 
 # --- process.run on real subprocesses ---------------------------------------------
@@ -1598,7 +1598,7 @@ def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
     built = build_steps(job, plan, profile, APP, out)
     ids = [s.id for s in built.steps]
     assert ids.index("dovi.rpu") < ids.index("dovi.edit") < ids.index("dovi.check") < ids.index("video")
-    source_rpu, rpu = job.work_dir / "dv_source.bin", job.work_dir / "dv_rpu.bin"
+    source_rpu, rpu = job.work_dir / "dv_source.bin", job.job_dir / "dv_rpu.bin"  # the source's; the job's crop
     extract = next(s for s in built.steps if s.id == "dovi.rpu")
     assert extract.argvs[1] == ("dovi_tool", "-m", "0", "extract-rpu", "-", "-o", str(source_rpu))
     video = next(s for s in built.steps if s.id == "video").argvs[1]

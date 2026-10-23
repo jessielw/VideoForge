@@ -38,7 +38,8 @@ Commands and folders can use `{tokens}`. Write `{{` and `}}` for a literal brace
 is refused when the action is saved.
 
 After a job: `{output}`, `{output_dir}`, `{output_name}`, `{output_stem}`, `{source}`,
-`{source_dir}`, `{work_dir}`, `{record}` (the job record), `{name}`, `{label}`, `{job}` (its id),
+`{source_dir}`, `{work_dir}` (the source's), `{job_dir}` (the job's folder in it: its encodes, log and
+record), `{record}` (the job record), `{name}`, `{label}`, `{job}` (its id),
 `{status}` (done, invalid, failed, skipped, cancelled). A token the job doesn't have (no output) is empty.
 With Settings → Work folders on, a done job's `{work_dir}` is already deleted when its actions run, and
 `{record}` is the copy in `<data folder>/records/`.
@@ -92,7 +93,8 @@ there" is on. Moving the output doesn't change the job record, which keeps the p
     "source": "D:\\src\\Show.S01E01.mkv",
     "output": "D:\\out\\Show.S01E01.mkv",   // after a move: where it is now; null when there's none
     "work_dir": "D:\\src\\Show.S01E01.mkv_tmp",
-    "record": "D:\\src\\Show.S01E01.mkv_tmp\\Show.S01E01.mkv.videoforge.json",  // null when none was written
+    "job_dir": "D:\\src\\Show.S01E01.mkv_tmp\\main",
+    "record": "D:\\src\\Show.S01E01.mkv_tmp\\main\\Show.S01E01.mkv.videoforge.json",  // null when none was written
     "error": null,
     "seconds": 1834.2
   }

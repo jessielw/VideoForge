@@ -20,11 +20,11 @@ from videoforge.core.execute.process import Cancelled, CancelToken, LogFn, ToolE
 from videoforge.core.job import JobResult, JobSpec, JobState, JobStatus, OutputPolicy, StepRecord, StepRun, StepStatus
 from videoforge.core.models import JobInputs, Plan, Severity, SourceInfo
 from videoforge.core.pipeline.build import build_steps, output_path
+from videoforge.core.pipeline.share import Sharing
 from videoforge.core.pipeline.steps import ProgressFn, Runner, run_steps
 from videoforge.core.probe import probe
 from videoforge.core.tools import tool_issues
 from videoforge.core.video import hdr, info
-from videoforge.core.workdir import note_finished
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -72,7 +72,8 @@ def run_job(
     (first every step as pending). A step's output lines go to step_log (default: log); with
     app.parallel_audio, audio encodes run alongside the video, so callbacks come from more than
     one thread (one at a time). state.keep (steps to reuse whatever their fingerprint) is used up. Each
-    finished step's files are noted in the work folder (note_finished), for other jobs on the source.
+    finished step's files are noted in their folders (pipeline/share.py), for other jobs on the source, and
+    a step without a record can take another job's identical files (not one in state.redo, used up too).
     The rest of state is set from the result."""
     state = state if state is not None else JobState()
     state.run = []
@@ -112,7 +113,7 @@ def _run(
     if output.resolve() == spec.inputs.source.resolve():
         return JobResult(plan, JobStatus.FAILED, error=f"Output would overwrite the source: {output}")
 
-    work = spec.work_dir
+    work = spec.job_dir
     encoded: dict[int, Path] = {}
     rejected: Path | None = None
     validate = StepRun("validate", "Validate")
@@ -189,28 +190,26 @@ def _run(
         state.run = [s.to_run() for s in built.steps] + [validate]
         for r in state.run:
             on_step(r)
-        work.mkdir(parents=True, exist_ok=True)
+        spec.job_dir.mkdir(parents=True, exist_ok=True)
         output.parent.mkdir(parents=True, exist_ok=True)
 
-        def finished(record: StepRecord) -> None:
-            note_finished(work, record.id, record.fingerprint, record.outputs, record.seconds)
-            if on_record:
-                on_record(record)
-
         keep, state.keep = state.keep, []
+        redo, state.redo = state.redo, []
         run_steps(
             built.steps,
             state.steps,
             log=log,
             cancel=cancel,
             progress=progress,
-            on_record=finished,
+            on_record=on_record,
             runner=runner,
             runs=state.run[:-1],
             on_step=on_step,
             step_log=step_log,
             parallel=app.parallel_audio,
             keep=keep,
+            share=Sharing(spec.work_dir, spec.job_dir),
+            redo=redo,
         )
         if validate.status is StepStatus.PENDING:  # the final file itself was reused
             validate_output(output)

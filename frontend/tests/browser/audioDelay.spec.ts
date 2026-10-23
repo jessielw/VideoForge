@@ -13,7 +13,7 @@ async function fixture(page: Page, delay: number, correction = 0) {
     size_bytes: null, duration_ms: 61000, copy: 0,
   }
   const job: JobDetail = {
-    id: 'delay', name: 'Audio delay', source: 'D:/Show.mkv', profile: 'manual', status: 'ready',
+    id: 'delay', name: 'Audio delay', label: '', source: 'D:/Show.mkv', profile: 'manual', status: 'ready',
     progress: null, issue: '', output: null, encoder: 'x265', crop: null, custom_script: false,
     indexed: false, index_error: '', index_held: false, audio: [], subs: 0,
     issues: [], steps: {},

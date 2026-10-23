@@ -19,7 +19,8 @@ Show.S01E01.subbed.mkv
 ```
 
 The label is part of the output identity and the associated record names. Profiles can also
-control the base output name.
+control the base output name. To make such a job, use **Duplicate** on the Queue; see
+[Duplicate a job](queue.md#duplicate-a-job).
 
 For MKV, **Compress PGS subtitles with zlib** enables lossless compression for all kept PGS
 tracks, including added `.sup` files. It is off by default: VideoForge explicitly disables PGS

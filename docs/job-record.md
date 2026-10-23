@@ -6,22 +6,24 @@ fields are only added within a schema version (`v`); a change that would break a
 
 ## Where the files are
 
-Each job has a work folder next to its source, `<source file name>_tmp/` (for `Show.S01E01.mkv`:
-`Show.S01E01.mkv_tmp/`). In it, named after the **output file**:
+Each source has a work folder next to it, `<source file name>_tmp/` (for `Show.S01E01.mkv`:
+`Show.S01E01.mkv_tmp/`), and each job a folder in that, named by its label: `main/` for a job without
+one, `dubbed/` for a job labelled `dubbed`. In the job's folder, named after the **output file**:
 
 | File | What |
 | --- | --- |
 | `<output name>.videoforge.json` | The **record**: how that output was made. Written when a run makes the output. |
 | `<output name>.videoforge.jsonl` | The **events**: one JSON object per line, appended while runs happen. |
-| `videoforge.log` | The text log a person reads: every run and index of this source, every tool's output. |
+| `videoforge.log` | The text log a person reads: every run and index of this job, every tool's output. |
 
 `<output name>` is the whole file name, extension included (`Show.S01E01.dubbed.mkv.videoforge.json`),
-so outputs made from one source (a job label such as `dubbed`, or MKV and MP4) each keep their own
-files. Glob `*.videoforge.json` in a work folder to find every output made from that source.
+so outputs made from one source each keep their own files. Glob `*/*.videoforge.json` in a work
+folder to find every output made from that source.
 
 With Settings → Work folders on (`delete_work_dir`), a done job's work folder is deleted. Its records and its
 log are copied first to `<data folder>/records/`, where the newest 100 of each are kept: the records by their
-own names, the log as `<source file name>.videoforge.log`. The events file isn't kept there; the same events
+own names, a job's log as `<source file name>.<label>.videoforge.log` (`<source file name>.videoforge.log`
+for `main/`). The events file isn't kept there; the same events
 are in the queue-wide stream below.
 
 VideoForge also appends every job's events, plus the index lane's, to one stream in its data folder:
@@ -65,7 +67,8 @@ VideoForge also appends every job's events, plus the index lane's, to one stream
   },
   "source": { "path": "...", "name": "...", "size": 123, "modified": "..." },
   "output": { "path": "...", "name": "...", "size": 123, "modified": "...", "container": "mkv" },
-  "work_dir": "...",
+  "work_dir": "...",                      // the source's work folder (<source>_tmp)
+  "job_dir": "...",                       // the job's folder in it (since this field was added)
   "log": ".../videoforge.log",
   "events": ".../<output name>.videoforge.jsonl",
   "original_language": "en",               // the content's original language as the job had it
@@ -180,7 +183,7 @@ Each line of a `.videoforge.jsonl` (and of the queue-wide `events.jsonl`) is one
 
 | `event` | Fields |
 | --- | --- |
-| `run.started` | `name`, `label`, `profile`, `source`, `output` (planned path, or null), `container`, `work_dir`, `issues` (the plan's) |
+| `run.started` | `name`, `label`, `profile`, `source`, `output` (planned path, or null), `container`, `work_dir`, `job_dir`, `issues` (the plan's) |
 | `step.started` | `step` (id), `label`, `n` (1-based), `total`, `command`. Not sent for a reused step |
 | `step.finished` | `step`, `label`, `n`, `total`, `status` (`done`, `reused`, `failed`, `cancelled`), `seconds`, `exit_code`, `command`, `error` |
 | `run.finished` | `status` (`done`, `invalid`, `failed`, `skipped`, `cancelled`), `output`, `error`, `seconds`, `record` (its path, or null), `issues` (the output check's) |

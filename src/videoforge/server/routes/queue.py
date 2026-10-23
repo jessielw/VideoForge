@@ -25,7 +25,8 @@ def state(request: Request) -> dict[str, Any]:
 @router.post("/reuse")
 def reuse(request: Request, body: dict[str, Any] | None = Body(None)) -> dict[str, Any]:  # noqa: B008
     """What a start of the given jobs (as /start picks them) could reuse: the jobs with finished files, each
-    with its offers (`id` "video" / "audio.N", label, file, size, seconds, finished, current)."""
+    with its offers (`id` "video" / "audio.N", label, file, size, seconds, finished, current, origin: the other
+    job's folder a run links it from, or "")."""
     q = queue_of(request)
     jobs = []
     for e in q.start_targets((body or {}).get("ids")):
@@ -34,6 +35,7 @@ def reuse(request: Request, body: dict[str, Any] | None = Body(None)) -> dict[st
                 {
                     "id": e.id,
                     "name": e.spec.name,
+                    "label": e.spec.label,
                     "offers": [
                         {
                             "id": o.id,
@@ -43,6 +45,7 @@ def reuse(request: Request, body: dict[str, Any] | None = Body(None)) -> dict[st
                             "seconds": o.seconds,
                             "finished": o.finished,
                             "current": o.current,
+                            "origin": o.origin,
                         }
                         for o in offers
                     ],

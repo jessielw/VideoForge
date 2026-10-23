@@ -126,7 +126,7 @@ def test_mp4_pipeline_extracts_source_srt_with_one_timing_shift(tmp_path, start_
     job = build_steps(spec, plan, ManualProfile(), app, tmp_path / "out.mp4")
     assert "subs.1.extract" in [step.id for step in job.steps]
     mux = job.steps[-1]
-    expected = spec.work_dir / "subtitle.1.srt"
+    expected = spec.job_dir / "subtitle.1.srt"
     assert expected in mux.inputs
     sub_arg = adds(mux.argvs[0])[-1]
     assert sub_arg == f"{expected}:lang=en:group=2:name=English:disable:txtflags=C0000000"

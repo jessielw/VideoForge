@@ -30,17 +30,39 @@ of each**; they are not a permanent archive of every run.
 
 ## Per-source work folders
 
-For `Show.S01E01.mkv`, the work folder is `Show.S01E01.mkv_tmp/` beside the source. It contains the
-index, `video.vpy`, video and audio encodes, pass statistics, `finished-steps.json`, the job log,
-and per-output records and events.
+For `Show.S01E01.mkv`, the work folder is `Show.S01E01.mkv_tmp/` beside the source. What comes
+from the source alone (its index, an enhancement layer, HDR metadata, subtitles extracted for
+burning in) sits at the top, shared by every job on the source. Each job has its own folder in it,
+named by its label (`main/` without one): its `video.vpy`, video and audio encodes, pass statistics,
+chapters, its own `videoforge.log`, and its records and events.
+
+```text
+Show.S01E01.mkv_tmp/
+  Show.S01E01.mkv.ffindex       shared: the source's index, HDR metadata, burn-in extracts
+  finished-steps.json
+  main/                         the job without a label
+    video.vpy  video.hevc  audio0_eng.ac3  chapters.qpf
+    videoforge.log
+    Show.S01E01.mkv.videoforge.json
+  dubbed/                       the job labelled "dubbed"
+    video.vpy  video.hevc  audio0_jpn.ac3 ...
+    videoforge.log
+    Show.S01E01.dubbed.mkv.videoforge.json
+```
+
+When two jobs on one source would make the same encode (dubbed and subbed usually differ only in
+the mux), the second links the first one's file into its own folder instead of encoding again: a
+hard link, so it takes no extra space, or a copy where the drive can't link. Renaming a label later
+starts a new folder; the old one stays until the work folder is removed.
 
 The source directory must be writable. Allow space for intermediate video and audio in addition
-to the final output. Jobs sharing a source use that source's work location.
+to the final output.
 
 ## Cleanup
 
-**Settings → Work folders** can delete a done job's working files automatically. Records and the
-text log are copied to the data folder's `records/` first. Per-output `.jsonl` files are not archived
+**Settings → Work folders** can delete a done job's working files automatically, once no other job
+in the queue uses the source. Records and the text logs are copied to the data folder's `records/`
+first. Per-output `.jsonl` files are not archived
 there; the queue-wide event stream still has the same events until it rotates.
 
 The Queue's **Remove → Remove and delete work folders** shows the folders and their sizes for

@@ -2,13 +2,13 @@ import type { JobSummary, Status } from './types'
 
 export const QUEUE_PAGE_SIZE = 100
 
-/** Preserve queue order; every search word must occur in the name or source path. */
+/** Preserve queue order; every search word must occur in the name, label or source path. */
 export function matchingJobs(jobs: JobSummary[], query: string, status: Status | '' = ''): JobSummary[] {
   const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
   return jobs.filter(job => {
     if (status && job.status !== status) return false
     if (!words.length) return true
-    const text = `${job.name}\n${job.source}`.toLocaleLowerCase()
+    const text = `${job.name}\n${job.label}\n${job.source}`.toLocaleLowerCase()
     return words.every(word => text.includes(word))
   })
 }

@@ -18,9 +18,25 @@ Import previews link to existing jobs. They keep those jobs' settings unless you
 and show added, kept and unmatched counts with details. Drafts survive navigation and refresh in
 the same browser tab.
 
+## Duplicate a job
+
+To make a second output from the same source with a few settings changed, select the job and use
+**Duplicate** (the copy icon on the Queue toolbar). The copy appears right after the original with
+the same settings and a label of its own (`v2`, `v3`, and so on, or `dubbed-2` for a job labelled
+`dubbed`), so it writes its own file. Change what you need in its tabs; the label and output name
+are on the **Output** tab. Duplicating several selected jobs copies each one.
+
+Each job keeps its files in its own folder in the source's work folder, named by its label, so set
+the label before the first run. The copy's run reuses what the two jobs share: the source index, and
+any video or audio encode whose settings did not change, linked into its folder. The log says
+`made by the job in dubbed/, reused` for those. Jobs on one source share the index, so one is never
+indexed while another runs; the second waits and its log says so.
+
+Adding the same source again keeps the existing job instead of making another; use Duplicate.
+
 ## Find and select jobs
 
-Search matches job names and source paths, ignoring case. Every word must match somewhere in
+Search matches job names, labels and source paths, ignoring case. Every word must match somewhere in
 the name or path. Combine it with a status filter; status counts reflect the current search.
 The list shows 100 matching jobs per page, in queue order. **Previous** and **Next** change pages
 without changing the selection or the run order.
@@ -81,8 +97,9 @@ Before rerunning a job, **Start queue** and **Run selected** show the available 
 audio encodes. Choose which to reuse and which to create again. Reuse depends on the saved step
 fingerprint and the finished output files; changed inputs or settings can invalidate it.
 
-Intermediate files and `finished-steps.json` live in the source's work folder. Keep that folder to
-retain reuse. A process interrupted halfway through an encode restarts that encode rather than
+Intermediate files and `finished-steps.json` live in the job's folder in the source's work folder
+([layout](../configuration/storage.md#per-source-work-folders)). Keep that folder to retain reuse.
+Files another job on the source made the same way are offered too, marked with that job's folder. A process interrupted halfway through an encode restarts that encode rather than
 continuing inside its bitstream.
 
 ## Read the result

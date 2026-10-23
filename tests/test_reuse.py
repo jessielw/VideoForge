@@ -35,7 +35,7 @@ def test_another_jobs_completed_output_is_not_current(profile, tmp_path):
     state = JobState()
     run(job, plan, profile, state)
     job.video_output.write_bytes(b"another job's completed encode")
-    note_finished(job.work_dir, "video", "other-settings", [job.video_output], 1)
+    note_finished(job.job_dir, "video", "other-settings", [job.video_output], 1)
     assert not offers(job, plan, profile, state)["video"].current
     assert "x264" in run(job, plan, profile, state)
 
@@ -140,3 +140,88 @@ def test_finished_files_note(tmp_path):
     (tmp_path / FINISHED_NAME).write_text("not json", encoding="utf-8")
     assert finished_files(tmp_path) == {}
     note_finished(tmp_path / "gone", "x", "f", [a], 0)  # never raises
+
+
+def variant(job, plan, label, **changes):
+    """Another job on the source, as Duplicate makes it: its own label (so its own folder and output)."""
+    from copy import deepcopy
+    from dataclasses import replace
+
+    other = replace(deepcopy(job), label=label, **changes)
+    other_plan = deepcopy(plan)
+    other_plan.encode_path = other.video_output
+    return other, other_plan
+
+
+def run_logged(job, plan, profile, state):
+    runner, lines = FakeRunner(), []
+    result = run_job(
+        job, plan, profile, APP, state=state, runner=runner, log=lines.append, prober=lambda *_: simulate_output(plan)
+    )
+    assert result.status is JobStatus.DONE, result.error
+    return tools_called(runner), lines
+
+
+def test_jobs_on_one_source_keep_their_own_folders_and_link_identical_encodes(profile, tmp_path):
+    """dubbed and subbed differ only in the mux: subbed links dubbed's video and audio encodes into its own folder
+    (no encode); 720p resizes, so its video is made again in its own folder and dubbed's is left as it was."""
+    plan = make_plan(tmp_path)
+    dubbed, dubbed_plan = variant(video_job(plan, tmp_path), plan, "dubbed")
+    dubbed_state = JobState()
+    tools, _ = run_logged(dubbed, dubbed_plan, profile, dubbed_state)
+    assert "x264" in tools and dubbed.job_dir == tmp_path / "Show.S01E01.mkv_tmp" / "dubbed"
+    assert dubbed.video_output.parent == dubbed.job_dir and (dubbed.job_dir / "video.vpy").is_file()
+    (dubbed.work_dir / "Show.S01E01.mkv.ffindex").write_bytes(
+        b"index"
+    )  # the source's, shared: what the real one leaves
+
+    subbed, subbed_plan = variant(dubbed, dubbed_plan, "subbed")
+    state = JobState()
+    tools, lines = run_logged(subbed, subbed_plan, profile, state)
+    assert tools == ["python", "mkvmerge"]  # the indexer keeps the source's index; every encode is linked
+    assert any("Video (x264): made by the job in dubbed/, reused" in line for line in lines)
+    assert os.path.samefile(subbed.video_output, dubbed.video_output)
+    assert subbed.video_output.parent == subbed.job_dir
+    assert {"video", "audio.1", "audio.2"} <= set(state.steps)
+    linked = finished_files(subbed.job_dir)[subbed.video_output.name]
+    assert linked.portable and linked.portable == finished_files(dubbed.job_dir)[dubbed.video_output.name].portable
+    assert run_logged(subbed, subbed_plan, profile, state)[0] == []  # its own records now: nothing to do
+
+    small, small_plan = variant(dubbed, dubbed_plan, "720p")
+    small.video.crop = Crop(0, 140, 0, 140)
+    tools, _ = run_logged(small, small_plan, profile, JobState())
+    assert "x264" in tools and "qaac64" not in tools  # the audio is the same: linked
+    assert not os.path.samefile(small.video_output, dubbed.video_output)
+    assert run_logged(dubbed, dubbed_plan, profile, dubbed_state)[0] == []  # dubbed's files are intact
+
+
+def test_a_section_made_again_is_not_taken_from_another_job(profile, tmp_path):
+    plan = make_plan(tmp_path)
+    dubbed, dubbed_plan = variant(video_job(plan, tmp_path), plan, "dubbed")
+    run_logged(dubbed, dubbed_plan, profile, JobState())
+    subbed, subbed_plan = variant(dubbed, dubbed_plan, "subbed")
+
+    found = {o.id: o for o in reuse_offers(subbed, subbed_plan, profile, APP, {})}
+    assert found["video"].origin == "dubbed" and found["video"].current
+    assert found["video"].file == dubbed.video_output
+
+    state = JobState(redo=["video"])
+    tools, _ = run_logged(subbed, subbed_plan, profile, state)
+    assert "x264" in tools and "qaac64" not in tools and state.redo == []
+    assert not os.path.samefile(subbed.video_output, dubbed.video_output)
+
+
+def test_a_linked_file_brings_the_files_its_tool_wrote_beside_it(tmp_path):
+    """x265's pass 2 reads `<stats>.cutree` beside the stats file pass 1 wrote."""
+    from videoforge.core.pipeline.share import _link
+
+    source, target = tmp_path / "a" / "video.stats", tmp_path / "b" / "video.stats"
+    source.parent.mkdir()
+    target.parent.mkdir()
+    source.write_bytes(b"stats")
+    (source.parent / "video.stats.cutree").write_bytes(b"cutree")
+    (source.parent / FINISHED_NAME).write_text("{}", encoding="utf-8")
+    target.write_bytes(b"stale")
+    _link(source, target)
+    assert os.path.samefile(source, target) and (target.parent / "video.stats.cutree").read_bytes() == b"cutree"
+    assert not (target.parent / FINISHED_NAME).exists()

@@ -46,6 +46,7 @@ def summary(e: Entry) -> dict[str, Any]:
     return {
         "id": e.id,
         "name": s.name,
+        "label": s.label,  # tells jobs on one source apart
         "source": str(s.inputs.source),
         "profile": s.profile,
         "status": e.status.value,
@@ -85,7 +86,7 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
         enc = e.spec.encoder
         if e.spec.encodes_video and target.applies(enc) and enc.target_mb is not None:
             found = target.budget(
-                enc.target_mb, e.plan, e.spec.container(profile), info.read(e.spec.work_dir / info.SCRIPT_INFO)
+                enc.target_mb, e.plan, e.spec.container(profile), info.read(e.spec.job_dir / info.SCRIPT_INFO)
             )
             out["target"] = to_json(found) | {"video": found.video, "kbps": found.kbps} if found else None
     if e.probed is not None:

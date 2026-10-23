@@ -209,6 +209,7 @@ export const api = {
     }),
   removalPreview: (ids: string[]) => post<{ folders: { id: string; path: string; bytes: number | null; error: string }[] }>('/api/jobs/removal-preview', { ids }),
   restore: (ids: string[]) => post<{ restored: string[] }>('/api/jobs/restore', { ids }),
+  duplicate: (ids: string[]) => post<{ added: string[] }>('/api/jobs/duplicate', { ids }),
   reorder: (ids: string[]) => post<{ ids: string[] }>('/api/jobs/reorder', { ids }),
   reprobe: (ids: string[]) => post('/api/jobs/reprobe', { ids }),
   log: (id: string) => get<{ lines: string[] }>(`/api/jobs/${id}/log`),

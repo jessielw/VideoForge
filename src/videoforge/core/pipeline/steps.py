@@ -5,7 +5,8 @@ Python call. Its fingerprint covers the commands, an extra key (e.g. the script
 text) and the size and mtime of its input files. A rerun skips a step whose
 fingerprint matches the last finished run and whose outputs still exist: that is
 how a job resumes after a crash or a cancel, and why changing a subtitle flag
-only redoes the mux.
+only redoes the mux. A step without a record of its own can take the same files
+from another job on the source (pipeline/share.py).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ import re
 import subprocess
 import threading
 import time
+from typing import TYPE_CHECKING
 
 from videoforge.core.execute import process
 from videoforge.core.execute.process import CancelToken, LogFn, ToolError
@@ -30,6 +32,9 @@ from videoforge.core.video.encoders import (
     rate as encoder_rate,
 )
 from videoforge.core.workdir import finished_files, forget_finished
+
+if TYPE_CHECKING:
+    from videoforge.core.pipeline.share import Sharing
 
 Runner = Callable[[Sequence[Sequence[str]], LogFn, CancelToken | None], None]
 _MKV_PROGRESS = re.compile(r"Progress:\s*(\d+)%")
@@ -140,6 +145,8 @@ def run_steps(
     step_log: Callable[[StepRun, str], None] | None = None,
     parallel: int = 0,
     keep: Collection[str] = (),
+    share: Sharing | None = None,
+    redo: Collection[str] = (),
 ) -> None:
     """Run the steps in order. records: the job's last finished steps, updated in place.
     runs: one StepRun per step (default: fresh ones), updated as each step starts, ends or fails;
@@ -149,8 +156,9 @@ def run_steps(
     steps after them go on; a step that reads a background step's outputs waits for it, and all are done
     before this returns. A step that fails stops the others. Callbacks may then come from several threads,
     one at a time. keep: step ids the user chose to reuse whatever their fingerprint (their outputs must be
-    there); they get a record with today's fingerprint. Raises ToolError (a step failed or didn't write its
-    outputs) or Cancelled."""
+    there); they get a record with today's fingerprint. share: the job's folders, to note finished files in
+    and to take another job's identical ones from (but not for the steps in redo: the user chose to make them
+    again). Raises ToolError (a step failed or didn't write its outputs) or Cancelled."""
     steps = list(steps)  # refresh() replaces a step
     total_weight = sum(s.weight for s in steps) or 1.0
     runs = runs if runs is not None else [s.to_run() for s in steps]
@@ -268,6 +276,8 @@ def run_steps(
             raise
         record = StepRecord(step.id, step.fingerprint(), list(step.outputs), round(spent(), 1))
         record.capture_outputs()
+        if share is not None:
+            share.note(step, record)
         with lock:
             records[step.id] = record
             if on_record:
@@ -296,9 +306,19 @@ def run_steps(
                 records[step.id] = prior
                 if on_record:
                     on_record(prior)
+        origin = ""
+        if (prior is None or not _reusable(step, prior)) and share is not None and step.id not in redo:
+            adopted = share.adopt(step)
+            if adopted is not None:
+                prior, origin = adopted
+                with lock:
+                    records[step.id] = prior
+                    if on_record:
+                        on_record(prior)
         if prior is None or not _reusable(step, prior):
             return False
-        log(f"== {i + 1}/{len(steps)} {step.label}: done in an earlier run, reused")
+        how = f"made by the job in {origin}/" if origin else "done in an earlier run"
+        log(f"== {i + 1}/{len(steps)} {step.label}: {how}, reused")
         run.status, run.seconds = StepStatus.REUSED, prior.seconds
         changed(run)
         report(i, 1.0, reused=True)

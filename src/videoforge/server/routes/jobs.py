@@ -1,4 +1,4 @@
-"""Jobs: match inputs, add, list, inspect, edit (one or many), remove, reorder, re-probe, logs."""
+"""Jobs: match inputs, add, list, inspect, edit (one or many), duplicate, remove, reorder, re-probe, logs."""
 
 from __future__ import annotations
 
@@ -274,6 +274,12 @@ def removal_preview(request: Request, body: dict[str, Any] = Body(...)) -> dict[
             error = str(ex)
         folders.append({"id": e.id, "path": str(e.spec.work_dir), "bytes": size, "error": error})
     return {"folders": folders}
+
+
+@router.post("/jobs/duplicate")
+def duplicate_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """{ids}: a copy of each job right after it, with a label of its own (queue.duplicate). Returns {added}."""
+    return {"added": [e.id for e in queue_of(request).duplicate(body.get("ids") or [])]}
 
 
 @router.post("/jobs/restore")

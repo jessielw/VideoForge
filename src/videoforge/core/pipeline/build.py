@@ -177,7 +177,7 @@ def index_steps(
     track the job burns in (plan.burn): a source track's is extracted."""
     work, source = spec.work_dir, spec.inputs.source
     text = job_script(spec, video, burn)
-    script = work / "video.vpy"
+    script = spec.job_dir / "video.vpy"
     source_filter = spec.video.source_filter
     el = baked_el(spec, video)
 
@@ -275,7 +275,7 @@ def index_steps(
 def script_fps(spec: JobSpec) -> Fraction | None:
     """The script's frame rate, once the job's script info step has written it; None before that, or for a
     variable rate."""
-    found = info.read(spec.work_dir / info.SCRIPT_INFO)
+    found = info.read(spec.job_dir / info.SCRIPT_INFO)
     return found.fps if found else None
 
 
@@ -294,12 +294,13 @@ def video_steps(
     spec: JobSpec, plan: Plan, app: AppConfig, container: str = "mkv", encoded: Mapping[int, Path] | None = None
 ) -> list[Step]:
     """encoded: plan.audio position -> its encoded file, which a target size's pass 2 counts."""
-    work, source, enc = spec.work_dir, spec.inputs.source, spec.encoder
-    script = work / "video.vpy"
+    # The source's extracts are in the shared work folder; the script, chapters and encode in the job's.
+    work, home, source, enc = spec.work_dir, spec.job_dir, spec.inputs.source, spec.encoder
+    script = home / "video.vpy"
     v = plan.source.video
     text = job_script(spec, v, plan.burn)
     steps = index_steps(spec, app, v, plan.burn)
-    info_file = work / info.SCRIPT_INFO
+    info_file = home / info.SCRIPT_INFO
     steps.append(
         Step(
             "script.info",
@@ -313,7 +314,7 @@ def video_steps(
     )
     qpfile = None
     if spec.makes_chapters:
-        files = qpf_paths(work)
+        files = qpf_paths(home)
         video = plan.source.video
         source_fps = frame_rate(video.default_duration_ns) if video and video.default_duration_ns else None
 
@@ -323,7 +324,7 @@ def video_steps(
             def make_chapters(log: LogFn) -> None:
                 if fps is None:
                     raise ToolError("Neither the source nor the script has a frame rate to place chapters by")
-                if make_qpf(source, work, fps) is None:
+                if make_qpf(source, home, fps) is None:
                     raise ToolError("AutoQPF could not read or generate chapters for the source")
                 log(f"Chapters and qpfile written ({fps} fps)")
 
@@ -377,7 +378,7 @@ def video_steps(
         shared += (meta,)
     dolby_vision, source_rpu, dv_profile = None, work / hdr.DV_SOURCE_RPU, hdr.dv_profile(v)
     if hdr.keeps_dv(v, enc) and v is not None:
-        dolby_vision = work / hdr.DV_RPU
+        dolby_vision = home / hdr.DV_RPU  # edited for the job's crop and resize
         rpu, width, height = dolby_vision, v.width, v.height
         order = [s.category.value for s in spec.video.filters if s.category.value in ("crop", "resize")]
 
@@ -465,7 +466,7 @@ def video_steps(
                     weight=60,
                 )
             ]
-        stats = stats_path(work, enc)
+        stats = stats_path(home, enc)
         first = command(sized(False), output=Path(os.devnull), pass_number=1, stats=stats)
         second = command(sized(True), output=out, pass_number=2, stats=stats)
         # A target size's pass 2 waits for the audio encodes (run_steps), whose files its bitrate counts.
@@ -522,13 +523,13 @@ def build_steps(
 ) -> JobSteps:
     if plan.source.path is None:
         raise ToolError("The plan has no source file")
-    work = spec.work_dir
+    work, home = spec.work_dir, spec.job_dir
     settings = profile.audio_settings()
     encoded: dict[int, Path] = {}
     audio: list[Step] = []
     for pos, a in enumerate(plan.audio):
         src = a.source.external_path or plan.source.path  # an added audio file is read from itself
-        cmd = audio_command(a, pos, src, work, settings, app.tools)
+        cmd = audio_command(a, pos, src, home, settings, app.tools)
         if cmd is None:
             continue
         encoded[pos] = cmd.output
@@ -544,7 +545,7 @@ def build_steps(
         if needs_measure(a):
             # Normalizing by a peak or a loudness: the encode applies what the measure step read, when its
             # turn comes (on its own thread, beside the video: run_steps).
-            found = measure_path(a, pos, work)
+            found = measure_path(a, pos, home)
             audio.append(
                 Step(
                     f"audio.{pos + 1}.measure",
@@ -558,7 +559,7 @@ def build_steps(
             )
 
             def measured(base: Step, a: PlannedAudio = a, pos: int = pos, src: Path = src, found: Path = found) -> Step:
-                again = audio_command(a, pos, src, work, settings, app.tools, loudness.read(found))
+                again = audio_command(a, pos, src, home, settings, app.tools, loudness.read(found))
                 argvs = base.argvs if again is None else again.argvs
                 return replace(base, argvs=argvs, refresh=partial(measured, base))
 
@@ -597,9 +598,9 @@ def build_steps(
     steps[at:at] = audio
 
     if container == "mp4":
-        subtitles, plan = mp4_subtitle_steps(plan, work, app)
+        subtitles, plan = mp4_subtitle_steps(plan, home, app)  # by the job's subtitle positions
         steps += subtitles
-    if container == "mp4" and (chapters := mp4_chapters_step(plan, work)) is not None:
+    if container == "mp4" and (chapters := mp4_chapters_step(plan, home)) is not None:
         steps.append(chapters)
         plan = replace(plan, chapters_path=chapters.outputs[0])
     unfinished = output.with_name(output.name + ".partial")
@@ -614,7 +615,7 @@ def build_steps(
     # source's); a reused encode by the source's. A VFR source's timestamps time it instead, while they fit the
     # script (one per frame: an IVTC or a trim drops them for the script's rate).
     def timing() -> tuple[Fraction | None, Path | None]:
-        found = info.read(work / info.SCRIPT_INFO)
+        found = info.read(home / info.SCRIPT_INFO)
         if found is None:
             return None, timestamps
         return found.fps, timestamps if timestamps is not None and vfr.fits(timestamps, found.frames) else None

@@ -39,7 +39,7 @@ from videoforge.core.tools import tool_issues
 from videoforge.core.video import encoders, filters, hdr, options, target
 from videoforge.core.video.qpf import qpf_paths
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
-from videoforge.core.workdir import work_dir
+from videoforge.core.workdir import job_dir, work_dir
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -69,7 +69,7 @@ class JobResult:
     output: Path | None = None
     issues: list[Issue] = field(default_factory=list)  # validation of the output
     error: str = ""
-    work_dir: Path | None = None  # the job's kept working folder
+    work_dir: Path | None = None  # the job's own kept folder (JobSpec.job_dir)
     encoded_audio: dict[int, Path] = field(default_factory=dict)  # plan.audio position -> encode in work_dir
 
 
@@ -109,11 +109,17 @@ class JobSpec:
 
     @property
     def work_dir(self) -> Path:
+        """The source's work folder, shared by every job on it (what comes from the source alone)."""
         return work_dir(self.inputs.source)
 
     @property
+    def job_dir(self) -> Path:
+        """The job's own folder in it: its script, encodes, log and records (workdir.job_dir)."""
+        return job_dir(self.inputs.source, self.label)
+
+    @property
     def video_output(self) -> Path:
-        return self.work_dir / encoders.output_name(self.encoder)
+        return self.job_dir / encoders.output_name(self.encoder)
 
     @property
     def makes_chapters(self) -> bool:
@@ -208,6 +214,7 @@ class JobState:
     issues: list[Issue] = field(default_factory=list)
     error: str = ""
     keep: list[str] = field(default_factory=list)  # steps the user chose to reuse on the next run (run_steps' keep)
+    redo: list[str] = field(default_factory=list)  # ... and to make again: not taken from another job (run_steps' redo)
 
 
 def planned_encode(spec: JobSpec, source: SourceInfo) -> SourceInfo:
@@ -234,7 +241,7 @@ def planned_encode(spec: JobSpec, source: SourceInfo) -> SourceInfo:
 def spec_inputs(spec: JobSpec) -> JobInputs:
     """The inputs the planner sees: the user's, plus the chapter file AutoQPF will write."""
     if spec.makes_chapters:
-        return replace(spec.inputs, chapters=qpf_paths(spec.work_dir).chapters)
+        return replace(spec.inputs, chapters=qpf_paths(spec.job_dir).chapters)
     return spec.inputs
 
 

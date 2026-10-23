@@ -55,7 +55,7 @@ def test_a_finished_run_writes_its_record_and_events(profile, tmp_path):
     queue = JsonLines(tmp_path / "data" / "logs" / "events.jsonl")
     spec, output, result, rec = run(profile, tmp_path, queue=queue)
     assert result.status is JobStatus.DONE and output == tmp_path / "out" / "Show.S01E01.dubbed.mkv"
-    work = tmp_path / "Show.S01E01.mkv_tmp"
+    work = tmp_path / "Show.S01E01.mkv_tmp" / "dubbed"  # the job's folder, by its label
 
     events = lines(work / "Show.S01E01.dubbed.mkv.videoforge.jsonl")
     assert all(e["v"] == SCHEMA and e["job"] == spec.id and e["run"] == rec.run_id for e in events)
@@ -120,6 +120,7 @@ def test_a_finished_run_writes_its_record_and_events(profile, tmp_path):
     assert all(s["status"] == "done" for s in doc["steps"])
     assert set(doc["tools"]) == {"qaac", "ffmpeg", "deezy", "dee", "mkvmerge"} and doc["tools"]["mkvmerge"] == "v1"
     assert doc["log"] == str(work / "videoforge.log")
+    assert doc["job_dir"] == str(work) and doc["work_dir"] == str(work.parent)
 
 
 def test_a_failed_run_keeps_the_last_record(profile, tmp_path):
@@ -145,7 +146,7 @@ def test_a_cancelled_run(profile, tmp_path):
 
     _, output, result, rec = run(profile, tmp_path, runner=cancelled, label="")
     assert result.status is JobStatus.CANCELLED and rec.record_file is None
-    events = lines(tmp_path / "Show.S01E01.mkv_tmp" / "Show.S01E01.mkv.videoforge.jsonl")
+    events = lines(tmp_path / "Show.S01E01.mkv_tmp" / "main" / "Show.S01E01.mkv.videoforge.jsonl")
     assert [e["event"] for e in events] == ["run.started", "step.started", "step.finished", "run.finished"]
     assert events[2]["status"] == "cancelled" and events[-1]["status"] == "cancelled"
 

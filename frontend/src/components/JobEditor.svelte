@@ -118,6 +118,7 @@
     <header class="space-y-2 border-b px-5 pt-3">
       <div class="flex items-center gap-3">
         <h2 class="truncate text-lg font-semibold" title={job.source}>{job.name}</h2>
+        {#if job.label}<Badge variant="outline" class="shrink-0" title="Label (Output tab)">{job.label}</Badge>{/if}
         <span class="text-sm {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
         <span class="text-sm text-muted-foreground">· {job.profile} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span>
         {#if !editable}<Badge variant="outline" class="border-info/40 bg-info/10 text-info">locked while {job.status}</Badge>{/if}

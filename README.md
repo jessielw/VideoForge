@@ -188,8 +188,9 @@ This syntax is the same on Windows and Linux; apostrophes and shell operators ar
 
 ## Where things are written
 
-- **Next to the source, `<source>_tmp/`:** the job's work folder: the index, `video.vpy`, the encodes,
-  `videoforge.log` (every run and index of this source, with times and tool output), and per output
+- **Next to the source, `<source>_tmp/`:** the source's work folder: the index at its top, and a folder per
+  job (`main/`, or the job's label) with its `video.vpy`, the encodes, `videoforge.log` (every run and index
+  of the job, with times and tool output), and per output
   `<output name>.videoforge.json` (how it was made: settings, script, each track and the source track it
   came from, commands, tool versions) and `<output name>.videoforge.jsonl` (live events). The format is in
   [docs/job-record.md](docs/job-record.md), for tools that read it. It stays after the job, so a rerun reuses

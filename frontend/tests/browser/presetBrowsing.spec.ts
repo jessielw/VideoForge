@@ -29,7 +29,7 @@ async function fixture(page: Page, empty = false) {
     default: true, forced: false, hearing_impaired: false, visual_impaired: false, commentary: false,
     original: false, atmos: false, dtsx: false, bitrate_kbps: 224, delay_ms: 24, format_name: 'E-AC-3', detected: {},
     sample_rate: 48000, bit_depth: null, size_bytes: null, duration_ms: 61000, copy: 0 }
-  const job: JobDetail = { id: 'presets', name: 'Preset browsing', source: 'D:/Show.mkv', profile: 'manual', status: 'ready',
+  const job: JobDetail = { id: 'presets', name: 'Preset browsing', label: '', source: 'D:/Show.mkv', profile: 'manual', status: 'ready',
     progress: null, issue: '', output: null, encoder: 'x264', crop: null, custom_script: false, indexed: false,
     index_error: '', index_held: false, audio: [], subs: 0, issues: [], steps: {},
     plan: { encode_path: null, resolution: '1080p', original_language: 'en', chapters_path: null,

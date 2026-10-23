@@ -166,7 +166,7 @@ def _commands(state: JobState) -> dict[str, str]:
 def _video(spec: JobSpec, plan: Plan, commands: dict[str, str]) -> dict[str, Any]:
     if not spec.encodes_video:
         return {"encoded": False, "encode": str(spec.inputs.encode), "language": _video_language(plan)}
-    script = spec.work_dir / "video.vpy"
+    script = spec.job_dir / "video.vpy"
     try:
         text = script.read_text(encoding="utf-8")
     except OSError:
@@ -280,7 +280,7 @@ def _subs(plan: Plan, container: str) -> list[dict[str, Any]]:
 
 def _chapters(spec: JobSpec, plan: Plan) -> dict[str, Any]:
     if spec.makes_chapters:
-        files = qpf_paths(spec.work_dir)
+        files = qpf_paths(spec.job_dir)
         return {"from": "autoqpf", "path": str(files.chapters), "qpfile": str(files.qpfile)}
     if plan.chapters_path is not None:
         return {"from": "file", "path": str(plan.chapters_path)}
@@ -329,7 +329,7 @@ def build_record(
 ) -> dict[str, Any]:
     container = spec.container(profile)
     commands = _commands(state)
-    work = spec.work_dir
+    home = spec.job_dir
     return {
         "v": SCHEMA,
         "videoforge": version(),
@@ -350,9 +350,10 @@ def build_record(
         },
         "source": _file(spec.inputs.source),
         "output": (_file(output) or {}) | {"container": container},
-        "work_dir": str(work),
-        "log": str(work / "videoforge.log"),
-        "events": str(events_path(work, output)),
+        "work_dir": str(spec.work_dir),
+        "job_dir": str(home),
+        "log": str(home / "videoforge.log"),
+        "events": str(events_path(home, output)),
         "video": _video(spec, plan, commands),
         "audio": _audio(plan, result, commands),
         "subtitles": _subs(plan, container),
@@ -386,7 +387,7 @@ class RunRecorder:
         self.versions = versions
         self.started = now()
         self._t0 = time.monotonic()
-        self._job = JsonLines(events_path(spec.work_dir, output)) if output is not None else None
+        self._job = JsonLines(events_path(spec.job_dir, output)) if output is not None else None
         self._queue = queue_events
         self.record_file: Path | None = None
 
@@ -406,6 +407,7 @@ class RunRecorder:
             output=str(self.output) if self.output else None,
             container=self.spec.container(self.profile),
             work_dir=str(self.spec.work_dir),
+            job_dir=str(self.spec.job_dir),
             issues=[_issue("plan", i) for i in self.plan.issues],
         )
 
@@ -441,7 +443,7 @@ class RunRecorder:
                     output=result.output,
                     versions=versions,
                 )
-                path = record_path(self.spec.work_dir, result.output)
+                path = record_path(self.spec.job_dir, result.output)
                 write_json(path, doc)
                 self.record_file = path
             except Exception:  # a bug here must not fail the job

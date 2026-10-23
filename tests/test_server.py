@@ -249,7 +249,7 @@ def test_add_inspect_and_edit(tmp_path):
         assert job["encoder"] == "x264 crf 18"  # the manual profile's default encode
         assert job["spec"]["encoder"]["preset"] == "slow"
         assert [a["action"] for a in job["plan"]["audio"]] == ["copy", "copy"]
-        assert Path(job["plan"]["encode_path"]).parts[-2:] == ("Show.S01E01.mkv_tmp", "video.264")
+        assert Path(job["plan"]["encode_path"]).parts[-3:] == ("Show.S01E01.mkv_tmp", "main", "video.264")
         assert [s["key"] for s in job["tracks"]["subs"]][:2] == ["id:10", "id:11"]
         flags = {"default": False, "forced": False, "hearing_impaired": False, "commentary": False, "original": False}
         assert job["tracks"]["subs"][0]["detected"] == flags
@@ -440,10 +440,10 @@ def test_queue_runs_jobs_and_streams_events(tmp_path):
         (step,) = client.get(f"/api/jobs/{ids[0]}/steps").json()
         assert (step["status"], step["command"], step["exit_code"]) == ("done", "x264 --crf 18", 0)
         assert step["lines"] == ["[x264] [ 50.0%] 1/2 frames"] and not step["partial"]  # not the header
-        text_log = (tmp_path / "src" / "Show.S01E01.mkv_tmp" / "videoforge.log").read_text(encoding="utf-8")
+        text_log = (tmp_path / "src" / "Show.S01E01.mkv_tmp" / "main" / "videoforge.log").read_text(encoding="utf-8")
         last = text_log.splitlines()[-1]
         assert last[:9].count(":") == 2 and last[9:] == f"Job complete: {tmp_path / 'out' / 'Show.S01E01.mkv'}"
-        work = tmp_path / "src" / "Show.S01E01.mkv_tmp"
+        work = tmp_path / "src" / "Show.S01E01.mkv_tmp" / "main"
         record = json.loads((work / "Show.S01E01.mkv.videoforge.json").read_text(encoding="utf-8"))
         assert record["run"]["status"] == "done" and record["job"]["id"] == ids[0]
         assert [s["id"] for s in record["steps"]] == ["video"]
@@ -652,8 +652,8 @@ class EncodingRun(WritingRun):
     """WritingRun that leaves an encode in the work folder, as a real run does."""
 
     def __call__(self, spec, plan, profile, app, **kw):
-        spec.work_dir.mkdir(exist_ok=True)
-        (spec.work_dir / "video.264").write_bytes(b"264")
+        spec.job_dir.mkdir(parents=True, exist_ok=True)
+        (spec.job_dir / "video.264").write_bytes(b"264")
         return super().__call__(spec, plan, profile, app, **kw)
 
 
@@ -682,7 +682,7 @@ def test_reuse_question(tmp_path):
         assert client.post("/api/queue/reuse", json={"ids": [one]}).json() == {"jobs": []}
 
         video = q.get(one).spec.video_output
-        video.parent.mkdir()
+        video.parent.mkdir(parents=True)
         video.write_bytes(b"264")
         note_finished(video.parent, "video", "made with other settings", [video], 12.0)
         jobs = client.post("/api/queue/reuse", json={}).json()["jobs"]  # Start queue: every runnable job
@@ -722,7 +722,7 @@ def test_work_folders(tmp_path):
         client.post("/api/queue/start", json={"ids": [one]})
         wait_for(client, one, "done")
         client.app.state.queue.wait(5)
-        assert (work[one] / "video.264").is_file() and not records.exists()
+        assert (work[one] / "main" / "video.264").is_file() and not records.exists()
 
         assert client.put("/api/config", json={"delete_work_dir": "yes"}).status_code == 422
         assert client.put("/api/config", json={"delete_work_dir": True}).json()["delete_work_dir"] is True
@@ -781,8 +781,8 @@ def test_keep_records_keeps_the_newest(tmp_path):
         for path in copied.values():
             os.utime(path, (n + 1, n + 1))  # the earlier copies are older
     assert copied == {
-        "s2.mkv.videoforge.json": dest / "s2.mkv.videoforge.json",
-        "videoforge.log": dest / "s2.mkv.videoforge.log",
+        work_dir(source) / "s2.mkv.videoforge.json": dest / "s2.mkv.videoforge.json",
+        work_dir(source) / "videoforge.log": dest / "s2.mkv.videoforge.log",
     }
     assert sorted(p.name for p in dest.iterdir()) == [
         "s1.mkv.videoforge.json",
@@ -790,6 +790,23 @@ def test_keep_records_keeps_the_newest(tmp_path):
         "s2.mkv.videoforge.json",
         "s2.mkv.videoforge.log",
     ]
+
+
+def test_keep_records_takes_every_jobs_folder(tmp_path):
+    """Each job's records by their own names, and its log by its label (main's as the source's)."""
+    source, dest = tmp_path / "s.mkv", tmp_path / "records"
+    for label, output in (("main", "s.mkv"), ("dubbed", "s.dubbed.mkv")):
+        (work_dir(source) / label).mkdir(parents=True)
+        (work_dir(source) / label / "videoforge.log").write_text(label, encoding="utf-8")
+        (work_dir(source) / label / f"{output}.videoforge.json").write_text("{}", encoding="utf-8")
+    copied = keep_records(source, dest)
+    assert sorted(p.name for p in copied.values()) == [
+        "s.dubbed.mkv.videoforge.json",
+        "s.mkv.dubbed.videoforge.log",
+        "s.mkv.videoforge.json",
+        "s.mkv.videoforge.log",
+    ]
+    assert (dest / "s.mkv.dubbed.videoforge.log").read_text(encoding="utf-8") == "dubbed"
 
 
 def test_restart_requeues_an_interrupted_job(tmp_path):
@@ -1439,7 +1456,7 @@ def test_index_lane(tmp_path):
         q = client.app.state.queue
         e = q.get(ids[0])
         assert set(e.state.steps) == {"script", "index"} and e.state.status is None  # no run, no outcome
-        assert (e.spec.work_dir / "video.vpy").is_file() and (e.spec.work_dir / "videoforge.log").is_file()
+        assert (e.spec.job_dir / "video.vpy").is_file() and (e.spec.job_dir / "videoforge.log").is_file()
         assert [c[1:] for c in indexer.calls] == [
             (
                 "-m",
@@ -1823,3 +1840,104 @@ def test_reimport_preserves_existing_job_unless_explicitly_replaced(tmp_path):
         assert client.get(f"/api/jobs/{job}").status_code == 404
         assert client.get(f"/api/jobs/{replacement}").json()["spec"]["label"] == ""
         assert add(client, tmp_path, replace_existing=[job]) == []  # stale preview cannot replace new edits
+
+
+def test_duplicate_makes_a_variant_of_the_job(tmp_path):
+    """A copy right after the job, with its settings and finished steps and a label of its own, so the two write
+    different files and share one source lock. Copies get v2, v3...; a labelled job's get its label -2, -3..."""
+    make_files(tmp_path, "S01E01", "S01E02")
+    with make_client(tmp_path) as client:
+        one, two = add(client, tmp_path)
+        for job in (one, two):
+            wait_for(client, job, "ready", "warn")
+        q = client.app.state.queue
+        encoder = client.get(f"/api/jobs/{one}").json()["spec"]["encoder"] | {"crf": 20}
+        client.patch(f"/api/jobs/{one}", json={"encoder": encoder})
+        q.get(one).state.steps["script"] = StepRecord("script", "abc")
+        [copy] = client.post("/api/jobs/duplicate", json={"ids": [one]}).json()["added"]
+        assert [j["id"] for j in client.get("/api/jobs").json()] == [one, copy, two]
+        job = wait_for(client, copy, "ready", "warn")
+        original = client.get(f"/api/jobs/{one}").json()
+        assert job["spec"]["label"] == "v2" and job["spec"]["encoder"] == original["spec"]["encoder"]
+        assert job["spec"]["inputs"] == original["spec"]["inputs"]
+        assert set(q.get(copy).state.steps) == {"script"} and q.get(copy).state.steps is not q.get(one).state.steps
+        assert q.get(copy).source_lock is q.get(one).source_lock
+        assert q.get(copy).source_lock is not q.get(two).source_lock
+
+        [third] = client.post("/api/jobs/duplicate", json={"ids": [copy]}).json()["added"]
+        assert client.get(f"/api/jobs/{third}").json()["spec"]["label"] == "v3"
+        client.patch(f"/api/jobs/{two}", json={"label": "dubbed"})
+        [dub] = client.post("/api/jobs/duplicate", json={"ids": [two]}).json()["added"]
+        assert client.get(f"/api/jobs/{dub}").json()["spec"]["label"] == "dubbed-2"
+        assert wait_for(client, dub, "ready", "warn")["status"] != "blocked"
+    with make_client(tmp_path) as client:  # kept across a restart, still sharing the lock
+        q = client.app.state.queue
+        assert [e.id for e in q.entries()] == [one, copy, third, two, dub]
+        assert q.get(one).source_lock is q.get(copy).source_lock is q.get(third).source_lock
+
+
+def test_undo_removal_beside_a_variant(tmp_path):
+    """A removed job comes back beside another job on its source; writing the same file blocks it."""
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        [one] = add(client, tmp_path)
+        wait_for(client, one, "ready", "warn")
+        [copy] = client.post("/api/jobs/duplicate", json={"ids": [one]}).json()["added"]
+        wait_for(client, copy, "ready", "warn")
+        client.post("/api/jobs/remove", json={"ids": [copy]})
+        client.patch(f"/api/jobs/{one}", json={"label": "v2"})
+        assert client.post("/api/jobs/restore", json={"ids": [copy]}).json()["restored"] == [copy]
+        assert wait_for(client, copy, "blocked")
+        assert client.app.state.queue.get(copy).source_lock is client.app.state.queue.get(one).source_lock
+
+
+def test_variants_never_index_while_one_runs(tmp_path):
+    """The jobs on one source share its work folder: the lane holds a variant back while another runs (Index now
+    too), and a run waits for a variant's index to finish before it starts."""
+    make_files(tmp_path)
+    indexer = FakeIndexer(hold=["Show.S01E01.mkv"])
+    run = FakeRun(block=True)
+    with make_client(tmp_path, run=run, runner=indexer) as client:
+        [one] = add(client, tmp_path)
+        wait_for(client, one, "ready", "warn")
+        [copy] = client.post("/api/jobs/duplicate", json={"ids": [one]}).json()["added"]
+        wait_for(client, copy, "ready", "warn")
+
+        client.post("/api/queue/start", json={"ids": [one]})
+        wait_for(client, one, "running")
+        client.post("/api/queue/index", json={"ids": [copy], "first": True})
+        time.sleep(0.3)
+        assert client.get(f"/api/jobs/{copy}").json()["index_held"] and indexer.calls == []
+        client.post("/api/queue/cancel")
+        indexer.wait(1)
+        wait_for(client, copy, "indexing")
+
+        client.post("/api/queue/start", json={"ids": [one]})
+        wait_for(client, one, "running")
+        time.sleep(0.3)
+        assert run.runs == ["Show.S01E01.mkv"]  # the second run waits for the index
+        assert any("Waiting for Show.S01E01.mkv (v2)" in line for line in client.app.state.queue.get(one).log)
+        indexer.gates["Show.S01E01.mkv"].set()
+        wait_for(client, copy, "ready", "warn")
+        end = time.monotonic() + 5
+        while len(run.runs) < 2:
+            assert time.monotonic() < end, "the run never started"
+            time.sleep(0.01)
+        client.post("/api/queue/cancel")
+        wait_for(client, one, "cancelled")
+
+
+def test_a_done_job_keeps_the_work_folder_a_variant_uses(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path, run=EncodingRun()) as client:
+        [one] = add(client, tmp_path)
+        wait_for(client, one, "ready", "warn")
+        [copy] = client.post("/api/jobs/duplicate", json={"ids": [one]}).json()["added"]
+        wait_for(client, copy, "ready", "warn")
+        client.put("/api/config", json={"delete_work_dir": True})
+        client.post("/api/queue/start", json={"ids": [one]})
+        wait_for(client, one, "done")
+        client.app.state.queue.wait(5)
+        assert (tmp_path / "src" / "Show.S01E01.mkv_tmp" / "main" / "video.264").is_file()
+        lines = client.get(f"/api/jobs/{one}/log").json()["lines"]
+        assert "Work folder kept: Show.S01E01.mkv (v2) uses it too" in lines

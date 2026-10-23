@@ -8,6 +8,7 @@
   import { saves } from '../lib/saves'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
+  import CopyPlusIcon from '@lucide/svelte/icons/copy-plus'
   import CropIcon from '@lucide/svelte/icons/crop'
   import DatabaseCheckIcon from '@lucide/svelte/icons/database-check'
   import DatabaseXIcon from '@lucide/svelte/icons/database-x'
@@ -24,6 +25,7 @@
   import SquareIcon from '@lucide/svelte/icons/square'
   import Trash2Icon from '@lucide/svelte/icons/trash-2'
   import { toast } from 'svelte-sonner'
+  import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
   import * as Card from '$lib/components/ui/card'
   import * as Dialog from '$lib/components/ui/dialog'
@@ -284,6 +286,21 @@
     await act(() => api.reorder(step < 0 ? order : order.reverse()))
   }
 
+  // A copy of each selected job right after it (same source and settings, a label of its own), for a second
+  // output with a few settings changed; the copy's run reuses what the two share. The copies end up selected.
+  async function duplicate() {
+    await act(async () => {
+      await saves.flush()
+      const { added } = await api.duplicate([...selected])
+      await app.refreshJobs()
+      select(added)
+      if (added.length === 1) void focusJob(added[0])
+      toast.success(added.length === 1 ? 'Job duplicated' : `Duplicated ${added.length} jobs`, {
+        description: 'Each copy has a label of its own (Output tab), so it writes its own file.',
+      })
+    })
+  }
+
   // workDirs: their <source>_tmp folders go too (one another job in the queue shares is kept)
   let removal = $state<Awaited<ReturnType<typeof api.removalPreview>> | null>(null)
   let removing = $state(false)
@@ -481,7 +498,7 @@
         {#each pageJobs as job, i (job.id)}
           <button
             data-job={job.id}
-            aria-label={`${job.name}: ${STATUS_LABEL[job.status]}`}
+            aria-label={`${job.name}${job.label ? ` (${job.label})` : ''}: ${STATUS_LABEL[job.status]}`}
             aria-pressed={selectedSet.has(job.id)}
             tabindex={job.id === tabStop ? 0 : -1}
             onfocus={() => cursor = job.id}
@@ -491,7 +508,7 @@
               {STATUS_TONE[job.status]}"
             onpointerdown={e => dragStart(e, job.id)}
             onclick={e => click(e, job.id)}
-            title="{job.name}: {STATUS_LABEL[job.status]}{job.issue ? ` (${job.issue})` : ''}"
+            title="{job.name}{job.label ? ` (${job.label})` : ''}: {STATUS_LABEL[job.status]}{job.issue ? ` (${job.issue})` : ''}"
           >
             {currentPage * QUEUE_PAGE_SIZE + i + 1}
             {#if (job.status === 'running' || job.status === 'indexing') && job.progress}
@@ -575,6 +592,9 @@
         aria-label={selected.length ? 'Index the selected jobs' : 'Index every job not indexed yet'}><DatabaseZapIcon /></Button>
       <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => move(-1)} title="Move up in the full queue" aria-label="Move selected jobs up"><ArrowUpIcon /></Button>
       <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => move(1)} title="Move down in the full queue" aria-label="Move selected jobs down"><ArrowDownIcon /></Button>
+      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={duplicate}
+        title="Duplicate: a copy of each selected job right after it, with a label of its own, to change a few settings for a second output"
+        aria-label="Duplicate selected jobs"><CopyPlusIcon /></Button>
       <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => act(() => api.reprobe(selected))} title="Probe again" aria-label="Probe selected jobs again">
         <RefreshCwIcon />
       </Button>
@@ -632,6 +652,7 @@
         >
           <div class="flex items-center gap-2">
             <span class="truncate font-medium" title={job.source}>{job.name}</span>
+            {#if job.label}<Badge variant="outline" class="shrink-0 px-1.5 py-0 text-xs font-normal" title="Label">{job.label}</Badge>{/if}
             {#if paused(job.status)}
               <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
             {:else}

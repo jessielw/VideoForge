@@ -6,15 +6,16 @@ import type { JobSummary } from '../src/lib/types.ts'
 const jobs = [
   { id: 'a', name: 'Episode 01', source: 'D:\\Show\\Season2\\01.mkv', status: 'ready' },
   { id: 'b', name: 'Episode 02', source: 'D:\\Show\\Season1\\02.mkv', status: 'done' },
-  { id: 'c', name: 'Episode 03', source: 'D:\\Show\\Season2\\03.mkv', status: 'failed' },
+  { id: 'c', name: 'Episode 03', label: 'dubbed', source: 'D:\\Show\\Season2\\03.mkv', status: 'failed' },
 ] as JobSummary[]
 
-test('queue search combines words, source paths, and status without changing run order', () => {
+test('queue search combines words, labels, source paths, and status without changing run order', () => {
   assert.deepEqual(matchingJobs(jobs, '  SEASON2 episode ').map(j => j.id), ['a', 'c'])
   assert.deepEqual(matchingJobs(jobs, 'show', 'failed').map(j => j.id), ['c'])
   assert.deepEqual(matchingJobs(jobs, '', 'done').map(j => j.id), ['b'])
   assert.equal(matchingJobs(jobs, 'missing').length, 0)
   assert.deepEqual(matchingJobs(jobs, '  '), jobs)
+  assert.deepEqual(matchingJobs(jobs, 'episode DUBBED').map(j => j.id), ['c'])
 })
 
 test('selection ranges follow matching order and recover when a live status removes the anchor', () => {

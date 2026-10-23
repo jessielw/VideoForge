@@ -6,7 +6,7 @@ async function queueFixture(page: Page, count = 10_000, statuses: Status[] = ['r
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   const jobs: JobSummary[] = Array.from({ length: count }, (_, i) => ({
-    id: `job-${i}`, name: `Episode ${String(i).padStart(5, '0')}`,
+    id: `job-${i}`, name: `Episode ${String(i).padStart(5, '0')}`, label: '',
     source: `D:\\Show\\Season${i < count / 2 ? 1 : 2}\\${i}.mkv`, profile: 'manual',
     status: statuses[i % statuses.length], progress: null, issue: '', output: null,
     encoder: 'x265', crop: null, custom_script: false, indexed: false,

@@ -26,8 +26,9 @@ src/videoforge/
                          source's tracks are known
     plan_io.py           Type-driven JSON codec for every model
     disks.py             Which physical disk a path is on (the index lane waits for an encode on its disk)
-    workdir.py           <source>_tmp/ per job: indexes, script, encodes, stats, logs; keep_records copies a
-                         folder's records and log to <data dir>/records before it's deleted
+    workdir.py           <source>_tmp/ per source (indexes, the source's extracts) with <label>/ per job (script,
+                         encodes, stats, log, records); keep_records copies the records and logs to
+                         <data dir>/records before it's deleted
     record.py            What a run did, for other tools: <output>.videoforge.json + .jsonl events (docs/job-record.md)
     events.py            EventBus: JobStarted / JobFinished / QueueFinished / IndexFinished, emitted by the queue,
                          for notifications, actions and plugins (each subscriber hands slow work to its own thread)
@@ -166,7 +167,11 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
                                       └► audio encodes (up to N at once) ────────────────────────────────┘
 ```
 
-- Each step writes only into the job's `<source>_tmp/` (the mux writes `<out>.partial`). The folder stays
+- Each step writes only into the source's `<source>_tmp/`: what comes from the source alone at its top
+  (`JobSpec.work_dir`: indexes, a FEL's layer, HDR10+ and the source RPU, burn-in extracts, VFR timestamps),
+  the rest in the job's own `<label>/` (`JobSpec.job_dir`, `main/` without a label: script, script info,
+  chapters, the edited RPU, encodes, stats, MP4 subtitle and chapter files, log, records). The mux writes
+  `<out>.partial`. The folder stays
   after the run (a rerun reuses it) unless `AppConfig.delete_work_dir` is on: then the queue deletes a done
   job's folder (`JobQueue._clean_up`, after `keep_records`) before `JobFinished` goes out, so the event's
   record is the kept copy. Removing jobs can delete theirs too (`JobQueue.delete_work_dirs`).
@@ -200,7 +205,11 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   (change a subtitle flag and only the mux runs again).
 - Reuse, StaxRip-like: each finished step's files are noted in `<work>/finished-steps.json` (step,
   fingerprint, size, mtime; `workdir.note_finished`), so any job on the source can find them (a rerun, a
-  re-added job, another label). `pipeline/reuse.reuse_offers` lists a job's sections (the video, each audio
+  re-added job, another label). Notes carry a portable fingerprint too (`pipeline/share.py`: the job folder's
+  path as `<job>`, a job-folder input by the portable fingerprint it was made with, else its bytes), so a step
+  without a record of its own links another job's identical file into its folder (`Sharing.adopt`, a hard
+  link or a copy, with x265's `.cutree` beside its stats); the user's "make again" (`JobState.redo`) stops
+  that. `pipeline/reuse.reuse_offers` lists a job's sections (the video, each audio
   encode) whose file is finished, and whether today's settings made it. Start queue / Run selected ask
   (`POST /api/queue/reuse`, the Reuse dialog) when there are any: ticked sections go to `JobState.keep`
   (`run_steps(keep=...)` reuses them whatever their fingerprint and records today's), unticked ones lose
@@ -353,12 +362,12 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   `<data dir>/logs/videoforge_<YYYY-mm-dd_HH-MM-SS>.log` (newest 50 kept, 10 MB per part) and the console,
   behind a QueueHandler/QueueListener. uvicorn runs with `log_config=None`, so its loggers land there too.
   Never fatal: an unwritable data folder means console only. Job tool output doesn't go here.
-- **Work-folder text log** (`<source>_tmp/videoforge.log`, the queue's `_open_log`/`_log`): every run and
-  index of the source, a time on each line, tool output prefixed `[x264]` etc., progress-only lines
+- **Job-folder text log** (`<source>_tmp/<label>/videoforge.log`, the queue's `_open_log`/`_log`): every run
+  and index of the job (headed `### <name> (<label>)`), a time on each line, tool output prefixed `[x264]` etc., progress-only lines
   (indexers, mkvmerge) at every 10% (`steps._THIN_PROGRESS`; the progress bar still sees each one), and
   `Job record: ...` / `Job complete: <output>` at the end of a finished run.
 - **Job record and events** (`core/record.py`, the public format in `docs/job-record.md`): the queue makes a
-  `RunRecorder` per run (output from `build.job_output`): `<output name>.videoforge.jsonl` in the work folder
+  `RunRecorder` per run (output from `build.job_output`): `<output name>.videoforge.jsonl` in the job folder
   gets run.started, step.started/finished (from on_step), run.finished; a run that writes the output writes
   `<output name>.videoforge.json` (source, output, video settings and script, each audio/subtitle output
   with the source track it came from, chapters, steps, issues, tool versions via `tools.versions`, cached
@@ -366,7 +375,11 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   index.started/finished) go to `<data dir>/logs/events.jsonl` (`JsonLines`, rolls at 10 MB). Writing them
   never fails a job.
 - **Job label** (`JobSpec.label`, Output tab): `<stem>.<label>.<ext>` (`build.output_path`), so runs of one
-  source (dubbed / subbed) are separate outputs with separate records.
+  source (dubbed / subbed) are separate outputs with separate records. Adding a source only ever makes one job
+  for it; **Duplicate** (`JobQueue.duplicate`, `POST /api/jobs/duplicate`) makes the others: a copy right after
+  the job with a free label (v2, v3... or `<label>-2`), its settings and its records of the shared files; its
+  run links the job's identical encodes (`pipeline/share.py`). A done job's work folder isn't auto-deleted
+  while a variant still uses it.
 
 ## VapourSynth
 
@@ -377,7 +390,7 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
   started on first use, one clip cached per job stage so a crop edit frees the old one; a crash or a
   request past its timeout costs only the worker, the next request starts a new one; it stops after
   5 idle minutes, handing its memory back; it is in the tool Job Object) and the encode (written to
-  `<source>_tmp/video.vpy`, run by vspipe).
+  `<source>_tmp/<label>/video.vpy`, run by vspipe).
 - Memory: the server process doesn't import numpy or VapourSynth (numpy's import alone commits
   ~30 MB per CPU thread for OpenBLAS; the worker runs with one BLAS thread). MediaInfo probes and
   AutoQPF run in the server; they measured flat over repeated probes and runs.
@@ -483,7 +496,10 @@ defaults, audio encoder settings, and the checks on the finished file.
   panel; its Index now puts the job first in the lane (`index(first=True)`), with progress there and in the
   header, and the job is locked (no edits) while it's being indexed. A template's auto crop waits in the
   lane too and runs after the index (`crop_pending`: not runnable meanwhile). `Entry.source_lock` is held
-  by the lane (index and crop) and a preview request for a clip the worker doesn't hold yet. The lane's
+  by the lane (index and crop) and a preview request for a clip the worker doesn't hold yet; every job on
+  one source shares it (`JobQueue._attach`, keyed by work folder). Jobs on one source (variants) also share
+  the source's index and extracts, so the lane holds a variant back while another runs (Index now too), and a
+  run waits for a variant's index or crop to finish first (`_wait_for_siblings`). The lane's
   order is kept in the store (`index_lane` setting: the job being indexed first), so a restart goes on
   with it; a job stopped mid-index is indexed again (the indexers replace a broken index). Stopping the
   lane by hand empties it; a shutdown doesn't. Disks (Settings, on by default): a job whose source is on

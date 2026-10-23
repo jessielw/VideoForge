@@ -28,9 +28,11 @@ from enum import StrEnum
 import logging
 import os
 from pathlib import Path
+import re
 import sqlite3
 import threading
 from typing import Any
+import uuid
 
 from videoforge.core.config import AppConfig, Tools
 from videoforge.core.disks import disks
@@ -70,6 +72,7 @@ from videoforge.core.notify import Sender, send as notify_send
 from videoforge.core.pipeline.build import index_steps, job_output
 from videoforge.core.pipeline.reuse import ReuseOffer, reuse_offers
 from videoforge.core.pipeline.run import missing_inputs, run_job
+from videoforge.core.pipeline.share import Sharing
 from videoforge.core.pipeline.steps import ProgressFn, StepProgress, run_steps
 from videoforge.core.plan_io import to_json
 from videoforge.core.profile import Profile
@@ -151,6 +154,7 @@ class Entry:
     index_error: str = ""
     # Held by whatever may build the source's index: the index lane, auto-crop, and a preview request
     # for a clip the preview worker doesn't hold yet. Two processes never index one source at once.
+    # Every job on the source shares it (JobQueue._attach): they share the work folder.
     source_lock: threading.Lock = field(default_factory=threading.Lock)
     progress: dict[str, Any] | None = None
     log: deque[str] = field(default_factory=lambda: deque(maxlen=LOG_LINES))
@@ -247,6 +251,7 @@ class JobQueue:
         # What a run did, for notifications, actions and plugins (core/events.py); the hub above is the browser's.
         self.bus = bus or EventBus()
         self._entries: dict[str, Entry] = {}
+        self._source_locks: dict[str, threading.Lock] = {}  # per work folder (Entry.source_lock)
         self._removed: dict[str, tuple[Entry, int]] = {}  # last 100 removals, undo until server restart
         self._order: list[str] = []
         self._lock = threading.RLock()
@@ -309,6 +314,16 @@ class JobQueue:
     def profile(self, e: Entry) -> Profile:
         return self.profiles(e.spec.profile)
 
+    def _attach(self, e: Entry) -> None:
+        """Under the lock: e shares its source's lock with the other jobs on the source."""
+        e.source_lock = self._source_locks.setdefault(_same_file(e.spec.work_dir), threading.Lock())
+
+    def _siblings(self, e: Entry) -> list[Entry]:
+        """Under the lock: the other jobs on e's source (variants). They share its work folder, whose script,
+        index and encodes have fixed names, so one's run and another's index never overlap."""
+        folder = _same_file(e.spec.work_dir)
+        return [o for o in self._entries.values() if o is not e and _same_file(o.spec.work_dir) == folder]
+
     # --- loading and adding ----------------------------------------------------------
 
     def load(self) -> None:
@@ -322,6 +337,7 @@ class JobQueue:
                     "Interrupted: the server stopped during this job; it resumes after its last finished step"
                 )
             with self._lock:
+                self._attach(e)
                 self._entries[e.id] = e
                 self._order.append(e.id)
             self._save(e)
@@ -386,6 +402,7 @@ class JobQueue:
                     spec.encoder = _copy(encoder)
                 e = Entry(spec, JobState())
                 with self._lock:
+                    self._attach(e)
                     self._entries[e.id] = e
                     self._order.append(e.id)
                 self._save(e)
@@ -397,6 +414,50 @@ class JobQueue:
     def _find_source(self, source: Path) -> Entry | None:
         key = str(source.resolve()).lower()
         return next((e for e in self.entries() if str(e.spec.inputs.source.resolve()).lower() == key), None)
+
+    def duplicate(self, ids: Iterable[str]) -> list[Entry]:
+        """A copy of each job, right after it: same source and settings, with a label of its own so it writes
+        its own file and has its own folder. It starts with the job's records of the source's shared files (the
+        index), and its run links the job's files it would make the same way (pipeline/share.py): an unchanged
+        video or audio encode. It makes the rest."""
+        copies: list[Entry] = []
+        with self._lock:
+            for job_id in dict.fromkeys(ids):
+                e = self._entries.get(job_id)
+                if e is None:
+                    continue
+                spec = _copy(e.spec)
+                spec.id, spec.label = uuid.uuid4().hex[:12], self._free_label(e)
+                shared = e.spec.work_dir
+                steps = {  # (a run may be adding to them)
+                    k: _copy(v) for k, v in dict(e.state.steps).items() if all(p.parent == shared for p in v.outputs)
+                }
+                c = Entry(spec, JobState(steps=steps), probed=_copy(e.probed), probing=e.probed is None)
+                self._attach(c)
+                self._entries[c.id] = c
+                self._order.insert(self._order.index(e.id) + 1, c.id)
+                self._replan(c)
+                if self._claim_crop(c):
+                    self.index([c.id])
+                self._save(c)
+                copies.append(c)
+            if copies:
+                self.store.reorder(self._order)
+        for c in copies:
+            self.events.publish("job.added", id=c.id)
+        self.probe([c.id for c in copies if c.probing])
+        return copies
+
+    def _free_label(self, e: Entry) -> str:
+        """Under the lock: a label no job on e's source has: "v2", "v3"... or the job's own with "-2", "-3"...
+        A copy's copy goes on with the series (v2 -> v3, dubbed-2 -> dubbed-3)."""
+        taken = {o.spec.label.lower() for o in [e, *self._siblings(e)]}
+        base = re.sub(r"-\d+$", "", e.spec.label)
+        base = "" if re.fullmatch(r"v\d+", base, re.IGNORECASE) else base
+        n = 2
+        while (label := f"{base}-{n}" if base else f"v{n}").lower() in taken:
+            n += 1
+        return label
 
     # --- probing and planning --------------------------------------------------------
 
@@ -677,15 +738,16 @@ class JobQueue:
         return removed
 
     def restore(self, ids: Iterable[str]) -> list[str]:
-        """Undo queue removal without replacing another job on the same source."""
+        """Undo queue removal. A job back beside another on its source that writes the same file is blocked
+        (outfile.shared) until one of them gets a label."""
         restored = []
         with self._lock:
             for job_id in reversed(list(ids)):
-                found = self._removed.get(job_id)
-                if found is None or self._find_source(found[0].spec.inputs.source) is not None:
+                if job_id not in self._removed:
                     continue
                 e, position = self._removed.pop(job_id)
                 e.queued = e.index_queued = e.index_now = e.index_held = False
+                self._attach(e)
                 self._entries[job_id] = e
                 self._order.insert(min(position, len(self._order)), job_id)
                 self._replan(e)
@@ -775,7 +837,8 @@ class JobQueue:
 
     def choose_reuse(self, choices: dict[str, Iterable[str]]) -> None:
         """The user's answer to the reuse question, per job: the sections to reuse (offer ids). Those are
-        kept on the next run whatever their settings; the other offered sections are made again."""
+        kept on the next run whatever their settings; the other offered sections are made again (not taken
+        from another job on the source either)."""
         for job_id, chosen in choices.items():
             e = self._entries.get(job_id)
             if e is None or e.running:
@@ -783,6 +846,7 @@ class JobQueue:
             offers, wanted = self.reuse_offers(e), set(chosen)
             with self._lock:
                 e.state.keep = [s for o in offers if o.id in wanted for s in o.steps]
+                e.state.redo = [s for o in offers if o.id not in wanted for s in o.steps]
                 for o in offers:
                     if o.id not in wanted:
                         for s in o.steps:
@@ -957,7 +1021,8 @@ class JobQueue:
 
         with self._lock:
             e.step_lines = {}
-        log(f"### {e.spec.name} ({datetime.now().isoformat(timespec='seconds')})")
+        log(f"### {_variant(e)} ({datetime.now().isoformat(timespec='seconds')})")
+        self._wait_for_siblings(e, log)
         try:
             result = self.services.run(
                 e.spec,
@@ -1008,6 +1073,22 @@ class JobQueue:
             self.bus.emit(JobFinished(_copy(e.spec), result, _now() - started, record))
         return result.status
 
+    def _wait_for_siblings(self, e: Entry, log: Callable[[str], None]) -> None:
+        """Before a run: wait while another job on the source is being indexed or cropped (its index steps
+        write the shared script). The lane takes no other one while e runs (_take_index). A cancel ends the
+        wait, and the run then ends cancelled."""
+        said = False
+        while True:
+            with self._lock:
+                busy = next((o for o in self._siblings(e) if o.indexing or o.cropping), None)
+                cancel = self._cancel
+            if busy is None or cancel is None or cancel.cancelled:
+                return
+            if not said:
+                log(f"Waiting for {_variant(busy)}, which is indexing this source")
+                said = True
+            self._index_wake.wait(0.2)
+
     def _progress(self, e: Entry, token: CancelToken | None) -> ProgressFn:
         """A run's progress callback (a job's or the index lane's): sets e.progress, with the step's fps and eta
         when its encoder prints them, the seconds since the run started, and the job's time left (from how fast
@@ -1050,7 +1131,13 @@ class JobQueue:
 
     def _clean_up(self, e: Entry, record: Path | None) -> Path | None:
         """A done job's work folder, deleted (AppConfig.delete_work_dir) once its records and log are copied
-        to records_dir; kept while a preview is indexing the source. Returns where the job record is now."""
+        to records_dir; kept while a preview is indexing the source or another job on the source needs it.
+        Returns where the job record is now."""
+        with self._lock:
+            sharing = self._siblings(e)
+        if sharing:
+            self._log(e, f"Work folder kept: {_variant(sharing[0])} uses it too")
+            return record
         if not e.source_lock.acquire(blocking=False):
             self._log(e, "Work folder kept: a preview is reading it")
             return record
@@ -1064,7 +1151,7 @@ class JobQueue:
             e.source_lock.release()
         self._log(e, f"Work folder deleted: {e.spec.work_dir}")
         logger.info("%s: work folder deleted (records kept in %s)", e.spec.name, self.records_dir)
-        return kept.get(record.name) if record is not None else None
+        return kept.get(record) if record is not None else None
 
     def delete_work_dirs(self, sources: Iterable[Path]) -> tuple[list[str], dict[str, str]]:
         """Delete the work folders of removed jobs' sources, unless the source is back in the queue (added
@@ -1166,7 +1253,8 @@ class JobQueue:
     def _take_index(self) -> tuple[Entry | None, bool, list[Entry]]:
         """(the next job to index, whether any are left, jobs held back or let go). A job still probing
         waits; so does one on a disk an encode reads (`index_waits_for_disk`) unless it was asked for by
-        itself, and a job on another disk goes ahead of it."""
+        itself, and a job on another disk goes ahead of it. One whose source another job is running waits
+        in any case."""
         with self._lock:
             waiting = [
                 self._entries[i] for i in self._index_order if i in self._entries and self._entries[i].index_queued
@@ -1175,7 +1263,10 @@ class JobQueue:
             busy = self._encode_disks() if self.index_waits_for_disk else frozenset()
             taken, changed = None, []
             for e in waiting:
-                held = not e.probing and not e.index_now and bool(busy and busy & disks(e.spec.inputs.source))
+                held = not e.probing and (
+                    any(o.running for o in self._siblings(e))  # its run writes the script this index writes
+                    or (not e.index_now and bool(busy and busy & disks(e.spec.inputs.source)))
+                )
                 if held != e.index_held:
                     e.index_held = held
                     changed.append(e)
@@ -1223,7 +1314,7 @@ class JobQueue:
 
         error = ""
         self._queue_event("index.started", e)
-        log(f"### {e.spec.name}: index ({datetime.now().isoformat(timespec='seconds')})")
+        log(f"### {_variant(e)}: index ({datetime.now().isoformat(timespec='seconds')})")
         try:
             if e.probe_error:
                 raise ToolError(f"The job couldn't be probed: {e.probe_error}")
@@ -1252,6 +1343,7 @@ class JobQueue:
                     progress=progress,
                     on_record=on_record,
                     runner=self.services.runner,
+                    share=Sharing(e.spec.work_dir, e.spec.job_dir),
                 )
                 if e.spec.autocrop and self.services.detect_crop is not None:  # a template's auto crop
                     with self._lock:
@@ -1296,7 +1388,7 @@ class JobQueue:
             e = self._entries.get(job_id)
         if e is None:
             return
-        log_file = _open_log(e) if e.spec.work_dir.is_dir() else None
+        log_file = _open_log(e) if e.spec.job_dir.is_dir() else None
         try:
             self._log(e, line, log_file)
         finally:
@@ -1344,6 +1436,11 @@ def step_json(run: StepRun, *, with_tail: bool = True) -> dict[str, Any]:
     return data
 
 
+def _variant(e: Entry) -> str:
+    """A job as told apart from the others on its source."""
+    return f"{e.spec.name} ({e.spec.label})" if e.spec.label else e.spec.name
+
+
 def _copy(obj):
     from copy import deepcopy
 
@@ -1357,9 +1454,9 @@ def _now() -> float:
 
 
 def _open_log(e: Entry):
-    """<source>_tmp/videoforge.log, appended to on every run."""
+    """The job's own log, <source>_tmp/<label>/videoforge.log, appended to on every run."""
     try:
-        e.spec.work_dir.mkdir(parents=True, exist_ok=True)
-        return open(e.spec.work_dir / "videoforge.log", "a", encoding="utf-8", buffering=1)
+        e.spec.job_dir.mkdir(parents=True, exist_ok=True)
+        return open(e.spec.job_dir / "videoforge.log", "a", encoding="utf-8", buffering=1)
     except OSError:
         return None

@@ -1,7 +1,8 @@
 <script lang="ts">
   // Asked on Start queue / Run selected when the jobs have finished files from an earlier run (any job on
   // the same source): per section (video, each audio encode), reuse it or make it again, StaxRip-like.
-  // Files made with today's settings start ticked; ones made with other settings start unticked.
+  // Files made with today's settings start ticked; ones made with other settings start unticked. A file another
+  // job on the source made the same way is linked into this job's folder (origin: that job's folder).
   import PlayIcon from '@lucide/svelte/icons/play'
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
@@ -49,7 +50,7 @@
     <div class="max-h-[60vh] space-y-4 overflow-y-auto pr-1" aria-label="Finished files">
       {#each jobs as job (job.id)}
         <section aria-label={job.name}>
-          {#if jobs.length > 1}<h3 class="mb-1 truncate text-sm font-medium" title={job.name}>{job.name}</h3>{/if}
+          {#if jobs.length > 1}<h3 class="mb-1 truncate text-sm font-medium" title={job.name}>{job.name}{job.label ? ` (${job.label})` : ''}</h3>{/if}
           <ul class="divide-y divide-border rounded-md border border-border">
             {#each job.offers as offer (offer.id)}
               <li>
@@ -63,6 +64,9 @@
                   <span class="min-w-0 flex-1">
                     <span class="flex items-center gap-2 text-sm">
                       <span class="truncate">{offer.label}</span>
+                      {#if offer.origin}
+                        <Badge variant="outline" title="Made by the job in {offer.origin}/: linked into this job's folder">from {offer.origin}</Badge>
+                      {/if}
                       {#if !offer.current}
                         <Badge variant="outline" class="border-warning/40 bg-warning/10 text-warning">other settings</Badge>
                       {/if}

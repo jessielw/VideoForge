@@ -139,6 +139,7 @@ export interface Progress {
 export interface JobSummary {
   id: string
   name: string
+  label: string // tells jobs on one source apart (spec.label)
   source: string
   profile: string
   status: Status
@@ -597,11 +598,13 @@ export interface ReuseOffer {
   seconds: number // how long it took to make (0 when unknown)
   finished: number | null // epoch seconds
   current: boolean // made with today's settings
+  origin: string // another job's folder on the source it's linked from ("" = the job's own)
 }
 
 export interface ReuseJob {
   id: string
   name: string
+  label: string
   offers: ReuseOffer[]
 }
 
