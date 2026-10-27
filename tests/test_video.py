@@ -21,6 +21,7 @@ from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video import crop as autocrop, vs as vsx
 from videoforge.core.video.encoders import (
     VP8_CRF_CAP,
+    analysis_file,
     encoder_command,
     issues as encoder_issues,
     output_name,
@@ -147,6 +148,23 @@ def test_x264_two_pass_and_options():
     with pytest.raises(ValueError):
         encoder_command("x264", s, frames=1, output=Path("v.264"))
     assert output_name(s) == "video.264"
+
+
+def test_x265_multi_pass_analysis_goes_beside_the_stats():
+    s = EncoderSettings(
+        encoder=Encoder.X265, rate_control=RateControl.TWO_PASS, options={"multi-pass-opt-analysis": ""}
+    )
+    stats = Path("job") / "video.stats"
+    for n in (1, 2):
+        argv = encoder_command("x265", s, output=Path("v.hevc"), pass_number=n, stats=stats)
+        assert argv[argv.index("--analysis-reuse-file") + 1] == str(Path("job") / "video.analysis")
+    assert analysis_file(s, stats) == Path("job") / "video.analysis"
+    own = replace(s, extra="--analysis-reuse-file a.dat")  # the job's own file wins
+    assert analysis_file(own, stats) is None
+    argv = encoder_command("x265", own, output=Path("v.hevc"), pass_number=1, stats=stats)
+    assert argv.count("--analysis-reuse-file") == 1
+    assert analysis_file(replace(s, options={}), stats) is None
+    assert analysis_file(replace(s, encoder=Encoder.X264), stats) is None
 
 
 def test_x265_crf_depth():

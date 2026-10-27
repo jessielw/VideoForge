@@ -40,6 +40,7 @@ from videoforge.core.video import burn as burn_in, hdr, info, remux, target, vfr
 from videoforge.core.video.color import effective_container_color
 from videoforge.core.video.encoders import (
     TOOLS,
+    analysis_file,
     encoder_command,
     forces_keyframes,
     qpfile_frames,
@@ -467,6 +468,8 @@ def video_steps(
                 )
             ]
         stats = stats_path(home, enc)
+        analysis = analysis_file(enc, stats)  # x265's multi-pass analysis: pass 1 writes it beside the stats
+        kept = (stats,) if analysis is None else (stats, analysis)
         first = command(sized(False), output=Path(os.devnull), pass_number=1, stats=stats)
         second = command(sized(True), output=out, pass_number=2, stats=stats)
         # A target size's pass 2 waits for the audio encodes (run_steps), whose files its bitrate counts.
@@ -476,7 +479,7 @@ def video_steps(
                 "video.pass1",
                 f"Video pass 1/2 ({name})",
                 argvs=(pipe, tuple(first)),
-                outputs=(stats,),
+                outputs=kept,
                 inputs=shared,
                 key=text,
                 weight=40,
@@ -486,7 +489,7 @@ def video_steps(
                 f"Video pass 2/2 ({name})",
                 argvs=(pipe, tuple(second)),
                 outputs=(out,),
-                inputs=(*shared, stats, *waits),
+                inputs=(*shared, *kept, *waits),
                 key=text,
                 weight=60,
             ),

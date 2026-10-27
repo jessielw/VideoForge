@@ -127,7 +127,8 @@ PRESETS: list[FilterPreset] = [
     *_variants(
         C.RESTORATION,
         "FillBorders",
-        "clip = core.fb.FillBorders(clip, left={}, top={}, right={}, bottom={}, mode='fixborders')",
+        "clip = core.fb.FillBorders(clip, left={}, top={}, right={}, bottom={}, mode='fillmargins')"
+        "  # or fixborders, repeat, mirror, reflect, wrap, fade",
         {"1 px": "1", "2 px": "2", "Empty": "0"},
         "Replace broken edge rows and columns",
     ),

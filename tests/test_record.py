@@ -10,9 +10,11 @@ from test_pipeline import APP, FakeRunner, make_plan
 
 from videoforge.core.execute.process import Cancelled
 from videoforge.core.job import JobState, JobStatus, OutputPolicy
+from videoforge.core.models import VideoHdr, VideoInfo
 from videoforge.core.pipeline.build import job_output
 from videoforge.core.pipeline.run import run_job, spec_from_plan
-from videoforge.core.record import SCHEMA, JsonLines, RunRecorder, read_record, record_path
+from videoforge.core.record import SCHEMA, JsonLines, RunRecorder, _hdr, read_record, record_path
+from videoforge.core.video.settings import Encoder, EncoderSettings
 
 
 def lines(path: Path) -> list[dict]:
@@ -167,3 +169,31 @@ def test_json_lines_never_fail_and_roll_over(tmp_path):
     assert all(p.exists() for p in kept) and not path.with_name("events.jsonl.3").exists()
     assert all(p.stat().st_size <= 200 for p in kept)
     assert lines(path)[-1]["n"] == 29
+
+
+def test_the_record_says_what_the_encode_carried_of_the_sources_hdr():
+    fel = VideoInfo(3840, 2160, hdr=VideoHdr(7, 6, 6, "BL+EL+RPU", dv_el="FEL", hdr10plus=True))
+    x265 = EncoderSettings(encoder=Encoder.X265)
+    assert _hdr(fel, x265) == {
+        "source": {
+            "dolby_vision": "7.6 FEL",
+            "dv_profile": 7,
+            "dv_layers": "BL+EL+RPU",
+            "dv_el": "FEL",
+            "hdr10plus": True,
+        },
+        "dolby_vision": "8.1",
+        "fel_baked": True,
+        "hdr10plus": True,
+    }
+    # x264 carries none of it; an unticked choice drops it
+    assert _hdr(fel, EncoderSettings())["dolby_vision"] is None and not _hdr(fel, EncoderSettings())["fel_baked"]
+    dropped = _hdr(fel, EncoderSettings(encoder=Encoder.X265, dolby_vision=False, hdr10plus=False))
+    assert (dropped["dolby_vision"], dropped["fel_baked"], dropped["hdr10plus"]) == (None, False, False)
+    assert _hdr(None, x265)["source"] == {
+        "dolby_vision": None,
+        "dv_profile": None,
+        "dv_layers": None,
+        "dv_el": None,
+        "hdr10plus": False,
+    }

@@ -12,6 +12,19 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Job records state what the encode carried of the source's HDR (`video.hdr`): its Dolby Vision
+  (profile, layers, FEL or MEL) and HDR10+, the profile the encode's Dolby Vision is written as, whether a
+  FEL was baked in, and whether HDR10+ was kept. An NFO tool no longer has to read the log for it.
+
+- A profile can set DeeZy's dialogue level (`AudioSettings.dialnorm`, `--custom-dialnorm`) for its DDP
+  and Atmos encodes; a track's own Dialogue level still wins.
+
+- x265's multi-pass analysis (`--multi-pass-opt-analysis` / `-distortion`) goes to `video.analysis` beside
+  the two-pass stats (`--analysis-reuse-file`, as StaxRip does) instead of `x265_analysis.dat` in VideoForge's
+  working directory; pass 2 waits for it like the stats.
+
+- The FillBorders filter presets use `fillmargins` (StaxRip's mode) and list the other modes in a comment.
+
 - **Duplicate** on the Queue copies the selected jobs, each right after its original with a label of
   its own, for a second output from the same source with a few settings changed. The copy reuses the
   source index and every encode whose settings it kept. Labels now show in the queue list and the

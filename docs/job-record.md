@@ -111,7 +111,17 @@ When VideoForge encoded the video:
     "options": { "aq-mode": "3" },         // --name value (an empty value is a bare flag)
     "extra": ""                            // raw arguments, as typed
   },
-  "commands": ["vspipe ... | x264 ..."]    // one per pass, as a shell would take them
+  "commands": ["vspipe ... | x264 ..."],   // one per pass, as a shell would take them
+  "hdr": {                                 // the source's dynamic HDR and what the encode carried of it
+    "source": {
+      "dolby_vision": "7.6 FEL",           // profile[.compatibility][ FEL|MEL], or null
+      "dv_profile": 7, "dv_layers": "BL+EL+RPU", "dv_el": "FEL",   // null when not Dolby Vision / not read
+      "hdr10plus": true
+    },
+    "dolby_vision": "8.1",                 // the profile the encode's Dolby Vision is written as ("8.1", "5"), or null
+    "fel_baked": true,                     // a profile 7 FEL's enhancement layer was baked into the picture
+    "hdr10plus": true                      // the source's HDR10+ metadata is in the encode
+  }
 }
 ```
 

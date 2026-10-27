@@ -93,6 +93,17 @@ def stats_path(work: Path, settings: EncoderSettings) -> Path:
     return work / ("video.stats-0.log" if settings.encoder.libvpx else "video.stats")
 
 
+def analysis_file(settings: EncoderSettings, stats: Path) -> Path | None:
+    """x265's multi-pass analysis file (--multi-pass-opt-analysis / -distortion): pass 1 writes it, pass 2 reads
+    it. Beside the stats, as StaxRip puts it beside the encode (x265Enc.vb), since x265's own default is
+    x265_analysis.dat in the working directory. None when neither flag is set or the job names the file."""
+    if settings.encoder is not Encoder.X265 or _setting(settings, "analysis-reuse-file") is not None:
+        return None
+    if all(_setting(settings, f) is None for f in ("multi-pass-opt-analysis", "multi-pass-opt-distortion")):
+        return None
+    return stats.with_suffix(".analysis")
+
+
 def qpfile_frames(qpfile: Path) -> list[int]:
     """The frames a qpfile ("1234 I" lines) forces keyframes at; [] when it isn't written yet."""
     if not qpfile.is_file():
@@ -219,6 +230,8 @@ def encoder_command(
     if x265 and (dolby_vision is not None or hdr10(color, settings)):
         argv += level_vbv(settings) or []
     argv += _options(settings.options)
+    if pass_number and stats is not None and (analysis := analysis_file(settings, stats)) is not None:
+        argv += ["--analysis-reuse-file", str(analysis)]
     if qpfile is not None:
         argv += ["--qpfile", str(qpfile)]
     if settings.extra.strip():

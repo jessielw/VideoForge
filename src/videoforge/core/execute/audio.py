@@ -443,14 +443,18 @@ class AudioSettings:
     qaac_tvbr: int = 127
     deezy_extra_args: tuple[str, ...] = ()  # before each track's own extra arguments
     qaac_extra_args: tuple[str, ...] = ()
+    dialnorm: int | None = None  # DeeZy's --custom-dialnorm (-31..-1) for DDP / Atmos; None: DEE measures it
 
     def option_defaults(self, action: AudioAction) -> dict[str, str]:
         """This profile's defaults for an encode's options (ENCODES[action].options keys)."""
+        out: dict[str, str] = {}
+        if self.dialnorm is not None and action in (AudioAction.DDP, AudioAction.ATMOS):
+            out["dialnorm"] = str(self.dialnorm)
         if action is AudioAction.ATMOS:
-            return {"atmos_mode": self.atmos_mode}
+            out["atmos_mode"] = self.atmos_mode
         if action is AudioAction.AAC:
-            return {"quality": str(self.qaac_tvbr)}
-        return {}
+            out["quality"] = str(self.qaac_tvbr)
+        return out
 
 
 @dataclass(frozen=True, slots=True)
@@ -593,8 +597,8 @@ def _deezy(
     ):
         if value := _opt(planned, key):
             chosen += (f"{flag}={value}",)
-    if _opt(planned, "dialnorm") not in ("", "0"):
-        chosen += (f"--custom-dialnorm={_opt(planned, 'dialnorm')}",)
+    if (dialnorm := _opt(planned, "dialnorm", settings)) not in ("", "0"):
+        chosen += (f"--custom-dialnorm={dialnorm}",)
     if _opt(planned, "bed_conform") == "on":
         chosen += ("--bed-conform",)
     return (tools.deezy, *mode, *common, *chosen, *settings.deezy_extra_args, *_extra_args(planned), str(source))

@@ -33,11 +33,13 @@ from videoforge import version
 from videoforge.core.execute.audio import ENCODES
 from videoforge.core.execute.mux import MUXERS
 from videoforge.core.job import JobResult, JobSpec, JobState, StepRun, StepStatus, planned_encode
-from videoforge.core.models import AudioAction, Issue, Plan
+from videoforge.core.models import AudioAction, Issue, Plan, VideoHdr, VideoInfo
 from videoforge.core.pairing import episode_token
 from videoforge.core.plan_io import to_json
+from videoforge.core.video import hdr
 from videoforge.core.video.encoders import TOOLS
 from videoforge.core.video.qpf import qpf_paths
+from videoforge.core.video.settings import EncoderSettings
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -198,6 +200,25 @@ def _video(spec: JobSpec, plan: Plan, commands: dict[str, str]) -> dict[str, Any
             "extra": enc.extra,
         },
         "commands": [c for sid, c in commands.items() if sid == "video" or sid.startswith("video.")],
+        "hdr": _hdr(plan.source.video, enc),
+    }
+
+
+def _hdr(video: VideoInfo | None, enc: EncoderSettings) -> dict[str, Any]:
+    """The source's dynamic HDR and what the encode carried of it (a FEL baked in, the profile DV is written as)."""
+    h = video.hdr if video is not None else VideoHdr()
+    dv = hdr.keeps_dv(video, enc)
+    return {
+        "source": {
+            "dolby_vision": h.dv_name or None,  # "7.6 FEL", "8.1", "5"
+            "dv_profile": h.dv_profile or None,
+            "dv_layers": h.dv_layers or None,
+            "dv_el": h.dv_el or None,  # profile 7: "FEL" | "MEL"
+            "hdr10plus": h.hdr10plus,
+        },
+        "dolby_vision": hdr.dv_profile(video) if dv else None,
+        "fel_baked": hdr.bakes_fel(video, enc),
+        "hdr10plus": hdr.keeps_hdr10plus(video, enc),
     }
 
 

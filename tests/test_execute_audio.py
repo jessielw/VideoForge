@@ -232,6 +232,19 @@ def test_profile_defaults_stand_in_for_unset_options():
     assert qaac[-5:] == ("--lowpass", "20000", "-o", qaac[-2], "-")
 
 
+def test_a_profile_dialnorm_goes_to_deezy_unless_the_track_sets_one():
+    settings = AudioSettings(dialnorm=-31)
+    ddp = planned(C.TRUEHD, "5.1", A.DDP, "5.1", 640)
+    atmos = planned(C.TRUEHD, "7.1", A.ATMOS, "5.1", 1024, atmos=True)
+    for p in (ddp, atmos):
+        (argv,) = command(p, settings).argvs
+        assert "--custom-dialnorm=-31" in argv
+    ddp.options = {"dialnorm": "-27"}
+    (argv,) = command(ddp, settings).argvs
+    assert "--custom-dialnorm=-27" in argv and "--custom-dialnorm=-31" not in argv
+    assert settings.option_defaults(A.AAC) == {"quality": "127"}  # only DeeZy's encodes take it
+
+
 def test_opusenc_pipes_ffmpeg_into_opusenc():
     p = planned(C.TRUEHD, "7.1", A.OPUSENC, "5.1", 384, index=1)
     cmd = command(p)
