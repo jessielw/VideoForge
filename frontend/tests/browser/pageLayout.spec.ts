@@ -30,7 +30,7 @@ async function layoutFixture(page: Page) {
     const path = new URL(route.request().url()).pathname
     const responses: Record<string, unknown> = {
       '/api/jobs': [], '/api/profiles': [profile], '/api/health': { ok: true, version: 'test' },
-      '/api/presets': { video: [], encoder: [], audio: [], template: [{ name: 'Hallowed 1080p CEL', data: template }], template_defaults: { manual: 'Hallowed 1080p CEL' }, encoder_starters: [] },
+      '/api/presets': { video: [], encoder: [], audio: [], template: [{ name: 'Film 1080p CEL', data: template }], template_defaults: { manual: 'Film 1080p CEL' }, encoder_starters: [] },
       '/api/filter-presets': [], '/api/config/encoders': [], '/api/config/video-options/x264': { dashes: '--', options: [] },
       '/api/settings': { output_dir: 'D:\\Output', last_dir: '' }, '/api/config': config, '/api/config/tools': [],
       '/api/plugins': { folder: 'plugins', items: [], failures: [], management_enabled: true, restart: [] },
@@ -46,7 +46,7 @@ test('Templates saves optional PGS compression and only shows it for MKV', async
   let saved: Template | null = null
   await page.route('**/api/presets/template/*', async route => {
     saved = route.request().postDataJSON() as Template
-    await route.fulfill({ json: { video: [], encoder: [], audio: [], template: [{ name: 'Hallowed 1080p CEL', data: saved }], template_defaults: {}, encoder_starters: [] } })
+    await route.fulfill({ json: { video: [], encoder: [], audio: [], template: [{ name: 'Film 1080p CEL', data: saved }], template_defaults: {}, encoder_starters: [] } })
   })
   await page.goto('/#/templates')
   const compression = page.getByRole('checkbox', { name: 'Compress PGS subtitles with zlib' })
