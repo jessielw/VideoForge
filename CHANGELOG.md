@@ -12,6 +12,14 @@ source), or in Docker on Linux.
 
 ### Added
 
+- A DDP or Atmos encode no longer fails when the job's folder is too deep for DEE (Windows' 259-character
+  limit: a long source name in a deep folder). DeeZy then works in a short temp folder of its own.
+
+- A standard-mode DDP 7.1 above 1024 kb/s blocks the plan (DEE makes it 1024): Blu-ray mode goes higher.
+
+- DDP Blu-ray 7.1 reads as DDP, not AC-3: some MediaInfo builds report its AC-3 core and E-AC-3 dependent
+  substream as AC-3 "Dep", which failed the output check of a job that made one.
+
 - Job records state what the encode carried of the source's HDR (`video.hdr`): its Dolby Vision
   (profile, layers, FEL or MEL) and HDR10+, the profile the encode's Dolby Vision is written as, whether a
   FEL was baked in, and whether HDR10+ was kept. An NFO tool no longer has to read the log for it.

@@ -100,6 +100,10 @@ def test_parse_layout(layout, channels, expected):
         ("MLP FBA", "Dolby TrueHD", None, AudioCodec.TRUEHD, False, False),
         ("E-AC-3 JOC", "Dolby Digital Plus with Dolby Atmos", None, AudioCodec.EAC3, True, False),
         ("E-AC-3", "Dolby Digital Plus", None, AudioCodec.EAC3, False, False),
+        # DDP Blu-ray 7.1 (an AC-3 core + an E-AC-3 dependent substream), as some MediaInfo builds report it
+        ("AC-3", "Dolby Digital Plus", "Dep", AudioCodec.EAC3, False, False),
+        ("AC-3 Dep", None, None, AudioCodec.EAC3, False, False),
+        ("AC-3", "Dolby Digital", None, AudioCodec.AC3, False, False),
         ("DTS", "DTS-HD MA + DTS:X", "XLL X", AudioCodec.DTS_HD_MA, False, True),
         ("DTS XLL", "DTS-HD Master Audio", None, AudioCodec.DTS_HD_MA, False, False),
         ("DTS", "DTS", None, AudioCodec.DTS, False, False),

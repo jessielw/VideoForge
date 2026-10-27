@@ -62,6 +62,15 @@ def test_deezy_gets_source_delay(action):
     assert "--delay=-42ms" in argv
 
 
+@pytest.mark.parametrize("deep", [False, True])
+def test_deezy_temp_dir_is_left_to_deezy_when_too_deep_for_dee(deep, monkeypatch):
+    monkeypatch.setattr("sys.platform", "win32")
+    work = Path("C:/") / ("x" * 150 if deep else "work")
+    p = planned(C.TRUEHD, "7.1", A.DDP, "5.1", 640)
+    (argv,) = audio_command(p, 1, SRC, work, AudioSettings(), TOOLS).argvs
+    assert ("--temp-dir" in argv) is not deep
+
+
 def test_ddp_50_upmixes():
     (argv,) = command(planned(C.DTS_HD_MA, "5.0", A.DDP, "5.1", 640, upmix=True)).argvs
     assert "--upmix-50-to-51" in argv and "--channels=6" in argv
@@ -281,3 +290,13 @@ def test_opusenc_for_real(tmp_path, out_layout, channels):
         [FFMPEG, "-hide_banner", "-i", str(cmd.output)], capture_output=True, text=True, check=False
     ).stderr
     assert "Audio: opus" in probe and ("5.1" if channels == 6 else "stereo") in probe
+
+
+def test_standard_ddp_71_takes_at_most_1024_and_blu_ray_more():
+    from videoforge.core.execute.audio import ENCODES
+
+    ddp = ENCODES[A.DDP]
+    assert ddp.bitrate_problem(1280, Layout(7, 1)) == "DDP (DEE) takes at most 1024 kb/s at 7.1"
+    assert ddp.bitrate_problem(1024, Layout(7, 1)) == ""
+    assert ddp.bitrate_problem(1024, Layout(5, 1)) == ""
+    assert ddp.configured({"ddp_mode": "bluray"}).bitrate_problem(1280, Layout(7, 1)) == ""

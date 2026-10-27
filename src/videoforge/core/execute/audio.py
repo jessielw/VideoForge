@@ -145,6 +145,7 @@ class AudioEncode:
     bitrate_range: tuple[int, int] | None = None  # allowed kb/s (None = not checked here)
     bitrate_choices: tuple[int, ...] = ()  # only these, when set
     per_channel_max: int | None = None  # kb/s per channel
+    channels_max: Mapping[int, int] | None = None  # the most kb/s for an output channel count
     vbr_default: bool = False  # no bitrate set = the encoder's quality VBR
     default_max: Layout | None = None  # the default layout is at most this (a downmix below it is chosen)
     delay_in_encode: bool = False  # it applies the source delay itself, so the mux must not
@@ -153,7 +154,7 @@ class AudioEncode:
     def configured(self, options: Mapping[str, str]) -> AudioEncode:
         """The layouts and defaults for the selected encoder mode."""
         if self.action is AudioAction.DDP and options.get("ddp_mode") == "bluray":
-            return replace(self, layouts=_layouts("7.1"), bitrates={8: 1280})
+            return replace(self, layouts=_layouts("7.1"), bitrates={8: 1280}, channels_max=None)
         return self
 
     def resolve_options(
@@ -212,6 +213,8 @@ class AudioEncode:
             return f"{self.label} takes {self.bitrate_range[0]} to {self.bitrate_range[1]} kb/s"
         if self.per_channel_max and kbps > self.per_channel_max * layout.channels:
             return f"{self.label} takes at most {self.per_channel_max} kb/s per channel"
+        if self.channels_max and kbps > (most := self.channels_max.get(layout.channels, kbps)):
+            return f"{self.label} takes at most {most} kb/s at {layout}"
         return ""
 
 
@@ -228,6 +231,8 @@ ENCODES: dict[AudioAction, AudioEncode] = {
             _layouts("1.0", "2.0", "5.1", "7.1"),
             ("deezy", "dee", "ffmpeg"),
             bitrates={1: 192, 2: 256, 6: 640, 8: 1024},
+            # DEE's streaming DDP stops at 1024 for 7.1, and a higher bitrate comes out at that; Blu-ray goes higher
+            channels_max={8: 1024},
             delay_in_encode=True,
             options=(
                 EncodeOption(
@@ -561,6 +566,19 @@ def measure_argv(planned: PlannedAudio, source: Path, out: Path, tools: Tools) -
     )
 
 
+# DEE can't open a path past Windows' MAX_PATH (259), and DeeZy refuses a --temp-dir with no room left in it for
+# its job folder (at most 44: a 29-character name, a track label, a run suffix) and a job file (56).
+_DEEZY_TEMP_MAX = 259 - 56 - 44
+
+
+def _deezy_temp(path: Path) -> tuple[str, ...]:
+    """DeeZy's --temp-dir in the job's folder, or none when that is too deep (a long source name in a deep folder):
+    DeeZy then uses a short folder of its own, unique to the run, and removes it after."""
+    if sys.platform == "win32" and len(str(path.absolute())) > _DEEZY_TEMP_MAX:
+        return ()
+    return ("--temp-dir", str(path))
+
+
 def _deezy(
     planned: PlannedAudio, source: Path, output: Path, temp_dir: Path, settings: AudioSettings, tools: Tools
 ) -> tuple[str, ...]:
@@ -571,8 +589,7 @@ def _deezy(
         f"--bitrate={planned.bitrate_kbps}",
         "--output",
         str(output),
-        "--temp-dir",
-        str(temp_dir / f"deezy.{output.stem}"),  # its own: audio encodes may run at the same time
+        *_deezy_temp(temp_dir / f"deezy.{output.stem}"),  # its own: audio encodes may run at the same time
         "--overwrite",
         "--ffmpeg",
         tools.ffmpeg,

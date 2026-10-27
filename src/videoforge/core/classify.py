@@ -64,6 +64,10 @@ def parse_audio_format(
     if head == "AAC":
         return AudioFormat(AudioCodec.AAC, False, False)
     if head == "AC-3":
+        # DDP Blu-ray (7.1): an AC-3 core and an E-AC-3 dependent substream, which some MediaInfo builds
+        # report as AC-3 "Dep" (others as E-AC-3, profile Blu-ray Disc); the track is DDP either way
+        if "DEP" in tokens or "DOLBY DIGITAL PLUS" in commercial.upper():
+            return AudioFormat(AudioCodec.EAC3, False, False)
         return AudioFormat(AudioCodec.AC3, False, False)
     if head == "E-AC-3":
         return AudioFormat(AudioCodec.EAC3, atmos or "JOC" in tokens, False)
