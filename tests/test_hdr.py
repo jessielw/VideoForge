@@ -140,6 +140,59 @@ def test_l5_offsets_follow_crop_and_resize():
     assert rpu_edit({"mode": 0}, plain, 3840, 2160) == {"mode": 2}  # no L5
 
 
+def _preset(pid, top, bottom, left=0, right=0):
+    return {"id": pid, "left": left, "right": right, "top": top, "bottom": bottom}
+
+
+def test_l5_bars_both_export_shapes():
+    """dovi_tool >= 2.3.3 wraps the area in "active_area"; older ones export it bare (DoviCrop reads both)."""
+    godzilla = _preset(0, 276, 277)  # Godzilla Minus One's L5: an odd bottom
+    new = {"mode": 0, "active_area": {"crop": True, "presets": [godzilla], "edits": {"0-461": 0}}}
+    assert hdr.l5_bars(new) == Crop(left=0, top=276, right=0, bottom=277)
+    assert hdr.l5_bars({"presets": [godzilla], "edits": {"all": 0}}) == Crop(top=276, bottom=277)
+    assert hdr.l5_bars({"mode": 0}) == Crop()  # no L5 authored
+    assert hdr.l5_bars({"active_area": {"presets": [], "edits": {}}}) == Crop()
+
+
+def test_l5_bars_varying_aspect_keeps_every_frame():
+    """IMAX scenes (another preset): each side takes the smallest bar, so the open-matte frames keep their picture;
+    a preset only used in the first or last 1000 frames (a full-frame logo) doesn't count."""
+    presets = [_preset(0, 0, 0), _preset(1, 276, 276), _preset(2, 140, 142, left=2, right=4)]
+    film = {"active_area": {"presets": presets, "edits": {"0-239": 0, "240-90000": 1, "90001-120000": 2}}}
+    assert hdr.l5_bars(film) == Crop(left=0, top=140, right=0, bottom=142)  # the logo's 0 skipped
+    one = {"active_area": {"presets": presets, "edits": {"0-239": 0, "240-120000": 1}}}
+    assert hdr.l5_bars(one) == Crop(top=276, bottom=276)
+    # the IMAX scenes in the middle of the film count
+    imax = {"active_area": {"presets": presets, "edits": {"0-50000": 1, "50001-60000": 0, "60001-120000": 1}}}
+    assert hdr.l5_bars(imax) == Crop()
+    # a short clip: the margin is 5% of it (23 frames of 462), so a cut still has frames left
+    cut = {"active_area": {"presets": presets, "edits": {"0-10": 0, "11-461": 1}}}
+    assert hdr.l5_bars(cut) == Crop(top=276, bottom=276)
+    # all of it in the margin: every preset counts
+    tiny = {"active_area": {"presets": presets[:2], "edits": {"0-0": 0, "1-1": 1}}}
+    assert hdr.l5_bars(tiny) == Crop()
+
+
+def test_l5_crop_rounds_down_and_checks_the_picture():
+    l5 = Crop(top=276, bottom=277)
+    # the luma crop stops 2-3 px short (the bars' soft edge): the L5's, an odd side rounded down (1 px of bar kept)
+    crop, origin = hdr.l5_crop(l5, Crop(top=274, bottom=274))
+    assert crop == Crop(top=276, bottom=276)
+    assert origin.startswith("Dolby Vision L5 (left 0, top 276, right 0, bottom 277; detected 0, 274, 0, 274)")
+    assert hdr.l5_crop(Crop(left=3, right=5, top=1), Crop(left=2, right=4))[0] == Crop(left=2, right=4)
+    # past the L5 is fine: the L5 is the smaller crop (a dark scene by the bar reads as bar)
+    assert hdr.l5_crop(l5, Crop(top=300, bottom=300))[0] == Crop(top=276, bottom=276)
+    # the picture shows inside the L5's bar: that side takes the detected crop, and says so
+    crop, origin = hdr.l5_crop(l5, Crop(top=200, bottom=274), "detected black borders")
+    assert crop == Crop(top=200, bottom=276)
+    assert origin.endswith("the picture shows inside the L5 bar, so detected: top 200 (L5 276)")
+    # no bars: the detected crop
+    assert hdr.l5_crop(Crop(), Crop(top=20, bottom=20), "detected black borders") == (
+        Crop(top=20, bottom=20),
+        "detected black borders (the Dolby Vision L5 has no bars)",
+    )
+
+
 def test_dolby_vision_x265_args():
     rpu = Path("dv_rpu.bin")
     x264 = encoder_command("x264", EncoderSettings(), output=Path("v.264"), dolby_vision=rpu)

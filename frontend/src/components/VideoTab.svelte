@@ -62,6 +62,7 @@
   let auto = $state(readAuto()) // a save renders the frame again; off, it waits for F5 / Refresh
   let stale = $state(false) // saved changes the frame doesn't show yet (auto off)
   let detecting = $state(false)
+  let cropOrigin = $state('') // the last auto crop's source, shown under its button
   // The editable copy; the effect below resets it when the job changes on the server.
   let video = $state<VideoSettings>(untrack(() => structuredClone($state.snapshot(job.spec.video)) as VideoSettings))
   let saving = $state(false)
@@ -278,6 +279,7 @@
   function setCrop(side: keyof Crop, value: number) {
     const v = Math.max(0, Math.round(value / 2) * 2)
     video.crop = { ...video.crop, [side]: v }
+    cropOrigin = ''
     vv.cropView = true
     commit()
   }
@@ -285,7 +287,9 @@
   async function autoCrop() {
     detecting = true
     try {
-      video.crop = await api.autocrop(jobId, 20)
+      const { origin, ...crop } = await api.autocrop(jobId, 20)
+      video.crop = crop
+      cropOrigin = origin
       vv.cropView = true
       commit(0)
     } finally {
@@ -567,11 +571,13 @@
               variant="outline"
               onclick={() => {
                 video.crop = { left: 0, top: 0, right: 0, bottom: 0 }
+                cropOrigin = ''
                 vv.cropView = true
                 commit(0)
               }}>Reset</Button
             >
           </div>
+          {#if cropOrigin}<p class="text-xs text-muted-foreground">Auto-crop from {cropOrigin}</p>{/if}
         </section>
 
         <section class="space-y-2">

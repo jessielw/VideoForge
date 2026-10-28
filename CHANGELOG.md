@@ -12,6 +12,13 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Auto crop of a Dolby Vision source takes the bars from its RPU's L5 active area (DoviCrop's method), not
+  only the luma: the detected borders stop short of a bar's soft edge (Godzilla Minus One: 274 where L5 says
+  276 / 277). Per side the smallest bar of the presets in use (a varying-aspect film keeps every frame), rounded
+  down to mod 2, checked against the detected borders (a side where the picture shows inside the bar takes the
+  detected value). The index now extracts the RPU (the encode reuses it). The editor and the job log say where
+  the crop came from.
+
 - The job record keeps the encoder's closing statistics for the final pass (`video.encoder_summary`: x264 /
   x265's "frame I: ..." to "encoded N frames ..."), the block an NFO quotes. A run that reuses the encode keeps
   the earlier run's.

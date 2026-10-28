@@ -1640,6 +1640,46 @@ def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
     assert "x265" not in tools_called(runner)
 
 
+def test_dolby_vision_rpu_comes_with_the_index_and_crops(tmp_path, monkeypatch):
+    """The source's RPU is extracted with the index (auto crop reads its L5, the encode reuses it); until its step
+    has finished it the source doesn't count as indexed. Auto crop takes the L5's bars, else the detected ones."""
+    from videoforge.core.pipeline import build
+    from videoforge.core.workdir import note_finished
+
+    plan = make_plan(tmp_path)
+    job = dv_job(plan, tmp_path)
+    video = plan.source.video
+    ids = [s.id for s in build.index_steps(job, APP, video)]
+    assert ids[-2:] == ["index", "dovi.rpu"]
+    x264 = replace(job, encoder=replace(job.encoder, encoder=Encoder.X264, depth=8))
+    assert "dovi.rpu" not in [s.id for s in build.index_steps(x264, APP, video)]
+
+    monkeypatch.setattr(build, "_index_present", lambda *_: True)
+    rpu = job.work_dir / hdr.DV_SOURCE_RPU
+    detected = Crop(top=274, bottom=274)
+    assert not build.indexed(job, video, None) and build.indexed(x264, video, None)
+    assert build.auto_crop(job, video, "dovi_tool", detected) == (detected, build.DETECTED)
+    rpu.parent.mkdir(parents=True)
+    rpu.write_bytes(b"rpu")  # an extract that stopped part way isn't taken
+    assert not build.indexed(job, video, None)
+    note_finished(rpu.parent, "dovi.rpu", "f", [rpu], 1.0)
+    assert build.indexed(job, video, None)
+
+    no_tool = build.auto_crop(job, video, str(tmp_path / "none.exe"), detected)
+    assert no_tool == (detected, f"{build.DETECTED} (dovi_tool isn't set, so no Dolby Vision L5)")
+    dovi = fake_tool_files("dovi_tool")["dovi_tool"]
+    monkeypatch.setattr(hdr, "source_l5", lambda tool, path: Crop(top=276, bottom=277) if path == rpu else Crop())
+    crop, origin = build.auto_crop(job, video, dovi, detected)
+    assert crop == Crop(top=276, bottom=276) and origin.startswith("Dolby Vision L5")
+    assert build.auto_crop(x264, video, dovi, detected) == (detected, build.DETECTED)  # not carried: not read
+
+    def unreadable(*_):
+        raise ToolError("dovi_tool export failed")
+
+    monkeypatch.setattr(hdr, "source_l5", unreadable)
+    assert build.auto_crop(job, video, dovi, detected)[1].endswith("couldn't be read: dovi_tool export failed)")
+
+
 def test_dolby_vision_profile_5_stays_profile_5(profile, tmp_path, monkeypatch):
     """A profile 5 source (no HDR10 layer, no mastering display) is written as profile 5, as StaxRip does: the RPU
     edited as it is (mode 0) but for its L5, and the output checked for profile 5."""

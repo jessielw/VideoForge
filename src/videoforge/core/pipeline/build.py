@@ -1,7 +1,7 @@
 """A job's steps from its spec and plan.
 
-    script -> (burned subtitle) extract -> index -> script info -> chapters/qpf -> (VFR) timestamps -> audio
-    encodes -> video (1 or 2 passes) -> mux
+    script -> (burned subtitle) extract -> index -> (Dolby Vision) RPU -> script info -> chapters/qpf -> (VFR)
+    timestamps -> audio encodes -> video (1 or 2 passes) -> mux
 
 The script info (vspipe --info) gives the encode's frame rate, which an IVTC or a double-rate deinterlace makes
 other than the source's: AutoQPF and the mux read it when their turn comes (Step.refresh). A VFR source's
@@ -36,6 +36,7 @@ from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
 from videoforge.core.models import Plan, PlannedAudio, SubFormat, SubTrack, VideoColor, VideoInfo
 from videoforge.core.pipeline.steps import Step
+from videoforge.core.tools import locate
 from videoforge.core.video import burn as burn_in, hdr, info, remux, target, vfr
 from videoforge.core.video.color import effective_container_color
 from videoforge.core.video.encoders import (
@@ -49,7 +50,8 @@ from videoforge.core.video.encoders import (
 )
 from videoforge.core.video.qpf import make_qpf, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
-from videoforge.core.video.settings import Encoder, EncoderSettings, SourceFilter
+from videoforge.core.video.settings import Crop, Encoder, EncoderSettings, SourceFilter
+from videoforge.core.workdir import finished_files
 
 if TYPE_CHECKING:
     from videoforge.core.profile import Profile
@@ -102,6 +104,36 @@ def mp4_chapters_step(plan: Plan, work: Path) -> Step | None:
 def baked_el(spec: JobSpec, video: VideoInfo | None) -> Path | None:
     """The enhancement layer the job's script bakes in (hdr.bakes_fel), in its work folder; None without one."""
     return spec.work_dir / hdr.DV_EL if spec.encodes_video and hdr.bakes_fel(video, spec.encoder) else None
+
+
+def source_rpu(spec: JobSpec, video: VideoInfo | None) -> Path | None:
+    """The source's Dolby Vision RPU the job carries (hdr.keeps_dv), in its work folder: extracted with the index,
+    as auto crop reads its L5. None without one."""
+    return spec.work_dir / hdr.DV_SOURCE_RPU if spec.encodes_video and hdr.keeps_dv(video, spec.encoder) else None
+
+
+def rpu_ready(spec: JobSpec, video: VideoInfo | None) -> Path | None:
+    """The job's source_rpu once its step has finished it (not one an extract stopped part way); else None."""
+    rpu = source_rpu(spec, video)
+    return rpu if rpu is not None and rpu.name in finished_files(rpu.parent) else None
+
+
+DETECTED = "detected black borders"  # auto crop's origin without a Dolby Vision L5
+
+
+def auto_crop(spec: JobSpec, video: VideoInfo | None, dovi_tool: str, detected: Crop) -> tuple[Crop, str]:
+    """Auto crop's result for the job, and where it came from: a Dolby Vision RPU's L5 (hdr.l5_crop, checked
+    against the detected crop) when the job carries one, else the detected crop."""
+    rpu = rpu_ready(spec, video)
+    if rpu is None:
+        return detected, DETECTED
+    if not locate(dovi_tool):
+        return detected, f"{DETECTED} (dovi_tool isn't set, so no Dolby Vision L5)"
+    try:
+        bars = hdr.source_l5(dovi_tool, rpu)
+    except (OSError, ToolError, ValueError) as ex:
+        return detected, f"{DETECTED} (the Dolby Vision L5 couldn't be read: {ex})"
+    return hdr.l5_crop(bars, detected, DETECTED)
 
 
 def job_script(spec: JobSpec, video: VideoInfo | None, burn: SubTrack | None = None) -> str:
@@ -255,7 +287,7 @@ def index_steps(
             inputs=inputs,
             key=source_filter.value,
             weight=2,
-            present=lambda: indexed(spec, video, None),
+            present=lambda: _index_present(spec, video),
         )
     )
     if el is not None and source_filter is SourceFilter.FFMS2:
@@ -270,6 +302,18 @@ def index_steps(
                 present=lambda: index_exists(el, source_filter, work),
             )
         )
+    if (rpu := source_rpu(spec, video)) is not None:
+        # With the index, not the encode: auto crop reads its L5 (hdr.l5_crop), and the encode's turn reuses it.
+        steps.append(
+            Step(
+                "dovi.rpu",
+                "Dolby Vision RPU (dovi_tool)",
+                argvs=hdr.rpu_argvs(app.tools, source, rpu),
+                outputs=(rpu,),
+                inputs=(source,),
+                weight=1,
+            )
+        )
     return steps
 
 
@@ -280,14 +324,18 @@ def script_fps(spec: JobSpec) -> Fraction | None:
     return found.fps if found else None
 
 
-def indexed(spec: JobSpec, video: VideoInfo | None, burn: SubTrack | None) -> bool:
-    """Whether the job's source (and a FEL's enhancement layer it bakes) is indexed, and a subtitle it burns in
-    extracted: opening its video is quick."""
+def _index_present(spec: JobSpec, video: VideoInfo | None) -> bool:
     s, el, work = spec.video.source_filter, baked_el(spec, video), spec.work_dir
+    return index_exists(spec.inputs.source, s, work) and (el is None or index_exists(el, s, work))
+
+
+def indexed(spec: JobSpec, video: VideoInfo | None, burn: SubTrack | None) -> bool:
+    """Whether the job's source (and a FEL's enhancement layer it bakes) is indexed, a subtitle it burns in
+    extracted and a Dolby Vision RPU it carries extracted: opening its video is quick, and auto crop has the L5."""
     return (
-        index_exists(spec.inputs.source, s, work)
-        and (el is None or index_exists(el, s, work))
-        and burn_in.present(burn, work)
+        _index_present(spec, video)
+        and burn_in.present(burn, spec.work_dir)
+        and (source_rpu(spec, video) is None or rpu_ready(spec, video) is not None)
     )
 
 
@@ -377,34 +425,26 @@ def video_steps(
             ),
         ]
         shared += (meta,)
-    dolby_vision, source_rpu, dv_profile = None, work / hdr.DV_SOURCE_RPU, hdr.dv_profile(v)
+    dolby_vision, dv_source, dv_profile = None, work / hdr.DV_SOURCE_RPU, hdr.dv_profile(v)
     if hdr.keeps_dv(v, enc) and v is not None:
         dolby_vision = home / hdr.DV_RPU  # edited for the job's crop and resize
         rpu, width, height = dolby_vision, v.width, v.height
         order = [s.category.value for s in spec.video.filters if s.category.value in ("crop", "resize")]
 
         def edit_rpu(log: LogFn) -> None:
-            hdr.edit_rpu(app.tools.dovi_tool, source_rpu, rpu, spec.video, width, height, log, dv_profile)
+            hdr.edit_rpu(app.tools.dovi_tool, dv_source, rpu, spec.video, width, height, log, dv_profile)
 
         def check_rpu(log: LogFn) -> None:
             hdr.check_rpu_frames(app.tools.vspipe, app.tools.dovi_tool, script, rpu, log)
 
-        steps += [
-            Step(
-                "dovi.rpu",
-                "Dolby Vision RPU (dovi_tool)",
-                argvs=hdr.rpu_argvs(app.tools, source, source_rpu),
-                outputs=(source_rpu,),
-                inputs=(source,),
-                weight=1,
-            ),
+        steps += [  # the source's RPU: extracted with the index (index_steps)
             # Keyed by the crop and resize (and their order): a new one edits the RPU again.
             Step(
                 "dovi.edit",
                 f"Dolby Vision RPU: crop, resize, profile {dv_profile}",
                 call=edit_rpu,
                 outputs=(rpu,),
-                inputs=(source_rpu,),
+                inputs=(dv_source,),
                 key=f"{width}x{height} {spec.video.crop} {spec.video.resize} {order} {dv_profile}",
                 weight=0.2,
             ),
@@ -505,9 +545,9 @@ def video_steps(
     source_color, dovi_tool = color, app.tools.dovi_tool
 
     def fel_color() -> VideoColor | None:
-        if not fel or source_color is None or not source_rpu.is_file():
+        if not fel or source_color is None or not dv_source.is_file():
             return source_color
-        return hdr.fel_color(source_color, hdr.rpu_summary(dovi_tool, source_rpu))
+        return hdr.fel_color(source_color, hdr.rpu_summary(dovi_tool, dv_source))
 
     def refreshed(k: int) -> Step:
         return replace(encodes(fel_color())[k], refresh=lambda: refreshed(k))

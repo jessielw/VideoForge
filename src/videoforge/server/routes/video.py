@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 
 from videoforge.core.job import JobSpec
 from videoforge.core.models import SubTrack
-from videoforge.core.pipeline.build import baked_el, indexed
+from videoforge.core.pipeline.build import auto_crop, baked_el, indexed
 from videoforge.core.plan_io import to_json
 from videoforge.core.video.info import length_warning
 from videoforge.core.video.preview import FrameError, Preview, PreviewError
@@ -184,12 +184,15 @@ def frame(
 
 @router.post("/autocrop")
 def detect_crop(request: Request, job_id: str, samples: int = 20) -> dict[str, Any]:
-    """Suggest a crop from the uncropped source (the job isn't changed)."""
+    """Suggest a crop from the uncropped source (the job isn't changed): a Dolby Vision source's from its RPU's L5
+    (checked against the detected borders), else the detected borders. origin says which."""
     try:
         e = _entry(request, job_id)
         _indexed(e)
         with e.source_lock:
-            crop = source_crop(_preview(request), e.spec, max(3, min(samples, 60)))
+            detected = source_crop(_preview(request), e.spec, max(3, min(samples, 60)))
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex) from None
-    return to_json(crop)
+    q: JobQueue = request.app.state.queue
+    crop, origin = auto_crop(e.spec, e.source_video, q.app.tools.dovi_tool, detected)
+    return to_json(crop) | {"origin": origin}

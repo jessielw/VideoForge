@@ -236,7 +236,8 @@ export const api = {
   clipInfo: (id: string, stage: 'crop' | 'output') => get<ClipInfo>(`/api/jobs/${id}/video/info?stage=${stage}`),
   frameUrl: (id: string, n: number, stage: 'crop' | 'output', version: number, fmt: 'jpeg' | 'png' = 'jpeg') =>
     `/api/jobs/${id}/video/frame?n=${n}&stage=${stage}&fmt=${fmt}&v=${version}`,
-  autocrop: (id: string, samples = 20) => post<Crop>(`/api/jobs/${id}/video/autocrop?samples=${samples}`),
+  // origin: where the crop came from (a Dolby Vision source's RPU L5, or the detected borders)
+  autocrop: (id: string, samples = 20) => post<Crop & { origin: string }>(`/api/jobs/${id}/video/autocrop?samples=${samples}`),
   script: (id: string) => get<ScriptParts>(`/api/jobs/${id}/video/script`),
   checkScript: (id: string) => get<ScriptCheck>(`/api/jobs/${id}/video/check`),
 }

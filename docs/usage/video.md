@@ -20,6 +20,16 @@ Use the frame preview's zoom and crop overlay to inspect borders. **Auto crop** 
 and proposes crop values. Check bright and dark scenes, credits, and any changing aspect ratios
 before accepting a fixed crop for the whole file.
 
+For a Dolby Vision source the job carries, auto crop takes the bars from the RPU's L5 active area
+instead: indexing extracts the RPU too (the encode reuses it). Each side is the smallest bar of the
+presets in use, so a film whose aspect changes (IMAX scenes) keeps every frame's picture, and the
+RPU's per-scene presets carry the rest. Presets only in the first or last 1000 frames (a full-frame
+logo) don't count. An odd bar rounds down: 277 crops 276, and the encode's L5 names the line left.
+The L5 is checked against the detected borders: where the picture shows more than 4 px inside a bar,
+that side takes the detected value. An L5 with no bars (or no RPU) leaves the detected borders.
+The editor (under the button) and the job log say where the crop came from. The crop stays yours to
+change; the RPU follows any crop.
+
 Resize supports kernels such as Spline36, Bicubic, Lanczos, and Point. Aspect-ratio fitting accounts
 for the cropped picture and the source's pixel aspect ratio; the output dimensions follow the
 selected modulus. A custom script can change the picture independently of these controls.

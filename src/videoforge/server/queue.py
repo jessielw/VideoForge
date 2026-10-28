@@ -69,7 +69,7 @@ from videoforge.core.models import (
     track_key,
 )
 from videoforge.core.notify import Sender, send as notify_send
-from videoforge.core.pipeline.build import index_steps, job_output
+from videoforge.core.pipeline.build import auto_crop, index_steps, job_output
 from videoforge.core.pipeline.reuse import ReuseOffer, reuse_offers
 from videoforge.core.pipeline.run import missing_inputs, run_job
 from videoforge.core.pipeline.share import Sharing
@@ -534,11 +534,11 @@ class JobQueue:
             detect = self.services.detect_crop
             if detect is None:  # _crop_due checked it
                 raise RuntimeError("No crop detection")
-            crop = detect(e.spec)
+            crop, origin = auto_crop(e.spec, e.source_video, self.app.tools.dovi_tool, detect(e.spec))
         except Exception as ex:  # shown in the job's log; the crop stays as it was
             self._log(e, f"Auto-crop failed: {type(ex).__name__}: {ex}")
             logger.warning("%s: auto-crop failed: %s: %s", e.spec.name, type(ex).__name__, ex)
-            crop = None
+            crop, origin = None, ""
         with self._lock:
             e.cropping = False
             if self._entries.get(e.id) is not e:  # removed meanwhile
@@ -550,7 +550,8 @@ class JobQueue:
                     self._replan(e)
                 self._save(e)
         if crop is not None:
-            self._log(e, f"Auto-crop: left {crop.left}, top {crop.top}, right {crop.right}, bottom {crop.bottom}")
+            sides = f"left {crop.left}, top {crop.top}, right {crop.right}, bottom {crop.bottom}"
+            self._log(e, f"Auto-crop: {sides}, from {origin}")
         self._changed(e)
         self._index_wake.set()
 

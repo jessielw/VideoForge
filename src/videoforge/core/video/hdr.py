@@ -11,9 +11,10 @@ the script must give the same frames: a check step compares them before the enco
 filter or a source filter counting frames its own way would put the metadata out of step).
 
 Dolby Vision (profile 8.1, and a profile 7 MEL as 8.1; StaxRip's flow): `ffmpeg ... | dovi_tool extract-rpu`
-writes the source's RPU to the work folder. An edit step moves its L5 active area (the letterbox offsets) by
-the job's crop and resize (DoviCrop's: `dovi_tool export`, each offset less the crop, at least 0) and makes it
-profile 8.1 (`dovi_tool editor`, mode 2); a check compares its frames with the script's, as for HDR10+; x265
+writes the source's RPU to the work folder, with the index: auto crop takes the source's bars from its L5
+(l5_bars, l5_crop: DoviCrop's idea, checked against the detected borders). An edit step moves its L5 active area
+(the letterbox offsets) by the job's crop and resize (DoviCrop's: `dovi_tool export`, each offset less the crop, at
+least 0) and makes it profile 8.1 (`dovi_tool editor`, mode 2); a check compares its frames with the script's, as for HDR10+; x265
 writes it (`--dolby-vision-profile 8.1 --dolby-vision-rpu`). x265 needs VBV for it (HRD; with only
 `--level-idc` set, the level's max bitrate fills it, as StaxRip does), a 10-bit encode and a mastering display.
 Profile 5 (StaxRip's too) stays profile 5: its base layer is IPTPQc2, not HDR10 (no mastering display; x265
@@ -49,7 +50,14 @@ from videoforge.core.execute.process import LogFn, ToolError, run
 from videoforge.core.models import Issue, Severity, SourceInfo, VideoColor, VideoHdr, VideoInfo
 from videoforge.core.tools import locate
 from videoforge.core.video.encoders import level_vbv
-from videoforge.core.video.settings import Encoder, EncoderSettings, FilterCategory, SourceFilter, VideoSettings
+from videoforge.core.video.settings import (
+    Crop,
+    Encoder,
+    EncoderSettings,
+    FilterCategory,
+    SourceFilter,
+    VideoSettings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +71,8 @@ _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 # vspipe --info's and dovi_tool info -s's; process.run tags lines "[vspipe] "
 _FRAMES = re.compile(r"(?:^|\] )\s*Frames:\s*(\d+)", re.MULTILINE)
 _L5 = ("left", "right", "top", "bottom")
+L5_MARGIN = 1000  # frames at each end whose L5 presets the crop ignores (StaxRip's _autoCropThresholdBegin / End)
+L5_SLACK = 4  # px a detected side may fall short of the L5 bar (a bar's soft edge) before the L5 is doubted
 _PROFILE = re.compile(r"Profile (\d+)(?:\.(\d+))?")
 _DVHE = re.compile(r"\b(?:dvhe|dvh1|dvav|dva1|dav1)\.(\d+)", re.IGNORECASE)
 # dovi_tool info -s: "RPU mastering display: 0.0050/4000 nits", "RPU content light level (L1): MaxCLL: 0.01 nits,
@@ -432,12 +442,76 @@ def l5_offsets(offsets: dict[str, Any], video_settings: VideoSettings, width: in
     return out
 
 
+def _area(level5: dict[str, Any]) -> dict[str, Any]:
+    return level5.get("active_area") or level5  # dovi_tool < 2.3.3 exports the bare active area (DoviCrop)
+
+
+def l5_bars(level5: dict[str, Any]) -> Crop:
+    """The letterbox bars the whole film has, from `dovi_tool export --data level5=`: per side the smallest offset of
+    the presets in use, so every frame keeps its picture (a varying-aspect film's open-matte scenes too: the
+    per-frame presets then carry the rest of the bars). Presets used only in the first or last L5_MARGIN frames
+    (5% of a short clip) don't count, as in StaxRip: a full-frame studio logo would otherwise undo the crop."""
+    area = _area(level5)
+    presets = {p.get("id", 0): p for p in area.get("presets") or []}
+    if not presets:
+        return Crop()
+    spans: list[tuple[int, int, Any]] = []
+    for frames, pid in (area.get("edits") or {}).items():
+        start, _, end = str(frames).partition("-")
+        if start.isdigit() and end.isdigit():
+            spans.append((int(start), int(end), pid))
+    used = set(presets)
+    if spans:
+        last = max(e for _, e, _ in spans)
+        margin = min(L5_MARGIN, (last + 1) // 20)
+        used = {pid for s, e, pid in spans if e >= margin and s <= last - margin} or {pid for *_, pid in spans}
+    chosen = [presets[i] for i in used if i in presets] or list(presets.values())
+    return Crop(**{k: min(int(p.get(k) or 0) for p in chosen) for k in _L5})
+
+
+def source_l5(dovi_tool: str, rpu: Path) -> Crop:
+    """l5_bars of an RPU file. Cached per file, size and mtime."""
+    st = rpu.stat()
+    return _source_l5(dovi_tool, str(rpu), st.st_size, st.st_mtime_ns)
+
+
+@functools.lru_cache(maxsize=16)
+def _source_l5(dovi_tool: str, rpu: str, _size: int, _mtime: int) -> Crop:
+    with tempfile.TemporaryDirectory(prefix="vf_l5_") as tmp:
+        level5 = Path(tmp) / "level5.json"
+        run([(dovi_tool, "export", "--data", f"level5={level5}", "-i", rpu)], lambda _line: None)
+        with level5.open(encoding="utf-8") as f:
+            return l5_bars(json.load(f))
+
+
+def l5_crop(bars: Crop, detected: Crop, detected_name: str = "detected", mod: int = 2) -> tuple[Crop, str]:
+    """The crop from a source's L5 bars (l5_bars), each side rounded down to mod (an odd bar keeps a line of it,
+    which the RPU's L5 then names), and where it came from. The L5 isn't taken on trust (StaxRip takes it as it
+    is): a side where the picture shows inside the bar (the detected crop more than L5_SLACK short of it) takes the
+    detected crop. All-zero bars (a full-frame film, or a disc that didn't author L5) leave the detected crop."""
+    if bars.is_zero:
+        return detected, f"{detected_name} (the Dolby Vision L5 has no bars)"
+    out, kept = {}, []
+    for k in ("left", "top", "right", "bottom"):
+        bar, found = getattr(bars, k), getattr(detected, k)
+        side = bar - bar % mod
+        if found < side - L5_SLACK:
+            side = found
+            kept.append(f"{k} {found} (L5 {bar})")
+        out[k] = side
+    origin = "Dolby Vision L5 (" + ", ".join(f"{k} {getattr(bars, k)}" for k in ("left", "top", "right", "bottom"))
+    origin += f"; detected {detected.left}, {detected.top}, {detected.right}, {detected.bottom})"
+    if kept:
+        origin += "; the picture shows inside the L5 bar, so detected: " + ", ".join(kept)
+    return Crop(**out), origin
+
+
 def rpu_edit(
     level5: dict[str, Any], video_settings: VideoSettings, width: int, height: int, profile: str = "8.1"
 ) -> dict[str, Any]:
     """dovi_tool editor's config for the encode's RPU, from `dovi_tool export --data level5=`: the written profile
     (8.1: mode 2; 5: mode 0, as it is) and each L5 preset on the encode's picture."""
-    area = level5.get("active_area") or level5  # dovi_tool < 2.3.3 exports the bare active area (DoviCrop)
+    area = _area(level5)
     presets = area.get("presets") or []
     config: dict[str, Any] = {"mode": _DV_MODES[profile]}
     if presets:

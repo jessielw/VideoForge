@@ -1159,6 +1159,8 @@ def test_templates(tmp_path):
             ]
             assert spec["video"]["crop"] == {"left": 0, "top": 20, "right": 0, "bottom": 22} and not spec["autocrop"]
             assert job["indexed"]  # the lane indexed it first, one job at a time
+            lines = client.get(f"/api/jobs/{job_id}/log").json()["lines"]
+            assert any(line.endswith("bottom 22, from detected black borders") for line in lines)
         assert len(indexer.calls) == 2
 
         # A batch: fixed crop on both; then the container alone keeps each job's extra arguments.
@@ -1708,6 +1710,7 @@ def test_video_preview_endpoints(tmp_path):
         assert wait_for(client, job_id, "ready", "warn", timeout=60)["indexed"]
         assert client.get(f"{base}/info", params={"stage": "source"}).json()["height"] == 180
         crop = client.post(f"{base}/autocrop", params={"samples": 5}).json()
+        assert crop.pop("origin") == "detected black borders"  # no Dolby Vision
         assert crop["top"] in (20, 22) and crop["left"] == 0
         video = client.get(f"/api/jobs/{job_id}").json()["spec"]["video"] | {"crop": crop}
         client.patch(f"/api/jobs/{job_id}", json={"video": video})
