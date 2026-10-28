@@ -112,6 +112,10 @@ When VideoForge encoded the video:
     "extra": ""                            // raw arguments, as typed
   },
   "commands": ["vspipe ... | x264 ..."],   // one per pass, as a shell would take them
+  "encoder_summary": [                     // x264 / x265's closing statistics for the final pass ("frame I: ..."
+    "x265 [info]: frame I: 19, Avg QP:23.50  kb/s: 33220.41",  //  to "encoded N frames ..."), as an NFO quotes them;
+    "encoded 48 frames in 15.49s (3.10 fps), 16544.34 kb/s, Avg QP:25.51"  // a reused encode's are kept from
+  ],                                       // the record it replaces; null when the output held no whole block
   "hdr": {                                 // the source's dynamic HDR and what the encode carried of it
     "source": {
       "dolby_vision": "7.6 FEL",           // profile[.compatibility][ FEL|MEL], or null

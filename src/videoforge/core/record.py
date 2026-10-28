@@ -24,6 +24,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import threading
 import time
 from typing import TYPE_CHECKING, Any
@@ -53,6 +54,12 @@ QUEUE_EVENTS = "events.jsonl"  # in <data dir>/logs/
 QUEUE_EVENTS_MAX = 10 * 1024 * 1024  # then it rolls over to events.jsonl.1 (3 kept)
 
 VersionsFn = Callable[[Sequence[str]], dict[str, str]]  # Tools field names -> version line
+
+# x264 / x265's closing statistics, the block an NFO quotes: "x265 [info]: frame I: ..." to "encoded 48 frames
+# in 15.49s (3.10 fps), 16544.34 kb/s, Avg QP:25.51"; a piped command's line carries its tool's tag ("[x265] ")
+_SUMMARY_START = re.compile(r"\[info\]: frame I:", re.IGNORECASE)
+_SUMMARY_END = re.compile(r"encoded \d+ frames")
+_TAG = re.compile(r"^(\[[^\]]+\]) ")
 
 
 def now() -> str:
@@ -165,7 +172,40 @@ def _commands(state: JobState) -> dict[str, str]:
     return {r.id: r.command for r in state.run}
 
 
-def _video(spec: JobSpec, plan: Plan, commands: dict[str, str]) -> dict[str, Any]:
+def summary_lines(tail: Sequence[str]) -> list[str] | None:
+    """The encoder's closing statistics in a step's last output lines, without its tag (other tools' lines
+    between are left out); None when the lines hold no whole block."""
+    start = next((i for i, line in enumerate(tail) if _SUMMARY_START.search(line)), None)
+    if start is None:
+        return None
+    tag = m.group(1) if (m := _TAG.match(tail[start])) else ""
+    block: list[str] = []
+    for line in tail[start:]:
+        if tag and not line.startswith(tag + " "):
+            continue
+        text = line[len(tag) + 1 :] if tag else line
+        block.append(text.rstrip())
+        if _SUMMARY_END.match(text):
+            return block
+    return None
+
+
+def encoder_summary(state: JobState, previous: dict[str, Any] | None) -> list[str] | None:
+    """The final video pass's closing statistics: from this run's output, or, when the run reused the encode,
+    from the record it replaces (that run made the encode)."""
+    passes = [r for r in state.run if r.id == "video" or r.id.startswith("video.pass")]
+    if not passes:
+        return None
+    last = passes[-1]
+    if last.status is StepStatus.DONE:
+        return summary_lines(last.tail)
+    if last.status is StepStatus.REUSED and previous:
+        found = (previous.get("video") or {}).get("encoder_summary")
+        return found if isinstance(found, list) else None
+    return None
+
+
+def _video(spec: JobSpec, plan: Plan, commands: dict[str, str], summary: list[str] | None = None) -> dict[str, Any]:
     if not spec.encodes_video:
         return {"encoded": False, "encode": str(spec.inputs.encode), "language": _video_language(plan)}
     script = spec.job_dir / "video.vpy"
@@ -200,6 +240,7 @@ def _video(spec: JobSpec, plan: Plan, commands: dict[str, str]) -> dict[str, Any
             "extra": enc.extra,
         },
         "commands": [c for sid, c in commands.items() if sid == "video" or sid.startswith("video.")],
+        "encoder_summary": summary,
         "hdr": _hdr(plan.source.video, enc),
     }
 
@@ -347,7 +388,9 @@ def build_record(
     seconds: float,
     output: Path,
     versions: dict[str, str] | None = None,
+    previous: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """previous: the record this one replaces (what it says of an encode this run reused)."""
     container = spec.container(profile)
     commands = _commands(state)
     home = spec.job_dir
@@ -375,7 +418,7 @@ def build_record(
         "job_dir": str(home),
         "log": str(home / "videoforge.log"),
         "events": str(events_path(home, output)),
-        "video": _video(spec, plan, commands),
+        "video": _video(spec, plan, commands, encoder_summary(state, previous)),
         "audio": _audio(plan, result, commands),
         "subtitles": _subs(plan, container),
         "chapters": _chapters(spec, plan),
@@ -451,6 +494,7 @@ class RunRecorder:
             try:
                 container = self.spec.container(self.profile)
                 versions = self.versions(used_tools(self.spec, self.plan, container)) if self.versions else {}
+                path = record_path(self.spec.job_dir, result.output)
                 doc = build_record(
                     self.spec,
                     self.plan,
@@ -463,8 +507,8 @@ class RunRecorder:
                     seconds=seconds,
                     output=result.output,
                     versions=versions,
+                    previous=read_record(path),
                 )
-                path = record_path(self.spec.job_dir, result.output)
                 write_json(path, doc)
                 self.record_file = path
             except Exception:  # a bug here must not fail the job

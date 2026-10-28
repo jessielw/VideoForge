@@ -9,11 +9,20 @@ from conftest import simulate_output
 from test_pipeline import APP, FakeRunner, make_plan
 
 from videoforge.core.execute.process import Cancelled
-from videoforge.core.job import JobState, JobStatus, OutputPolicy
+from videoforge.core.job import JobState, JobStatus, OutputPolicy, StepRun, StepStatus
 from videoforge.core.models import VideoHdr, VideoInfo
 from videoforge.core.pipeline.build import job_output
 from videoforge.core.pipeline.run import run_job, spec_from_plan
-from videoforge.core.record import SCHEMA, JsonLines, RunRecorder, _hdr, read_record, record_path
+from videoforge.core.record import (
+    SCHEMA,
+    JsonLines,
+    RunRecorder,
+    _hdr,
+    encoder_summary,
+    read_record,
+    record_path,
+    summary_lines,
+)
 from videoforge.core.video.settings import Encoder, EncoderSettings
 
 
@@ -197,3 +206,45 @@ def test_the_record_says_what_the_encode_carried_of_the_sources_hdr():
         "dv_el": None,
         "hdr10plus": False,
     }
+
+
+X265_TAIL = [
+    "[x265] [91.7%] 44/48 Frames @ 2.766 FPS | 16221 kb/s | 0:00:15 [-0:00:01] | 3.72 MB [4.06 MB]  ",
+    "[x265] x265 [INFO]: frame I:     19, Avg QP:23.50  kb/s: 33220.41",
+    "[vspipe] Output 48 frames in 15.40 seconds (3.12 fps)",
+    "[x265] x265 [INFO]: frame P:     19, Avg QP:26.35  kb/s: 7333.31 ",
+    "[x265] x265 [INFO]: Weighted P-Frames: Y:5.3% UV:5.3%",
+    "[x265] encoded 48 frames in 15.49s (3.10 fps), 16544.34 kb/s, Avg QP:25.51",
+]
+X264_TAIL = [
+    "[x264] [100.0%] 48/48 Frames @ 21.16 FPS | 14271 kb/s | 0:00:02 [-0:00:00] | 3.57 MB [3.57 MB]  ",
+    "[x264] x264 [INFO]: frame I:1     Avg QP:12.61  size:227074",
+    "[x264] x264 [INFO]: kb/s:14271.11",
+    "[x264] encoded 48 frames, 21.16 fps, 14271.11 kb/s, duration 0:00:02.26",
+]
+
+
+def test_the_encoders_closing_statistics_are_kept_without_their_tag():
+    assert summary_lines(X265_TAIL) == [
+        "x265 [INFO]: frame I:     19, Avg QP:23.50  kb/s: 33220.41",
+        "x265 [INFO]: frame P:     19, Avg QP:26.35  kb/s: 7333.31",
+        "x265 [INFO]: Weighted P-Frames: Y:5.3% UV:5.3%",
+        "encoded 48 frames in 15.49s (3.10 fps), 16544.34 kb/s, Avg QP:25.51",
+    ]  # vspipe's line between is not the encoder's
+    assert summary_lines(X264_TAIL) == [line.removeprefix("[x264] ") for line in X264_TAIL[1:]]
+    assert summary_lines(X265_TAIL[:-1]) is None  # cut short: no "encoded" line
+    assert summary_lines(["[x265] [50.0%] 24/48 Frames"]) is None
+
+
+def test_the_summary_is_the_final_pass_or_the_reused_encodes():
+    def state(*runs: StepRun) -> JobState:
+        return JobState(run=list(runs))
+
+    pass1 = StepRun("video.pass1", "Video pass 1/2", status=StepStatus.DONE, tail=X264_TAIL)
+    pass2 = StepRun("video.pass2", "Video pass 2/2", status=StepStatus.DONE, tail=X265_TAIL)
+    assert encoder_summary(state(pass1, pass2), None)[-1].startswith("encoded 48 frames in 15.49s")
+    reused = StepRun("video.pass2", "Video pass 2/2", status=StepStatus.REUSED)
+    previous = {"video": {"encoder_summary": ["encoded 1 frames"]}}
+    assert encoder_summary(state(pass1, reused), previous) == ["encoded 1 frames"]
+    assert encoder_summary(state(pass1, reused), None) is None
+    assert encoder_summary(state(StepRun("mux", "Mux", status=StepStatus.DONE)), previous) is None

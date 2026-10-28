@@ -12,6 +12,10 @@ source), or in Docker on Linux.
 
 ### Added
 
+- The job record keeps the encoder's closing statistics for the final pass (`video.encoder_summary`: x264 /
+  x265's "frame I: ..." to "encoded N frames ..."), the block an NFO quotes. A run that reuses the encode keeps
+  the earlier run's.
+
 - A DDP or Atmos encode no longer fails when the job's folder is too deep for DEE (Windows' 259-character
   limit: a long source name in a deep folder). DeeZy then works in a short temp folder of its own.
 
