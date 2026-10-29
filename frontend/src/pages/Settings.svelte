@@ -11,6 +11,7 @@
   import PluginManager from '../components/PluginManager.svelte'
   import AudioPresetMenu from '../components/AudioPresetMenu.svelte'
   import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
+  import TemplateSubsEditor from '../components/TemplateSubsEditor.svelte'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import CheckIcon from '@lucide/svelte/icons/check'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
@@ -41,6 +42,7 @@
     Priority,
     ToolCheck,
     ToolSetting,
+    TemplateSubs,
     ToolStatus,
   } from '../lib/types'
 
@@ -133,6 +135,24 @@
 
   async function setProfile(id: string) {
     if (await change({ profile: id === config?.profile_default ? null : id })) app.profiles = await api.profiles()
+  }
+
+  // Subtitle rules for new jobs whose template sets none: shown as changed at once, saved in order.
+  let subsEdit = $state<{ value: TemplateSubs | null } | null>(null)
+  let subsSent = 0
+  const subsDefault = $derived(subsEdit ? subsEdit.value : (app.presets.subs_default ?? null))
+  const defaultProfile = $derived(app.profiles.find(p => p.id === config?.profile) ?? app.defaultProfile)
+  const subFlags = $derived(defaultProfile?.track_properties.filter(f => f.kind === 'sub') ?? [])
+  async function setSubsDefault(value: TemplateSubs | null) {
+    const sent = ++subsSent
+    subsEdit = { value }
+    try {
+      app.presets = await saves.add(() => api.setSubsDefault(value))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      if (sent === subsSent) subsEdit = null // the last change: show what the server has
+    }
   }
 
   function setRoots(roots: string[] | null) {
@@ -497,6 +517,23 @@
             </span>
           </span>
         </label>
+      </section>
+
+      <section class="col-span-full min-w-0 space-y-3" aria-label="Default subtitles">
+        <h2 class="font-medium">Default subtitles</h2>
+        {#if !defaultProfile?.track_editor}
+          <p class="text-xs text-muted-foreground">
+            {defaultProfile?.name}'s rules choose its jobs' subtitles; these apply to other profiles' jobs.
+          </p>
+        {/if}
+        <TemplateSubsEditor
+          value={subsDefault}
+          flags={subFlags}
+          toggleLabel="Choose every new job's subtitles by rules"
+          offNote="Off: new jobs keep every subtitle track, unless their template sets subtitle rules."
+          appliedNote="New jobs get these rules unless their template sets its own; jobs already in the queue keep theirs."
+          onchange={setSubsDefault}
+        />
       </section>
 
       <!-- the events a notification or an action wants (skip: ones it can't have) -->

@@ -496,12 +496,13 @@ export interface AudioBundle {
 }
 export interface ConfigurationBundle {
   format: 'videoforge.configuration'
-  version: 1 | 2
+  version: 1 | 2 | 3
   application: Record<string, unknown> & { allow_commands: boolean }
   settings: Record<string, unknown> & { notifications: NotificationDestination[]; actions: ActionSetting[]; disabled_plugins: string[]; plugin_settings?: Record<string, Record<string, unknown>> }
   folders: { output_dir: string; last_dir: string }
   presets: { template: Preset<Template>[]; video: Preset<VideoPresetData>[]; encoder: Preset<EncoderSettings>[]; audio: Preset<AudioPresetSettings>[] }
   template_defaults: Record<string, string>
+  subs_default?: TemplateSubs | null // version 3
 }
 export interface ConfigurationPreview {
   bundle: ConfigurationBundle
@@ -564,6 +565,7 @@ export interface SubRule {
 export interface TemplateSubs {
   rules: SubRule[]
   others: 'keep' | 'exclude' // tracks no rule matches
+  name_untitled?: boolean // a kept track left untitled is named from its language and flags ("English (SDH)")
 }
 export interface Presets {
   video: Preset<VideoPresetData>[]
@@ -571,6 +573,7 @@ export interface Presets {
   audio: Preset<AudioPresetSettings>[]
   template: Preset<Template>[]
   template_defaults: Record<string, string> // profile id -> its default template's name
+  subs_default?: TemplateSubs | null // Settings: subtitle rules for new jobs whose template has none
   encoder_starters: Preset<EncoderSettings>[] // built in for every profile (core/video/starters.py)
 }
 export type PresetKind = 'video' | 'encoder' | 'audio' | 'template'

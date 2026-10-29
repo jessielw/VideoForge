@@ -18,7 +18,7 @@ from videoforge.core.template import Template
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.core.workdir import work_dir_size
 from videoforge.server.queue import LOG_LINES, Busy, JobQueue
-from videoforge.server.routes.presets import default_template
+from videoforge.server.routes.presets import default_template, subs_default
 from videoforge.server.views import detail, summary
 
 router = APIRouter(prefix="/api")
@@ -90,6 +90,7 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         encoder=from_json(EncoderSettings, body["encoder"]) if body.get("encoder") else None,
         template=_template(body) or _default_template(request, body),
         replace_existing=body.get("replace_existing") or [],
+        subs_default=subs_default(request.app.state.store),
     )
     left = result.unmatched
     added_sources = {e.spec.inputs.source for e in added}

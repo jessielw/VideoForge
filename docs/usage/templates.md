@@ -103,6 +103,17 @@ compatible values. Manual choices in the job editor remain strict and can block 
 Subtitle rules match language, format, forced, SDH, and commentary traits. They cover source tracks
 and added subtitle files. As with audio, the first matching rule wins.
 
+**Name untitled tracks** titles every kept track that ends up without a title (none from its rule,
+none in the source) from its language and flags: `English`, `English (Forced)`, `English (SDH)`.
+A track with a title keeps it.
+
+### Default subtitles for every job
+
+**Settings → Default subtitles** holds subtitle rules that every new job gets unless its template sets
+its own. Use it for a standing policy, such as "keep English and forced English, name them, leave out
+the rest", without putting it in each template. Jobs already in the queue keep their subtitles. A
+profile that chooses subtitles by its own rules ignores it, as it does a template's.
+
 A typical policy is forced English first and default, then full English, with other subtitles
 excluded. Check the flags and order on several episodes before using it for a season.
 

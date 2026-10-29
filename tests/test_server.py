@@ -973,6 +973,7 @@ def test_presets(tmp_path):
             "audio": [],
             "template": [],
             "template_defaults": {},
+            "subs_default": None,
         }
         saved = client.put(
             "/api/presets/encoder/Fast x265", json={"encoder": "x265", "crf": 20, "preset": "fast"}
@@ -1363,6 +1364,27 @@ def test_template_subs(tmp_path):
             ("en", "English"),
             ("en", ""),
         ]  # "Mine" replaced; German first by rule
+
+
+def test_default_subtitle_rules_apply_to_new_jobs_without_their_own(tmp_path):
+    """Settings' subtitle rules: every new job gets them unless its template sets subtitles; name_untitled
+    titles the kept tracks that have no title."""
+    make_files(tmp_path, "S01E01", "S01E02")  # en PGS, de PGS, and an added .en.srt
+    rules = {"rules": [{"languages": ["en"], "formats": ["srt"]}], "others": "exclude", "name_untitled": True}
+    with make_client(tmp_path) as client:
+        assert client.put("/api/presets/subs-default", json={"rules": [], "others": "nope"}).status_code == 422
+        assert client.put("/api/presets/subs-default", json=rules).json()["subs_default"]["name_untitled"] is True
+        assert client.get("/api/presets").json()["subs_default"]["rules"][0]["formats"] == ["srt"]
+        first, second = add(client, tmp_path)
+        plan = wait_for(client, first, "ready", "warn")["plan"]
+        # only the added English SRT, untitled, so named
+        assert [(s["source"]["format"], s["title"]) for s in plan["subs"]] == [("srt", "English")]
+        own = {"subs": {"rules": [{"languages": ["de"]}], "others": "exclude"}}
+        client.delete(f"/api/jobs/{second}")
+        (third,) = add(client, tmp_path, template=own)
+        third_plan = wait_for(client, third, "ready", "warn")["plan"]
+        assert [s["language"] for s in third_plan["subs"]] == ["de"]  # the template's own rules win
+        assert client.put("/api/presets/subs-default", json=None).json()["subs_default"] is None
 
 
 def test_template_audio_is_dropped_without_a_track_editor(tmp_path, monkeypatch):

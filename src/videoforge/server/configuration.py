@@ -6,6 +6,7 @@ from typing import Any
 
 from videoforge.core.actions import Action
 from videoforge.core.config import AppConfig
+from videoforge.core.models import TemplateSubs
 from videoforge.core.notify import Destination
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template_io import MAX_NAME, check_settings
@@ -14,7 +15,7 @@ from videoforge.server.routes.presets import KINDS
 from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
 
 FORMAT = "videoforge.configuration"
-VERSION = 2
+VERSION = 3  # 3: subs_default
 MAX_BYTES = 20 * 1024 * 1024
 BASE_KEY = "configuration_base"
 SETTING_KEYS = tuple(f.name for f in fields(SavedSettings))
@@ -35,13 +36,10 @@ def _name(value: Any, path: str, *, limit: int = MAX_NAME) -> str:
 def read_configuration(doc: Any) -> dict[str, Any]:
     if not isinstance(doc, dict) or doc.get("format") != FORMAT:
         raise ValueError("Choose a VideoForge configuration export (.json)")
-    if type(doc.get("version")) is not int or doc["version"] not in (1, VERSION):
+    if type(doc.get("version")) is not int or doc["version"] not in (1, 2, VERSION):
         raise ValueError(f"Unsupported configuration version; this app supports version {VERSION}")
-    _object(
-        doc,
-        {"format", "version", "application", "settings", "folders", "presets", "template_defaults"},
-        "Configuration",
-    )
+    keys = {"format", "version", "application", "settings", "folders", "presets", "template_defaults"}
+    _object(doc, keys | {"subs_default"} if doc["version"] >= 3 else keys, "Configuration")
     # JSON-native values only, including plugin-owned settings; reject NaN/Infinity anywhere.
     json.dumps(doc, allow_nan=False)
     _object(doc["application"], {f.name for f in fields(AppConfig)}, "Application settings")
@@ -76,6 +74,12 @@ def read_configuration(doc: Any) -> dict[str, Any]:
         for pid, name in defaults.items()
     ):
         raise ValueError("Default template selections must refer to templates included in this backup")
+    subs = doc.get("subs_default")  # version 3: Settings' default subtitle rules
+    if subs is not None:
+        if not isinstance(subs, dict):
+            raise ValueError("Default subtitle rules must be an object or null")
+        check_settings(TemplateSubs, subs, "Default subtitle rules")
+        subs = to_json(from_json(TemplateSubs, subs))
     return {
         "format": FORMAT,
         "version": VERSION,
@@ -84,6 +88,7 @@ def read_configuration(doc: Any) -> dict[str, Any]:
         "folders": doc["folders"],
         "presets": libraries,
         "template_defaults": defaults,
+        "subs_default": subs,
     }
 
 

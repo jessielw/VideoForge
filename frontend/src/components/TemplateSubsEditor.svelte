@@ -20,11 +20,17 @@
     onchange,
     flags,
     disabled = false,
+    toggleLabel = 'Set the subtitle tracks',
+    offNote = "Off: applying the template leaves each job's subtitles as they are.",
+    appliedNote = "Applying the template replaces a job's subtitle choices.",
   }: {
     value: TemplateSubs | null
     onchange: (v: TemplateSubs | null) => void
     flags: TrackProperty[]
     disabled?: boolean
+    toggleLabel?: string
+    offNote?: string
+    appliedNote?: string
   } = $props()
 
   const FORMATS: { id: SubFormat; label: string }[] = [
@@ -68,15 +74,14 @@
 <div class="space-y-3">
   <label class="flex items-center gap-2 text-sm">
     <Checkbox checked={value !== null} {disabled} onCheckedChange={on => onchange(on ? { rules: [rule()], others: 'exclude' } : null)} />
-    Set the subtitle tracks
+    {toggleLabel}
   </label>
   {#if value === null}
-    <p class="text-xs text-muted-foreground">Off: applying the template leaves each job's subtitles as they are.</p>
+    <p class="text-xs text-muted-foreground">{offNote}</p>
   {:else}
     <p class="text-xs text-muted-foreground">
       Each subtitle track, added files too, takes the first rule it matches (empty = any). Kept tracks go in rule order; a rule that
-      sets Default gives it to the first track it reaches, and every other subtitle has it off. Applying the template replaces a job's
-      subtitle choices.
+      sets Default gives it to the first track it reaches, and every other subtitle has it off. {appliedNote}
     </p>
     {#each value.rules as r, i (i)}
       <div class="space-y-3 rounded-lg border p-3" role="group" aria-label="Rule {i + 1}">
@@ -183,6 +188,15 @@
       <Button variant="outline" size="sm" {disabled} onclick={() => change(s => s.rules.push(rule()))}>
         <PlusIcon />Rule {value.rules.length + 1}
       </Button>
+      <label class="flex items-center gap-2 text-sm" title="A kept track with no title (none from its rule or the source) is named from its language and flags">
+        <Checkbox
+          checked={!!value.name_untitled}
+          {disabled}
+          aria-label="Name untitled tracks"
+          onCheckedChange={on => change(s => (s.name_untitled = on))}
+        />
+        Name untitled tracks <span class="text-xs text-muted-foreground">English (SDH)</span>
+      </label>
       <label class="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
         Tracks no rule matches
         <NativeSelect value={value.others} {disabled} onchange={e => change(s => (s.others = e.currentTarget.value as TemplateSubs['others']))}>

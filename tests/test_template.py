@@ -34,6 +34,7 @@ from videoforge.core.template import (
     audio_matches,
     fit_audio,
     sub_matches,
+    sub_title,
 )
 from videoforge.core.video.settings import Crop, EncoderSettings, FilterCategory, FilterStep, VideoSettings
 
@@ -203,6 +204,57 @@ def test_sub_rules_keep_order_and_flag_the_tracks():
     out = apply_subs(Overrides(), rules, [full, sdh, french, forced])
     assert "id:12" not in out.tracks and "id:10" not in out.tracks  # kept as they are; no default set, none cleared
     assert out.order == ["id:13", "id:10", "id:12"]
+
+
+# The same table as the frontend's (frontend/tests/subtitleNames.test.ts): the track editor names them alike.
+SUB_TITLES = [
+    ("en", {}, "English"),
+    ("en", {"forced": True}, "English (Forced)"),
+    ("en", {"hearing_impaired": True}, "English (SDH)"),
+    ("en", {"forced": True, "hearing_impaired": True, "commentary": True}, "English (Forced) (SDH) (Commentary)"),
+    ("es-419", {"hearing_impaired": True}, "Spanish (Latin America) (SDH)"),
+    ("es-ES", {}, "Spanish (Spain)"),
+    ("fr-CA", {}, "French (Canada)"),
+    ("zh-Hans", {}, "Chinese (Simplified)"),
+    ("yue", {}, "Cantonese"),
+    ("pt-BR", {}, "Portuguese (Brazil)"),
+    ("ja", {"commentary": True}, "Japanese (Commentary)"),
+    ("und", {}, "Unknown"),
+    ("", {}, "Unknown"),
+]
+
+
+def test_sub_title_names_a_language_and_its_flags():
+    for language, flags, name in SUB_TITLES:
+        assert sub_title(language, **flags) == name, language
+
+
+def test_sub_rules_name_the_untitled_kept_tracks():
+    """name_untitled: a kept track without a title (its rule sets none, the source has none) is named from its
+    language and its flags after the rule's; a titled one, a rule's title and a left-out track are untouched."""
+    plain, forced = sub(SubFormat.SRT, "en", index=0), sub(SubFormat.PGS, "en", index=1, forced=True)
+    titled, spanish = sub(SubFormat.PGS, "en", "Director", index=2), sub(SubFormat.SRT, "es-419", index=3)
+    french = sub(SubFormat.SRT, "fr", index=4)
+    rules = TemplateSubs(
+        [
+            SubRule(languages=["es"], track=TrackOverride(flags={"hearing_impaired": True})),
+            SubRule(languages=["fr"], track=TrackOverride(title="Français")),
+            SubRule(languages=["en"]),
+        ],
+        others=OtherTracks.EXCLUDE,
+        name_untitled=True,
+    )
+    out = apply_subs(Overrides(), rules, [plain, forced, titled, spanish, french, sub(SubFormat.SRT, "de", index=5)])
+    titles = {k: v.title for k, v in out.tracks.items()}
+    assert titles == {
+        "id:13": "Spanish (Latin America) (SDH)",
+        "id:14": "Français",
+        "id:10": "English",
+        "id:11": "English (Forced)",
+        "id:15": None,  # left out
+    }
+    rules.name_untitled = False
+    assert apply_subs(Overrides(), rules, [plain]).tracks == {}
 
 
 def test_template_carries_its_subs_to_the_job():

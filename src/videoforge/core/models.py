@@ -433,6 +433,7 @@ class TemplateSubs:
 
     rules: list[SubRule] = field(default_factory=list)
     others: OtherTracks = OtherTracks.EXCLUDE
+    name_untitled: bool = False  # a kept track with no title (its rule's or its own) gets sub_title's
 
 
 @dataclass(slots=True)

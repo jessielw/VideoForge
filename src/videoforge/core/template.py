@@ -176,13 +176,35 @@ def sub_matches(rule: SubRule, track: SubTrack) -> bool:
     )
 
 
+_VARIANT_NAMES = {  # the frontend's picker names them alike (lib/format.ts LANGUAGES)
+    "es-419": "Spanish (Latin America)",
+    "es-ES": "Spanish (Spain)",
+    "fr-FR": "French (France)",
+    "fr-CA": "French (Canada)",
+    "zh-Hans": "Chinese (Simplified)",
+    "zh-Hant": "Chinese (Traditional)",
+    "yue": "Cantonese",
+    "pt-BR": "Portuguese (Brazil)",
+}
+
+
+def sub_title(language: str, *, forced: bool = False, hearing_impaired: bool = False, commentary: bool = False) -> str:
+    """A subtitle's title from its language and flags: "English", "English (Forced)", "Spanish (Latin America)
+    (SDH)" (the track editor's Name subtitles too, lib/format.ts subtitleName)."""
+    tag = language.strip() or "und"
+    name = _VARIANT_NAMES.get(tag) or ("Unknown" if tag == "und" else lang.display_name(tag))
+    tags = [t for t, on in (("Forced", forced), ("SDH", hearing_impaired), ("Commentary", commentary)) if on]
+    return " ".join([name, *(f"({t})" for t in tags)])
+
+
 def apply_subs(overrides: Overrides, subs: TemplateSubs, tracks: list[SubTrack]) -> Overrides:
     """The job's overrides with its subtitles (source tracks, then added files) set from the template's
     rules: the earlier choices for them (settings, order) are replaced. Each track takes its first
     matching rule's settings (no language: that's per source); one no rule matches is kept or left
     out (subs.others). Kept tracks are ordered by rule, then source order. One default at most: when
     a rule sets it, the first kept track to get it keeps it and every other subtitle has it off. One burned in:
-    the first track a burn-in rule matches; later ones go on to the next rules."""
+    the first track a burn-in rule matches; later ones go on to the next rules. With subs.name_untitled, a kept
+    track left without a title is titled from its language and flags (sub_title)."""
     keys = [track_key(t) for t in tracks]
     ours = set(keys)
     out = {k: v for k, v in overrides.tracks.items() if k not in ours}
@@ -211,6 +233,15 @@ def apply_subs(overrides: Overrides, subs: TemplateSubs, tracks: list[SubTrack])
             if key != first:
                 ov = out.setdefault(key, TrackOverride())
                 ov.flags = {**ov.flags, "default": False}
+    if subs.name_untitled:
+        by_key = dict(zip(keys, tracks, strict=True))
+        for key in kept:
+            track, ov = by_key[key], out.get(key)
+            if (track.title if ov is None or ov.title is None else ov.title).strip():
+                continue
+            traits, flags = sub_traits(track), ov.flags if ov else {}
+            on = {k: bool(flags.get(k, traits[k])) for k in ("forced", "hearing_impaired", "commentary")}
+            out.setdefault(key, TrackOverride()).title = sub_title(track.language, **on)
     order = [k for k in overrides.order or [] if k not in ours] + kept
     return replace(overrides, tracks=out, order=order or None)
 

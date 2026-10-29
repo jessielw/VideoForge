@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from videoforge.core.audio_io import read_audio_bundle
 from videoforge.core.audio_preset import AudioPresetSettings
 from videoforge.core.encoder_io import read_encoder_bundle
+from videoforge.core.models import TemplateSubs
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template import Template
 from videoforge.core.template_io import MAX_BYTES, MAX_NAME, read_bundle
@@ -34,6 +35,7 @@ KINDS: dict[str, type] = {
     "template": Template,
 }
 DEFAULTS = "template_defaults"  # setting: {profile id: template name}
+SUBS_DEFAULT = "subs_default"  # setting: subtitle rules (TemplateSubs) for new jobs whose template has none
 
 
 class GroupedPresetBody(BaseModel):
@@ -47,6 +49,8 @@ def _all(request: Request) -> dict[str, Any]:
     store = request.app.state.store
     out: dict[str, Any] = {kind: [_entry(kind, n, d) for n, d in store.presets(kind).items()] for kind in KINDS}
     out["template_defaults"] = template_defaults(store)
+    default_subs = subs_default(store)
+    out["subs_default"] = to_json(default_subs) if default_subs else None
     out["encoder_starters"] = [{"name": s.name, "label": s.label, "data": to_json(s.settings)} for s in starters()]
     return out
 
@@ -71,6 +75,15 @@ def template_defaults(store: Any) -> dict[str, str]:
     """Each profile's default template, by name (only ones that still exist)."""
     saved = store.presets("template")
     return {pid: name for pid, name in (store.get_setting(DEFAULTS) or {}).items() if name in saved}
+
+
+def subs_default(store: Any) -> TemplateSubs | None:
+    """The subtitle rules every new job gets unless its template sets its own (Settings -> Default subtitles)."""
+    data = store.get_setting(SUBS_DEFAULT)
+    try:
+        return from_json(TemplateSubs, data) if data else None
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return None
 
 
 def default_template(store: Any, profile_id: str) -> Template | None:
@@ -207,6 +220,21 @@ def set_template_default(request: Request, profile_id: str, body: dict[str, Any]
     if name and name not in store.presets("template"):
         raise HTTPException(404, f"No template {name!r}")
     _set_default(store, profile_id, name or None)
+    return _all(request)
+
+
+@router.put("/subs-default")
+def set_subs_default(request: Request, body: dict[str, Any] | None = Body(None)) -> dict[str, Any]:  # noqa: B008
+    """Subtitle rules (a template's `subs`) for every new job whose template has none; null: none."""
+    store = request.app.state.store
+    if body is None:
+        store.set_setting(SUBS_DEFAULT, None)
+    else:
+        try:
+            rules = from_json(TemplateSubs, body)
+        except (TypeError, ValueError, KeyError, AttributeError) as ex:
+            raise HTTPException(422, f"Bad subtitle rules: {ex}") from None
+        store.set_setting(SUBS_DEFAULT, to_json(rules))
     return _all(request)
 
 

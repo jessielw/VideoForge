@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/configuration")
 def export_configuration(request: Request) -> dict[str, Any]:
     state = request.app.state
     snapshot = state.store.configuration_snapshot(
-        SETTING_KEYS + FOLDER_KEYS + (BASE_KEY, "template_defaults"), tuple(presets.KINDS)
+        SETTING_KEYS + FOLDER_KEYS + (BASE_KEY, "template_defaults", presets.SUBS_DEFAULT), tuple(presets.KINDS)
     )
     saved = snapshot["settings"]
     libraries = {}
@@ -52,6 +52,7 @@ def export_configuration(request: Request) -> dict[str, Any]:
             for pid, name in saved.get("template_defaults", {}).items()
             if name in snapshot["presets"]["template"]
         },
+        "subs_default": saved.get(presets.SUBS_DEFAULT) or None,
     }
     try:
         return read_configuration(bundle)
@@ -106,7 +107,11 @@ async def import_configuration(request: Request) -> dict[str, Any]:
     settings = (
         bundle["settings"]
         | bundle["folders"]
-        | {BASE_KEY: bundle["application"], "template_defaults": bundle["template_defaults"]}
+        | {
+            BASE_KEY: bundle["application"],
+            "template_defaults": bundle["template_defaults"],
+            presets.SUBS_DEFAULT: bundle["subs_default"],
+        }
     )
     # One transaction for every library, default reference, and setting.
     state.store.restore_configuration(settings, storage_presets(bundle))

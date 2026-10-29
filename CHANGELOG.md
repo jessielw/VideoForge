@@ -12,6 +12,11 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Settings → Default subtitles**: subtitle rules every new job gets unless its template sets its own.
+  Subtitle rules (templates and the default) can **name untitled tracks** from their language and flags.
+  Configuration backups are version 3 (they carry the default rules); version 1 and 2 backups still
+  import.
+
 - **Name subtitles** on a job's Subtitles tab (StaxRip's "Set names"): titles the kept tracks from their
   language and flags, `English`, `English (Forced)`, `English (SDH)`; the untitled ones, or all.
 

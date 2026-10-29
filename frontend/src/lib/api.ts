@@ -1,5 +1,6 @@
 // Thin typed client for /api. Errors carry the server's `detail` message.
 import type {
+  TemplateSubs,
   ActionSetting,
   AudioEncodeInfo,
   AudioBundle,
@@ -129,6 +130,7 @@ export const api = {
     post<Presets>(`/api/presets/${kind}/${encodeURIComponent(name)}/rename`, { to }),
   setTemplateDefault: (profile: string, name: string | null) =>
     request<Presets>('PUT', `/api/presets/template-default/${encodeURIComponent(profile)}`, { name }),
+  setSubsDefault: (subs: TemplateSubs | null) => request<Presets>('PUT', '/api/presets/subs-default', subs),
   config: () => get<ConfigState>('/api/config'),
   plugins: () => get<PluginInventory>('/api/plugins'),
   previewPlugin: (file: File) => pluginZip<PluginPreview>('/api/plugins/preview', file),

@@ -51,6 +51,8 @@ def seed(client, tmp_path):
         json={"qpf": False, "video": {"custom": "raise RuntimeError('never during import')"}},
     )
     client.put("/api/presets/template-default/manual", json={"name": "Feature"})
+    response = client.put("/api/presets/subs-default", json={"rules": [{"languages": ["en"]}], "name_untitled": True})
+    assert response.status_code == 200, response.text
     client.put("/api/presets/video/Processing", json={"custom": "clip = src"})
     for kind, data in (
         ("encoder", {"encoder": "x265", "crf": 19.5, "options": {"ref": "4"}}),
@@ -84,6 +86,8 @@ def test_export_preview_restore_and_restart_preserve_entire_configuration(tmp_pa
         assert response.status_code == 200, response.text
         result = response.json()
         assert result["presets"]["template_defaults"] == {"manual": "Feature"}
+        assert result["presets"]["subs_default"]["rules"][0]["languages"] == ["en"]
+        assert result["presets"]["subs_default"]["name_untitled"] is True
         assert result["config"]["parallel_audio"] == 4
         assert result["config"]["allow_commands"] is True
         assert any("plugin settings" in text for text in result["config"]["restart"])
@@ -96,6 +100,18 @@ def test_export_preview_restore_and_restart_preserve_entire_configuration(tmp_pa
         assert client.app.state.config.matching.encode_suffixes == ("_custom", "")
         assert client.get("/api/config").json()["restart"] == []
         assert client.get("/api/settings").json() == original["folders"]
+
+
+def test_a_version_2_backup_has_no_default_subtitle_rules(tmp_path):
+    with make_client(tmp_path) as client:
+        seed(client, tmp_path)
+        old = export(client)
+        old["version"] = 2
+        with pytest.raises(ValueError, match="missing or unknown fields"):
+            read_configuration(old)  # version 2 had no subs_default
+        del old["subs_default"]
+        assert read_configuration(old)["subs_default"] is None
+        assert client.post("/api/configuration/import", json=old).json()["presets"]["subs_default"] is None
 
 
 def test_restore_empty_libraries_preserves_jobs_and_queue_bookkeeping(tmp_path):
@@ -121,7 +137,8 @@ def test_restore_empty_libraries_preserves_jobs_and_queue_bookkeeping(tmp_path):
     "location,value",
     [
         (("version",), True),
-        (("version",), 3),
+        (("version",), 4),
+        (("subs_default",), {"rules": [], "others": "everything"}),
         (("settings", "parallel_audio"), True),
         (("settings", "parallel_audio"), 99),
         (("settings", "actions"), [{"name": "bad"}]),
