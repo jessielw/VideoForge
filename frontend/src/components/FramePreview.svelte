@@ -2,6 +2,8 @@
   // A job's frames from the server (VapourSynth, lossless PNG): zoom (fit .. 800%, Ctrl+wheel and
   // double-click zoom at the pointer), drag to pan with a minimap, an edge-detect view for spotting
   // borders, the crop lines, and frame stepping (←/→ 1, Shift 10, PgUp/PgDn 1 s, Home/End).
+  // The scrub bar is a native range (bits-ui's slider walks an array of every frame on each move): a
+  // drag loads the frame where it rests a moment, and the one it's let go on.
   // Zoom counts screen (device) pixels: at 100% one frame pixel is one screen pixel, and from 100% up
   // the frame is drawn nearest-neighbour, so every pixel shows as it is.
   // The crop stage is the output with the cropped-off margins stacked back on (the server's crop view),
@@ -32,7 +34,6 @@
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
-  import { Slider } from '$lib/components/ui/slider'
   import { Toggle } from '$lib/components/ui/toggle'
 
   let {
@@ -94,10 +95,12 @@
   let showMap = $state(false)
   let mapPos = $state({ left: 0, top: 0, w: 100, h: 100 })
   let frameInput = $state('0')
-  let scrub = $state(0) // the slider's position while dragging; the frame changes on release
+  let scrub = $state(0) // the scrub bar's position; while dragging, ahead of the frame
+  const SCRUB_REST = 150 // ms a drag rests before its frame loads
 
   let controller: AbortController | null = null
   let mapTimer: ReturnType<typeof setTimeout> | undefined
+  let scrubTimer: ReturnType<typeof setTimeout> | undefined
 
   async function load(n: number, st: string, v: number) {
     controller?.abort()
@@ -149,8 +152,18 @@
   })
 
   function seek(n: number) {
+    clearTimeout(scrubTimer)
     frame = Math.max(0, Math.min(frames - 1, Math.round(n)))
   }
+
+  // A drag shows where it is at once; the frame follows once it rests (or on release, the range's change).
+  function onscrub() {
+    frameInput = String(scrub)
+    clearTimeout(scrubTimer)
+    scrubTimer = setTimeout(() => seek(scrub), SCRUB_REST)
+  }
+
+  $effect(() => () => clearTimeout(scrubTimer))
 
   function onkey(e: KeyboardEvent) {
     const step = e.shiftKey ? 10 : 1
@@ -663,14 +676,16 @@
   <div class="@container flex items-center gap-1 @lg:gap-2">
     <Button variant="ghost" size="icon" class="hidden @md:inline-flex" onclick={() => seek(0)} title="First (Home)" aria-label="First frame"><ChevronsLeftIcon /></Button>
     <Button variant="ghost" size="icon" onclick={() => seek(frame - 1)} title="Previous (←)" aria-label="Previous frame"><ChevronLeftIcon /></Button>
-    <Slider
-      type="single"
-      class="mx-2 min-w-10 flex-1"
+    <input
+      type="range"
+      class="scrub mx-2 min-w-10 flex-1"
       min={0}
       max={Math.max(0, frames - 1)}
       step={1}
       bind:value={scrub}
-      onValueCommit={v => seek(v)}
+      style="--p:{frames > 1 ? scrub / (frames - 1) : 0}"
+      oninput={onscrub}
+      onchange={() => seek(scrub)}
       aria-label="Frame"
     />
     <Button variant="ghost" size="icon" onclick={() => seek(frame + 1)} title="Next (→)" aria-label="Next frame"><ChevronRightIcon /></Button>
@@ -682,6 +697,69 @@
       onkeydown={e => e.key === 'Enter' && seek(+frameInput || 0)}
       onblur={() => seek(+frameInput || 0)}
     />
-    <span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground tabular-nums">/ {frames - 1} · {(frame / (fps || 24)).toFixed(2)} s</span>
+    <span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground tabular-nums">/ {frames - 1} · {(scrub / (fps || 24)).toFixed(2)} s</span>
   </div>
 </div>
+
+<style>
+  /* The shadcn slider's look: a thin muted track filled in primary up to a small white thumb. */
+  .scrub {
+    appearance: none;
+    height: 1rem;
+    background: transparent;
+    cursor: pointer;
+  }
+  .scrub:focus-visible {
+    outline: none;
+  }
+  .scrub::-webkit-slider-runnable-track {
+    height: 0.25rem;
+    border-radius: 9999px;
+    /* The fill ends at the thumb's centre, which travels half a thumb in from each end. */
+    background: linear-gradient(
+      to right,
+      var(--primary) calc(0.375rem + (100% - 0.75rem) * var(--p)),
+      var(--muted) 0
+    );
+  }
+  .scrub::-moz-range-track {
+    height: 0.25rem;
+    border-radius: 9999px;
+    background: var(--muted);
+  }
+  .scrub::-moz-range-progress {
+    height: 0.25rem;
+    border-radius: 9999px;
+    background: var(--primary);
+  }
+  .scrub::-webkit-slider-thumb {
+    appearance: none;
+    box-sizing: border-box;
+    width: 0.75rem;
+    height: 0.75rem;
+    margin-top: -0.25rem;
+    border: 1px solid var(--ring);
+    border-radius: 9999px;
+    background: white;
+    transition: box-shadow 0.15s;
+  }
+  .scrub::-moz-range-thumb {
+    box-sizing: border-box;
+    width: 0.75rem;
+    height: 0.75rem;
+    border: 1px solid var(--ring);
+    border-radius: 9999px;
+    background: white;
+    transition: box-shadow 0.15s;
+  }
+  .scrub:hover::-webkit-slider-thumb,
+  .scrub:active::-webkit-slider-thumb,
+  .scrub:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+  }
+  .scrub:hover::-moz-range-thumb,
+  .scrub:active::-moz-range-thumb,
+  .scrub:focus-visible::-moz-range-thumb {
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+  }
+</style>
