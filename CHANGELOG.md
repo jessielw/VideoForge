@@ -33,6 +33,9 @@ source), or in Docker on Linux.
   searchable picker: type part of a name or a tag, or pick from the list; rules show their languages as
   chips. Any other tag can still be typed. It replaces the browser's own suggestion popup.
 
+- The Encoder tab's target size and option name boxes suggest from their own list, like the language
+  picker, in place of the browser's popup. Option names match by name first, then by their help text.
+
 - `serve` reads its settings from `VIDEOFORGE_*` variables too (`VIDEOFORGE_ALLOW_HOST`,
   `VIDEOFORGE_ALLOW_ORIGIN`, `VIDEOFORGE_PLUGIN_MANAGEMENT`, `VIDEOFORGE_HOST`, `VIDEOFORGE_PORT`,
   `VIDEOFORGE_DATA_DIR`), so a Docker or Unraid template sets them without replacing the image's command.

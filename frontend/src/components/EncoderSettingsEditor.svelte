@@ -12,6 +12,7 @@
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import { api } from '../lib/api'
   import { extraFlags, parseOptions, unknownHint, type OptionHelp } from '../lib/encoderOptions'
+  import SuggestInput from './SuggestInput.svelte'
 
   // colorArgs: the job's source's colour flags for this encoder; hdr10plus: whether the source has HDR10+; dv: its
   // Dolby Vision (false: none); budget: where a 2-pass target size goes (the job editor; null until probed or
@@ -40,6 +41,7 @@
 
   // StaxRip's size menu (MB) and its default target size
   const SIZES: [number, string][] = [[4700, 'DVD / BD-5'], [8540, 'DVD-DL / BD-9'], [25000, 'BD'], [50000, 'BD-DL']]
+  const SIZE_SUGGESTIONS = SIZES.map(([size, label]) => ({ value: String(size), label }))
   const DEFAULT_SIZE = 5000
   const sized = $derived(value.rate_control === '2pass' && value.target_mb !== null)
 
@@ -140,8 +142,8 @@
 
   // The encoder's option names from its own help (one request per encoder for the page's life): suggestions, what
   // each option does, and a hint when the encoder doesn't list one (the plan warns too)
-  const uid = $props.id()
   let known = $state<OptionHelp | null>(null)
+  const optionSuggestions = $derived([...(known ?? new Map()).entries()].map(([name, help]) => ({ value: name, label: help })))
   $effect(() => {
     const enc = value.encoder
     known = null
@@ -245,22 +247,20 @@
           onchange={e => set('crf', +(e.target as HTMLInputElement).value)}
         />
       {:else if sized}
-        <Input
-          class="w-28 max-w-full"
+        <SuggestInput
+          wrapClass="w-28 max-w-full"
           type="number"
           aria-label="Target size"
-          list="target-sizes"
+          suggestions={SIZE_SUGGESTIONS}
           step="100"
           min="1"
           value={value.target_mb}
+          onpick={v => set('target_mb', +v)}
           onchange={e => {
             const n = Math.round(+(e.target as HTMLInputElement).value)
             set('target_mb', n > 0 ? n : DEFAULT_SIZE)
           }}
         />
-        <datalist id="target-sizes">
-          {#each SIZES as [size, label] (size)}<option value={size}>{label}</option>{/each}
-        </datalist>
       {:else}
         <Input
           class="w-28 max-w-full"
@@ -454,20 +454,18 @@
         (the progress the queue reads). The chapters' keyframes are forced in CRF only.
       </p>
     {/if}
-    <datalist id="{uid}-options">
-      {#each [...(known ?? new Map()).entries()] as [name, help] (name)}<option value={name}>{help}</option>{/each}
-    </datalist>
     <div class="overflow-hidden rounded-lg border">
       {#each Object.entries(value.options) as [key, val] (key)}
         {@const warn = hint(key)}
         <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 border-b border-border/60 px-2 py-1 last:border-b-0">
           <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
-          <Input
-            class="min-w-0 font-mono text-xs {warn ? 'border-warning' : ''}"
+          <SuggestInput
+            class="font-mono text-xs {warn ? 'border-warning' : ''}"
             value={key}
-            list="{uid}-options"
+            suggestions={optionSuggestions}
             title={known?.get(key) || undefined}
             aria-label="Option name"
+            onpick={name => setOption(key, val, name)}
             onchange={e => setOption(key, val, (e.target as HTMLInputElement).value.trim().replace(/^-+/, ''))}
           />
           <Input
@@ -489,7 +487,7 @@
       {/each}
       <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 bg-muted/50 px-2 py-1">
         <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
-        <Input class="min-w-0 font-mono text-xs" placeholder="name, or paste {dashes}ref 4 {dashes}bframes 8" title="One option name, or a whole command line: Enter adds a row for each option" aria-label="New option name" list="{uid}-options" bind:value={newKey} oninput={() => (notAdded = '')} onkeydown={e => e.key === 'Enter' && addOption()} />
+        <SuggestInput class="font-mono text-xs" placeholder="name, or paste {dashes}ref 4 {dashes}bframes 8" title="One option name, or a whole command line: Enter adds a row for each option" aria-label="New option name" suggestions={optionSuggestions} bind:value={newKey} oninput={() => (notAdded = '')} onkeydown={e => e.key === 'Enter' && addOption()} />
         <Input class="min-w-0 font-mono text-xs" placeholder="value" aria-label="New option value" bind:value={newValue} onkeydown={e => e.key === 'Enter' && addOption()} />
         <Button variant="ghost" size="icon-sm" onclick={addOption} aria-label="Add"><PlusIcon /></Button>
         {#if newName && hint(newName)}
