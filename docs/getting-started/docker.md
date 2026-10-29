@@ -75,13 +75,42 @@ reach that port run jobs and modify settings.
 On Unraid, add a port mapping for container port **8765**. Without a published port, the application
 cannot be reached outside the container. Restrict access to that published port or use an authenticated proxy.
 
-For a LAN address or proxy hostname, add `--allow-host <hostname-or-IP>` to the serve command. If the
-proxy changes Host or terminates TLS, also add `--allow-origin https://<public-hostname>` (include a
-nonstandard port when used). See [Serve options](../reference/cli.md#serve). Binding to `0.0.0.0`
-alone does not permit arbitrary browser hosts.
+To open the page at a LAN address or proxy hostname, set `VIDEOFORGE_ALLOW_HOST` to that hostname or
+IP, without the port. Otherwise the page answers *Host is not allowed*. If the proxy changes Host or
+terminates TLS, also set `VIDEOFORGE_ALLOW_ORIGIN=https://<public-hostname>` (include a nonstandard
+port when used). Binding to `0.0.0.0` alone does not permit arbitrary browser hosts.
 
 Command actions are disabled in the Docker configuration. Their opt-in setting is documented under
 [Actions](../actions.md#commands).
+
+## Environment variables
+
+| Variable | Meaning |
+| --- | --- |
+| `VIDEOFORGE_ALLOW_HOST` | Hostnames or IPs you open the page at, without port; comma-separated, such as `192.168.1.50,tower` |
+| `VIDEOFORGE_ALLOW_ORIGIN` | Browser origins for a proxy that rewrites Host, such as `https://video.example`; comma-separated |
+| `VIDEOFORGE_PLUGIN_MANAGEMENT` | `true` allows installing, removing and configuring plugins from the page; off by default in Docker |
+| `PUID` / `PGID` | Run as this user and group (Unraid: `99` / `100`); the container must start as root |
+| `UMASK` | File-creation mask for what it writes, such as `002` for group-writable files |
+| `VIDEOFORGE_PORT` | Listening port inside the container; default `8765`. Change the host side of the port mapping instead. |
+
+The image already sets `VIDEOFORGE_HOST=0.0.0.0` and `VIDEOFORGE_DATA_DIR=/data`. Each `serve`
+option has a matching variable; a command-line option wins over its variable, and `--allow-host` /
+`--allow-origin` add to the variable's list. See [Serve options](../reference/cli.md#serve).
+
+`PUID` is an alternative to `user:` (`docker run --user`). With it, the container hands `/data` to that
+user on start, so a queue made while it ran as root stays usable. Media mounts and `/tools` keep their
+ownership. Omit `PGID` to use the `PUID` value.
+
+### Unraid
+
+In the container's template, add a **Variable** for each setting:
+
+1. `VIDEOFORGE_ALLOW_HOST`: the server's IP and name, such as `192.168.1.50,tower`
+2. `PUID`: `99` and `PGID`: `100` (`nobody:users`), so files on your shares are not owned by root
+3. Optional: `UMASK`: `000` to match Unraid's default share permissions
+
+Leave **Post Arguments** empty. Text there replaces the image's command.
 
 ## Update and inspect logs
 

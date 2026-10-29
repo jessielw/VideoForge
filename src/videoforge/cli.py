@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+import os
 from pathlib import Path
+import re
 import sys
 
 from rich.console import Console
@@ -227,6 +229,19 @@ def _bring_up_running(url: str, open_browser: bool) -> bool:
     return True
 
 
+def _env(name: str, default: str | None = None) -> str | None:
+    """A `serve` setting from VIDEOFORGE_<name> (a Docker or Unraid template's variable); its flag still wins."""
+    return os.environ.get(f"VIDEOFORGE_{name}", "").strip() or default
+
+
+def _env_list(name: str) -> list[str]:
+    """VIDEOFORGE_<name> as a list: comma- or space-separated."""
+    return [v for v in re.split(r"[,\s]+", _env(name) or "") if v]
+
+
+_ENV_BOOL = {"1": True, "true": True, "yes": True, "on": True, "0": False, "false": False, "no": False, "off": False}
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import threading
     import webbrowser
@@ -236,12 +251,18 @@ def cmd_serve(args: argparse.Namespace) -> int:
     from videoforge.server.app import create_app
     from videoforge.server.settings import ServerSettings
 
+    plugin_management = args.plugin_management
+    if plugin_management is None and (value := _env("PLUGIN_MANAGEMENT")) is not None:
+        if value.lower() not in _ENV_BOOL:
+            console.print(f"[red]VIDEOFORGE_PLUGIN_MANAGEMENT must be true or false, not {escape(value)!r}[/]")
+            return 2
+        plugin_management = _ENV_BOOL[value.lower()]
     settings = ServerSettings(
         host=args.host,
         port=args.port,
-        allowed_hosts=args.allow_host,
-        allowed_origins=args.allow_origin,
-        plugin_management=args.plugin_management,
+        allowed_hosts=[*_env_list("ALLOW_HOST"), *args.allow_host],
+        allowed_origins=[*_env_list("ALLOW_ORIGIN"), *args.allow_origin],
+        plugin_management=plugin_management,
     )
     if args.data_dir:
         settings.data_dir = args.data_dir
@@ -317,23 +338,29 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_run)
 
     p = sub.add_parser("serve", help="start the web app (http://127.0.0.1:8765) and open it in the browser")
-    p.add_argument("--host", default="127.0.0.1", help="interface to listen on (default: this machine only)")
-    p.add_argument("--port", type=int, default=8765)
+    # Each has a VIDEOFORGE_<NAME> variable too (a string default goes through the option's type).
     p.add_argument(
-        "--allow-host", action="append", default=[], help="additional exact UI hostname/IP (repeatable, no port)"
+        "--host", default=_env("HOST", "127.0.0.1"), help="interface to listen on (default: this machine only)"
+    )
+    p.add_argument("--port", type=int, default=_env("PORT", "8765"))
+    p.add_argument(
+        "--allow-host",
+        action="append",
+        default=[],
+        help="additional exact UI hostname/IP (repeatable, no port; adds to VIDEOFORGE_ALLOW_HOST)",
     )
     p.add_argument(
         "--allow-origin",
         action="append",
         default=[],
-        help="additional browser origin for a proxy that rewrites Host (repeatable)",
+        help="additional browser origin for a proxy that rewrites Host (repeatable; adds to VIDEOFORGE_ALLOW_ORIGIN)",
     )
     p.add_argument("--no-browser", action="store_true", help="don't open the browser")
     p.add_argument(
         "--plugin-management",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="allow plugin ZIP installation, removal and configuration (default: loopback bindings only)",
+        help="allow plugin ZIP installation, removal and configuration (default: VIDEOFORGE_PLUGIN_MANAGEMENT, else loopback bindings only)",
     )
     p.add_argument(
         "--window",
@@ -341,7 +368,12 @@ def main(argv: list[str] | None = None) -> int:
         help="open the app in its own window (dropped files fill path fields; closing it keeps VideoForge in the "
         "tray); needs the desktop extra",
     )
-    p.add_argument("--data-dir", type=Path, help="where the queue database lives (default: %%APPDATA%%/VideoForge)")
+    p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=_env("DATA_DIR"),
+        help="where the queue database lives (default: %%APPDATA%%/VideoForge)",
+    )
     p.set_defaults(func=cmd_serve)
 
     args = parser.parse_args(argv)

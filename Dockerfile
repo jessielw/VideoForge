@@ -148,13 +148,15 @@ RUN uv sync --frozen --no-dev --extra filters
 COPY --from=frontend /src/frontend/dist frontend/dist
 COPY docker/videoforge.toml videoforge.toml
 
-# Any user id works (docker run --user): HOME only holds VapourSynth's small config.
+# Any user id works (docker run --user, or PUID / PGID): HOME only holds VapourSynth's small config.
 RUN mkdir -p /data /tools /home/videoforge && chmod 0777 /data /tools /home/videoforge
 ENV VIDEOFORGE_ROOT=/app HOME=/home/videoforge PATH=/app/.venv/bin:/opt/vf/bin:$PATH PYTHONUNBUFFERED=1
+# serve's settings as variables, for a template to change: 0.0.0.0 inside the container; publish the port on
+# the host's 127.0.0.1 (there's no login). VIDEOFORGE_ALLOW_HOST adds the address you open it at.
+ENV VIDEOFORGE_HOST=0.0.0.0 VIDEOFORGE_DATA_DIR=/data
 VOLUME ["/data"]
 EXPOSE 8765
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4)"
+    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('VIDEOFORGE_PORT', '8765') + '/api/health', timeout=4)"
 ENTRYPOINT ["tini", "--", "videoforge-entrypoint"]
-# 0.0.0.0 inside the container; publish the port on the host's 127.0.0.1 (there's no login).
-CMD ["videoforge", "serve", "--no-browser", "--host", "0.0.0.0", "--data-dir", "/data"]
+CMD ["videoforge", "serve", "--no-browser"]

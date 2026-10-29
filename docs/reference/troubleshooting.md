@@ -45,6 +45,12 @@ Confirm port **8765** is published. On Unraid, add the port mapping to the templ
 Compose file binds to `127.0.0.1`, so the page is reachable from the Docker host; remote access
 requires your own authenticated proxy and network configuration.
 
+## The page says "Host is not allowed"
+
+The server only answers the addresses it is told about. Set `VIDEOFORGE_ALLOW_HOST` to the hostname
+or IP in your browser's address bar, without the port, such as `192.168.1.50`. On Unraid, add it as a
+template **Variable**. See [Docker environment variables](../getting-started/docker.md#environment-variables).
+
 ## DEE or qaac is unavailable in Docker
 
 Check the [required folder layout](../getting-started/docker.md#add-dee-or-qaac) and restart the

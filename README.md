@@ -120,6 +120,9 @@ http://127.0.0.1:8765.
   Port to the template, container port 8765). Without that, nothing outside the container reaches it.
 - There's no login: publish the port on `127.0.0.1` as the compose file does, or put it behind your own
   proxy with authentication. Publishing it on the LAN (`-p 8765:8765`) lets anyone on it run jobs.
+- Opening it at a LAN IP or hostname needs `VIDEOFORGE_ALLOW_HOST` (e.g. `192.168.1.50,tower`). `PUID` /
+  `PGID` (Unraid: 99 / 100) and `UMASK` set who owns what it writes. The other variables are in the
+  [Docker guide](docs/getting-started/docker.md#environment-variables).
 - Build it yourself with `docker build -t videoforge .` (on the published plugins image), or the plugins
   image too (FFmpeg, MP4Box, x264 and the plugins: half an hour or more): `docker build -t videoforge-plugins
   vsplugins`, then `docker build --build-arg PLUGINS_IMAGE=videoforge-plugins -t videoforge .`.
