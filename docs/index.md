@@ -6,16 +6,13 @@ description: A browser-based encode and mux queue for Windows and Docker, powere
 
 **Turn a source file or a season of episodes into an encode and mux queue.**
 
-VideoForge combines VapourSynth processing, video and audio encoding, subtitle selection, and
-MKV or MP4 output in one local application. Set up each job in your browser, or use the Windows
-desktop window. Jobs survive restarts, and completed encodes can be reused.
+VideoForge combines VapourSynth processing, video and audio encoding, subtitle selection, and MKV or MP4 output in one local application. Set up each job in your browser, or use the Windows desktop window. Jobs survive restarts, and completed encodes can be reused.
 
-[Get started](getting-started/index.md){ .md-button .md-button--primary }
-[Create your first job](getting-started/first-job.md){ .md-button }
+[Get started](getting-started/index.md){ .md-button .md-button--primary } [Create your first job](getting-started/first-job.md){ .md-button }
 
+<!-- prettier-ignore -->
 !!! note "Beta software"
-    VideoForge is currently **0.1.0 beta**. Expect changes. Read the
-    [changelog](reference/changelog.md) before updating.
+    VideoForge is currently **0.1.0 beta**. Expect changes. Read the [changelog](reference/changelog.md) before updating.
 
 ## Choose your starting point
 
@@ -43,16 +40,10 @@ Source → Index → VapourSynth → Video encode ─┐
 
 ## Current boundaries
 
-Sources are **MKV, MP4, and M2TS / TS**. Remux other containers to MKV before adding them.
-Filters run on the CPU. VideoForge is a single-user application and has no login.
-The [Docker guide](getting-started/docker.md#network-access) explains how to keep access local.
+Sources are **MKV, MP4, and M2TS / TS**. Remux other containers to MKV before adding them. Filters run on the CPU. VideoForge is a single-user application and has no login. The [Docker guide](getting-started/docker.md#network-access) explains how to keep access local.
 
-Dolby Vision and HDR10+ processing is available for supported x265 workflows; profile 8.4 (HLG)
-is not supported. See [Encoders and HDR](usage/encoders.md).
+Dolby Vision and HDR10+ processing is available for supported x265 workflows; profile 8.4 (HLG) is not supported. See [Encoders and HDR](usage/encoders.md).
 
 ## Project
 
-[Source code](https://github.com/jessielw/VideoForge) ·
-[Releases](https://github.com/jessielw/VideoForge/releases) ·
-[Report an issue](https://github.com/jessielw/VideoForge/issues) ·
-[MIT license](https://github.com/jessielw/VideoForge/blob/main/LICENSE)
+[Source code](https://github.com/jessielw/VideoForge) · [Releases](https://github.com/jessielw/VideoForge/releases) · [Report an issue](https://github.com/jessielw/VideoForge/issues) · [MIT license](https://github.com/jessielw/VideoForge/blob/main/LICENSE)

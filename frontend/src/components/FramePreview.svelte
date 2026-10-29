@@ -241,7 +241,9 @@
   const ax = $derived(anamorphic && shaped ? sar : 1) // the frame drawn ax times as wide as its rows' scale
   // scale: screen (device) pixels per frame pixel (down, for an anamorphic frame); layout is in CSS px,
   // dpr of them to a device pixel.
-  const fitScale = $derived(vw && vh ? Math.max(0.01, Math.min(((vw - 2 * PAD) * dpr) / (W * ax), ((vh - 2 * PAD) * dpr) / H)) : 1)
+  const fitScale = $derived(
+    vw && vh ? Math.max(0.01, Math.min(((vw - 2 * PAD) * dpr) / (W * ax), ((vh - 2 * PAD) * dpr) / H)) : 1,
+  )
   const scale = $derived(zoom ? zoom / 100 : fitScale)
   const css = $derived(scale / dpr) // CSS px per frame pixel, down
   const cssX = $derived(css * ax) // and across
@@ -280,10 +282,10 @@
   function zoomBy(dir: number, cx?: number, cy?: number) {
     const cur = scale * 100
     if (dir > 0) {
-      const next = ZOOMS.find(z => z > cur + 0.5)
+      const next = ZOOMS.find((z) => z > cur + 0.5)
       if (next) setZoom(next, cx, cy)
     } else if (zoom) {
-      const next = [...ZOOMS].reverse().find(z => z < cur - 0.5)
+      const next = [...ZOOMS].reverse().find((z) => z < cur - 0.5)
       setZoom(next && next > fitScale * 100 + 0.5 ? next : 0, cx, cy)
     }
   }
@@ -306,7 +308,7 @@
   // Fit <-> a close look (100%, or more when the fit is already that big) at the pointer.
   function ondblclick(e: MouseEvent) {
     if (zoom) setZoom(0)
-    else setZoom(ZOOMS.find(z => z >= 100 && z > fitScale * 100 + 1) ?? ZOOMS[ZOOMS.length - 1], e.clientX, e.clientY)
+    else setZoom(ZOOMS.find((z) => z >= 100 && z > fitScale * 100 + 1) ?? ZOOMS[ZOOMS.length - 1], e.clientX, e.clientY)
   }
 
   function readMatte(): Matte {
@@ -360,14 +362,24 @@
   // The pointer in source pixels (off the frame on the matte too) and one screen px in source px, each way.
   function framePoint(e: MouseEvent) {
     const r = frameEl!.getBoundingClientRect()
-    return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H, pxX: W / r.width, pxY: H / r.height }
+    return {
+      x: ((e.clientX - r.left) / r.width) * W,
+      y: ((e.clientY - r.top) / r.height) * H,
+      pxX: W / r.width,
+      pxY: H / r.height,
+    }
   }
 
   // The crop line nearest the pointer, measured in screen px (an anamorphic frame's differ across and down).
   function nearestLine(e: MouseEvent) {
     const { x, y, pxX, pxY } = framePoint(e)
     const c = crop!
-    const d = { left: (x - c.left) / pxX, right: (W - c.right - x) / pxX, top: (y - c.top) / pxY, bottom: (H - c.bottom - y) / pxY }
+    const d = {
+      left: (x - c.left) / pxX,
+      right: (W - c.right - x) / pxX,
+      top: (y - c.top) / pxY,
+      bottom: (H - c.bottom - y) / pxY,
+    }
     const side = (Object.keys(d) as (keyof Crop)[]).reduce((a, b) => (Math.abs(d[b]) < Math.abs(d[a]) ? b : a))
     return { side, near: Math.abs(d[side]) <= HIT }
   }
@@ -506,15 +518,17 @@
       for (let y = 1; y < h - 1; y++) {
         for (let x = 1; x < w - 1; x++) {
           const i = y * w + x
-          const gx = -gray[i - w - 1] + gray[i - w + 1] - 2 * gray[i - 1] + 2 * gray[i + 1] - gray[i + w - 1] + gray[i + w + 1]
-          const gy = -gray[i - w - 1] - 2 * gray[i - w] - gray[i - w + 1] + gray[i + w - 1] + 2 * gray[i + w] + gray[i + w + 1]
+          const gx =
+            -gray[i - w - 1] + gray[i - w + 1] - 2 * gray[i - 1] + 2 * gray[i + 1] - gray[i + w - 1] + gray[i + w + 1]
+          const gy =
+            -gray[i - w - 1] - 2 * gray[i - w] - gray[i - w + 1] + gray[i + w - 1] + 2 * gray[i + w] + gray[i + w + 1]
           const v = 255 - Math.min(255, Math.sqrt(gx * gx + gy * gy) * 2)
           out.data[i * 4] = out.data[i * 4 + 1] = out.data[i * 4 + 2] = v
           out.data[i * 4 + 3] = 255
         }
       }
       ctx.putImageData(out, 0, 0)
-      canvas.toBlob(b => {
+      canvas.toBlob((b) => {
         if (!b) return
         if (edgeSrc) URL.revokeObjectURL(edgeSrc)
         edgeSrc = URL.createObjectURL(b)
@@ -548,14 +562,23 @@
 <div class="flex h-full min-h-0 flex-col gap-2">
   <div class="flex flex-wrap items-center gap-2 text-sm">
     <div class="flex items-center gap-1">
-      <Button variant="ghost" size="icon" onclick={() => zoomBy(-1)} title="Zoom out (-)" aria-label="Zoom out"><ZoomOutIcon /></Button>
-      <NativeSelect value={zoom} aria-label="Zoom" onchange={e => setZoom(+e.currentTarget.value)}>
+      <Button variant="ghost" size="icon" onclick={() => zoomBy(-1)} title="Zoom out (-)" aria-label="Zoom out"
+        ><ZoomOutIcon /></Button
+      >
+      <NativeSelect value={zoom} aria-label="Zoom" onchange={(e) => setZoom(+e.currentTarget.value)}>
         <option value={0}>Fit ({Math.round(fitScale * 100)}%)</option>
         {#each ZOOMS as z (z)}<option value={z}>{z}%</option>{/each}
       </NativeSelect>
-      <Button variant="ghost" size="icon" onclick={() => zoomBy(1)} title="Zoom in (+)" aria-label="Zoom in"><ZoomInIcon /></Button>
+      <Button variant="ghost" size="icon" onclick={() => zoomBy(1)} title="Zoom in (+)" aria-label="Zoom in"
+        ><ZoomInIcon /></Button
+      >
     </div>
-    <Toggle pressed={edges} onPressedChange={toggleEdges} class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary" title="Show edges, to judge borders">
+    <Toggle
+      pressed={edges}
+      onPressedChange={toggleEdges}
+      class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+      title="Show edges, to judge borders"
+    >
       Edges
     </Toggle>
     <Button variant="ghost" onclick={nextMatte} title="Background around the frame: {matte} (click to change)">
@@ -566,17 +589,26 @@
         pressed={shaped}
         onPressedChange={toggleShaped}
         class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
-        title="Anamorphic frame (pixels {+sar.toFixed(4)}:1). On: shown at the shape it plays at. Off: the stored pixels (exact at 100% and up)"
+        title="Anamorphic frame (pixels {+sar.toFixed(
+          4,
+        )}:1). On: shown at the shape it plays at. Off: the stored pixels (exact at 100% and up)"
       >
         AR
       </Toggle>
     {/if}
-    <Button variant="ghost" onclick={saveFrame} disabled={!src} title="Save frame {shownAt.n} as a PNG: full size, lossless (S)">
+    <Button
+      variant="ghost"
+      onclick={saveFrame}
+      disabled={!src}
+      title="Save frame {shownAt.n} as a PNG: full size, lossless (S)"
+    >
       <DownloadIcon />Save
     </Button>
     {@render tools?.()}
     <span class="ml-auto text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-      {W}×{H}{lined ? ` → ${outW}×${outH}` : ''}{anamorphic ? ` · plays ${((W * sar) / H).toFixed(2)}:1` : ''} · {Math.round(scale * 100)}%
+      {W}×{H}{lined ? ` → ${outW}×${outH}` : ''}{anamorphic ? ` · plays ${((W * sar) / H).toFixed(2)}:1` : ''} · {Math.round(
+        scale * 100,
+      )}%
       {#if pictType}· {pictType}-frame{/if}
     </span>
   </div>
@@ -608,7 +640,11 @@
            bigger when the frame plus its margin is. The frame sits on a whole device pixel, its size in
            whole device pixels, so its pixels and the lines line up. -->
       <div class="relative min-h-full min-w-full" style="width:{dispW + 2 * PAD}px;height:{dispH + 2 * PAD}px">
-        <div bind:this={frameEl} class="absolute" style="left:{frameX}px;top:{frameY}px;width:{dispW}px;height:{dispH}px">
+        <div
+          bind:this={frameEl}
+          class="absolute"
+          style="left:{frameX}px;top:{frameY}px;width:{dispW}px;height:{dispH}px"
+        >
           {#if shown}
             <img
               src={shown}
@@ -627,17 +663,28 @@
                 <!-- The cropped-off margins, tinted. -->
                 <div class="absolute inset-x-0 top-0 {band('top')}" style="height:{t}px"></div>
                 <div class="absolute inset-x-0 bottom-0 {band('bottom')}" style="height:{b}px"></div>
-                <div class="absolute left-0 {band('left')}" style="top:{t}px;bottom:{b}px;width:{snapX(crop.left)}px"></div>
-                <div class="absolute right-0 {band('right')}" style="top:{t}px;bottom:{b}px;width:{snapX(crop.right)}px"></div>
+                <div
+                  class="absolute left-0 {band('left')}"
+                  style="top:{t}px;bottom:{b}px;width:{snapX(crop.left)}px"
+                ></div>
+                <div
+                  class="absolute right-0 {band('right')}"
+                  style="top:{t}px;bottom:{b}px;width:{snapX(crop.right)}px"
+                ></div>
                 <!-- The lines: one screen pixel just outside the kept picture, so none of its pixels is covered. -->
                 <div
                   class="absolute box-border"
-                  style="left:{snapX(crop.left) - px}px;top:{t - px}px;right:{snapX(crop.right) - px}px;bottom:{b - px}px;border:{px}px solid;border-color:{line('top')} {line('right')} {line('bottom')} {line('left')}"
+                  style="left:{snapX(crop.left) - px}px;top:{t - px}px;right:{snapX(crop.right) - px}px;bottom:{b -
+                    px}px;border:{px}px solid;border-color:{line('top')} {line('right')} {line('bottom')} {line(
+                    'left',
+                  )}"
                 ></div>
                 <!-- The side the wheel moves is marked on the matte too, just outside the frame. -->
                 {#if cropping && armed}
                   <div
-                    class="absolute bg-primary {armed === 'top' || armed === 'bottom' ? 'inset-x-0 h-1' : 'inset-y-0 w-1'}"
+                    class="absolute bg-primary {armed === 'top' || armed === 'bottom'
+                      ? 'inset-x-0 h-1'
+                      : 'inset-y-0 w-1'}"
                     style="{armed}:-8px"
                     data-armed={armed}
                   ></div>
@@ -650,7 +697,11 @@
     </div>
 
     {#if src && slow}
-      <div class="pointer-events-none absolute top-3 right-3 rounded-full bg-black/60 p-1.5 text-white" role="status" aria-label="Loading the frame">
+      <div
+        class="pointer-events-none absolute top-3 right-3 rounded-full bg-black/60 p-1.5 text-white"
+        role="status"
+        aria-label="Loading the frame"
+      >
         <LoaderCircleIcon class="size-4 animate-spin" />
       </div>
     {/if}
@@ -658,7 +709,8 @@
     {#if !src}
       <div class="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
         {#if error}
-          <pre class="max-w-full overflow-auto border border-destructive/50 bg-destructive/10 p-3 text-xs whitespace-pre-wrap text-destructive">{error}</pre>
+          <pre
+            class="max-w-full overflow-auto border border-destructive/50 bg-destructive/10 p-3 text-xs whitespace-pre-wrap text-destructive">{error}</pre>
         {:else if loading}
           <span class="text-muted-foreground">Loading the frame…</span>
         {/if}
@@ -667,7 +719,8 @@
       <!-- Over the kept frame: why it isn't the newest (or has no crop lines). -->
       <div class="pointer-events-none absolute inset-x-2 top-2 flex flex-col items-start gap-1 text-xs">
         {#if error}
-          <pre class="max-h-24 max-w-full overflow-hidden bg-destructive px-2 py-1 whitespace-pre-wrap text-white">{error}</pre>
+          <pre
+            class="max-h-24 max-w-full overflow-hidden bg-destructive px-2 py-1 whitespace-pre-wrap text-white">{error}</pre>
         {/if}
         {#if notice}
           <span class="px-2 py-1 text-white {notice.tone === 'bad' ? 'bg-destructive' : 'bg-black/70'}"
@@ -683,7 +736,9 @@
     {/if}
 
     {#if pannable && (panning || showMap) && shown}
-      <div class="pointer-events-none absolute right-3 bottom-3 w-48 overflow-hidden rounded-md border bg-black/80 shadow-lg">
+      <div
+        class="pointer-events-none absolute right-3 bottom-3 w-48 overflow-hidden rounded-md border bg-black/80 shadow-lg"
+      >
         <div class="relative">
           <img src={shown} alt="" class="block w-full opacity-70" style="aspect-ratio:{W * ax} / {H}" />
           <div
@@ -696,8 +751,17 @@
   </div>
 
   <div class="@container flex items-center gap-1 @lg:gap-2">
-    <Button variant="ghost" size="icon" class="hidden @md:inline-flex" onclick={() => seek(0)} title="First (Home)" aria-label="First frame"><ChevronsLeftIcon /></Button>
-    <Button variant="ghost" size="icon" onclick={() => seek(frame - 1)} title="Previous (←)" aria-label="Previous frame"><ChevronLeftIcon /></Button>
+    <Button
+      variant="ghost"
+      size="icon"
+      class="hidden @md:inline-flex"
+      onclick={() => seek(0)}
+      title="First (Home)"
+      aria-label="First frame"><ChevronsLeftIcon /></Button
+    >
+    <Button variant="ghost" size="icon" onclick={() => seek(frame - 1)} title="Previous (←)" aria-label="Previous frame"
+      ><ChevronLeftIcon /></Button
+    >
     <input
       type="range"
       class="scrub mx-2 min-w-10 flex-1"
@@ -710,16 +774,27 @@
       onchange={() => seek(scrub)}
       aria-label="Frame"
     />
-    <Button variant="ghost" size="icon" onclick={() => seek(frame + 1)} title="Next (→)" aria-label="Next frame"><ChevronRightIcon /></Button>
-    <Button variant="ghost" size="icon" class="hidden @md:inline-flex" onclick={() => seek(frames - 1)} title="Last (End)" aria-label="Last frame"><ChevronsRightIcon /></Button>
+    <Button variant="ghost" size="icon" onclick={() => seek(frame + 1)} title="Next (→)" aria-label="Next frame"
+      ><ChevronRightIcon /></Button
+    >
+    <Button
+      variant="ghost"
+      size="icon"
+      class="hidden @md:inline-flex"
+      onclick={() => seek(frames - 1)}
+      title="Last (End)"
+      aria-label="Last frame"><ChevronsRightIcon /></Button
+    >
     <Input
       class="w-20 shrink-0 text-right font-mono"
       aria-label="Frame number"
       bind:value={frameInput}
-      onkeydown={e => e.key === 'Enter' && seek(+frameInput || 0)}
+      onkeydown={(e) => e.key === 'Enter' && seek(+frameInput || 0)}
       onblur={() => seek(+frameInput || 0)}
     />
-    <span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground tabular-nums">/ {frames - 1} · {(scrub / (fps || 24)).toFixed(2)} s</span>
+    <span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+      >/ {frames - 1} · {(scrub / (fps || 24)).toFixed(2)} s</span
+    >
   </div>
 </div>
 
@@ -738,11 +813,7 @@
     height: 0.25rem;
     border-radius: 9999px;
     /* The fill ends at the thumb's centre, which travels half a thumb in from each end. */
-    background: linear-gradient(
-      to right,
-      var(--primary) calc(0.375rem + (100% - 0.75rem) * var(--p)),
-      var(--muted) 0
-    );
+    background: linear-gradient(to right, var(--primary) calc(0.375rem + (100% - 0.75rem) * var(--p)), var(--muted) 0);
   }
   .scrub::-moz-range-track {
     height: 0.25rem;

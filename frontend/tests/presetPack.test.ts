@@ -3,14 +3,32 @@ import { test } from 'node:test'
 import { presetPack } from '../src/lib/presetPack.ts'
 import type { ConfigurationBundle, EncoderSettings } from '../src/lib/types.ts'
 
-const encoder: EncoderSettings = { encoder: 'x264', rate_control: 'crf', crf: 18, bitrate_kbps: 8000, target_mb: null,
-  preset: 'slow', tune: 'grain', depth: 10, options: { ref: '4' }, extra: '', source_color: true, hdr10plus: false, dolby_vision: false }
+const encoder: EncoderSettings = {
+  encoder: 'x264',
+  rate_control: 'crf',
+  crf: 18,
+  bitrate_kbps: 8000,
+  target_mb: null,
+  preset: 'slow',
+  tune: 'grain',
+  depth: 10,
+  options: { ref: '4' },
+  extra: '',
+  source_color: true,
+  hdr10plus: false,
+  dolby_vision: false,
+}
 
 test('sharing allowlists portable fields and removes local identities and accidental metadata', () => {
-  const data = { template: [], video: [],
-    encoder: [{ name: 'local-id', label: 'Film', group: ['1080p', 'SDR'], data: encoder, privateToken: 'DO_NOT_SHARE' }],
+  const data = {
+    template: [],
+    video: [],
+    encoder: [
+      { name: 'local-id', label: 'Film', group: ['1080p', 'SDR'], data: encoder, privateToken: 'DO_NOT_SHARE' },
+    ],
     audio: [{ name: 'legacy-audio', data: { action: 'copy' as const, layout: null, bitrate_kbps: null, options: {} } }],
-    settings: { notifications: [{ url: 'TOKEN' }] }, application: { plugins: { secret: 'TOKEN' } },
+    settings: { notifications: [{ url: 'TOKEN' }] },
+    application: { plugins: { secret: 'TOKEN' } },
   }
   const pack = presetPack(data)
   assert.deepEqual(Object.keys(pack).sort(), ['format', 'presets', 'version'])

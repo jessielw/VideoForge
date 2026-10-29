@@ -1,4 +1,13 @@
-import type { EncodeOptionInfo, Priority, Progress, Severity, Status, TrackOverride, VideoColor, VideoHdr } from './types'
+import type {
+  EncodeOptionInfo,
+  Priority,
+  Progress,
+  Severity,
+  Status,
+  TrackOverride,
+  VideoColor,
+  VideoHdr,
+} from './types'
 
 export const PRIORITY_LABEL: Record<Priority, string> = {
   idle: 'Idle',
@@ -60,7 +69,11 @@ export function basename(path: string | null | undefined): string {
 // (so a folder of them sorts in frame order), and the crop view marked (its frame has the margins on).
 export function frameFilename(source: string, n: number, frames: number, stage: 'crop' | 'output'): string {
   const stem = basename(source).replace(/\.[^.]+$/, '')
-  const safe = stem.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/g, '').slice(0, 120) || 'frame'
+  const safe =
+    stem
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+      .replace(/[. ]+$/g, '')
+      .slice(0, 120) || 'frame'
   const num = String(n).padStart(String(Math.max(frames - 1, 0)).length, '0')
   return `${safe} - ${num}${stage === 'crop' ? ' (crop view)' : ''}.png`
 }
@@ -120,15 +133,49 @@ export const LANGUAGES: [string, string][] = [
 // The rest of the languages the server names (core/lang.py), whole families too: the picker lists these
 // after the common ones.
 const MORE_LANGUAGES: [string, string][] = [
-  ['ar', 'Arabic'], ['eu', 'Basque'], ['bg', 'Bulgarian'], ['ca', 'Catalan'], ['zh', 'Chinese'],
-  ['hr', 'Croatian'], ['cs', 'Czech'], ['da', 'Danish'], ['et', 'Estonian'], ['fil', 'Filipino'],
-  ['fi', 'Finnish'], ['fr', 'French'], ['gl', 'Galician'], ['el', 'Greek'], ['he', 'Hebrew'],
-  ['hi', 'Hindi'], ['hu', 'Hungarian'], ['is', 'Icelandic'], ['id', 'Indonesian'], ['kn', 'Kannada'],
-  ['kk', 'Kazakh'], ['lv', 'Latvian'], ['lt', 'Lithuanian'], ['ms', 'Malay'], ['ml', 'Malayalam'],
-  ['no', 'Norwegian'], ['fa', 'Persian'], ['pl', 'Polish'], ['pt-BR', 'Portuguese (Brazil)'], ['ro', 'Romanian'],
-  ['ru', 'Russian'], ['sr', 'Serbian'], ['sk', 'Slovak'], ['sl', 'Slovenian'], ['es', 'Spanish'],
-  ['sv', 'Swedish'], ['tl', 'Tagalog'], ['ta', 'Tamil'], ['te', 'Telugu'], ['th', 'Thai'],
-  ['tr', 'Turkish'], ['uk', 'Ukrainian'], ['vi', 'Vietnamese'],
+  ['ar', 'Arabic'],
+  ['eu', 'Basque'],
+  ['bg', 'Bulgarian'],
+  ['ca', 'Catalan'],
+  ['zh', 'Chinese'],
+  ['hr', 'Croatian'],
+  ['cs', 'Czech'],
+  ['da', 'Danish'],
+  ['et', 'Estonian'],
+  ['fil', 'Filipino'],
+  ['fi', 'Finnish'],
+  ['fr', 'French'],
+  ['gl', 'Galician'],
+  ['el', 'Greek'],
+  ['he', 'Hebrew'],
+  ['hi', 'Hindi'],
+  ['hu', 'Hungarian'],
+  ['is', 'Icelandic'],
+  ['id', 'Indonesian'],
+  ['kn', 'Kannada'],
+  ['kk', 'Kazakh'],
+  ['lv', 'Latvian'],
+  ['lt', 'Lithuanian'],
+  ['ms', 'Malay'],
+  ['ml', 'Malayalam'],
+  ['no', 'Norwegian'],
+  ['fa', 'Persian'],
+  ['pl', 'Polish'],
+  ['pt-BR', 'Portuguese (Brazil)'],
+  ['ro', 'Romanian'],
+  ['ru', 'Russian'],
+  ['sr', 'Serbian'],
+  ['sk', 'Slovak'],
+  ['sl', 'Slovenian'],
+  ['es', 'Spanish'],
+  ['sv', 'Swedish'],
+  ['tl', 'Tagalog'],
+  ['ta', 'Tamil'],
+  ['te', 'Telugu'],
+  ['th', 'Thai'],
+  ['tr', 'Turkish'],
+  ['uk', 'Ukrainian'],
+  ['vi', 'Vietnamese'],
 ]
 export const PICKER_LANGUAGES: [string, string][] = [...LANGUAGES, ...MORE_LANGUAGES, ['und', 'Unknown']]
 
@@ -147,9 +194,14 @@ export function languageName(tag: string): string {
 
 /** A subtitle's title from its language and flags: "English", "English (Forced)", "Spanish (Latin America) (SDH)".
  * The same names as the server's (core/template.py sub_title), which templates use. */
-export function subtitleName(language: string, flags: { forced?: boolean; hearing_impaired?: boolean; commentary?: boolean }): string {
-  const tags = [flags.forced && 'Forced', flags.hearing_impaired && 'SDH', flags.commentary && 'Commentary'].filter(Boolean)
-  return [languageName(language.trim() || 'und'), ...tags.map(t => `(${t})`)].join(' ')
+export function subtitleName(
+  language: string,
+  flags: { forced?: boolean; hearing_impaired?: boolean; commentary?: boolean },
+): string {
+  const tags = [flags.forced && 'Forced', flags.hearing_impaired && 'SDH', flags.commentary && 'Commentary'].filter(
+    Boolean,
+  )
+  return [languageName(language.trim() || 'und'), ...tags.map((t) => `(${t})`)].join(' ')
 }
 
 export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number): (...a: A) => void {
@@ -161,15 +213,27 @@ export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number)
 }
 
 // An encode's options to show: one used only with another's value (loudnorm's targets) only then.
-export function shownOptions(options: EncodeOptionInfo[], valueOf: (o: EncodeOptionInfo) => string): EncodeOptionInfo[] {
-  return options.filter(o => {
-    const by = o.when && options.find(x => x.key === o.when?.key)
+export function shownOptions(
+  options: EncodeOptionInfo[],
+  valueOf: (o: EncodeOptionInfo) => string,
+): EncodeOptionInfo[] {
+  return options.filter((o) => {
+    const by = o.when && options.find((x) => x.key === o.when?.key)
     return !by || valueOf(by) === o.when?.value
   })
 }
 
 export function emptyOverride(): TrackOverride {
-  return { exclude: null, language: null, title: null, flags: {}, action: null, bitrate_kbps: null, layout: null, options: {} }
+  return {
+    exclude: null,
+    language: null,
+    title: null,
+    flags: {},
+    action: null,
+    bitrate_kbps: null,
+    layout: null,
+    options: {},
+  }
 }
 
 // An override that changes nothing (the server drops those too).

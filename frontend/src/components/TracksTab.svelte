@@ -28,7 +28,9 @@
   const overrides = $derived(job.spec.overrides)
   const plan = $derived(job.plan)
   const tracks = $derived(job.tracks)
-  const flags = $derived(app.profiles.find(p => p.id === job.profile)?.track_properties.filter(t => t.kind === 'sub') ?? [])
+  const flags = $derived(
+    app.profiles.find((p) => p.id === job.profile)?.track_properties.filter((t) => t.kind === 'sub') ?? [],
+  )
 
   function copy(): Overrides {
     return structuredClone($state.snapshot(overrides)) as Overrides
@@ -38,18 +40,18 @@
   const plannedAudio = $derived(new Map((plan?.audio ?? []).map((a, i) => [a.source.id, { pos: i, a }])))
   const audioRows = $derived.by(() => {
     const all = tracks?.audio ?? []
-    const order = overrides.audio_track_ids ?? (plan?.audio ?? []).map(a => a.source.id)
-    const byId = new Map(all.map(t => [t.id, t]))
-    return [...order.filter(i => byId.has(i)).map(i => byId.get(i)!), ...all.filter(t => !order.includes(t.id))]
+    const order = overrides.audio_track_ids ?? (plan?.audio ?? []).map((a) => a.source.id)
+    const byId = new Map(all.map((t) => [t.id, t]))
+    return [...order.filter((i) => byId.has(i)).map((i) => byId.get(i)!), ...all.filter((t) => !order.includes(t.id))]
   })
 
   function audioIds(rows: AudioTrack[], checked: (t: AudioTrack) => boolean): number[] {
-    return rows.filter(checked).map(t => t.id)
+    return rows.filter(checked).map((t) => t.id)
   }
 
   function toggleAudio(t: AudioTrack, on: boolean) {
     const o = copy()
-    o.audio_track_ids = audioIds(audioRows, x => (x.id === t.id ? on : plannedAudio.has(x.id)))
+    o.audio_track_ids = audioIds(audioRows, (x) => (x.id === t.id ? on : plannedAudio.has(x.id)))
     save(o)
   }
 
@@ -60,7 +62,7 @@
     if (j < 0 || j >= rows.length) return
     ;[rows[i], rows[j]] = [rows[j], rows[i]]
     const o = copy()
-    o.audio_track_ids = audioIds(rows, x => plannedAudio.has(x.id))
+    o.audio_track_ids = audioIds(rows, (x) => plannedAudio.has(x.id))
     save(o)
   }
 
@@ -72,7 +74,12 @@
 
   // --- subtitles ---
   const plannedSubs = $derived(
-    new Map((plan?.subs ?? []).map((s, i) => [s.source.external_path ? `ext:${basename(s.source.external_path)}` : `id:${s.source.id}`, { pos: i, s }])),
+    new Map(
+      (plan?.subs ?? []).map((s, i) => [
+        s.source.external_path ? `ext:${basename(s.source.external_path)}` : `id:${s.source.id}`,
+        { pos: i, s },
+      ]),
+    ),
   )
   const subRows = $derived(
     [...(tracks?.subs ?? [])].sort(
@@ -105,14 +112,14 @@
   }
 
   function setFlag(t: SubTrack, key: string, on: boolean) {
-    editTrack(t.key, ov => {
+    editTrack(t.key, (ov) => {
       if (on === (t.detected[key] ?? false)) delete ov.flags[key]
       else ov.flags[key] = on
     })
   }
 
   function setLanguage(t: SubTrack, tag: string) {
-    editTrack(t.key, ov => (ov.language = !tag || tag === t.language ? null : tag))
+    editTrack(t.key, (ov) => (ov.language = !tag || tag === t.language ? null : tag))
   }
 
   function setLanguageOriginal(tag: string) {
@@ -131,7 +138,9 @@
 </script>
 
 {#if !tracks || !plan}
-  <div class="p-6 text-muted-foreground">{job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}</div>
+  <div class="p-6 text-muted-foreground">
+    {job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}
+  </div>
 {:else}
   <fieldset disabled={!editable} class="space-y-6">
     <div class="flex flex-wrap items-center gap-3">
@@ -149,102 +158,133 @@
     </div>
 
     {#if kind === 'audio'}
-    <section>
-      <div class="mb-2 flex items-center gap-2">
-        <AudioLinesIcon class="size-4 text-primary" /><span class="font-medium">Audio</span>
-        <Button variant="ghost" size="sm" class="ml-auto" onclick={automaticAudio} disabled={overrides.audio_track_ids === null}>
-          <WandSparklesIcon />Automatic
-        </Button>
-      </div>
-      <table class="w-full text-sm">
-        <thead class="text-left text-xs text-muted-foreground uppercase">
-          <tr><th class="w-10"></th><th>Source</th><th>Lang</th><th>Title</th><th>Output</th><th class="w-16"></th></tr>
-        </thead>
-        <tbody>
-          {#each audioRows as t (t.id)}
-            {@const out = plannedAudio.get(t.id)}
-            <tr class="border-t border-border/60 {out ? '' : 'text-muted-foreground'}">
-              <td class="py-1.5"><Checkbox checked={!!out} aria-label="Use #{t.id}" onCheckedChange={v => toggleAudio(t, v)} /></td>
-              <td>{audioLabel(t)}</td>
-              <td>{t.language}</td>
-              <td class="max-w-48 truncate" title={t.title}>{t.title}</td>
-              <td>
-                {#if out}
-                  {out.pos + 1}. {out.a.title}
-                  <span class="text-xs text-muted-foreground">[{out.a.action}{out.a.bitrate_kbps ? ` ${out.a.bitrate_kbps}k` : ''}{out.a.default ? ', default' : ''}]</span>
-                {:else}—{/if}
-              </td>
-              <td class="text-right">
-                <Button variant="ghost" size="icon-sm" onclick={() => moveAudio(t, -1)} aria-label="Up"><ArrowUpIcon /></Button>
-                <Button variant="ghost" size="icon-sm" onclick={() => moveAudio(t, 1)} aria-label="Down"><ArrowDownIcon /></Button>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </section>
+      <section>
+        <div class="mb-2 flex items-center gap-2">
+          <AudioLinesIcon class="size-4 text-primary" /><span class="font-medium">Audio</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            class="ml-auto"
+            onclick={automaticAudio}
+            disabled={overrides.audio_track_ids === null}
+          >
+            <WandSparklesIcon />Automatic
+          </Button>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="text-left text-xs text-muted-foreground uppercase">
+            <tr
+              ><th class="w-10"></th><th>Source</th><th>Lang</th><th>Title</th><th>Output</th><th class="w-16"></th></tr
+            >
+          </thead>
+          <tbody>
+            {#each audioRows as t (t.id)}
+              {@const out = plannedAudio.get(t.id)}
+              <tr class="border-t border-border/60 {out ? '' : 'text-muted-foreground'}">
+                <td class="py-1.5"
+                  ><Checkbox checked={!!out} aria-label="Use #{t.id}" onCheckedChange={(v) => toggleAudio(t, v)} /></td
+                >
+                <td>{audioLabel(t)}</td>
+                <td>{t.language}</td>
+                <td class="max-w-48 truncate" title={t.title}>{t.title}</td>
+                <td>
+                  {#if out}
+                    {out.pos + 1}. {out.a.title}
+                    <span class="text-xs text-muted-foreground"
+                      >[{out.a.action}{out.a.bitrate_kbps ? ` ${out.a.bitrate_kbps}k` : ''}{out.a.default
+                        ? ', default'
+                        : ''}]</span
+                    >
+                  {:else}—{/if}
+                </td>
+                <td class="text-right">
+                  <Button variant="ghost" size="icon-sm" onclick={() => moveAudio(t, -1)} aria-label="Up"
+                    ><ArrowUpIcon /></Button
+                  >
+                  <Button variant="ghost" size="icon-sm" onclick={() => moveAudio(t, 1)} aria-label="Down"
+                    ><ArrowDownIcon /></Button
+                  >
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </section>
     {/if}
 
     {#if kind === 'sub'}
-    <section>
-      <div class="mb-2 flex items-center gap-2"><CaptionsIcon class="size-4 text-primary" /><span class="font-medium">Subtitles</span></div>
-      <div class="mb-3">
-        <SubtitleSelectionMenu tracks={subRows} {overrides} disabled={!editable} onselect={selectSubs} />
-      </div>
-      <table class="w-full text-sm">
-        <thead class="text-left text-xs text-muted-foreground uppercase">
-          <tr>
-            <th class="w-10"></th><th>Source</th><th>Format</th><th>Lang</th>
-            {#each flags as f (f.key)}<th title={f.help}>{f.label}</th>{/each}
-            <th>Output</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each subRows as t (t.key)}
-            {@const out = plannedSubs.get(t.key)}
-            {@const ov = subOverride(t)}
-            <tr class="border-t border-border/60 {out ? '' : 'text-muted-foreground'}">
-              <td class="py-1.5">
-                <Checkbox checked={!ov?.exclude} aria-label="Use this track" onCheckedChange={v => editTrack(t.key, o => (o.exclude = v ? null : true))} />
-              </td>
-              <td class="max-w-56 truncate" title={t.external_path ?? t.title}>
-                {t.external_path ? basename(t.external_path) : `#${t.id}${t.title ? ` · ${t.title}` : ''}`}
-              </td>
-              <td>{t.format}</td>
-              <td>
-                <LanguagePicker
-                  class="w-28 {ov?.language ? 'border-warning/60' : ''}"
-                  show="tag"
-                  clearable={false}
-                  aria-label="Language"
-                  value={subLanguage(t)}
-                  onchange={(v: string) => setLanguage(t, v)}
-                />
-              </td>
-              {#each flags as f (f.key)}
-                <td>
+      <section>
+        <div class="mb-2 flex items-center gap-2">
+          <CaptionsIcon class="size-4 text-primary" /><span class="font-medium">Subtitles</span>
+        </div>
+        <div class="mb-3">
+          <SubtitleSelectionMenu tracks={subRows} {overrides} disabled={!editable} onselect={selectSubs} />
+        </div>
+        <table class="w-full text-sm">
+          <thead class="text-left text-xs text-muted-foreground uppercase">
+            <tr>
+              <th class="w-10"></th><th>Source</th><th>Format</th><th>Lang</th>
+              {#each flags as f (f.key)}<th title={f.help}>{f.label}</th>{/each}
+              <th>Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each subRows as t (t.key)}
+              {@const out = plannedSubs.get(t.key)}
+              {@const ov = subOverride(t)}
+              <tr class="border-t border-border/60 {out ? '' : 'text-muted-foreground'}">
+                <td class="py-1.5">
                   <Checkbox
-                    class={flagPinned(t, f.key) ? 'ring-2 ring-warning/70' : ''}
-                    title={flagPinned(t, f.key) ? 'Set by override' : 'As detected'}
-                    aria-label={f.label}
-                    checked={flagValue(t, f.key)}
-                    onCheckedChange={v => setFlag(t, f.key, v)}
+                    checked={!ov?.exclude}
+                    aria-label="Use this track"
+                    onCheckedChange={(v) => editTrack(t.key, (o) => (o.exclude = v ? null : true))}
                   />
                 </td>
-              {/each}
-              <td>
-                {#if out}
-                  {out.pos + 1}. {out.s.title}
-                  <span class="text-xs text-muted-foreground">
-                    {[out.s.default && 'default', out.s.forced && 'forced', out.s.hearing_impaired && 'SDH', out.s.visual_impaired && 'AD'].filter(Boolean).join(', ')}
-                  </span>
-                {:else}—{/if}
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </section>
+                <td class="max-w-56 truncate" title={t.external_path ?? t.title}>
+                  {t.external_path ? basename(t.external_path) : `#${t.id}${t.title ? ` · ${t.title}` : ''}`}
+                </td>
+                <td>{t.format}</td>
+                <td>
+                  <LanguagePicker
+                    class="w-28 {ov?.language ? 'border-warning/60' : ''}"
+                    show="tag"
+                    clearable={false}
+                    aria-label="Language"
+                    value={subLanguage(t)}
+                    onchange={(v: string) => setLanguage(t, v)}
+                  />
+                </td>
+                {#each flags as f (f.key)}
+                  <td>
+                    <Checkbox
+                      class={flagPinned(t, f.key) ? 'ring-2 ring-warning/70' : ''}
+                      title={flagPinned(t, f.key) ? 'Set by override' : 'As detected'}
+                      aria-label={f.label}
+                      checked={flagValue(t, f.key)}
+                      onCheckedChange={(v) => setFlag(t, f.key, v)}
+                    />
+                  </td>
+                {/each}
+                <td>
+                  {#if out}
+                    {out.pos + 1}. {out.s.title}
+                    <span class="text-xs text-muted-foreground">
+                      {[
+                        out.s.default && 'default',
+                        out.s.forced && 'forced',
+                        out.s.hearing_impaired && 'SDH',
+                        out.s.visual_impaired && 'AD',
+                      ]
+                        .filter(Boolean)
+                        .join(', ')}
+                    </span>
+                  {:else}—{/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </section>
     {/if}
   </fieldset>
 {/if}

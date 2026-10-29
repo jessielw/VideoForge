@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { downloadTemplates, MAX_TEMPLATE_BYTES, templateBundle, templateFilename, templateScripts } from '../src/lib/templateTransfer.ts'
+import {
+  downloadTemplates,
+  MAX_TEMPLATE_BYTES,
+  templateBundle,
+  templateFilename,
+  templateScripts,
+} from '../src/lib/templateTransfer.ts'
 import type { Template } from '../src/lib/types.ts'
 
 test('exports only template names and data, keeping settings embedded', () => {
@@ -17,10 +23,15 @@ test('download filenames cannot contain path separators or invalid Windows chara
 })
 
 test('script preview includes disabled filters and a custom body', () => {
-  const data = { video: { custom: 'clip = src', filters: [
-    { name: 'Crop', script: '', enabled: true },
-    { name: 'Disabled Python', script: 'clip = process(clip)', enabled: false },
-  ] } } as unknown as Template
+  const data = {
+    video: {
+      custom: 'clip = src',
+      filters: [
+        { name: 'Crop', script: '', enabled: true },
+        { name: 'Disabled Python', script: 'clip = process(clip)', enabled: false },
+      ],
+    },
+  } as unknown as Template
   assert.deepEqual(templateScripts(data), [
     { name: 'Custom script body', script: 'clip = src' },
     { name: 'Disabled Python', script: 'clip = process(clip)' },

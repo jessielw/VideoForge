@@ -51,7 +51,16 @@
     forced: null,
     hearing_impaired: null,
     commentary: null,
-    track: { exclude: null, language: null, title: null, flags: {}, action: null, bitrate_kbps: null, layout: null, options: {} },
+    track: {
+      exclude: null,
+      language: null,
+      title: null,
+      flags: {},
+      action: null,
+      bitrate_kbps: null,
+      layout: null,
+      options: {},
+    },
   })
 
   function change(fn: (s: TemplateSubs) => void) {
@@ -64,7 +73,7 @@
   const fromTri = (v: string) => (v === 'any' ? null : v === 'yes')
 
   function move(i: number, by: number) {
-    change(s => {
+    change((s) => {
       const [r] = s.rules.splice(i, 1)
       s.rules.splice(i + by, 0, r)
     })
@@ -73,15 +82,19 @@
 
 <div class="space-y-3">
   <label class="flex items-center gap-2 text-sm">
-    <Checkbox checked={value !== null} {disabled} onCheckedChange={on => onchange(on ? { rules: [rule()], others: 'exclude' } : null)} />
+    <Checkbox
+      checked={value !== null}
+      {disabled}
+      onCheckedChange={(on) => onchange(on ? { rules: [rule()], others: 'exclude' } : null)}
+    />
     {toggleLabel}
   </label>
   {#if value === null}
     <p class="text-xs text-muted-foreground">{offNote}</p>
   {:else}
     <p class="text-xs text-muted-foreground">
-      Each subtitle track, added files too, takes the first rule it matches (empty = any). Kept tracks go in rule order; a rule that
-      sets Default gives it to the first track it reaches, and every other subtitle has it off. {appliedNote}
+      Each subtitle track, added files too, takes the first rule it matches (empty = any). Kept tracks go in rule order;
+      a rule that sets Default gives it to the first track it reaches, and every other subtitle has it off. {appliedNote}
     </p>
     {#each value.rules as r, i (i)}
       <div class="space-y-3 rounded-lg border p-3" role="group" aria-label="Rule {i + 1}">
@@ -91,9 +104,9 @@
             aria-label="Rule {i + 1}: keep, leave out or burn in"
             value={r.track.exclude ? 'exclude' : r.track.burn ? 'burn' : 'keep'}
             {disabled}
-            onchange={e =>
+            onchange={(e) =>
               change(
-                s =>
+                (s) =>
                   (s.rules[i].track = {
                     ...rule().track,
                     exclude: e.currentTarget.value === 'exclude' || null,
@@ -103,7 +116,9 @@
           >
             <option value="keep">Keep</option>
             <option value="exclude">Leave out</option>
-            <option value="burn" title="Burned into the video instead of muxed: the first track a burn-in rule matches">Burn in</option>
+            <option value="burn" title="Burned into the video instead of muxed: the first track a burn-in rule matches"
+              >Burn in</option
+            >
           </NativeSelect>
           <Button
             variant="ghost"
@@ -129,7 +144,7 @@
             title="Remove rule {i + 1}"
             aria-label="Remove rule {i + 1}"
             {disabled}
-            onclick={() => change(s => s.rules.splice(i, 1))}><XIcon /></Button
+            onclick={() => change((s) => s.rules.splice(i, 1))}><XIcon /></Button
           >
         </div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
@@ -141,13 +156,14 @@
             title="Languages (en matches en-US too; es-419 only itself)"
             value={r.languages}
             {disabled}
-            onchange={(v: string[]) => change(s => (s.rules[i].languages = v))}
+            onchange={(v: string[]) => change((s) => (s.rules[i].languages = v))}
           />
           <NativeSelect
             aria-label="Rule {i + 1}: format"
             value={r.formats[0] ?? ''}
             {disabled}
-            onchange={e => change(s => (s.rules[i].formats = e.currentTarget.value ? [e.currentTarget.value as SubFormat] : []))}
+            onchange={(e) =>
+              change((s) => (s.rules[i].formats = e.currentTarget.value ? [e.currentTarget.value as SubFormat] : []))}
           >
             <option value="">Any format</option>
             {#each FORMATS as f (f.id)}<option value={f.id}>{f.label}</option>{/each}
@@ -159,7 +175,7 @@
                 aria-label="Rule {i + 1}: {t.label}"
                 value={tri(r[t.key])}
                 {disabled}
-                onchange={e => change(s => (s.rules[i][t.key] = fromTri(e.currentTarget.value)))}
+                onchange={(e) => change((s) => (s.rules[i][t.key] = fromTri(e.currentTarget.value)))}
               >
                 <option value="any">any</option>
                 <option value="yes">yes</option>
@@ -177,29 +193,41 @@
               placeholder="Title: the source's"
               value={r.track.title ?? ''}
               {disabled}
-              onchange={e => change(s => (s.rules[i].track.title = e.currentTarget.value.trim() || null))}
+              onchange={(e) => change((s) => (s.rules[i].track.title = e.currentTarget.value.trim() || null))}
             />
-            <TrackFlags value={r.track.flags} {flags} {disabled} onchange={f => change(s => (s.rules[i].track.flags = f))} />
+            <TrackFlags
+              value={r.track.flags}
+              {flags}
+              {disabled}
+              onchange={(f) => change((s) => (s.rules[i].track.flags = f))}
+            />
           </div>
         {/if}
       </div>
     {/each}
     <div class="flex flex-wrap items-center gap-3">
-      <Button variant="outline" size="sm" {disabled} onclick={() => change(s => s.rules.push(rule()))}>
+      <Button variant="outline" size="sm" {disabled} onclick={() => change((s) => s.rules.push(rule()))}>
         <PlusIcon />Rule {value.rules.length + 1}
       </Button>
-      <label class="flex items-center gap-2 text-sm" title="A kept track with no title (none from its rule or the source) is named from its language and flags">
+      <label
+        class="flex items-center gap-2 text-sm"
+        title="A kept track with no title (none from its rule or the source) is named from its language and flags"
+      >
         <Checkbox
           checked={!!value.name_untitled}
           {disabled}
           aria-label="Name untitled tracks"
-          onCheckedChange={on => change(s => (s.name_untitled = on))}
+          onCheckedChange={(on) => change((s) => (s.name_untitled = on))}
         />
         Name untitled tracks <span class="text-xs text-muted-foreground">English (SDH)</span>
       </label>
       <label class="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
         Tracks no rule matches
-        <NativeSelect value={value.others} {disabled} onchange={e => change(s => (s.others = e.currentTarget.value as TemplateSubs['others']))}>
+        <NativeSelect
+          value={value.others}
+          {disabled}
+          onchange={(e) => change((s) => (s.others = e.currentTarget.value as TemplateSubs['others']))}
+        >
           <option value="exclude">Leave out</option>
           <option value="keep">Keep (after the rest)</option>
         </NativeSelect>

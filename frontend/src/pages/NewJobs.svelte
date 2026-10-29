@@ -20,7 +20,19 @@
   import LanguagePicker from '../components/LanguagePicker.svelte'
 
   type ImportResult = Awaited<ReturnType<typeof api.addJobs>>
-  type Draft = { profile: string; language: string; sources: string[]; encodes: string[]; subtitles: string[]; chapters: string[]; output: string[]; templateName: string | null; encoder: EncoderSettings | null; container: string; completion?: ImportResult | null }
+  type Draft = {
+    profile: string
+    language: string
+    sources: string[]
+    encodes: string[]
+    subtitles: string[]
+    chapters: string[]
+    output: string[]
+    templateName: string | null
+    encoder: EncoderSettings | null
+    container: string
+    completion?: ImportResult | null
+  }
   const restored = drafts.read<Draft>('new-jobs')
   let profile = $state(restored?.profile ?? '')
   let language = $state(restored?.language ?? '')
@@ -41,35 +53,55 @@
   let encoder = $state<EncoderSettings | null>(restored?.encoder ?? null)
   let container = $state(restored?.container ?? '')
   const templateChoices = $derived(app.presetChoices('template', profile))
-  const templateGroups = $derived(groupByFolder(templateChoices, c => c.name))
-  const template = $derived(templateChoices.find(c => c.name === (templateName ?? app.defaultTemplate(profile))) ?? templateChoices[0])
+  const templateGroups = $derived(groupByFolder(templateChoices, (c) => c.name))
+  const template = $derived(
+    templateChoices.find((c) => c.name === (templateName ?? app.defaultTemplate(profile))) ?? templateChoices[0],
+  )
   const templateKey = $derived(JSON.stringify([profile, templateName ?? app.defaultTemplate(profile)]))
   let previousProfile = restored?.profile ?? ''
   let appliedKey = restored ? JSON.stringify([restored.profile, restored.templateName]) : ''
 
   function persist() {
-    drafts.write('new-jobs', $state.snapshot({ profile, language, sources, encodes, subtitles, chapters, output,
-      templateName: template?.name ?? templateName, encoder, container, completion }))
+    drafts.write(
+      'new-jobs',
+      $state.snapshot({
+        profile,
+        language,
+        sources,
+        encodes,
+        subtitles,
+        chapters,
+        output,
+        templateName: template?.name ?? templateName,
+        encoder,
+        container,
+        completion,
+      }),
+    )
   }
   onDestroy(persist)
-  const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
+  const containers = $derived(app.profiles.find((p) => p.id === profile)?.containers ?? [])
 
   $effect(() => {
     // A manual selection survives preset saves; a profile switch starts on its default.
-    if (profile !== previousProfile) { previousProfile = profile; templateName = null }
+    if (profile !== previousProfile) {
+      previousProfile = profile
+      templateName = null
+    }
   })
   $effect(() => {
     // Switching templates resets the override, but saving/renaming an encoder preset does not.
-    if (!template || template.name !== (templateName ?? app.defaultTemplate(profile)) || templateKey === appliedKey) return
+    if (!template || template.name !== (templateName ?? app.defaultTemplate(profile)) || templateKey === appliedKey)
+      return
     appliedKey = templateKey
     untrack(() => {
       encoder = template ? structuredClone($state.snapshot(template.data.encoder)) : null
       const own = template?.data.mux.container
-      container = containers.some(c => c.id === own) ? own! : (containers[0]?.id ?? '')
+      container = containers.some((c) => c.id === own) ? own! : (containers[0]?.id ?? '')
     })
   })
 
-  const takesSubs = $derived(app.profiles.find(p => p.id === profile)?.external_subtitles ?? true)
+  const takesSubs = $derived(app.profiles.find((p) => p.id === profile)?.external_subtitles ?? true)
 
   onMount(async () => {
     if (!profile) profile = app.defaultProfile?.id ?? ''
@@ -103,11 +135,17 @@
       if (!snapshot.sources.length) return
       const response = await matches.run(() => api.match(snapshot))
       if (!response) return
-      if ('value' in response) { result = response.value; settledKey = key; error = '' }
-      else error = response.error
+      if ('value' in response) {
+        result = response.value
+        settledKey = key
+        error = ''
+      } else error = response.error
       matching = false
     }, 250)
-    return () => { clearTimeout(timer); matches.invalidate() }
+    return () => {
+      clearTimeout(timer)
+      matches.invalidate()
+    }
   })
 
   async function add() {
@@ -155,17 +193,25 @@
 
   {#if completion}
     <section class="shrink-0 space-y-2 rounded-lg border p-4 text-sm" aria-label="Import results">
-      <p role="status" class="font-medium">Added {completion.added.length} · Kept existing {completion.skipped.length} · Unmatched {completion.unmatched.length}</p>
+      <p role="status" class="font-medium">
+        Added {completion.added.length} · Kept existing {completion.skipped.length} · Unmatched {completion.unmatched
+          .length}
+      </p>
       {#if completion.skipped.length || completion.unmatched.length || !completion.added.length}
-        <p class="text-muted-foreground">Your input draft is retained below. Review existing jobs or correct unmatched files before trying again.</p>
+        <p class="text-muted-foreground">
+          Your input draft is retained below. Review existing jobs or correct unmatched files before trying again.
+        </p>
       {/if}
       {#if completion.kept.length || completion.unmatched.length}
         <details open={!completion.added.length}>
           <summary class="cursor-pointer">Review skipped and unmatched files</summary>
           <ul class="mt-2 space-y-2">
             {#each completion.kept as kept}
-              <li><span title={kept.source}>{kept.name}: {kept.reason}.</span>
-                {#if kept.id}<Button size="sm" variant="link" onclick={() => router.go('queue', kept.id)}>Open existing job</Button>{/if}
+              <li>
+                <span title={kept.source}>{kept.name}: {kept.reason}.</span>
+                {#if kept.id}<Button size="sm" variant="link" onclick={() => router.go('queue', kept.id)}
+                    >Open existing job</Button
+                  >{/if}
               </li>
             {/each}
             {#each completion.unmatched as path}
@@ -175,7 +221,14 @@
         </details>
       {/if}
       <Button size="sm" onclick={() => router.go('queue', completion?.added[0] ?? null)}>Open queue</Button>
-      <Button size="sm" variant="ghost" onclick={() => { completion = null; persist() }}>Dismiss results</Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onclick={() => {
+          completion = null
+          persist()
+        }}>Dismiss results</Button
+      >
     </section>
   {/if}
 
@@ -188,7 +241,13 @@
         </NativeSelect>
         <label class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           Original language
-          <LanguagePicker class="w-48" aria-label="Original language" placeholder="Guess from audio" value={language} onchange={(v: string) => (language = v)} />
+          <LanguagePicker
+            class="w-48"
+            aria-label="Original language"
+            placeholder="Guess from audio"
+            value={language}
+            onchange={(v: string) => (language = v)}
+          />
         </label>
       </div>
       <div class="text-sm text-muted-foreground">Template</div>
@@ -198,9 +257,15 @@
             <option value={c.name}>{label}{c.name === app.defaultTemplate(profile) ? ' (default)' : ''}</option>
           {/each}
         {/snippet}
-        <NativeSelect class="min-w-0 max-w-full" aria-label="Template" value={template?.name ?? ''} onchange={e => (templateName = e.currentTarget.value)}>
+        <NativeSelect
+          class="min-w-0 max-w-full"
+          aria-label="Template"
+          value={template?.name ?? ''}
+          onchange={(e) => (templateName = e.currentTarget.value)}
+        >
           {#each templateGroups as g (g.folder)}
-            {#if g.folder}<optgroup label={g.folder}>{@render templateOptions(g.items)}</optgroup>{:else}{@render templateOptions(g.items)}{/if}
+            {#if g.folder}<optgroup label={g.folder}>{@render templateOptions(g.items)}</optgroup
+              >{:else}{@render templateOptions(g.items)}{/if}
           {/each}
         </NativeSelect>
         <button class="underline underline-offset-2" onclick={() => router.go('templates')}>Edit templates…</button>
@@ -223,11 +288,26 @@
         <div class="text-sm text-muted-foreground">Encoder preset</div>
         <div class="min-w-0 space-y-2">
           <div class="flex flex-wrap items-center gap-3">
-            <EncoderPresetMenu {profile} current={encoder} apply={value => { encoder = value }} />
-            <span class="text-xs text-muted-foreground">{ENCODERS.find(([id]) => id === encoder?.encoder)?.[1]} · {encoder.depth}-bit</span>
-            <button class="text-xs underline underline-offset-2" onclick={() => { encoder = structuredClone($state.snapshot(template.data.encoder)) }}>Use template settings</button>
+            <EncoderPresetMenu
+              {profile}
+              current={encoder}
+              apply={(value) => {
+                encoder = value
+              }}
+            />
+            <span class="text-xs text-muted-foreground"
+              >{ENCODERS.find(([id]) => id === encoder?.encoder)?.[1]} · {encoder.depth}-bit</span
+            >
+            <button
+              class="text-xs underline underline-offset-2"
+              onclick={() => {
+                encoder = structuredClone($state.snapshot(template.data.encoder))
+              }}>Use template settings</button
+            >
           </div>
-          <p class="text-xs text-muted-foreground">Changes encoder settings only. Resize and filters come from the template.</p>
+          <p class="text-xs text-muted-foreground">
+            Changes encoder settings only. Resize and filters come from the template.
+          </p>
         </div>
       {/if}
     </div>
@@ -251,7 +331,12 @@
         extensions={['.srt', '.ass', '.ssa', '.sup']}
       />
     {/if}
-    <PathSlot label="Chapters" hint="Optional; otherwise AutoQPF reads or makes them" bind:paths={chapters} extensions={['.txt', '.xml']} />
+    <PathSlot
+      label="Chapters"
+      hint="Optional; otherwise AutoQPF reads or makes them"
+      bind:paths={chapters}
+      extensions={['.txt', '.xml']}
+    />
     <PathSlot label="Output folder" hint="Where the muxed releases go" bind:paths={output} mode="folder" />
   </Card.Root>
 
@@ -277,18 +362,30 @@
                   {basename(j.source)}
                   {#if j.existing_id}
                     <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <button class="underline" onclick={() => router.go('queue', j.existing_id)}>Open existing job</button>
+                      <button class="underline" onclick={() => router.go('queue', j.existing_id)}
+                        >Open existing job</button
+                      >
                       {#if ['queued', 'running', 'indexing'].includes(j.existing_status ?? '')}
                         <span>Kept: {j.existing_status}</span>
                       {:else}
-                        <label class="flex items-center gap-1"><Checkbox checked={replacements.includes(j.existing_id)}
-                          onCheckedChange={on => { replacements = on ? [...replacements, j.existing_id!] : replacements.filter(id => id !== j.existing_id) }} />Replace and reset its edits</label>
+                        <label class="flex items-center gap-1"
+                          ><Checkbox
+                            checked={replacements.includes(j.existing_id)}
+                            onCheckedChange={(on) => {
+                              replacements = on
+                                ? [...replacements, j.existing_id!]
+                                : replacements.filter((id) => id !== j.existing_id)
+                            }}
+                          />Replace and reset its edits</label
+                        >
                       {/if}
                     </div>
                   {/if}
                 </td>
                 <td class={j.encode ? (j.encode_state === 'in_progress' ? 'text-warning' : '') : 'text-primary'}>
-                  {j.encode ? basename(j.encode) + (j.encode_state === 'in_progress' ? ' (still encoding)' : '') : 'encode with VapourSynth'}
+                  {j.encode
+                    ? basename(j.encode) + (j.encode_state === 'in_progress' ? ' (still encoding)' : '')
+                    : 'encode with VapourSynth'}
                 </td>
                 <td class="text-muted-foreground">{j.subtitles.map(basename).join(', ') || '—'}</td>
                 <td class="text-muted-foreground">{j.chapters ? basename(j.chapters) : 'AutoQPF'}</td>
@@ -307,8 +404,13 @@
 
   <footer class="flex shrink-0 flex-wrap items-center gap-3">
     {#if error}<span class="text-sm text-destructive">{error}</span>{/if}
-    <Button variant="outline" class="ml-auto" onclick={() => (sources = encodes = subtitles = chapters = [])}>Clear</Button>
-    <Button disabled={!result?.jobs.length || matching || settledKey !== inputKey || adding || !output.length} onclick={add}>
+    <Button variant="outline" class="ml-auto" onclick={() => (sources = encodes = subtitles = chapters = [])}
+      >Clear</Button
+    >
+    <Button
+      disabled={!result?.jobs.length || matching || settledKey !== inputKey || adding || !output.length}
+      onclick={add}
+    >
       <PlusIcon />Add {result?.jobs.length ? `${result.jobs.length} job(s)` : ''} to queue
     </Button>
   </footer>

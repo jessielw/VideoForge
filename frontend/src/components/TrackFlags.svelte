@@ -40,7 +40,9 @@
       {disabled}
       title="{f.label}: {state === undefined ? "the source's" : state ? 'on' : 'off'} (click to change). {f.help}"
       onPressedChange={() => cycle(f.key)}
-      >{#if state === true}<CheckIcon class="size-3" />{:else if state === false}<XIcon class="size-3" />{/if}{f.label}</Toggle
+      >{#if state === true}<CheckIcon class="size-3" />{:else if state === false}<XIcon
+          class="size-3"
+        />{/if}{f.label}</Toggle
     >
   {/each}
 </div>

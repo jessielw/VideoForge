@@ -10,12 +10,24 @@ const jobs = [
 ] as JobSummary[]
 
 test('queue search combines words, labels, source paths, and status without changing run order', () => {
-  assert.deepEqual(matchingJobs(jobs, '  SEASON2 episode ').map(j => j.id), ['a', 'c'])
-  assert.deepEqual(matchingJobs(jobs, 'show', 'failed').map(j => j.id), ['c'])
-  assert.deepEqual(matchingJobs(jobs, '', 'done').map(j => j.id), ['b'])
+  assert.deepEqual(
+    matchingJobs(jobs, '  SEASON2 episode ').map((j) => j.id),
+    ['a', 'c'],
+  )
+  assert.deepEqual(
+    matchingJobs(jobs, 'show', 'failed').map((j) => j.id),
+    ['c'],
+  )
+  assert.deepEqual(
+    matchingJobs(jobs, '', 'done').map((j) => j.id),
+    ['b'],
+  )
   assert.equal(matchingJobs(jobs, 'missing').length, 0)
   assert.deepEqual(matchingJobs(jobs, '  '), jobs)
-  assert.deepEqual(matchingJobs(jobs, 'episode DUBBED').map(j => j.id), ['c'])
+  assert.deepEqual(
+    matchingJobs(jobs, 'episode DUBBED').map((j) => j.id),
+    ['c'],
+  )
 })
 
 test('selection ranges follow matching order and recover when a live status removes the anchor', () => {
@@ -32,6 +44,8 @@ test('queue pages clamp after removal and handle empty and exact page boundaries
 })
 
 test('a job can be queued once it is set up, and again after a run, but not while it is busy or blocked', () => {
-  for (const s of ['ready', 'warn', 'index-queued', 'done', 'failed', 'invalid', 'skipped', 'cancelled'] as const) assert.ok(queueable(s), s)
-  for (const s of ['probing', 'error', 'cropping', 'indexing', 'blocked', 'queued', 'running'] as const) assert.ok(!queueable(s), s)
+  for (const s of ['ready', 'warn', 'index-queued', 'done', 'failed', 'invalid', 'skipped', 'cancelled'] as const)
+    assert.ok(queueable(s), s)
+  for (const s of ['probing', 'error', 'cropping', 'indexing', 'blocked', 'queued', 'running'] as const)
+    assert.ok(!queueable(s), s)
 })

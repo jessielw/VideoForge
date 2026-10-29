@@ -5,7 +5,12 @@
   import { importSummary } from '../lib/importPlan'
   import type { ImportAction } from '../lib/types'
 
-  let { keepBoth, actions, disabled = false, onchange }: {
+  let {
+    keepBoth,
+    actions,
+    disabled = false,
+    onchange,
+  }: {
     keepBoth: boolean
     actions: ImportAction[] // the selected entries'
     disabled?: boolean
@@ -17,7 +22,11 @@
 <div class="space-y-1.5 rounded-md bg-muted/50 p-2 text-sm">
   <label class="flex items-start gap-2">
     <Checkbox checked={keepBoth} {disabled} onCheckedChange={onchange} />
-    <span>Keep both<span class="block text-xs text-muted-foreground">Add a numbered copy instead of replacing a preset with the same name.</span></span>
+    <span
+      >Keep both<span class="block text-xs text-muted-foreground"
+        >Add a numbered copy instead of replacing a preset with the same name.</span
+      ></span
+    >
   </label>
   {#if summary}<p class="text-xs text-muted-foreground" aria-live="polite">{summary}</p>{/if}
 </div>

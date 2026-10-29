@@ -40,14 +40,17 @@
       const value = valueOf(t)
       counts.set(value, (counts.get(value) ?? 0) + 1)
     }
-    return [...counts].map(([value, count]) => ({ value, count, label: labelOf(value) }))
+    return [...counts]
+      .map(([value, count]) => ({ value, count, label: labelOf(value) }))
       .sort((a, b) => a.label.localeCompare(b.label))
   }
 
-  const languages = $derived(choices(t => subtitleLanguage(t, overrides), languageLabel))
-  const formats = $derived(choices(subtitleFormat, f => f === 'vobsub' ? 'VobSub' : f === 'unknown' ? 'Unknown type' : f.toUpperCase()))
+  const languages = $derived(choices((t) => subtitleLanguage(t, overrides), languageLabel))
+  const formats = $derived(
+    choices(subtitleFormat, (f) => (f === 'vobsub' ? 'VobSub' : f === 'unknown' ? 'Unknown type' : f.toUpperCase())),
+  )
   const selected = $derived(
-    tracks.filter(t => {
+    tracks.filter((t) => {
       const ov = overrides.tracks[t.key]
       return ov?.burn || (ov?.exclude ?? !(t.auto?.kept ?? true)) === false
     }).length,
@@ -63,7 +66,9 @@
     {#snippet child({ props })}
       <Button {...props} variant="outline" size="sm">
         <ListFilterIcon />Select subtitles
-        <span class="text-xs text-muted-foreground tabular-nums" aria-label="{selected} of {tracks.length} selected">{selected}/{tracks.length}</span>
+        <span class="text-xs text-muted-foreground tabular-nums" aria-label="{selected} of {tracks.length} selected"
+          >{selected}/{tracks.length}</span
+        >
         <ChevronDownIcon class="size-3.5 text-muted-foreground" />
       </Button>
     {/snippet}
@@ -79,9 +84,14 @@
     <DropdownMenu.Label>Select matching tracks; deselect the rest.</DropdownMenu.Label>
     <DropdownMenu.Sub>
       <DropdownMenu.SubTrigger {disabled}><LanguagesIcon />Select only by language</DropdownMenu.SubTrigger>
-      <DropdownMenu.SubContent class="max-h-[min(24rem,var(--bits-dropdown-menu-content-available-height))] w-64 overflow-y-auto">
+      <DropdownMenu.SubContent
+        class="max-h-[min(24rem,var(--bits-dropdown-menu-content-available-height))] w-64 overflow-y-auto"
+      >
         {#each languages as language (language.value)}
-          <DropdownMenu.Item {disabled} onSelect={() => select(t => subtitleLanguage(t, overrides) === language.value)}>
+          <DropdownMenu.Item
+            {disabled}
+            onSelect={() => select((t) => subtitleLanguage(t, overrides) === language.value)}
+          >
             <span class="min-w-0 flex-1 truncate" title={language.label}>{language.label}</span>
             <span class="ml-auto text-xs text-muted-foreground tabular-nums">{language.count}</span>
           </DropdownMenu.Item>
@@ -90,9 +100,11 @@
     </DropdownMenu.Sub>
     <DropdownMenu.Sub>
       <DropdownMenu.SubTrigger {disabled}><CaptionsIcon />Select only by type</DropdownMenu.SubTrigger>
-      <DropdownMenu.SubContent class="max-h-[min(24rem,var(--bits-dropdown-menu-content-available-height))] w-44 overflow-y-auto">
+      <DropdownMenu.SubContent
+        class="max-h-[min(24rem,var(--bits-dropdown-menu-content-available-height))] w-44 overflow-y-auto"
+      >
         {#each formats as format (format.value)}
-          <DropdownMenu.Item {disabled} onSelect={() => select(t => subtitleFormat(t) === format.value)}>
+          <DropdownMenu.Item {disabled} onSelect={() => select((t) => subtitleFormat(t) === format.value)}>
             {format.label}<span class="ml-auto text-xs text-muted-foreground tabular-nums">{format.count}</span>
           </DropdownMenu.Item>
         {/each}

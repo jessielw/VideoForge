@@ -44,7 +44,7 @@ export function fitWidth(height: number, g: Geometry, mod: number): number {
 export const displayAspect = (g: Geometry) => (g.width * g.sarNum) / (g.height * g.sarDen)
 
 // How far width x height is from it, in percent.
-export const arError = (width: number, height: number, g: Geometry) => ((width / height) / displayAspect(g) - 1) * 100
+export const arError = (width: number, height: number, g: Geometry) => (width / height / displayAspect(g) - 1) * 100
 
 // The shape of the encode's pixels (width / height), as VideoSettings.output_sar: the source's without a
 // resize, square after a keep-AR one, the shape undoing a fixed size's stretch (square within 1%).
@@ -61,7 +61,7 @@ export function outputShape(r: Resize | null, g: Geometry): number {
 // a resize after the crop (its pixels are the source's then).
 export function previewShape(video: VideoSettings, source: Geometry | null, stage: 'crop' | 'output'): number {
   if (!source || video.custom !== null) return 1
-  const at = (c: string) => video.filters.findIndex(s => s.category === c)
+  const at = (c: string) => video.filters.findIndex((s) => s.category === c)
   if (stage === 'crop' && at('crop') < at('resize')) return source.sarNum / source.sarDen
   return outputShape(video.resize, resizeInput(video, source))
 }

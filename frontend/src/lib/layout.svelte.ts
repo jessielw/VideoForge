@@ -32,10 +32,10 @@ class Layout {
     if (typeof window === 'undefined' || !window.matchMedia) return
     const mq = window.matchMedia(NARROW)
     this.narrow = mq.matches
-    mq.addEventListener('change', e => (this.narrow = e.matches))
+    mq.addEventListener('change', (e) => (this.narrow = e.matches))
     const small = window.matchMedia('(max-width: 639px)')
     this.small = small.matches
-    small.addEventListener('change', e => (this.small = e.matches))
+    small.addEventListener('change', (e) => (this.small = e.matches))
   }
 
   get navCollapsed(): boolean {

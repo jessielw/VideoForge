@@ -36,14 +36,17 @@
   })
 
   const navCollapsed = $derived(layout.navCollapsed || layout.small)
-  const running = $derived(app.jobs.find(j => j.status === 'running'))
+  const running = $derived(app.jobs.find((j) => j.status === 'running'))
 </script>
 
 <ModeWatcher defaultMode="system" modeStorageKey="videoforge.mode" />
 <Toaster richColors closeButton position="bottom-right" />
 
 {#if app.stopped}
-  <div class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background p-6 text-center" role="alert">
+  <div
+    class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background p-6 text-center"
+    role="alert"
+  >
     <img src="/favicon.svg" alt="" class="size-12" />
     <h1 class="text-xl font-semibold">VideoForge has stopped</h1>
     <p class="text-sm text-muted-foreground">
@@ -53,7 +56,10 @@
 {/if}
 
 <div class="flex h-full">
-  <nav class="flex {navCollapsed ? 'w-14' : 'w-48'} shrink-0 flex-col overflow-y-auto border-r bg-card" aria-label="Main navigation">
+  <nav
+    class="flex {navCollapsed ? 'w-14' : 'w-48'} shrink-0 flex-col overflow-y-auto border-r bg-card"
+    aria-label="Main navigation"
+  >
     <div class="flex items-center gap-2 py-4 {navCollapsed ? 'justify-center' : 'px-4'}">
       <img src="/favicon.svg" alt="" class="size-6" title={app.version ? `VideoForge ${app.version}` : undefined} />
       {#if !navCollapsed}
@@ -66,7 +72,9 @@
         <Button
           variant="ghost"
           class="relative justify-start gap-3 {navCollapsed ? 'justify-center px-0' : 'px-3'}
-            {router.page === item.page ? 'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary' : 'text-muted-foreground'}"
+            {router.page === item.page
+            ? 'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary'
+            : 'text-muted-foreground'}"
           aria-current={router.page === item.page ? 'page' : undefined}
           aria-label={item.label}
           onclick={() => router.go(item.page)}
@@ -105,7 +113,10 @@
             >{running.progress ? Math.round(running.progress.overall * 100) + '%' : '▶'}</span
           >
         {/if}
-        <span class={app.connected ? 'text-success' : 'text-destructive'} title={app.connected ? 'Connected' : 'Reconnecting…'}>●</span>
+        <span
+          class={app.connected ? 'text-success' : 'text-destructive'}
+          title={app.connected ? 'Connected' : 'Reconnecting…'}>●</span
+        >
       </div>
     {:else}
       <div class="space-y-1 border-t p-3 text-xs text-muted-foreground">
@@ -124,7 +135,9 @@
           {@const left = (app.queue.indexing ? 1 : 0) + app.queue.index_queued}
           <div class="truncate text-info">Indexing {left} job{left > 1 ? 's' : ''}</div>
         {/if}
-        <div class={app.connected ? 'text-success' : 'text-destructive'}>{app.connected ? '● connected' : '● reconnecting…'}</div>
+        <div class={app.connected ? 'text-success' : 'text-destructive'}>
+          {app.connected ? '● connected' : '● reconnecting…'}
+        </div>
       </div>
     {/if}
   </nav>
@@ -133,7 +146,9 @@
     {#if app.connectionError}
       <div class="m-6 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
         Couldn't reach the VideoForge server: {app.connectionError}
-        <Button class="ml-3" variant="outline" disabled={app.connection === 'retrying'} onclick={() => app.start()}>Retry now</Button>
+        <Button class="ml-3" variant="outline" disabled={app.connection === 'retrying'} onclick={() => app.start()}
+          >Retry now</Button
+        >
       </div>
     {/if}
     {#if router.page === 'new'}

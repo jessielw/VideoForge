@@ -1,7 +1,6 @@
 # Documentation and releases
 
-The documentation is built with [Zensical](https://zensical.org/) from `docs/` and `zensical.toml`.
-GitHub Pages hosts it at [jessielw.github.io/VideoForge](https://jessielw.github.io/VideoForge/).
+The documentation is built with [Zensical](https://zensical.org/) from `docs/` and `zensical.toml`. GitHub Pages hosts it at [jessielw.github.io/VideoForge](https://jessielw.github.io/VideoForge/).
 
 ## Preview
 
@@ -26,12 +25,9 @@ With the dev and docs groups installed, `uv run --group docs poe docs` is a prev
 uv run --only-group docs --frozen zensical build --clean --strict
 ```
 
-The output is `site/`, which is ignored by Git. Strict mode fails on reported warnings, including
-broken documentation links. Keep all public pages in the configured navigation.
+The output is `site/`, which is ignored by Git. Strict mode fails on reported warnings, including broken documentation links. Keep all public pages in the configured navigation.
 
-`reference/changelog.md` and `development/architecture.md` include the root `CHANGELOG.md` and
-`ARCHITECTURE.md` using Markdown snippets. Edit those root documents to keep GitHub and the site
-in sync. Internal `audit-*.md` notes are excluded from the published site.
+`reference/changelog.md` and `development/architecture.md` include the root `CHANGELOG.md` and `ARCHITECTURE.md` using Markdown snippets. Edit those root documents to keep GitHub and the site in sync. Internal `audit-*.md` notes are excluded from the published site.
 
 ## GitHub Pages
 
@@ -41,26 +37,14 @@ The [Docs workflow](https://github.com/jessielw/VideoForge/actions/workflows/doc
 2. Builds and deploys matching pushes to `main`.
 3. Allows a manual run from the Actions page; only a run on `main` deploys.
 
-It installs the locked docs group independently of the application. Deployment uses GitHub's
-Pages artifact and OIDC flow; it does not require a personal access token in repository secrets.
-The one-time repository setting is **Settings → Pages → Source → GitHub Actions**. This follows
-[Zensical's publishing guide](https://zensical.org/docs/publish-your-site/).
+It installs the locked docs group independently of the application. Deployment uses GitHub's Pages artifact and OIDC flow; it does not require a personal access token in repository secrets. The one-time repository setting is **Settings → Pages → Source → GitHub Actions**. This follows [Zensical's publishing guide](https://zensical.org/docs/publish-your-site/).
 
-The GitHub Pages site contains the docs build only. Publishing these docs does not change the
-source repository's visibility. GitHub account plan limits still apply to Pages for private repositories.
+The GitHub Pages site contains the docs build only. Publishing these docs does not change the source repository's visibility. GitHub account plan limits still apply to Pages for private repositories.
 
 ## Application releases
 
-Application releases use version tags without a leading `v`, such as `0.1.0` or `0.1.0-beta`.
-The Release workflow builds the Windows ZIP and individual example plugin ZIPs, then creates a draft release using the matching section
-of `CHANGELOG.md`; publishing the draft is a separate release action.
+Application releases use version tags without a leading `v`, such as `0.1.0` or `0.1.0-beta`. The Release workflow builds the Windows ZIP and individual example plugin ZIPs, then creates a draft release using the matching section of `CHANGELOG.md`; publishing the draft is a separate release action.
 
-Example plugins remain readable under `examples/plugins/`, with setup instructions in each README.
-`python scripts/build_plugin_examples.py` packages their READMEs, manifests and declared Python modules
-into `build/plugin-examples/VideoForge-plugin-<id>-<version>.zip`. The packaging job needs only Python
-3.12 and does not import plugins or install app dependencies. Release assets are generated from that
-checkout. Manual workflow runs without a tag upload the ZIPs as Actions artifacts without creating a release.
+Example plugins remain readable under `examples/plugins/`, with setup instructions in each README. `python scripts/build_plugin_examples.py` packages their READMEs, manifests and declared Python modules into `build/plugin-examples/VideoForge-plugin-<id>-<version>.zip`. The packaging job needs only Python 3.12 and does not import plugins or install app dependencies. Release assets are generated from that checkout. Manual workflow runs without a tag upload the ZIPs as Actions artifacts without creating a release.
 
-The Docker workflow builds tagged images. A stable version tag moves `latest`; a tag with a suffix
-does not. The plugins image is keyed by the `vsplugins/` content hash so unchanged toolchains can be
-reused. Neither workflow is required to deploy a documentation-only update.
+The Docker workflow builds tagged images. A stable version tag moves `latest`; a tag with a suffix does not. The plugins image is keyed by the `vsplugins/` content hash so unchanged toolchains can be reused. Neither workflow is required to deploy a documentation-only update.

@@ -9,7 +9,17 @@
   import type { InputChanges } from '../lib/api'
   import { emptyOverride, isEmpty, shownOptions, subtitleName } from '../lib/format'
   import { app } from '../lib/state.svelte'
-  import type { AudioAction, AudioEncodeInfo, AudioTrack, EncodeOptionInfo, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
+  import type {
+    AudioAction,
+    AudioEncodeInfo,
+    AudioTrack,
+    EncodeOptionInfo,
+    JobDetail,
+    Overrides,
+    PlannedAudio,
+    SubTrack,
+    TrackOverride,
+  } from '../lib/types'
   import FileBrowser from './FileBrowser.svelte'
   import SubtitleSelectionMenu from './SubtitleSelectionMenu.svelte'
   import AudioPresetMenu from './AudioPresetMenu.svelte'
@@ -59,8 +69,24 @@
 
   // --- the job's files ---
   const SUB_EXTENSIONS = ['.srt', '.ass', '.ssa', '.sup', '.idx']
-  const AUDIO_EXTENSIONS = ['.ac3', '.eac3', '.ec3', '.dts', '.dtshd', '.thd', '.truehd', '.mlp', '.flac', '.wav', '.w64',
-    '.m4a', '.aac', '.mka', '.opus', '.ogg']
+  const AUDIO_EXTENSIONS = [
+    '.ac3',
+    '.eac3',
+    '.ec3',
+    '.dts',
+    '.dtshd',
+    '.thd',
+    '.truehd',
+    '.mlp',
+    '.flac',
+    '.wav',
+    '.w64',
+    '.m4a',
+    '.aac',
+    '.mka',
+    '.opus',
+    '.ogg',
+  ]
   let browsing = $state(false)
   const sourceDir = $derived(job.spec.inputs.source.replace(/[\\/][^\\/]*$/, ''))
   const sameFile = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
@@ -70,16 +96,24 @@
   // Picked files (or folders: the server takes each one's files of this kind) join this kind's list.
   function addFiles(paths: string[]) {
     const have = inputList(kind)
-    const add = paths.filter(p => !have.some(s => sameFile(s, p)))
+    const add = paths.filter((p) => !have.some((s) => sameFile(s, p)))
     if (add.length) saveInputs(listChange(kind, [...have, ...add]))
   }
 
-  const removeFile = (path: string) => saveInputs(listChange(kind, inputList(kind).filter(s => !sameFile(s, path))))
+  const removeFile = (path: string) =>
+    saveInputs(
+      listChange(
+        kind,
+        inputList(kind).filter((s) => !sameFile(s, path)),
+      ),
+    )
 
   const overrides = $derived(job.spec.overrides)
   const plan = $derived(job.plan)
   const tracks = $derived(job.tracks)
-  const properties = $derived(app.profiles.find(p => p.id === job.profile)?.track_properties.filter(p => p.kind === kind) ?? [])
+  const properties = $derived(
+    app.profiles.find((p) => p.id === job.profile)?.track_properties.filter((p) => p.kind === kind) ?? [],
+  )
 
   const isAudio = (t: Track): t is AudioTrack => 'codec' in t
   const basename = (p: string) => p.split(/[\\/]/).pop() ?? p
@@ -100,7 +134,10 @@
       const at = ids && isAudio(t) && !t.external_path && !t.copy ? ids.indexOf(t.id) : order.indexOf(t.key)
       return at < 0 ? 10_000 + planned[i] : at
     }
-    return list.map((t, i) => ({ t, r: rank(t, i) })).sort((a, b) => a.r - b.r).map(x => x.t)
+    return list
+      .map((t, i) => ({ t, r: rank(t, i) }))
+      .sort((a, b) => a.r - b.r)
+      .map((x) => x.t)
   }
 
   const audioRows = $derived(inOrder(tracks?.audio ?? []))
@@ -113,14 +150,21 @@
   const plannedAudio = $derived(new Map((plan?.audio ?? []).map((a, i) => [audioKey(a.source), { pos: i, a }])))
   const plannedSubs = $derived(
     new Map(
-      (plan?.subs ?? []).map((s, i) => [s.source.external_path ? `ext:${basename(s.source.external_path)}` : `id:${s.source.id}`, i]),
+      (plan?.subs ?? []).map((s, i) => [
+        s.source.external_path ? `ext:${basename(s.source.external_path)}` : `id:${s.source.id}`,
+        i,
+      ]),
     ),
   )
 
   const ovOf = (t: Track): TrackOverride | undefined => overrides.tracks[t.key]
   const excluded = (t: Track) =>
     !!ovOf(t)?.exclude ||
-    (!!overrides.audio_track_ids && isAudio(t) && !t.external_path && !t.copy && !overrides.audio_track_ids.includes(t.id))
+    (!!overrides.audio_track_ids &&
+      isAudio(t) &&
+      !t.external_path &&
+      !t.copy &&
+      !overrides.audio_track_ids.includes(t.id))
   const outPos = (t: Track) => (isAudio(t) ? plannedAudio.get(t.key)?.pos : plannedSubs.get(t.key))
   // The track as the profile has it with no hand edit (a profile with its own rules, e.g. a group's,
   // titles, encodes and picks tracks itself): shown until changed, and changing back saves no override.
@@ -137,9 +181,10 @@
     o.copies ??= []
     if (o.audio_track_ids) {
       for (const t of audioRows)
-        if (!t.external_path && !t.copy && !o.audio_track_ids.includes(t.id)) edit(o, t.key, ov => (ov.exclude = true))
+        if (!t.external_path && !t.copy && !o.audio_track_ids.includes(t.id))
+          edit(o, t.key, (ov) => (ov.exclude = true))
       o.audio_track_ids = null
-      o.order = [...audioRows, ...subRows].map(t => t.key)
+      o.order = [...audioRows, ...subRows].map((t) => t.key)
     }
     return o
   }
@@ -153,7 +198,7 @@
 
   // The order is saved once one is set (a track moved); until then the profile orders the tracks.
   function commit(o: Overrides, audio?: Track[], subs?: Track[]) {
-    if (audio || subs || o.order) o.order = [...(audio ?? audioRows), ...(subs ?? subRows)].map(t => t.key)
+    if (audio || subs || o.order) o.order = [...(audio ?? audioRows), ...(subs ?? subRows)].map((t) => t.key)
     save(o)
   }
 
@@ -163,7 +208,7 @@
     commit(o)
   }
 
-  const setIncluded = (t: Track, on: boolean) => editTrack(t, ov => (ov.exclude = on === autoKept(t) ? null : !on))
+  const setIncluded = (t: Track, on: boolean) => editTrack(t, (ov) => (ov.exclude = on === autoKept(t) ? null : !on))
 
   function selectSubs(include: (t: SubTrack) => boolean) {
     const o = draft()
@@ -175,20 +220,20 @@
   // untitled ones, or all. A flag the profile doesn't offer is the track's own.
   const titleOf = (t: Track) => ovOf(t)?.title ?? autoTitle(t)
   const nameFlag = (t: SubTrack, key: 'forced' | 'hearing_impaired' | 'commentary') =>
-    properties.some(p => p.key === key) ? flagOn(t, key) : t[key]
+    properties.some((p) => p.key === key) ? flagOn(t, key) : t[key]
   const subName = (t: SubTrack) =>
     subtitleName(ovOf(t)?.language ?? autoLanguage(t), {
       forced: nameFlag(t, 'forced'),
       hearing_impaired: nameFlag(t, 'hearing_impaired'),
       commentary: nameFlag(t, 'commentary'),
     })
-  const untitled = $derived(subRows.filter(t => !isOff(t) && !titleOf(t).trim()).length)
+  const untitled = $derived(subRows.filter((t) => !isOff(t) && !titleOf(t).trim()).length)
   function nameSubs(all: boolean) {
     const o = draft()
     for (const t of subRows as SubTrack[]) {
       if (isOff(t) || (!all && titleOf(t).trim())) continue
       const name = subName(t)
-      edit(o, t.key, ov => (ov.title = name === autoTitle(t) ? null : name))
+      edit(o, t.key, (ov) => (ov.title = name === autoTitle(t) ? null : name))
     }
     commit(o)
   }
@@ -196,15 +241,18 @@
   // Burning a subtitle in: one track per job (marking one unmarks the others); it leaves the mux. Only an
   // encode can take it, and only the formats SubText draws (core.video.burn).
   const BURNS = ['srt', 'ass', 'pgs', 'vobsub']
-  const burnKey = $derived(plan?.burn ? (plan.burn.external_path ? `ext:${basename(plan.burn.external_path)}` : `id:${plan.burn.id}`) : null)
+  const burnKey = $derived(
+    plan?.burn ? (plan.burn.external_path ? `ext:${basename(plan.burn.external_path)}` : `id:${plan.burn.id}`) : null,
+  )
   const canBurn = (t: Track) => !isAudio(t) && !job.spec.inputs.encode && BURNS.includes(t.format)
   function setBurn(t: Track, on: boolean) {
     const o = draft()
-    for (const s of subRows) edit(o, s.key, ov => (ov.burn = s.key === t.key && on ? true : null))
+    for (const s of subRows) edit(o, s.key, (ov) => (ov.burn = s.key === t.key && on ? true : null))
     commit(o)
   }
-  const setTitle = (t: Track, v: string) => editTrack(t, ov => (ov.title = v === autoTitle(t) ? null : v))
-  const setLanguage = (t: Track, v: string) => editTrack(t, ov => (ov.language = !v || v === autoLanguage(t) ? null : v))
+  const setTitle = (t: Track, v: string) => editTrack(t, (ov) => (ov.title = v === autoTitle(t) ? null : v))
+  const setLanguage = (t: Track, v: string) =>
+    editTrack(t, (ov) => (ov.language = !v || v === autoLanguage(t) ? null : v))
 
   // Where a set value comes from: the last template set it for this track, or a hand edit
   // (a template's value changed counts as one). Unset: as the profile has it, no mark.
@@ -226,10 +274,10 @@
   }
 
   const flagOn = (t: Track, key: string) => ovOf(t)?.flags[key] ?? t.detected[key] ?? false
-  const flagMark = (t: Track, key: string) => mark(t, ov => ov?.flags[key])
+  const flagMark = (t: Track, key: string) => mark(t, (ov) => ov?.flags[key])
   function toggleFlag(t: Track, key: string) {
     const on = !flagOn(t, key)
-    editTrack(t, ov => {
+    editTrack(t, (ov) => {
       if (on === (t.detected[key] ?? false)) delete ov.flags[key]
       else ov.flags[key] = on
     })
@@ -243,25 +291,33 @@
     while (o.copies.includes(`${base.key}+${n}`)) n++
     const key = `${base.key}+${n}`
     o.copies = [...o.copies, key]
-    const keys = audioRows.map(t => t.key)
+    const keys = audioRows.map((t) => t.key)
     const last = Math.max(...audioRows.map((t, i) => (isCopyOf(t, base) ? i : -1)))
     keys.splice(last + 1, 0, key) // just after the track and its other copies
-    o.order = [...keys, ...subRows.map(t => t.key)]
+    o.order = [...keys, ...subRows.map((t) => t.key)]
     save(o)
   }
 
   function removeCopy(t: AudioTrack) {
     const o = draft()
-    o.copies = o.copies.filter(k => k !== t.key)
+    o.copies = o.copies.filter((k) => k !== t.key)
     delete o.tracks[t.key]
-    o.order = (o.order ?? []).filter(k => k !== t.key)
+    o.order = (o.order ?? []).filter((k) => k !== t.key)
     save(o)
   }
 
   // --- audio encodes ---
   const CODEC: Record<string, string> = {
-    eac3: 'E-AC-3', ac3: 'AC-3', aac: 'AAC', truehd: 'TrueHD', dts: 'DTS', dts_hd_ma: 'DTS-HD MA',
-    dts_hd_hra: 'DTS-HD HRA', lpcm: 'LPCM', flac: 'FLAC', opus: 'Opus',
+    eac3: 'E-AC-3',
+    ac3: 'AC-3',
+    aac: 'AAC',
+    truehd: 'TrueHD',
+    dts: 'DTS',
+    dts_hd_ma: 'DTS-HD MA',
+    dts_hd_hra: 'DTS-HD HRA',
+    lpcm: 'LPCM',
+    flac: 'FLAC',
+    opus: 'Opus',
   }
   const channels = (layout: string) => layout.split('.').reduce((n, x) => n + +x, 0)
   const autoAction = (t: AudioTrack): AudioAction => t.auto?.action ?? 'copy'
@@ -269,17 +325,20 @@
   const canAtmos = (t: AudioTrack) => t.atmos && t.codec === 'truehd'
   // The encodes come from the server; one whose tools are missing can't be picked (one already
   // picked stays, and blocks the job). Atmos is offered for TrueHD Atmos sources only.
-  const encodeOf = (a: AudioAction) => app.encodes.find(e => e.id === a)
+  const encodeOf = (a: AudioAction) => app.encodes.find((e) => e.id === a)
   const needs = (e: AudioEncodeInfo) => (e.missing.length ? ` (needs ${e.missing.join(', ')})` : '')
-  const offered = (t: AudioTrack, current: AudioAction) => app.encodes.filter(e => e.id !== 'atmos' || canAtmos(t) || current === 'atmos')
+  const offered = (t: AudioTrack, current: AudioAction) =>
+    app.encodes.filter((e) => e.id !== 'atmos' || canAtmos(t) || current === 'atmos')
 
   // The layouts an encode can make from this track: no upmix (DDP's 5.0 -> 5.1 aside).
   function layoutChoices(t: AudioTrack, e: AudioEncodeInfo): string[] {
-    return audioEncodeLayouts(e, ovOf(t)?.options).filter(l => channels(l) <= channels(t.layout) || (e.id === 'ddp' && t.layout === '5.0' && l === '5.1'))
+    return audioEncodeLayouts(e, ovOf(t)?.options).filter(
+      (l) => channels(l) <= channels(t.layout) || (e.id === 'ddp' && t.layout === '5.0' && l === '5.1'),
+    )
   }
 
   const setAction = (t: AudioTrack, a: AudioAction) =>
-    editTrack(t, ov => {
+    editTrack(t, (ov) => {
       ov.action = a === autoAction(t) ? null : a
       ov.layout = ov.bitrate_kbps = null
       ov.options = {}
@@ -288,15 +347,15 @@
   // The encode's own settings, folded away under a "Settings" toggle per track.
   let openSettings = $state<Record<string, boolean>>({})
   const setOption = (t: AudioTrack, o: EncodeOptionInfo, v: string) =>
-    editTrack(t, ov => {
+    editTrack(t, (ov) => {
       ov.options ??= {}
-      if (v.trim() === o.default || !v.trim() && !o.choices.length && !o.range) delete ov.options[o.key]
+      if (v.trim() === o.default || (!v.trim() && !o.choices.length && !o.range)) delete ov.options[o.key]
       else ov.options[o.key] = v.trim()
       if (o.key === 'ddp_mode' && v.trim() === 'bluray' && ov.layout !== '7.1') ov.layout = null
     })
   const changedOptions = (t: AudioTrack, e: AudioEncodeInfo) =>
-    e.options.filter(o => ovOf(t)?.options?.[o.key] !== undefined).length
-  const setLayout = (t: AudioTrack, v: string) => editTrack(t, ov => (ov.layout = v || null))
+    e.options.filter((o) => ovOf(t)?.options?.[o.key] !== undefined).length
+  const setLayout = (t: AudioTrack, v: string) => editTrack(t, (ov) => (ov.layout = v || null))
   function setDelay(t: AudioTrack, input: HTMLInputElement) {
     const v = input.value
     const n = Math.round(Number(v))
@@ -306,17 +365,21 @@
     // Restore the visible value even when clearing an already unmodified delay; its
     // saved value doesn't change, so Svelte otherwise leaves the input blank.
     input.value = String(t.delay_ms + correction)
-    editTrack(t, ov => (ov.sync_ms = correction || null))
+    editTrack(t, (ov) => (ov.sync_ms = correction || null))
   }
   function setBitrate(t: AudioTrack, v: string) {
     const n = Math.round(+v)
-    editTrack(t, ov => (ov.bitrate_kbps = v.trim() && n > 0 ? n : null))
+    editTrack(t, (ov) => (ov.bitrate_kbps = v.trim() && n > 0 ? n : null))
   }
 
   function audioOut(p: PlannedAudio): string {
     const codec = (CODEC[p.out_codec] ?? p.out_codec) + (p.out_atmos ? ' Atmos' : '')
     if (p.action === 'copy') return `copied · ${codec} ${p.out_layout}`
-    const rate = p.bitrate_kbps ? `${p.bitrate_kbps} kb/s` : encodeOf(p.action as AudioAction)?.bitrates === null ? 'lossless' : 'quality VBR'
+    const rate = p.bitrate_kbps
+      ? `${p.bitrate_kbps} kb/s`
+      : encodeOf(p.action as AudioAction)?.bitrates === null
+        ? 'lossless'
+        : 'quality VBR'
     return `${codec} ${p.out_layout} · ${rate}${p.upmix_50 ? ' · 5.0 upmixed to 5.1' : ''}`
   }
 
@@ -327,7 +390,9 @@
       const where = t.external_path ? `${basename(t.external_path)}${t.index ? ` #${t.index + 1}` : ''}:` : `#${t.id}`
       return `${where} ${fmt}${t.atmos ? ' Atmos' : t.dtsx ? ' DTS:X' : ''} ${t.layout}`
     }
-    return t.external_path ? `${basename(t.external_path)} (${t.format.toUpperCase()})` : `#${t.id} ${t.format.toUpperCase()}`
+    return t.external_path
+      ? `${basename(t.external_path)} (${t.format.toUpperCase()})`
+      : `#${t.id} ${t.format.toUpperCase()}`
   }
 
   function duration(ms: number): string {
@@ -365,7 +430,7 @@
 
   function move(key: string, to: number) {
     const list = [...rows]
-    const from = list.findIndex(t => t.key === key)
+    const from = list.findIndex((t) => t.key === key)
     const target = to > from ? to - 1 : to
     if (from < 0 || target === from || target < 0 || target >= list.length) return
     const [t] = list.splice(from, 1)
@@ -401,10 +466,10 @@
   // Back to the profile's choices for this kind (the other tab's edits stay).
   function reset() {
     const o = draft()
-    const mine = new Set(rows.map(t => t.key))
+    const mine = new Set(rows.map((t) => t.key))
     for (const key of Object.keys(o.tracks)) if (mine.has(key)) delete o.tracks[key]
     if (kind === 'audio') o.copies = []
-    o.order = (o.order ?? []).filter(key => !mine.has(key))
+    o.order = (o.order ?? []).filter((key) => !mine.has(key))
     save(o)
   }
 
@@ -414,11 +479,11 @@
     if (!chosen) return
     const tpl = $state.snapshot(chosen) as typeof chosen
     const o = draft()
-    const mine = new Set([...rows.map(t => t.key), ...Object.keys(tpl.tracks)])
+    const mine = new Set([...rows.map((t) => t.key), ...Object.keys(tpl.tracks)])
     for (const key of Object.keys(o.tracks)) if (mine.has(key)) delete o.tracks[key]
     for (const [key, ov] of Object.entries(tpl.tracks)) if (!isEmpty(ov)) o.tracks[key] = ov
     if (kind === 'audio') o.copies = [...tpl.copies]
-    o.order = [...(o.order ?? []).filter(key => !mine.has(key)), ...(tpl.order ?? [])]
+    o.order = [...(o.order ?? []).filter((key) => !mine.has(key)), ...(tpl.order ?? [])]
     save(o)
   }
 
@@ -442,14 +507,16 @@
     data-row
     role="listitem"
     class="rounded-lg border bg-card {drag === t.key ? 'opacity-40' : ''}"
-    ondragover={e => dragOver(e, i)}
+    ondragover={(e) => dragOver(e, i)}
     ondrop={drop}
   >
     <div class="flex items-center gap-2 px-2 py-1.5">
       <span
-        class="rounded-md p-0.5 text-muted-foreground {editable ? 'cursor-grab hover:bg-accent hover:text-foreground' : 'opacity-40'}"
+        class="rounded-md p-0.5 text-muted-foreground {editable
+          ? 'cursor-grab hover:bg-accent hover:text-foreground'
+          : 'opacity-40'}"
         draggable={editable}
-        ondragstart={e => dragStart(e, t)}
+        ondragstart={(e) => dragStart(e, t)}
         ondragend={() => (drag = dropAt = null)}
         title="Drag to reorder"
         role="button"
@@ -457,11 +524,13 @@
       >
       <Checkbox
         checked={!off}
-        title="In the output{note(mark(t, o => o?.exclude))}"
+        title="In the output{note(mark(t, (o) => o?.exclude))}"
         aria-label="In the output"
-        onCheckedChange={v => setIncluded(t, v)}
+        onCheckedChange={(v) => setIncluded(t, v)}
       />
-      <span class="w-5 text-center text-xs {off ? 'text-muted-foreground' : 'text-primary'}">{pos === undefined ? '–' : pos + 1}</span>
+      <span class="w-5 text-center text-xs {off ? 'text-muted-foreground' : 'text-primary'}"
+        >{pos === undefined ? '–' : pos + 1}</span
+      >
       <div class="min-w-0 flex-1">
         <div class="truncate text-sm {off ? 'text-muted-foreground line-through' : ''}" title={t.title}>
           <span class="font-medium">{sourceLabel(t)}</span>
@@ -483,12 +552,14 @@
           title={burned
             ? 'Burned into the video (not muxed): image subtitles before the crop, text after it'
             : 'Burn this track into the video instead of muxing it (one per job)'}
-          onPressedChange={on => setBurn(t, on)}><FlameIcon class="size-3" />Burn in</Toggle
+          onPressedChange={(on) => setBurn(t, on)}><FlameIcon class="size-3" />Burn in</Toggle
         >
       {/if}
       {#if copy}
-        <Badge variant="outline" class="border-primary/40 bg-primary/10 text-primary" title="Another output track from {sourceLabel(t)}"
-          >copy {copy.copy}</Badge
+        <Badge
+          variant="outline"
+          class="border-primary/40 bg-primary/10 text-primary"
+          title="Another output track from {sourceLabel(t)}">copy {copy.copy}</Badge
         >
         <Button
           variant="ghost"
@@ -517,13 +588,19 @@
       <Button variant="ghost" size="icon-sm" disabled={i === 0} onclick={() => move(t.key, i - 1)} aria-label="Move up">
         <ArrowUpIcon />
       </Button>
-      <Button variant="ghost" size="icon-sm" disabled={i === count - 1} onclick={() => move(t.key, i + 2)} aria-label="Move down">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        disabled={i === count - 1}
+        onclick={() => move(t.key, i + 2)}
+        aria-label="Move down"
+      >
         <ArrowDownIcon />
       </Button>
     </div>
     {#if !off}
-      {@const titleMark = mark(t, o => o?.title)}
-      {@const langMark = mark(t, o => o?.language)}
+      {@const titleMark = mark(t, (o) => o?.title)}
+      {@const langMark = mark(t, (o) => o?.language)}
       <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-3 py-2 text-sm">
         <Input
           class="w-64 {titleMark ? INPUT_MARK[titleMark] : ''}"
@@ -531,7 +608,7 @@
           value={ov?.title ?? autoTitle(t)}
           title={titleMark ? `Title${note(titleMark)}` : undefined}
           aria-label="Title"
-          onchange={e => setTitle(t, e.currentTarget.value)}
+          onchange={(e) => setTitle(t, e.currentTarget.value)}
         />
         <LanguagePicker
           class="w-28 {langMark ? INPUT_MARK[langMark] : ''}"
@@ -563,19 +640,23 @@
         {@const action = actionOf(t)}
         {@const planned = plannedAudio.get(t.key)?.a}
         {@const enc = encodeOf(action)}
-        {@const actionMark = mark(t, o => o?.action)}
-        {@const layoutMark = mark(t, o => o?.layout)}
-        {@const bitrateMark = mark(t, o => o?.bitrate_kbps)}
-        {@const delayMark = mark(t, o => o?.sync_ms)}
+        {@const actionMark = mark(t, (o) => o?.action)}
+        {@const layoutMark = mark(t, (o) => o?.layout)}
+        {@const bitrateMark = mark(t, (o) => o?.bitrate_kbps)}
+        {@const delayMark = mark(t, (o) => o?.sync_ms)}
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-3 py-2 text-sm">
-          <AudioPresetMenu current={audioPresetSettings(ov)} source={t} disabled={!editable}
-            apply={preset => editTrack(t, value => Object.assign(value, applyAudioPreset(value, preset)))} />
+          <AudioPresetMenu
+            current={audioPresetSettings(ov)}
+            source={t}
+            disabled={!editable}
+            apply={(preset) => editTrack(t, (value) => Object.assign(value, applyAudioPreset(value, preset)))}
+          />
           <NativeSelect
             value={action}
             class={actionMark ? SELECT_MARK[actionMark] : ''}
             title={actionMark ? `Copy or encode${note(actionMark)}` : undefined}
             aria-label="Copy or encode"
-            onchange={e => setAction(t, e.currentTarget.value as AudioAction)}
+            onchange={(e) => setAction(t, e.currentTarget.value as AudioAction)}
           >
             <option value="copy">Copy</option>
             {#each offered(t, action) as e (e.id)}
@@ -588,7 +669,7 @@
               class={layoutMark ? SELECT_MARK[layoutMark] : ''}
               title={layoutMark ? `Channels${note(layoutMark)}` : undefined}
               aria-label="Channels"
-              onchange={e => setLayout(t, e.currentTarget.value)}
+              onchange={(e) => setLayout(t, e.currentTarget.value)}
             >
               <option value="">Channels: auto{planned && !ov?.layout ? ` (${planned.out_layout})` : ''}</option>
               {#each layoutChoices(t, enc) as l (l)}<option value={l}>{l}</option>{/each}
@@ -602,9 +683,11 @@
                   class={bitrateMark ? SELECT_MARK[bitrateMark] : ''}
                   title={bitrateMark ? `Bitrate${note(bitrateMark)}` : undefined}
                   aria-label="Bitrate"
-                  onchange={e => setBitrate(t, e.currentTarget.value)}
+                  onchange={(e) => setBitrate(t, e.currentTarget.value)}
                 >
-                  <option value="">auto{planned?.bitrate_kbps && !ov?.bitrate_kbps ? ` (${planned.bitrate_kbps})` : ''}</option>
+                  <option value=""
+                    >auto{planned?.bitrate_kbps && !ov?.bitrate_kbps ? ` (${planned.bitrate_kbps})` : ''}</option
+                  >
                   {#each enc.bitrate_choices as b (b)}<option value={b}>{b}</option>{/each}
                 </NativeSelect>
               {:else}
@@ -617,14 +700,16 @@
                   placeholder={enc.vbr_default ? 'VBR' : String(planned?.bitrate_kbps ?? '')}
                   value={ov?.bitrate_kbps ?? ''}
                   aria-label="Bitrate"
-                  onchange={e => setBitrate(t, e.currentTarget.value)}
+                  onchange={(e) => setBitrate(t, e.currentTarget.value)}
                 />
               {/if}kb/s
             </label>
           {/if}
           <label
             class="flex items-center gap-1.5 text-muted-foreground"
-            title="Total delay relative to video: + later, − earlier. Detected delay: {t.delay_ms > 0 ? '+' : ''}{t.delay_ms} ms. Clear to restore the detected delay. Only the mux changes: an encode isn't made again."
+            title="Total delay relative to video: + later, − earlier. Detected delay: {t.delay_ms > 0
+              ? '+'
+              : ''}{t.delay_ms} ms. Clear to restore the detected delay. Only the mux changes: an encode isn't made again."
           >
             Delay
             <Input
@@ -634,7 +719,7 @@
               placeholder={String(t.delay_ms)}
               value={t.delay_ms + (ov?.sync_ms ?? 0)}
               aria-label="Delay (ms)"
-              onchange={e => setDelay(t, e.currentTarget)}
+              onchange={(e) => setDelay(t, e.currentTarget)}
             />ms
           </label>
           {#if enc?.options.length}
@@ -654,22 +739,40 @@
         </div>
         {#if enc?.options.length && openSettings[t.key]}
           <div class="grid gap-x-4 gap-y-2 border-t border-border/60 px-3 py-2 text-sm sm:grid-cols-[12rem_1fr]">
-            {#each shownOptions(enc.options, o => ov?.options?.[o.key] ?? planned?.options?.[o.key] ?? o.default) as o (o.key)}
+            {#each shownOptions(enc.options, (o) => ov?.options?.[o.key] ?? planned?.options?.[o.key] ?? o.default) as o (o.key)}
               {@const value = ov?.options?.[o.key] ?? planned?.options?.[o.key] ?? o.default}
               <label class="text-muted-foreground" for="opt-{t.key}-{o.key}" title={o.help}>{o.label}</label>
               <div class="flex items-center gap-2">
                 {#if o.choices.length}
-                  <NativeSelect id="opt-{t.key}-{o.key}" {value} onchange={e => setOption(t, o, e.currentTarget.value)}>
+                  <NativeSelect
+                    id="opt-{t.key}-{o.key}"
+                    {value}
+                    onchange={(e) => setOption(t, o, e.currentTarget.value)}
+                  >
                     {#each o.choices as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
                   </NativeSelect>
                 {:else if o.range}
-                  <Input id="opt-{t.key}-{o.key}" class="w-24" type="number" min={o.range[0]} max={o.range[1]} step={o.step}
-                    {value} onchange={e => setOption(t, o, e.currentTarget.value)} />
+                  <Input
+                    id="opt-{t.key}-{o.key}"
+                    class="w-24"
+                    type="number"
+                    min={o.range[0]}
+                    max={o.range[1]}
+                    step={o.step}
+                    {value}
+                    onchange={(e) => setOption(t, o, e.currentTarget.value)}
+                  />
                 {:else}
-                  <Input id="opt-{t.key}-{o.key}" class="min-w-0 flex-1 font-mono text-xs" {value} placeholder={o.help}
-                    onchange={e => setOption(t, o, e.currentTarget.value)} />
+                  <Input
+                    id="opt-{t.key}-{o.key}"
+                    class="min-w-0 flex-1 font-mono text-xs"
+                    {value}
+                    placeholder={o.help}
+                    onchange={(e) => setOption(t, o, e.currentTarget.value)}
+                  />
                 {/if}
-                {#if o.help && (o.choices.length || o.range)}<span class="text-xs text-muted-foreground">{o.help}</span>{/if}
+                {#if o.help && (o.choices.length || o.range)}<span class="text-xs text-muted-foreground">{o.help}</span
+                  >{/if}
               </div>
             {/each}
           </div>
@@ -681,7 +784,9 @@
 {/snippet}
 
 {#if !tracks || !plan}
-  <div class="p-6 text-muted-foreground">{job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}</div>
+  <div class="p-6 text-muted-foreground">
+    {job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}
+  </div>
 {:else}
   <fieldset disabled={!editable} class="max-w-5xl space-y-4">
     <div class="flex flex-wrap items-center gap-3">
@@ -698,13 +803,16 @@
       <div class="ml-auto flex flex-wrap gap-2">
         {#if kind === 'audio'}
           <DropdownMenu.Root>
-            <DropdownMenu.Trigger disabled={!editable} title="Use a track again: another output track with its own encode, title and flags">
+            <DropdownMenu.Trigger
+              disabled={!editable}
+              title="Use a track again: another output track with its own encode, title and flags"
+            >
               {#snippet child({ props })}
                 <Button {...props} variant="outline"><CopyPlusIcon />Add a track from…</Button>
               {/snippet}
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end" class="w-auto max-w-[32rem]">
-              {#each audioRows.filter(t => !t.copy) as t (t.key)}
+              {#each audioRows.filter((t) => !t.copy) as t (t.key)}
                 <DropdownMenu.Item onSelect={() => addCopy(t)}>
                   <span class="truncate">{sourceLabel(t)} · {t.language}{t.title ? ` · ${t.title}` : ''}</span>
                 </DropdownMenu.Item>
@@ -712,7 +820,11 @@
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         {/if}
-        <Button variant="outline" onclick={() => (browsing = true)} title="Add {kind === 'audio' ? 'audio' : 'subtitle'} files to this job">
+        <Button
+          variant="outline"
+          onclick={() => (browsing = true)}
+          title="Add {kind === 'audio' ? 'audio' : 'subtitle'} files to this job"
+        >
           <FilePlusIcon />Add files…
         </Button>
         {#if chosen}
@@ -720,7 +832,9 @@
             <LayoutTemplateIcon />Back to template
           </Button>
         {/if}
-        <Button variant="outline" onclick={reset} title="Back to the profile's choices for these tracks"><RefreshCwIcon />Reset</Button>
+        <Button variant="outline" onclick={reset} title="Back to the profile's choices for these tracks"
+          ><RefreshCwIcon />Reset</Button
+        >
       </div>
     </div>
 
@@ -734,20 +848,30 @@
       }}
     >
       <div class="mb-2 flex items-center gap-2">
-        {#if kind === 'audio'}<AudioLinesIcon class="size-4 text-primary" />{:else}<CaptionsIcon class="size-4 text-primary" />{/if}
+        {#if kind === 'audio'}<AudioLinesIcon class="size-4 text-primary" />{:else}<CaptionsIcon
+            class="size-4 text-primary"
+          />{/if}
         <span class="font-medium">{title}</span>
-        <span class="text-xs text-muted-foreground">{rows.filter(t => !isOff(t)).length} of {rows.length} in the output</span>
+        <span class="text-xs text-muted-foreground"
+          >{rows.filter((t) => !isOff(t)).length} of {rows.length} in the output</span
+        >
         <span class="ml-auto text-xs text-muted-foreground"
-          >Drag a track by its handle to reorder; {drops.desktop ? 'drop' : 'paste'} files here to add them; every change saves.</span
+          >Drag a track by its handle to reorder; {drops.desktop ? 'drop' : 'paste'} files here to add them; every change
+          saves.</span
         >
       </div>
       {#if kind === 'sub'}
         <div class="mb-3 flex flex-wrap gap-2">
           <SubtitleSelectionMenu tracks={subRows} {overrides} disabled={!editable} onselect={selectSubs} />
           <DropdownMenu.Root>
-            <DropdownMenu.Trigger disabled={!editable || !subRows.length} title="Title the kept subtitles from their language and flags">
+            <DropdownMenu.Trigger
+              disabled={!editable || !subRows.length}
+              title="Title the kept subtitles from their language and flags"
+            >
               {#snippet child({ props })}
-                <Button {...props} variant="outline" size="sm"><TagIcon />Name subtitles<ChevronDownIcon class="size-3.5 text-muted-foreground" /></Button>
+                <Button {...props} variant="outline" size="sm"
+                  ><TagIcon />Name subtitles<ChevronDownIcon class="size-3.5 text-muted-foreground" /></Button
+                >
               {/snippet}
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="start" class="w-72">
@@ -778,7 +902,7 @@
     title={kind === 'audio' ? 'Add audio files' : 'Add subtitle files'}
     extensions={kind === 'audio' ? AUDIO_EXTENSIONS : SUB_EXTENSIONS}
     start={sourceDir}
-    onpick={paths => {
+    onpick={(paths) => {
       addFiles(paths)
       browsing = false
     }}

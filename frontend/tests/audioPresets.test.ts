@@ -1,22 +1,48 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { applyAudioPreset, audioPresetDefaults, audioPresetProblem, audioPresetSettings } from '../src/lib/audioPresets.ts'
+import {
+  applyAudioPreset,
+  audioPresetDefaults,
+  audioPresetProblem,
+  audioPresetSettings,
+} from '../src/lib/audioPresets.ts'
 import type { AudioEncodeInfo, AudioPresetSettings, AudioTrack, TrackOverride } from '../src/lib/types.ts'
 
 const ddp: AudioEncodeInfo = {
-  id: 'ddp', label: 'DDP (DEE)', codec: 'eac3', layouts: ['1.0', '2.0', '5.1', '7.1'],
-  bitrates: { '1': 192, '2': 256, '6': 640, '8': 1024 }, bitrate_choices: [], bitrate_range: null,
-  per_channel_max: null, vbr_default: false, default_max: null, missing: [], options: [],
+  id: 'ddp',
+  label: 'DDP (DEE)',
+  codec: 'eac3',
+  layouts: ['1.0', '2.0', '5.1', '7.1'],
+  bitrates: { '1': 192, '2': 256, '6': 640, '8': 1024 },
+  bitrate_choices: [],
+  bitrate_range: null,
+  per_channel_max: null,
+  vbr_default: false,
+  default_max: null,
+  missing: [],
+  options: [],
 }
 const opus: AudioEncodeInfo = { ...ddp, id: 'opus', label: 'Opus', bitrate_range: [6, 2048], per_channel_max: 256 }
-const ac3: AudioEncodeInfo = { ...ddp, id: 'ac3', label: 'AC-3', layouts: ['1.0', '2.0', '5.0', '5.1'], bitrate_choices: [192, 224, 448, 640] }
+const ac3: AudioEncodeInfo = {
+  ...ddp,
+  id: 'ac3',
+  label: 'AC-3',
+  layouts: ['1.0', '2.0', '5.0', '5.1'],
+  bitrate_choices: [192, 224, 448, 640],
+}
 const atmos: AudioEncodeInfo = { ...ddp, id: 'atmos', label: 'Atmos', layouts: ['5.1'] }
 const encodes = [ddp, opus, ac3, atmos]
 const source = (layout: string, codec = 'flac', atmos = false) => ({ layout, codec, atmos }) as AudioTrack
 const preset: AudioPresetSettings = { action: 'ddp', layout: '5.1', bitrate_kbps: 640, options: { dialnorm: '-27' } }
 
 test('saving audio settings includes custom titles, excludes other metadata and takes an independent options copy', () => {
-  const settings = audioPresetSettings({ ...preset, title: 'Original', language: 'ja', flags: { default: true }, exclude: true })
+  const settings = audioPresetSettings({
+    ...preset,
+    title: 'Original',
+    language: 'ja',
+    flags: { default: true },
+    exclude: true,
+  })
   assert.deepEqual(Object.keys(settings).sort(), ['action', 'bitrate_kbps', 'layout', 'options', 'title'])
   assert.equal(settings.title, 'Original')
   settings.options.dialnorm = '-25'
@@ -24,7 +50,13 @@ test('saving audio settings includes custom titles, excludes other metadata and 
 })
 
 test('applying a preset preserves track metadata and replaces only encoding fields', () => {
-  const track: TrackOverride = { ...preset, title: 'Commentary', language: 'en', flags: { commentary: true }, exclude: false }
+  const track: TrackOverride = {
+    ...preset,
+    title: 'Commentary',
+    language: 'en',
+    flags: { commentary: true },
+    exclude: false,
+  }
   const next = applyAudioPreset(track, { ...preset, action: 'ac3', options: { extra: '-cutoff 18000' } })
   assert.deepEqual(next, { ...track, action: 'ac3', options: { extra: '-cutoff 18000' } })
   next.options.extra = '-cutoff 16000'
@@ -66,7 +98,10 @@ test('automatic output layouts still enforce bitrate limits for the actual sourc
   assert.match(audioPresetProblem(setting, encodes, source('1.0')), /exceeds the limit/)
   assert.equal(audioPresetProblem(setting, encodes, source('2.0')), '')
   assert.match(audioPresetProblem({ ...setting, bitrate_kbps: 3000 }, encodes, source('7.1')), /takes 6 to 2048/)
-  assert.match(audioPresetProblem({ ...preset, action: 'ac3', bitrate_kbps: 641 }, encodes, source('5.1')), /not supported/)
+  assert.match(
+    audioPresetProblem({ ...preset, action: 'ac3', bitrate_kbps: 641 }, encodes, source('5.1')),
+    /not supported/,
+  )
 })
 
 test('missing tools disable direct application without preventing template configuration', () => {
@@ -79,13 +114,12 @@ test('missing tools disable direct application without preventing template confi
 
 test('built-ins provide 5.1 640 kb/s and source-independent encoder defaults', () => {
   const choices = audioPresetDefaults(encodes)
-  const surround = choices.find(c => c.data.action === 'ddp' && c.data.layout === '5.1')!
+  const surround = choices.find((c) => c.data.action === 'ddp' && c.data.layout === '5.1')!
   assert.equal(surround.label, '5.1 640 kb/s')
   assert.equal(surround.data.bitrate_kbps, 640)
-  assert.equal(choices.find(c => c.data.action === 'ddp' && c.label === 'Encoder defaults')!.data.layout, null)
-  assert.equal(new Set(choices.map(c => c.name)).size, choices.length)
+  assert.equal(choices.find((c) => c.data.action === 'ddp' && c.label === 'Encoder defaults')!.data.layout, null)
+  assert.equal(new Set(choices.map((c) => c.name)).size, choices.length)
 })
-
 
 test('custom preset titles override output titles for encode and copy; untitled presets preserve edits', () => {
   const track = { ...preset, title: 'Source title', language: 'en', flags: {} } as TrackOverride

@@ -1,6 +1,8 @@
 export class LatestRequest {
   private revision = 0
-  invalidate() { this.revision++ }
+  invalidate() {
+    this.revision++
+  }
 
   async run<T>(send: () => Promise<T>): Promise<{ value: T } | { error: string } | null> {
     const revision = ++this.revision

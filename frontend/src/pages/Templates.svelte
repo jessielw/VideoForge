@@ -38,7 +38,13 @@
   // What the editor holds: the saved template it started from (name null = not saved yet).
   type Open = { name: string | null; builtin: boolean; data: Template }
 
-  const restored = drafts.read<{ profile: string; opened: Open | null; draft: Template | null; draftName: string; collapsed?: string[] }>('templates')
+  const restored = drafts.read<{
+    profile: string
+    opened: Open | null
+    draft: Template | null
+    draftName: string
+    collapsed?: string[]
+  }>('templates')
   let profile = $state(restored?.profile ?? '')
   let opened = $state<Open | null>(restored?.opened ?? null)
   let draft = $state<Template | null>(restored?.draft ?? null)
@@ -53,7 +59,7 @@
   }
   let collapsed = $state<string[]>(restored?.collapsed ?? [])
   function toggleFolder(path: string) {
-    collapsed = collapsed.includes(path) ? collapsed.filter(p => p !== path) : [...collapsed, path]
+    collapsed = collapsed.includes(path) ? collapsed.filter((p) => p !== path) : [...collapsed, path]
   }
   let pending = $state<(() => void) | null>(null)
   let busy = $state(false)
@@ -67,15 +73,21 @@
   ]
 
   const choices = $derived<Choice[]>(app.presetChoices('template', profile))
-  const tree = $derived(buildTree(choices.filter(c => !c.builtin), c => c.name))
+  const tree = $derived(
+    buildTree(
+      choices.filter((c) => !c.builtin),
+      (c) => c.name,
+    ),
+  )
 
   // Selecting several saved templates (a folder: all inside it) to delete at once.
   let selecting = $state(false)
   let picked = $state<string[]>([])
   let confirmDelete = $state(false)
-  const leafNames = (n: TreeNode<Choice>): string[] => (n.kind === 'item' ? [n.item.name] : n.children.flatMap(leafNames))
+  const leafNames = (n: TreeNode<Choice>): string[] =>
+    n.kind === 'item' ? [n.item.name] : n.children.flatMap(leafNames)
   function pickMany(names: string[], on: boolean) {
-    picked = on ? [...new Set([...picked, ...names])] : picked.filter(n => !names.includes(n))
+    picked = on ? [...new Set([...picked, ...names])] : picked.filter((n) => !names.includes(n))
     confirmDelete = false
   }
   function stopSelecting() {
@@ -98,20 +110,25 @@
     }
   }
   const starred = $derived(app.defaultTemplate(profile))
-  const userNames = $derived(new Set(app.presets.template.map(t => t.name)))
-  const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
-  const container = $derived(containers.find(c => c.id === draft?.mux.container) ?? containers[0])
+  const userNames = $derived(new Set(app.presets.template.map((t) => t.name)))
+  const containers = $derived(app.profiles.find((p) => p.id === profile)?.containers ?? [])
+  const container = $derived(containers.find((c) => c.id === draft?.mux.container) ?? containers[0])
   // templates are shared; a profile without a track editor ignores their audio and subtitles
-  const trackEditor = $derived(app.profiles.find(p => p.id === profile)?.track_editor ?? false)
-  const trackFlags = $derived(app.profiles.find(p => p.id === profile)?.track_properties ?? [])
-  const audioFlags = $derived(trackFlags.filter(f => f.kind === 'audio'))
-  const subFlags = $derived(trackFlags.filter(f => f.kind === 'sub'))
+  const trackEditor = $derived(app.profiles.find((p) => p.id === profile)?.track_editor ?? false)
+  const trackFlags = $derived(app.profiles.find((p) => p.id === profile)?.track_properties ?? [])
+  const audioFlags = $derived(trackFlags.filter((f) => f.kind === 'audio'))
+  const subFlags = $derived(trackFlags.filter((f) => f.kind === 'sub'))
   const readOnly = $derived(!!opened?.builtin)
   const dirty = $derived(
-    !!opened && !!draft && !opened.builtin && (opened.name === null || draftName.trim() !== opened.name || canon(draft) !== canon(opened.data)),
+    !!opened &&
+      !!draft &&
+      !opened.builtin &&
+      (opened.name === null || draftName.trim() !== opened.name || canon(draft) !== canon(opened.data)),
   )
 
-  function persist() { drafts.write('templates', $state.snapshot({ profile, opened, draft, draftName, collapsed })) }
+  function persist() {
+    drafts.write('templates', $state.snapshot({ profile, opened, draft, draftName, collapsed }))
+  }
   function request(proceed: () => void) {
     if (busy) return
     if (dirty) pending = proceed
@@ -119,7 +136,9 @@
   }
   $effect(() => {
     router.guard = request
-    return () => { if (router.guard === request) router.guard = null }
+    return () => {
+      if (router.guard === request) router.guard = null
+    }
   })
   onDestroy(persist)
 
@@ -128,12 +147,14 @@
   })
   $effect(() => {
     // the first time the profile's templates are known, open its default
-    if (!opened && choices.length) open(choices.find(c => c.name === starred) ?? choices[0])
+    if (!opened && choices.length) open(choices.find((c) => c.name === starred) ?? choices[0])
   })
 
   function canon(v: unknown): string {
     return JSON.stringify(v, (_k, val) =>
-      val && typeof val === 'object' && !Array.isArray(val) ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b))) : val,
+      val && typeof val === 'object' && !Array.isArray(val)
+        ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b)))
+        : val,
     )
   }
   const copy = <T,>(v: T): T => structuredClone($state.snapshot(v)) as T
@@ -224,34 +245,64 @@
 
   async function resolve(action: 'save' | 'discard' | 'stay') {
     const next = pending
-    if (action === 'stay' || !next) { pending = null; return }
+    if (action === 'stay' || !next) {
+      pending = null
+      return
+    }
     if (action === 'save' && !(await save())) return
     if (action === 'discard' && opened) {
-      if (opened.name === null) { opened = null; draft = null; setName('') }
-      else { draft = copy(opened.data); setName(opened.name) }
+      if (opened.name === null) {
+        opened = null
+        draft = null
+        setName('')
+      } else {
+        draft = copy(opened.data)
+        setName(opened.name)
+      }
     }
     pending = null
     next()
   }
 </script>
 
-<svelte:window onbeforeunload={e => { persist(); if (dirty) { e.preventDefault(); e.returnValue = '' } }} />
+<svelte:window
+  onbeforeunload={(e) => {
+    persist()
+    if (dirty) {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+  }}
+/>
 
 <div class="flex h-full">
   <section class="flex w-72 shrink-0 flex-col border-r">
     <div class="space-y-3 border-b p-4">
       <div class="flex items-center justify-between gap-2">
         <h1 class="text-xl font-semibold">Templates</h1>
-        <Button variant={selecting ? 'secondary' : 'ghost'} size="sm" disabled={!tree.length && !selecting}
-          aria-pressed={selecting} title="Select saved templates to delete several at once"
-          onclick={() => (selecting ? stopSelecting() : (selecting = true))}><ListChecksIcon />Select</Button>
+        <Button
+          variant={selecting ? 'secondary' : 'ghost'}
+          size="sm"
+          disabled={!tree.length && !selecting}
+          aria-pressed={selecting}
+          title="Select saved templates to delete several at once"
+          onclick={() => (selecting ? stopSelecting() : (selecting = true))}><ListChecksIcon />Select</Button
+        >
       </div>
       <label class="flex items-center gap-2 text-sm text-muted-foreground">
         Profile
-        <NativeSelect class="min-w-0 flex-1" aria-label="Profile" value={profile} onchange={e => {
-          const next = e.currentTarget.value
-          request(() => { profile = next; opened = null })
-        }}>
+        <NativeSelect
+          class="min-w-0 flex-1"
+          aria-label="Profile"
+          value={profile}
+          onchange={(e) => {
+            const next = e.currentTarget.value
+            request(() => {
+              profile = next
+              opened = null
+            })
+          }}
+        >
           {#each app.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
         </NativeSelect>
       </label>
@@ -259,30 +310,47 @@
     {#snippet row(c: Choice, label: string, depth: number)}
       {@const active = opened && (c.builtin ? opened.builtin && draftName === c.name : opened.name === c.name)}
       {@const chosen = picked.includes(c.name)}
-      <li class="flex items-center gap-1 rounded-md {active && !selecting ? 'bg-primary/15 text-primary' : 'hover:bg-accent'}" style:padding-left="{depth * 1.25}rem">
+      <li
+        class="flex items-center gap-1 rounded-md {active && !selecting
+          ? 'bg-primary/15 text-primary'
+          : 'hover:bg-accent'}"
+        style:padding-left="{depth * 1.25}rem"
+      >
         {#if selecting}
           <span class="flex size-8 shrink-0 items-center justify-center">
-            {#if !c.builtin}<Checkbox checked={chosen} aria-label="Select {c.name}" onCheckedChange={on => pickMany([c.name], on)} />{/if}
+            {#if !c.builtin}<Checkbox
+                checked={chosen}
+                aria-label="Select {c.name}"
+                onCheckedChange={(on) => pickMany([c.name], on)}
+              />{/if}
           </span>
-          <button class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm {c.builtin ? 'text-muted-foreground' : ''}" title={c.name}
-            disabled={c.builtin} onclick={() => pickMany([c.name], !chosen)}>
+          <button
+            class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm {c.builtin ? 'text-muted-foreground' : ''}"
+            title={c.name}
+            disabled={c.builtin}
+            onclick={() => pickMany([c.name], !chosen)}
+          >
             {label}{#if c.builtin}<span class="ml-2 text-xs">built in</span>{/if}
           </button>
         {:else}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          class={c.name === starred ? 'text-warning hover:text-warning' : 'text-muted-foreground opacity-50 hover:opacity-100'}
-          title={c.name === starred ? `New jobs start on this template for ${profile}` : 'Make this the default for New jobs'}
-          aria-label="Default: {c.name}"
-          aria-pressed={c.name === starred}
-          onclick={() => star(c)}
-        >
-          <StarIcon class={c.name === starred ? 'fill-current' : ''} />
-        </Button>
-        <button class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm" title={c.name} onclick={() => pick(c)}>
-          {label}{#if c.builtin}<span class="ml-2 text-xs text-muted-foreground">built in</span>{/if}
-        </button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            class={c.name === starred
+              ? 'text-warning hover:text-warning'
+              : 'text-muted-foreground opacity-50 hover:opacity-100'}
+            title={c.name === starred
+              ? `New jobs start on this template for ${profile}`
+              : 'Make this the default for New jobs'}
+            aria-label="Default: {c.name}"
+            aria-pressed={c.name === starred}
+            onclick={() => star(c)}
+          >
+            <StarIcon class={c.name === starred ? 'fill-current' : ''} />
+          </Button>
+          <button class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm" title={c.name} onclick={() => pick(c)}>
+            {label}{#if c.builtin}<span class="ml-2 text-xs text-muted-foreground">built in</span>{/if}
+          </button>
         {/if}
       </li>
     {/snippet}
@@ -291,12 +359,16 @@
         {#if n.kind === 'folder'}
           {@const open = !collapsed.includes(n.path)}
           {@const inside = leafNames(n)}
-          {@const some = inside.filter(name => picked.includes(name)).length}
+          {@const some = inside.filter((name) => picked.includes(name)).length}
           <li class="flex items-center gap-1" style:padding-left="{depth * 1.25}rem">
             {#if selecting}
               <span class="flex size-8 shrink-0 items-center justify-center">
-                <Checkbox checked={some === inside.length} indeterminate={some > 0 && some < inside.length}
-                  aria-label="Select everything in {n.name}" onCheckedChange={on => pickMany(inside, on)} />
+                <Checkbox
+                  checked={some === inside.length}
+                  indeterminate={some > 0 && some < inside.length}
+                  aria-label="Select everything in {n.name}"
+                  onCheckedChange={(on) => pickMany(inside, on)}
+                />
               </span>
             {/if}
             <button
@@ -317,13 +389,15 @@
       {/each}
     {/snippet}
     <ul class="min-h-0 flex-1 overflow-auto p-2" aria-label="Templates">
-      {#each choices.filter(c => c.builtin) as c (`${c.builtin}:${c.name}`)}{@render row(c, c.name, 0)}{/each}
+      {#each choices.filter((c) => c.builtin) as c (`${c.builtin}:${c.name}`)}{@render row(c, c.name, 0)}{/each}
       {@render nodes(tree, 0)}
     </ul>
     <div class="space-y-2 border-t p-2">
       {#if selecting}
         {#if confirmDelete}
-          <p class="px-1 text-sm" role="alert">Delete {picked.length} template{picked.length === 1 ? '' : 's'}? This can't be undone.</p>
+          <p class="px-1 text-sm" role="alert">
+            Delete {picked.length} template{picked.length === 1 ? '' : 's'}? This can't be undone.
+          </p>
           <div class="grid grid-cols-2 gap-2">
             <Button variant="destructive" disabled={busy} onclick={deletePicked}><Trash2Icon />Delete</Button>
             <Button variant="outline" disabled={busy} onclick={() => (confirmDelete = false)}>Keep them</Button>
@@ -358,20 +432,34 @@
             />
             <span class="text-muted-foreground" aria-hidden="true">/</span>
           {/if}
-          <Input class="max-w-sm text-base font-semibold" aria-label="Template name" bind:value={draftLabel} disabled={readOnly} />
-          {#if dirty}<span class="text-xs text-warning">{opened.name === null ? 'Not saved yet' : 'Unsaved changes'}</span>{/if}
+          <Input
+            class="max-w-sm text-base font-semibold"
+            aria-label="Template name"
+            bind:value={draftLabel}
+            disabled={readOnly}
+          />
+          {#if dirty}<span class="text-xs text-warning"
+              >{opened.name === null ? 'Not saved yet' : 'Unsaved changes'}</span
+            >{/if}
           <div class="ml-auto flex gap-2">
             {#if !readOnly}<Button onclick={save} disabled={busy || !dirty}><SaveIcon />Save</Button>{/if}
-            <Button variant="outline" onclick={duplicate}><CopyIcon />{readOnly ? 'Duplicate to change it' : 'Duplicate'}</Button>
+            <Button variant="outline" onclick={duplicate}
+              ><CopyIcon />{readOnly ? 'Duplicate to change it' : 'Duplicate'}</Button
+            >
             {#if opened.name}
               <Button variant="ghost" class="hover:text-destructive" onclick={remove}><Trash2Icon />Delete</Button>
             {/if}
           </div>
         </header>
-        {#if readOnly}<p class="text-sm text-muted-foreground">The profile's own settings for a new job. Duplicate it to make your own.</p>{/if}
+        {#if readOnly}<p class="text-sm text-muted-foreground">
+            The profile's own settings for a new job. Duplicate it to make your own.
+          </p>{/if}
         {#if error}<p class="text-sm text-destructive">{error}</p>{/if}
 
-        <fieldset disabled={readOnly} class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 @min-[56rem]/template-editor:grid-cols-2">
+        <fieldset
+          disabled={readOnly}
+          class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 @min-[56rem]/template-editor:grid-cols-2"
+        >
           <Card.Root class="gap-4 p-4">
             <span class="section-label">Video</span>
             <label class="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-2 text-sm">
@@ -379,7 +467,7 @@
               <NativeSelect
                 class="w-full"
                 value={draft.video.source_filter}
-                onchange={e => (draft!.video.source_filter = e.currentTarget.value as SourceFilter)}
+                onchange={(e) => (draft!.video.source_filter = e.currentTarget.value as SourceFilter)}
               >
                 {#each SOURCE_FILTERS as f (f.id)}<option value={f.id} title={f.title}>{f.label}</option>{/each}
               </NativeSelect>
@@ -393,10 +481,14 @@
                 class="w-fit max-w-full flex-wrap"
                 disabled={readOnly}
                 value={draft.crop_mode}
-                onValueChange={v => v && (draft!.crop_mode = v as CropMode)}
+                onValueChange={(v) => v && (draft!.crop_mode = v as CropMode)}
               >
                 {#each CROP_MODES as m (m.id)}
-                  <ToggleGroup.Item value={m.id} class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">{m.label}</ToggleGroup.Item>
+                  <ToggleGroup.Item
+                    value={m.id}
+                    class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    >{m.label}</ToggleGroup.Item
+                  >
                 {/each}
               </ToggleGroup.Root>
               {#if draft.crop_mode === 'fixed'}
@@ -408,7 +500,9 @@
                 </div>
                 <p class="text-xs text-muted-foreground">The same crop on every job (one show, the same black bars).</p>
               {:else if draft.crop_mode === 'auto'}
-                <p class="text-xs text-muted-foreground">Each job's crop is detected after it's added (indexing the source takes a while the first time).</p>
+                <p class="text-xs text-muted-foreground">
+                  Each job's crop is detected after it's added (indexing the source takes a while the first time).
+                </p>
               {:else}
                 <p class="text-xs text-muted-foreground">Applying the template leaves each job's crop as it is.</p>
               {/if}
@@ -426,7 +520,7 @@
                 <Checkbox
                   checked={draft.video.custom !== null}
                   disabled={readOnly}
-                  onCheckedChange={on => (draft!.video.custom = on ? (opened?.data.video.custom ?? '') : null)}
+                  onCheckedChange={(on) => (draft!.video.custom = on ? (opened?.data.video.custom ?? '') : null)}
                 />
                 Custom script body (instead of the filters)
               </label>
@@ -444,7 +538,9 @@
           <div class="min-w-0 space-y-4">
             <Card.Root class="@container/output gap-3 p-4">
               <span class="section-label">Output</span>
-              <div class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 text-sm @min-[26rem]/output:grid-cols-[7rem_minmax(0,1fr)]">
+              <div
+                class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 text-sm @min-[26rem]/output:grid-cols-[7rem_minmax(0,1fr)]"
+              >
                 <span class="text-muted-foreground">Container</span>
                 {#if containers.length > 1}
                   <ToggleGroup.Root
@@ -453,34 +549,58 @@
                     spacing={1}
                     class="w-fit max-w-full flex-wrap"
                     disabled={readOnly}
-                    value={containers.some(c => c.id === draft?.mux.container) ? draft.mux.container : containers[0].id}
-                    onValueChange={v => v && (draft!.mux.container = v)}
+                    value={containers.some((c) => c.id === draft?.mux.container)
+                      ? draft.mux.container
+                      : containers[0].id}
+                    onValueChange={(v) => v && (draft!.mux.container = v)}
                   >
                     {#each containers as c (c.id)}
-                      <ToggleGroup.Item value={c.id} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">{c.label}</ToggleGroup.Item>
+                      <ToggleGroup.Item
+                        value={c.id}
+                        class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                        >{c.label}</ToggleGroup.Item
+                      >
                     {/each}
                   </ToggleGroup.Root>
                 {:else}
-                  <span>{containers[0]?.label ?? '—'}{draft.mux.container && draft.mux.container !== containers[0]?.id ? ` (this profile can't make ${draft.mux.container.toUpperCase()})` : ''}</span>
+                  <span
+                    >{containers[0]?.label ?? '—'}{draft.mux.container && draft.mux.container !== containers[0]?.id
+                      ? ` (this profile can't make ${draft.mux.container.toUpperCase()})`
+                      : ''}</span
+                  >
                 {/if}
                 {#if container?.id === 'mkv'}
                   <span class="text-muted-foreground">PGS compression</span>
                   <label class="flex items-center gap-2">
-                    <Checkbox checked={draft.mux.pgs_zlib ?? false} disabled={readOnly} onCheckedChange={v => (draft!.mux.pgs_zlib = v)} />
+                    <Checkbox
+                      checked={draft.mux.pgs_zlib ?? false}
+                      disabled={readOnly}
+                      onCheckedChange={(v) => (draft!.mux.pgs_zlib = v)}
+                    />
                     Compress PGS subtitles with zlib
                   </label>
                 {/if}
                 <span class="text-muted-foreground">Extra arguments</span>
-                <Input class="font-mono text-xs" aria-label="Extra muxer arguments" placeholder="added to the muxer command as typed" bind:value={draft.mux.extra} />
+                <Input
+                  class="font-mono text-xs"
+                  aria-label="Extra muxer arguments"
+                  placeholder="added to the muxer command as typed"
+                  bind:value={draft.mux.extra}
+                />
                 <span class="hidden @min-[26rem]/output:block"></span>
                 <label class="flex items-center gap-2">
-                  <Checkbox checked={draft.qpf} disabled={readOnly} onCheckedChange={v => (draft!.qpf = v)} />
+                  <Checkbox checked={draft.qpf} disabled={readOnly} onCheckedChange={(v) => (draft!.qpf = v)} />
                   AutoQPF: chapters from the source (or every 5%) and keyframes on them
                 </label>
               </div>
             </Card.Root>
             <Card.Root class="p-4">
-              <EncoderPanel {profile} value={draft.encoder} disabled={readOnly} onchange={v => (draft!.encoder = v)} />
+              <EncoderPanel
+                {profile}
+                value={draft.encoder}
+                disabled={readOnly}
+                onchange={(v) => (draft!.encoder = v)}
+              />
             </Card.Root>
           </div>
         </fieldset>
@@ -488,19 +608,31 @@
           <span class="section-label">Audio</span>
           {#if !trackEditor}
             <p class="text-xs text-muted-foreground">
-              {app.profiles.find(p => p.id === profile)?.name}'s rules choose its jobs' audio: these settings apply to other profiles' jobs.
+              {app.profiles.find((p) => p.id === profile)?.name}'s rules choose its jobs' audio: these settings apply to
+              other profiles' jobs.
             </p>
           {/if}
-          <TemplateAudioEditor value={draft.audio ?? null} flags={audioFlags} disabled={readOnly} onchange={v => (draft!.audio = v)} />
+          <TemplateAudioEditor
+            value={draft.audio ?? null}
+            flags={audioFlags}
+            disabled={readOnly}
+            onchange={(v) => (draft!.audio = v)}
+          />
         </Card.Root>
         <Card.Root class="gap-3 p-4">
           <span class="section-label">Subtitles</span>
           {#if !trackEditor}
             <p class="text-xs text-muted-foreground">
-              {app.profiles.find(p => p.id === profile)?.name}'s rules choose its jobs' subtitles: these settings apply to other profiles' jobs.
+              {app.profiles.find((p) => p.id === profile)?.name}'s rules choose its jobs' subtitles: these settings
+              apply to other profiles' jobs.
             </p>
           {/if}
-          <TemplateSubsEditor value={draft.subs ?? null} flags={subFlags} disabled={readOnly} onchange={v => (draft!.subs = v)} />
+          <TemplateSubsEditor
+            value={draft.subs ?? null}
+            flags={subFlags}
+            disabled={readOnly}
+            onchange={(v) => (draft!.subs = v)}
+          />
         </Card.Root>
       </div>
     {:else}
@@ -509,7 +641,12 @@
   </section>
 </div>
 
-<Dialog.Root open={pending !== null} onOpenChange={open => { if (!open && !busy) pending = null }}>
+<Dialog.Root
+  open={pending !== null}
+  onOpenChange={(open) => {
+    if (!open && !busy) pending = null
+  }}
+>
   <Dialog.Content>
     <Dialog.Header>
       <Dialog.Title>Save changes to {draftName}?</Dialog.Title>

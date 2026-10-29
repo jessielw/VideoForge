@@ -17,7 +17,11 @@ class Router {
     const [, page, id] = location.hash.replace(/^#/, '').split('/')
     const next = PAGES.includes(page as Page) ? (page as Page) : 'new'
     let jobId: string | null = null
-    try { jobId = next === 'queue' && id ? decodeURIComponent(id) : null } catch { /* malformed route */ }
+    try {
+      jobId = next === 'queue' && id ? decodeURIComponent(id) : null
+    } catch {
+      /* malformed route */
+    }
     if (this.guard && (next !== this.page || jobId !== this.jobId)) {
       history.replaceState(null, '', `#/${this.page}${this.jobId ? `/${encodeURIComponent(this.jobId)}` : ''}`)
       this.go(next, jobId)

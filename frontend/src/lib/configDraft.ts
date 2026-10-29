@@ -16,15 +16,22 @@ export function configDraft(config: ConfigState, changes: ConfigChanges): Config
     next.roots = changes.roots ?? config.default_roots
     next.roots_custom = !!changes.roots?.length
   }
-  if (changes.tools) next.tools = config.tools.map(tool => {
-    if (!(tool.name in changes.tools!)) return tool
-    const custom = changes.tools![tool.name] || null
-    return { ...tool, custom, path: custom ?? tool.default }
-  })
+  if (changes.tools)
+    next.tools = config.tools.map((tool) => {
+      if (!(tool.name in changes.tools!)) return tool
+      const custom = changes.tools![tool.name] || null
+      return { ...tool, custom, path: custom ?? tool.default }
+    })
   if (changes.disabled_plugins) {
-    const enabled = <T extends { id: string; enabled: boolean }>(plugin: T): T =>
-      ({ ...plugin, enabled: !changes.disabled_plugins!.includes(plugin.id) })
-    next.plugins = { ...config.plugins, loaded: config.plugins.loaded.map(enabled), disabled: config.plugins.disabled.map(enabled) }
+    const enabled = <T extends { id: string; enabled: boolean }>(plugin: T): T => ({
+      ...plugin,
+      enabled: !changes.disabled_plugins!.includes(plugin.id),
+    })
+    next.plugins = {
+      ...config.plugins,
+      loaded: config.plugins.loaded.map(enabled),
+      disabled: config.plugins.disabled.map(enabled),
+    }
   }
   return next
 }

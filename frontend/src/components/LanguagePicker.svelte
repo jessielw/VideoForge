@@ -34,7 +34,7 @@
   const uid = $props.id()
   const many = $derived(Array.isArray(value))
   const chosen = $derived(Array.isArray(value) ? value : value ? [value] : [])
-  const isChosen = (tag: string) => chosen.some(c => c.toLowerCase() === tag.toLowerCase())
+  const isChosen = (tag: string) => chosen.some((c) => c.toLowerCase() === tag.toLowerCase())
 
   let open = $state(false)
   let query = $state('')
@@ -48,9 +48,12 @@
   const realTag = (t: string) => TAG.test(t) && languageName(t).toLowerCase() !== t.toLowerCase()
   const items = $derived.by(() => {
     const q = query.trim().toLowerCase()
-    const found = PICKER_LANGUAGES.filter(([tag, name]) => !q || tag.toLowerCase().startsWith(q) || name.toLowerCase().includes(q))
+    const found = PICKER_LANGUAGES.filter(
+      ([tag, name]) => !q || tag.toLowerCase().startsWith(q) || name.toLowerCase().includes(q),
+    )
     const typed = query.trim()
-    if (realTag(typed) && !found.some(([tag, name]) => tag.toLowerCase() === q || name === languageName(typed))) found.push([typed, languageName(typed)])
+    if (realTag(typed) && !found.some(([tag, name]) => tag.toLowerCase() === q || name === languageName(typed)))
+      found.push([typed, languageName(typed)])
     return found
   })
   // What was typed, when it names one language exactly (a tag or a name): taken when the box loses focus.
@@ -69,7 +72,8 @@
   function begin() {
     if (disabled || open) return
     query = ''
-    const at = chosen.length === 1 ? PICKER_LANGUAGES.findIndex(([tag]) => tag.toLowerCase() === chosen[0].toLowerCase()) : -1
+    const at =
+      chosen.length === 1 ? PICKER_LANGUAGES.findIndex(([tag]) => tag.toLowerCase() === chosen[0].toLowerCase()) : -1
     active = Math.max(at, 0)
     open = true
     requestAnimationFrame(() => list?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' }))
@@ -82,7 +86,7 @@
 
   function pick(tag: string) {
     if (Array.isArray(value)) {
-      emit(isChosen(tag) ? value.filter(v => v.toLowerCase() !== tag.toLowerCase()) : [...value, tag])
+      emit(isChosen(tag) ? value.filter((v) => v.toLowerCase() !== tag.toLowerCase()) : [...value, tag])
       query = ''
       active = 0
       input?.focus()
@@ -94,7 +98,7 @@
   }
 
   function remove(tag: string) {
-    if (Array.isArray(value)) emit(value.filter(v => v !== tag))
+    if (Array.isArray(value)) emit(value.filter((v) => v !== tag))
   }
 
   function onkeydown(e: KeyboardEvent) {
@@ -117,7 +121,12 @@
   }
 </script>
 
-<Popover.Root open={open} onOpenChange={o => { if (!o) end() }}>
+<Popover.Root
+  {open}
+  onOpenChange={(o) => {
+    if (!o) end()
+  }}
+>
   <div
     bind:this={anchor}
     class={cn(
@@ -129,7 +138,10 @@
   >
     {#if many}
       {#each chosen as tag (tag)}
-        <span class="inline-flex max-w-full items-center gap-0.5 rounded-md bg-secondary py-0.5 pr-0.5 pl-1.5 text-xs text-secondary-foreground" title={tag}>
+        <span
+          class="inline-flex max-w-full items-center gap-0.5 rounded-md bg-secondary py-0.5 pr-0.5 pl-1.5 text-xs text-secondary-foreground"
+          title={tag}
+        >
           <span class="truncate">{languageName(tag)}</span>
           {#if !disabled}
             <button
@@ -158,7 +170,11 @@
       value={open ? query : shown}
       onfocus={begin}
       onclick={begin}
-      oninput={e => { query = e.currentTarget.value; active = 0; if (!open) begin() }}
+      oninput={(e) => {
+        query = e.currentTarget.value
+        active = 0
+        if (!open) begin()
+      }}
       onblur={() => {
         const tag = typedTag()
         if (tag && !isChosen(tag)) emit(Array.isArray(value) ? [...value, tag] : tag)
@@ -172,7 +188,7 @@
         class="rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
         aria-label="Clear the language"
         title="Clear"
-        onmousedown={e => e.preventDefault()}
+        onmousedown={(e) => e.preventDefault()}
         onclick={() => emit('')}><XIcon class="size-3.5" /></button
       >
     {/if}
@@ -182,9 +198,11 @@
     align="start"
     class="w-64 gap-0 p-1"
     trapFocus={false}
-    onOpenAutoFocus={e => e.preventDefault()}
-    onCloseAutoFocus={e => e.preventDefault()}
-    onInteractOutside={e => { if (anchor?.contains(e.target as Node)) e.preventDefault() }}
+    onOpenAutoFocus={(e) => e.preventDefault()}
+    onCloseAutoFocus={(e) => e.preventDefault()}
+    onInteractOutside={(e) => {
+      if (anchor?.contains(e.target as Node)) e.preventDefault()
+    }}
   >
     <div bind:this={list} id="{uid}-list" role="listbox" aria-multiselectable={many} class="max-h-64 overflow-y-auto">
       {#each items as [tag, name], i (tag)}
@@ -194,8 +212,10 @@
           tabindex="-1"
           aria-selected={isChosen(tag)}
           data-active={i === active ? '' : undefined}
-          class="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm select-none {i === active ? 'bg-accent text-accent-foreground' : ''}"
-          onmousedown={e => e.preventDefault()}
+          class="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm select-none {i === active
+            ? 'bg-accent text-accent-foreground'
+            : ''}"
+          onmousedown={(e) => e.preventDefault()}
           onmousemove={() => (active = i)}
           onclick={() => pick(tag)}
           onkeydown={() => {}}

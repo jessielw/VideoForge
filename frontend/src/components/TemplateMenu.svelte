@@ -40,10 +40,10 @@
 
   const choices = $derived(app.presetChoices('template', profile))
   // a profile without a track editor chooses the audio by its own rules, so there's none to save
-  const trackEditor = $derived(app.profiles.find(p => p.id === profile)?.track_editor ?? false)
-  const userNames = $derived(new Set(app.presets.template.map(p => p.name)))
+  const trackEditor = $derived(app.profiles.find((p) => p.id === profile)?.track_editor ?? false)
+  const userNames = $derived(new Set(app.presets.template.map((p) => p.name)))
   // replacing a template whose audio is by rules keeps them (rules can't be made from a job)
-  const replaced = $derived(app.presets.template.find(p => p.name === name.trim())?.data ?? null)
+  const replaced = $derived(app.presets.template.find((p) => p.name === name.trim())?.data ?? null)
   const keepsRules = $derived(replaced?.audio?.mode === 'rules')
   const current = $derived<Template>({
     video: spec.video,
@@ -59,14 +59,25 @@
     if (!audioKeys.length) return null
     const o = spec.overrides
     const strip = (ov: TrackOverride | undefined): TrackOverride => ({
-      exclude: null, title: null, flags: {}, action: null, bitrate_kbps: null, layout: null, options: {}, ...ov, language: null,
+      exclude: null,
+      title: null,
+      flags: {},
+      action: null,
+      bitrate_kbps: null,
+      layout: null,
+      options: {},
+      ...ov,
+      language: null,
     })
     const copiesOf = (key: string) =>
-      o.copies.filter(c => c.startsWith(`${key}+`)).sort((a, b) => +a.split('+').pop()! - +b.split('+').pop()!)
-    const slots = audioKeys.map(k => ({ track: strip(o.tracks[k]), extra: copiesOf(k).map(c => strip(o.tracks[c])) }))
+      o.copies.filter((c) => c.startsWith(`${key}+`)).sort((a, b) => +a.split('+').pop()! - +b.split('+').pop()!)
+    const slots = audioKeys.map((k) => ({
+      track: strip(o.tracks[k]),
+      extra: copiesOf(k).map((c) => strip(o.tracks[c])),
+    }))
     return { mode: 'position', slots, rules: [], others: 'keep' }
   }
-  const matched = $derived(choices.find(c => same(c.data, current))?.name ?? null)
+  const matched = $derived(choices.find((c) => same(c.data, current))?.name ?? null)
   const crop = $derived(spec.video.crop)
   const cropText = (c: Template['video']['crop']) => `${c.left}/${c.top}/${c.right}/${c.bottom}`
 
@@ -96,9 +107,13 @@
     if (!n) return
     busy = true
     try {
-      const old = app.presets.template.find(p => p.name === n)?.data
+      const old = app.presets.template.find((p) => p.name === n)?.data
       const audio = old?.audio?.mode === 'rules' ? old.audio : current.audio
-      app.presets = await api.savePreset('template', n, { ...structuredClone($state.snapshot(current)), audio, subs: old?.subs ?? null })
+      app.presets = await api.savePreset('template', n, {
+        ...structuredClone($state.snapshot(current)),
+        audio,
+        subs: old?.subs ?? null,
+      })
       name = ''
       error = ''
     } catch (e) {
@@ -126,7 +141,7 @@
       </Button>
     {/snippet}
   </Popover.Trigger>
-  <Popover.Content align="end" class="w-80 gap-2 p-2" onEscapeKeydown={e => e.stopPropagation()}>
+  <Popover.Content align="end" class="w-80 gap-2 p-2" onEscapeKeydown={(e) => e.stopPropagation()}>
     <ul class="max-h-64 overflow-auto">
       {#each choices as c (`${c.builtin}:${c.name}`)}
         {@const { folder, label } = splitName(c.name)}
@@ -135,9 +150,16 @@
             class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-accent"
             onclick={() => load(c.data)}
           >
-            <span class="w-3.5 shrink-0">{#if c.name === matched}<CheckIcon class="size-3.5 text-primary" />{/if}</span>
-            <span class="truncate" title={c.name}>{#if folder.length}<span class="text-muted-foreground">{folder.join(' / ')} / </span>{/if}{label || c.name}</span>
-            <span class="ml-auto shrink-0 text-xs text-muted-foreground">{c.builtin ? 'profile' : cropNote(c.data)}</span>
+            <span class="w-3.5 shrink-0"
+              >{#if c.name === matched}<CheckIcon class="size-3.5 text-primary" />{/if}</span
+            >
+            <span class="truncate" title={c.name}
+              >{#if folder.length}<span class="text-muted-foreground">{folder.join(' / ')} / </span>{/if}{label ||
+                c.name}</span
+            >
+            <span class="ml-auto shrink-0 text-xs text-muted-foreground"
+              >{c.builtin ? 'profile' : cropNote(c.data)}</span
+            >
           </button>
           {#if !c.builtin}
             <Button
@@ -156,14 +178,16 @@
     </ul>
     <form
       class="space-y-1 border-t pt-2"
-      onsubmit={e => {
+      onsubmit={(e) => {
         e.preventDefault()
         save()
       }}
     >
       <div class="flex gap-1">
         <Input class="min-w-0 flex-1" placeholder="Save this job's settings as…" bind:value={name} />
-        <Button variant="outline" type="submit" disabled={busy || !name.trim()}>{userNames.has(name.trim()) ? 'Replace' : 'Save'}</Button>
+        <Button variant="outline" type="submit" disabled={busy || !name.trim()}
+          >{userNames.has(name.trim()) ? 'Replace' : 'Save'}</Button
+        >
       </div>
       <NativeSelect class="w-full" aria-label="Crop in the template" bind:value={cropMode}>
         <option value="keep">Crop: keep each job's own</option>

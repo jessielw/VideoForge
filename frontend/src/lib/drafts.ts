@@ -6,18 +6,28 @@ export function createDraftStore(storage?: Pick<Storage, 'getItem' | 'setItem'>)
       if (memory.has(key)) return structuredClone(memory.get(key)) as T
       try {
         const saved = JSON.parse(storage?.getItem(`videoforge.draft.${key}`) ?? 'null')
-        return saved?.version === 1 ? saved.value as T : null
-      } catch { return null }
+        return saved?.version === 1 ? (saved.value as T) : null
+      } catch {
+        return null
+      }
     },
     write(key: string, value: unknown): void {
       const snapshot = structuredClone(value)
       memory.set(key, snapshot)
-      try { storage?.setItem(`videoforge.draft.${key}`, JSON.stringify({ version: 1, value: snapshot })) } catch { /* memory fallback */ }
+      try {
+        storage?.setItem(`videoforge.draft.${key}`, JSON.stringify({ version: 1, value: snapshot }))
+      } catch {
+        /* memory fallback */
+      }
     },
   }
 }
 
 function session(): Storage | undefined {
-  try { return globalThis.sessionStorage } catch { return undefined }
+  try {
+    return globalThis.sessionStorage
+  } catch {
+    return undefined
+  }
 }
 export const drafts = createDraftStore(session())

@@ -69,7 +69,10 @@
   $effect(() => {
     if ((tab === 'encoder' || tab === 'output') && job?.plan && !pending) {
       const seq = ++commandsSeq
-      api.commands(jobId).then(c => seq === commandsSeq && (commands = c)).catch(() => seq === commandsSeq && (commands = []))
+      api
+        .commands(jobId)
+        .then((c) => seq === commandsSeq && (commands = c))
+        .catch(() => seq === commandsSeq && (commands = []))
     }
   })
 
@@ -85,10 +88,10 @@
     const snapshot = structuredClone($state.snapshot(changes))
     const send = saves.add(() => api.update(id, snapshot))
     return send.then(
-      reply => {
+      (reply) => {
         if (--pending === 0) job = reply
       },
-      e => {
+      (e) => {
         toast.error("Couldn't save the change", { description: e instanceof Error ? e.message : String(e) })
         if (--pending === 0) load()
       },
@@ -102,14 +105,17 @@
     try {
       await saves.flush()
       if (!on) await api.dequeue([jobId])
-      else if (!(await api.enqueue([jobId])).enqueued.length) toast.warning("Couldn't queue the job", { description: 'It changed meanwhile: it is being probed or indexed, or is blocked.' })
+      else if (!(await api.enqueue([jobId])).enqueued.length)
+        toast.warning("Couldn't queue the job", {
+          description: 'It changed meanwhile: it is being probed or indexed, or is blocked.',
+        })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     }
     load()
   }
   // The queue row's copy: progress events update it live (the detail reloads on job changes only).
-  const live = $derived(app.jobs.find(j => j.id === jobId))
+  const live = $derived(app.jobs.find((j) => j.id === jobId))
   const TABS: { id: Tab; label: string }[] = [
     { id: 'video', label: 'Video' },
     { id: 'encoder', label: 'Encoder' },
@@ -118,11 +124,11 @@
     { id: 'output', label: 'Output' },
     { id: 'log', label: 'Log' },
   ]
-  const problems = $derived((job?.issues ?? []).filter(i => i.severity !== 'info'))
-  const profile = $derived(app.profiles.find(p => p.id === job?.profile))
+  const problems = $derived((job?.issues ?? []).filter((i) => i.severity !== 'info'))
+  const profile = $derived(app.profiles.find((p) => p.id === job?.profile))
   const containers = $derived(profile?.containers ?? [])
-  const container = $derived(containers.find(c => c.id === job?.spec.mux.container) ?? containers[0])
-  const muxCommands = $derived(commands.filter(c => c.id === 'mux' || c.id === 'chapters.mp4'))
+  const container = $derived(containers.find((c) => c.id === job?.spec.mux.container) ?? containers[0])
+  const muxCommands = $derived(commands.filter((c) => c.id === 'mux' || c.id === 'chapters.mp4'))
 </script>
 
 {#if !job}
@@ -142,20 +148,30 @@
                 ? 'Tick when the job is set up: it locks, and the queue runs it'
                 : `Can't be queued while ${STATUS_LABEL[job.status].toLowerCase()}`}
         >
-          <Checkbox checked={queued} disabled={job.status === 'running' || (!queued && !queueable(job.status))} onCheckedChange={setQueued} />
+          <Checkbox
+            checked={queued}
+            disabled={job.status === 'running' || (!queued && !queueable(job.status))}
+            onCheckedChange={setQueued}
+          />
           {queued ? 'Queued · locked' : 'Queue'}
         </label>
         <h2 class="truncate text-lg font-semibold" title={job.source}>{job.name}</h2>
         {#if job.label}<Badge variant="outline" class="shrink-0" title="Label (Output tab)">{job.label}</Badge>{/if}
         <span class="text-sm {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
-        <span class="text-sm text-muted-foreground">· {job.profile} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span>
-        {#if job.status === 'indexing'}<Badge variant="outline" class="border-info/40 bg-info/10 text-info">locked while indexing</Badge>{/if}
+        <span class="text-sm text-muted-foreground"
+          >· {job.profile} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span
+        >
+        {#if job.status === 'indexing'}<Badge variant="outline" class="border-info/40 bg-info/10 text-info"
+            >locked while indexing</Badge
+          >{/if}
         <TemplateMenu
           profile={job.profile}
           spec={job.spec}
-          audioKeys={(job.tracks?.audio ?? []).filter(t => !t.external_path && !t.key.includes('+')).map(t => t.key)}
+          audioKeys={(job.tracks?.audio ?? [])
+            .filter((t) => !t.external_path && !t.key.includes('+'))
+            .map((t) => t.key)}
           disabled={!editable}
-          apply={template => save({ template })}
+          apply={(template) => save({ template })}
         />
       </div>
       {#if live?.progress && (live.status === 'running' || live.status === 'indexing')}
@@ -169,7 +185,8 @@
             {p.step} · {(p.fraction * 100).toFixed(1)}%{p.eta != null ? ` (${duration(p.eta)} left)` : ''}
             {#if p.fps != null}· {p.fps < 10 ? p.fps.toFixed(2) : p.fps.toFixed(1)} fps{/if}
             {#if p.elapsed != null}· {duration(p.elapsed)} elapsed{/if}
-            {#if p.left != null}<span title="A guess from the job's pace so far">· job ~{duration(p.left)} left</span>{/if}
+            {#if p.left != null}<span title="A guess from the job's pace so far">· job ~{duration(p.left)} left</span
+              >{/if}
           </span>
         </div>
       {/if}
@@ -181,11 +198,15 @@
               <span class="text-xs text-muted-foreground">{i.code}</span>
             </div>
           {/each}
-          {#if !showInfo && problems.length > 2}<div class="text-xs text-muted-foreground">+{problems.length - 2} more…</div>{/if}
+          {#if !showInfo && problems.length > 2}<div class="text-xs text-muted-foreground">
+              +{problems.length - 2} more…
+            </div>{/if}
         </button>
       {/if}
       {#if (job.status === 'failed' || job.status === 'invalid') && tab !== 'log'}
-        <Button variant="link" size="xs" class="h-auto p-0" onclick={() => (tab = 'log')}>Open the failed step in the Log tab</Button>
+        <Button variant="link" size="xs" class="h-auto p-0" onclick={() => (tab = 'log')}
+          >Open the failed step in the Log tab</Button
+        >
       {/if}
       {#if error}<div class="text-sm text-destructive">{error}</div>{/if}
       <Tabs.List variant="line" class="-mx-2 h-9">
@@ -198,14 +219,25 @@
     <div class="min-h-0 flex-1 overflow-auto p-5">
       {#if tab === 'video'}
         {#if job.spec.inputs.encode}
-          <p class="text-muted-foreground">This job reuses an existing encode ({basename(job.spec.inputs.encode)}); there is no video step.</p>
+          <p class="text-muted-foreground">
+            This job reuses an existing encode ({basename(job.spec.inputs.encode)}); there is no video step.
+          </p>
         {:else}
-          {#key job.id}<VideoTab {job} {editable} save={video => save({ video })} />{/key}
+          {#key job.id}<VideoTab {job} {editable} save={(video) => save({ video })} />{/key}
         {/if}
       {:else if tab === 'encoder'}
         <div class="grid max-w-6xl gap-6 2xl:grid-cols-2">
           <div class="space-y-4">
-            <EncoderPanel profile={job.profile} value={job.spec.encoder} disabled={!editable} colorArgs={job.color_args} hdr10plus={job.tracks ? !!job.tracks.video?.hdr?.hdr10plus : null} dv={job.tracks ? (job.tracks.video?.hdr ?? false) : null} budget={job.target} onchange={encoder => save({ encoder })} />
+            <EncoderPanel
+              profile={job.profile}
+              value={job.spec.encoder}
+              disabled={!editable}
+              colorArgs={job.color_args}
+              hdr10plus={job.tracks ? !!job.tracks.video?.hdr?.hdr10plus : null}
+              dv={job.tracks ? (job.tracks.video?.hdr ?? false) : null}
+              budget={job.target}
+              onchange={(encoder) => save({ encoder })}
+            />
           </div>
           <div class="space-y-2">
             <span class="section-label">Commands this job runs</span>
@@ -221,10 +253,16 @@
         </div>
       {:else if tab === 'audio' || tab === 'subs'}
         {@const kind = tab === 'audio' ? 'audio' : 'sub'}
-        {#if app.profiles.find(p => p.id === job?.profile)?.track_editor}
-          <TrackEditor {job} {editable} {kind} save={overrides => save({ overrides })} saveInputs={inputs => save({ inputs })} />
+        {#if app.profiles.find((p) => p.id === job?.profile)?.track_editor}
+          <TrackEditor
+            {job}
+            {editable}
+            {kind}
+            save={(overrides) => save({ overrides })}
+            saveInputs={(inputs) => save({ inputs })}
+          />
         {:else}
-          <TracksTab {job} {editable} {kind} save={overrides => save({ overrides })} />
+          <TracksTab {job} {editable} {kind} save={(overrides) => save({ overrides })} />
         {/if}
       {:else if tab === 'output'}
         <div class="max-w-3xl space-y-5">
@@ -236,7 +274,7 @@
               aria-label="Output folder (drop or paste a folder)"
               use:pathDrop={{
                 rule: { mode: 'folder', label: 'Output folder' },
-                accept: paths => save({ output_dir: paths[0] }),
+                accept: (paths) => save({ output_dir: paths[0] }),
                 disabled: !editable,
               }}
             >
@@ -245,9 +283,11 @@
                 aria-label="Output folder"
                 value={job.spec.output_dir ?? ''}
                 disabled={!editable}
-                onchange={e => save({ output_dir: pastedPaths((e.target as HTMLInputElement).value)[0] || null })}
+                onchange={(e) => save({ output_dir: pastedPaths((e.target as HTMLInputElement).value)[0] || null })}
               />
-              <Button variant="outline" disabled={!editable} onclick={() => (browsing = 'output')}><FolderOpenIcon />Browse…</Button>
+              <Button variant="outline" disabled={!editable} onclick={() => (browsing = 'output')}
+                ><FolderOpenIcon />Browse…</Button
+              >
             </div>
             <span class="text-muted-foreground">Output name</span>
             <Input
@@ -256,18 +296,24 @@
               title="The output's file name, without its extension; empty = the profile's name for it (the source's). The label and the container's extension go after it"
               value={job.spec.output_name}
               disabled={!editable}
-              onchange={e => save({ output_name: (e.target as HTMLInputElement).value.trim() })}
+              onchange={(e) => save({ output_name: (e.target as HTMLInputElement).value.trim() })}
             />
             <label for="output-policy" class="text-muted-foreground">Existing output</label>
             <div class="space-y-1">
-              <NativeSelect id="output-policy" disabled={!editable} value={job.spec.output_policy}
-                onchange={e => save({ output_policy: e.currentTarget.value as JobDetail['spec']['output_policy'] })}>
+              <NativeSelect
+                id="output-policy"
+                disabled={!editable}
+                value={job.spec.output_policy}
+                onchange={(e) => save({ output_policy: e.currentTarget.value as JobDetail['spec']['output_policy'] })}
+              >
                 <option value="stop">Stop and keep the existing file</option>
                 <option value="skip">Skip this job</option>
                 <option value="rename">Use a new numbered filename</option>
                 <option value="replace">Replace after validation</option>
               </NativeSelect>
-              <p class="text-xs text-muted-foreground">Applies to files outside this job's verified results. An output changed during a run is always kept.</p>
+              <p class="text-xs text-muted-foreground">
+                Applies to files outside this job's verified results. An output changed during a run is always kept.
+              </p>
             </div>
             <span class="text-muted-foreground">Label</span>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -278,10 +324,12 @@
                 title="Tells runs of one source apart: added to the output name, and kept in the job record"
                 value={job.spec.label}
                 disabled={!editable}
-                onchange={e => save({ label: (e.target as HTMLInputElement).value.trim() })}
+                onchange={(e) => save({ label: (e.target as HTMLInputElement).value.trim() })}
               />
               {#if job.output_name}
-                <span class="font-mono text-xs break-all text-muted-foreground" title="The file this job writes">{job.output_name}</span>
+                <span class="font-mono text-xs break-all text-muted-foreground" title="The file this job writes"
+                  >{job.output_name}</span
+                >
               {/if}
             </div>
             <span class="text-muted-foreground">Container</span>
@@ -293,10 +341,14 @@
                 class="w-fit max-w-full flex-wrap"
                 disabled={!editable}
                 value={container?.id}
-                onValueChange={v => v && save({ mux: { ...job!.spec.mux, container: v } })}
+                onValueChange={(v) => v && save({ mux: { ...job!.spec.mux, container: v } })}
               >
                 {#each containers as c (c.id)}
-                  <ToggleGroup.Item value={c.id} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">{c.label}</ToggleGroup.Item>
+                  <ToggleGroup.Item
+                    value={c.id}
+                    class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    >{c.label}</ToggleGroup.Item
+                  >
                 {/each}
               </ToggleGroup.Root>
             {:else}
@@ -308,7 +360,7 @@
                 <Checkbox
                   checked={job.spec.mux.pgs_zlib ?? false}
                   disabled={!editable}
-                  onCheckedChange={v => save({ mux: { ...job!.spec.mux, pgs_zlib: v } })}
+                  onCheckedChange={(v) => save({ mux: { ...job!.spec.mux, pgs_zlib: v } })}
                 />
                 Compress PGS subtitles with zlib
               </label>
@@ -320,7 +372,7 @@
               placeholder="added to the {container?.tool ?? 'muxer'} command as typed"
               value={job.spec.mux.extra}
               disabled={!editable}
-              onchange={e => save({ mux: { ...job!.spec.mux, extra: (e.target as HTMLInputElement).value.trim() } })}
+              onchange={(e) => save({ mux: { ...job!.spec.mux, extra: (e.target as HTMLInputElement).value.trim() } })}
             />
             <span class="text-muted-foreground">Chapters</span>
             <div
@@ -329,7 +381,7 @@
               aria-label="Chapters (drop or paste a file)"
               use:pathDrop={{
                 rule: { mode: 'file', extensions: ['.xml', '.txt'], label: 'Chapters' },
-                accept: paths => save({ inputs: { chapters: paths[0] } }),
+                accept: (paths) => save({ inputs: { chapters: paths[0] } }),
                 disabled: !editable,
               }}
             >
@@ -346,18 +398,27 @@
                 {job.spec.inputs.chapters ? 'Change…' : 'Use a file…'}
               </Button>
               {#if job.spec.inputs.chapters}
-                <Button variant="ghost" size="sm" class="hover:text-destructive" disabled={!editable} onclick={() => save({ inputs: { chapters: null } })}
-                  >Remove</Button
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="hover:text-destructive"
+                  disabled={!editable}
+                  onclick={() => save({ inputs: { chapters: null } })}>Remove</Button
                 >
               {/if}
             </div>
             <span></span>
             <label class="flex items-center gap-2">
-              <Checkbox checked={job.spec.qpf} disabled={!editable} onCheckedChange={v => save({ qpf: v })} />
+              <Checkbox checked={job.spec.qpf} disabled={!editable} onCheckedChange={(v) => save({ qpf: v })} />
               AutoQPF: chapters from the source (or every 5%) and keyframes on them
             </label>
             <span class="text-muted-foreground">Profile</span>
-            <NativeSelect class="w-48" value={job.profile} disabled={!editable} onchange={e => save({ profile: e.currentTarget.value })}>
+            <NativeSelect
+              class="w-48"
+              value={job.profile}
+              disabled={!editable}
+              onchange={(e) => save({ profile: e.currentTarget.value })}
+            >
               {#each app.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
             </NativeSelect>
             <span class="text-muted-foreground">Work folder</span>
@@ -378,10 +439,16 @@
           {/if}
           {#if Object.keys(job.steps).length}
             <div>
-              <span class="section-label">Finished steps (reused on the next run if nothing they depend on changed)</span>
+              <span class="section-label"
+                >Finished steps (reused on the next run if nothing they depend on changed)</span
+              >
               <ul class="mt-2 space-y-1 text-sm">
                 {#each Object.values(job.steps) as s (s.id)}
-                  <li class="flex gap-3"><CheckIcon class="size-4 text-success" /><span class="w-28">{s.id}</span><span class="text-muted-foreground">{s.seconds}s</span></li>
+                  <li class="flex gap-3">
+                    <CheckIcon class="size-4 text-success" /><span class="w-28">{s.id}</span><span
+                      class="text-muted-foreground">{s.seconds}s</span
+                    >
+                  </li>
                 {/each}
               </ul>
             </div>
@@ -399,7 +466,7 @@
     title="Output folder"
     mode="folder"
     start={job.spec.output_dir ?? ''}
-    onpick={paths => {
+    onpick={(paths) => {
       browsing = null
       if (paths[0]) save({ output_dir: paths[0] })
     }}
@@ -410,7 +477,7 @@
     title="Chapters file"
     extensions={['.xml', '.txt']}
     start={job.spec.inputs.source.replace(/[\\/][^\\/]*$/, '')}
-    onpick={paths => {
+    onpick={(paths) => {
       browsing = null
       if (paths[0]) save({ inputs: { chapters: paths[0] } })
     }}

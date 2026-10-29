@@ -1,14 +1,10 @@
 # Job record and events (schema v1)
 
-VideoForge writes what each job run did in a form other tools can read: NFO generators, uploaders,
-anything that wants to know how a release was made without parsing a text log. This is the contract:
-fields are only added within a schema version (`v`); a change that would break a reader bumps `v`.
+VideoForge writes what each job run did in a form other tools can read: NFO generators, uploaders, anything that wants to know how a release was made without parsing a text log. This is the contract: fields are only added within a schema version (`v`); a change that would break a reader bumps `v`.
 
 ## Where the files are
 
-Each source has a work folder next to it, `<source file name>_tmp/` (for `Show.S01E01.mkv`:
-`Show.S01E01.mkv_tmp/`), and each job a folder in that, named by its label: `main/` for a job without
-one, `dubbed/` for a job labelled `dubbed`. In the job's folder, named after the **output file**:
+Each source has a work folder next to it, `<source file name>_tmp/` (for `Show.S01E01.mkv`: `Show.S01E01.mkv_tmp/`), and each job a folder in that, named by its label: `main/` for a job without one, `dubbed/` for a job labelled `dubbed`. In the job's folder, named after the **output file**:
 
 | File | What |
 | --- | --- |
@@ -16,35 +12,19 @@ one, `dubbed/` for a job labelled `dubbed`. In the job's folder, named after the
 | `<output name>.videoforge.jsonl` | The **events**: one JSON object per line, appended while runs happen. |
 | `videoforge.log` | The text log a person reads: every run and index of this job, every tool's output. |
 
-`<output name>` is the whole file name, extension included (`Show.S01E01.dubbed.mkv.videoforge.json`),
-so outputs made from one source each keep their own files. Glob `*/*.videoforge.json` in a work
-folder to find every output made from that source.
+`<output name>` is the whole file name, extension included (`Show.S01E01.dubbed.mkv.videoforge.json`), so outputs made from one source each keep their own files. Glob `*/*.videoforge.json` in a work folder to find every output made from that source.
 
-With Settings → Work folders on (`delete_work_dir`), a done job's work folder is deleted. Its records and its
-log are copied first to `<data folder>/records/`, where the newest 100 of each are kept: the records by their
-own names, a job's log as `<source file name>.<label>.videoforge.log` (`<source file name>.videoforge.log`
-for `main/`). The events file isn't kept there; the same events
-are in the queue-wide stream below.
+With Settings → Work folders on (`delete_work_dir`), a done job's work folder is deleted. Its records and its log are copied first to `<data folder>/records/`, where the newest 100 of each are kept: the records by their own names, a job's log as `<source file name>.<label>.videoforge.log` (`<source file name>.videoforge.log` for `main/`). The events file isn't kept there; the same events are in the queue-wide stream below.
 
-VideoForge also appends every job's events, plus the index lane's, to one stream in its data folder:
-`%APPDATA%\VideoForge\logs\events.jsonl` on Windows (`$XDG_DATA_HOME/VideoForge` or
-`~/.local/share/VideoForge` elsewhere; `serve --data-dir` moves it). It rolls over at 10 MB to
-`events.jsonl.1` (three kept). The app's own log is in the same folder, one file per session
-(`videoforge_<YYYY-mm-dd_HH-MM-SS>.log`, the newest 50 kept).
+VideoForge also appends every job's events, plus the index lane's, to one stream in its data folder: `%APPDATA%\VideoForge\logs\events.jsonl` on Windows (`$XDG_DATA_HOME/VideoForge` or `~/.local/share/VideoForge` elsewhere; `serve --data-dir` moves it). It rolls over at 10 MB to `events.jsonl.1` (three kept). The app's own log is in the same folder, one file per session (`videoforge_<YYYY-mm-dd_HH-MM-SS>.log`, the newest 50 kept).
 
 ## Reading a record
 
-- **Completed** means: the record exists and `run.status` is `"done"`. `"invalid"` means the output
-  was written but failed VideoForge's output check (`issues` says why). Nothing else is written as a
-  record: a failed or cancelled run leaves the previous record (if any) in place, because the output
-  file it describes is still the one there.
+- **Completed** means: the record exists and `run.status` is `"done"`. `"invalid"` means the output was written but failed VideoForge's output check (`issues` says why). Nothing else is written as a record: a failed or cancelled run leaves the previous record (if any) in place, because the output file it describes is still the one there.
 - A later run to the same output **replaces** the record. The events file keeps every run.
-- Paths are absolute, as they were on the machine that ran the job. An output moved or renamed
-  after the run is not followed: treat `output.path` as where it was written, and match by name, size
-  or your own means if it moved.
+- Paths are absolute, as they were on the machine that ran the job. An output moved or renamed after the run is not followed: treat `output.path` as where it was written, and match by name, size or your own means if it moved.
 - Times are local ISO 8601 with the UTC offset (`2026-10-15T21:04:05.123+02:00`).
-- The file is written atomically (a `.partial` beside it, then renamed), so a reader never sees half
-  of one.
+- The file is written atomically (a `.partial` beside it, then renamed), so a reader never sees half of one.
 
 ## Record fields
 
@@ -90,42 +70,54 @@ When VideoForge encoded the video:
 ```jsonc
 {
   "encoded": true,
-  "encode": ".../video.264",               // the raw encode in the work folder
-  "width": 1920, "height": 800,            // after crop / resize
+  "encode": ".../video.264", // the raw encode in the work folder
+  "width": 1920,
+  "height": 800, // after crop / resize
   "language": "en",
-  "script": { "path": ".../video.vpy", "text": "import vapoursynth as vs\n..." },
-  "source_filter": "ffms2",                // "ffms2" | "lsmash" | "bestsource"
-  "crop": { "left": 0, "top": 140, "right": 0, "bottom": 140 },
-  "resize": null,                          // or { "width", "height", "kernel" }
-  "filters": [                             // enabled steps, in processing order
-    { "category": "crop", "name": "Crop", "script": "", "enabled": true },
-    { "category": "resize", "name": "Resize", "script": "", "enabled": true }
-  ],
-  "custom_script": false,                  // true: the user wrote the script body
-  "encoder": {
-    "name": "x264",                        // "x264" | "x265" | "vp8" | "vp9" | "svtav1"
-    "rate_control": "crf",                 // "crf" | "abr" | "2pass"
-    "crf": 18.0, "bitrate_kbps": 10000,    // the one rate_control uses counts
-    "target_mb": null,                     // 2pass: the target size (MB) that set the bitrate (the commands carry it)
-    "preset": "slower", "tune": "", "depth": 8,
-    "options": { "aq-mode": "3" },         // --name value (an empty value is a bare flag)
-    "extra": ""                            // raw arguments, as typed
+  "script": {
+    "path": ".../video.vpy",
+    "text": "import vapoursynth as vs\n...",
   },
-  "commands": ["vspipe ... | x264 ..."],   // one per pass, as a shell would take them
-  "encoder_summary": [                     // x264 / x265's closing statistics for the final pass ("frame I: ..."
-    "x265 [info]: frame I: 19, Avg QP:23.50  kb/s: 33220.41",  //  to "encoded N frames ..."), as an NFO quotes them;
-    "encoded 48 frames in 15.49s (3.10 fps), 16544.34 kb/s, Avg QP:25.51"  // a reused encode's are kept from
-  ],                                       // the record it replaces; null when the output held no whole block
-  "hdr": {                                 // the source's dynamic HDR and what the encode carried of it
+  "source_filter": "ffms2", // "ffms2" | "lsmash" | "bestsource"
+  "crop": { "left": 0, "top": 140, "right": 0, "bottom": 140 },
+  "resize": null, // or { "width", "height", "kernel" }
+  "filters": [
+    // enabled steps, in processing order
+    { "category": "crop", "name": "Crop", "script": "", "enabled": true },
+    { "category": "resize", "name": "Resize", "script": "", "enabled": true },
+  ],
+  "custom_script": false, // true: the user wrote the script body
+  "encoder": {
+    "name": "x264", // "x264" | "x265" | "vp8" | "vp9" | "svtav1"
+    "rate_control": "crf", // "crf" | "abr" | "2pass"
+    "crf": 18.0,
+    "bitrate_kbps": 10000, // the one rate_control uses counts
+    "target_mb": null, // 2pass: the target size (MB) that set the bitrate (the commands carry it)
+    "preset": "slower",
+    "tune": "",
+    "depth": 8,
+    "options": { "aq-mode": "3" }, // --name value (an empty value is a bare flag)
+    "extra": "", // raw arguments, as typed
+  },
+  "commands": ["vspipe ... | x264 ..."], // one per pass, as a shell would take them
+  "encoder_summary": [
+    // x264 / x265's closing statistics for the final pass ("frame I: ..."
+    "x265 [info]: frame I: 19, Avg QP:23.50  kb/s: 33220.41", //  to "encoded N frames ..."), as an NFO quotes them;
+    "encoded 48 frames in 15.49s (3.10 fps), 16544.34 kb/s, Avg QP:25.51", // a reused encode's are kept from
+  ], // the record it replaces; null when the output held no whole block
+  "hdr": {
+    // the source's dynamic HDR and what the encode carried of it
     "source": {
-      "dolby_vision": "7.6 FEL",           // profile[.compatibility][ FEL|MEL], or null
-      "dv_profile": 7, "dv_layers": "BL+EL+RPU", "dv_el": "FEL",   // null when not Dolby Vision / not read
-      "hdr10plus": true
+      "dolby_vision": "7.6 FEL", // profile[.compatibility][ FEL|MEL], or null
+      "dv_profile": 7,
+      "dv_layers": "BL+EL+RPU",
+      "dv_el": "FEL", // null when not Dolby Vision / not read
+      "hdr10plus": true,
     },
-    "dolby_vision": "8.1",                 // the profile the encode's Dolby Vision is written as ("8.1", "5"), or null
-    "fel_baked": true,                     // a profile 7 FEL's enhancement layer was baked into the picture
-    "hdr10plus": true                      // the source's HDR10+ metadata is in the encode
-  }
+    "dolby_vision": "8.1", // the profile the encode's Dolby Vision is written as ("8.1", "5"), or null
+    "fel_baked": true, // a profile 7 FEL's enhancement layer was baked into the picture
+    "hdr10plus": true, // the source's HDR10+ metadata is in the encode
+  },
 }
 ```
 
@@ -133,59 +125,71 @@ When the job reused an existing encode: `{ "encoded": false, "encode": "<that fi
 
 ### `audio[]` and `subtitles[]`
 
-One entry per output track, in output order. `index` is the position among that kind (0-based);
-`track` is the position in the output file (0-based, the video is 0, then audio, then subtitles).
+One entry per output track, in output order. `index` is the position among that kind (0-based); `track` is the position in the output file (0-based, the video is 0, then audio, then subtitles).
 
 ```jsonc
 {
-  "index": 0, "track": 1,
+  "index": 0,
+  "track": 1,
   "source": {
-    "kind": "source",                      // "source": a track of the job's source; "file": an added file
-    "path": "...",                         // the file the track was read from
-    "id": 1,                               // its mkvmerge track id in that file (all tracks, 0-based)
-    "index": 0,                            // its position among that file's audio (or subtitle) tracks, 0-based
-    "copy": 0,                             // audio: 1, 2, ... = another output made from the same track
-    "codec": "truehd", "layout": "7.1", "atmos": true, "language": "en", "title": "..."
-                                           // subtitles: "format", "language", "title"
+    "kind": "source", // "source": a track of the job's source; "file": an added file
+    "path": "...", // the file the track was read from
+    "id": 1, // its mkvmerge track id in that file (all tracks, 0-based)
+    "index": 0, // its position among that file's audio (or subtitle) tracks, 0-based
+    "copy": 0, // audio: 1, 2, ... = another output made from the same track
+    "codec": "truehd",
+    "layout": "7.1",
+    "atmos": true,
+    "language": "en",
+    "title": "...",
+    // subtitles: "format", "language", "title"
   },
-  "action": "ddp",                         // audio: "copy", or the encode ("ddp", "atmos", "aac", "flac", "opus", ...)
-  "encoder": { "label": "DDP (DEE)", "tools": ["deezy", "dee"] },   // null for a copy
-  "command": "deezy encode ...",           // null for a copy
-  "file": ".../audio_2.ec3",               // the encoded file in the work folder; null for a copy
-  "codec": "eac3", "layout": "5.1", "channels": 6, "atmos": false, "bitrate_kbps": 640, "delay_ms": 0,
-  "language": "en", "title": "English DDP 5.1",
-  "default": true, "forced": false, "hearing_impaired": false,
-  "commentary": false, "original": true, "visual_impaired": false
+  "action": "ddp", // audio: "copy", or the encode ("ddp", "atmos", "aac", "flac", "opus", ...)
+  "encoder": { "label": "DDP (DEE)", "tools": ["deezy", "dee"] }, // null for a copy
+  "command": "deezy encode ...", // null for a copy
+  "file": ".../audio_2.ec3", // the encoded file in the work folder; null for a copy
+  "codec": "eac3",
+  "layout": "5.1",
+  "channels": 6,
+  "atmos": false,
+  "bitrate_kbps": 640,
+  "delay_ms": 0,
+  "language": "en",
+  "title": "English DDP 5.1",
+  "default": true,
+  "forced": false,
+  "hearing_impaired": false,
+  "commentary": false,
+  "original": true,
+  "visual_impaired": false,
 }
 ```
 
-Subtitle entries have `format` (`"srt"`, `"pgs"`, `"ass"`, `"tx3g"`, ...: as the output holds it, so an SRT
-muxed into MP4 is `"tx3g"`; `source.format` is what it was) instead of the audio fields after `source`, and the same language, title and flags. For a track of the source, `source.id` and
-`source.index` are what `mkvmerge -J` and ffmpeg (`a:N` / `s:N`) call it; add 1 for a 1-based count.
+Subtitle entries have `format` (`"srt"`, `"pgs"`, `"ass"`, `"tx3g"`, ...: as the output holds it, so an SRT muxed into MP4 is `"tx3g"`; `source.format` is what it was) instead of the audio fields after `source`, and the same language, title and flags. For a track of the source, `source.id` and `source.index` are what `mkvmerge -J` and ffmpeg (`a:N` / `s:N`) call it; add 1 for a 1-based count.
 
 ### `chapters`
 
-`from` is `"autoqpf"` (generated from the source, with the `qpfile` the encoder placed keyframes
-by), `"file"` (a chapter file the user gave: `path`), `"source"` (the source's own chapters) or
-`null` (none).
+`from` is `"autoqpf"` (generated from the source, with the `qpfile` the encoder placed keyframes by), `"file"` (a chapter file the user gave: `path`), `"source"` (the source's own chapters) or `null` (none).
 
 ### `steps[]` and `issues[]`
 
 ```jsonc
-{ "id": "video", "label": "Video (x264)", "status": "done", "seconds": 700.2,
-  "exit_code": 0, "command": "...", "error": null }
+{
+  "id": "video",
+  "label": "Video (x264)",
+  "status": "done",
+  "seconds": 700.2,
+  "exit_code": 0,
+  "command": "...",
+  "error": null,
+}
 ```
 
-`status` is `"done"`, `"reused"` (finished in an earlier run and still valid, so skipped), `"failed"`,
-`"cancelled"` or `"pending"`. Issues: `{ "stage": "plan" | "output", "severity": "info" | "warn" |
-"block", "code": "...", "message": "..." }`; `plan` issues are what the job's plan warned about,
-`output` issues come from checking the finished file.
+`status` is `"done"`, `"reused"` (finished in an earlier run and still valid, so skipped), `"failed"`, `"cancelled"` or `"pending"`. Issues: `{ "stage": "plan" | "output", "severity": "info" | "warn" | "block", "code": "...", "message": "..." }`; `plan` issues are what the job's plan warned about, `output` issues come from checking the finished file.
 
 ### `tools`
 
-The version line of each tool the run used, keyed by VideoForge's tool name (`vspipe`, `x264`,
-`x265`, `ffmpeg`, `qaac`, `opusenc`, `deezy`, `dee`, `truehdd`, `mkvmerge`, `mp4box`, `dovi_tool`, `hdr10plus_tool`); `""` when the
-tool printed none.
+The version line of each tool the run used, keyed by VideoForge's tool name (`vspipe`, `x264`, `x265`, `ffmpeg`, `qaac`, `opusenc`, `deezy`, `dee`, `truehdd`, `mkvmerge`, `mp4box`, `dovi_tool`, `hdr10plus_tool`); `""` when the tool printed none.
 
 ## Events
 
@@ -205,5 +209,4 @@ Each line of a `.videoforge.jsonl` (and of the queue-wide `events.jsonl`) is one
 | `index.finished` | `name`, `error` (null when it worked; `"Cancelled"` when stopped) |
 | `action.finished` | `action` (its name), `type` (`command`, `move`, `copy`, `webhook`), `error` (null when it worked), `output` (after a move: the new path), `seconds`; `job` is null for the queue's actions (queue-wide stream only; docs/actions.md) |
 
-Lines are flushed one at a time, so `tail -f` (or reading new lines as they appear) follows a run
-live. A reader should skip events it doesn't know: new ones may be added within a version.
+Lines are flushed one at a time, so `tail -f` (or reading new lines as they appear) follows a run live. A reader should skip events it doesn't know: new ones may be added within a version.

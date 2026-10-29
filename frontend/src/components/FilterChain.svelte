@@ -35,13 +35,14 @@
 
   // The add menu: per category (chain order), its filters, each family's strengths side by side.
   const groups = $derived(
-    FILTER_CATEGORIES.map(c => {
+    FILTER_CATEGORIES.map((c) => {
       const families = new Map<string, FilterPreset[]>()
-      for (const p of app.filterPresets.filter(p => p.category === c.id)) families.set(p.family, [...(families.get(p.family) ?? []), p])
+      for (const p of app.filterPresets.filter((p) => p.category === c.id))
+        families.set(p.family, [...(families.get(p.family) ?? []), p])
       return { ...c, families: [...families.entries()] }
-    }).filter(g => g.families.length),
+    }).filter((g) => g.families.length),
   )
-  const inChain = $derived(new Set(filters.map(s => s.name)))
+  const inChain = $derived(new Set(filters.map((s) => s.name)))
 
   function set(chain: FilterStep[]) {
     filters = chain
@@ -61,8 +62,9 @@
       const { left, top, right, bottom } = crop
       return left || top || right || bottom ? `${left}/${top}/${right}/${bottom}` : 'none'
     }
-    if (s.category === 'resize') return resize ? `${resize.width}×${resize.keep_ar && template ? 'auto' : resize.height}` : 'off'
-    return FILTER_CATEGORIES.find(c => c.id === s.category)?.label ?? s.category
+    if (s.category === 'resize')
+      return resize ? `${resize.width}×${resize.keep_ar && template ? 'auto' : resize.height}` : 'off'
+    return FILTER_CATEGORIES.find((c) => c.id === s.category)?.label ?? s.category
   }
 </script>
 
@@ -80,7 +82,7 @@
         side="left"
         align="start"
         class="block max-h-(--bits-floating-available-height) w-[44rem] max-w-[90vw] columns-2 gap-6 overflow-auto p-3"
-        onEscapeKeydown={e => e.stopPropagation()}
+        onEscapeKeydown={(e) => e.stopPropagation()}
       >
         {#each groups as g (g.id)}
           <div class="mb-3 break-inside-avoid space-y-1">
@@ -90,13 +92,17 @@
               <div class="flex items-center gap-1" title={presets[0].description}>
                 <span class="w-36 shrink-0 truncate text-sm">{family}</span>
                 {#each presets as p (p.name)}
-                  <Button size="xs" variant={inChain.has(p.name) ? 'default' : 'outline'} onclick={() => add(p)}>{p.variant || 'Add'}</Button>
+                  <Button size="xs" variant={inChain.has(p.name) ? 'default' : 'outline'} onclick={() => add(p)}
+                    >{p.variant || 'Add'}</Button
+                  >
                 {/each}
               </div>
             {/each}
           </div>
         {/each}
-        {#if !groups.length}<p class="text-sm text-muted-foreground">No built-in filters (the server didn't send them).</p>{/if}
+        {#if !groups.length}<p class="text-sm text-muted-foreground">
+            No built-in filters (the server didn't send them).
+          </p>{/if}
       </Popover.Content>
     </Popover.Root>
   </div>
@@ -113,7 +119,7 @@
               checked={s.enabled}
               {disabled}
               aria-label="Use {s.name}"
-              onCheckedChange={on => set(filters.map((x, j) => (j === i ? { ...x, enabled: !!on } : x)))}
+              onCheckedChange={(on) => set(filters.map((x, j) => (j === i ? { ...x, enabled: !!on } : x)))}
             />
           {/if}
           <button
@@ -122,10 +128,18 @@
             title={fixed ? `Set in the ${s.name} section` : 'Show its lines'}
             onclick={() => (expanded = expanded === i ? null : i)}
           >
-            <span class="truncate {fixed ? 'font-medium' : ''} {s.enabled ? '' : 'text-muted-foreground line-through'}">{s.name}</span>
+            <span class="truncate {fixed ? 'font-medium' : ''} {s.enabled ? '' : 'text-muted-foreground line-through'}"
+              >{s.name}</span
+            >
             <span class="ml-auto shrink-0 text-xs text-muted-foreground">{summary(s)}</span>
           </button>
-          <Button variant="ghost" size="icon-xs" aria-label="Move {s.name} up" disabled={disabled || i === 0} onclick={() => set(moveStep(filters, i, -1))}>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Move {s.name} up"
+            disabled={disabled || i === 0}
+            onclick={() => set(moveStep(filters, i, -1))}
+          >
             <ChevronUpIcon />
           </Button>
           <Button

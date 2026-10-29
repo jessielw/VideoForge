@@ -6,7 +6,13 @@
   import { applyAudioPreset, audioPresetSettings } from '../lib/audioPresets'
   import type { TrackOverride, TrackProperty } from '../lib/types'
 
-  let { value, onchange, flags, label, disabled = false }: {
+  let {
+    value,
+    onchange,
+    flags,
+    label,
+    disabled = false,
+  }: {
     value: TrackOverride
     onchange: (value: TrackOverride) => void
     flags: TrackProperty[]
@@ -16,11 +22,25 @@
 </script>
 
 <div class="space-y-3" role="group" aria-label={label}>
-  <AudioPresetMenu current={audioPresetSettings(value)} {disabled} apply={preset => onchange(applyAudioPreset(value, preset))} />
-  <AudioSettingsEditor value={audioPresetSettings(value)} {disabled} onchange={preset => onchange(applyAudioPreset(value, preset))} />
+  <AudioPresetMenu
+    current={audioPresetSettings(value)}
+    {disabled}
+    apply={(preset) => onchange(applyAudioPreset(value, preset))}
+  />
+  <AudioSettingsEditor
+    value={audioPresetSettings(value)}
+    {disabled}
+    onchange={(preset) => onchange(applyAudioPreset(value, preset))}
+  />
   <div class="flex flex-wrap items-center gap-2">
-    <Input class="w-56" aria-label="Title" placeholder="Title: the source's" value={value.title ?? ''} {disabled}
-      onchange={e => onchange({ ...value, title: e.currentTarget.value.trim() || null })} />
-    <TrackFlags value={value.flags ?? {}} {flags} {disabled} onchange={flags => onchange({ ...value, flags })} />
+    <Input
+      class="w-56"
+      aria-label="Title"
+      placeholder="Title: the source's"
+      value={value.title ?? ''}
+      {disabled}
+      onchange={(e) => onchange({ ...value, title: e.currentTarget.value.trim() || null })}
+    />
+    <TrackFlags value={value.flags ?? {}} {flags} {disabled} onchange={(flags) => onchange({ ...value, flags })} />
   </div>
 </div>

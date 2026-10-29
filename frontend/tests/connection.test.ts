@@ -15,14 +15,32 @@ test('startup and reconnect recover catalogs with one bounded retry loop', async
   class Socket {
     onopen = () => {}
     onclose = () => {}
-    constructor() { socketCount++; sockets.push(this) }
+    constructor() {
+      socketCount++
+      sockets.push(this)
+    }
   }
   const sockets: Socket[] = []
-  const read = async () => { if (offline) throw new Error('server offline'); return [] }
+  const read = async () => {
+    if (offline) throw new Error('server offline')
+    return []
+  }
   Object.assign(globalThis, {
     __connectionDeps: {
-      api: { profiles: read, jobs: read, presets: read, encoders: read, filterPresets: async () => { filterCalls++; return read() }, health: async () => ({ version: 'test' }) },
-      toast: {}, STATUS_LABEL: {}, keepVideoViews: () => {},
+      api: {
+        profiles: read,
+        jobs: read,
+        presets: read,
+        encoders: read,
+        filterPresets: async () => {
+          filterCalls++
+          return read()
+        },
+        health: async () => ({ version: 'test' }),
+      },
+      toast: {},
+      STATUS_LABEL: {},
+      keepVideoViews: () => {},
     },
   })
   const raw = readFileSync(new URL('../src/lib/state.svelte.ts', import.meta.url), 'utf8')
@@ -30,12 +48,18 @@ test('startup and reconnect recover catalogs with one bounded retry loop', async
   const js = transpileModule(source, { compilerOptions: { target: ScriptTarget.ESNext } }).outputText
   const compiled = compileModule(js, { filename: 'state.svelte.js', generate: 'client' }).js.code
   const runtime = pathToFileURL(createRequire(import.meta.url).resolve('svelte/internal/client')).href
-  const code = 'const { api, toast, STATUS_LABEL, keepVideoViews } = globalThis.__connectionDeps;\n' + compiled.replace(/(['"])svelte\/internal\/client\1/g, JSON.stringify(runtime))
+  const code =
+    'const { api, toast, STATUS_LABEL, keepVideoViews } = globalThis.__connectionDeps;\n' +
+    compiled.replace(/(['"])svelte\/internal\/client\1/g, JSON.stringify(runtime))
   const { app } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
   const previous = { setTimeout, clearTimeout, WebSocket: globalThis.WebSocket }
   Object.assign(globalThis, {
-    WebSocket: Socket, location: { protocol: 'http:', host: 'localhost' },
-    setTimeout: (fn: () => void, delay: number) => { timers.set(++timerId, { fn, delay }); return timerId },
+    WebSocket: Socket,
+    location: { protocol: 'http:', host: 'localhost' },
+    setTimeout: (fn: () => void, delay: number) => {
+      timers.set(++timerId, { fn, delay })
+      return timerId
+    },
     clearTimeout: (id: number) => timers.delete(id),
   })
   try {
@@ -46,7 +70,9 @@ test('startup and reconnect recover catalogs with one bounded retry loop', async
     for (let i = 0; i < 6; i++) {
       const timer = [...timers.values()][0]
       assert.ok(timer.delay <= 8000)
-      timers.clear(); timer.fn(); await app.start()
+      timers.clear()
+      timer.fn()
+      await app.start()
       assert.equal(timers.size, 1)
     }
     offline = false
@@ -65,5 +91,7 @@ test('startup and reconnect recover catalogs with one bounded retry loop', async
     app.stopped = true
     sockets[1].onclose()
     assert.equal(timers.size, 0)
-  } finally { Object.assign(globalThis, previous) }
+  } finally {
+    Object.assign(globalThis, previous)
+  }
 })

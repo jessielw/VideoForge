@@ -11,8 +11,16 @@ test('sidebar and browser-history navigation wait for the template guard; malfor
   const location = { hash: '#/templates' }
   Object.assign(globalThis, {
     location,
-    window: { addEventListener: (_: string, callback: () => void) => { onHash = callback } },
-    history: { replaceState: (_: unknown, __: string, url: string) => { location.hash = url } },
+    window: {
+      addEventListener: (_: string, callback: () => void) => {
+        onHash = callback
+      },
+    },
+    history: {
+      replaceState: (_: unknown, __: string, url: string) => {
+        location.hash = url
+      },
+    },
   })
   const source = readFileSync(new URL('../src/lib/router.svelte.ts', import.meta.url), 'utf8')
   const js = transpileModule(source, { compilerOptions: { target: ScriptTarget.ESNext } }).outputText
@@ -21,7 +29,9 @@ test('sidebar and browser-history navigation wait for the template guard; malfor
   const code = compiled.replace(/(['"])svelte\/internal\/client\1/g, JSON.stringify(runtime))
   const { router } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
   let proceed: (() => void) | null = null
-  router.guard = (next: () => void) => { proceed = next }
+  router.guard = (next: () => void) => {
+    proceed = next
+  }
   router.go('new')
   assert.equal(router.page, 'templates')
   assert.ok(proceed)

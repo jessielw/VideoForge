@@ -19,23 +19,25 @@
 
   let chosen = $state<Record<string, string[]>>({})
   $effect(() => {
-    chosen = Object.fromEntries(jobs.map(j => [j.id, j.offers.filter(o => o.current).map(o => o.id)]))
+    chosen = Object.fromEntries(jobs.map((j) => [j.id, j.offers.filter((o) => o.current).map((o) => o.id)]))
   })
 
   function toggle(job: string, offer: string, on: boolean) {
     const now = chosen[job] ?? []
-    chosen[job] = on ? [...now.filter(o => o !== offer), offer] : now.filter(o => o !== offer)
+    chosen[job] = on ? [...now.filter((o) => o !== offer), offer] : now.filter((o) => o !== offer)
   }
 
   function all(on: boolean) {
-    chosen = Object.fromEntries(jobs.map(j => [j.id, on ? j.offers.map(o => o.id) : []]))
+    chosen = Object.fromEntries(jobs.map((j) => [j.id, on ? j.offers.map((o) => o.id) : []]))
   }
 
   function when(epoch: number | null): string {
-    return epoch == null ? '' : new Date(epoch * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+    return epoch == null
+      ? ''
+      : new Date(epoch * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
   }
 
-  const stale = $derived(jobs.some(j => j.offers.some(o => !o.current)))
+  const stale = $derived(jobs.some((j) => j.offers.some((o) => !o.current)))
 </script>
 
 <Dialog.Root bind:open>
@@ -50,7 +52,9 @@
     <div class="max-h-[60vh] space-y-4 overflow-y-auto pr-1" aria-label="Finished files">
       {#each jobs as job (job.id)}
         <section aria-label={job.name}>
-          {#if jobs.length > 1}<h3 class="mb-1 truncate text-sm font-medium" title={job.name}>{job.name}{job.label ? ` (${job.label})` : ''}</h3>{/if}
+          {#if jobs.length > 1}<h3 class="mb-1 truncate text-sm font-medium" title={job.name}>
+              {job.name}{job.label ? ` (${job.label})` : ''}
+            </h3>{/if}
           <ul class="divide-y divide-border rounded-md border border-border">
             {#each job.offers as offer (offer.id)}
               <li>
@@ -58,17 +62,23 @@
                   <Checkbox
                     class="mt-0.5"
                     checked={chosen[job.id]?.includes(offer.id) ?? false}
-                    onCheckedChange={v => toggle(job.id, offer.id, v === true)}
+                    onCheckedChange={(v) => toggle(job.id, offer.id, v === true)}
                     aria-label="Reuse {offer.label}"
                   />
                   <span class="min-w-0 flex-1">
                     <span class="flex items-center gap-2 text-sm">
                       <span class="truncate">{offer.label}</span>
                       {#if offer.origin}
-                        <Badge variant="outline" title="Made by the job in {offer.origin}/: linked into this job's folder">from {offer.origin}</Badge>
+                        <Badge
+                          variant="outline"
+                          title="Made by the job in {offer.origin}/: linked into this job's folder"
+                          >from {offer.origin}</Badge
+                        >
                       {/if}
                       {#if !offer.current}
-                        <Badge variant="outline" class="border-warning/40 bg-warning/10 text-warning">other settings</Badge>
+                        <Badge variant="outline" class="border-warning/40 bg-warning/10 text-warning"
+                          >other settings</Badge
+                        >
                       {/if}
                     </span>
                     <span class="block truncate text-xs text-muted-foreground" title={offer.file}>

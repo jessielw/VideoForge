@@ -1,14 +1,10 @@
 # Output and chapters
 
-The job's **Output** tab controls its destination, container, label, chapters, and AutoQPF settings.
-Inspect the plan after changing the container or supplying an existing video encode.
+The job's **Output** tab controls its destination, container, label, chapters, and AutoQPF settings. Inspect the plan after changing the container or supplying an existing video encode.
 
 ## Folder, container, and label
 
-Choose **MKV** or **MP4** and a writable destination. MKV uses MKVToolNix; MP4 uses MP4Box.
-Clearing the output folder saves that empty value and blocks the job until a folder is chosen.
-An output is written as `<output>.partial`, validated, then published. A rejected candidate is kept
-as `<name>.unpublished-<id>.<container>` for inspection, and the previous finished file stays intact.
+Choose **MKV** or **MP4** and a writable destination. MKV uses MKVToolNix; MP4 uses MP4Box. Clearing the output folder saves that empty value and blocks the job until a folder is chosen. An output is written as `<output>.partial`, validated, then published. A rejected candidate is kept as `<name>.unpublished-<id>.<container>` for inspection, and the previous finished file stays intact.
 
 A job label distinguishes outputs made from the same source:
 
@@ -18,52 +14,32 @@ Show.S01E01.dubbed.mkv
 Show.S01E01.subbed.mkv
 ```
 
-The label is part of the output identity and the associated record names. Profiles can also
-control the base output name. To make such a job, use **Duplicate** on the Queue; see
-[Duplicate a job](queue.md#duplicate-a-job).
+The label is part of the output identity and the associated record names. Profiles can also control the base output name. To make such a job, use **Duplicate** on the Queue; see [Duplicate a job](queue.md#duplicate-a-job).
 
-For MKV, **Compress PGS subtitles with zlib** enables lossless compression for all kept PGS
-tracks, including added `.sup` files. It is off by default: VideoForge explicitly disables PGS
-compression in mkvmerge. The option is also saved in templates and has no effect on MP4 or other
-subtitle formats. Changing it only reruns the mux; video and audio encodes can be reused.
+For MKV, **Compress PGS subtitles with zlib** enables lossless compression for all kept PGS tracks, including added `.sup` files. It is off by default: VideoForge explicitly disables PGS compression in mkvmerge. The option is also saved in templates and has no effect on MP4 or other subtitle formats. Changing it only reruns the mux; video and audio encodes can be reused.
 
-Two jobs that would write the same file are both blocked until one gets a label, another output
-name, or another folder; a job already queued or running keeps its file. A job whose output file
-already exists warns with the selected **Existing output** policy: Stop (default), Skip, Rename to
-a numbered filename, or Replace after validation. Verified results from the same job can be reused
-or replaced on an explicit rerun. A file appearing or changing during the run prevents publication;
-the candidate is kept for inspection. The CLI offers the same choices with `--existing-output`.
+Two jobs that would write the same file are both blocked until one gets a label, another output name, or another folder; a job already queued or running keeps its file. A job whose output file already exists warns with the selected **Existing output** policy: Stop (default), Skip, Rename to a numbered filename, or Replace after validation. Verified results from the same job can be reused or replaced on an explicit rerun. A file appearing or changing during the run prevents publication; the candidate is kept for inspection. The CLI offers the same choices with `--existing-output`.
 
 ## Chapters and AutoQPF
 
-Jobs can use source chapters, an added chapter file, or AutoQPF-generated chapters.
-AutoQPF generates a chapter file and a QP file so supported encoders place keyframes at chapter
-starts. A reused video encode has already chosen its keyframes.
+Jobs can use source chapters, an added chapter file, or AutoQPF-generated chapters. AutoQPF generates a chapter file and a QP file so supported encoders place keyframes at chapter starts. A reused video encode has already chosen its keyframes.
 
 The completed [job record](../job-record.md#chapters) states where the chapters came from.
 
 ## Reuse an existing video encode
 
-Add the encode with the source on **New jobs**. The source still supplies the audio, subtitles,
-and other source information, while the supplied encode becomes the output video.
+Add the encode with the source on **New jobs**. The source still supplies the audio, subtitles, and other source information, while the supplied encode becomes the output video.
 
-Automatic pairing recognizes configured suffixes such as `_job`, `_out`, and `_new`, and matches
-TV episodes by their `SxxEyy` token. Raw H.264 / HEVC streams and MKVs without audio can count as
-encodes. Inspect the pairing before starting a batch.
+Automatic pairing recognizes configured suffixes such as `_job`, `_out`, and `_new`, and matches TV episodes by their `SxxEyy` token. Raw H.264 / HEVC streams and MKVs without audio can count as encodes. Inspect the pairing before starting a batch.
 
-Pairing can also read a StaxRip `<source>_temp` folder for its running status and chapter file.
-See [configuration](../configuration/settings.md#pairing-settings) for the matching switches.
+Pairing can also read a StaxRip `<source>_temp` folder for its running status and chapter file. See [configuration](../configuration/settings.md#pairing-settings) for the matching switches.
 
 ## Variable frame rate
 
-For a compatible MKV encode, VideoForge carries the source's variable-frame-rate timestamps when
-they still fit the output. Frame-changing filters can invalidate that relationship. Check the
-resulting timing and any issues when using deinterlacing, decimation, or custom scripts.
+For a compatible MKV encode, VideoForge carries the source's variable-frame-rate timestamps when they still fit the output. Frame-changing filters can invalidate that relationship. Check the resulting timing and any issues when using deinterlacing, decimation, or custom scripts.
 
 ## After the run
 
-Validation checks the finished file against the plan. A written file with blocking validation
-issues is **invalid**. Preserve its job log and record when investigating.
+Validation checks the finished file against the plan. A written file with blocking validation issues is **invalid**. Preserve its job log and record when investigating.
 
-[Actions](../actions.md) can move or copy a completed output. A move action updates the path seen by
-later actions; the original job record still describes the path written by the run.
+[Actions](../actions.md) can move or copy a completed output. A move action updates the path seen by later actions; the original job record still describes the path written by the run.

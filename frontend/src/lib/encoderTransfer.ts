@@ -3,9 +3,15 @@ import type { EncoderBundle, EncoderSettings, Preset } from './types'
 export const MAX_ENCODER_BYTES = 5 * 1024 * 1024
 
 export function encoderBundle(entries: Preset<EncoderSettings>[]): EncoderBundle {
-  return { format: 'videoforge.encoders', version: 1, encoders: entries.map(entry => ({
-    label: entry.label ?? entry.name, group: [...(entry.group ?? [])], data: structuredClone(entry.data),
-  })) }
+  return {
+    format: 'videoforge.encoders',
+    version: 1,
+    encoders: entries.map((entry) => ({
+      label: entry.label ?? entry.name,
+      group: [...(entry.group ?? [])],
+      data: structuredClone(entry.data),
+    })),
+  }
 }
 
 export function downloadEncoders(bundle: EncoderBundle, filename: string) {

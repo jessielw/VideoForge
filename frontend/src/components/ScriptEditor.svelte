@@ -21,7 +21,7 @@
   const INDENT = '    '
   const bodyLines = $derived(body.split('\n'))
   const total = $derived(head.length + bodyLines.length + tail.length)
-  const widest = $derived(Math.max(0, ...[...head, ...bodyLines, ...tail].map(l => l.length)))
+  const widest = $derived(Math.max(0, ...[...head, ...bodyLines, ...tail].map((l) => l.length)))
   const bodyError = $derived(
     errorLine !== null && errorLine > head.length && errorLine <= head.length + bodyLines.length
       ? errorLine - head.length - 1
@@ -55,18 +55,25 @@
 
 <div class="min-h-0 flex-1 overflow-auto rounded-lg border bg-card font-mono text-xs leading-5">
   <div class="flex min-h-full min-w-max">
-    <div class="sticky left-0 shrink-0 border-r border-border bg-card px-2 text-right text-muted-foreground select-none">
+    <div
+      class="sticky left-0 shrink-0 border-r border-border bg-card px-2 text-right text-muted-foreground select-none"
+    >
       {#each { length: total } as _, i (i)}
         <div class={i + 1 === errorLine ? 'font-semibold text-destructive' : ''}>{i + 1}</div>
       {/each}
     </div>
     <div class="flex-1" style="min-width:calc({widest}ch + 2rem)">
       {#each head as line, i (i)}
-        <div class="px-2 whitespace-pre text-muted-foreground/70 {i + 1 === errorLine ? 'bg-destructive/20' : ''}">{line || ' '}</div>
+        <div class="px-2 whitespace-pre text-muted-foreground/70 {i + 1 === errorLine ? 'bg-destructive/20' : ''}">
+          {line || ' '}
+        </div>
       {/each}
       <div class="relative">
         {#if bodyError !== null}
-          <div class="pointer-events-none absolute inset-x-0 h-5 bg-destructive/20" style="top:{bodyError * 1.25}rem"></div>
+          <div
+            class="pointer-events-none absolute inset-x-0 h-5 bg-destructive/20"
+            style="top:{bodyError * 1.25}rem"
+          ></div>
         {/if}
         <textarea
           class="relative block w-full resize-none overflow-hidden border-0 bg-transparent px-2 py-0 leading-5 whitespace-pre outline-none
@@ -79,12 +86,13 @@
           placeholder="# Empty: the source is encoded as it is. Lines here read and reassign `clip`."
           {disabled}
           bind:value={body}
-          {onkeydown}
-        ></textarea>
+          {onkeydown}></textarea>
       </div>
       {#each tail as line, i (i)}
         {@const n = head.length + bodyLines.length + i + 1}
-        <div class="px-2 whitespace-pre text-muted-foreground/70 {n === errorLine ? 'bg-destructive/20' : ''}">{line || ' '}</div>
+        <div class="px-2 whitespace-pre text-muted-foreground/70 {n === errorLine ? 'bg-destructive/20' : ''}">
+          {line || ' '}
+        </div>
       {/each}
     </div>
   </div>

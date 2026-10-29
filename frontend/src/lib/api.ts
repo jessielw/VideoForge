@@ -103,7 +103,21 @@ export interface InputChanges {
   encode?: string | null
 }
 
-export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides' | 'output_dir' | 'output_policy' | 'qpf' | 'profile' | 'mux' | 'label' | 'output_name'>> & {
+export type SpecChanges = Partial<
+  Pick<
+    JobSpec,
+    | 'video'
+    | 'encoder'
+    | 'overrides'
+    | 'output_dir'
+    | 'output_policy'
+    | 'qpf'
+    | 'profile'
+    | 'mux'
+    | 'label'
+    | 'output_name'
+  >
+> & {
   inputs?: InputChanges
   template?: Template // applied first: the whole run's settings
   container?: string // the container alone; the job keeps its extra muxer arguments
@@ -111,7 +125,7 @@ export type SpecChanges = Partial<Pick<JobSpec, 'video' | 'encoder' | 'overrides
 
 export const api = {
   health: () => get<{ ok: boolean; version: string }>('/api/health'),
-  profiles:() => get<Profile[]>('/api/profiles'),
+  profiles: () => get<Profile[]>('/api/profiles'),
   presets: () => get<Presets>('/api/presets'),
   exportAudio: (bundle: AudioBundle) => post<AudioBundle>('/api/presets/audio/export', bundle),
   previewAudio: (bundle: unknown, keepBoth = false) =>
@@ -135,7 +149,8 @@ export const api = {
     post<Presets>('/api/presets/encoder', preset),
   saveAudioPreset: (preset: { name?: string; label: string; group: string[]; data: AudioPresetSettings }) =>
     post<Presets>('/api/presets/audio', preset),
-  deletePreset: (kind: PresetKind, name: string) => request<Presets>('DELETE', `/api/presets/${kind}/${encodeURIComponent(name)}`),
+  deletePreset: (kind: PresetKind, name: string) =>
+    request<Presets>('DELETE', `/api/presets/${kind}/${encodeURIComponent(name)}`),
   deletePresets: (kind: PresetKind, names: string[]) => post<Presets>('/api/presets/delete', { kind, names }),
   renamePreset: (kind: PresetKind, name: string, to: string) =>
     post<Presets>(`/api/presets/${kind}/${encodeURIComponent(name)}/rename`, { to }),
@@ -146,23 +161,27 @@ export const api = {
   plugins: () => get<PluginInventory>('/api/plugins'),
   previewPlugin: (file: File) => pluginZip<PluginPreview>('/api/plugins/preview', file),
   installPlugin: (file: File, revision: string, replace: boolean) =>
-    pluginZip<PluginInventory>(`/api/plugins/import?${new URLSearchParams({ revision, replace: String(replace) })}`, file),
-  removePlugin: (id: string, revision: string) =>
-    post<PluginInventory>('/api/plugins/remove', { id, revision }),
+    pluginZip<PluginInventory>(
+      `/api/plugins/import?${new URLSearchParams({ revision, replace: String(replace) })}`,
+      file,
+    ),
+  removePlugin: (id: string, revision: string) => post<PluginInventory>('/api/plugins/remove', { id, revision }),
   enablePlugin: (id: string, enabled: boolean) =>
     request<PluginInventory>('PUT', '/api/plugins/enabled', { id, enabled }),
   pluginSettings: (id: string, values: Record<string, unknown>, reset: string[] = []) =>
     request<PluginInventory>('PUT', '/api/plugins/settings', { id, values, reset }),
   exportConfiguration: () => get<ConfigurationBundle>('/api/configuration/export'),
   exportPresetPack: (bundle: PresetPack) => post<PresetPack>('/api/preset-packs/export', bundle),
-  previewPresetPack: (bundle: unknown, keepBoth = false) => post<PresetPackPreview>(`/api/preset-packs/preview${keep(keepBoth)}`, bundle),
+  previewPresetPack: (bundle: unknown, keepBoth = false) =>
+    post<PresetPackPreview>(`/api/preset-packs/preview${keep(keepBoth)}`, bundle),
   importPresetPack: (bundle: PresetPack, keepBoth = false) =>
     post<{ presets: Presets; names: Record<PresetKind, string[]>; actions: Record<PresetKind, ImportAction[]> }>(
       `/api/preset-packs/import${keep(keepBoth)}`,
       bundle,
     ),
   previewConfiguration: (bundle: unknown) => post<ConfigurationPreview>('/api/configuration/preview', bundle),
-  importConfiguration: (bundle: ConfigurationBundle) => post<{ config: ConfigState; presets: Presets; warnings: string[] }>('/api/configuration/import', bundle),
+  importConfiguration: (bundle: ConfigurationBundle) =>
+    post<{ config: ConfigState; presets: Presets; warnings: string[] }>('/api/configuration/import', bundle),
   saveConfig: (changes: {
     tools?: Record<string, string | null>
     roots?: string[] | null
@@ -175,8 +194,7 @@ export const api = {
     notifications?: NotificationDestination[]
     actions?: ActionSetting[]
     disabled_plugins?: string[]
-  }) =>
-    request<ConfigState>('PUT', '/api/config', changes),
+  }) => request<ConfigState>('PUT', '/api/config', changes),
   testNotification: (url: string) => post<{ ok: boolean }>('/api/config/notifications/test', { url }),
   toolChecks: () => get<ToolCheck[]>('/api/config/tools'),
   // a video encoder's option names from its own help ([] when it isn't found)
@@ -210,7 +228,12 @@ export const api = {
       template?: Template
     },
   ) =>
-    post<{ added: string[]; skipped: string[]; unmatched: string[]; kept: { source: string; id: string | null; name: string; status: string | null; reason: string }[] }>('/api/jobs', body),
+    post<{
+      added: string[]
+      skipped: string[]
+      unmatched: string[]
+      kept: { source: string; id: string | null; name: string; status: string | null; reason: string }[]
+    }>('/api/jobs', body),
 
   jobs: () => get<JobSummary[]>('/api/jobs'),
   job: (id: string) => get<JobDetail>(`/api/jobs/${id}`),
@@ -218,13 +241,20 @@ export const api = {
   apply: (ids: string[], changes: SpecChanges) =>
     post<{ updated: string[]; skipped: string[] }>('/api/jobs/apply', { ids, ...changes }),
   applyCrop: (ids: string[], crop: Crop) =>
-    post<{ updated: string[]; skipped: Record<string, string>; failed: Record<string, string> }>('/api/jobs/apply-crop', { ids, crop }),
+    post<{ updated: string[]; skipped: Record<string, string>; failed: Record<string, string> }>(
+      '/api/jobs/apply-crop',
+      { ids, crop },
+    ),
   remove: (ids: string[], workDirs = false) =>
     post<{ removed: string[]; deleted: string[]; kept: Record<string, string> }>('/api/jobs/remove', {
       ids,
       work_dirs: workDirs,
     }),
-  removalPreview: (ids: string[]) => post<{ folders: { id: string; path: string; bytes: number | null; error: string }[] }>('/api/jobs/removal-preview', { ids }),
+  removalPreview: (ids: string[]) =>
+    post<{ folders: { id: string; path: string; bytes: number | null; error: string }[] }>(
+      '/api/jobs/removal-preview',
+      { ids },
+    ),
   restore: (ids: string[]) => post<{ restored: string[] }>('/api/jobs/restore', { ids }),
   duplicate: (ids: string[]) => post<{ added: string[] }>('/api/jobs/duplicate', { ids }),
   reorder: (ids: string[]) => post<{ ids: string[] }>('/api/jobs/reorder', { ids }),
@@ -232,7 +262,8 @@ export const api = {
   log: (id: string) => get<{ lines: string[] }>(`/api/jobs/${id}/log`),
   commands: (id: string) => get<CommandStep[]>(`/api/jobs/${id}/commands`),
   steps: (id: string) => get<StepOutput[]>(`/api/jobs/${id}/steps`),
-  logSnapshot: (id: string) => get<{ seq: number; steps: StepOutput[]; lines: string[] }>(`/api/jobs/${id}/log-snapshot`),
+  logSnapshot: (id: string) =>
+    get<{ seq: number; steps: StepOutput[]; lines: string[] }>(`/api/jobs/${id}/log-snapshot`),
 
   queue: () => get<QueueState>('/api/queue'),
   // reuse: per job, the offered sections to keep (the others are made again); jobs left out reuse as always
@@ -254,7 +285,8 @@ export const api = {
   frameUrl: (id: string, n: number, stage: 'crop' | 'output', version: number, fmt: 'jpeg' | 'png' = 'jpeg') =>
     `/api/jobs/${id}/video/frame?n=${n}&stage=${stage}&fmt=${fmt}&v=${version}`,
   // origin: where the crop came from (a Dolby Vision source's RPU L5, or the detected borders)
-  autocrop: (id: string, samples = 20) => post<Crop & { origin: string }>(`/api/jobs/${id}/video/autocrop?samples=${samples}`),
+  autocrop: (id: string, samples = 20) =>
+    post<Crop & { origin: string }>(`/api/jobs/${id}/video/autocrop?samples=${samples}`),
   script: (id: string) => get<ScriptParts>(`/api/jobs/${id}/video/script`),
   checkScript: (id: string) => get<ScriptCheck>(`/api/jobs/${id}/video/check`),
 }

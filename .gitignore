@@ -21,3 +21,6 @@ videoforge.local.toml
 # Generated documentation
 site/
 .cache/
+
+# Node
+node_modules/

@@ -91,7 +91,7 @@
     try {
       await api.removeDir(path, contents.files + contents.dirs > 0)
       // Ticked things in it (ticked before going up) went with it.
-      picked = picked.filter(p => p !== path && !p.startsWith(path + '/') && !p.startsWith(path + '\\'))
+      picked = picked.filter((p) => p !== path && !p.startsWith(path + '/') && !p.startsWith(path + '\\'))
       deleting = null
       await open(listing.path)
     } catch (e) {
@@ -110,7 +110,7 @@
   })
 
   function toggle(path: string) {
-    picked = picked.includes(path) ? picked.filter(p => p !== path) : [...picked, path]
+    picked = picked.includes(path) ? picked.filter((p) => p !== path) : [...picked, path]
   }
 
   function confirm() {
@@ -122,11 +122,15 @@
   }
 </script>
 
-<Dialog.Root open onOpenChange={o => !o && onclose()}>
+<Dialog.Root open onOpenChange={(o) => !o && onclose()}>
   <Dialog.Content class="flex h-[80vh] flex-col gap-0 p-0 sm:max-w-3xl" showCloseButton={false} aria-label={title}>
     <header class="flex items-center gap-2 border-b p-3">
       <Dialog.Title>{title}</Dialog.Title>
-      <NativeSelect class="ml-auto" aria-label="Drive or folder" onchange={e => open((e.target as HTMLSelectElement).value)}>
+      <NativeSelect
+        class="ml-auto"
+        aria-label="Drive or folder"
+        onchange={(e) => open((e.target as HTMLSelectElement).value)}
+      >
         {#each roots as r (r)}<option value={r} selected={listing?.path.startsWith(r)}>{r}</option>{/each}
       </NativeSelect>
     </header>
@@ -142,8 +146,20 @@
       >
         <ArrowUpIcon />
       </Button>
-      <Input class="flex-1 font-mono text-xs" aria-label="Path" bind:value={pathInput} onkeydown={e => e.key === 'Enter' && open(pathInput)} />
-      <Button variant="ghost" size="icon" disabled={!listing} onclick={() => (newName = '')} title="New folder" aria-label="New folder">
+      <Input
+        class="flex-1 font-mono text-xs"
+        aria-label="Path"
+        bind:value={pathInput}
+        onkeydown={(e) => e.key === 'Enter' && open(pathInput)}
+      />
+      <Button
+        variant="ghost"
+        size="icon"
+        disabled={!listing}
+        onclick={() => (newName = '')}
+        title="New folder"
+        aria-label="New folder"
+      >
         <FolderPlusIcon />
       </Button>
     </div>
@@ -155,7 +171,7 @@
         {#if newName !== null}
           <form
             class="flex items-center gap-2 px-2 py-1"
-            onsubmit={e => {
+            onsubmit={(e) => {
               e.preventDefault()
               makeDir()
             }}
@@ -168,7 +184,7 @@
               placeholder="New folder name"
               autofocus
               bind:value={newName}
-              onkeydown={e => {
+              onkeydown={(e) => {
                 if (e.key === 'Escape') {
                   e.stopPropagation() // closes this, not the browser
                   newName = null
@@ -182,7 +198,11 @@
         {#each listing.dirs as d (d.path)}
           <div class="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
             {#if mode === 'files'}
-              <Checkbox checked={picked.includes(d.path)} onCheckedChange={() => toggle(d.path)} aria-label="Pick {d.name}" />
+              <Checkbox
+                checked={picked.includes(d.path)}
+                onCheckedChange={() => toggle(d.path)}
+                aria-label="Pick {d.name}"
+              />
             {/if}
             <button class="flex flex-1 items-center gap-2 text-left" onclick={() => open(d.path)}>
               <FolderIcon class="size-4 text-primary" />{d.name}
@@ -230,7 +250,9 @@
         {/if}
       </span>
       <Button variant="outline" class="ml-auto" onclick={onclose}>Cancel</Button>
-      <Button disabled={programs && !picked.length} onclick={confirm}>{mode === 'folder' ? 'Use this folder' : 'Add'}</Button>
+      <Button disabled={programs && !picked.length} onclick={confirm}
+        >{mode === 'folder' ? 'Use this folder' : 'Add'}</Button
+      >
     </footer>
   </Dialog.Content>
 </Dialog.Root>
@@ -238,7 +260,7 @@
 {#if deleting}
   {@const { name, path, contents } = deleting}
   {@const full = contents.files + contents.dirs > 0}
-  <Dialog.Root open onOpenChange={o => !o && (deleting = null)}>
+  <Dialog.Root open onOpenChange={(o) => !o && (deleting = null)}>
     <Dialog.Content class="sm:max-w-md">
       <Dialog.Header>
         <Dialog.Title>Delete {name}?</Dialog.Title>
@@ -247,7 +269,10 @@
       {#if full}
         <div class="space-y-3 text-sm">
           <p class="text-destructive">
-            It holds {contents.files} file{contents.files === 1 ? '' : 's'} and {contents.dirs} folder{contents.dirs === 1 ? '' : 's'}
+            It holds {contents.files} file{contents.files === 1 ? '' : 's'} and {contents.dirs} folder{contents.dirs ===
+            1
+              ? ''
+              : 's'}
             ({bytes(contents.bytes)}). They're deleted with it for good, not moved to the recycle bin.
           </p>
           <label class="flex items-center gap-2">
@@ -259,7 +284,9 @@
       {/if}
       <Dialog.Footer>
         <Button variant="outline" onclick={() => (deleting = null)}>Cancel</Button>
-        <Button variant="destructive" disabled={busy || (full && !deleteAll)} onclick={removeDir}><Trash2Icon />Delete</Button>
+        <Button variant="destructive" disabled={busy || (full && !deleteAll)} onclick={removeDir}
+          ><Trash2Icon />Delete</Button
+        >
       </Dialog.Footer>
     </Dialog.Content>
   </Dialog.Root>

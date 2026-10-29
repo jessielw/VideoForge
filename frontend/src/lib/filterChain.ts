@@ -1,14 +1,14 @@
 // The video filter chain (VideoSettings.filters): where a built-in filter goes when it's added.
 import { FILTER_CATEGORIES, type FilterCategory, type FilterPreset, type FilterStep } from './types'
 
-export const rank = (c: FilterCategory) => FILTER_CATEGORIES.findIndex(x => x.id === c)
+export const rank = (c: FilterCategory) => FILTER_CATEGORIES.findIndex((x) => x.id === c)
 
 // The chain with preset added: in place of the same filter at another strength, else after the last
 // step whose category comes at or before its own (so a click puts it where it belongs). Also where it went.
 export function addFilter(chain: FilterStep[], preset: FilterPreset, presets: FilterPreset[]): [FilterStep[], number] {
   const step: FilterStep = { category: preset.category, name: preset.name, script: preset.script, enabled: true }
-  const family = (s: FilterStep) => presets.find(p => p.name === s.name)?.family
-  const same = preset.category === 'custom' ? -1 : chain.findIndex(s => family(s) === preset.family)
+  const family = (s: FilterStep) => presets.find((p) => p.name === s.name)?.family
+  const same = preset.category === 'custom' ? -1 : chain.findIndex((s) => family(s) === preset.family)
   if (same >= 0) return [chain.map((s, i) => (i === same ? step : s)), same]
   const r = rank(preset.category)
   let at = 0

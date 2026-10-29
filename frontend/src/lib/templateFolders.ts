@@ -1,7 +1,7 @@
 // Template folders: a template's folder is part of its name ("Group / 1080p / Film"), so defaults,
 // imports and packs keep naming templates as they always have. The Templates page shows the parts as a tree.
 export const SEP = ' / '
-const folderParts = (text: string) => text.split('/').map(part => part.trim())
+const folderParts = (text: string) => text.split('/').map((part) => part.trim())
 
 /** A template name's folders and its own label: "a / b / Film" -> [["a", "b"], "Film"]. */
 export function splitName(name: string): { folder: string[]; label: string } {
@@ -15,14 +15,19 @@ export function joinName(folder: string, label: string): string {
 }
 
 /** One level for a flat list (a select's optgroups): items without a folder first, then each folder path by name. */
-export function groupByFolder<T>(items: T[], nameOf: (item: T) => string): { folder: string; items: { item: T; label: string }[] }[] {
+export function groupByFolder<T>(
+  items: T[],
+  nameOf: (item: T) => string,
+): { folder: string; items: { item: T; label: string }[] }[] {
   const groups = new Map<string, { item: T; label: string }[]>()
   for (const item of items) {
     const { folder, label } = splitName(nameOf(item))
     const key = folder.join(SEP)
     groups.set(key, [...(groups.get(key) ?? []), { item, label: label || nameOf(item) }])
   }
-  return [...groups].map(([folder, items]) => ({ folder, items })).sort((a, b) => (a.folder ? b.folder ? a.folder.localeCompare(b.folder) : 1 : -1))
+  return [...groups]
+    .map(([folder, items]) => ({ folder, items }))
+    .sort((a, b) => (a.folder ? (b.folder ? a.folder.localeCompare(b.folder) : 1) : -1))
 }
 
 export type FolderNode<T> = { kind: 'folder'; path: string; name: string; children: TreeNode<T>[]; count: number }
@@ -36,7 +41,9 @@ export function buildTree<T>(items: T[], nameOf: (item: T) => string): TreeNode<
     let at = root
     for (const part of folder) {
       at.count++
-      let next = at.children.find((c): c is FolderNode<T> => c.kind === 'folder' && c.name.toLowerCase() === part.toLowerCase())
+      let next = at.children.find(
+        (c): c is FolderNode<T> => c.kind === 'folder' && c.name.toLowerCase() === part.toLowerCase(),
+      )
       if (!next) {
         next = { kind: 'folder', path: at.path ? at.path + SEP + part : part, name: part, children: [], count: 0 }
         at.children.push(next)
@@ -47,9 +54,11 @@ export function buildTree<T>(items: T[], nameOf: (item: T) => string): TreeNode<
     at.children.push({ kind: 'item', item, label: label || nameOf(item) })
   }
   const order = (nodes: TreeNode<T>[]): TreeNode<T>[] => {
-    const folders = nodes.filter((n): n is FolderNode<T> => n.kind === 'folder').sort((a, b) => a.name.localeCompare(b.name))
+    const folders = nodes
+      .filter((n): n is FolderNode<T> => n.kind === 'folder')
+      .sort((a, b) => a.name.localeCompare(b.name))
     for (const f of folders) f.children = order(f.children)
-    return [...folders, ...nodes.filter(n => n.kind === 'item')]
+    return [...folders, ...nodes.filter((n) => n.kind === 'item')]
   }
   return order(root.children)
 }

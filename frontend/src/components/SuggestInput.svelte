@@ -39,7 +39,12 @@
   let list = $state<HTMLElement | null>(null)
 
   const items = $derived.by(() => {
-    const q = typed ? String(value ?? '').trim().replace(/^-+/, '').toLowerCase() : ''
+    const q = typed
+      ? String(value ?? '')
+          .trim()
+          .replace(/^-+/, '')
+          .toLowerCase()
+      : ''
     if (!q) return suggestions
     // the value starting with it, then holding it, then the label holding it
     const rank = (s: Suggestion) => {
@@ -47,10 +52,10 @@
       return v.startsWith(q) ? 0 : v.includes(q) ? 1 : s.label?.toLowerCase().includes(q) ? 2 : -1
     }
     return suggestions
-      .map(s => ({ s, r: rank(s) }))
-      .filter(x => x.r >= 0)
+      .map((s) => ({ s, r: rank(s) }))
+      .filter((x) => x.r >= 0)
       .sort((a, b) => a.r - b.r)
-      .map(x => x.s)
+      .map((x) => x.s)
   })
 
   function begin() {
@@ -97,7 +102,12 @@
   }
 </script>
 
-<Popover.Root {open} onOpenChange={o => { if (!o) open = false }}>
+<Popover.Root
+  {open}
+  onOpenChange={(o) => {
+    if (!o) open = false
+  }}
+>
   <div bind:this={anchor} class={cn('min-w-0', wrapClass)}>
     <Input
       {...rest}
@@ -112,10 +122,21 @@
       aria-activedescendant={open && items[active] ? `${uid}-${active}` : undefined}
       autocomplete="off"
       spellcheck="false"
-      onfocus={e => { begin(); focus?.(e) }}
+      onfocus={(e) => {
+        begin()
+        focus?.(e)
+      }}
       onclick={begin}
-      oninput={e => { typed = true; active = -1; if (!open) begin(); input?.(e) }}
-      onblur={e => { open = false; blur?.(e) }}
+      oninput={(e) => {
+        typed = true
+        active = -1
+        if (!open) begin()
+        input?.(e)
+      }}
+      onblur={(e) => {
+        open = false
+        blur?.(e)
+      }}
       {onkeydown}
     />
   </div>
@@ -124,9 +145,11 @@
     align="start"
     class="w-auto min-w-56 max-w-96 gap-0 p-1"
     trapFocus={false}
-    onOpenAutoFocus={e => e.preventDefault()}
-    onCloseAutoFocus={e => e.preventDefault()}
-    onInteractOutside={e => { if (anchor?.contains(e.target as Node)) e.preventDefault() }}
+    onOpenAutoFocus={(e) => e.preventDefault()}
+    onCloseAutoFocus={(e) => e.preventDefault()}
+    onInteractOutside={(e) => {
+      if (anchor?.contains(e.target as Node)) e.preventDefault()
+    }}
   >
     <div bind:this={list} id="{uid}-list" role="listbox" class="max-h-64 overflow-y-auto">
       {#each items as s, i (s.value)}
@@ -136,14 +159,18 @@
           tabindex="-1"
           aria-selected={i === active}
           data-active={i === active ? '' : undefined}
-          class="flex cursor-default items-baseline gap-3 rounded-md px-2 py-1.5 text-sm select-none {i === active ? 'bg-accent text-accent-foreground' : ''}"
-          onmousedown={e => e.preventDefault()}
+          class="flex cursor-default items-baseline gap-3 rounded-md px-2 py-1.5 text-sm select-none {i === active
+            ? 'bg-accent text-accent-foreground'
+            : ''}"
+          onmousedown={(e) => e.preventDefault()}
           onmousemove={() => (active = i)}
           onclick={() => pick(s)}
           onkeydown={() => {}}
         >
           <span class="shrink-0 font-mono text-xs">{s.value}</span>
-          {#if s.label}<span class="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={s.label}>{s.label}</span>{/if}
+          {#if s.label}<span class="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={s.label}
+              >{s.label}</span
+            >{/if}
         </div>
       {:else}
         <div class="px-2 py-1.5 text-sm text-muted-foreground">No match: the typed value is used as it is.</div>

@@ -1,12 +1,8 @@
 # Settings and configuration files
 
-Use **Settings** for tool paths, the default profile, folder browser roots, indexing behavior,
-parallel audio, priorities, cleanup, notifications, actions, and plugin switches. Changes save
-immediately to the application database.
+Use **Settings** for tool paths, the default profile, folder browser roots, indexing behavior, parallel audio, priorities, cleanup, notifications, actions, and plugin switches. Changes save immediately to the application database.
 
-Use **Settings → Encoder presets** to manage audio and video encoder libraries without opening a
-job or template. Both managers support folders, editing, duplication, import, and export, including
-the open draft's unsaved settings. Saving a library preset leaves existing jobs and templates as they are.
+Use **Settings → Encoder presets** to manage audio and video encoder libraries without opening a job or template. Both managers support folders, editing, duplication, import, and export, including the open draft's unsaved settings. Saving a library preset leaves existing jobs and templates as they are.
 
 ## Configuration precedence
 
@@ -14,19 +10,14 @@ For settings available in both places, the application uses these layers in orde
 
 1. `videoforge.toml`: shipped defaults in the application folder.
 2. `videoforge.local.toml`: machine-specific overrides beside that file; tables merge recursively.
-3. An imported configuration backup, if present: supplies restored server defaults, including pairing
-   and plugin settings. The TOML files themselves are not rewritten.
+3. An imported configuration backup, if present: supplies restored server defaults, including pairing and plugin settings. The TOML files themselves are not rewritten.
 4. Saved **Settings** values in `videoforge.db`: override those defaults for the server.
 
-Reset a setting in the UI to return to its default (from the imported backup, if one was restored).
-Editing a TOML file does not override an imported configuration or an
-existing saved UI value. Restart VideoForge after editing a configuration file.
+Reset a setting in the UI to return to its default (from the imported backup, if one was restored). Editing a TOML file does not override an imported configuration or an existing saved UI value. Restart VideoForge after editing a configuration file.
 
-Use **Settings → Configuration backup** to export or import the complete server configuration and
-all preset libraries without creating a job. See [Storage and backups](storage.md#back-up).
+Use **Settings → Configuration backup** to export or import the complete server configuration and all preset libraries without creating a job. See [Storage and backups](storage.md#back-up).
 
-The command-line `plan`, `run`, and `validate` commands load file configuration; server UI overrides
-are not a replacement for their file configuration.
+The command-line `plan`, `run`, and `validate` commands load file configuration; server UI overrides are not a replacement for their file configuration.
 
 ## Local tool paths
 
@@ -42,13 +33,9 @@ ffmpeg = 'D:\Tools\ffmpeg\bin\ffmpeg.exe'
 vs_plugins = 'D:\Tools\vs-plugins'
 ```
 
-Relative paths resolve against the configuration file's folder. Bare names such as `ffmpeg` are
-looked up on `PATH`. `mkvextract` and `mkvpropedit` are found beside `mkvmerge`, and `ffprobe` beside
-`ffmpeg`, unless explicitly configured. The default `vspipe` is the one installed with VideoForge's
-Python environment.
+Relative paths resolve against the configuration file's folder. Bare names such as `ffmpeg` are looked up on `PATH`. `mkvextract` and `mkvpropedit` are found beside `mkvmerge`, and `ffprobe` beside `ffmpeg`, unless explicitly configured. The default `vspipe` is the one installed with VideoForge's Python environment.
 
-For Docker, use container paths. A local configuration file can be mounted at
-`/app/videoforge.local.toml`.
+For Docker, use container paths. A local configuration file can be mounted at `/app/videoforge.local.toml`.
 
 ## Pipeline settings
 
@@ -67,12 +54,9 @@ tool_priority = "normal"
 | `encoder_priority` | Default priority for the video encoder and its `vspipe` |
 | `tool_priority` | Default priority for the other tools |
 
-Priorities are `idle`, `below_normal`, `normal`, `above_normal`, or `high`. Linux maps these to nice
-values; raising priority requires the appropriate permissions. The Queue toolbar can change a
-running job's priority separately.
+Priorities are `idle`, `below_normal`, `normal`, `above_normal`, or `high`. Linux maps these to nice values; raising priority requires the appropriate permissions. The Queue toolbar can change a running job's priority separately.
 
-Deleting work folders also deletes the intermediate encodes used for reuse. See
-[Storage and backups](storage.md) before enabling cleanup.
+Deleting work folders also deletes the intermediate encodes used for reuse. See [Storage and backups](storage.md) before enabling cleanup.
 
 ## Pairing settings
 
@@ -84,18 +68,13 @@ scan_source_folder = true
 staxrip_temp = true
 ```
 
-Suffixes match existing video encodes to source stems; episode names can also match by `SxxEyy`.
-`scan_source_folder` also finds matching SRTs beside the source and one folder down.
-`staxrip_temp` reads the source's StaxRip temp folder for an encode still running and chapter files.
+Suffixes match existing video encodes to source stems; episode names can also match by `SxxEyy`. `scan_source_folder` also finds matching SRTs beside the source and one folder down. `staxrip_temp` reads the source's StaxRip temp folder for an encode still running and chapter files.
 
 ## Actions and plugins
 
-`[actions] commands = true` permits command actions; Docker ships with it disabled. The full command
-and webhook behavior is described under [Notifications and actions](../actions.md).
+`[actions] commands = true` permits command actions; Docker ships with it disabled. The full command and webhook behavior is described under [Notifications and actions](../actions.md).
 
-Install plugin ZIPs, enable or disable plugins, and edit declared plugin options under **Settings → Plugins**.
-File changes and plugin settings apply after restart. TOML tables such as `[plugins.library_scan]`
-remain supported; saved form values override them. See [Plugins](../plugins.md).
+Install plugin ZIPs, enable or disable plugins, and edit declared plugin options under **Settings → Plugins**. File changes and plugin settings apply after restart. TOML tables such as `[plugins.library_scan]` remain supported; saved form values override them. See [Plugins](../plugins.md).
 
 ## Listening address and data folder
 
@@ -105,5 +84,4 @@ These are command-line options:
 uv run videoforge serve --port 8765 --data-dir "D:\VideoForgeData"
 ```
 
-The default host is `127.0.0.1`. There is no login, so use an authenticated proxy if you expose the
-server beyond the machine. See the [command-line reference](../reference/cli.md).
+The default host is `127.0.0.1`. There is no login, so use an authenticated proxy if you expose the server beyond the machine. See the [command-line reference](../reference/cli.md).

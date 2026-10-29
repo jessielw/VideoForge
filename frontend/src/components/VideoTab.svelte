@@ -22,7 +22,14 @@
   import { videoView } from '../lib/videoView.svelte'
   import { clipLength, hdrFormats } from '../lib/format'
   import { fitted, previewShape, resizeInput, type Geometry } from '../lib/resize'
-  import { SOURCE_FILTERS, type ClipInfo, type Crop, type JobDetail, type SourceFilter, type VideoSettings } from '../lib/types'
+  import {
+    SOURCE_FILTERS,
+    type ClipInfo,
+    type Crop,
+    type JobDetail,
+    type SourceFilter,
+    type VideoSettings,
+  } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import CropIcon from '@lucide/svelte/icons/crop'
@@ -43,11 +50,8 @@
   import ResizeEditor from './ResizeEditor.svelte'
   import ScriptEditor from './ScriptEditor.svelte'
 
-  let {
-    job,
-    save,
-    editable,
-  }: { job: JobDetail; save: (v: VideoSettings) => Promise<void>; editable: boolean } = $props()
+  let { job, save, editable }: { job: JobDetail; save: (v: VideoSettings) => Promise<void>; editable: boolean } =
+    $props()
 
   // Preview, panel, frame, zoom, scroll and the script editor's text, kept per job (JobEditor remounts this per job).
   const vv = videoView(untrack(() => job.id))
@@ -78,7 +82,7 @@
   const scriptKey = $derived(job.id + JSON.stringify(job.spec.video) + job.spec.encoder.depth)
   // The source's index is there (for the job's source filter): only then is the clip opened.
   const ready = $derived(job.indexed)
-  const live = $derived(app.jobs.find(j => j.id === job.id)) // live status and progress
+  const live = $derived(app.jobs.find((j) => j.id === job.id)) // live status and progress
   const indexStatus = $derived(live?.status ?? job.status)
 
   async function indexNow() {
@@ -160,7 +164,9 @@
       vv.parts = p
       if (!keep) vv.body = p.body.join('\n')
       if (!ready) return // shown, not run: running opens the source
-      const c = await api.checkScript(id).catch(e => ({ ok: false as const, error: String(e.message ?? e), line: null }))
+      const c = await api
+        .checkScript(id)
+        .catch((e) => ({ ok: false as const, error: String(e.message ?? e), line: null }))
       if (seq !== refreshSeq) return
       vv.checked = c
       if (c.ok) {
@@ -304,16 +310,22 @@
   // The other stage's info until this one's comes: switching the crop lines keeps the preview up.
   const current = $derived(info[stage] ?? info[stage === 'crop' ? 'output' : 'crop'])
   const notice = $derived.by(() => {
-    if (!scripting) return stale ? { text: 'Changed: F5 or Refresh to see it on this frame', tone: 'muted' as const } : null
+    if (!scripting)
+      return stale ? { text: 'Changed: F5 or Refresh to see it on this frame', tone: 'muted' as const } : null
     if (running) return { text: 'Running the script…', tone: 'muted' as const }
     if (vv.checked && !vv.checked.ok)
-      return { text: `The script failed${vv.checked.line ? ` (line ${vv.checked.line})` : ''}: this is the last good frame.`, tone: 'bad' as const }
+      return {
+        text: `The script failed${vv.checked.line ? ` (line ${vv.checked.line})` : ''}: this is the last good frame.`,
+        tone: 'bad' as const,
+      }
     return null
   })
   // The probed source (its pixel aspect too), and the picture going into the resize step.
   const source = $derived.by<Geometry | null>(() => {
     const v = job.tracks?.video
-    return v && v.width > 0 && v.height > 0 ? { width: v.width, height: v.height, sarNum: v.sar_num ?? 1, sarDen: v.sar_den ?? 1 } : null
+    return v && v.width > 0 && v.height > 0
+      ? { width: v.width, height: v.height, sarNum: v.sar_num ?? 1, sarDen: v.sar_den ?? 1 }
+      : null
   })
   const resizeIn = $derived(source ? resizeInput(video, source) : null)
   // The shown frame's pixel shape, from the saved settings it was rendered with (the script panel's runs too).
@@ -324,7 +336,9 @@
     if (source) return source
     const o = info.output
     const c = job.spec.video.crop
-    return o && !job.spec.video.resize ? { width: o.width + c.left + c.right, height: o.height + c.top + c.bottom } : null
+    return o && !job.spec.video.resize
+      ? { width: o.width + c.left + c.right, height: o.height + c.top + c.bottom }
+      : null
   })
   const outW = $derived(src ? src.width - video.crop.left - video.crop.right : 0)
   const outH = $derived(src ? src.height - video.crop.top - video.crop.bottom : 0)
@@ -340,7 +354,8 @@
   <div class="flex min-w-0 flex-1 flex-col gap-2">
     <div class="flex h-9 items-center gap-2">
       {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
-      {#if infoError && !scripting}<span class="truncate text-xs text-destructive" title={infoError}>{infoError}</span>{/if}
+      {#if infoError && !scripting}<span class="truncate text-xs text-destructive" title={infoError}>{infoError}</span
+        >{/if}
       <Button
         variant="ghost"
         class="ml-auto"
@@ -351,7 +366,10 @@
       </Button>
     </div>
     {#if !ready}
-      <div class="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border p-6 text-center" aria-label="Index">
+      <div
+        class="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border p-6 text-center"
+        aria-label="Index"
+      >
         {#if indexStatus === 'indexing'}
           {@const p = live?.progress}
           <div class="text-base font-medium">Indexing the source…</div>
@@ -361,14 +379,16 @@
             </div>
             <span class="w-14 text-right tabular-nums">{p ? `${(p.fraction * 100).toFixed(0)}%` : '…'}</span>
           </div>
-          <p class="max-w-md text-sm text-muted-foreground">The job is locked until it's done; the preview opens by itself after.</p>
+          <p class="max-w-md text-sm text-muted-foreground">
+            The job is locked until it's done; the preview opens by itself after.
+          </p>
           <Button variant="outline" onclick={() => api.stopIndex([jobId])}><SquareIcon />Stop</Button>
         {:else if indexStatus === 'index-queued'}
           <div class="text-base font-medium">Waiting to be indexed</div>
           <p class="max-w-md text-sm text-muted-foreground">
             {#if live?.index_held}
-              An encode is reading this source's disk: it waits until that's done (Settings, Batch indexing). Index this one
-              next doesn't wait.
+              An encode is reading this source's disk: it waits until that's done (Settings, Batch indexing). Index this
+              one next doesn't wait.
             {:else}
               Sources are indexed one at a time. The preview opens by itself after.
             {/if}
@@ -380,11 +400,14 @@
         {:else}
           <div class="text-base font-medium">The source isn't indexed yet</div>
           <p class="max-w-md text-sm text-muted-foreground">
-            The preview, auto-crop and the script's Run need the source's index ({SOURCE_FILTERS.find(f => f.id === job.spec.video.source_filter)?.label}).
-            Indexing reads the whole file once (minutes on a large remux), one source at a time; the job is locked while it runs.
-            Crop, resize and filters can be set meanwhile.
+            The preview, auto-crop and the script's Run need the source's index ({SOURCE_FILTERS.find(
+              (f) => f.id === job.spec.video.source_filter,
+            )?.label}). Indexing reads the whole file once (minutes on a large remux), one source at a time; the job is
+            locked while it runs. Crop, resize and filters can be set meanwhile.
           </p>
-          {#if live?.index_error}<p class="max-w-md text-sm text-destructive">The last index failed: {live.index_error}</p>{/if}
+          {#if live?.index_error}<p class="max-w-md text-sm text-destructive">
+              The last index failed: {live.index_error}
+            </p>{/if}
           <Button onclick={indexNow} disabled={!editable}><DatabaseZapIcon />Index now</Button>
         {/if}
       </div>
@@ -406,7 +429,7 @@
         {notice}
         sar={shape}
         oncrop={editable && stage === 'crop'
-          ? c => {
+          ? (c) => {
               video.crop = c
               commit()
             }
@@ -417,7 +440,7 @@
             <Toggle
               pressed={stage === 'crop'}
               disabled={!canCrop}
-              onPressedChange={on => (vv.cropView = on)}
+              onPressedChange={(on) => (vv.cropView = on)}
               class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
               title={canCrop
                 ? 'Crop lines: the output with the cropped-off margins shown (a resize after the crop is left out). Off: the output as encoded'
@@ -434,7 +457,11 @@
               Auto
             </Toggle>
             {#if !auto}
-              <Button variant={stale ? 'default' : 'ghost'} onclick={refreshPreview} title="Render the frame with the saved settings (F5)">
+              <Button
+                variant={stale ? 'default' : 'ghost'}
+                onclick={refreshPreview}
+                title="Render the frame with the saved settings (F5)"
+              >
                 <RefreshCwIcon />Refresh
               </Button>
             {/if}
@@ -453,167 +480,218 @@
   </div>
 
   <div class="flex shrink-0 flex-col gap-2 {vv.panel === 'script' ? 'w-[45%]' : 'w-72'}">
-    <Tabs.Root value={vv.panel} onValueChange={v => (v === 'script' ? openScript() : (vv.panel = 'settings'))}>
+    <Tabs.Root value={vv.panel} onValueChange={(v) => (v === 'script' ? openScript() : (vv.panel = 'settings'))}>
       <Tabs.List aria-label="Side panel">
         <Tabs.Trigger value="settings" class="px-3">Settings</Tabs.Trigger>
         <Tabs.Trigger value="script" class="px-3">Script</Tabs.Trigger>
       </Tabs.List>
     </Tabs.Root>
-  {#if vv.panel === 'script'}
-    <section class="flex min-h-0 flex-1 flex-col gap-2">
-      <div class="flex items-center gap-2">
-        <Button onclick={run} disabled={running || saving || !ready} title={ready ? 'Save the body and run the script (Ctrl+Enter)' : 'Index the source first (the preview side)'}>
-          <PlayIcon />{running ? 'Running…' : dirty && editable ? 'Save & run' : 'Run'}
-        </Button>
-        {#if vv.parts?.custom}
-          <Button variant="outline" onclick={useGenerated} disabled={!editable || running}
-            title="Drop the custom body: crop, resize and filters make the script again">Back to generated</Button>
-        {/if}
-        <span class="ml-auto text-xs text-muted-foreground">
-          {#if !editable}read-only while {job.status}{:else if dirty}edited, not saved{:else if vv.parts?.custom}custom body{:else}generated from crop, resize and filters (editing makes it custom){/if}
-        </span>
-      </div>
-      {#if vv.parts}
-        <ScriptEditor
-          head={vv.parts.head}
-          tail={vv.parts.tail}
-          bind:body={vv.body}
-          errorLine={vv.checked && !vv.checked.ok ? vv.checked.line : null}
-          disabled={!editable}
-          onrun={run}
-        />
-      {:else}
-        <div class="flex flex-1 items-center justify-center rounded-lg border text-muted-foreground">Loading the script…</div>
-      {/if}
-      {#if vv.checked && !vv.checked.ok}
-        <pre class="max-h-40 shrink-0 overflow-auto rounded-lg border border-destructive/50 bg-destructive/10 p-2 text-xs whitespace-pre-wrap text-destructive">{vv.checked.line ? `Line ${vv.checked.line}: ` : ''}{vv.checked.error}</pre>
-      {:else if vv.checked?.ok}
-        {@const i = vv.checked.info}
-        <div class="flex shrink-0 flex-wrap gap-x-4 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs">
-          <span class="text-success"><CheckIcon class="mr-1 inline size-3.5 align-[-2px]" />Runs</span>
-          <span><span class="text-muted-foreground">Frames</span> {i.frames}</span>
-          <span><span class="text-muted-foreground">Size</span> {i.width}×{i.height}</span>
-          <span><span class="text-muted-foreground">Format</span> {i.format}</span>
-          <span><span class="text-muted-foreground">FPS</span> {+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span>
-          <span><span class="text-muted-foreground">Length</span> {clipLength(i.frames, i.fps_num, i.fps_den)}</span>
-          {#if i.length_warning}<span class="basis-full text-warning">{i.length_warning}</span>{/if}
-        </div>
-      {/if}
-    </section>
-  {:else}
-    <aside class="min-h-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto pr-1">
-      <PresetMenu
-        kind="video"
-        profile={job.profile}
-        current={video}
-        disabled={!editable}
-        apply={data => {
-          video = { ...data, crop: video.crop }
-          commit(0)
-        }}
-      />
-      <!-- min-w-0: a fieldset is as wide as its widest content by default, which ran past the panel. -->
-      <fieldset disabled={!editable} class="min-w-0 space-y-5">
-        {#if interlaced}
-          {@const v = job.tracks?.video}
-          <section class="space-y-1">
-            <span class="section-label">Scan</span>
-            <p class="text-sm">{v?.scan_type}{v?.scan_order ? ` · ${v.scan_order}` : ''}</p>
-            <p class="text-xs text-muted-foreground">Stored as fields: add IVTC or a deinterlacer from the Field filters, unless the preview shows no combing.</p>
-          </section>
-        {/if}
-        {#if hdr.length}
-          <section class="space-y-1">
-            <span class="section-label">HDR</span>
-            <p class="text-sm">{hdr.join(' · ')}</p>
-            {#if job.tracks?.video?.hdr?.dv_profile}
-              {@const dv = job.tracks.video.hdr}
-              {#if dv.dv_profile === 5}
-                <p class="text-xs text-muted-foreground">Dolby Vision goes into an x265 encode as profile 5 (Encoder tab: Dolby Vision from the source), its active area following the crop and resize. Its base layer isn't HDR10: the preview's colours look off (green / purple), the encode's play right through the RPU.</p>
-              {:else if dv.dv_profile === 8 && dv.dv_compat !== 4 || dv.dv_profile === 7 && (dv.dv_el === 'MEL' || dv.dv_el === 'FEL')}
-                <p class="text-xs text-muted-foreground">Dolby Vision goes into an x265 encode as 8.1 (Encoder tab: Dolby Vision from the source), its active area following the crop and resize.</p>
-                {#if dv.dv_el === 'FEL'}
-                  <p class="text-xs text-muted-foreground">The FEL's enhancement layer is baked into the picture: the preview shows it baked, auto crop reads the base layer.</p>
-                {/if}
-              {:else}
-                <p class="text-xs text-muted-foreground">This Dolby Vision ({dv.dv_profile === 7 ? 'profile 7, enhancement layer not read' : '8.4, HLG'}) isn't carried into the encode yet.</p>
-              {/if}
-            {/if}
-            {#if job.tracks?.video?.hdr?.hdr10plus}
-              <p class="text-xs text-muted-foreground">HDR10+ goes into an x265 encode (Encoder tab: HDR10+ from the source).</p>
-            {/if}
-          </section>
-        {/if}
-        <section class="space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="section-label">Crop</span>
-            <span class="text-xs text-muted-foreground">{src ? `${outW}×${outH}` : ""}</span>
-          </div>
-          <!-- Label, box, label, box: the labels get their own columns, so every box is the same width. -->
-          <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">
-            {#each SIDES as side (side)}
-              <label class="text-muted-foreground capitalize" for="crop-{side}">{side}</label>
-              <Input
-                id="crop-{side}"
-                class="w-full"
-                type="number"
-                step="2"
-                min="0"
-                value={video.crop[side]}
-                onchange={e => setCrop(side, +(e.target as HTMLInputElement).value)}
-              />
-            {/each}
-          </div>
-          <div class="flex gap-2">
-            <Button variant="outline" class="flex-1" onclick={autoCrop} disabled={detecting || !ready} title={ready ? undefined : 'Index the source first'}>
-              <WandSparklesIcon />{detecting ? 'Detecting…' : 'Auto-crop'}
-            </Button>
+    {#if vv.panel === 'script'}
+      <section class="flex min-h-0 flex-1 flex-col gap-2">
+        <div class="flex items-center gap-2">
+          <Button
+            onclick={run}
+            disabled={running || saving || !ready}
+            title={ready
+              ? 'Save the body and run the script (Ctrl+Enter)'
+              : 'Index the source first (the preview side)'}
+          >
+            <PlayIcon />{running ? 'Running…' : dirty && editable ? 'Save & run' : 'Run'}
+          </Button>
+          {#if vv.parts?.custom}
             <Button
               variant="outline"
-              onclick={() => {
-                video.crop = { left: 0, top: 0, right: 0, bottom: 0 }
-                cropOrigin = ''
-                vv.cropView = true
-                commit(0)
-              }}>Reset</Button
+              onclick={useGenerated}
+              disabled={!editable || running}
+              title="Drop the custom body: crop, resize and filters make the script again">Back to generated</Button
             >
-          </div>
-          {#if cropOrigin}<p class="text-xs text-muted-foreground">Auto-crop from {cropOrigin}</p>{/if}
-        </section>
-
-        <section class="space-y-2">
-          <span class="section-label">Source filter</span>
-          <NativeSelect
-            class="w-full"
-            aria-label="Source filter"
-            value={video.source_filter}
-            onchange={e => {
-              video.source_filter = (e.target as HTMLSelectElement).value as SourceFilter
-              info = { crop: null, output: null }
-              commit(0) // the saved job brings the new filter (and whether it's indexed): the preview follows
-            }}
-          >
-            {#each SOURCE_FILTERS as f (f.id)}<option value={f.id} title={f.title}>{f.label}</option>{/each}
-          </NativeSelect>
-        </section>
-
-        <ResizeEditor bind:resize={video.resize} input={video.custom === null ? resizeIn : null} onchange={() => commit()} />
-
-        <section class="space-y-2">
-          <FilterChain bind:filters={video.filters} crop={video.crop} resize={video.resize} disabled={video.custom !== null} onchange={() => commit(0)} />
-          {#if info.output?.length_warning}<p class="text-xs text-warning">{info.output.length_warning}</p>{/if}
-          {#if video.custom !== null}
-            <p class="text-xs text-warning">
-              A custom script body is in use, so crop, resize and filters don't apply.
-              <button class="underline underline-offset-2" onclick={openScript}>Edit it</button> ·
-              <button class="underline underline-offset-2" onclick={useGenerated}>Back to generated</button>
-            </p>
-          {:else}
-            <Button variant="ghost" size="sm" onclick={openScript}>Edit the whole script…</Button>
           {/if}
-        </section>
-      </fieldset>
-    </aside>
-  {/if}
+          <span class="ml-auto text-xs text-muted-foreground">
+            {#if !editable}read-only while {job.status}{:else if dirty}edited, not saved{:else if vv.parts?.custom}custom
+              body{:else}generated from crop, resize and filters (editing makes it custom){/if}
+          </span>
+        </div>
+        {#if vv.parts}
+          <ScriptEditor
+            head={vv.parts.head}
+            tail={vv.parts.tail}
+            bind:body={vv.body}
+            errorLine={vv.checked && !vv.checked.ok ? vv.checked.line : null}
+            disabled={!editable}
+            onrun={run}
+          />
+        {:else}
+          <div class="flex flex-1 items-center justify-center rounded-lg border text-muted-foreground">
+            Loading the script…
+          </div>
+        {/if}
+        {#if vv.checked && !vv.checked.ok}
+          <pre
+            class="max-h-40 shrink-0 overflow-auto rounded-lg border border-destructive/50 bg-destructive/10 p-2 text-xs whitespace-pre-wrap text-destructive">{vv
+              .checked.line
+              ? `Line ${vv.checked.line}: `
+              : ''}{vv.checked.error}</pre>
+        {:else if vv.checked?.ok}
+          {@const i = vv.checked.info}
+          <div class="flex shrink-0 flex-wrap gap-x-4 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs">
+            <span class="text-success"><CheckIcon class="mr-1 inline size-3.5 align-[-2px]" />Runs</span>
+            <span><span class="text-muted-foreground">Frames</span> {i.frames}</span>
+            <span><span class="text-muted-foreground">Size</span> {i.width}×{i.height}</span>
+            <span><span class="text-muted-foreground">Format</span> {i.format}</span>
+            <span><span class="text-muted-foreground">FPS</span> {+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span>
+            <span><span class="text-muted-foreground">Length</span> {clipLength(i.frames, i.fps_num, i.fps_den)}</span>
+            {#if i.length_warning}<span class="basis-full text-warning">{i.length_warning}</span>{/if}
+          </div>
+        {/if}
+      </section>
+    {:else}
+      <aside class="min-h-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto pr-1">
+        <PresetMenu
+          kind="video"
+          profile={job.profile}
+          current={video}
+          disabled={!editable}
+          apply={(data) => {
+            video = { ...data, crop: video.crop }
+            commit(0)
+          }}
+        />
+        <!-- min-w-0: a fieldset is as wide as its widest content by default, which ran past the panel. -->
+        <fieldset disabled={!editable} class="min-w-0 space-y-5">
+          {#if interlaced}
+            {@const v = job.tracks?.video}
+            <section class="space-y-1">
+              <span class="section-label">Scan</span>
+              <p class="text-sm">{v?.scan_type}{v?.scan_order ? ` · ${v.scan_order}` : ''}</p>
+              <p class="text-xs text-muted-foreground">
+                Stored as fields: add IVTC or a deinterlacer from the Field filters, unless the preview shows no
+                combing.
+              </p>
+            </section>
+          {/if}
+          {#if hdr.length}
+            <section class="space-y-1">
+              <span class="section-label">HDR</span>
+              <p class="text-sm">{hdr.join(' · ')}</p>
+              {#if job.tracks?.video?.hdr?.dv_profile}
+                {@const dv = job.tracks.video.hdr}
+                {#if dv.dv_profile === 5}
+                  <p class="text-xs text-muted-foreground">
+                    Dolby Vision goes into an x265 encode as profile 5 (Encoder tab: Dolby Vision from the source), its
+                    active area following the crop and resize. Its base layer isn't HDR10: the preview's colours look
+                    off (green / purple), the encode's play right through the RPU.
+                  </p>
+                {:else if (dv.dv_profile === 8 && dv.dv_compat !== 4) || (dv.dv_profile === 7 && (dv.dv_el === 'MEL' || dv.dv_el === 'FEL'))}
+                  <p class="text-xs text-muted-foreground">
+                    Dolby Vision goes into an x265 encode as 8.1 (Encoder tab: Dolby Vision from the source), its active
+                    area following the crop and resize.
+                  </p>
+                  {#if dv.dv_el === 'FEL'}
+                    <p class="text-xs text-muted-foreground">
+                      The FEL's enhancement layer is baked into the picture: the preview shows it baked, auto crop reads
+                      the base layer.
+                    </p>
+                  {/if}
+                {:else}
+                  <p class="text-xs text-muted-foreground">
+                    This Dolby Vision ({dv.dv_profile === 7 ? 'profile 7, enhancement layer not read' : '8.4, HLG'})
+                    isn't carried into the encode yet.
+                  </p>
+                {/if}
+              {/if}
+              {#if job.tracks?.video?.hdr?.hdr10plus}
+                <p class="text-xs text-muted-foreground">
+                  HDR10+ goes into an x265 encode (Encoder tab: HDR10+ from the source).
+                </p>
+              {/if}
+            </section>
+          {/if}
+          <section class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="section-label">Crop</span>
+              <span class="text-xs text-muted-foreground">{src ? `${outW}×${outH}` : ''}</span>
+            </div>
+            <!-- Label, box, label, box: the labels get their own columns, so every box is the same width. -->
+            <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">
+              {#each SIDES as side (side)}
+                <label class="text-muted-foreground capitalize" for="crop-{side}">{side}</label>
+                <Input
+                  id="crop-{side}"
+                  class="w-full"
+                  type="number"
+                  step="2"
+                  min="0"
+                  value={video.crop[side]}
+                  onchange={(e) => setCrop(side, +(e.target as HTMLInputElement).value)}
+                />
+              {/each}
+            </div>
+            <div class="flex gap-2">
+              <Button
+                variant="outline"
+                class="flex-1"
+                onclick={autoCrop}
+                disabled={detecting || !ready}
+                title={ready ? undefined : 'Index the source first'}
+              >
+                <WandSparklesIcon />{detecting ? 'Detecting…' : 'Auto-crop'}
+              </Button>
+              <Button
+                variant="outline"
+                onclick={() => {
+                  video.crop = { left: 0, top: 0, right: 0, bottom: 0 }
+                  cropOrigin = ''
+                  vv.cropView = true
+                  commit(0)
+                }}>Reset</Button
+              >
+            </div>
+            {#if cropOrigin}<p class="text-xs text-muted-foreground">Auto-crop from {cropOrigin}</p>{/if}
+          </section>
+
+          <section class="space-y-2">
+            <span class="section-label">Source filter</span>
+            <NativeSelect
+              class="w-full"
+              aria-label="Source filter"
+              value={video.source_filter}
+              onchange={(e) => {
+                video.source_filter = (e.target as HTMLSelectElement).value as SourceFilter
+                info = { crop: null, output: null }
+                commit(0) // the saved job brings the new filter (and whether it's indexed): the preview follows
+              }}
+            >
+              {#each SOURCE_FILTERS as f (f.id)}<option value={f.id} title={f.title}>{f.label}</option>{/each}
+            </NativeSelect>
+          </section>
+
+          <ResizeEditor
+            bind:resize={video.resize}
+            input={video.custom === null ? resizeIn : null}
+            onchange={() => commit()}
+          />
+
+          <section class="space-y-2">
+            <FilterChain
+              bind:filters={video.filters}
+              crop={video.crop}
+              resize={video.resize}
+              disabled={video.custom !== null}
+              onchange={() => commit(0)}
+            />
+            {#if info.output?.length_warning}<p class="text-xs text-warning">{info.output.length_warning}</p>{/if}
+            {#if video.custom !== null}
+              <p class="text-xs text-warning">
+                A custom script body is in use, so crop, resize and filters don't apply.
+                <button class="underline underline-offset-2" onclick={openScript}>Edit it</button> ·
+                <button class="underline underline-offset-2" onclick={useGenerated}>Back to generated</button>
+              </p>
+            {:else}
+              <Button variant="ghost" size="sm" onclick={openScript}>Edit the whole script…</Button>
+            {/if}
+          </section>
+        </fieldset>
+      </aside>
+    {/if}
   </div>
 </div>

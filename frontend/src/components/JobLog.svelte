@@ -40,17 +40,24 @@
     const request = ++requestSeq
     const started = app.logSeq
     let snapshot
-    try { snapshot = await api.logSnapshot(id) }
-    catch (e) { if (request === requestSeq) error = e instanceof Error ? e.message : String(e); return }
+    try {
+      snapshot = await api.logSnapshot(id)
+    } catch (e) {
+      if (request === requestSeq) error = e instanceof Error ? e.message : String(e)
+      return
+    }
     if (request !== requestSeq || id !== jobId) return
-    if ((app.runStarts[id] ?? 0) > started) { void load(id); return }
+    if ((app.runStarts[id] ?? 0) > started) {
+      void load(id)
+      return
+    }
     const { steps } = snapshot
     since = app.logSeq
     cursor = snapshot.seq
     full = snapshot.lines
     error = ''
-    base = Object.fromEntries(steps.map(s => [s.id, s.lines]))
-    partial = Object.fromEntries(steps.map(s => [s.id, s.partial]))
+    base = Object.fromEntries(steps.map((s) => [s.id, s.lines]))
+    partial = Object.fromEntries(steps.map((s) => [s.id, s.partial]))
     app.runs[id] = mergeSteps(steps, app.runs[id] ?? [], app.stepVersions[id] ?? {}, cursor)
     loaded = true
   }
@@ -72,7 +79,8 @@
     const from = fresh ? runStart : since
     const out: Record<string, string[]> = {}
     for (const l of app.log) {
-      if ((fresh ? l.seq > from : (l.remoteSeq ?? 0) > cursor) && l.job === jobId && l.step) (out[l.step] ??= []).push(l.line)
+      if ((fresh ? l.seq > from : (l.remoteSeq ?? 0) > cursor) && l.job === jobId && l.step)
+        (out[l.step] ??= []).push(l.line)
     }
     return out
   })
@@ -82,7 +90,9 @@
   }
 
   const fullLines = $derived(
-    view === 'full' ? [...full, ...app.log.filter(l => l.job === jobId && (l.remoteSeq ?? 0) > cursor).map(l => l.line)] : [],
+    view === 'full'
+      ? [...full, ...app.log.filter((l) => l.job === jobId && (l.remoteSeq ?? 0) > cursor).map((l) => l.line)]
+      : [],
   )
 
   const LOOK: Record<StepStatus, { icon: typeof CheckIcon; tone: string; text: string }> = {
@@ -129,7 +139,10 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col gap-3">
-  {#if error}<div role="alert" class="text-sm text-destructive">Couldn't load the log: {error} <Button size="sm" onclick={() => load(jobId)}>Retry</Button></div>{/if}
+  {#if error}<div role="alert" class="text-sm text-destructive">
+      Couldn't load the log: {error}
+      <Button size="sm" onclick={() => load(jobId)}>Retry</Button>
+    </div>{/if}
   <div class="flex items-center gap-3">
     <Tabs.Root bind:value={view}>
       <Tabs.List>
@@ -139,12 +152,15 @@
     </Tabs.Root>
     {#if view === 'steps' && steps.length}
       <span class="text-xs text-muted-foreground">
-        {steps.filter(s => s.status === 'done' || s.status === 'reused').length}/{steps.length} steps done
+        {steps.filter((s) => s.status === 'done' || s.status === 'reused').length}/{steps.length} steps done
       </span>
-      <Button variant="ghost" size="sm" class="ml-auto" onclick={() => (open = Object.fromEntries(steps.map(s => [s.id, true])))}
-        >Open all</Button
+      <Button
+        variant="ghost"
+        size="sm"
+        class="ml-auto"
+        onclick={() => (open = Object.fromEntries(steps.map((s) => [s.id, true])))}>Open all</Button
       >
-      <Button variant="ghost" size="sm" onclick={() => (open = Object.fromEntries(steps.map(s => [s.id, false])))}
+      <Button variant="ghost" size="sm" onclick={() => (open = Object.fromEntries(steps.map((s) => [s.id, false])))}
         >Close all</Button
       >
     {/if}
@@ -156,14 +172,18 @@
       use:follow={fullLines.length}>{fullLines.join('\n') || 'No output yet.'}</pre>
   {:else if !steps.length}
     <p class="text-sm text-muted-foreground">
-      {loaded ? 'No run yet. Each step shows up here when the job runs (the Encoder tab lists their commands).' : 'Loading…'}
+      {loaded
+        ? 'No run yet. Each step shows up here when the job runs (the Encoder tab lists their commands).'
+        : 'Loading…'}
     </p>
   {:else}
     <div class="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
       {#each steps as s, i (s.id)}
         {@const look = LOOK[s.status]}
         {@const isOpen = open[s.id] ?? (s.status === 'running' || s.status === 'failed')}
-        <section class="overflow-hidden rounded-lg border bg-card {s.status === 'failed' ? 'border-destructive/60' : ''}">
+        <section
+          class="overflow-hidden rounded-lg border bg-card {s.status === 'failed' ? 'border-destructive/60' : ''}"
+        >
           <button
             class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent/50"
             aria-expanded={isOpen}
@@ -173,7 +193,9 @@
                 class="size-3.5 shrink-0 text-muted-foreground"
               />{/if}
             <span class="w-10 shrink-0 text-xs text-muted-foreground">{i + 1}/{steps.length}</span>
-            <span class="min-w-0 flex-1 truncate {s.status === 'pending' ? 'text-muted-foreground' : ''}">{s.label}</span>
+            <span class="min-w-0 flex-1 truncate {s.status === 'pending' ? 'text-muted-foreground' : ''}"
+              >{s.label}</span
+            >
             <span class="flex shrink-0 items-center gap-1 text-xs {look.tone}">
               <look.icon class="size-3.5 {s.status === 'running' ? 'animate-spin' : ''}" />{look.text}
             </span>
@@ -185,8 +207,17 @@
             <div class="space-y-2 border-t p-3">
               {#if s.command}
                 <div class="flex items-start gap-2">
-                  <code class="min-w-0 flex-1 rounded-md bg-muted px-2 py-1 font-mono text-[11px] break-all">{s.command}</code>
-                  <Button variant="ghost" size="icon-sm" class="shrink-0" title="Copy the command line" aria-label="Copy the command line" onclick={() => copy(s)}>
+                  <code class="min-w-0 flex-1 rounded-md bg-muted px-2 py-1 font-mono text-[11px] break-all"
+                    >{s.command}</code
+                  >
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    class="shrink-0"
+                    title="Copy the command line"
+                    aria-label="Copy the command line"
+                    onclick={() => copy(s)}
+                  >
                     {#if copied === s.id}<CheckIcon />{:else}<CopyIcon />{/if}
                   </Button>
                 </div>
@@ -194,7 +225,8 @@
                 <p class="text-xs text-muted-foreground">Runs inside VideoForge (no external command).</p>
               {/if}
               {#if s.error}
-                <pre class="rounded-lg border border-destructive/50 bg-destructive/10 p-2 text-xs whitespace-pre-wrap text-destructive">{s.error}</pre>
+                <pre
+                  class="rounded-lg border border-destructive/50 bg-destructive/10 p-2 text-xs whitespace-pre-wrap text-destructive">{s.error}</pre>
               {/if}
               {#if lines.length}
                 {#if lines.length > shown.length}
@@ -202,7 +234,9 @@
                     >Show all {lines.length} lines ({lines.length - shown.length} hidden)</Button
                   >
                 {:else if !fresh && partial[s.id]}
-                  <p class="text-xs text-muted-foreground">The last lines only (the full output is in the work folder's videoforge.log).</p>
+                  <p class="text-xs text-muted-foreground">
+                    The last lines only (the full output is in the work folder's videoforge.log).
+                  </p>
                 {/if}
                 <pre
                   class="max-h-96 overflow-auto rounded-lg border bg-background p-2 font-mono text-[11px] leading-relaxed"

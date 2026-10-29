@@ -53,18 +53,22 @@
   let error = $state('')
   let pending = $state(0)
   let saveError = $state('')
-  $effect(() => saves.subscribe(message => { saveError = message }))
+  $effect(() =>
+    saves.subscribe((message) => {
+      saveError = message
+    }),
+  )
   let newRoot = $state('')
   let browse = $state<
     { kind: 'tool'; tool: ToolSetting } | { kind: 'root' } | { kind: 'action'; index: number | 'draft' } | null
   >(null)
 
   async function checkAll() {
-    const names = config?.tools.map(t => t.name) ?? []
-    checking = Object.fromEntries(names.map(n => [n, true]))
+    const names = config?.tools.map((t) => t.name) ?? []
+    checking = Object.fromEntries(names.map((n) => [n, true]))
     try {
       const all = await api.toolChecks()
-      checks = Object.fromEntries(all.map(c => [c.name, c]))
+      checks = Object.fromEntries(all.map((c) => [c.name, c]))
     } finally {
       checking = {}
     }
@@ -126,7 +130,7 @@
     app.loadEncoders()
     checking = { ...checking, [t.name]: true }
     try {
-      const now = config!.tools.find(x => x.name === t.name)!
+      const now = config!.tools.find((x) => x.name === t.name)!
       checks = { ...checks, [t.name]: await api.checkTool(t.name, now.path) }
     } finally {
       checking = { ...checking, [t.name]: false }
@@ -141,8 +145,8 @@
   let subsEdit = $state<{ value: TemplateSubs | null } | null>(null)
   let subsSent = 0
   const subsDefault = $derived(subsEdit ? subsEdit.value : (app.presets.subs_default ?? null))
-  const defaultProfile = $derived(app.profiles.find(p => p.id === config?.profile) ?? app.defaultProfile)
-  const subFlags = $derived(defaultProfile?.track_properties.filter(f => f.kind === 'sub') ?? [])
+  const defaultProfile = $derived(app.profiles.find((p) => p.id === config?.profile) ?? app.defaultProfile)
+  const subFlags = $derived(defaultProfile?.track_properties.filter((f) => f.kind === 'sub') ?? [])
   async function setSubsDefault(value: TemplateSubs | null) {
     const sent = ++subsSent
     subsEdit = { value }
@@ -163,7 +167,7 @@
     const p = path.trim()
     if (!p || !config) return
     const current = config.roots_custom ? config.roots : []
-    if (await change({ roots: [...current.filter(r => r.toLowerCase() !== p.toLowerCase()), p] })) newRoot = ''
+    if (await change({ roots: [...current.filter((r) => r.toLowerCase() !== p.toLowerCase()), p] })) newRoot = ''
   }
 
   // Where Browse opens: the tool's folder (or the plugin folder itself).
@@ -184,7 +188,7 @@
   let testing = $state<Record<string, boolean>>({})
 
   function defaultEvents(): NotificationEvent[] {
-    return config?.notification_events.filter(e => e.default).map(e => e.id) ?? []
+    return config?.notification_events.filter((e) => e.default).map((e) => e.id) ?? []
   }
 
   function setNotifications(list: NotificationDestination[]): Promise<boolean> {
@@ -197,7 +201,7 @@
   }
 
   function toggleEvent(events: NotificationEvent[], id: NotificationEvent, on: boolean): NotificationEvent[] {
-    return on ? [...events.filter(e => e !== id), id] : events.filter(e => e !== id)
+    return on ? [...events.filter((e) => e !== id), id] : events.filter((e) => e !== id)
   }
 
   async function addNotification() {
@@ -251,7 +255,7 @@
 
   // A move or copy runs after a job only: switching to one drops the queue's event.
   function withKind(a: ActionSetting, kind: ActionKind): ActionSetting {
-    const events = isFileKind(kind) ? a.events.filter(e => e !== 'queue_finished') : a.events
+    const events = isFileKind(kind) ? a.events.filter((e) => e !== 'queue_finished') : a.events
     return { ...a, kind, events: events.length ? events : ['job_done'] }
   }
 
@@ -306,7 +310,11 @@
       {#if pending}<span class="text-sm text-muted-foreground">{saveError ? 'Unsaved changes' : 'Saving…'}</span>{/if}
     </header>
 
-    {#if error}<div class="col-span-full rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>{/if}
+    {#if error}<div
+        class="col-span-full rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
+      >
+        {error}
+      </div>{/if}
     {#if saveError}
       <div role="alert" class="col-span-full space-y-2 text-sm text-destructive">
         <p>Changes are not saved: {saveError}</p>
@@ -320,19 +328,38 @@
 
     <section class="col-span-full space-y-3">
       <h2 class="font-medium">Encoder presets</h2>
-      <p class="text-sm text-muted-foreground">Create, edit, organize, import, and export presets without opening a job or template.</p>
+      <p class="text-sm text-muted-foreground">
+        Create, edit, organize, import, and export presets without opening a job or template.
+      </p>
       <div class="flex flex-wrap gap-2">
         {#if app.defaultProfile}
-          <EncoderPresetMenu profile={app.defaultProfile.id} current={app.defaultProfile.defaults.encoder} apply={() => {}} manageOnly />
+          <EncoderPresetMenu
+            profile={app.defaultProfile.id}
+            current={app.defaultProfile.defaults.encoder}
+            apply={() => {}}
+            manageOnly
+          />
         {/if}
-        <AudioPresetMenu current={{ action: 'copy', layout: null, bitrate_kbps: null, options: {} }} apply={() => {}} manageOnly />
+        <AudioPresetMenu
+          current={{ action: 'copy', layout: null, bitrate_kbps: null, options: {} }}
+          apply={() => {}}
+          manageOnly
+        />
       </div>
     </section>
 
     {#if !config}
       <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
     {:else}
-      <ConfigurationTransfer disabled={pending > 0 || !!saveError} onimported={value => { config = value; pluginRefresh++; checks = {}; checkAll() }} />
+      <ConfigurationTransfer
+        disabled={pending > 0 || !!saveError}
+        onimported={(value) => {
+          config = value
+          pluginRefresh++
+          checks = {}
+          checkAll()
+        }}
+      />
       <PresetPackTransfer disabled={pending > 0 || !!saveError} />
       <section class="col-span-full min-w-0 space-y-3">
         <div class="flex items-center gap-3">
@@ -357,9 +384,11 @@
                   value={t.custom ?? t.default}
                   placeholder={t.default || 'not set'}
                   aria-label="{t.label} path"
-                  onchange={e => setTool(t, e.currentTarget.value)}
+                  onchange={(e) => setTool(t, e.currentTarget.value)}
                 />
-                <Button variant="outline" onclick={() => (browse = { kind: 'tool', tool: t })}><FolderOpenIcon />Browse…</Button>
+                <Button variant="outline" onclick={() => (browse = { kind: 'tool', tool: t })}
+                  ><FolderOpenIcon />Browse…</Button
+                >
                 <Button
                   variant="ghost"
                   size="sm"
@@ -373,18 +402,22 @@
                 {#if checking[t.name]}
                   <span class="text-muted-foreground">checking…</span>
                 {:else if c && look}
-                  <span class="flex shrink-0 items-center gap-1 {look.tone}"><look.icon class="size-3.5" />{look.text}</span>
+                  <span class="flex shrink-0 items-center gap-1 {look.tone}"
+                    ><look.icon class="size-3.5" />{look.text}</span
+                  >
                   {#if c.version}<span class="truncate" title={c.version}>{c.version}</span>{/if}
                   {#if c.detail}<span class="truncate text-muted-foreground" title={c.detail}>{c.detail}</span>{/if}
-                  {#if c.found && c.found !== t.path}<span class="truncate text-muted-foreground" title={c.found}>· {c.found}</span>{/if}
+                  {#if c.found && c.found !== t.path}<span class="truncate text-muted-foreground" title={c.found}
+                      >· {c.found}</span
+                    >{/if}
                 {/if}
               </div>
             </div>
           {/each}
         </div>
         <p class="text-xs text-muted-foreground">
-          Dolby Encoding Engine and qaac's CoreAudioToolbox can't be shipped with VideoForge: install them and point at them
-          here. DDP needs DeeZy + DEE (+ truehdd for Atmos); AAC needs ffmpeg + qaac.
+          Dolby Encoding Engine and qaac's CoreAudioToolbox can't be shipped with VideoForge: install them and point at
+          them here. DDP needs DeeZy + DEE (+ truehdd for Atmos); AAC needs ffmpeg + qaac.
         </p>
       </section>
 
@@ -392,9 +425,17 @@
         <div class="flex items-center gap-3">
           <h2 class="font-medium">Folder browser</h2>
           <span class="text-xs text-muted-foreground">
-            {config.roots_custom ? 'Only these folders (and what is under them) can be browsed.' : 'Every drive can be browsed.'}
+            {config.roots_custom
+              ? 'Only these folders (and what is under them) can be browsed.'
+              : 'Every drive can be browsed.'}
           </span>
-          <Button variant="ghost" size="sm" class="ml-auto" disabled={!config.roots_custom} onclick={() => setRoots(null)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            class="ml-auto"
+            disabled={!config.roots_custom}
+            onclick={() => setRoots(null)}
+          >
             Reset to every drive
           </Button>
         </div>
@@ -406,7 +447,7 @@
                 <button
                   class="text-muted-foreground hover:text-destructive"
                   aria-label="Remove {r}"
-                  onclick={() => setRoots(config!.roots.filter(x => x !== r))}><XIcon class="size-3" /></button
+                  onclick={() => setRoots(config!.roots.filter((x) => x !== r))}><XIcon class="size-3" /></button
                 >
               {/if}
             </span>
@@ -417,7 +458,7 @@
             class="w-96 font-mono text-xs"
             placeholder="D:\Media"
             bind:value={newRoot}
-            onkeydown={e => e.key === 'Enter' && addRoot(newRoot)}
+            onkeydown={(e) => e.key === 'Enter' && addRoot(newRoot)}
           />
           <Button variant="outline" onclick={() => addRoot(newRoot)} disabled={!newRoot.trim()}>Add folder</Button>
           <Button variant="outline" onclick={() => (browse = { kind: 'root' })}><FolderOpenIcon />Browse…</Button>
@@ -428,7 +469,7 @@
         <h2 class="font-medium">Profile</h2>
         <label class="flex items-center gap-3 text-sm">
           <span class="text-muted-foreground">New jobs start with</span>
-          <NativeSelect value={config.profile} onchange={e => setProfile(e.currentTarget.value)}>
+          <NativeSelect value={config.profile} onchange={(e) => setProfile(e.currentTarget.value)}>
             {#each config.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
           </NativeSelect>
           <span class="text-xs text-muted-foreground">Default: {config.profile_default}</span>
@@ -441,13 +482,13 @@
           <Checkbox
             class="mt-0.5"
             checked={config.index_waits_for_disk}
-            onCheckedChange={v => change({ index_waits_for_disk: v })}
+            onCheckedChange={(v) => change({ index_waits_for_disk: v })}
           />
           <span>
             Wait while an encode reads the same disk
             <span class="block text-xs text-muted-foreground">
-              A job in the index lane whose source is on the disk the running encode reads waits for it to finish; jobs on
-              other disks go first. Index now on a job never waits.
+              A job in the index lane whose source is on the disk the running encode reads waits for it to finish; jobs
+              on other disks go first. Index now on a job never waits.
             </span>
           </span>
         </label>
@@ -462,7 +503,7 @@
             max="8"
             class="w-20"
             value={config.parallel_audio}
-            onchange={e => setParallelAudio(e.currentTarget)}
+            onchange={(e) => setParallelAudio(e.currentTarget)}
           />
           <span>
             At once, beside the video encode
@@ -476,16 +517,17 @@
 
       <section class="space-y-3">
         <h2 class="font-medium">Process priority</h2>
-        {#each [
-          { key: 'encoder_priority', label: 'Video encode', hint: 'the encoder (x264, x265, ffmpeg for VP8 / VP9, SvtAv1EncApp) and the vspipe feeding it' },
-          { key: 'tool_priority', label: 'Other tools', hint: 'audio encodes, the mux, indexing' },
-        ] as const as row (row.key)}
+        {#each [{ key: 'encoder_priority', label: 'Video encode', hint: 'the encoder (x264, x265, ffmpeg for VP8 / VP9, SvtAv1EncApp) and the vspipe feeding it' }, { key: 'tool_priority', label: 'Other tools', hint: 'audio encodes, the mux, indexing' }] as const as row (row.key)}
           <label class="flex items-center gap-3 text-sm">
             <span class="w-28 shrink-0 text-muted-foreground">{row.label}</span>
-            <NativeSelect class="shrink-0" value={config[row.key]} onchange={e => {
+            <NativeSelect
+              class="shrink-0"
+              value={config[row.key]}
+              onchange={(e) => {
                 const v = e.currentTarget.value as Priority
                 change({ [row.key]: v === config?.[`${row.key}_default`] ? null : v })
-              }}>
+              }}
+            >
               {#each config.priorities as p (p)}<option value={p}>{PRIORITY_LABEL[p]}</option>{/each}
             </NativeSelect>
             <span class="text-xs text-muted-foreground">
@@ -505,7 +547,7 @@
           <Checkbox
             class="mt-0.5"
             checked={config.delete_work_dir}
-            onCheckedChange={v => change({ delete_work_dir: v === config?.delete_work_dir_default ? null : v })}
+            onCheckedChange={(v) => change({ delete_work_dir: v === config?.delete_work_dir_default ? null : v })}
           />
           <span>
             Delete a job's work folder once it's done
@@ -543,9 +585,12 @@
         skip: NotificationEvent[] = [],
       )}
         <div class="flex flex-wrap gap-x-4 gap-y-1.5">
-          {#each config!.notification_events.filter(ev => !skip.includes(ev.id)) as ev (ev.id)}
+          {#each config!.notification_events.filter((ev) => !skip.includes(ev.id)) as ev (ev.id)}
             <label class="flex items-center gap-1.5 text-xs">
-              <Checkbox checked={events.includes(ev.id)} onCheckedChange={v => onchange(toggleEvent(events, ev.id, v))} />
+              <Checkbox
+                checked={events.includes(ev.id)}
+                onCheckedChange={(v) => onchange(toggleEvent(events, ev.id, v))}
+              />
               {ev.label}
             </label>
           {/each}
@@ -557,8 +602,11 @@
           <h2 class="font-medium">Notifications</h2>
           <span class="text-xs text-muted-foreground">
             Tell Discord, Telegram, ntfy, Pushover, email or
-            <a class="underline hover:text-foreground" href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noreferrer"
-              >any service Apprise supports</a
+            <a
+              class="underline hover:text-foreground"
+              href="https://github.com/caronc/apprise/wiki"
+              target="_blank"
+              rel="noreferrer">any service Apprise supports</a
             > when jobs end.
           </span>
         </div>
@@ -570,19 +618,19 @@
                   checked={d.enabled}
                   aria-label="Send to {d.name}"
                   title={d.enabled ? 'On' : 'Off: nothing is sent here'}
-                  onCheckedChange={v => editNotification(i, { enabled: v })}
+                  onCheckedChange={(v) => editNotification(i, { enabled: v })}
                 />
                 <Input
                   class="w-40 text-sm"
                   value={d.name}
                   aria-label="Name"
-                  onchange={e => editNotification(i, { name: e.currentTarget.value })}
+                  onchange={(e) => editNotification(i, { name: e.currentTarget.value })}
                 />
                 <Input
                   class="min-w-0 flex-1 font-mono text-xs"
                   value={d.url}
                   aria-label="{d.name} Apprise URL"
-                  onchange={e => editNotification(i, { url: e.currentTarget.value })}
+                  onchange={(e) => editNotification(i, { url: e.currentTarget.value })}
                 />
                 <Button variant="outline" disabled={testing[i]} onclick={() => testNotification(String(i), d.url)}>
                   <SendIcon />{testing[i] ? 'Sending…' : 'Test'}
@@ -591,7 +639,7 @@
                   <XIcon />
                 </Button>
               </div>
-              {@render eventChoices(d.events, events => editNotification(i, { events }))}
+              {@render eventChoices(d.events, (events) => editNotification(i, { events }))}
             </div>
           {/each}
           <div class="space-y-2 px-4 py-3">
@@ -601,14 +649,18 @@
                 class="min-w-0 flex-1 font-mono text-xs"
                 placeholder="discord://webhook_id/webhook_token"
                 bind:value={draft.url}
-                onkeydown={e => e.key === 'Enter' && addNotification()}
+                onkeydown={(e) => e.key === 'Enter' && addNotification()}
               />
-              <Button variant="outline" disabled={!draft.url.trim() || testing.draft} onclick={() => testNotification('draft', draft.url)}>
+              <Button
+                variant="outline"
+                disabled={!draft.url.trim() || testing.draft}
+                onclick={() => testNotification('draft', draft.url)}
+              >
                 <SendIcon />{testing.draft ? 'Sending…' : 'Test'}
               </Button>
               <Button onclick={addNotification} disabled={!draft.url.trim()}><PlusIcon />Add</Button>
             </div>
-            {@render eventChoices(draft.events, events => (draft.events = events))}
+            {@render eventChoices(draft.events, (events) => (draft.events = events))}
           </div>
         </div>
       </section>
@@ -623,8 +675,8 @@
         </div>
         {#if !config.allow_commands}
           <p class="text-xs text-warning">
-            Command actions are disabled by the current server configuration
-            (the page has no login, so only if no one else can reach it).
+            Command actions are disabled by the current server configuration (the page has no login, so only if no one
+            else can reach it).
           </p>
         {/if}
         {#snippet actionRow(a: ActionSetting, set: (changes: Partial<ActionSetting>) => void, index: number | 'draft')}
@@ -634,7 +686,7 @@
                 checked={a.enabled}
                 aria-label="Run {a.name}"
                 title={a.enabled ? 'On' : 'Off: it never runs'}
-                onCheckedChange={v => set({ enabled: v })}
+                onCheckedChange={(v) => set({ enabled: v })}
               />
             {/if}
             <Input
@@ -642,9 +694,13 @@
               value={a.name}
               placeholder="Name (optional)"
               aria-label="Name"
-              onchange={e => set({ name: e.currentTarget.value })}
+              onchange={(e) => set({ name: e.currentTarget.value })}
             />
-            <NativeSelect value={a.kind} aria-label="Kind" onchange={e => set(withKind(a, e.currentTarget.value as ActionKind))}>
+            <NativeSelect
+              value={a.kind}
+              aria-label="Kind"
+              onchange={(e) => set(withKind(a, e.currentTarget.value as ActionKind))}
+            >
               {#each config!.action_kinds as k (k.id)}<option value={k.id}>{k.label}</option>{/each}
             </NativeSelect>
             <Input
@@ -652,27 +708,37 @@
               value={a.target}
               placeholder={TARGET_HINT[a.kind]}
               aria-label="{a.name || 'Action'} target"
-              oninput={e => index === 'draft' && set({ target: e.currentTarget.value })}
-              onchange={e => index !== 'draft' && set({ target: e.currentTarget.value })}
-              onkeydown={e => index === 'draft' && e.key === 'Enter' && addAction()}
+              oninput={(e) => index === 'draft' && set({ target: e.currentTarget.value })}
+              onchange={(e) => index !== 'draft' && set({ target: e.currentTarget.value })}
+              onkeydown={(e) => index === 'draft' && e.key === 'Enter' && addAction()}
             />
             {#if isFileKind(a.kind)}
-              <Button variant="outline" onclick={() => (browse = { kind: 'action', index })}><FolderOpenIcon />Browse…</Button>
+              <Button variant="outline" onclick={() => (browse = { kind: 'action', index })}
+                ><FolderOpenIcon />Browse…</Button
+              >
             {/if}
             {#if index === 'draft'}
               <Button onclick={addAction} disabled={!a.target.trim()}><PlusIcon />Add</Button>
             {:else}
-              <Button variant="ghost" size="icon" aria-label="Move {a.name} up" disabled={index === 0} onclick={() => moveActionUp(index)}>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Move {a.name} up"
+                disabled={index === 0}
+                onclick={() => moveActionUp(index)}
+              >
                 <ArrowUpIcon />
               </Button>
-              <Button variant="ghost" size="icon" aria-label="Remove {a.name}" onclick={() => removeAction(index)}><XIcon /></Button>
+              <Button variant="ghost" size="icon" aria-label="Remove {a.name}" onclick={() => removeAction(index)}
+                ><XIcon /></Button
+              >
             {/if}
           </div>
           <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-            {@render eventChoices(a.events, events => set({ events }), isFileKind(a.kind) ? ['queue_finished'] : [])}
+            {@render eventChoices(a.events, (events) => set({ events }), isFileKind(a.kind) ? ['queue_finished'] : [])}
             {#if isFileKind(a.kind)}
               <label class="flex items-center gap-1.5 text-xs">
-                <Checkbox checked={a.overwrite} onCheckedChange={v => set({ overwrite: v })} />
+                <Checkbox checked={a.overwrite} onCheckedChange={(v) => set({ overwrite: v })} />
                 Replace a file already there
               </label>
             {/if}
@@ -681,11 +747,11 @@
         <div class="divide-y divide-border/60 rounded-xl border bg-card">
           {#each config.actions as a, i (i)}
             <div class="space-y-2 px-4 py-3 {a.enabled ? '' : 'opacity-60'}">
-              {@render actionRow(a, changes => editAction(i, changes), i)}
+              {@render actionRow(a, (changes) => editAction(i, changes), i)}
             </div>
           {/each}
           <div class="space-y-2 px-4 py-3">
-            {@render actionRow(actionDraft, changes => (actionDraft = { ...actionDraft, ...changes }), 'draft')}
+            {@render actionRow(actionDraft, (changes) => (actionDraft = { ...actionDraft, ...changes }), 'draft')}
           </div>
         </div>
         <details class="text-xs text-muted-foreground">
@@ -700,15 +766,21 @@
               <code>{`{${token}}`}</code><span>{what}</span>
             {/each}
             <p class="col-span-2 mt-2">
-              A command's arguments are split before the tokens go in, so a path with spaces stays one argument and no shell
-              reads it. For pipes or redirection, run the shell yourself (<code>cmd /c …</code>). Write <code>{'{{'}</code>
+              A command's arguments are split before the tokens go in, so a path with spaces stays one argument and no
+              shell reads it. For pipes or redirection, run the shell yourself (<code>cmd /c …</code>). Write
+              <code>{'{{'}</code>
               and <code>{'}}'}</code> for a literal brace. A webhook POSTs the event as JSON.
             </p>
           </div>
         </details>
       </section>
 
-      <PluginManager refreshKey={pluginRefresh} onupdated={value => { config = value }} />
+      <PluginManager
+        refreshKey={pluginRefresh}
+        onupdated={(value) => {
+          config = value
+        }}
+      />
     {/if}
 
     <section class="col-span-full min-w-0 space-y-3">
@@ -752,7 +824,7 @@
     mode={browse.kind !== 'tool' || browse.tool.folder ? 'folder' : 'files'}
     programs={browse.kind === 'tool' && !browse.tool.folder}
     start={browse.kind === 'tool' ? startFolder(browse.tool) : ''}
-    onpick={paths => {
+    onpick={(paths) => {
       const b = browse
       browse = null
       if (!paths[0] || !b) return

@@ -16,7 +16,7 @@
     { id: 'system', label: 'System', icon: MonitorIcon },
   ] as const
   let open = $state(false)
-  const current = $derived(MODES.find(m => m.id === userPrefersMode.current) ?? MODES[2])
+  const current = $derived(MODES.find((m) => m.id === userPrefersMode.current) ?? MODES[2])
 </script>
 
 <DropdownMenu.Root bind:open>
@@ -33,10 +33,13 @@
     {#if !compact}Theme: {current.label}{/if}
   </DropdownMenu.Trigger>
   <DropdownMenu.Content side={compact ? 'right' : 'top'} align="start" class="w-36">
-    <DropdownMenu.RadioGroup value={current.id} onValueChange={v => {
+    <DropdownMenu.RadioGroup
+      value={current.id}
+      onValueChange={(v) => {
         setMode(v as 'light' | 'dark' | 'system')
         open = false
-      }}>
+      }}
+    >
       {#each MODES as m (m.id)}
         <DropdownMenu.RadioItem value={m.id}><m.icon />{m.label}</DropdownMenu.RadioItem>
       {/each}

@@ -53,16 +53,24 @@
     for (const job of searched) result.set(job.status, (result.get(job.status) ?? 0) + 1)
     return result
   })
-  const matching = $derived(status ? searched.filter(job => job.status === status) : searched)
-  const matchingIds = $derived(matching.map(job => job.id))
+  const matching = $derived(status ? searched.filter((job) => job.status === status) : searched)
+  const matchingIds = $derived(matching.map((job) => job.id))
   const matchingSet = $derived(new Set(matchingIds))
   const selectedSet = $derived(new Set(selected))
-  const hiddenSelected = $derived(selected.filter(id => !matchingSet.has(id)).length)
+  const hiddenSelected = $derived(selected.filter((id) => !matchingSet.has(id)).length)
   const currentPage = $derived(queuePage(matching.length, page))
   const pageJobs = $derived(matching.slice(currentPage * QUEUE_PAGE_SIZE, (currentPage + 1) * QUEUE_PAGE_SIZE))
-  const tabStop = $derived(pageJobs.find(job => job.id === cursor)?.id ?? pageJobs.find(job => selectedSet.has(job.id))?.id ?? pageJobs[0]?.id)
-  const waitingSelected = $derived(app.jobs.filter(job => selectedSet.has(job.id) && job.status === 'queued').map(job => job.id))
-  const queueableSelected = $derived(app.jobs.filter(job => selectedSet.has(job.id) && queueable(job.status)).map(job => job.id))
+  const tabStop = $derived(
+    pageJobs.find((job) => job.id === cursor)?.id ??
+      pageJobs.find((job) => selectedSet.has(job.id))?.id ??
+      pageJobs[0]?.id,
+  )
+  const waitingSelected = $derived(
+    app.jobs.filter((job) => selectedSet.has(job.id) && job.status === 'queued').map((job) => job.id),
+  )
+  const queueableSelected = $derived(
+    app.jobs.filter((job) => selectedSet.has(job.id) && queueable(job.status)).map((job) => job.id),
+  )
 
   function filterChanged() {
     page = 0
@@ -89,7 +97,9 @@
   async function focusJob(id: string) {
     await tick()
     const surface = peek || !rail ? listEl : railEl
-    const row = Array.from(surface?.querySelectorAll<HTMLElement>('[data-job]') ?? []).find(row => row.dataset.job === id)
+    const row = Array.from(surface?.querySelectorAll<HTMLElement>('[data-job]') ?? []).find(
+      (row) => row.dataset.job === id,
+    )
     row?.focus()
     row?.scrollIntoView({ block: 'nearest' })
   }
@@ -109,7 +119,10 @@
   async function unqueue(ids = [...waitingSelected]) {
     await api.dequeue(ids)
     await app.refreshJobs()
-    if (ids.length > 1) toast.success(`Unqueued ${ids.length} jobs`, { description: 'Their settings can be edited again; the queue leaves them out.' })
+    if (ids.length > 1)
+      toast.success(`Unqueued ${ids.length} jobs`, {
+        description: 'Their settings can be edited again; the queue leaves them out.',
+      })
   }
 
   // Queued: locked (read-only), and the queue runs it, even one already running. Edits still saving go first.
@@ -118,37 +131,44 @@
     const { enqueued } = await api.enqueue(ids)
     await app.refreshJobs()
     if (enqueued.length < ids.length) {
-      toast.warning(`Queued ${enqueued.length} of ${ids.length} jobs`, { description: 'The others are still being probed or indexed, or are blocked.' })
-    } else if (ids.length > 1) toast.success(`Queued ${ids.length} jobs`, { description: 'Locked until they run; Start queue runs them.' })
+      toast.warning(`Queued ${enqueued.length} of ${ids.length} jobs`, {
+        description: 'The others are still being probed or indexed, or are blocked.',
+      })
+    } else if (ids.length > 1)
+      toast.success(`Queued ${ids.length} jobs`, { description: 'Locked until they run; Start queue runs them.' })
   }
 
   // The routed job is selected once it's in the list (the prune below would undo it otherwise).
   $effect(() => {
     const id = router.jobId
-    if (id && !selected.includes(id) && app.jobs.some(j => j.id === id)) {
+    if (id && !selected.includes(id) && app.jobs.some((j) => j.id === id)) {
       selected = [id]
       query = ''
       status = ''
-      page = Math.floor(app.jobs.findIndex(j => j.id === id) / QUEUE_PAGE_SIZE)
+      page = Math.floor(app.jobs.findIndex((j) => j.id === id) / QUEUE_PAGE_SIZE)
     }
   })
 
   // Forget jobs that are gone.
   $effect(() => {
-    const ids = new Set(app.jobs.map(j => j.id))
-    if (selected.some(id => !ids.has(id))) selected = selected.filter(id => ids.has(id))
+    const ids = new Set(app.jobs.map((j) => j.id))
+    if (selected.some((id) => !ids.has(id))) selected = selected.filter((id) => ids.has(id))
   })
 
   // A live status change can remove the focused row from the current filter.
   $effect.pre(() => {
     const ids = matchingSet
     const focused = document.activeElement as HTMLElement | null
-    if (focused?.dataset.job && !ids.has(focused.dataset.job) &&
-      (listEl?.contains(focused) || railEl?.contains(focused))) {
+    if (
+      focused?.dataset.job &&
+      !ids.has(focused.dataset.job) &&
+      (listEl?.contains(focused) || railEl?.contains(focused))
+    ) {
       tick().then(() => {
         const surface = peek || !rail ? listEl : railEl
-        const target = surface?.querySelector<HTMLElement>('[data-job][tabindex="0"]')
-          ?? surface?.querySelector<HTMLElement>('input[type="search"], button')
+        const target =
+          surface?.querySelector<HTMLElement>('[data-job][tabindex="0"]') ??
+          surface?.querySelector<HTMLElement>('input[type="search"], button')
         target?.focus()
       })
     }
@@ -173,7 +193,14 @@
   function dragStart(e: PointerEvent, id: string) {
     const scroller = (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-scroller]')
     if (e.button !== 0 || e.shiftKey || !scroller) return
-    drag = { from: id, base: e.ctrlKey || e.metaKey ? [...selected] : [], moved: false, scroller, x: e.clientX, y: e.clientY }
+    drag = {
+      from: id,
+      base: e.ctrlKey || e.metaKey ? [...selected] : [],
+      moved: false,
+      scroller,
+      x: e.clientX,
+      y: e.clientY,
+    }
     requestAnimationFrame(dragTick)
   }
 
@@ -189,7 +216,7 @@
     if (id && (drag.moved || id !== drag.from)) {
       drag.moved = true
       const range = new Set([...drag.base, ...between(drag.from, id)])
-      const ids = app.jobs.filter(j => range.has(j.id)).map(j => j.id)
+      const ids = app.jobs.filter((j) => range.has(j.id)).map((j) => j.id)
       if (ids.length !== selected.length || ids.some((j, i) => j !== selected[i])) select(ids)
       anchor = drag.from
       cursor = id
@@ -242,7 +269,7 @@
     if (e.shiftKey && anchor) {
       selected = between(anchor, id)
     } else if (e.ctrlKey || e.metaKey) {
-      selected = selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]
+      selected = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]
       anchor = id
     } else {
       selected = [id]
@@ -267,28 +294,37 @@
   let reuseOpen = $state(false)
   let starting = $state(false)
   let saveError = $state('')
-  $effect(() => saves.subscribe(error => { saveError = error }))
+  $effect(() =>
+    saves.subscribe((error) => {
+      saveError = error
+    }),
+  )
 
   async function run(ids?: string[]) {
     if (starting) return
     starting = true
     try {
-    await saves.flush()
-    const { jobs } = await api.reuse(ids)
-    if (!jobs.length) return await api.start(ids)
-    reuseJobs = jobs
-    reuseIds = ids
-    reuseOpen = true
-    } finally { starting = false }
+      await saves.flush()
+      const { jobs } = await api.reuse(ids)
+      if (!jobs.length) return await api.start(ids)
+      reuseJobs = jobs
+      reuseIds = ids
+      reuseOpen = true
+    } finally {
+      starting = false
+    }
   }
 
   function startReusing(reuse: Record<string, string[]>) {
     reuseOpen = false
-    act(async () => { await saves.flush(); await api.start(reuseIds, reuse) })
+    act(async () => {
+      await saves.flush()
+      await api.start(reuseIds, reuse)
+    })
   }
 
   async function move(step: number) {
-    const ids = app.jobs.map(j => j.id)
+    const ids = app.jobs.map((j) => j.id)
     const sel = new Set(selected)
     const order = step < 0 ? ids : [...ids].reverse()
     for (let i = 1; i < order.length; i++) {
@@ -317,7 +353,9 @@
   let removing = $state(false)
 
   async function confirmRemoval() {
-    await act(async () => { removal = await api.removalPreview([...selected]) })
+    await act(async () => {
+      removal = await api.removalPreview([...selected])
+    })
   }
 
   async function remove(workDirs = false, ids = [...selected]) {
@@ -325,13 +363,18 @@
     await act(async () => {
       const r = await api.remove(ids, workDirs)
       if (r.removed.length < ids.length) toast.info('Queued, running or indexing jobs were kept')
-      if (!workDirs && r.removed.length) toast.success(`Removed ${r.removed.length} job(s)`, {
-        action: { label: 'Undo', onClick: () => act(async () => {
-          const restored = await api.restore(r.removed)
-          await app.refreshJobs()
-          toast.info(`Restored ${restored.restored.length} job(s)`)
-        }) },
-      })
+      if (!workDirs && r.removed.length)
+        toast.success(`Removed ${r.removed.length} job(s)`, {
+          action: {
+            label: 'Undo',
+            onClick: () =>
+              act(async () => {
+                const restored = await api.restore(r.removed)
+                await app.refreshJobs()
+                toast.info(`Restored ${restored.restored.length} job(s)`)
+              }),
+          },
+        })
       const kept = Object.entries(r.kept)
       if (r.deleted.length) toast.info(`Deleted ${r.deleted.length} work folder${r.deleted.length > 1 ? 's' : ''}`)
       if (kept.length) {
@@ -350,7 +393,7 @@
   // Jobs already indexed are skipped.
   const unindexed = (ids: string[]) => {
     const want = new Set(ids)
-    return app.jobs.filter(j => want.has(j.id) && !j.indexed).map(j => j.id)
+    return app.jobs.filter((j) => want.has(j.id) && !j.indexed).map((j) => j.id)
   }
 
   async function index(ids: string[]) {
@@ -367,9 +410,10 @@
       const left = todo.length - r.taken.length
       const out = left ? `${left} left out (queued, running, already indexing, or reusing an encode).` : ''
       if (!r.taken.length) toast.info('Nothing to index', { description: [already, out].join(' ').trim() })
-      else toast.info(`Indexing ${r.taken.length} job${r.taken.length > 1 ? 's' : ''}`, {
-        description: [already, out].join(' ').trim() || undefined,
-      })
+      else
+        toast.info(`Indexing ${r.taken.length} job${r.taken.length > 1 ? 's' : ''}`, {
+          description: [already, out].join(' ').trim() || undefined,
+        })
     })
   }
   const indexing = $derived(!!app.queue.indexing || app.queue.index_queued > 0)
@@ -377,7 +421,7 @@
   const working = $derived(!!app.queue.current || !!app.queue.indexing)
   const paused = (status: string) => app.queue.paused && (status === 'running' || status === 'indexing')
   // The toolbar's Index: the selected jobs, or every job when none is selected.
-  const indexTarget = $derived(selected.length ? selected : app.jobs.map(j => j.id))
+  const indexTarget = $derived(selected.length ? selected : app.jobs.map((j) => j.id))
   const toIndex = $derived(unindexed(indexTarget).length)
   const batchToIndex = $derived(unindexed(selected).length)
 
@@ -410,15 +454,25 @@
     if (peek && !listEl?.contains(t) && !railEl?.contains(t)) peek = false
   }
 
-  const startJobs = $derived(app.jobs.filter(j => j.status === 'queued'))
+  const startJobs = $derived(app.jobs.filter((j) => j.status === 'queued'))
 
   // --- batch panel ---
   let batchSource = $state<JobDetail | null>(null)
   $effect(() => {
     let current = true
     batchSource = null
-    if (selected.length > 1) api.job(selected[0]).then(j => { if (current) batchSource = j }).catch(e => { if (current) toast.error(e.message) })
-    return () => { current = false }
+    if (selected.length > 1)
+      api
+        .job(selected[0])
+        .then((j) => {
+          if (current) batchSource = j
+        })
+        .catch((e) => {
+          if (current) toast.error(e.message)
+        })
+    return () => {
+      current = false
+    }
   })
 
   async function applyEncoder(encoder: EncoderSettings) {
@@ -426,15 +480,17 @@
     batchSource.spec.encoder = encoder
     await act(async () => {
       const r = await api.apply(selected, { encoder })
-      toast.success(`Encoder applied to ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''))
+      toast.success(
+        `Encoder applied to ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
+      )
     })
   }
 
   // A template (by name) for the whole batch, from the first job's profile's choices.
   let batchTemplate = $state('')
   const batchTemplates = $derived(batchSource ? app.presetChoices('template', batchSource.profile) : [])
-  const picked = $derived(batchTemplates.find(c => c.name === batchTemplate) ?? batchTemplates[0])
-  const batchContainers = $derived(app.profiles.find(p => p.id === batchSource?.profile)?.containers ?? [])
+  const picked = $derived(batchTemplates.find((c) => c.name === batchTemplate) ?? batchTemplates[0])
+  const batchContainers = $derived(app.profiles.find((p) => p.id === batchSource?.profile)?.containers ?? [])
 
   async function applyTemplate() {
     if (!picked) return
@@ -442,7 +498,10 @@
     const ids = [...selected]
     await act(async () => {
       const r = await api.apply(ids, { template: $state.snapshot(picked.data) })
-      toast.success(`Template ${name} applied to ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''))
+      toast.success(
+        `Template ${name} applied to ${r.updated.length} job(s)` +
+          (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
+      )
       const fresh = await api.job(ids[0])
       if (selected.length > 1 && selected[0] === ids[0]) batchSource = fresh
     })
@@ -453,7 +512,7 @@
     batchSource.spec.mux.container = container
     await act(async () => {
       const r = await api.apply(selected, { container })
-      const label = batchContainers.find(c => c.id === container)?.label ?? container
+      const label = batchContainers.find((c) => c.id === container)?.label ?? container
       toast.success(`${label} for ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''))
     })
   }
@@ -465,7 +524,9 @@
     await act(async () => {
       await saves.flush()
       const r = await api.applyCrop(ids, crop)
-      const reasons = Object.entries({ ...r.skipped, ...r.failed }).map(([id, reason]) => `${app.jobName(id)}: ${reason}`).join('\n')
+      const reasons = Object.entries({ ...r.skipped, ...r.failed })
+        .map(([id, reason]) => `${app.jobName(id)}: ${reason}`)
+        .join('\n')
       const message = `Crop: ${r.updated.length} updated, ${Object.keys(r.skipped).length} skipped, ${Object.keys(r.failed).length} failed`
       if (Object.keys(r.failed).length) toast.error(message, { description: reasons })
       else if (Object.keys(r.skipped).length) toast.warning(message, { description: reasons })
@@ -479,7 +540,7 @@
   onpointermove={dragMove}
   onpointerup={dragEnd}
   onpointercancel={dragEnd}
-  onkeydown={e => {
+  onkeydown={(e) => {
     if (peek && e.key === 'Escape') {
       hideList()
       e.stopPropagation()
@@ -490,34 +551,51 @@
 <div class="relative flex h-full">
   {#if rail}
     <!-- The list as a rail: one chip per job (its place, coloured by status). -->
-    <section bind:this={railEl} class="flex w-14 shrink-0 flex-col items-center border-r border-border" aria-label="Queue rail" inert={peek}>
+    <section
+      bind:this={railEl}
+      class="flex w-14 shrink-0 flex-col items-center border-r border-border"
+      aria-label="Queue rail"
+      inert={peek}
+    >
       <Button
         variant="ghost"
         size="icon"
         class="my-2"
         onclick={showList}
-        title={layout.narrow && single !== null ? 'Show the queue list (over the editor: the window is narrow)' : 'Show the queue list'}
+        title={layout.narrow && single !== null
+          ? 'Show the queue list (over the editor: the window is narrow)'
+          : 'Show the queue list'}
         aria-label="Show the queue list"
         aria-expanded={peek}
       >
         <PanelLeftOpenIcon />
       </Button>
-      <span class="pb-1 text-[10px] text-muted-foreground" title={`${matching.length} matching jobs of ${app.jobs.length}`}>{matching.length}</span>
-      <div data-scroller role="group" aria-label="Matching jobs" class="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-auto border-t border-border py-2 select-none">
+      <span
+        class="pb-1 text-[10px] text-muted-foreground"
+        title={`${matching.length} matching jobs of ${app.jobs.length}`}>{matching.length}</span
+      >
+      <div
+        data-scroller
+        role="group"
+        aria-label="Matching jobs"
+        class="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-auto border-t border-border py-2 select-none"
+      >
         {#each pageJobs as job, i (job.id)}
           <button
             data-job={job.id}
             aria-label={`${job.name}${job.label ? ` (${job.label})` : ''}: ${STATUS_LABEL[job.status]}`}
             aria-pressed={selectedSet.has(job.id)}
             tabindex={job.id === tabStop ? 0 : -1}
-            onfocus={() => cursor = job.id}
+            onfocus={() => (cursor = job.id)}
             onkeydown={keys}
             class="relative flex h-9 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border text-xs focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring
               {selectedSet.has(job.id) ? 'border-primary bg-card' : 'hover:bg-accent'}
               {STATUS_TONE[job.status]}"
-            onpointerdown={e => dragStart(e, job.id)}
-            onclick={e => click(e, job.id)}
-            title="{job.name}{job.label ? ` (${job.label})` : ''}: {STATUS_LABEL[job.status]}{job.issue ? ` (${job.issue})` : ''}"
+            onpointerdown={(e) => dragStart(e, job.id)}
+            onclick={(e) => click(e, job.id)}
+            title="{job.name}{job.label ? ` (${job.label})` : ''}: {STATUS_LABEL[job.status]}{job.issue
+              ? ` (${job.issue})`
+              : ''}"
           >
             {currentPage * QUEUE_PAGE_SIZE + i + 1}
             {#if (job.status === 'running' || job.status === 'indexing') && job.progress}
@@ -529,221 +607,402 @@
         {/each}
       </div>
       {#if matching.length > QUEUE_PAGE_SIZE}
-        <Button variant="ghost" size="icon" disabled={currentPage === 0} aria-label="Previous queue page" onclick={() => changePage(currentPage - 1)}><ArrowUpIcon /></Button>
-        <Button variant="ghost" size="icon" disabled={(currentPage + 1) * QUEUE_PAGE_SIZE >= matching.length} aria-label="Next queue page" onclick={() => changePage(currentPage + 1)}><ArrowDownIcon /></Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={currentPage === 0}
+          aria-label="Previous queue page"
+          onclick={() => changePage(currentPage - 1)}><ArrowUpIcon /></Button
+        >
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={(currentPage + 1) * QUEUE_PAGE_SIZE >= matching.length}
+          aria-label="Next queue page"
+          onclick={() => changePage(currentPage + 1)}><ArrowDownIcon /></Button
+        >
       {/if}
     </section>
-    {#if peek}{@render list('absolute inset-y-0 left-14 z-30 w-[28rem] max-w-[calc(100%-3.5rem)] bg-background shadow-xl')}{/if}
+    {#if peek}{@render list(
+        'absolute inset-y-0 left-14 z-30 w-[28rem] max-w-[calc(100%-3.5rem)] bg-background shadow-xl',
+      )}{/if}
   {:else}
     {@render list('w-[28rem] max-w-full shrink-0 max-sm:w-full')}
   {/if}
 
-{#snippet list(cls: string)}
-  <section bind:this={listEl} class="flex min-w-0 flex-col overflow-y-auto border-r border-border {cls}" aria-label="Queue list">
-    <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-border p-2">
-      <Button variant="ghost" size="icon" onclick={hideList} aria-label={peek ? 'Hide the queue list' : 'Collapse the queue list'} title={peek ? 'Hide the list (Esc)' : 'Collapse the list, for more room'}>
-        <PanelLeftCloseIcon />
-      </Button>
-      {#if app.queue.running}
-        <Button variant="outline" onclick={() => act(api.stop)} title="Finish the current job, then stop">
-          <ListEndIcon />{app.queue.stop_after_current ? 'Stopping…' : 'Stop after current'}
+  {#snippet list(cls: string)}
+    <section
+      bind:this={listEl}
+      class="flex min-w-0 flex-col overflow-y-auto border-r border-border {cls}"
+      aria-label="Queue list"
+    >
+      <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-border p-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          onclick={hideList}
+          aria-label={peek ? 'Hide the queue list' : 'Collapse the queue list'}
+          title={peek ? 'Hide the list (Esc)' : 'Collapse the list, for more room'}
+        >
+          <PanelLeftCloseIcon />
         </Button>
-        <Button variant="outline" onclick={() => act(api.cancel)} title="Cancel the running job"><SquareIcon />Cancel</Button>
-      {:else}
-        <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())} title={startJobs.length ? `Run the ${startJobs.length} queued jobs, in queue order` : 'Nothing is queued: tick the jobs to run (or Queue a selection)'}>
-          <PlayIcon />Start queue ({startJobs.length})
-        </Button>
-      {/if}
-      {#if working || app.queue.paused}
-        {#if app.queue.paused}
-          <Button onclick={() => act(api.resume)} title="Go on with the paused tools"><PlayIcon />Resume</Button>
+        {#if app.queue.running}
+          <Button variant="outline" onclick={() => act(api.stop)} title="Finish the current job, then stop">
+            <ListEndIcon />{app.queue.stop_after_current ? 'Stopping…' : 'Stop after current'}
+          </Button>
+          <Button variant="outline" onclick={() => act(api.cancel)} title="Cancel the running job"
+            ><SquareIcon />Cancel</Button
+          >
         {:else}
-          <Button variant="outline" onclick={() => act(api.pause)}
-            title="Suspend the running job's tools and the index lane's (they use no CPU until resumed)">
-            <PauseIcon />Pause
+          <Button
+            disabled={starting || !startJobs.length}
+            onclick={() => act(() => run())}
+            title={startJobs.length
+              ? `Run the ${startJobs.length} queued jobs, in queue order`
+              : 'Nothing is queued: tick the jobs to run (or Queue a selection)'}
+          >
+            <PlayIcon />Start queue ({startJobs.length})
           </Button>
         {/if}
+        {#if working || app.queue.paused}
+          {#if app.queue.paused}
+            <Button onclick={() => act(api.resume)} title="Go on with the paused tools"><PlayIcon />Resume</Button>
+          {:else}
+            <Button
+              variant="outline"
+              onclick={() => act(api.pause)}
+              title="Suspend the running job's tools and the index lane's (they use no CPU until resumed)"
+            >
+              <PauseIcon />Pause
+            </Button>
+          {/if}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger
+              disabled={!working}
+              title="Process priority of the running tools, for the rest of their run (Settings has the default)"
+            >
+              {#snippet child({ props })}
+                <Button {...props} variant="ghost" size="icon" aria-label="Process priority"><GaugeIcon /></Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="start" class="w-48">
+              <DropdownMenu.Label>Priority, this run</DropdownMenu.Label>
+              <DropdownMenu.RadioGroup
+                value={app.queue.priority ?? ''}
+                onValueChange={(v) => act(() => api.priority((v || null) as Priority | null))}
+              >
+                <DropdownMenu.RadioItem value="">As in Settings</DropdownMenu.RadioItem>
+                {#each Object.entries(PRIORITY_LABEL) as [value, label] (value)}
+                  <DropdownMenu.RadioItem {value}>{label}</DropdownMenu.RadioItem>
+                {/each}
+              </DropdownMenu.RadioGroup>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        {/if}
+        <Button
+          variant="outline"
+          disabled={starting || !selected.length}
+          onclick={() => act(() => run(selected))}
+          title="Queue the selected jobs and start"
+        >
+          <PlayIcon />Run selected ({selected.length})
+        </Button>
+        {#if queueableSelected.length}
+          <Button
+            variant="outline"
+            onclick={() => act(() => queue())}
+            title="Queue the selected jobs: locked until they run, and the queue runs them (a running queue too)"
+            >Queue ({queueableSelected.length})</Button
+          >
+        {/if}
+        {#if waitingSelected.length}
+          <Button
+            variant="outline"
+            onclick={() => act(() => unqueue())}
+            title="Take the selected jobs out of the run, to edit them; their settings and files stay"
+            >Unqueue ({waitingSelected.length})</Button
+          >
+        {/if}
+        {#if indexing}
+          <Button
+            variant="outline"
+            onclick={() => act(() => app.stopIndexing())}
+            title="Stop indexing: cancel the job being indexed and the ones waiting"
+          >
+            <DatabaseXIcon />Stop indexing
+          </Button>
+        {/if}
+        <span class="flex-1"></span>
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={!matching.length}
+          onclick={selectMatching}
+          title={`Select all ${matching.length} matching jobs across pages (Ctrl+A in the list)`}
+          aria-label="Select matching jobs"><ListChecksIcon /></Button
+        >
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={!toIndex}
+          onclick={() => index(indexTarget)}
+          title="Index {selected.length
+            ? 'the selected jobs'
+            : 'every job'} not indexed yet ({toIndex}): one at a time, each gets its work folder, script and source index, and nothing else, so its video opens at once (runs next to the queue)"
+          aria-label={selected.length ? 'Index the selected jobs' : 'Index every job not indexed yet'}
+          ><DatabaseZapIcon /></Button
+        >
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={!selected.length}
+          onclick={() => move(-1)}
+          title="Move up in the full queue"
+          aria-label="Move selected jobs up"><ArrowUpIcon /></Button
+        >
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={!selected.length}
+          onclick={() => move(1)}
+          title="Move down in the full queue"
+          aria-label="Move selected jobs down"><ArrowDownIcon /></Button
+        >
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={!selected.length}
+          onclick={duplicate}
+          title="Duplicate: a copy of each selected job right after it, with a label of its own, to change a few settings for a second output"
+          aria-label="Duplicate selected jobs"><CopyPlusIcon /></Button
+        >
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={!selected.length}
+          onclick={() => act(() => api.reprobe(selected))}
+          title="Probe again"
+          aria-label="Probe selected jobs again"
+        >
+          <RefreshCwIcon />
+        </Button>
         <DropdownMenu.Root>
-          <DropdownMenu.Trigger disabled={!working}
-            title="Process priority of the running tools, for the rest of their run (Settings has the default)">
+          <DropdownMenu.Trigger disabled={!selected.length} title="Remove">
             {#snippet child({ props })}
-              <Button {...props} variant="ghost" size="icon" aria-label="Process priority"><GaugeIcon /></Button>
+              <Button {...props} variant="ghost" size="icon" class="hover:text-destructive" aria-label="Remove"
+                ><Trash2Icon /></Button
+              >
             {/snippet}
           </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="start" class="w-48">
-            <DropdownMenu.Label>Priority, this run</DropdownMenu.Label>
-            <DropdownMenu.RadioGroup value={app.queue.priority ?? ''}
-              onValueChange={v => act(() => api.priority((v || null) as Priority | null))}>
-              <DropdownMenu.RadioItem value="">As in Settings</DropdownMenu.RadioItem>
-              {#each Object.entries(PRIORITY_LABEL) as [value, label] (value)}
-                <DropdownMenu.RadioItem {value}>{label}</DropdownMenu.RadioItem>
-              {/each}
-            </DropdownMenu.RadioGroup>
+          <DropdownMenu.Content align="end" class="w-auto">
+            <DropdownMenu.Item onSelect={() => remove()}>Remove from the queue</DropdownMenu.Item>
+            <DropdownMenu.Item
+              onSelect={confirmRemoval}
+              title="Review the work folders before deleting their intermediate files"
+            >
+              Remove and delete work folders
+            </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Root>
-      {/if}
-      <Button variant="outline" disabled={starting || !selected.length} onclick={() => act(() => run(selected))} title="Queue the selected jobs and start">
-        <PlayIcon />Run selected ({selected.length})
-      </Button>
-      {#if queueableSelected.length}
-        <Button variant="outline" onclick={() => act(() => queue())} title="Queue the selected jobs: locked until they run, and the queue runs them (a running queue too)">Queue ({queueableSelected.length})</Button>
-      {/if}
-      {#if waitingSelected.length}
-        <Button variant="outline" onclick={() => act(() => unqueue())} title="Take the selected jobs out of the run, to edit them; their settings and files stay">Unqueue ({waitingSelected.length})</Button>
-      {/if}
-      {#if indexing}
-        <Button variant="outline" onclick={() => act(() => app.stopIndexing())} title="Stop indexing: cancel the job being indexed and the ones waiting">
-          <DatabaseXIcon />Stop indexing
-        </Button>
-      {/if}
-      <span class="flex-1"></span>
-      <Button variant="ghost" size="icon" disabled={!matching.length} onclick={selectMatching}
-        title={`Select all ${matching.length} matching jobs across pages (Ctrl+A in the list)`} aria-label="Select matching jobs"><ListChecksIcon /></Button>
-      <Button variant="ghost" size="icon" disabled={!toIndex} onclick={() => index(indexTarget)}
-        title="Index {selected.length ? 'the selected jobs' : 'every job'} not indexed yet ({toIndex}): one at a time, each gets its work folder, script and source index, and nothing else, so its video opens at once (runs next to the queue)"
-        aria-label={selected.length ? 'Index the selected jobs' : 'Index every job not indexed yet'}><DatabaseZapIcon /></Button>
-      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => move(-1)} title="Move up in the full queue" aria-label="Move selected jobs up"><ArrowUpIcon /></Button>
-      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => move(1)} title="Move down in the full queue" aria-label="Move selected jobs down"><ArrowDownIcon /></Button>
-      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={duplicate}
-        title="Duplicate: a copy of each selected job right after it, with a label of its own, to change a few settings for a second output"
-        aria-label="Duplicate selected jobs"><CopyPlusIcon /></Button>
-      <Button variant="ghost" size="icon" disabled={!selected.length} onclick={() => act(() => api.reprobe(selected))} title="Probe again" aria-label="Probe selected jobs again">
-        <RefreshCwIcon />
-      </Button>
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger disabled={!selected.length} title="Remove">
-          {#snippet child({ props })}
-            <Button {...props} variant="ghost" size="icon" class="hover:text-destructive" aria-label="Remove"><Trash2Icon /></Button>
-          {/snippet}
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" class="w-auto">
-          <DropdownMenu.Item onSelect={() => remove()}>Remove from the queue</DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={confirmRemoval} title="Review the work folders before deleting their intermediate files">
-            Remove and delete work folders
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-    </div>
-
-    <div class="shrink-0 space-y-2 border-b border-border p-2">
-      <Input type="search" aria-label="Search jobs by name or source path" placeholder="Search name or source path" value={query} oninput={e => { query = e.currentTarget.value; filterChanged() }} />
-      <div class="flex flex-wrap items-center gap-2">
-        <NativeSelect aria-label="Filter jobs by status" value={status} onchange={e => { status = e.currentTarget.value as Status | ''; filterChanged() }}>
-          <option value="">All statuses ({searched.length})</option>
-          {#each Object.entries(STATUS_LABEL) as [value, label] (value)}
-            <option value={value}>{label} ({counts.get(value as Status) ?? 0})</option>
-          {/each}
-        </NativeSelect>
-        {#if query || status}<Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>{/if}
       </div>
-      <p role="status" class="text-xs text-muted-foreground">{matching.length} of {app.jobs.length} jobs match. {selected.length} selected{hiddenSelected ? ` (${hiddenSelected} hidden by filters)` : ''}.</p>
-      {#if selected.length}<Button variant="outline" size="sm" onclick={clearSelection}>Clear selection</Button>{/if}
-      <p class="text-xs text-muted-foreground">Ticked jobs are queued: locked, and the queue runs them. Selected actions include selections on other pages and hidden by filters. Index uses {selected.length ? `${selected.length} selected jobs` : `all ${app.jobs.length} jobs`}.</p>
-      <p id="queue-keys" class="text-xs text-muted-foreground">Arrows/Home/End navigate; Shift extends selection; Ctrl/Cmd+A selects matching jobs across pages.</p>
-    </div>
 
-    {#if saveError}
-      <div role="alert" class="space-y-2 border-b p-3 text-sm text-destructive">
-        <p>Changes are not saved: {saveError}. Start is blocked until resolved.</p>
-        <Button size="sm" onclick={() => act(() => saves.retry())}>Retry saves</Button>
-        <Button size="sm" variant="outline" onclick={() => saves.discard()}>Discard unsaved changes</Button>
-      </div>
-    {/if}
-    <div data-scroller role="group" aria-label="Matching jobs" aria-describedby="queue-keys" class="min-h-24 flex-1 overflow-auto select-none">
-      {#each pageJobs as job (job.id)}
-        {@const queued = job.status === 'queued' || job.status === 'running'}
-        <div class="flex border-b border-border/60 {selectedSet.has(job.id) ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]' : 'hover:bg-accent'}">
-          <div class="flex shrink-0 items-start pt-2.5 pl-3">
-            <!-- Out of the tab order (the list is one stop): the keyboard queues a selection with Queue (N). -->
-            <Checkbox
-              checked={queued}
-              disabled={job.status === 'running' || (!queued && !queueable(job.status))}
-              onCheckedChange={on => act(() => (on ? queue([job.id]) : unqueue([job.id])))}
-            tabindex={-1}
-              aria-label={`Queued: ${job.name}${job.label ? ` (${job.label})` : ''}`}
-              title={job.status === 'running' ? 'Running' : queued ? 'Queued: locked, the queue runs it (untick to edit)' : queueable(job.status) ? 'Tick to queue: locks it, and the queue runs it' : `Can't be queued while ${STATUS_LABEL[job.status].toLowerCase()}`}
-            />
-          </div>
-          <button
-            data-job={job.id}
-            aria-pressed={selectedSet.has(job.id)}
-            tabindex={job.id === tabStop ? 0 : -1}
-            onfocus={() => cursor = job.id}
-            onkeydown={keys}
-            class="block min-w-0 flex-1 py-2 pr-3 pl-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
-            onpointerdown={e => dragStart(e, job.id)}
-            onclick={e => click(e, job.id)}
+      <div class="shrink-0 space-y-2 border-b border-border p-2">
+        <Input
+          type="search"
+          aria-label="Search jobs by name or source path"
+          placeholder="Search name or source path"
+          value={query}
+          oninput={(e) => {
+            query = e.currentTarget.value
+            filterChanged()
+          }}
+        />
+        <div class="flex flex-wrap items-center gap-2">
+          <NativeSelect
+            aria-label="Filter jobs by status"
+            value={status}
+            onchange={(e) => {
+              status = e.currentTarget.value as Status | ''
+              filterChanged()
+            }}
           >
-            <div class="flex items-center gap-2">
-              <span class="truncate font-medium" title={job.source}>{job.name}</span>
-              {#if job.label}<Badge variant="outline" class="shrink-0 px-1.5 py-0 text-xs font-normal" title="Label">{job.label}</Badge>{/if}
-              {#if paused(job.status)}
-                <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
-              {:else}
-                <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
-              {/if}
-            </div>
-            <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{job.encoder}</span>
-              {#if job.custom_script}
-                <span>· custom script</span>
-              {:else if job.crop && (job.crop.top || job.crop.bottom || job.crop.left || job.crop.right)}
-                <span>· crop {job.crop.left}/{job.crop.top}/{job.crop.right}/{job.crop.bottom}</span>
-              {/if}
-              <span>· {job.audio.length} audio · {job.subs} subs</span>
-              {#if job.indexed}
-                <span class="ml-auto flex shrink-0 items-center" title="Indexed: the video opens at once"><DatabaseCheckIcon class="size-3.5" /></span>
-              {/if}
-            </div>
-            {#if (job.status === 'running' || job.status === 'indexing') && job.progress}
-              <div class="mt-1.5 flex items-center gap-2 text-xs text-info">
-                <div class="h-1 flex-1 overflow-hidden rounded bg-muted">
-                  <div class="h-full bg-info" style="width:{job.progress.overall * 100}%"></div>
-                </div>
-                {percent(job.progress.overall)}
-              </div>
-              <div class="flex gap-2 text-xs text-muted-foreground">
-                <span class="truncate">{job.progress.step}</span>
-                <span class="ml-auto shrink-0 tabular-nums" title="Encoder speed · time since the run started · the job's time left (a guess from its pace so far)"
-                  >{progressTimes(job.progress)}</span
-                >
-              </div>
-            {:else if job.issue}
-              <div class="mt-0.5 truncate text-xs {['blocked', 'error', 'failed', 'invalid'].includes(job.status) ? 'text-destructive' : 'text-warning'}">
-                {job.issue}
-              </div>
-            {/if}
-            {#if job.index_held && job.status === 'index-queued'}
-              <div class="mt-0.5 truncate text-xs text-muted-foreground" title="Settings, Batch indexing">
-                Waits: an encode is reading this disk
-              </div>
-            {/if}
-            {#if job.index_error && job.status !== 'indexing'}
-              <div class="mt-0.5 truncate text-xs text-warning" title={job.index_error}>Index failed: {job.index_error}</div>
-            {/if}
-          </button>
+            <option value="">All statuses ({searched.length})</option>
+            {#each Object.entries(STATUS_LABEL) as [value, label] (value)}
+              <option {value}>{label} ({counts.get(value as Status) ?? 0})</option>
+            {/each}
+          </NativeSelect>
+          {#if query || status}<Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>{/if}
         </div>
-      {:else}
-        <div class="p-6 text-center text-muted-foreground">
-          {#if app.jobs.length}
-            No jobs match these filters. <Button variant="link" class="h-auto p-0" onclick={clearFilters}>Clear filters</Button>.
-          {:else}
-            No jobs yet. <Button variant="link" class="h-auto p-0" onclick={() => router.go('new')}>Add some</Button>.
-          {/if}
-        </div>
-      {/each}
-    </div>
-    <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t p-2 text-xs">
-      <span>Showing {matching.length ? currentPage * QUEUE_PAGE_SIZE + 1 : 0}–{Math.min((currentPage + 1) * QUEUE_PAGE_SIZE, matching.length)} of {matching.length}</span>
-      <div class="flex gap-1">
-        <Button variant="outline" size="sm" disabled={currentPage === 0} aria-label="Previous queue page" onclick={() => changePage(currentPage - 1)}>Previous</Button>
-        <Button variant="outline" size="sm" disabled={(currentPage + 1) * QUEUE_PAGE_SIZE >= matching.length} aria-label="Next queue page" onclick={() => changePage(currentPage + 1)}>Next</Button>
+        <p role="status" class="text-xs text-muted-foreground">
+          {matching.length} of {app.jobs.length} jobs match. {selected.length} selected{hiddenSelected
+            ? ` (${hiddenSelected} hidden by filters)`
+            : ''}.
+        </p>
+        {#if selected.length}<Button variant="outline" size="sm" onclick={clearSelection}>Clear selection</Button>{/if}
+        <p class="text-xs text-muted-foreground">
+          Ticked jobs are queued: locked, and the queue runs them. Selected actions include selections on other pages
+          and hidden by filters. Index uses {selected.length
+            ? `${selected.length} selected jobs`
+            : `all ${app.jobs.length} jobs`}.
+        </p>
+        <p id="queue-keys" class="text-xs text-muted-foreground">
+          Arrows/Home/End navigate; Shift extends selection; Ctrl/Cmd+A selects matching jobs across pages.
+        </p>
       </div>
-    </div>
-  </section>
-{/snippet}
 
-  <section class="min-w-0 flex-1 overflow-auto {layout.small && !rail ? 'hidden' : ''}" inert={peek} aria-label="Job settings">
+      {#if saveError}
+        <div role="alert" class="space-y-2 border-b p-3 text-sm text-destructive">
+          <p>Changes are not saved: {saveError}. Start is blocked until resolved.</p>
+          <Button size="sm" onclick={() => act(() => saves.retry())}>Retry saves</Button>
+          <Button size="sm" variant="outline" onclick={() => saves.discard()}>Discard unsaved changes</Button>
+        </div>
+      {/if}
+      <div
+        data-scroller
+        role="group"
+        aria-label="Matching jobs"
+        aria-describedby="queue-keys"
+        class="min-h-24 flex-1 overflow-auto select-none"
+      >
+        {#each pageJobs as job (job.id)}
+          {@const queued = job.status === 'queued' || job.status === 'running'}
+          <div
+            class="flex border-b border-border/60 {selectedSet.has(job.id)
+              ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]'
+              : 'hover:bg-accent'}"
+          >
+            <div class="flex shrink-0 items-start pt-2.5 pl-3">
+              <!-- Out of the tab order (the list is one stop): the keyboard queues a selection with Queue (N). -->
+              <Checkbox
+                checked={queued}
+                disabled={job.status === 'running' || (!queued && !queueable(job.status))}
+                onCheckedChange={(on) => act(() => (on ? queue([job.id]) : unqueue([job.id])))}
+                tabindex={-1}
+                aria-label={`Queued: ${job.name}${job.label ? ` (${job.label})` : ''}`}
+                title={job.status === 'running'
+                  ? 'Running'
+                  : queued
+                    ? 'Queued: locked, the queue runs it (untick to edit)'
+                    : queueable(job.status)
+                      ? 'Tick to queue: locks it, and the queue runs it'
+                      : `Can't be queued while ${STATUS_LABEL[job.status].toLowerCase()}`}
+              />
+            </div>
+            <button
+              data-job={job.id}
+              aria-pressed={selectedSet.has(job.id)}
+              tabindex={job.id === tabStop ? 0 : -1}
+              onfocus={() => (cursor = job.id)}
+              onkeydown={keys}
+              class="block min-w-0 flex-1 py-2 pr-3 pl-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+              onpointerdown={(e) => dragStart(e, job.id)}
+              onclick={(e) => click(e, job.id)}
+            >
+              <div class="flex items-center gap-2">
+                <span class="truncate font-medium" title={job.source}>{job.name}</span>
+                {#if job.label}<Badge variant="outline" class="shrink-0 px-1.5 py-0 text-xs font-normal" title="Label"
+                    >{job.label}</Badge
+                  >{/if}
+                {#if paused(job.status)}
+                  <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
+                {:else}
+                  <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
+                {/if}
+              </div>
+              <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{job.encoder}</span>
+                {#if job.custom_script}
+                  <span>· custom script</span>
+                {:else if job.crop && (job.crop.top || job.crop.bottom || job.crop.left || job.crop.right)}
+                  <span>· crop {job.crop.left}/{job.crop.top}/{job.crop.right}/{job.crop.bottom}</span>
+                {/if}
+                <span>· {job.audio.length} audio · {job.subs} subs</span>
+                {#if job.indexed}
+                  <span class="ml-auto flex shrink-0 items-center" title="Indexed: the video opens at once"
+                    ><DatabaseCheckIcon class="size-3.5" /></span
+                  >
+                {/if}
+              </div>
+              {#if (job.status === 'running' || job.status === 'indexing') && job.progress}
+                <div class="mt-1.5 flex items-center gap-2 text-xs text-info">
+                  <div class="h-1 flex-1 overflow-hidden rounded bg-muted">
+                    <div class="h-full bg-info" style="width:{job.progress.overall * 100}%"></div>
+                  </div>
+                  {percent(job.progress.overall)}
+                </div>
+                <div class="flex gap-2 text-xs text-muted-foreground">
+                  <span class="truncate">{job.progress.step}</span>
+                  <span
+                    class="ml-auto shrink-0 tabular-nums"
+                    title="Encoder speed · time since the run started · the job's time left (a guess from its pace so far)"
+                    >{progressTimes(job.progress)}</span
+                  >
+                </div>
+              {:else if job.issue}
+                <div
+                  class="mt-0.5 truncate text-xs {['blocked', 'error', 'failed', 'invalid'].includes(job.status)
+                    ? 'text-destructive'
+                    : 'text-warning'}"
+                >
+                  {job.issue}
+                </div>
+              {/if}
+              {#if job.index_held && job.status === 'index-queued'}
+                <div class="mt-0.5 truncate text-xs text-muted-foreground" title="Settings, Batch indexing">
+                  Waits: an encode is reading this disk
+                </div>
+              {/if}
+              {#if job.index_error && job.status !== 'indexing'}
+                <div class="mt-0.5 truncate text-xs text-warning" title={job.index_error}>
+                  Index failed: {job.index_error}
+                </div>
+              {/if}
+            </button>
+          </div>
+        {:else}
+          <div class="p-6 text-center text-muted-foreground">
+            {#if app.jobs.length}
+              No jobs match these filters. <Button variant="link" class="h-auto p-0" onclick={clearFilters}
+                >Clear filters</Button
+              >.
+            {:else}
+              No jobs yet. <Button variant="link" class="h-auto p-0" onclick={() => router.go('new')}>Add some</Button>.
+            {/if}
+          </div>
+        {/each}
+      </div>
+      <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t p-2 text-xs">
+        <span
+          >Showing {matching.length ? currentPage * QUEUE_PAGE_SIZE + 1 : 0}–{Math.min(
+            (currentPage + 1) * QUEUE_PAGE_SIZE,
+            matching.length,
+          )} of {matching.length}</span
+        >
+        <div class="flex gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={currentPage === 0}
+            aria-label="Previous queue page"
+            onclick={() => changePage(currentPage - 1)}>Previous</Button
+          >
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={(currentPage + 1) * QUEUE_PAGE_SIZE >= matching.length}
+            aria-label="Next queue page"
+            onclick={() => changePage(currentPage + 1)}>Next</Button
+          >
+        </div>
+      </div>
+    </section>
+  {/snippet}
+
+  <section
+    class="min-w-0 flex-1 overflow-auto {layout.small && !rail ? 'hidden' : ''}"
+    inert={peek}
+    aria-label="Job settings"
+  >
     {#if single}
       {#key single}<JobEditor jobId={single} />{/key}
     {:else if selected.length > 1}
@@ -755,24 +1014,35 @@
         </p>
         <div class="flex flex-wrap items-center gap-3">
           <Button variant="outline" disabled={!batchToIndex} onclick={() => index(selected)}>
-            <DatabaseZapIcon />{batchToIndex ? `Index ${batchToIndex} job${batchToIndex > 1 ? 's' : ''}` : 'All indexed'}
+            <DatabaseZapIcon />{batchToIndex
+              ? `Index ${batchToIndex} job${batchToIndex > 1 ? 's' : ''}`
+              : 'All indexed'}
           </Button>
           <span class="text-sm text-muted-foreground">
-            One at a time: the work folder, script and source index, nothing else. Their video then opens at once, and the
-            encode reuses the index.{batchToIndex && batchToIndex < selected.length ? ` ${selected.length - batchToIndex} already indexed.` : ''}
+            One at a time: the work folder, script and source index, nothing else. Their video then opens at once, and
+            the encode reuses the index.{batchToIndex && batchToIndex < selected.length
+              ? ` ${selected.length - batchToIndex} already indexed.`
+              : ''}
           </span>
         </div>
         {#if batchSource}
           <Card.Root class="gap-2 p-4">
             <div class="flex flex-wrap items-center gap-3">
               <span class="text-sm">Template</span>
-              <NativeSelect aria-label="Template for the selected jobs" value={picked?.name ?? ''} onchange={e => (batchTemplate = e.currentTarget.value)}>
+              <NativeSelect
+                aria-label="Template for the selected jobs"
+                value={picked?.name ?? ''}
+                onchange={(e) => (batchTemplate = e.currentTarget.value)}
+              >
                 {#each batchTemplates as c (`${c.builtin}:${c.name}`)}<option value={c.name}>{c.name}</option>{/each}
               </NativeSelect>
-              <Button class="ml-auto" onclick={applyTemplate} disabled={!picked}><LayoutTemplateIcon />Apply to {selected.length} jobs</Button>
+              <Button class="ml-auto" onclick={applyTemplate} disabled={!picked}
+                ><LayoutTemplateIcon />Apply to {selected.length} jobs</Button
+              >
             </div>
             <p class="text-xs text-muted-foreground">
-              Sets video, encoder, container, AutoQPF{picked?.data.audio ? ', audio' : ''}{picked?.data.crop_mode === 'auto'
+              Sets video, encoder, container, AutoQPF{picked?.data.audio ? ', audio' : ''}{picked?.data.crop_mode ===
+              'auto'
                 ? '; the crop is detected for each job'
                 : picked?.data.crop_mode === 'fixed'
                   ? `; crop ${picked.data.video.crop.left}/${picked.data.video.crop.top}/${picked.data.video.crop.right}/${picked.data.video.crop.bottom} on every job`
@@ -788,10 +1058,14 @@
                 spacing={1}
                 class="w-fit max-w-full flex-wrap"
                 value={batchSource.spec.mux.container || batchContainers[0].id}
-                onValueChange={v => v && applyContainer(v)}
+                onValueChange={(v) => v && applyContainer(v)}
               >
                 {#each batchContainers as c (c.id)}
-                  <ToggleGroup.Item value={c.id} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">{c.label}</ToggleGroup.Item>
+                  <ToggleGroup.Item
+                    value={c.id}
+                    class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    >{c.label}</ToggleGroup.Item
+                  >
                 {/each}
               </ToggleGroup.Root>
               <span class="text-xs text-muted-foreground">Each job keeps its extra muxer arguments.</span>
@@ -802,8 +1076,8 @@
           </Card.Root>
           <Card.Root class="flex-row items-center gap-3 p-4">
             <span class="text-sm">
-              Crop from {batchSource.name}: {batchSource.spec.video.crop.left}/{batchSource.spec.video.crop.top}/{batchSource
-                .spec.video.crop.right}/{batchSource.spec.video.crop.bottom}
+              Crop from {batchSource.name}: {batchSource.spec.video.crop.left}/{batchSource.spec.video.crop
+                .top}/{batchSource.spec.video.crop.right}/{batchSource.spec.video.crop.bottom}
             </span>
             <Button variant="outline" class="ml-auto" onclick={applyCrop}><CropIcon />Apply this crop to all</Button>
           </Card.Root>
@@ -817,20 +1091,38 @@
 
 <ReuseDialog bind:open={reuseOpen} jobs={reuseJobs} onstart={startReusing} />
 
-<Dialog.Root open={removal !== null} onOpenChange={open => { if (!open && !removing) removal = null }}>
+<Dialog.Root
+  open={removal !== null}
+  onOpenChange={(open) => {
+    if (!open && !removing) removal = null
+  }}
+>
   <Dialog.Content>
     <Dialog.Header>
       <Dialog.Title>Remove jobs and delete working files?</Dialog.Title>
-      <Dialog.Description>Records and logs are archived first. Indexes, scripts and intermediate encodes are permanently deleted; a rerun must recreate them. Finished output files are kept.</Dialog.Description>
+      <Dialog.Description
+        >Records and logs are archived first. Indexes, scripts and intermediate encodes are permanently deleted; a rerun
+        must recreate them. Finished output files are kept.</Dialog.Description
+      >
     </Dialog.Header>
     <div class="max-h-64 space-y-3 overflow-auto text-sm">
       {#each removal?.folders ?? [] as folder (folder.id)}
-        <div><code class="break-all">{folder.path}</code><div class="text-muted-foreground">{folder.bytes === null ? 'Size unavailable' : bytes(folder.bytes)}{folder.error ? ` · ${folder.error}` : ''}</div></div>
+        <div>
+          <code class="break-all">{folder.path}</code>
+          <div class="text-muted-foreground">
+            {folder.bytes === null ? 'Size unavailable' : bytes(folder.bytes)}{folder.error ? ` · ${folder.error}` : ''}
+          </div>
+        </div>
       {/each}
     </div>
     <Dialog.Footer>
-      <Button variant="outline" disabled={removing} onclick={() => removal = null}>Cancel</Button>
-      <Button variant="destructive" disabled={removing} onclick={() => remove(true, removal?.folders.map(f => f.id) ?? [])}>{removing ? 'Removing…' : 'Remove and delete'}</Button>
+      <Button variant="outline" disabled={removing} onclick={() => (removal = null)}>Cancel</Button>
+      <Button
+        variant="destructive"
+        disabled={removing}
+        onclick={() => remove(true, removal?.folders.map((f) => f.id) ?? [])}
+        >{removing ? 'Removing…' : 'Remove and delete'}</Button
+      >
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

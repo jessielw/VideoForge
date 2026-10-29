@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
@@ -23,6 +25,8 @@
     "bits-ui": "^2.19.5",
     "clsx": "^2.1.1",
     "mode-watcher": "^1.1.0",
+    "prettier": "^3.9.10",
+    "prettier-plugin-svelte": "^4.1.1",
     "shadcn-svelte": "^1.7.0",
     "svelte": "^5.57.0",
     "svelte-check": "^4.7.6",

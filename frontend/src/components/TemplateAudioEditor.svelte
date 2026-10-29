@@ -81,7 +81,11 @@
   ]
   const TRAITS = [
     { key: 'commentary', label: 'Commentary', help: 'By its flag, or "commentary" in its title' },
-    { key: 'visual_impaired', label: 'Audio description', help: 'By its flag, or "audio description", "descriptive" or "AD" in its title' },
+    {
+      key: 'visual_impaired',
+      label: 'Audio description',
+      help: 'By its flag, or "audio description", "descriptive" or "AD" in its title',
+    },
   ] as const
 
   const mode = $derived(value?.mode ?? 'position')
@@ -97,7 +101,7 @@
   }
   // rules leave out what they don't match by default, slots keep what's past them
   const setMode = (m: TemplateAudio['mode']) =>
-    change(a => {
+    change((a) => {
       a.mode = m
       a.others = m === 'rules' ? 'exclude' : 'keep'
       if (m === 'rules' && !a.rules.length) a.rules.push(rule())
@@ -108,7 +112,7 @@
   const num = (v: string) => (v ? Number(v) : null)
 
   function move(i: number, by: number) {
-    change(a => {
+    change((a) => {
       const [r] = a.rules.splice(i, 1)
       a.rules.splice(i + by, 0, r)
     })
@@ -125,7 +129,7 @@
   from: string,
   at: (a: TemplateAudio) => { track: TrackOverride; extra: TrackOverride[] },
 )}
-  <AudioOutputEditor value={track} {flags} {disabled} label={main} onchange={v => change(a => (at(a).track = v))} />
+  <AudioOutputEditor value={track} {flags} {disabled} label={main} onchange={(v) => change((a) => (at(a).track = v))} />
   {#each extra as x, n (n)}
     <div class="space-y-2 border-l-2 border-primary/40 pl-3">
       <div class="flex items-center gap-2 text-sm text-muted-foreground">
@@ -137,13 +141,24 @@
           title="Remove this output"
           aria-label="Remove output {n + 2} of {name}"
           {disabled}
-          onclick={() => change(a => at(a).extra.splice(n, 1))}><XIcon /></Button
+          onclick={() => change((a) => at(a).extra.splice(n, 1))}><XIcon /></Button
         >
       </div>
-      <AudioOutputEditor value={x} {flags} {disabled} label="{name}, output {n + 2}" onchange={v => change(a => (at(a).extra[n] = v))} />
+      <AudioOutputEditor
+        value={x}
+        {flags}
+        {disabled}
+        label="{name}, output {n + 2}"
+        onchange={(v) => change((a) => (at(a).extra[n] = v))}
+      />
     </div>
   {/each}
-  <Button variant="ghost" size="sm" {disabled} onclick={() => change(a => at(a).extra.push({ ...empty(), action: 'ddp' }))}>
+  <Button
+    variant="ghost"
+    size="sm"
+    {disabled}
+    onclick={() => change((a) => at(a).extra.push({ ...empty(), action: 'ddp' }))}
+  >
     <PlusIcon />Another output from this track
   </Button>
 {/snippet}
@@ -153,22 +168,34 @@
     <Checkbox
       checked={value !== null}
       {disabled}
-      onCheckedChange={on => onchange(on ? { mode: 'position', slots: [{ track: empty(), extra: [] }], rules: [], others: 'keep' } : null)}
+      onCheckedChange={(on) =>
+        onchange(on ? { mode: 'position', slots: [{ track: empty(), extra: [] }], rules: [], others: 'keep' } : null)}
     />
     Set the audio tracks
   </label>
   {#if value === null}
     <p class="text-xs text-muted-foreground">Off: applying the template leaves each job's audio as it is.</p>
   {:else}
-    <ToggleGroup.Root type="single" variant="outline" class="w-fit" {disabled} value={mode} onValueChange={v => v && v !== mode && setMode(v as TemplateAudio['mode'])}>
-      <ToggleGroup.Item value="position" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">By position</ToggleGroup.Item>
-      <ToggleGroup.Item value="rules" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">By rules</ToggleGroup.Item>
+    <ToggleGroup.Root
+      type="single"
+      variant="outline"
+      class="w-fit"
+      {disabled}
+      value={mode}
+      onValueChange={(v) => v && v !== mode && setMode(v as TemplateAudio['mode'])}
+    >
+      <ToggleGroup.Item value="position" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+        >By position</ToggleGroup.Item
+      >
+      <ToggleGroup.Item value="rules" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+        >By rules</ToggleGroup.Item
+      >
     </ToggleGroup.Root>
     {#if mode === 'position'}
       <p class="text-xs text-muted-foreground">
-        By position: track 1 is the source's first audio track. A source with fewer tracks skips the rest; added audio files keep their own
-        settings. A slot asking for more than its track has gets the best that fits (2.0 stays 2.0, DDP Atmos needs a TrueHD
-        Atmos track). Applying the template replaces a job's audio choices.
+        By position: track 1 is the source's first audio track. A source with fewer tracks skips the rest; added audio
+        files keep their own settings. A slot asking for more than its track has gets the best that fits (2.0 stays 2.0,
+        DDP Atmos needs a TrueHD Atmos track). Applying the template replaces a job's audio choices.
       </p>
       {#each value.slots as slot, i (i)}
         <div class="space-y-3 rounded-lg border p-3">
@@ -178,7 +205,13 @@
               <Checkbox
                 checked={slot.track.exclude === true}
                 {disabled}
-                onCheckedChange={on => change(a => (a.slots[i] = on ? { track: { ...empty(), exclude: true }, extra: [] } : { track: empty(), extra: [] }))}
+                onCheckedChange={(on) =>
+                  change(
+                    (a) =>
+                      (a.slots[i] = on
+                        ? { track: { ...empty(), exclude: true }, extra: [] }
+                        : { track: empty(), extra: [] }),
+                  )}
               />
               Leave out
             </label>
@@ -189,21 +222,37 @@
               title="Remove audio track {i + 1}"
               aria-label="Remove audio track {i + 1}"
               {disabled}
-              onclick={() => change(a => a.slots.splice(i, 1))}><XIcon /></Button
+              onclick={() => change((a) => a.slots.splice(i, 1))}><XIcon /></Button
             >
           </div>
           {#if !slot.track.exclude}
-            {@render outputs(slot.track, slot.extra, `Audio track ${i + 1}`, `Audio track ${i + 1}`, `track ${i + 1}`, a => a.slots[i])}
+            {@render outputs(
+              slot.track,
+              slot.extra,
+              `Audio track ${i + 1}`,
+              `Audio track ${i + 1}`,
+              `track ${i + 1}`,
+              (a) => a.slots[i],
+            )}
           {/if}
         </div>
       {/each}
       <div class="flex flex-wrap items-center gap-3">
-        <Button variant="outline" size="sm" {disabled} onclick={() => change(a => a.slots.push({ track: empty(), extra: [] }))}>
+        <Button
+          variant="outline"
+          size="sm"
+          {disabled}
+          onclick={() => change((a) => a.slots.push({ track: empty(), extra: [] }))}
+        >
           <PlusIcon />Audio track {value.slots.length + 1}
         </Button>
         <label class="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
           Audio tracks past these
-          <NativeSelect value={value.others} {disabled} onchange={e => change(a => (a.others = e.currentTarget.value as TemplateAudio['others']))}>
+          <NativeSelect
+            value={value.others}
+            {disabled}
+            onchange={(e) => change((a) => (a.others = e.currentTarget.value as TemplateAudio['others']))}
+          >
             <option value="keep">Keep (as the profile decides)</option>
             <option value="exclude">Leave out</option>
           </NativeSelect>
@@ -211,9 +260,10 @@
       </div>
     {:else}
       <p class="text-xs text-muted-foreground">
-        Each source audio track takes the first rule it matches (empty = any); added audio files keep their own settings. "Only the first":
-        the first matching track takes the rule, the others go on to the next rules. Kept tracks go in rule order; a rule that sets Default
-        gives it to the first track it reaches, and every other one has it off. Outputs are fitted to each track as with slots.
+        Each source audio track takes the first rule it matches (empty = any); added audio files keep their own
+        settings. "Only the first": the first matching track takes the rule, the others go on to the next rules. Kept
+        tracks go in rule order; a rule that sets Default gives it to the first track it reaches, and every other one
+        has it off. Outputs are fitted to each track as with slots.
       </p>
       {#each rules as r, i (i)}
         <div class="space-y-3 rounded-lg border p-3" role="group" aria-label="Audio rule {i + 1}">
@@ -223,8 +273,8 @@
               aria-label="Audio rule {i + 1}: keep or leave out"
               value={r.track.exclude ? 'exclude' : 'keep'}
               {disabled}
-              onchange={e =>
-                change(a => {
+              onchange={(e) =>
+                change((a) => {
                   a.rules[i].track = { ...empty(), exclude: e.currentTarget.value === 'exclude' || null }
                   a.rules[i].extra = []
                 })}
@@ -232,8 +282,15 @@
               <option value="keep">Keep</option>
               <option value="exclude">Leave out</option>
             </NativeSelect>
-            <label class="ml-2 flex items-center gap-2 text-sm text-muted-foreground" title="Only the first matching track (in source order) takes this rule">
-              <Checkbox checked={r.first_only} {disabled} onCheckedChange={on => change(a => (a.rules[i].first_only = on))} />
+            <label
+              class="ml-2 flex items-center gap-2 text-sm text-muted-foreground"
+              title="Only the first matching track (in source order) takes this rule"
+            >
+              <Checkbox
+                checked={r.first_only}
+                {disabled}
+                onCheckedChange={(on) => change((a) => (a.rules[i].first_only = on))}
+              />
               Only the first
             </label>
             <Button
@@ -260,7 +317,7 @@
               title="Remove rule {i + 1}"
               aria-label="Remove audio rule {i + 1}"
               {disabled}
-              onclick={() => change(a => a.rules.splice(i, 1))}><XIcon /></Button
+              onclick={() => change((a) => a.rules.splice(i, 1))}><XIcon /></Button
             >
           </div>
           <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
@@ -272,14 +329,14 @@
               title="Languages (en matches en-US too; es-419 only itself)"
               value={r.languages}
               {disabled}
-              onchange={(v: string[]) => change(a => (a.rules[i].languages = v))}
+              onchange={(v: string[]) => change((a) => (a.rules[i].languages = v))}
             />
             <NativeSelect
               aria-label="Audio rule {i + 1}: original language"
               title="The job's original language (the profile's guess, or the one set on the job)"
               value={tri(r.original)}
               {disabled}
-              onchange={e => change(a => (a.rules[i].original = fromTri(e.currentTarget.value)))}
+              onchange={(e) => change((a) => (a.rules[i].original = fromTri(e.currentTarget.value)))}
             >
               <option value="any">Original or not</option>
               <option value="yes">Original language</option>
@@ -289,10 +346,18 @@
               aria-label="Audio rule {i + 1}: codec"
               value={codecKey(r.codecs)}
               {disabled}
-              onchange={e => change(a => (a.rules[i].codecs = (e.currentTarget.value ? e.currentTarget.value.split(',') : []) as AudioCodec[]))}
+              onchange={(e) =>
+                change(
+                  (a) =>
+                    (a.rules[i].codecs = (
+                      e.currentTarget.value ? e.currentTarget.value.split(',') : []
+                    ) as AudioCodec[]),
+                )}
             >
               {#each CODECS as c (c.label)}<option value={codecKey(c.codecs)}>{c.label}</option>{/each}
-              {#if !CODECS.some(c => codecKey(c.codecs) === codecKey(r.codecs))}<option value={codecKey(r.codecs)}>{r.codecs.join(', ')}</option>{/if}
+              {#if !CODECS.some((c) => codecKey(c.codecs) === codecKey(r.codecs))}<option value={codecKey(r.codecs)}
+                  >{r.codecs.join(', ')}</option
+                >{/if}
             </NativeSelect>
             <label class="flex items-center gap-1.5 text-muted-foreground">
               Channels
@@ -300,7 +365,7 @@
                 aria-label="Audio rule {i + 1}: at least"
                 value={r.min_channels ?? ''}
                 {disabled}
-                onchange={e => change(a => (a.rules[i].min_channels = num(e.currentTarget.value)))}
+                onchange={(e) => change((a) => (a.rules[i].min_channels = num(e.currentTarget.value)))}
               >
                 <option value="">at least: any</option>
                 {#each MIN_CHANNELS as c (c.n)}<option value={c.n}>at least {c.label}</option>{/each}
@@ -309,7 +374,7 @@
                 aria-label="Audio rule {i + 1}: at most"
                 value={r.max_channels ?? ''}
                 {disabled}
-                onchange={e => change(a => (a.rules[i].max_channels = num(e.currentTarget.value)))}
+                onchange={(e) => change((a) => (a.rules[i].max_channels = num(e.currentTarget.value)))}
               >
                 <option value="">at most: any</option>
                 {#each MAX_CHANNELS as c (c.n)}<option value={c.n}>at most {c.label}</option>{/each}
@@ -322,7 +387,7 @@
                   aria-label="Audio rule {i + 1}: {t.label}"
                   value={tri(r[t.key])}
                   {disabled}
-                  onchange={e => change(a => (a.rules[i][t.key] = fromTri(e.currentTarget.value)))}
+                  onchange={(e) => change((a) => (a.rules[i][t.key] = fromTri(e.currentTarget.value)))}
                 >
                   <option value="any">any</option>
                   <option value="yes">yes</option>
@@ -332,17 +397,28 @@
             {/each}
           </div>
           {#if !r.track.exclude}
-            {@render outputs(r.track, r.extra, `Audio rule ${i + 1}`, `Audio rule ${i + 1}, output 1`, 'each track it matches', a => a.rules[i])}
+            {@render outputs(
+              r.track,
+              r.extra,
+              `Audio rule ${i + 1}`,
+              `Audio rule ${i + 1}, output 1`,
+              'each track it matches',
+              (a) => a.rules[i],
+            )}
           {/if}
         </div>
       {/each}
       <div class="flex flex-wrap items-center gap-3">
-        <Button variant="outline" size="sm" {disabled} onclick={() => change(a => a.rules.push(rule()))}>
+        <Button variant="outline" size="sm" {disabled} onclick={() => change((a) => a.rules.push(rule()))}>
           <PlusIcon />Rule {rules.length + 1}
         </Button>
         <label class="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
           Tracks no rule matches
-          <NativeSelect value={value.others} {disabled} onchange={e => change(a => (a.others = e.currentTarget.value as TemplateAudio['others']))}>
+          <NativeSelect
+            value={value.others}
+            {disabled}
+            onchange={(e) => change((a) => (a.others = e.currentTarget.value as TemplateAudio['others']))}
+          >
             <option value="exclude">Leave out</option>
             <option value="keep">Keep (after the rest)</option>
           </NativeSelect>

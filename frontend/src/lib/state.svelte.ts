@@ -2,7 +2,21 @@
 import { toast } from 'svelte-sonner'
 import { api } from './api'
 import { STATUS_LABEL } from './format'
-import type { AudioEncodeInfo, AudioPresetSettings, EncoderSettings, FilterPreset, JobSummary, Preset, PresetKind, Presets, Profile, QueueState, StepRun, Template, VideoPresetData } from './types'
+import type {
+  AudioEncodeInfo,
+  AudioPresetSettings,
+  EncoderSettings,
+  FilterPreset,
+  JobSummary,
+  Preset,
+  PresetKind,
+  Presets,
+  Profile,
+  QueueState,
+  StepRun,
+  Template,
+  VideoPresetData,
+} from './types'
 import { keepVideoViews } from './videoView.svelte'
 
 const MAX_LOG = 20000
@@ -15,11 +29,26 @@ export interface LogLine {
   line: string
 }
 
-export type PresetData<K extends PresetKind> = K extends 'video' ? VideoPresetData : K extends 'template' ? Template : K extends 'audio' ? AudioPresetSettings : EncoderSettings
+export type PresetData<K extends PresetKind> = K extends 'video'
+  ? VideoPresetData
+  : K extends 'template'
+    ? Template
+    : K extends 'audio'
+      ? AudioPresetSettings
+      : EncoderSettings
 
 class AppState {
   jobs = $state<JobSummary[]>([])
-  queue = $state<QueueState>({ running: false, current: null, stop_after_current: false, paused: false, priority: null, queued: 0, indexing: null, index_queued: 0 })
+  queue = $state<QueueState>({
+    running: false,
+    current: null,
+    stop_after_current: false,
+    paused: false,
+    priority: null,
+    queued: 0,
+    indexing: null,
+    index_queued: 0,
+  })
   profiles = $state<Profile[]>([])
   log = $state<LogLine[]>([])
   connected = $state(false)
@@ -36,7 +65,14 @@ class AppState {
   runStarts = $state<Record<string, number>>({}) // logSeq when each job's latest run began
   logSeq = 0
   encodes = $state<AudioEncodeInfo[]>([])
-  presets = $state<Presets>({ video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] })
+  presets = $state<Presets>({
+    video: [],
+    encoder: [],
+    audio: [],
+    template: [],
+    template_defaults: {},
+    encoder_starters: [],
+  })
   filterPresets = $state<FilterPreset[]>([])
   version = $state('') // the server's, for bug reports
 
@@ -72,26 +108,50 @@ class AppState {
   }
 
   // A kind's presets for a profile: its defaults first (built in), the encoder starters, then the user's.
-  presetChoices<K extends PresetKind>(kind: K, profileId: string): (Preset<PresetData<K>> & { builtin: boolean; badge?: string })[] {
-    const p = this.profiles.find(x => x.id === profileId)
-    const own = p && kind !== 'audio' ? [{ name: `${p.name} defaults`, data: p.defaults[kind as keyof Profile['defaults']] as unknown as PresetData<K>, builtin: true }] : []
-    const starters = kind === 'encoder' ? (this.presets.encoder_starters ?? []).map(x => ({ ...x, data: x.data as unknown as PresetData<K>, builtin: true, badge: 'starter' })) : []
-    return [...own, ...starters, ...(this.presets[kind] as Preset<PresetData<K>>[]).map(x => ({ ...x, builtin: false }))]
+  presetChoices<K extends PresetKind>(
+    kind: K,
+    profileId: string,
+  ): (Preset<PresetData<K>> & { builtin: boolean; badge?: string })[] {
+    const p = this.profiles.find((x) => x.id === profileId)
+    const own =
+      p && kind !== 'audio'
+        ? [
+            {
+              name: `${p.name} defaults`,
+              data: p.defaults[kind as keyof Profile['defaults']] as unknown as PresetData<K>,
+              builtin: true,
+            },
+          ]
+        : []
+    const starters =
+      kind === 'encoder'
+        ? (this.presets.encoder_starters ?? []).map((x) => ({
+            ...x,
+            data: x.data as unknown as PresetData<K>,
+            builtin: true,
+            badge: 'starter',
+          }))
+        : []
+    return [
+      ...own,
+      ...starters,
+      ...(this.presets[kind] as Preset<PresetData<K>>[]).map((x) => ({ ...x, builtin: false })),
+    ]
   }
 
   // The name of the template New jobs starts on: the user's starred one, else the profile's own.
   defaultTemplate(profileId: string): string {
-    const p = this.profiles.find(x => x.id === profileId)
+    const p = this.profiles.find((x) => x.id === profileId)
     return this.presets.template_defaults[profileId] ?? (p ? `${p.name} defaults` : '')
   }
 
   get defaultProfile(): Profile | undefined {
-    return this.profiles.find(p => p.default) ?? this.profiles[0]
+    return this.profiles.find((p) => p.default) ?? this.profiles[0]
   }
 
   jobName(id: string | null): string {
     if (!id) return 'VideoForge'
-    return this.jobs.find(j => j.id === id)?.name ?? id
+    return this.jobs.find((j) => j.id === id)?.name ?? id
   }
 
   start(): Promise<void> {
@@ -102,7 +162,11 @@ class AppState {
     this.#starting = (async () => {
       try {
         const [profiles, presets, filters, encodes, health] = await Promise.all([
-          api.profiles(), api.presets(), api.filterPresets(), api.encoders(), api.health(),
+          api.profiles(),
+          api.presets(),
+          api.filterPresets(),
+          api.encoders(),
+          api.health(),
         ])
         await this.refreshJobs()
         this.profiles = profiles
@@ -117,20 +181,25 @@ class AppState {
         this.connection = 'offline'
         this.#scheduleRetry()
       }
-    })().finally(() => { this.#starting = null })
+    })().finally(() => {
+      this.#starting = null
+    })
     return this.#starting
   }
 
   #scheduleRetry(): void {
     if (this.stopped || this.#retryTimer) return
-    this.#retryTimer = setTimeout(() => { this.#retryTimer = null; void this.start() }, this.#retry)
+    this.#retryTimer = setTimeout(() => {
+      this.#retryTimer = null
+      void this.start()
+    }, this.#retry)
     this.#retry = Math.min(this.#retry * 2, 8000)
   }
 
   async refreshJobs(): Promise<void> {
-    const before = new Map(this.jobs.map(j => [j.id, j.status]))
+    const before = new Map(this.jobs.map((j) => [j.id, j.status]))
     this.jobs = await api.jobs()
-    keepVideoViews(this.jobs.map(j => j.id))
+    keepVideoViews(this.jobs.map((j) => j.id))
     for (const j of this.jobs) {
       if (before.get(j.id) === 'running' && j.status !== 'running') this.#finished(j)
       if (before.get(j.id) === 'indexing' && j.status !== 'indexing' && j.index_error)
@@ -143,7 +212,11 @@ class AppState {
     const open = { label: 'Open', onClick: () => (location.hash = `#/queue/${encodeURIComponent(job.id)}`) }
     if (job.status === 'done') toast.success(`${job.name} is done`, { action: open })
     else if (job.status === 'cancelled') toast.warning(`${job.name} was cancelled`, { action: open })
-    else toast.error(`${job.name}: ${STATUS_LABEL[job.status].toLowerCase()}`, { description: job.issue || undefined, action: open })
+    else
+      toast.error(`${job.name}: ${STATUS_LABEL[job.status].toLowerCase()}`, {
+        description: job.issue || undefined,
+        action: open,
+      })
   }
 
   #scheduleRefresh(): void {
@@ -181,7 +254,7 @@ class AppState {
     const ws = new WebSocket(`${proto}://${location.host}/api/events`)
     this.#socket = ws
     ws.onopen = () => {
-      this.log = this.log.filter(line => line.job === null)
+      this.log = this.log.filter((line) => line.job === null)
       this.runs = {}
       this.runStarts = {}
       this.stepVersions = {}
@@ -201,7 +274,7 @@ class AppState {
       this.connectionError = 'Connection lost. Retrying automatically.'
       this.#scheduleRetry()
     }
-    ws.onmessage = msg => this.#handle(JSON.parse(msg.data))
+    ws.onmessage = (msg) => this.#handle(JSON.parse(msg.data))
   }
 
   #handle(event: { type: string; [k: string]: unknown }): void {
@@ -228,7 +301,7 @@ class AppState {
         this.#scheduleRefresh()
         break
       case 'progress': {
-        const job = this.jobs.find(j => j.id === event.id)
+        const job = this.jobs.find((j) => j.id === event.id)
         if (job) {
           const { type: _t, id: _i, ...p } = event
           job.progress = p as unknown as JobSummary['progress']
@@ -238,7 +311,12 @@ class AppState {
         break
       }
       case 'log':
-        this.addLog(event.line as string, event.id as string, (event.step as string | null) ?? null, event.seq as number)
+        this.addLog(
+          event.line as string,
+          event.id as string,
+          (event.step as string | null) ?? null,
+          event.seq as number,
+        )
         break
       case 'step': {
         const id = event.id as string

@@ -1,10 +1,26 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { canonical, draftFromChoice, duplicatePresetDraft, folderParts, matchingPreset, newPresetDraft, presetKey, saveDestination, type PresetChoice } from '../src/lib/presetDraft.ts'
+import {
+  canonical,
+  draftFromChoice,
+  duplicatePresetDraft,
+  folderParts,
+  matchingPreset,
+  newPresetDraft,
+  presetKey,
+  saveDestination,
+  type PresetChoice,
+} from '../src/lib/presetDraft.ts'
 
 type Settings = { encoder: string; crf: number; options: Record<string, string> }
 const data: Settings = { encoder: 'x265', crf: 18, options: { tune: 'grain', 'aq-mode': '3' } }
-const choice: PresetChoice<Settings> = { name: 'stable-id', label: 'Grain', group: ['1080p', 'SDR'], data, builtin: false }
+const choice: PresetChoice<Settings> = {
+  name: 'stable-id',
+  label: 'Grain',
+  group: ['1080p', 'SDR'],
+  data,
+  builtin: false,
+}
 const parentOf = (value: Settings) => value.encoder
 
 test('editing a saved preset uses a snapshot without changing the library or current settings', () => {

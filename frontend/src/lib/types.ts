@@ -36,7 +36,11 @@ export type SourceFilter = 'bestsource' | 'lsmash' | 'ffms2'
 // The source filter menu: FFMS2 (the default) first.
 export const SOURCE_FILTERS: { id: SourceFilter; label: string; title: string }[] = [
   { id: 'ffms2', label: 'FFMS2', title: 'Quick to index; the default' },
-  { id: 'bestsource', label: 'BestSource (exact seeking)', title: 'Frame-exact seeking; the first index decodes the whole video' },
+  {
+    id: 'bestsource',
+    label: 'BestSource (exact seeking)',
+    title: 'Frame-exact seeking; the first index decodes the whole video',
+  },
   { id: 'lsmash', label: 'L-SMASH Works', title: 'Quick to index' },
 ]
 
@@ -82,7 +86,13 @@ export interface VideoSettings {
 }
 
 export type EncoderName = 'x264' | 'x265' | 'vp8' | 'vp9' | 'svtav1'
-export const ENCODERS: [EncoderName, string][] = [['x264', 'x264'], ['x265', 'x265'], ['vp8', 'VP8'], ['vp9', 'VP9'], ['svtav1', 'SVT-AV1']]
+export const ENCODERS: [EncoderName, string][] = [
+  ['x264', 'x264'],
+  ['x265', 'x265'],
+  ['vp8', 'VP8'],
+  ['vp9', 'VP9'],
+  ['svtav1', 'SVT-AV1'],
+]
 export type RateControl = 'crf' | 'abr' | '2pass'
 
 export interface EncoderSettings {
@@ -512,9 +522,19 @@ export interface ConfigurationBundle {
   format: 'videoforge.configuration'
   version: 1 | 2 | 3
   application: Record<string, unknown> & { allow_commands: boolean }
-  settings: Record<string, unknown> & { notifications: NotificationDestination[]; actions: ActionSetting[]; disabled_plugins: string[]; plugin_settings?: Record<string, Record<string, unknown>> }
+  settings: Record<string, unknown> & {
+    notifications: NotificationDestination[]
+    actions: ActionSetting[]
+    disabled_plugins: string[]
+    plugin_settings?: Record<string, Record<string, unknown>>
+  }
   folders: { output_dir: string; last_dir: string }
-  presets: { template: Preset<Template>[]; video: Preset<VideoPresetData>[]; encoder: Preset<EncoderSettings>[]; audio: Preset<AudioPresetSettings>[] }
+  presets: {
+    template: Preset<Template>[]
+    video: Preset<VideoPresetData>[]
+    encoder: Preset<EncoderSettings>[]
+    audio: Preset<AudioPresetSettings>[]
+  }
   template_defaults: Record<string, string>
   subs_default?: TemplateSubs | null // version 3
 }
@@ -554,7 +574,8 @@ export interface AudioSlot {
   track: TrackOverride
   extra: TrackOverride[]
 }
-export type AudioCodec = 'aac' | 'ac3' | 'eac3' | 'truehd' | 'dts' | 'dts_hd_ma' | 'dts_hd_hra' | 'lpcm' | 'flac' | 'opus' | 'other'
+export type AudioCodec =
+  'aac' | 'ac3' | 'eac3' | 'truehd' | 'dts' | 'dts_hd_ma' | 'dts_hd_hra' | 'lpcm' | 'flac' | 'opus' | 'other'
 export interface AudioRule {
   languages: string[]
   original: boolean | null // in the job's original language
@@ -773,7 +794,14 @@ export interface PluginInventory {
 }
 
 export interface PluginPreview {
-  plugin: { id: string; name: string; version: string; description: string; api_version: number; settings: PluginSetting[] }
+  plugin: {
+    id: string
+    name: string
+    version: string
+    description: string
+    api_version: number
+    settings: PluginSetting[]
+  }
   current: { id: string; name: string; version: string } | null
   revision: string
 }
@@ -808,7 +836,7 @@ export interface ToolCheck {
   detail: string
 }
 
-export type StepStatus ='pending' | 'running' | 'done' | 'reused' | 'failed' | 'cancelled'
+export type StepStatus = 'pending' | 'running' | 'done' | 'reused' | 'failed' | 'cancelled'
 
 // One step of a job's last run (GET /jobs/<id>/steps adds its output lines).
 export interface StepRun {

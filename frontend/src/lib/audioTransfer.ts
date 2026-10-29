@@ -3,9 +3,15 @@ import type { AudioBundle, AudioPresetSettings, Preset } from './types'
 export const MAX_AUDIO_BYTES = 5 * 1024 * 1024
 
 export function audioBundle(entries: Preset<AudioPresetSettings>[]): AudioBundle {
-  return { format: 'videoforge.audio', version: 1, audio: entries.map(entry => ({
-    label: entry.label ?? entry.name, group: [...(entry.group ?? [])], data: structuredClone(entry.data),
-  })) }
+  return {
+    format: 'videoforge.audio',
+    version: 1,
+    audio: entries.map((entry) => ({
+      label: entry.label ?? entry.name,
+      group: [...(entry.group ?? [])],
+      data: structuredClone(entry.data),
+    })),
+  }
 }
 
 export function downloadAudio(bundle: AudioBundle, filename: string) {

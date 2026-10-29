@@ -10,11 +10,44 @@
   import { Input } from '$lib/components/ui/input'
   import * as Dialog from '$lib/components/ui/dialog'
   import PresetBrowser from './PresetBrowser.svelte'
-  import { canonical, draftFromChoice, duplicatePresetDraft, folderParts, matchingPreset, newPresetDraft, presetKey, presetLabel, saveDestination, type PresetChoice, type PresetDraft } from '../lib/presetDraft'
+  import {
+    canonical,
+    draftFromChoice,
+    duplicatePresetDraft,
+    folderParts,
+    matchingPreset,
+    newPresetDraft,
+    presetKey,
+    presetLabel,
+    saveDestination,
+    type PresetChoice,
+    type PresetDraft,
+  } from '../lib/presetDraft'
 
-  let { title, current, choices, parents, parentOf, summary, editor, apply, savePreset, removePreset, removePresets,
-    onclose, onapplied, nameExample, folderExample, folderHint, builtinLabel = 'built-in',
-    problem = () => '', applyLabel = 'Apply settings', initialSelected = null, transfer, manageOnly = false }: {
+  let {
+    title,
+    current,
+    choices,
+    parents,
+    parentOf,
+    summary,
+    editor,
+    apply,
+    savePreset,
+    removePreset,
+    removePresets,
+    onclose,
+    onapplied,
+    nameExample,
+    folderExample,
+    folderHint,
+    builtinLabel = 'built-in',
+    problem = () => '',
+    applyLabel = 'Apply settings',
+    initialSelected = null,
+    transfer,
+    manageOnly = false,
+  }: {
     title: string
     current: T
     choices: PresetChoice<T>[]
@@ -78,10 +111,22 @@
   let notice = $state('')
   const dirty = $derived(!!draft && canonical(draft) !== baseline)
   const applyProblem = $derived(draft ? problem(draft.data) : '')
-  const deleteLabel = $derived(choices.find(c => !c.builtin && c.name === draft?.name)?.label ?? choices.find(c => !c.builtin && c.name === draft?.name)?.name ?? draft?.label)
-  const replacement = $derived(draft && !draft.name ? choices.find(c => !c.builtin
-    && presetLabel(c) === draft!.label.trim() && parentOf(c.data) === parentOf(draft!.data)
-    && canonical(c.group ?? []) === canonical(folderParts(draft!.folder))) : undefined)
+  const deleteLabel = $derived(
+    choices.find((c) => !c.builtin && c.name === draft?.name)?.label ??
+      choices.find((c) => !c.builtin && c.name === draft?.name)?.name ??
+      draft?.label,
+  )
+  const replacement = $derived(
+    draft && !draft.name
+      ? choices.find(
+          (c) =>
+            !c.builtin &&
+            presetLabel(c) === draft!.label.trim() &&
+            parentOf(c.data) === parentOf(draft!.data) &&
+            canonical(c.group ?? []) === canonical(folderParts(draft!.folder)),
+        )
+      : undefined,
+  )
 
   $effect(() => {
     // The manager edits a snapshot. Refreshed library data never replaces an open draft.
@@ -127,7 +172,11 @@
     else proceed(action)
   }
   function updateData(value: T) {
-    if (draft && !busy) { draft.data = value; notice = ''; error = '' }
+    if (draft && !busy) {
+      draft.data = value
+      notice = ''
+      error = ''
+    }
   }
 
   async function save(): Promise<boolean> {
@@ -137,8 +186,13 @@
     try {
       const payload = saveDestination($state.snapshot(draft) as PresetDraft<T>, choices, parentOf)
       const saved = await savePreset(payload)
-      const choice = saved.find(c => !c.builtin && presetLabel(c) === payload.label
-        && parentOf(c.data) === parentOf(payload.data) && canonical(c.group ?? []) === canonical(payload.group))
+      const choice = saved.find(
+        (c) =>
+          !c.builtin &&
+          presetLabel(c) === payload.label &&
+          parentOf(c.data) === parentOf(payload.data) &&
+          canonical(c.group ?? []) === canonical(payload.group),
+      )
       if (!choice) throw new Error('The saved preset could not be found. Reopen the manager to refresh the library.')
       openChoice(choice)
       search = ''
@@ -192,33 +246,66 @@
   }
 </script>
 
-<Dialog.Root open onOpenChange={value => { if (!value) request({ kind: 'close' }) }}>
+<Dialog.Root
+  open
+  onOpenChange={(value) => {
+    if (!value) request({ kind: 'close' })
+  }}
+>
   <Dialog.Content
     class="flex h-[min(52rem,calc(100dvh-2rem))] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl"
     showCloseButton={false}
-    onInteractOutside={e => e.preventDefault()}
-    onEscapeKeydown={e => { e.preventDefault(); e.stopPropagation(); request({ kind: 'close' }) }}
-    onCloseAutoFocus={e => e.preventDefault()}
+    onInteractOutside={(e) => e.preventDefault()}
+    onEscapeKeydown={(e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      request({ kind: 'close' })
+    }}
+    onCloseAutoFocus={(e) => e.preventDefault()}
   >
     <Dialog.Header class="relative shrink-0 border-b p-4 pr-14">
       <Dialog.Title>{title} presets</Dialog.Title>
-      <Dialog.Description>{manageOnly ? 'Edit and save library presets here.' : 'Edit and save library presets here. Apply settings separately to the current job or template.'}</Dialog.Description>
-      <Button variant="ghost" size="icon-sm" class="absolute top-3 right-3" aria-label="Close preset manager" disabled={busy} onclick={() => request({ kind: 'close' })}><XIcon /></Button>
+      <Dialog.Description
+        >{manageOnly
+          ? 'Edit and save library presets here.'
+          : 'Edit and save library presets here. Apply settings separately to the current job or template.'}</Dialog.Description
+      >
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        class="absolute top-3 right-3"
+        aria-label="Close preset manager"
+        disabled={busy}
+        onclick={() => request({ kind: 'close' })}><XIcon /></Button
+      >
     </Dialog.Header>
-    <div class="min-h-0 flex-1 overflow-y-auto md:grid md:grid-cols-[18rem_minmax(0,1fr)] md:grid-rows-1 md:overflow-hidden">
+    <div
+      class="min-h-0 flex-1 overflow-y-auto md:grid md:grid-cols-[18rem_minmax(0,1fr)] md:grid-rows-1 md:overflow-hidden"
+    >
       <aside class="flex h-72 min-h-0 flex-col gap-3 overflow-y-auto border-b p-4 md:h-auto md:border-r md:border-b-0">
         {#if selecting}
           <div class="shrink-0 space-y-2 rounded-md border p-2">
             {#if confirmMany}
-              <p class="text-sm" role="alert">Delete {picked.length} preset{picked.length === 1 ? '' : 's'}? This can't be undone.</p>
+              <p class="text-sm" role="alert">
+                Delete {picked.length} preset{picked.length === 1 ? '' : 's'}? This can't be undone.
+              </p>
               <div class="grid grid-cols-2 gap-2">
-                <Button variant="destructive" size="sm" disabled={busy} onclick={removePicked}><Trash2Icon />Delete</Button>
-                <Button variant="outline" size="sm" disabled={busy} onclick={() => (confirmMany = false)}>Keep them</Button>
+                <Button variant="destructive" size="sm" disabled={busy} onclick={removePicked}
+                  ><Trash2Icon />Delete</Button
+                >
+                <Button variant="outline" size="sm" disabled={busy} onclick={() => (confirmMany = false)}
+                  >Keep them</Button
+                >
               </div>
             {:else}
               <p class="text-sm text-muted-foreground" aria-live="polite">{picked.length} selected</p>
               <div class="grid grid-cols-2 gap-2">
-                <Button variant="destructive" size="sm" disabled={busy || !picked.length} onclick={() => (confirmMany = true)}>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={busy || !picked.length}
+                  onclick={() => (confirmMany = true)}
+                >
                   <Trash2Icon />Delete{picked.length ? ` ${picked.length}` : ''}
                 </Button>
                 <Button variant="outline" size="sm" disabled={busy} onclick={stopSelecting}>Done</Button>
@@ -226,37 +313,86 @@
             {/if}
           </div>
         {:else}
-          <Button variant="outline" class="w-full shrink-0" disabled={busy} onclick={() => request({ kind: 'new' })}><PlusIcon />{manageOnly ? 'New preset' : 'New from current settings'}</Button>
+          <Button variant="outline" class="w-full shrink-0" disabled={busy} onclick={() => request({ kind: 'new' })}
+            ><PlusIcon />{manageOnly ? 'New preset' : 'New from current settings'}</Button
+          >
           {#if transfer}{@render transfer(draft, busy)}{/if}
         {/if}
         {#if removePresets}
-          <Button variant={selecting ? 'secondary' : 'ghost'} size="sm" class="shrink-0 self-start" aria-pressed={selecting}
-            disabled={busy || (!selecting && !choices.some(c => !c.builtin))} title="Select saved presets to delete several at once"
-            onclick={() => (selecting ? stopSelecting() : (selecting = true))}><ListChecksIcon />Select</Button>
+          <Button
+            variant={selecting ? 'secondary' : 'ghost'}
+            size="sm"
+            class="shrink-0 self-start"
+            aria-pressed={selecting}
+            disabled={busy || (!selecting && !choices.some((c) => !c.builtin))}
+            title="Select saved presets to delete several at once"
+            onclick={() => (selecting ? stopSelecting() : (selecting = true))}><ListChecksIcon />Select</Button
+          >
         {/if}
         <div class="flex min-h-52 flex-1 flex-col">
-          <PresetBrowser {title} {choices} {parents} {parentOf} {summary} {problem} {builtinLabel} allowIncompatible
-            bind:encoder bind:path bind:search {selected} disabled={busy} onselect={choice => request({ kind: 'choice', choice })}
-            {selecting} bind:picked />
+          <PresetBrowser
+            {title}
+            {choices}
+            {parents}
+            {parentOf}
+            {summary}
+            {problem}
+            {builtinLabel}
+            allowIncompatible
+            bind:encoder
+            bind:path
+            bind:search
+            {selected}
+            disabled={busy}
+            onselect={(choice) => request({ kind: 'choice', choice })}
+            {selecting}
+            bind:picked
+          />
         </div>
       </aside>
       <section class="min-h-0 min-w-0 overscroll-contain p-4 md:overflow-y-auto" aria-label="Preset editor">
         {#if draft}
           <div class="mb-5 space-y-3 border-b pb-4">
             <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>{draft.name ? 'Saved preset' : selected ? `${choices.find(c => presetKey(c) === selected)?.badge ?? builtinLabel} · save as your own preset` : 'New preset'}</span>
+              <span
+                >{draft.name
+                  ? 'Saved preset'
+                  : selected
+                    ? `${choices.find((c) => presetKey(c) === selected)?.badge ?? builtinLabel} · save as your own preset`
+                    : 'New preset'}</span
+              >
               {#if dirty}<span class="text-warning">Unsaved changes</span>{/if}
               <div class="ml-auto flex items-center gap-1">
                 <Button variant="ghost" size="sm" disabled={busy} onclick={duplicate}><CopyIcon />Duplicate</Button>
-                {#if draft.name}<Button variant="ghost" size="sm" class="hover:text-destructive" disabled={busy} onclick={() => { deleting = true; pending = null }}><Trash2Icon />Delete preset</Button>{/if}
+                {#if draft.name}<Button
+                    variant="ghost"
+                    size="sm"
+                    class="hover:text-destructive"
+                    disabled={busy}
+                    onclick={() => {
+                      deleting = true
+                      pending = null
+                    }}><Trash2Icon />Delete preset</Button
+                  >{/if}
               </div>
             </div>
             <fieldset class="grid gap-3 sm:grid-cols-2" disabled={busy}>
-              <label class="space-y-1 text-xs text-muted-foreground">Preset name
-                <Input aria-label="{title} preset name" placeholder="e.g. {nameExample}" maxlength={80} bind:value={draft.label} />
+              <label class="space-y-1 text-xs text-muted-foreground"
+                >Preset name
+                <Input
+                  aria-label="{title} preset name"
+                  placeholder="e.g. {nameExample}"
+                  maxlength={80}
+                  bind:value={draft.label}
+                />
               </label>
-              <label class="space-y-1 text-xs text-muted-foreground">Folder
-                <Input aria-label="{title} preset folder" placeholder="e.g. {folderExample}" bind:value={draft.folder} />
+              <label class="space-y-1 text-xs text-muted-foreground"
+                >Folder
+                <Input
+                  aria-label="{title} preset folder"
+                  placeholder="e.g. {folderExample}"
+                  bind:value={draft.folder}
+                />
               </label>
             </fieldset>
             <p class="text-xs text-muted-foreground">{folderHint}</p>
@@ -266,9 +402,14 @@
       </section>
     </div>
     {#if pending}
-      <div class="flex shrink-0 flex-wrap items-center gap-2 border-t border-warning/40 bg-warning/10 px-4 py-3 text-sm" role="alert">
+      <div
+        class="flex shrink-0 flex-wrap items-center gap-2 border-t border-warning/40 bg-warning/10 px-4 py-3 text-sm"
+        role="alert"
+      >
         <span class="mr-auto">Save your preset changes before continuing?</span>
-        <Button size="sm" disabled={busy || !draft?.label.trim()} onclick={() => resolve(true)}>Save and continue</Button>
+        <Button size="sm" disabled={busy || !draft?.label.trim()} onclick={() => resolve(true)}
+          >Save and continue</Button
+        >
         <Button size="sm" variant="outline" disabled={busy} onclick={() => resolve(false)}>Discard changes</Button>
         <Button size="sm" variant="ghost" disabled={busy} onclick={() => (pending = null)}>Keep editing</Button>
       </div>
@@ -287,9 +428,14 @@
       </div>
     {/if}
     <footer class="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-muted/30 p-4">
-      <Button variant="ghost" disabled={busy} onclick={() => manageOnly ? request({ kind: 'close' }) : onclose()}>{manageOnly ? 'Close' : 'Cancel'}</Button>
-      <Button variant="outline" disabled={busy || !draft?.label.trim() || (!!draft.name && !dirty)} onclick={save}><SaveIcon />{replacement ? 'Replace preset' : draft?.name ? 'Save preset' : 'Save new preset'}</Button>
-      {#if !manageOnly}<Button disabled={busy || !draft || !!applyProblem} onclick={applyDraft}>{applyLabel}</Button>{/if}
+      <Button variant="ghost" disabled={busy} onclick={() => (manageOnly ? request({ kind: 'close' }) : onclose())}
+        >{manageOnly ? 'Close' : 'Cancel'}</Button
+      >
+      <Button variant="outline" disabled={busy || !draft?.label.trim() || (!!draft.name && !dirty)} onclick={save}
+        ><SaveIcon />{replacement ? 'Replace preset' : draft?.name ? 'Save preset' : 'Save new preset'}</Button
+      >
+      {#if !manageOnly}<Button disabled={busy || !draft || !!applyProblem} onclick={applyDraft}>{applyLabel}</Button
+        >{/if}
     </footer>
   </Dialog.Content>
 </Dialog.Root>

@@ -1,7 +1,28 @@
+<script lang="ts" module>
+  import type { EncoderName as Name } from '../lib/types'
+  const optionLists = new Map<Name, Promise<OptionHelp>>()
+  function loadOptions(encoder: Name): Promise<OptionHelp> {
+    let p = optionLists.get(encoder)
+    if (!p) {
+      p = api.videoOptions(encoder).then((r) => new Map(r.options.map((o) => [o.name, o.help])))
+      p.catch(() => optionLists.delete(encoder)) // try again next time
+      optionLists.set(encoder, p)
+    }
+    return p
+  }
+</script>
+
 <script lang="ts">
   // Encoder settings (x264 / x265, VP8 / VP9 through ffmpeg, SVT-AV1): rate control, preset, tune, bit depth, options, extra args.
   // Emits a fresh copy on every change; the parent decides when to save.
-  import { ENCODERS, type EncoderName, type EncoderSettings, type RateControl, type SizeBudget, type VideoHdr } from '../lib/types'
+  import {
+    ENCODERS,
+    type EncoderName,
+    type EncoderSettings,
+    type RateControl,
+    type SizeBudget,
+    type VideoHdr,
+  } from '../lib/types'
   import { untrack, type Snippet } from 'svelte'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import XIcon from '@lucide/svelte/icons/x'
@@ -40,7 +61,12 @@
   } = $props()
 
   // StaxRip's size menu (MB) and its default target size
-  const SIZES: [number, string][] = [[4700, 'DVD / BD-5'], [8540, 'DVD-DL / BD-9'], [25000, 'BD'], [50000, 'BD-DL']]
+  const SIZES: [number, string][] = [
+    [4700, 'DVD / BD-5'],
+    [8540, 'DVD-DL / BD-9'],
+    [25000, 'BD'],
+    [50000, 'BD-DL'],
+  ]
   const SIZE_SUGGESTIONS = SIZES.map(([size, label]) => ({ value: String(size), label }))
   const DEFAULT_SIZE = 5000
   const sized = $derived(value.rate_control === '2pass' && value.target_mb !== null)
@@ -70,19 +96,29 @@
   // H.265 MaxBR (kb/s) by level x 10, [Main tier, High tier]: Dolby Vision fills a missing --vbv-maxrate /
   // --vbv-bufsize from --level-idc (High tier unless --no-high-tier), as encoders.level_vbv does
   const LEVEL_KBPS: Record<number, [number, number]> = {
-    10: [128, 128], 20: [1500, 1500], 21: [3000, 3000], 30: [6000, 6000], 31: [10000, 10000], 40: [12000, 30000],
-    41: [20000, 50000], 50: [25000, 100000], 51: [40000, 160000], 52: [60000, 240000], 60: [60000, 240000],
-    61: [120000, 480000], 62: [240000, 800000],
+    10: [128, 128],
+    20: [1500, 1500],
+    21: [3000, 3000],
+    30: [6000, 6000],
+    31: [10000, 10000],
+    40: [12000, 30000],
+    41: [20000, 50000],
+    50: [25000, 100000],
+    51: [40000, 160000],
+    52: [60000, 240000],
+    60: [60000, 240000],
+    61: [120000, 480000],
+    62: [240000, 800000],
   }
   // the VBV flags filled from the level ([] when both are set, null when one is missing and the level can't fill it)
   const levelVbv = $derived.by(() => {
-    const missing = ['vbv-maxrate', 'vbv-bufsize'].filter(f => !value.options[f])
+    const missing = ['vbv-maxrate', 'vbv-bufsize'].filter((f) => !value.options[f])
     if (!missing.length) return []
     const level = parseFloat(value.options['level-idc'] ?? '')
     const kbps = LEVEL_KBPS[level < 10 ? Math.round(10 * level) : Math.trunc(level)]
     if (!kbps) return null
     const rate = 'no-high-tier' in value.options ? kbps[0] : kbps[1]
-    return missing.flatMap(f => [`--${f}`, String(rate)])
+    return missing.flatMap((f) => [`--${f}`, String(rate)])
   })
 
   const HDR_TRANSFERS = ['smpte2084', 'arib-std-b67'] // PQ, HLG
@@ -101,14 +137,43 @@
   const svt = $derived(value.encoder === 'svtav1')
   // SvtAv1EncApp's CRF range, in quarter steps (encoders.SVTAV1_CRF)
   const SVT_CRF: [number, number] = [1, 70]
-  const X26X_PRESETS: [string, string][] = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'].map(
-    p => [p, p],
-  )
-  const VPX_PRESETS: [string, string][] = [['6', '6 - Fastest'], ['5', '5 - Faster'], ['4', '4 - Fast'], ['3', '3 - Medium'], ['2', '2 - Slow'], ['1', '1 - Slower'], ['0', '0 - Slowest']]
+  const X26X_PRESETS: [string, string][] = [
+    'ultrafast',
+    'superfast',
+    'veryfast',
+    'faster',
+    'fast',
+    'medium',
+    'slow',
+    'slower',
+    'veryslow',
+    'placebo',
+  ].map((p) => [p, p])
+  const VPX_PRESETS: [string, string][] = [
+    ['6', '6 - Fastest'],
+    ['5', '5 - Faster'],
+    ['4', '4 - Fast'],
+    ['3', '3 - Medium'],
+    ['2', '2 - Slow'],
+    ['1', '1 - Slower'],
+    ['0', '0 - Slowest'],
+  ]
   // StaxRip's names for SvtAv1EncApp's presets 0-13 (-1 is for debugging), fastest first
   const SVT_PRESETS: [string, string][] = [
-    'Slowest', 'Extreme Slow', 'Ultra Slow', 'Very Slow', 'Slower', 'Slow', 'Medium', 'Fast', 'Faster', 'Very Fast', 'Mega Fast',
-    'Ultra Fast', 'Extreme Fast', 'Fastest',
+    'Slowest',
+    'Extreme Slow',
+    'Ultra Slow',
+    'Very Slow',
+    'Slower',
+    'Slow',
+    'Medium',
+    'Fast',
+    'Faster',
+    'Very Fast',
+    'Mega Fast',
+    'Ultra Fast',
+    'Extreme Fast',
+    'Fastest',
   ]
     .map((name, n): [string, string] => [String(n), `${n} - ${name}`])
     .reverse()
@@ -119,7 +184,13 @@
     vp9: VPX_PRESETS,
     svtav1: SVT_PRESETS,
   }
-  const DEFAULT_PRESET: Record<EncoderName, string> = { x264: 'slower', x265: 'slower', vp8: '1', vp9: '1', svtav1: '4' }
+  const DEFAULT_PRESET: Record<EncoderName, string> = {
+    x264: 'slower',
+    x265: 'slower',
+    vp8: '1',
+    vp9: '1',
+    svtav1: '4',
+  }
   const named = (names: string[]) => names.map((t): [string, string] => [t, t])
   // [value, label]
   const TUNES: Record<EncoderName, [string, string][]> = {
@@ -128,9 +199,22 @@
     vp8: [],
     vp9: [],
     // SvtAv1EncApp's --tune (1, PSNR, is its default)
-    svtav1: [['0', '0 - VQ'], ['1', '1 - PSNR'], ['2', '2 - SSIM'], ['3', '3 - Image quality'], ['4', '4 - MS-SSIM / SSIMULACRA2'], ['5', '5 - VMAF']],
+    svtav1: [
+      ['0', '0 - VQ'],
+      ['1', '1 - PSNR'],
+      ['2', '2 - SSIM'],
+      ['3', '3 - Image quality'],
+      ['4', '4 - MS-SSIM / SSIMULACRA2'],
+      ['5', '5 - VMAF'],
+    ],
   }
-  const DEPTHS: Record<EncoderName, number[]> = { x264: [8, 10], x265: [8, 10, 12], vp8: [8], vp9: [8, 10, 12], svtav1: [8, 10] }
+  const DEPTHS: Record<EncoderName, number[]> = {
+    x264: [8, 10],
+    x265: [8, 10, 12],
+    vp8: [8],
+    vp9: [8, 10, 12],
+    svtav1: [8, 10],
+  }
   // what encoders.VP9_DEFAULTS writes before the options (StaxRip's, plus row-mt)
   const VP9_DEFAULTS = '-tile-columns 6 -frame-parallel 1 -auto-alt-ref 1 -lag-in-frames 25 -row-mt 1'
   const dashes = $derived(vpx ? '-' : '--')
@@ -143,13 +227,22 @@
   // The encoder's option names from its own help (one request per encoder for the page's life): suggestions, what
   // each option does, and a hint when the encoder doesn't list one (the plan warns too)
   let known = $state<OptionHelp | null>(null)
-  const optionSuggestions = $derived([...(known ?? new Map()).entries()].map(([name, help]) => ({ value: name, label: help })))
+  const optionSuggestions = $derived(
+    [...(known ?? new Map()).entries()].map(([name, help]) => ({ value: name, label: help })),
+  )
   $effect(() => {
     const enc = value.encoder
     known = null
     let current = true
-    loadOptions(enc).then(m => { if (current) known = m }, () => {})
-    return () => { current = false }
+    loadOptions(enc).then(
+      (m) => {
+        if (current) known = m
+      },
+      () => {},
+    )
+    return () => {
+      current = false
+    }
   })
   const hint = (name: string) => unknownHint(name, known, dashes, encoderLabel)
   const extraHints = $derived(extraFlags(value.extra, dashes).map(hint).filter(Boolean))
@@ -183,30 +276,20 @@
   function addOption() {
     const { pairs, skipped } = parseOptions(newKey, dashes)
     if (pairs.length === 1 && !pairs[0][1]) pairs[0][1] = newValue.trim()
-    notAdded = skipped.length ? `Not added: ${skipped.join(' ')} (short flags and values with no option: Extra arguments)` : ''
+    notAdded = skipped.length
+      ? `Not added: ${skipped.join(' ')} (short flags and values with no option: Extra arguments)`
+      : ''
     if (!pairs.length) return
     onchange({ ...value, options: { ...value.options, ...Object.fromEntries(pairs) } })
     newKey = newValue = ''
   }
 </script>
 
-<script lang="ts" module>
-  import type { EncoderName as Name } from '../lib/types'
-  const optionLists = new Map<Name, Promise<OptionHelp>>()
-  function loadOptions(encoder: Name): Promise<OptionHelp> {
-    let p = optionLists.get(encoder)
-    if (!p) {
-      p = api.videoOptions(encoder).then(r => new Map(r.options.map(o => [o.name, o.help])))
-      p.catch(() => optionLists.delete(encoder)) // try again next time
-      optionLists.set(encoder, p)
-    }
-    return p
-  }
-</script>
-
 <fieldset class="@container/encoder min-w-0 space-y-4" {disabled}>
   <!-- Respond to the panel's width: template cards can be narrow even in a wide window. -->
-  <div class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-4 gap-y-3 @min-[32rem]/encoder:grid-cols-[9rem_minmax(0,1fr)]">
+  <div
+    class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-4 gap-y-3 @min-[32rem]/encoder:grid-cols-[9rem_minmax(0,1fr)]"
+  >
     <span class="section-label">Encoder</span>
     <ToggleGroup.Root
       type="single"
@@ -216,10 +299,12 @@
       aria-label="Encoder"
       {disabled}
       value={value.encoder}
-      onValueChange={v => v && set('encoder', v as EncoderName)}
+      onValueChange={(v) => v && set('encoder', v as EncoderName)}
     >
       {#each ENCODERS as [enc, label] (enc)}
-        <ToggleGroup.Item value={enc} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">{label}</ToggleGroup.Item>
+        <ToggleGroup.Item value={enc} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          >{label}</ToggleGroup.Item
+        >
       {/each}
     </ToggleGroup.Root>
 
@@ -230,7 +315,11 @@
 
     <span class="section-label">Rate control</span>
     <div class="flex flex-wrap items-center gap-2">
-      <NativeSelect value={value.rate_control} aria-label="Rate control" onchange={e => set('rate_control', e.currentTarget.value as RateControl)}>
+      <NativeSelect
+        value={value.rate_control}
+        aria-label="Rate control"
+        onchange={(e) => set('rate_control', e.currentTarget.value as RateControl)}
+      >
         <option value="crf">CRF (constant quality)</option>
         <option value="abr">Bitrate, 1 pass</option>
         <option value="2pass">Bitrate, 2 passes</option>
@@ -244,7 +333,7 @@
           min={svt ? SVT_CRF[0] : 0}
           max={vpx ? 63 : svt ? SVT_CRF[1] : 51}
           value={value.crf}
-          onchange={e => set('crf', +(e.target as HTMLInputElement).value)}
+          onchange={(e) => set('crf', +(e.target as HTMLInputElement).value)}
         />
       {:else if sized}
         <SuggestInput
@@ -255,8 +344,8 @@
           step="100"
           min="1"
           value={value.target_mb}
-          onpick={v => set('target_mb', +v)}
-          onchange={e => {
+          onpick={(v) => set('target_mb', +v)}
+          onchange={(e) => {
             const n = Math.round(+(e.target as HTMLInputElement).value)
             set('target_mb', n > 0 ? n : DEFAULT_SIZE)
           }}
@@ -269,14 +358,14 @@
           step="100"
           min="100"
           value={value.bitrate_kbps}
-          onchange={e => set('bitrate_kbps', +(e.target as HTMLInputElement).value)}
+          onchange={(e) => set('bitrate_kbps', +(e.target as HTMLInputElement).value)}
         />
       {/if}
       {#if value.rate_control === '2pass'}
         <NativeSelect
           value={sized ? 'mb' : 'kbps'}
           aria-label="Bitrate or size"
-          onchange={e => set('target_mb', e.currentTarget.value === 'mb' ? DEFAULT_SIZE : null)}
+          onchange={(e) => set('target_mb', e.currentTarget.value === 'mb' ? DEFAULT_SIZE : null)}
         >
           <option value="kbps">kb/s</option>
           <option value="mb">MB (file size)</option>
@@ -288,15 +377,15 @@
     {#if sized}
       <span class="hidden @min-[32rem]/encoder:block"></span>
       <div class="text-xs text-muted-foreground">
-        The video gets what the size leaves: less the audio, subtitles, attachments, HDR metadata and container overhead, over
-        the length (StaxRip's sum). Pass 2 counts the encoded audio's files.
+        The video gets what the size leaves: less the audio, subtitles, attachments, HDR metadata and container
+        overhead, over the length (StaxRip's sum). Pass 2 counts the encoded audio's files.
         {#if budget === null}
           <span class="block">Worked out once the job is planned.</span>
         {:else if budget}
           <span class="mt-1 block text-foreground">
-            ≈ {budget.kbps.toLocaleString()} kb/s for the video ({mb(budget.video)} over {duration(budget.seconds)}){spent.length
-              ? `: ${mb(budget.target)} less ${spent.join(', ')}`
-              : ''}
+            ≈ {budget.kbps.toLocaleString()} kb/s for the video ({mb(budget.video)} over {duration(
+              budget.seconds,
+            )}){spent.length ? `: ${mb(budget.target)} less ${spent.join(', ')}` : ''}
           </span>
           {#if budget.video <= 0}
             <span class="mt-1 block text-destructive">The size leaves nothing for the video.</span>
@@ -309,21 +398,36 @@
     {/if}
 
     <span class="section-label">Speed preset</span>
-    <NativeSelect class="w-48 max-w-full" value={value.preset} aria-label="Speed preset" onchange={e => set('preset', e.currentTarget.value)}>
+    <NativeSelect
+      class="w-48 max-w-full"
+      value={value.preset}
+      aria-label="Speed preset"
+      onchange={(e) => set('preset', e.currentTarget.value)}
+    >
       <option value="">(encoder default)</option>
       {#each PRESETS[value.encoder] as [p, label] (p)}<option value={p}>{label}</option>{/each}
     </NativeSelect>
 
     {#if TUNES[value.encoder].length}
       <span class="section-label">Tune</span>
-      <NativeSelect class="w-full max-w-sm" value={value.tune} aria-label="Tune" onchange={e => set('tune', e.currentTarget.value)}>
+      <NativeSelect
+        class="w-full max-w-sm"
+        value={value.tune}
+        aria-label="Tune"
+        onchange={(e) => set('tune', e.currentTarget.value)}
+      >
         <option value="">none</option>
         {#each TUNES[value.encoder] as [t, label] (t)}<option value={t}>{label}</option>{/each}
       </NativeSelect>
     {/if}
 
     <span class="section-label">Bit depth</span>
-    <NativeSelect class="w-24 max-w-full" value={value.depth} aria-label="Bit depth" onchange={e => set('depth', +e.currentTarget.value)}>
+    <NativeSelect
+      class="w-24 max-w-full"
+      value={value.depth}
+      aria-label="Bit depth"
+      onchange={(e) => set('depth', +e.currentTarget.value)}
+    >
       {#each DEPTHS[value.encoder] as d (d)}<option value={d}>{d}-bit</option>{/each}
     </NativeSelect>
   </div>
@@ -331,185 +435,257 @@
   <details bind:open={advancedOpen} class="rounded-lg border p-3">
     <summary class="cursor-pointer text-sm font-medium">Advanced settings and HDR</summary>
     <div class="space-y-4 pt-4">
-  <label class="flex items-start gap-3 text-sm">
-    <Checkbox class="mt-0.5" checked={value.source_color} {disabled} onCheckedChange={v => set('source_color', v)} />
-    <span class="min-w-0">
-      Colour from the source
-      <span class="block text-xs text-muted-foreground">
-        Tags the encode with the source's colour description{value.encoder === 'x265' || svt ? ' and HDR10 metadata' : ''}
-        (vspipe passes none on){value.encoder === 'x265' ? ', with --repeat-headers --hrd --aud for HDR10 as StaxRip sets them' : ''}.
-        {#if vpx}
-          {value.encoder === 'vp9' ? 'VP9 holds the matrix and range in the stream' : 'VP8 holds none in the stream'}: the mux
-          tags the container with the colour (and the pixel aspect). An HDR10 mastering display and light levels aren't carried yet.
-        {:else if svt}
-          AV1 holds them in the stream; the mux tags an MKV's track with them too (mkvmerge doesn't copy them), and the pixel
-          aspect. An option below with the same flag wins.
-        {:else}
-          An option below with the same flag wins (--no-hrd turns one off).
-        {/if}
-        Untick it when the script changes the colours.
-      </span>
-      {#if colorArgs !== undefined}
-        {#if colorArgs === null}
-          <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
-        {:else if !colorArgs.length}
-          <span class="block text-xs text-muted-foreground">The source doesn't describe its colours.</span>
-        {:else}
-          <code class="mt-1 block font-mono text-xs break-all {value.source_color ? '' : 'text-muted-foreground line-through'}"
-            >{colorArgs.join(' ')}</code
-          >
-        {/if}
-        {#if hdr && value.source_color && value.depth < 10}
-          <span class="mt-1 block text-xs text-warning">An HDR source: encode it at 10-bit.</span>
-        {/if}
-      {/if}
-    </span>
-  </label>
-
-  <label class="flex items-start gap-3 text-sm">
-    <Checkbox class="mt-0.5" checked={value.hdr10plus} {disabled} onCheckedChange={v => set('hdr10plus', v)} />
-    <span class="min-w-0">
-      HDR10+ from the source
-      <span class="block text-xs text-muted-foreground">
-        x265: carries a source's HDR10+ metadata into the encode (hdr10plus_tool reads it, x265's --dhdr10-info writes it). Needs a
-        10-bit encode and a script that keeps every frame (no trims).
-      </span>
-      {#if hdr10plus !== undefined}
-        {#if hdr10plus === null}
-          <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
-        {:else if !hdr10plus}
-          <span class="block text-xs text-muted-foreground">The source has no HDR10+.</span>
-        {:else if value.encoder !== 'x265'}
-          <span class="mt-1 block text-xs text-warning">{encoderLabel} can't carry HDR10+: the encode keeps HDR10 only.</span>
-        {:else}
-          <code class="mt-1 block font-mono text-xs break-all {value.hdr10plus ? '' : 'text-muted-foreground line-through'}"
-            >--dhdr10-info hdr10plus.json</code
-          >
-          {#if value.hdr10plus && value.depth < 10}
-            <span class="mt-1 block text-xs text-warning">HDR10+ needs a 10-bit encode.</span>
-          {/if}
-        {/if}
-      {/if}
-    </span>
-  </label>
-
-  <label class="flex items-start gap-3 text-sm">
-    <Checkbox class="mt-0.5" checked={value.dolby_vision} {disabled} onCheckedChange={v => set('dolby_vision', v)} />
-    <span class="min-w-0">
-      Dolby Vision from the source
-      <span class="block text-xs text-muted-foreground">
-        x265: carries a source's Dolby Vision into the encode as profile 8.1, or a profile 5 as 5 (dovi_tool reads the RPU and moves its active
-        area with the crop and resize). Needs a 10-bit encode, --vbv-maxrate and --vbv-bufsize (or --level-idc, whose max
-        bitrate fills the ones not set), and a script that keeps every
-        frame. A FEL's enhancement layer is baked into the picture first (felbaker). 8.4 (HLG) isn't carried yet.
-      </span>
-      {#if dv !== undefined}
-        {#if dv === null}
-          <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
-        {:else if !dv || !dv.dv_profile}
-          <span class="block text-xs text-muted-foreground">The source has no Dolby Vision.</span>
-        {:else if dv.dv_profile === 5 && (value.encoder !== 'x265' || !value.dolby_vision)}
-          <span class="mt-1 block text-xs text-warning">Profile 5 has no HDR10 layer: without its RPU the encode's colours look wrong, unless the script maps them.</span>
-        {:else if value.encoder !== 'x265'}
-          <span class="mt-1 block text-xs text-warning">{encoderLabel} can't carry Dolby Vision: the encode keeps the HDR10 layer.</span>
-        {:else}
-          <code class="mt-1 block font-mono text-xs break-all {value.dolby_vision ? '' : 'text-muted-foreground line-through'}"
-            >--dolby-vision-profile {dv.dv_profile === 5 ? '5' : '8.1'} --dolby-vision-rpu dv_rpu.bin{levelVbv?.length ? ' ' + levelVbv.join(' ') : ''}</code
-          >
-          {#if value.dolby_vision}
-            {#if dv.dv_compat === 4}
-              <span class="mt-1 block text-xs text-warning">Dolby Vision 8.4 (HLG) isn't carried yet: untick it to keep the HLG layer.</span>
+      <label class="flex items-start gap-3 text-sm">
+        <Checkbox
+          class="mt-0.5"
+          checked={value.source_color}
+          {disabled}
+          onCheckedChange={(v) => set('source_color', v)}
+        />
+        <span class="min-w-0">
+          Colour from the source
+          <span class="block text-xs text-muted-foreground">
+            Tags the encode with the source's colour description{value.encoder === 'x265' || svt
+              ? ' and HDR10 metadata'
+              : ''}
+            (vspipe passes none on){value.encoder === 'x265'
+              ? ', with --repeat-headers --hrd --aud for HDR10 as StaxRip sets them'
+              : ''}.
+            {#if vpx}
+              {value.encoder === 'vp9'
+                ? 'VP9 holds the matrix and range in the stream'
+                : 'VP8 holds none in the stream'}: the mux tags the container with the colour (and the pixel aspect). An
+              HDR10 mastering display and light levels aren't carried yet.
+            {:else if svt}
+              AV1 holds them in the stream; the mux tags an MKV's track with them too (mkvmerge doesn't copy them), and
+              the pixel aspect. An option below with the same flag wins.
+            {:else}
+              An option below with the same flag wins (--no-hrd turns one off).
             {/if}
-            {#if dv.dv_profile === 7 && dv.dv_el === 'FEL'}
-              <span class="mt-1 block text-xs text-muted-foreground">FEL: its enhancement layer is baked into the picture (FFMS2 or L-SMASH), and the HDR10 values come from the RPU.</span>
-            {:else if dv.dv_profile === 7 && dv.dv_el !== 'MEL'}
-              <span class="mt-1 block text-xs text-warning">The enhancement layer's kind (FEL or MEL) couldn't be read: untick it to keep the base layer.</span>
-            {/if}
-            {#if value.depth !== 10}
-              <span class="mt-1 block text-xs text-warning">Dolby Vision needs a 10-bit encode.</span>
-            {/if}
-            {#if levelVbv === null}
-              <span class="mt-1 block text-xs text-warning"
-                >Add --vbv-maxrate and --vbv-bufsize below, or --level-idc to fill them with its max bitrate (x265 needs VBV for Dolby
-                Vision).</span
+            Untick it when the script changes the colours.
+          </span>
+          {#if colorArgs !== undefined}
+            {#if colorArgs === null}
+              <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
+            {:else if !colorArgs.length}
+              <span class="block text-xs text-muted-foreground">The source doesn't describe its colours.</span>
+            {:else}
+              <code
+                class="mt-1 block font-mono text-xs break-all {value.source_color
+                  ? ''
+                  : 'text-muted-foreground line-through'}">{colorArgs.join(' ')}</code
               >
             {/if}
+            {#if hdr && value.source_color && value.depth < 10}
+              <span class="mt-1 block text-xs text-warning">An HDR source: encode it at 10-bit.</span>
+            {/if}
           {/if}
-        {/if}
-      {/if}
-    </span>
-  </label>
+        </span>
+      </label>
 
-  <div>
-    <div class="section-label mb-2">Options ({dashes}name value, in order; an empty value is a flag)</div>
-    {#if value.encoder === 'vp9'}
-      <p class="mb-2 text-xs text-muted-foreground">
-        ffmpeg's libvpx-vp9 options. Before them, StaxRip's VP9 defaults (one set here wins): <code class="font-mono">{VP9_DEFAULTS}</code>
-      </p>
-    {:else if vpx}
-      <p class="mb-2 text-xs text-muted-foreground">ffmpeg's libvpx options.</p>
-    {:else if svt}
-      <p class="mb-2 text-xs text-muted-foreground">
-        SvtAv1EncApp's options (--enable-variance-boost 1, --film-grain 8, ...). Before them, <code class="font-mono">--progress 2</code>
-        (the progress the queue reads). The chapters' keyframes are forced in CRF only.
-      </p>
-    {/if}
-    <div class="overflow-hidden rounded-lg border">
-      {#each Object.entries(value.options) as [key, val] (key)}
-        {@const warn = hint(key)}
-        <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 border-b border-border/60 px-2 py-1 last:border-b-0">
-          <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
-          <SuggestInput
-            class="font-mono text-xs {warn ? 'border-warning' : ''}"
-            value={key}
-            suggestions={optionSuggestions}
-            title={known?.get(key) || undefined}
-            aria-label="Option name"
-            onpick={name => setOption(key, val, name)}
-            onchange={e => setOption(key, val, (e.target as HTMLInputElement).value.trim().replace(/^-+/, ''))}
-          />
-          <Input
-            class="min-w-0 font-mono text-xs"
-            value={val}
-            aria-label="{dashes}{key} value"
-            placeholder="(flag)"
-            onchange={e => setOption(key, (e.target as HTMLInputElement).value.trim())}
-          />
-          <Button variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" onclick={() => setOption(key, null)} aria-label="Remove">
-            <XIcon />
-          </Button>
-          {#if warn}
-            <p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{warn}</p>
-          {:else if known?.get(key)}
-            <p class="col-start-2 col-end-5 truncate pb-0.5 text-xs text-muted-foreground" title={known.get(key)}>{known.get(key)}</p>
+      <label class="flex items-start gap-3 text-sm">
+        <Checkbox class="mt-0.5" checked={value.hdr10plus} {disabled} onCheckedChange={(v) => set('hdr10plus', v)} />
+        <span class="min-w-0">
+          HDR10+ from the source
+          <span class="block text-xs text-muted-foreground">
+            x265: carries a source's HDR10+ metadata into the encode (hdr10plus_tool reads it, x265's --dhdr10-info
+            writes it). Needs a 10-bit encode and a script that keeps every frame (no trims).
+          </span>
+          {#if hdr10plus !== undefined}
+            {#if hdr10plus === null}
+              <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
+            {:else if !hdr10plus}
+              <span class="block text-xs text-muted-foreground">The source has no HDR10+.</span>
+            {:else if value.encoder !== 'x265'}
+              <span class="mt-1 block text-xs text-warning"
+                >{encoderLabel} can't carry HDR10+: the encode keeps HDR10 only.</span
+              >
+            {:else}
+              <code
+                class="mt-1 block font-mono text-xs break-all {value.hdr10plus
+                  ? ''
+                  : 'text-muted-foreground line-through'}">--dhdr10-info hdr10plus.json</code
+              >
+              {#if value.hdr10plus && value.depth < 10}
+                <span class="mt-1 block text-xs text-warning">HDR10+ needs a 10-bit encode.</span>
+              {/if}
+            {/if}
           {/if}
+        </span>
+      </label>
+
+      <label class="flex items-start gap-3 text-sm">
+        <Checkbox
+          class="mt-0.5"
+          checked={value.dolby_vision}
+          {disabled}
+          onCheckedChange={(v) => set('dolby_vision', v)}
+        />
+        <span class="min-w-0">
+          Dolby Vision from the source
+          <span class="block text-xs text-muted-foreground">
+            x265: carries a source's Dolby Vision into the encode as profile 8.1, or a profile 5 as 5 (dovi_tool reads
+            the RPU and moves its active area with the crop and resize). Needs a 10-bit encode, --vbv-maxrate and
+            --vbv-bufsize (or --level-idc, whose max bitrate fills the ones not set), and a script that keeps every
+            frame. A FEL's enhancement layer is baked into the picture first (felbaker). 8.4 (HLG) isn't carried yet.
+          </span>
+          {#if dv !== undefined}
+            {#if dv === null}
+              <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
+            {:else if !dv || !dv.dv_profile}
+              <span class="block text-xs text-muted-foreground">The source has no Dolby Vision.</span>
+            {:else if dv.dv_profile === 5 && (value.encoder !== 'x265' || !value.dolby_vision)}
+              <span class="mt-1 block text-xs text-warning"
+                >Profile 5 has no HDR10 layer: without its RPU the encode's colours look wrong, unless the script maps
+                them.</span
+              >
+            {:else if value.encoder !== 'x265'}
+              <span class="mt-1 block text-xs text-warning"
+                >{encoderLabel} can't carry Dolby Vision: the encode keeps the HDR10 layer.</span
+              >
+            {:else}
+              <code
+                class="mt-1 block font-mono text-xs break-all {value.dolby_vision
+                  ? ''
+                  : 'text-muted-foreground line-through'}"
+                >--dolby-vision-profile {dv.dv_profile === 5 ? '5' : '8.1'} --dolby-vision-rpu dv_rpu.bin{levelVbv?.length
+                  ? ' ' + levelVbv.join(' ')
+                  : ''}</code
+              >
+              {#if value.dolby_vision}
+                {#if dv.dv_compat === 4}
+                  <span class="mt-1 block text-xs text-warning"
+                    >Dolby Vision 8.4 (HLG) isn't carried yet: untick it to keep the HLG layer.</span
+                  >
+                {/if}
+                {#if dv.dv_profile === 7 && dv.dv_el === 'FEL'}
+                  <span class="mt-1 block text-xs text-muted-foreground"
+                    >FEL: its enhancement layer is baked into the picture (FFMS2 or L-SMASH), and the HDR10 values come
+                    from the RPU.</span
+                  >
+                {:else if dv.dv_profile === 7 && dv.dv_el !== 'MEL'}
+                  <span class="mt-1 block text-xs text-warning"
+                    >The enhancement layer's kind (FEL or MEL) couldn't be read: untick it to keep the base layer.</span
+                  >
+                {/if}
+                {#if value.depth !== 10}
+                  <span class="mt-1 block text-xs text-warning">Dolby Vision needs a 10-bit encode.</span>
+                {/if}
+                {#if levelVbv === null}
+                  <span class="mt-1 block text-xs text-warning"
+                    >Add --vbv-maxrate and --vbv-bufsize below, or --level-idc to fill them with its max bitrate (x265
+                    needs VBV for Dolby Vision).</span
+                  >
+                {/if}
+              {/if}
+            {/if}
+          {/if}
+        </span>
+      </label>
+
+      <div>
+        <div class="section-label mb-2">Options ({dashes}name value, in order; an empty value is a flag)</div>
+        {#if value.encoder === 'vp9'}
+          <p class="mb-2 text-xs text-muted-foreground">
+            ffmpeg's libvpx-vp9 options. Before them, StaxRip's VP9 defaults (one set here wins): <code
+              class="font-mono">{VP9_DEFAULTS}</code
+            >
+          </p>
+        {:else if vpx}
+          <p class="mb-2 text-xs text-muted-foreground">ffmpeg's libvpx options.</p>
+        {:else if svt}
+          <p class="mb-2 text-xs text-muted-foreground">
+            SvtAv1EncApp's options (--enable-variance-boost 1, --film-grain 8, ...). Before them, <code
+              class="font-mono">--progress 2</code
+            >
+            (the progress the queue reads). The chapters' keyframes are forced in CRF only.
+          </p>
+        {/if}
+        <div class="overflow-hidden rounded-lg border">
+          {#each Object.entries(value.options) as [key, val] (key)}
+            {@const warn = hint(key)}
+            <div
+              class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 border-b border-border/60 px-2 py-1 last:border-b-0"
+            >
+              <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
+              <SuggestInput
+                class="font-mono text-xs {warn ? 'border-warning' : ''}"
+                value={key}
+                suggestions={optionSuggestions}
+                title={known?.get(key) || undefined}
+                aria-label="Option name"
+                onpick={(name) => setOption(key, val, name)}
+                onchange={(e) => setOption(key, val, (e.target as HTMLInputElement).value.trim().replace(/^-+/, ''))}
+              />
+              <Input
+                class="min-w-0 font-mono text-xs"
+                value={val}
+                aria-label="{dashes}{key} value"
+                placeholder="(flag)"
+                onchange={(e) => setOption(key, (e.target as HTMLInputElement).value.trim())}
+              />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                class="text-muted-foreground hover:text-destructive"
+                onclick={() => setOption(key, null)}
+                aria-label="Remove"
+              >
+                <XIcon />
+              </Button>
+              {#if warn}
+                <p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{warn}</p>
+              {:else if known?.get(key)}
+                <p class="col-start-2 col-end-5 truncate pb-0.5 text-xs text-muted-foreground" title={known.get(key)}>
+                  {known.get(key)}
+                </p>
+              {/if}
+            </div>
+          {/each}
+          <div
+            class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 bg-muted/50 px-2 py-1"
+          >
+            <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
+            <SuggestInput
+              class="font-mono text-xs"
+              placeholder="name, or paste {dashes}ref 4 {dashes}bframes 8"
+              title="One option name, or a whole command line: Enter adds a row for each option"
+              aria-label="New option name"
+              suggestions={optionSuggestions}
+              bind:value={newKey}
+              oninput={() => (notAdded = '')}
+              onkeydown={(e) => e.key === 'Enter' && addOption()}
+            />
+            <Input
+              class="min-w-0 font-mono text-xs"
+              placeholder="value"
+              aria-label="New option value"
+              bind:value={newValue}
+              onkeydown={(e) => e.key === 'Enter' && addOption()}
+            />
+            <Button variant="ghost" size="icon-sm" onclick={addOption} aria-label="Add"><PlusIcon /></Button>
+            {#if newName && hint(newName)}
+              <p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{hint(newName)}</p>
+            {:else if newName && known?.get(newName)}
+              <p class="col-start-2 col-end-5 truncate pb-0.5 text-xs text-muted-foreground" title={known.get(newName)}>
+                {known.get(newName)}
+              </p>
+            {/if}
+            {#if notAdded}<p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{notAdded}</p>{/if}
+          </div>
         </div>
-      {/each}
-      <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 bg-muted/50 px-2 py-1">
-        <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
-        <SuggestInput class="font-mono text-xs" placeholder="name, or paste {dashes}ref 4 {dashes}bframes 8" title="One option name, or a whole command line: Enter adds a row for each option" aria-label="New option name" suggestions={optionSuggestions} bind:value={newKey} oninput={() => (notAdded = '')} onkeydown={e => e.key === 'Enter' && addOption()} />
-        <Input class="min-w-0 font-mono text-xs" placeholder="value" aria-label="New option value" bind:value={newValue} onkeydown={e => e.key === 'Enter' && addOption()} />
-        <Button variant="ghost" size="icon-sm" onclick={addOption} aria-label="Add"><PlusIcon /></Button>
-        {#if newName && hint(newName)}
-          <p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{hint(newName)}</p>
-        {:else if newName && known?.get(newName)}
-          <p class="col-start-2 col-end-5 truncate pb-0.5 text-xs text-muted-foreground" title={known.get(newName)}>{known.get(newName)}</p>
-        {/if}
-        {#if notAdded}<p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{notAdded}</p>{/if}
       </div>
-    </div>
-  </div>
 
-  <label class="block">
-    <span class="section-label">Extra arguments</span>
-    <Input
-      class="mt-1 w-full font-mono text-xs"
-      value={value.extra}
-      placeholder="appended as typed"
-      onchange={e => set('extra', (e.target as HTMLInputElement).value)}
-    />
-    {#each extraHints as warn (warn)}<span class="mt-1 block text-xs text-warning">{warn}</span>{/each}
-  </label>
+      <label class="block">
+        <span class="section-label">Extra arguments</span>
+        <Input
+          class="mt-1 w-full font-mono text-xs"
+          value={value.extra}
+          placeholder="appended as typed"
+          onchange={(e) => set('extra', (e.target as HTMLInputElement).value)}
+        />
+        {#each extraHints as warn (warn)}<span class="mt-1 block text-xs text-warning">{warn}</span>{/each}
+      </label>
     </div>
   </details>
 </fieldset>

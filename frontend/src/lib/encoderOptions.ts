@@ -7,7 +7,7 @@ export type OptionHelp = Map<string, string> // name (no dashes) -> its help lin
 // any stream specifier dropped: -b:v -> b). Quoted values aren't flags; short flags (-p) aren't checked.
 export function extraFlags(extra: string, dashes: string): string[] {
   const words = extra.match(/"[^"]*"|\S+/g) ?? []
-  const names = words.flatMap(w => {
+  const names = words.flatMap((w) => {
     const flag = w.split('=')[0]
     if (dashes === '-') return /^-[A-Za-z]/.test(flag) ? [flag.slice(1).split(':')[0]] : []
     return flag.startsWith('--') && flag.length > 2 ? [flag.slice(2)] : []

@@ -1,0 +1,20 @@
+# The frontend has its own Prettier setup
+frontend/
+
+# Python, build output and local tooling
+.venv/
+.cache/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+site/
+tools/
+scraps/
+src/
+tests/
+vsplugins/
+uv.lock
+
+node_modules/
+package-lock.json

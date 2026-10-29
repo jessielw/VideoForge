@@ -1,0 +1,11 @@
+{
+  "name": "videoforge-docs",
+  "private": true,
+  "scripts": {
+    "format": "prettier \"*.{md,json,yaml,yml}\" docs examples .github --write",
+    "format:check": "prettier \"*.{md,json,yaml,yml}\" docs examples .github --check"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10"
+  }
+}

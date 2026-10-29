@@ -10,8 +10,8 @@
   let follow = $state(true)
   let box = $state<HTMLPreElement>()
 
-  const lines = $derived(filter ? app.log.filter(l => l.job === filter) : app.log)
-  const jobs = $derived([...new Set(app.log.map(l => l.job).filter((j): j is string => !!j))])
+  const lines = $derived(filter ? app.log.filter((l) => l.job === filter) : app.log)
+  const jobs = $derived([...new Set(app.log.map((l) => l.job).filter((j): j is string => !!j))])
 
   function tone(line: string): string {
     const low = line.toLowerCase()
@@ -34,8 +34,14 @@
       <option value="">All jobs</option>
       {#each jobs as id (id)}<option value={id}>{app.jobName(id)}</option>{/each}
     </NativeSelect>
-    <label class="flex items-center gap-2 text-sm text-muted-foreground"><Checkbox bind:checked={follow} />Follow</label>
+    <label class="flex items-center gap-2 text-sm text-muted-foreground"><Checkbox bind:checked={follow} />Follow</label
+    >
     <Button variant="outline" class="ml-auto" onclick={() => (app.log = [])}>Clear</Button>
   </header>
-  <pre bind:this={box} class="min-h-0 flex-1 overflow-auto rounded-lg border bg-card p-3 font-mono text-xs leading-relaxed">{#each lines as l, i (i)}<div class={tone(l.line)}>{filter ? '' : `${app.jobName(l.job)}: `}{l.line}</div>{:else}<span class="text-muted-foreground">Output from probes and runs appears here.</span>{/each}</pre>
+  <pre
+    bind:this={box}
+    class="min-h-0 flex-1 overflow-auto rounded-lg border bg-card p-3 font-mono text-xs leading-relaxed">{#each lines as l, i (i)}<div
+        class={tone(l.line)}>{filter ? '' : `${app.jobName(l.job)}: `}{l.line}</div>{:else}<span
+        class="text-muted-foreground">Output from probes and runs appears here.</span
+      >{/each}</pre>
 </div>

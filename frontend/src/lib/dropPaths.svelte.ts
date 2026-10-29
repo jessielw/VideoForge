@@ -24,7 +24,7 @@ const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files')
 export function installDrops() {
   drops.desktop = !!window.videoforgeDesktop
   window.addEventListener('videoforge:desktop', () => (drops.desktop = true))
-  window.videoforgeDropped = paths => {
+  window.videoforgeDropped = (paths) => {
     const take = pending
     pending = null
     if (take && paths.length) take(paths)
@@ -43,8 +43,11 @@ export function installDrops() {
 export function pastedPaths(text: string): string[] {
   return text
     .split(/\r?\n/)
-    .map(line => {
-      let p = line.trim().replace(/^"(.*)"$/, '$1').trim()
+    .map((line) => {
+      let p = line
+        .trim()
+        .replace(/^"(.*)"$/, '$1')
+        .trim()
       if (/^file:\/\//i.test(p)) {
         p = decodeURIComponent(p.replace(/^file:\/\/(localhost)?/i, ''))
         if (/^\/[A-Za-z]:/.test(p)) p = p.slice(1).replaceAll('/', '\\')
@@ -71,7 +74,7 @@ export async function checkPaths(paths: string[], rule: PathRule): Promise<strin
     toast.error("Couldn't check the paths", { description: e instanceof Error ? e.message : String(e) })
     return []
   }
-  const exts = (rule.extensions ?? []).map(x => x.toLowerCase())
+  const exts = (rule.extensions ?? []).map((x) => x.toLowerCase())
   const ok: string[] = []
   const left: string[] = []
   for (const { path, kind } of kinds) {
@@ -82,11 +85,11 @@ export async function checkPaths(paths: string[], rule: PathRule): Promise<strin
     else if (kind === 'folder') {
       if (rule.mode === 'files') ok.push(path)
       else left.push(`${name}: a folder, not a file`)
-    } else if (!exts.length || exts.some(x => name.toLowerCase().endsWith(x))) ok.push(path)
+    } else if (!exts.length || exts.some((x) => name.toLowerCase().endsWith(x))) ok.push(path)
     else left.push(`${name}: not ${exts.join(' ')}`)
   }
   if (left.length) toast.warning(`Not added to ${rule.label}`, { description: left.join('\n') })
-  return [...new Map(ok.map(p => [p.toLowerCase(), p])).values()]
+  return [...new Map(ok.map((p) => [p.toLowerCase(), p])).values()]
 }
 
 export interface PathDropOptions {
@@ -149,10 +152,13 @@ export const pathDrop: Action<HTMLElement, PathDropOptions> = (node, initial) =>
   }
 
   if (node.tabIndex < 0) node.tabIndex = 0
-  const events = { dragenter: enter, dragover, dragleave: leave, drop, paste } as unknown as Record<string, EventListener>
+  const events = { dragenter: enter, dragover, dragleave: leave, drop, paste } as unknown as Record<
+    string,
+    EventListener
+  >
   for (const [k, f] of Object.entries(events)) node.addEventListener(k, f)
   return {
-    update: next => (opts = next),
+    update: (next) => (opts = next),
     destroy: () => {
       for (const [k, f] of Object.entries(events)) node.removeEventListener(k, f)
     },

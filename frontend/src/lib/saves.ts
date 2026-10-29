@@ -9,7 +9,9 @@ export class SaveQueue {
   subscribe(listener: (error: string) => void) {
     this.listeners.add(listener)
     listener(this.error)
-    return () => { this.listeners.delete(listener) }
+    return () => {
+      this.listeners.delete(listener)
+    }
   }
 
   private report(error: string) {
@@ -19,7 +21,10 @@ export class SaveQueue {
 
   register(flush: () => void) {
     this.flushers.add(flush)
-    return () => { flush(); this.flushers.delete(flush) }
+    return () => {
+      flush()
+      this.flushers.delete(flush)
+    }
   }
 
   add<T>(send: () => Promise<T>): Promise<T> {
@@ -42,7 +47,10 @@ export class SaveQueue {
           break
         }
       }
-    })().finally(() => { this.running = null; this.pump() })
+    })().finally(() => {
+      this.running = null
+      this.pump()
+    })
   }
 
   async flush() {
@@ -50,7 +58,8 @@ export class SaveQueue {
     do {
       this.pump()
       if (this.running) await this.running
-      if (this.error) throw new Error(`Changes are not saved: ${this.error}. Retry or discard unsaved changes before starting.`)
+      if (this.error)
+        throw new Error(`Changes are not saved: ${this.error}. Retry or discard unsaved changes before starting.`)
     } while (this.items.length)
   }
 
