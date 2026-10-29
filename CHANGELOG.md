@@ -12,6 +12,10 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Language boxes (template audio and subtitle rules, a track's language, the original language) are a
+  searchable picker: type part of a name or a tag, or pick from the list; rules show their languages as
+  chips. Any other tag can still be typed. It replaces the browser's own suggestion popup.
+
 - `serve` reads its settings from `VIDEOFORGE_*` variables too (`VIDEOFORGE_ALLOW_HOST`,
   `VIDEOFORGE_ALLOW_ORIGIN`, `VIDEOFORGE_PLUGIN_MANAGEMENT`, `VIDEOFORGE_HOST`, `VIDEOFORGE_PORT`,
   `VIDEOFORGE_DATA_DIR`), so a Docker or Unraid template sets them without replacing the image's command.

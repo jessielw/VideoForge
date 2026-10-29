@@ -82,6 +82,10 @@ Rules can match language, original language, codec, channels, commentary, and au
 **The first matching rule wins for each track.** Put specific rules before broad ones, and choose
 whether unmatched tracks should be kept or excluded.
 
+A rule's languages are picked from a list: type part of a name or a tag to filter it, then Enter or a
+click to add one. A tag the list doesn't have (`pt-PT`) can be typed in full. A base language matches
+its regions too (`en` matches `en-US`); a region matches only itself (`es-419`). No language = any.
+
 Template audio settings are fitted to the actual source. For example, an Atmos choice on a source
 without suitable TrueHD Atmos becomes plain DDP; unsupported layouts and bitrates fall back to
 compatible values. Manual choices in the job editor remain strict and can block an impossible encode.

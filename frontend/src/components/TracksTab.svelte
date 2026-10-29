@@ -2,7 +2,7 @@
   // Audio or subtitle choices (one kind per tab): what the profile's rules picked, and per-job overrides
   // (audio tracks and order, subtitle use / language / the profile's flags). Every change
   // replans on the server; the output columns always show what the rules now produce.
-  import { emptyOverride, isEmpty, LANGUAGES } from '../lib/format'
+  import { emptyOverride, isEmpty } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type { AudioTrack, JobDetail, Overrides, SubTrack, TrackOverride } from '../lib/types'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
@@ -16,6 +16,7 @@
   import { Input } from '$lib/components/ui/input'
   import SubtitleSelectionMenu from './SubtitleSelectionMenu.svelte'
   import { selectSubtitles } from '../lib/subtitleSelection'
+  import LanguagePicker from './LanguagePicker.svelte'
 
   let {
     job,
@@ -136,16 +137,14 @@
     <div class="flex flex-wrap items-center gap-3">
       <label class="flex items-center gap-2 text-sm text-muted-foreground">
         Original language
-        <Input
-          class="w-40"
-          list="languages-tracks"
+        <LanguagePicker
+          class="w-48"
+          aria-label="Original language"
+          placeholder="Not set"
           value={overrides.original_language ?? ''}
-          onchange={e => setLanguageOriginal((e.target as HTMLInputElement).value.trim())}
+          onchange={(v: string) => setLanguageOriginal(v)}
         />
       </label>
-      <datalist id="languages-tracks">
-        {#each LANGUAGES as [tag, name] (tag)}<option value={tag}>{name}</option>{/each}
-      </datalist>
       <Button variant="outline" class="ml-auto" onclick={reset}><RefreshCwIcon />Reset overrides</Button>
     </div>
 
@@ -213,11 +212,13 @@
               </td>
               <td>{t.format}</td>
               <td>
-                <Input
-                  class="h-7 w-24 {ov?.language ? 'border-warning/60' : ''}"
-                  list="languages-tracks"
+                <LanguagePicker
+                  class="w-28 {ov?.language ? 'border-warning/60' : ''}"
+                  show="tag"
+                  clearable={false}
+                  aria-label="Language"
                   value={subLanguage(t)}
-                  onchange={e => setLanguage(t, (e.target as HTMLInputElement).value.trim())}
+                  onchange={(v: string) => setLanguage(t, v)}
                 />
               </td>
               {#each flags as f (f.key)}

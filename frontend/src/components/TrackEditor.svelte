@@ -7,7 +7,7 @@
   // Files can be added to the job here and removed again, and an audio track can be used more
   // than once ("Add a track from…": a copy with its own encode, title and flags).
   import type { InputChanges } from '../lib/api'
-  import { emptyOverride, isEmpty, LANGUAGES, shownOptions } from '../lib/format'
+  import { emptyOverride, isEmpty, shownOptions } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type { AudioAction, AudioEncodeInfo, AudioTrack, EncodeOptionInfo, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
   import FileBrowser from './FileBrowser.svelte'
@@ -36,6 +36,7 @@
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import { Toggle } from '$lib/components/ui/toggle'
+  import LanguagePicker from './LanguagePicker.svelte'
 
   type Kind = 'audio' | 'sub'
   type Track = AudioTrack | SubTrack
@@ -491,13 +492,14 @@
           aria-label="Title"
           onchange={e => setTitle(t, e.currentTarget.value)}
         />
-        <Input
-          class="w-24 {langMark ? INPUT_MARK[langMark] : ''}"
-          list="track-languages"
+        <LanguagePicker
+          class="w-28 {langMark ? INPUT_MARK[langMark] : ''}"
+          show="tag"
+          clearable={false}
           value={ov?.language ?? t.language}
           title={langMark ? `Language${note(langMark)}` : undefined}
           aria-label="Language"
-          onchange={e => setLanguage(t, e.currentTarget.value.trim())}
+          onchange={(v: string) => setLanguage(t, v)}
         />
         <div class="flex flex-wrap gap-1" role="group" aria-label="Track flags">
           {#each properties as f (f.key)}
@@ -644,16 +646,14 @@
     <div class="flex flex-wrap items-center gap-3">
       <label class="flex items-center gap-2 text-sm text-muted-foreground">
         Original language
-        <Input
-          class="w-40"
-          list="track-languages"
+        <LanguagePicker
+          class="w-48"
+          aria-label="Original language"
+          placeholder="Not set"
           value={overrides.original_language ?? ''}
-          onchange={e => setOriginal(e.currentTarget.value.trim())}
+          onchange={(v: string) => setOriginal(v)}
         />
       </label>
-      <datalist id="track-languages">
-        {#each LANGUAGES as [tag, name] (tag)}<option value={tag}>{name}</option>{/each}
-      </datalist>
       <div class="ml-auto flex flex-wrap gap-2">
         {#if kind === 'audio'}
           <DropdownMenu.Root>

@@ -16,6 +16,7 @@
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import AudioOutputEditor from './AudioOutputEditor.svelte'
   import type { AudioCodec, AudioRule, TemplateAudio, TrackOverride, TrackProperty } from '../lib/types'
+  import LanguagePicker from './LanguagePicker.svelte'
 
   let {
     value,
@@ -103,7 +104,6 @@
     })
   const tri = (v: boolean | null) => (v === null ? 'any' : v ? 'yes' : 'no')
   const fromTri = (v: string) => (v === 'any' ? null : v === 'yes')
-  const languages = (text: string) => text.split(/[\s,]+/).filter(Boolean)
   const codecKey = (c: AudioCodec[]) => [...c].sort().join(',')
   const num = (v: string) => (v ? Number(v) : null)
 
@@ -265,14 +265,14 @@
           </div>
           <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
             <span class="w-8 text-xs text-muted-foreground">Match</span>
-            <Input
-              class="w-36"
+            <LanguagePicker
+              class="w-56"
               aria-label="Audio rule {i + 1}: languages"
               placeholder="Language: any"
-              title="Languages, e.g. en, ja (en matches en-US too; es-419 only itself)"
-              value={r.languages.join(', ')}
+              title="Languages (en matches en-US too; es-419 only itself)"
+              value={r.languages}
               {disabled}
-              onchange={e => change(a => (a.rules[i].languages = languages(e.currentTarget.value)))}
+              onchange={(v: string[]) => change(a => (a.rules[i].languages = v))}
             />
             <NativeSelect
               aria-label="Audio rule {i + 1}: original language"

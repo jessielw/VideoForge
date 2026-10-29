@@ -13,6 +13,7 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import TrackFlags from './TrackFlags.svelte'
   import type { SubFormat, SubRule, TemplateSubs, TrackProperty } from '../lib/types'
+  import LanguagePicker from './LanguagePicker.svelte'
 
   let {
     value,
@@ -55,7 +56,6 @@
   }
   const tri = (v: boolean | null) => (v === null ? 'any' : v ? 'yes' : 'no')
   const fromTri = (v: string) => (v === 'any' ? null : v === 'yes')
-  const languages = (text: string) => text.split(/[\s,]+/).filter(Boolean)
 
   function move(i: number, by: number) {
     change(s => {
@@ -129,14 +129,14 @@
         </div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
           <span class="w-8 text-xs text-muted-foreground">Match</span>
-          <Input
-            class="w-40"
+          <LanguagePicker
+            class="w-56"
             aria-label="Rule {i + 1}: languages"
             placeholder="Language: any"
-            title="Languages, e.g. en, ja (en matches en-US too; es-419 only itself)"
-            value={r.languages.join(', ')}
+            title="Languages (en matches en-US too; es-419 only itself)"
+            value={r.languages}
             {disabled}
-            onchange={e => change(s => (s.rules[i].languages = languages(e.currentTarget.value)))}
+            onchange={(v: string[]) => change(s => (s.rules[i].languages = v))}
           />
           <NativeSelect
             aria-label="Rule {i + 1}: format"

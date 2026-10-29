@@ -108,6 +108,34 @@ export const LANGUAGES: [string, string][] = [
   ['pt', 'Portuguese'],
 ]
 
+// The rest of the languages the server names (core/lang.py), whole families too: the picker lists these
+// after the common ones.
+const MORE_LANGUAGES: [string, string][] = [
+  ['ar', 'Arabic'], ['eu', 'Basque'], ['bg', 'Bulgarian'], ['ca', 'Catalan'], ['zh', 'Chinese'],
+  ['hr', 'Croatian'], ['cs', 'Czech'], ['da', 'Danish'], ['et', 'Estonian'], ['fil', 'Filipino'],
+  ['fi', 'Finnish'], ['fr', 'French'], ['gl', 'Galician'], ['el', 'Greek'], ['he', 'Hebrew'],
+  ['hi', 'Hindi'], ['hu', 'Hungarian'], ['is', 'Icelandic'], ['id', 'Indonesian'], ['kn', 'Kannada'],
+  ['kk', 'Kazakh'], ['lv', 'Latvian'], ['lt', 'Lithuanian'], ['ms', 'Malay'], ['ml', 'Malayalam'],
+  ['no', 'Norwegian'], ['fa', 'Persian'], ['pl', 'Polish'], ['pt-BR', 'Portuguese (Brazil)'], ['ro', 'Romanian'],
+  ['ru', 'Russian'], ['sr', 'Serbian'], ['sk', 'Slovak'], ['sl', 'Slovenian'], ['es', 'Spanish'],
+  ['sv', 'Swedish'], ['tl', 'Tagalog'], ['ta', 'Tamil'], ['te', 'Telugu'], ['th', 'Thai'],
+  ['tr', 'Turkish'], ['uk', 'Ukrainian'], ['vi', 'Vietnamese'],
+]
+export const PICKER_LANGUAGES: [string, string][] = [...LANGUAGES, ...MORE_LANGUAGES, ['und', 'Unknown']]
+
+const displayNames = new Intl.DisplayNames(['en'], { type: 'language' })
+/** A language tag's English name: the picker's own, else the browser's, else the tag ("eng" -> "English"). */
+export function languageName(tag: string): string {
+  const t = tag.trim()
+  const known = PICKER_LANGUAGES.find(([code]) => code.toLowerCase() === t.toLowerCase())?.[1]
+  if (known) return known
+  try {
+    return displayNames.of(t) ?? t
+  } catch {
+    return t
+  }
+}
+
 export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number): (...a: A) => void {
   let t: ReturnType<typeof setTimeout> | undefined
   return (...a: A) => {

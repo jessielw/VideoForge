@@ -11,11 +11,12 @@
   import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
   import { api } from '../lib/api'
   import { drafts } from '../lib/drafts'
-  import { basename, LANGUAGES } from '../lib/format'
+  import { basename } from '../lib/format'
   import { LatestRequest } from '../lib/latestRequest'
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
   import { ENCODERS, type EncoderSettings, type MatchResult } from '../lib/types'
+  import LanguagePicker from '../components/LanguagePicker.svelte'
 
   type ImportResult = Awaited<ReturnType<typeof api.addJobs>>
   type Draft = { profile: string; language: string; sources: string[]; encodes: string[]; subtitles: string[]; chapters: string[]; output: string[]; templateName: string | null; encoder: EncoderSettings | null; container: string; completion?: ImportResult | null }
@@ -185,11 +186,8 @@
         </NativeSelect>
         <label class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           Original language
-          <Input class="w-44" list="languages" placeholder="Guess from audio" bind:value={language} />
+          <LanguagePicker class="w-48" aria-label="Original language" placeholder="Guess from audio" value={language} onchange={(v: string) => (language = v)} />
         </label>
-        <datalist id="languages">
-          {#each LANGUAGES as [tag, name] (tag)}<option value={tag}>{name}</option>{/each}
-        </datalist>
       </div>
       <div class="text-sm text-muted-foreground">Template</div>
       <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
