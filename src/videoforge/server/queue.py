@@ -784,8 +784,7 @@ class JobQueue:
                 if (e.state.status is None if wanted is None else e.id in wanted) and e.runnable:
                     e.queued = True
                     e.index_queued = e.index_now = e.index_held = False  # the run indexes it first anyway
-                    e.state.status, e.state.error = None, ""
-                    self._save(e)
+                    self._save(e)  # its last result stays until it runs: unqueued again, it shows as it was
                     queued.append(e.id)
             self._save_lane()
         for job_id in queued:
@@ -824,14 +823,13 @@ class JobQueue:
 
     def start_targets(self, ids: Iterable[str] | None = None) -> list[Entry]:
         """The jobs a start would run: the given ones that are runnable or queued; with none given, the
-        queued ones, or every runnable one when none is queued (as the start route queues them)."""
+        queued ones (a job runs only once it's queued, explicitly)."""
         with self._lock:
             entries = self.entries()
             if ids is not None:
                 wanted = set(ids)
                 return [e for e in entries if e.id in wanted and (e.runnable or e.queued)]
-            queued = [e for e in entries if e.queued]
-            return queued or [e for e in entries if e.runnable and e.state.status is None]
+            return [e for e in entries if e.queued]
 
     def reuse_offers(self, e: Entry) -> list[ReuseOffer]:
         """The finished files e's next run could reuse (core/pipeline/reuse.py); [] when it can't be built."""
@@ -980,6 +978,7 @@ class JobQueue:
         started = _now()
         with self._lock:
             e.queued, e.running, e.progress = False, True, None
+            e.state.status, e.state.error = None, ""
             self._cancel = self._token()
             self._save(e)
         self._changed(e)

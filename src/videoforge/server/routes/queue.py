@@ -56,14 +56,13 @@ def reuse(request: Request, body: dict[str, Any] | None = Body(None)) -> dict[st
 
 @router.post("/start")
 def start(request: Request, body: dict[str, Any] | None = Body(None)) -> dict[str, Any]:  # noqa: B008
-    """Queue the given jobs (or every runnable one when none are given) and start the worker. `reuse`
+    """Queue the given jobs (none given: run the queued ones) and start the worker. `reuse`
     ({job id: [offer ids]}, the answer to /reuse) says which finished files each job keeps; the others
     it was offered are made again. A job left out of it reuses what matches its settings, as always."""
     q = queue_of(request)
     if reuse := (body or {}).get("reuse"):
         q.choose_reuse(reuse)
-    ids = (body or {}).get("ids")
-    if ids is not None or not any(e.queued for e in q.entries()):
+    if (ids := (body or {}).get("ids")) is not None:
         q.enqueue(ids)
     q.start()
     return q.queue_state()

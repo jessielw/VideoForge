@@ -12,6 +12,14 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Jobs are queued explicitly: a tick on each queue row (and **Queue** at the top of the job's editor)
+  queues the job and locks its settings, and **Queue (N)** queues a selection. **Start queue** runs
+  only queued jobs (it no longer takes every ready job when none is queued), and a job ticked while
+  the queue runs is picked up in its turn. Unticking a job that ran before keeps its last result.
+
+- The preview's frame bar scrubs smoothly on long sources: it loads the frame where a drag rests,
+  and the one it's let go on.
+
 - Importing a template or preset with the same name replaces yours instead of adding `Name (2)`, so
   importing an updated pack again adds no duplicates. The preview marks each entry (**replaces yours**,
   **already the same**); **Keep both** brings back numbered copies. **Select** on the Templates list

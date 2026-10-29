@@ -423,7 +423,7 @@ def test_queue_runs_jobs_and_streams_events(tmp_path):
             wait_for(client, i, "ready", "warn")
         with client.websocket_connect("ws://127.0.0.1:8765/api/events") as ws:
             assert ws.receive_json()["type"] == "hello"
-            assert client.post("/api/queue/start").json()["running"] in (True, False)
+            assert client.post("/api/queue/start", json={"ids": ids}).json()["running"] in (True, False)
             seen, events = set(), []
             end = time.monotonic() + 5
             while not {"progress", "log", "step"} <= seen and time.monotonic() < end:
@@ -551,7 +551,7 @@ def test_notifications(tmp_path):
         ids = add(client, tmp_path)
         for i in ids:
             wait_for(client, i, "ready", "warn")
-        client.post("/api/queue/start")
+        client.post("/api/queue/start", json={"ids": ids})
         for i in ids:
             wait_for(client, i, "done")
         client.app.state.queue.wait(5)
@@ -632,7 +632,7 @@ def test_actions_and_plugins(tmp_path):
 
         [job] = add(client, tmp_path)
         wait_for(client, job, "ready", "warn")
-        client.post("/api/queue/start")
+        client.post("/api/queue/start", json={"ids": [job]})
         wait_for(client, job, "done")
         client.app.state.queue.wait(5)
         client.app.state.actions.wait()
@@ -695,7 +695,9 @@ def test_reuse_question(tmp_path):
         video.parent.mkdir(parents=True)
         video.write_bytes(b"264")
         note_finished(video.parent, "video", "made with other settings", [video], 12.0)
-        jobs = client.post("/api/queue/reuse", json={}).json()["jobs"]  # Start queue: every runnable job
+        assert client.post("/api/queue/reuse", json={}).json() == {"jobs": []}  # Start queue: nothing queued
+        client.post("/api/queue/enqueue", json={"ids": [one]})
+        jobs = client.post("/api/queue/reuse", json={}).json()["jobs"]  # Start queue: the queued jobs
         assert [(j["id"], j["name"]) for j in jobs] == [(one, "Show.S01E01.mkv")]
         (offer,) = jobs[0]["offers"]
         assert (offer["id"], offer["file"], offer["size"], offer["seconds"]) == ("video", str(video), 3, 12.0)
@@ -1889,21 +1891,31 @@ def test_undo_removal_restores_edits_and_order(tmp_path):
         assert client.post("/api/jobs/restore", json={"ids": ids[:2]}).json() == {"restored": []}
 
 
-def test_default_start_does_not_rerun_completed_jobs(tmp_path):
+def test_default_start_runs_only_queued_jobs(tmp_path):
     make_files(tmp_path)
     runner = FakeRun()
     with make_client(tmp_path, run=runner) as client:
         first = add(client, tmp_path)[0]
         wait_for(client, first, "ready", "warn")
+        q = client.app.state.queue
+        assert q.start_targets() == []
+        client.post("/api/queue/start", json={})  # nothing queued: nothing runs
+        q.wait(5)
+        assert runner.runs == []
+        client.post("/api/queue/enqueue", json={"ids": [first]})
         client.post("/api/queue/start", json={})
-        client.app.state.queue.wait(5)
+        q.wait(5)
         wait_for(client, first, "done")
+        client.post("/api/queue/enqueue", json={"ids": [first]})
+        wait_for(client, first, "queued")
+        client.post("/api/queue/dequeue", json={"ids": [first]})
+        wait_for(client, first, "done")  # unqueued again, it shows its last result
         make_files(tmp_path, "S01E02")
         second = add(client, tmp_path, sources=[str(tmp_path / "src/Show.S01E02.mkv")])[0]
         wait_for(client, second, "ready", "warn")
-        q = client.app.state.queue
+        assert q.start_targets() == [] and q.start_targets([]) == []
+        client.post("/api/queue/enqueue", json={"ids": [second]})
         assert [e.id for e in q.start_targets()] == [second]
-        assert q.start_targets([]) == []
         client.post("/api/queue/start", json={})
         q.wait(5)
         assert runner.runs == ["Show.S01E01.mkv", "Show.S01E02.mkv"]

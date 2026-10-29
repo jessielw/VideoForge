@@ -4,7 +4,7 @@
   import EncoderPanel from '../components/EncoderPanel.svelte'
   import { tick, onDestroy } from 'svelte'
   import { Input } from '$lib/components/ui/input'
-  import { matchingJobs, queuePage, queueRange, QUEUE_PAGE_SIZE } from '../lib/queueView'
+  import { matchingJobs, queuePage, queueRange, queueable, QUEUE_PAGE_SIZE } from '../lib/queueView'
   import { saves } from '../lib/saves'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
@@ -27,6 +27,7 @@
   import { toast } from 'svelte-sonner'
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
+  import { Checkbox } from '$lib/components/ui/checkbox'
   import * as Card from '$lib/components/ui/card'
   import * as Dialog from '$lib/components/ui/dialog'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
@@ -61,6 +62,7 @@
   const pageJobs = $derived(matching.slice(currentPage * QUEUE_PAGE_SIZE, (currentPage + 1) * QUEUE_PAGE_SIZE))
   const tabStop = $derived(pageJobs.find(job => job.id === cursor)?.id ?? pageJobs.find(job => selectedSet.has(job.id))?.id ?? pageJobs[0]?.id)
   const waitingSelected = $derived(app.jobs.filter(job => selectedSet.has(job.id) && job.status === 'queued').map(job => job.id))
+  const queueableSelected = $derived(app.jobs.filter(job => selectedSet.has(job.id) && queueable(job.status)).map(job => job.id))
 
   function filterChanged() {
     page = 0
@@ -104,11 +106,20 @@
     if (matchingIds.length === 1) void focusJob(matchingIds[0])
   }
 
-  async function unqueue() {
-    const ids = [...waitingSelected]
+  async function unqueue(ids = [...waitingSelected]) {
     await api.dequeue(ids)
     await app.refreshJobs()
-    toast.success(`Unqueued ${ids.length} waiting job${ids.length === 1 ? '' : 's'}`, { description: 'Jobs and their settings remain in the list for editing.' })
+    if (ids.length > 1) toast.success(`Unqueued ${ids.length} jobs`, { description: 'Their settings can be edited again; the queue leaves them out.' })
+  }
+
+  // Queued: locked (read-only), and the queue runs it, even one already running. Edits still saving go first.
+  async function queue(ids = [...queueableSelected]) {
+    await saves.flush()
+    const { enqueued } = await api.enqueue(ids)
+    await app.refreshJobs()
+    if (enqueued.length < ids.length) {
+      toast.warning(`Queued ${enqueued.length} of ${ids.length} jobs`, { description: 'The others are still being probed or indexed, or are blocked.' })
+    } else if (ids.length > 1) toast.success(`Queued ${ids.length} jobs`, { description: 'Locked until they run; Start queue runs them.' })
   }
 
   // The routed job is selected once it's in the list (the prune below would undo it otherwise).
@@ -399,9 +410,7 @@
     if (peek && !listEl?.contains(t) && !railEl?.contains(t)) peek = false
   }
 
-  const startJobs = $derived(app.jobs.some(j => j.status === 'queued')
-    ? app.jobs.filter(j => j.status === 'queued')
-    : app.jobs.filter(j => ['ready', 'warn'].includes(j.status)))
+  const startJobs = $derived(app.jobs.filter(j => j.status === 'queued'))
 
   // --- batch panel ---
   let batchSource = $state<JobDetail | null>(null)
@@ -541,7 +550,7 @@
         </Button>
         <Button variant="outline" onclick={() => act(api.cancel)} title="Cancel the running job"><SquareIcon />Cancel</Button>
       {:else}
-        <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())} title={`Start ${startJobs.length} jobs across the full queue. Completed jobs and retries require Run selected.`}>
+        <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())} title={startJobs.length ? `Run the ${startJobs.length} queued jobs, in queue order` : 'Nothing is queued: tick the jobs to run (or Queue a selection)'}>
           <PlayIcon />Start queue ({startJobs.length})
         </Button>
       {/if}
@@ -576,8 +585,11 @@
       <Button variant="outline" disabled={starting || !selected.length} onclick={() => act(() => run(selected))} title="Queue the selected jobs and start">
         <PlayIcon />Run selected ({selected.length})
       </Button>
+      {#if queueableSelected.length}
+        <Button variant="outline" onclick={() => act(() => queue())} title="Queue the selected jobs: locked until they run, and the queue runs them (a running queue too)">Queue ({queueableSelected.length})</Button>
+      {/if}
       {#if waitingSelected.length}
-        <Button variant="outline" onclick={() => act(unqueue)} title="Remove waiting jobs from the run; keep their settings and files">Unqueue ({waitingSelected.length})</Button>
+        <Button variant="outline" onclick={() => act(() => unqueue())} title="Take the selected jobs out of the run, to edit them; their settings and files stay">Unqueue ({waitingSelected.length})</Button>
       {/if}
       {#if indexing}
         <Button variant="outline" onclick={() => act(() => app.stopIndexing())} title="Stop indexing: cancel the job being indexed and the ones waiting">
@@ -626,7 +638,7 @@
       </div>
       <p role="status" class="text-xs text-muted-foreground">{matching.length} of {app.jobs.length} jobs match. {selected.length} selected{hiddenSelected ? ` (${hiddenSelected} hidden by filters)` : ''}.</p>
       {#if selected.length}<Button variant="outline" size="sm" onclick={clearSelection}>Clear selection</Button>{/if}
-      <p class="text-xs text-muted-foreground">Start queue uses all waiting jobs. Selected actions include selections on other pages and hidden by filters. Index uses {selected.length ? `${selected.length} selected jobs` : `all ${app.jobs.length} jobs`}.</p>
+      <p class="text-xs text-muted-foreground">Ticked jobs are queued: locked, and the queue runs them. Selected actions include selections on other pages and hidden by filters. Index uses {selected.length ? `${selected.length} selected jobs` : `all ${app.jobs.length} jobs`}.</p>
       <p id="queue-keys" class="text-xs text-muted-foreground">Arrows/Home/End navigate; Shift extends selection; Ctrl/Cmd+A selects matching jobs across pages.</p>
     </div>
 
@@ -639,65 +651,78 @@
     {/if}
     <div data-scroller role="group" aria-label="Matching jobs" aria-describedby="queue-keys" class="min-h-24 flex-1 overflow-auto select-none">
       {#each pageJobs as job (job.id)}
-        <button
-          data-job={job.id}
-          aria-pressed={selectedSet.has(job.id)}
-          tabindex={job.id === tabStop ? 0 : -1}
-          onfocus={() => cursor = job.id}
-          onkeydown={keys}
-          class="block w-full border-b border-border/60 px-3 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring
-            {selectedSet.has(job.id) ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]' : 'hover:bg-accent'}"
-          onpointerdown={e => dragStart(e, job.id)}
-          onclick={e => click(e, job.id)}
-        >
-          <div class="flex items-center gap-2">
-            <span class="truncate font-medium" title={job.source}>{job.name}</span>
-            {#if job.label}<Badge variant="outline" class="shrink-0 px-1.5 py-0 text-xs font-normal" title="Label">{job.label}</Badge>{/if}
-            {#if paused(job.status)}
-              <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
-            {:else}
-              <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
-            {/if}
+        {@const queued = job.status === 'queued' || job.status === 'running'}
+        <div class="flex border-b border-border/60 {selectedSet.has(job.id) ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]' : 'hover:bg-accent'}">
+          <div class="flex shrink-0 items-start pt-2.5 pl-3">
+            <!-- Out of the tab order (the list is one stop): the keyboard queues a selection with Queue (N). -->
+            <Checkbox
+              checked={queued}
+              disabled={job.status === 'running' || (!queued && !queueable(job.status))}
+              onCheckedChange={on => act(() => (on ? queue([job.id]) : unqueue([job.id])))}
+            tabindex={-1}
+              aria-label={`Queued: ${job.name}${job.label ? ` (${job.label})` : ''}`}
+              title={job.status === 'running' ? 'Running' : queued ? 'Queued: locked, the queue runs it (untick to edit)' : queueable(job.status) ? 'Tick to queue: locks it, and the queue runs it' : `Can't be queued while ${STATUS_LABEL[job.status].toLowerCase()}`}
+            />
           </div>
-          <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{job.encoder}</span>
-            {#if job.custom_script}
-              <span>· custom script</span>
-            {:else if job.crop && (job.crop.top || job.crop.bottom || job.crop.left || job.crop.right)}
-              <span>· crop {job.crop.left}/{job.crop.top}/{job.crop.right}/{job.crop.bottom}</span>
-            {/if}
-            <span>· {job.audio.length} audio · {job.subs} subs</span>
-            {#if job.indexed}
-              <span class="ml-auto flex shrink-0 items-center" title="Indexed: the video opens at once"><DatabaseCheckIcon class="size-3.5" /></span>
-            {/if}
-          </div>
-          {#if (job.status === 'running' || job.status === 'indexing') && job.progress}
-            <div class="mt-1.5 flex items-center gap-2 text-xs text-info">
-              <div class="h-1 flex-1 overflow-hidden rounded bg-muted">
-                <div class="h-full bg-info" style="width:{job.progress.overall * 100}%"></div>
+          <button
+            data-job={job.id}
+            aria-pressed={selectedSet.has(job.id)}
+            tabindex={job.id === tabStop ? 0 : -1}
+            onfocus={() => cursor = job.id}
+            onkeydown={keys}
+            class="block min-w-0 flex-1 py-2 pr-3 pl-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+            onpointerdown={e => dragStart(e, job.id)}
+            onclick={e => click(e, job.id)}
+          >
+            <div class="flex items-center gap-2">
+              <span class="truncate font-medium" title={job.source}>{job.name}</span>
+              {#if job.label}<Badge variant="outline" class="shrink-0 px-1.5 py-0 text-xs font-normal" title="Label">{job.label}</Badge>{/if}
+              {#if paused(job.status)}
+                <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
+              {:else}
+                <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
+              {/if}
+            </div>
+            <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{job.encoder}</span>
+              {#if job.custom_script}
+                <span>· custom script</span>
+              {:else if job.crop && (job.crop.top || job.crop.bottom || job.crop.left || job.crop.right)}
+                <span>· crop {job.crop.left}/{job.crop.top}/{job.crop.right}/{job.crop.bottom}</span>
+              {/if}
+              <span>· {job.audio.length} audio · {job.subs} subs</span>
+              {#if job.indexed}
+                <span class="ml-auto flex shrink-0 items-center" title="Indexed: the video opens at once"><DatabaseCheckIcon class="size-3.5" /></span>
+              {/if}
+            </div>
+            {#if (job.status === 'running' || job.status === 'indexing') && job.progress}
+              <div class="mt-1.5 flex items-center gap-2 text-xs text-info">
+                <div class="h-1 flex-1 overflow-hidden rounded bg-muted">
+                  <div class="h-full bg-info" style="width:{job.progress.overall * 100}%"></div>
+                </div>
+                {percent(job.progress.overall)}
               </div>
-              {percent(job.progress.overall)}
-            </div>
-            <div class="flex gap-2 text-xs text-muted-foreground">
-              <span class="truncate">{job.progress.step}</span>
-              <span class="ml-auto shrink-0 tabular-nums" title="Encoder speed · time since the run started · the job's time left (a guess from its pace so far)"
-                >{progressTimes(job.progress)}</span
-              >
-            </div>
-          {:else if job.issue}
-            <div class="mt-0.5 truncate text-xs {['blocked', 'error', 'failed', 'invalid'].includes(job.status) ? 'text-destructive' : 'text-warning'}">
-              {job.issue}
-            </div>
-          {/if}
-          {#if job.index_held && job.status === 'index-queued'}
-            <div class="mt-0.5 truncate text-xs text-muted-foreground" title="Settings, Batch indexing">
-              Waits: an encode is reading this disk
-            </div>
-          {/if}
-          {#if job.index_error && job.status !== 'indexing'}
-            <div class="mt-0.5 truncate text-xs text-warning" title={job.index_error}>Index failed: {job.index_error}</div>
-          {/if}
-        </button>
+              <div class="flex gap-2 text-xs text-muted-foreground">
+                <span class="truncate">{job.progress.step}</span>
+                <span class="ml-auto shrink-0 tabular-nums" title="Encoder speed · time since the run started · the job's time left (a guess from its pace so far)"
+                  >{progressTimes(job.progress)}</span
+                >
+              </div>
+            {:else if job.issue}
+              <div class="mt-0.5 truncate text-xs {['blocked', 'error', 'failed', 'invalid'].includes(job.status) ? 'text-destructive' : 'text-warning'}">
+                {job.issue}
+              </div>
+            {/if}
+            {#if job.index_held && job.status === 'index-queued'}
+              <div class="mt-0.5 truncate text-xs text-muted-foreground" title="Settings, Batch indexing">
+                Waits: an encode is reading this disk
+              </div>
+            {/if}
+            {#if job.index_error && job.status !== 'indexing'}
+              <div class="mt-0.5 truncate text-xs text-warning" title={job.index_error}>Index failed: {job.index_error}</div>
+            {/if}
+          </button>
+        </div>
       {:else}
         <div class="p-6 text-center text-muted-foreground">
           {#if app.jobs.length}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { matchingJobs, queuePage, queueRange, QUEUE_PAGE_SIZE } from '../src/lib/queueView.ts'
+import { matchingJobs, queuePage, queueRange, queueable, QUEUE_PAGE_SIZE } from '../src/lib/queueView.ts'
 import type { JobSummary } from '../src/lib/types.ts'
 
 const jobs = [
@@ -29,4 +29,9 @@ test('queue pages clamp after removal and handle empty and exact page boundaries
   assert.equal(queuePage(QUEUE_PAGE_SIZE, 1), 0)
   assert.equal(queuePage(QUEUE_PAGE_SIZE + 1, 9), 1)
   assert.equal(queuePage(10_000, 99), 99)
+})
+
+test('a job can be queued once it is set up, and again after a run, but not while it is busy or blocked', () => {
+  for (const s of ['ready', 'warn', 'index-queued', 'done', 'failed', 'invalid', 'skipped', 'cancelled'] as const) assert.ok(queueable(s), s)
+  for (const s of ['probing', 'error', 'cropping', 'indexing', 'blocked', 'queued', 'running'] as const) assert.ok(!queueable(s), s)
 })

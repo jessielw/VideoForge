@@ -25,3 +25,9 @@ export function queueRange(ids: string[], from: string, to: string): string[] {
 export function queuePage(count: number, requested: number): number {
   return Math.max(0, Math.min(requested, Math.ceil(count / QUEUE_PAGE_SIZE) - 1))
 }
+
+// Whether a job can be queued: queued is locked (read-only), and the queue runs it. Not one still being
+// probed, indexed or crop-detected, a blocked one, or one already queued or running.
+export function queueable(status: Status): boolean {
+  return !['probing', 'error', 'cropping', 'indexing', 'blocked', 'queued', 'running'].includes(status)
+}

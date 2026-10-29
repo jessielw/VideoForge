@@ -10,7 +10,8 @@ preview and later encoding.
 2. Choose a template and add the jobs to the queue.
 3. Open a job to check video processing, encoder settings, tracks, and output.
 4. Select several jobs to apply an edit or template to all of them.
-5. Use **Run selected** for a subset or **Start queue** for the queued jobs.
+5. Tick each job that's set up to queue it, or select several and use **Queue**.
+6. Use **Start queue** to run the queued jobs, or **Run selected** to queue and run a selection at once.
 
 Each job gets its own settings. Changing one job does not silently change the others.
 Import previews link to existing jobs. They keep those jobs' settings unless you explicitly choose
@@ -50,7 +51,7 @@ stop instead of visiting every job.
 Selections survive filters and live status changes. The count identifies jobs hidden by filters;
 **Clear selection** clears all selected jobs. **Run selected**, Index with a selection, and the
 other selected-job actions include selections on other pages and hidden by filters. **Start queue**
-uses the full queue, and Index without a selection uses all jobs. Move up/down changes positions
+runs every queued job, and Index without a selection uses all jobs. Move up/down changes positions
 in the full queue, including across filtered-out neighbors.
 
 On small windows, opening one job collapses the list to a rail. **Show the queue list** opens
@@ -58,10 +59,22 @@ search and filters over the editor; Escape closes it and restores focus to the o
 below 640 CSS pixels, navigation also collapses and the list fills the available width. Short
 windows allow scrolling to reach queue controls.
 
+## Queue jobs
+
+A job runs only once it's queued. Queue it when its settings are final: tick its box in the queue list
+or **Queue** at the top of its editor (they're the same switch), or select several jobs and use
+**Queue (N)** on the toolbar. A queued job is locked: its settings are read-only and its preview
+doesn't change, so what the queue will encode is what you see. Untick it (or **Unqueue (N)**) to
+edit it again; the queue leaves it out until it's queued again.
+
+A job queued while the queue runs is picked up in its turn, in queue order. Queueing a completed,
+failed or cancelled job runs it again; unticking it before it runs keeps its last result. A job can't
+be queued while it's being probed, indexed or crop-detected, or while it's blocked.
+
 ## Start a run
 
-**Start queue** runs already queued jobs, or ready jobs if none are queued. Completed jobs and
-failed/cancelled runs are left alone; select them and use **Run selected** to rerun or retry explicitly.
+**Start queue** runs the queued jobs; with none queued it's disabled. **Run selected** queues the
+selected jobs and starts, including completed jobs and failed or cancelled runs to rerun or retry.
 Start and Index wait for pending editor saves. Failed saves offer **Retry saves** or **Discard
 unsaved changes** before work can start. Batch crop reports updated, skipped and failed jobs;
 imported encodes and busy jobs are skipped without stopping later eligible jobs.
@@ -88,8 +101,8 @@ Stopping the queue after the current job leaves the remaining jobs queued. Cance
 the running work. When VideoForge shuts down, its child tools stop too; a partially encoded stream
 is not a finished reusable step.
 
-Use **Unqueue** on selected waiting jobs, or **Unqueue to edit** in the editor, to unlock their
-settings without removing the jobs or files. This does not cancel a running job.
+Untick a queued job, or use **Unqueue** on selected queued jobs, to unlock their settings without
+removing the jobs or files. This does not cancel a running job.
 
 ## Reuse completed work
 

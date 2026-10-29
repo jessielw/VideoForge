@@ -1,9 +1,11 @@
 <script lang="ts">
   // One job, StaxRip-style: issues on top, then Video | Encoder | Audio | Subtitles | Output | Log.
   // Changes save straight away (the server replans); a queued, running or indexing job is read-only.
+  // Queue (top left, and the tick on its queue row) locks the job for the run: the queue runs it.
   import { api, type SpecChanges } from '../lib/api'
   import { saves } from '../lib/saves'
   import { basename, duration, SEVERITY_TONE, STATUS_LABEL, STATUS_TONE } from '../lib/format'
+  import { queueable } from '../lib/queueView'
   import { app } from '../lib/state.svelte'
   import type { CommandStep, JobDetail } from '../lib/types'
   import EncoderPanel from './EncoderPanel.svelte'
@@ -94,6 +96,18 @@
   }
 
   const editable = $derived(!!job && !['queued', 'running', 'indexing'].includes(job.status))
+  const queued = $derived(job?.status === 'queued' || job?.status === 'running')
+
+  async function setQueued(on: boolean) {
+    try {
+      await saves.flush()
+      if (!on) await api.dequeue([jobId])
+      else if (!(await api.enqueue([jobId])).enqueued.length) toast.warning("Couldn't queue the job", { description: 'It changed meanwhile: it is being probed or indexed, or is blocked.' })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+    load()
+  }
   // The queue row's copy: progress events update it live (the detail reloads on job changes only).
   const live = $derived(app.jobs.find(j => j.id === jobId))
   const TABS: { id: Tab; label: string }[] = [
@@ -117,14 +131,25 @@
   <Tabs.Root bind:value={tab} class="h-full min-h-0 gap-0">
     <header class="space-y-2 border-b px-5 pt-3">
       <div class="flex items-center gap-3">
+        <label
+          class="flex shrink-0 items-center gap-2 rounded-md border px-2.5 py-1 text-sm font-medium has-disabled:opacity-60
+            {queued ? 'border-info/40 bg-info/10 text-info' : 'border-border'}"
+          title={job.status === 'running'
+            ? 'Running: locked until it finishes'
+            : queued
+              ? 'Queued: locked, and the queue runs it (a running queue too). Untick to edit it; the queue leaves it out.'
+              : queueable(job.status)
+                ? 'Tick when the job is set up: it locks, and the queue runs it'
+                : `Can't be queued while ${STATUS_LABEL[job.status].toLowerCase()}`}
+        >
+          <Checkbox checked={queued} disabled={job.status === 'running' || (!queued && !queueable(job.status))} onCheckedChange={setQueued} />
+          {queued ? 'Queued · locked' : 'Queue'}
+        </label>
         <h2 class="truncate text-lg font-semibold" title={job.source}>{job.name}</h2>
         {#if job.label}<Badge variant="outline" class="shrink-0" title="Label (Output tab)">{job.label}</Badge>{/if}
         <span class="text-sm {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
         <span class="text-sm text-muted-foreground">· {job.profile} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span>
-        {#if !editable}<Badge variant="outline" class="border-info/40 bg-info/10 text-info">locked while {job.status}</Badge>{/if}
-        {#if job.status === 'queued'}
-          <Button size="sm" variant="outline" onclick={() => api.dequeue([jobId]).then(() => load()).catch(e => toast.error(e.message))}>Unqueue to edit</Button>
-        {/if}
+        {#if job.status === 'indexing'}<Badge variant="outline" class="border-info/40 bg-info/10 text-info">locked while indexing</Badge>{/if}
         <TemplateMenu
           profile={job.profile}
           spec={job.spec}

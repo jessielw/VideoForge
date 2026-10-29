@@ -39,6 +39,7 @@ async function queueFixture(page: Page, count = 10_000, statuses: Status[] = ['r
     else if (path === '/api/jobs/reorder') json = { ids: request.postDataJSON().ids }
     else if (/^\/api\/jobs\/job-\d+$/.test(path)) json = detail(jobs.find(job => job.id === path.split('/').at(-1))!)
     else if (path === '/api/queue/start') json = {}
+    else if (path === '/api/queue/enqueue') json = { enqueued: request.postDataJSON().ids }
     else if (['/api/profiles', '/api/config/encoders', '/api/filter-presets'].includes(path)) json = []
     else throw new Error(`Unhandled queue fixture request: ${request.method()} ${path}`)
     await route.fulfill({ json })
@@ -70,9 +71,14 @@ test('10,000 jobs: bounded rows, combined filters, counts, and explicit action s
   await page.getByRole('button', { name: 'Clear selection', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Run selected (0)', exact: true })).toBeDisabled()
   await page.getByRole('button', { name: 'Clear filters', exact: true }).first().click()
-  await page.getByRole('button', { name: 'Start queue (5000)', exact: true }).click()
-  await expect.poll(() => calls.filter(call => call.path === '/api/queue/start').length).toBe(2)
-  expect(calls.filter(call => call.path === '/api/queue/start')[1].body).toEqual({})
+  // Nothing queued: Start queue has nothing to run; a tick (or Queue on a selection) queues jobs.
+  await expect(page.getByRole('button', { name: 'Start queue (0)', exact: true })).toBeDisabled()
+  await page.getByRole('checkbox', { name: 'Queued: Episode 00000', exact: true }).click()
+  await expect.poll(() => calls.find(call => call.path === '/api/queue/enqueue')?.body.ids).toEqual(['job-0'])
+  await expect(page.locator('[data-job="job-0"]')).toHaveAttribute('aria-pressed', 'false') // a tick doesn't select
+  await page.getByRole('button', { name: 'Select matching jobs', exact: true }).click()
+  await page.getByRole('button', { name: 'Queue (10000)', exact: true }).click()
+  await expect.poll(() => calls.filter(call => call.path === '/api/queue/enqueue').at(-1)?.body.ids?.length).toBe(10000)
   expect(errors).toEqual([])
 })
 
