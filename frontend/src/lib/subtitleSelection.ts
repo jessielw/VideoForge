@@ -6,12 +6,13 @@ export const subtitleLanguage = (t: SubTrack, overrides: Overrides) =>
 
 export const subtitleFormat = (t: SubTrack) => t.format.trim().toLowerCase() || 'unknown'
 
-// Change all subtitle choices in one save, preserving order and other track edits.
+// Change all subtitle choices in one save, preserving order and other track edits. A track the
+// profile keeps on its own (auto) needs no override to stay; one it leaves out needs exclude: false.
 export function selectSubtitles(overrides: Overrides, tracks: SubTrack[], include: (t: SubTrack) => boolean) {
   for (const t of tracks) {
     const on = include(t)
     const ov = overrides.tracks[t.key] ?? emptyOverride()
-    ov.exclude = on ? null : true
+    ov.exclude = on === (t.auto?.kept ?? true) ? null : !on
     // Burn-in is independent of exclusion on the server: leaving a track out must clear it too.
     if (!on) ov.burn = null
     if (isEmpty(ov)) delete overrides.tracks[t.key]

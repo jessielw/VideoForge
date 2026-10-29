@@ -46,7 +46,12 @@
 
   const languages = $derived(choices(t => subtitleLanguage(t, overrides), languageLabel))
   const formats = $derived(choices(subtitleFormat, f => f === 'vobsub' ? 'VobSub' : f === 'unknown' ? 'Unknown type' : f.toUpperCase()))
-  const selected = $derived(tracks.filter(t => !overrides.tracks[t.key]?.exclude || overrides.tracks[t.key]?.burn).length)
+  const selected = $derived(
+    tracks.filter(t => {
+      const ov = overrides.tracks[t.key]
+      return ov?.burn || (ov?.exclude ?? !(t.auto?.kept ?? true)) === false
+    }).length,
+  )
 
   function select(include: (t: SubTrack) => boolean) {
     if (!disabled && tracks.length) onselect(include)

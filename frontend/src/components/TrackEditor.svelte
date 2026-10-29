@@ -84,16 +84,23 @@
   const isAudio = (t: Track): t is AudioTrack => 'codec' in t
   const basename = (p: string) => p.split(/[\\/]/).pop() ?? p
 
-  // Output order: the saved order (track keys) first, the rest in source order. A list of
-  // audio track ids (set from the simpler tracks tab) leads for audio when it's there.
+  // Output order: the saved order (track keys) first, the rest as the plan has them (a track left out
+  // follows the planned one before it in source order). A list of audio track ids (set from the
+  // simpler tracks tab) leads for audio when it's there.
   function inOrder<T extends Track>(list: T[]): T[] {
     const ids = overrides.audio_track_ids
     const order = overrides.order ?? []
-    const rank = (t: T) => {
-      const i = ids && isAudio(t) && !t.external_path && !t.copy ? ids.indexOf(t.id) : order.indexOf(t.key)
-      return i < 0 ? 10_000 + list.indexOf(t) : i
+    let after = -1
+    const planned = list.map((t, i) => {
+      const pos = outPos(t)
+      if (pos !== undefined) after = pos
+      return pos ?? after + (i + 1) / (list.length + 1)
+    })
+    const rank = (t: T, i: number) => {
+      const at = ids && isAudio(t) && !t.external_path && !t.copy ? ids.indexOf(t.id) : order.indexOf(t.key)
+      return at < 0 ? 10_000 + planned[i] : at
     }
-    return [...list].sort((a, b) => rank(a) - rank(b))
+    return list.map((t, i) => ({ t, r: rank(t, i) })).sort((a, b) => a.r - b.r).map(x => x.t)
   }
 
   const audioRows = $derived(inOrder(tracks?.audio ?? []))
@@ -115,6 +122,13 @@
     !!ovOf(t)?.exclude ||
     (!!overrides.audio_track_ids && isAudio(t) && !t.external_path && !t.copy && !overrides.audio_track_ids.includes(t.id))
   const outPos = (t: Track) => (isAudio(t) ? plannedAudio.get(t.key)?.pos : plannedSubs.get(t.key))
+  // The track as the profile has it with no hand edit (a profile with its own rules, e.g. a group's,
+  // titles, encodes and picks tracks itself): shown until changed, and changing back saves no override.
+  const autoKept = (t: Track) => t.auto?.kept ?? true
+  const autoTitle = (t: Track) => t.auto?.title ?? t.title
+  const autoLanguage = (t: Track) => t.auto?.language ?? t.language
+  // Out of the output: left out by hand or by the profile, or burned into the video.
+  const isOff = (t: Track) => excluded(t) || burnKey === t.key || (!!plan && outPos(t) === undefined)
 
   // A copy of the overrides to change, in the editor's terms: an audio id list becomes
   // order + exclusions, so the two ways of choosing tracks never disagree.
@@ -125,6 +139,7 @@
       for (const t of audioRows)
         if (!t.external_path && !t.copy && !o.audio_track_ids.includes(t.id)) edit(o, t.key, ov => (ov.exclude = true))
       o.audio_track_ids = null
+      o.order = [...audioRows, ...subRows].map(t => t.key)
     }
     return o
   }
@@ -136,8 +151,9 @@
     else o.tracks[key] = ov
   }
 
-  function commit(o: Overrides, audio: Track[] = audioRows, subs: Track[] = subRows) {
-    o.order = [...audio, ...subs].map(t => t.key)
+  // The order is saved once one is set (a track moved); until then the profile orders the tracks.
+  function commit(o: Overrides, audio?: Track[], subs?: Track[]) {
+    if (audio || subs || o.order) o.order = [...(audio ?? audioRows), ...(subs ?? subRows)].map(t => t.key)
     save(o)
   }
 
@@ -147,7 +163,7 @@
     commit(o)
   }
 
-  const setIncluded = (t: Track, on: boolean) => editTrack(t, ov => (ov.exclude = on ? null : true))
+  const setIncluded = (t: Track, on: boolean) => editTrack(t, ov => (ov.exclude = on === autoKept(t) ? null : !on))
 
   function selectSubs(include: (t: SubTrack) => boolean) {
     const o = draft()
@@ -157,22 +173,22 @@
 
   // Name the kept subtitles from their language and flags ("English (SDH)"), StaxRip's "Set names": the
   // untitled ones, or all. A flag the profile doesn't offer is the track's own.
-  const titleOf = (t: Track) => ovOf(t)?.title ?? t.title
+  const titleOf = (t: Track) => ovOf(t)?.title ?? autoTitle(t)
   const nameFlag = (t: SubTrack, key: 'forced' | 'hearing_impaired' | 'commentary') =>
     properties.some(p => p.key === key) ? flagOn(t, key) : t[key]
   const subName = (t: SubTrack) =>
-    subtitleName(ovOf(t)?.language ?? t.language, {
+    subtitleName(ovOf(t)?.language ?? autoLanguage(t), {
       forced: nameFlag(t, 'forced'),
       hearing_impaired: nameFlag(t, 'hearing_impaired'),
       commentary: nameFlag(t, 'commentary'),
     })
-  const untitled = $derived(subRows.filter(t => !excluded(t) && !titleOf(t).trim()).length)
+  const untitled = $derived(subRows.filter(t => !isOff(t) && !titleOf(t).trim()).length)
   function nameSubs(all: boolean) {
     const o = draft()
     for (const t of subRows as SubTrack[]) {
-      if (excluded(t) || (!all && titleOf(t).trim())) continue
+      if (isOff(t) || (!all && titleOf(t).trim())) continue
       const name = subName(t)
-      edit(o, t.key, ov => (ov.title = name === t.title ? null : name))
+      edit(o, t.key, ov => (ov.title = name === autoTitle(t) ? null : name))
     }
     commit(o)
   }
@@ -187,8 +203,8 @@
     for (const s of subRows) edit(o, s.key, ov => (ov.burn = s.key === t.key && on ? true : null))
     commit(o)
   }
-  const setTitle = (t: Track, v: string) => editTrack(t, ov => (ov.title = v === t.title ? null : v))
-  const setLanguage = (t: Track, v: string) => editTrack(t, ov => (ov.language = !v || v === t.language ? null : v))
+  const setTitle = (t: Track, v: string) => editTrack(t, ov => (ov.title = v === autoTitle(t) ? null : v))
+  const setLanguage = (t: Track, v: string) => editTrack(t, ov => (ov.language = !v || v === autoLanguage(t) ? null : v))
 
   // Where a set value comes from: the last template set it for this track, or a hand edit
   // (a template's value changed counts as one). Unset: as the profile has it, no mark.
@@ -248,7 +264,8 @@
     dts_hd_hra: 'DTS-HD HRA', lpcm: 'LPCM', flac: 'FLAC', opus: 'Opus',
   }
   const channels = (layout: string) => layout.split('.').reduce((n, x) => n + +x, 0)
-  const actionOf = (t: AudioTrack): AudioAction => ovOf(t)?.action ?? 'copy'
+  const autoAction = (t: AudioTrack): AudioAction => t.auto?.action ?? 'copy'
+  const actionOf = (t: AudioTrack): AudioAction => ovOf(t)?.action ?? autoAction(t)
   const canAtmos = (t: AudioTrack) => t.atmos && t.codec === 'truehd'
   // The encodes come from the server; one whose tools are missing can't be picked (one already
   // picked stays, and blocks the job). Atmos is offered for TrueHD Atmos sources only.
@@ -263,7 +280,7 @@
 
   const setAction = (t: AudioTrack, a: AudioAction) =>
     editTrack(t, ov => {
-      ov.action = a === 'copy' ? null : a
+      ov.action = a === autoAction(t) ? null : a
       ov.layout = ov.bitrate_kbps = null
       ov.options = {}
     })
@@ -417,7 +434,7 @@
 {#snippet trackRow(t: Track, i: number, count: number)}
   {@const ov = ovOf(t)}
   {@const burned = burnKey === t.key}
-  {@const off = excluded(t) || burned}
+  {@const off = isOff(t)}
   {@const pos = outPos(t)}
   {@const copy = isAudio(t) && t.copy ? t : null}
   {#if dropAt === i}<div class="-my-1 h-0.5 rounded-full bg-primary"></div>{/if}
@@ -511,7 +528,7 @@
         <Input
           class="w-64 {titleMark ? INPUT_MARK[titleMark] : ''}"
           placeholder="No title"
-          value={ov?.title ?? t.title}
+          value={ov?.title ?? autoTitle(t)}
           title={titleMark ? `Title${note(titleMark)}` : undefined}
           aria-label="Title"
           onchange={e => setTitle(t, e.currentTarget.value)}
@@ -520,7 +537,7 @@
           class="w-28 {langMark ? INPUT_MARK[langMark] : ''}"
           show="tag"
           clearable={false}
-          value={ov?.language ?? t.language}
+          value={ov?.language ?? autoLanguage(t)}
           title={langMark ? `Language${note(langMark)}` : undefined}
           aria-label="Language"
           onchange={(v: string) => setLanguage(t, v)}
@@ -719,7 +736,7 @@
       <div class="mb-2 flex items-center gap-2">
         {#if kind === 'audio'}<AudioLinesIcon class="size-4 text-primary" />{:else}<CaptionsIcon class="size-4 text-primary" />{/if}
         <span class="font-medium">{title}</span>
-        <span class="text-xs text-muted-foreground">{rows.filter(t => !excluded(t)).length} of {rows.length} in the output</span>
+        <span class="text-xs text-muted-foreground">{rows.filter(t => !isOff(t)).length} of {rows.length} in the output</span>
         <span class="ml-auto text-xs text-muted-foreground"
           >Drag a track by its handle to reorder; {drops.desktop ? 'drop' : 'paste'} files here to add them; every change saves.</span
         >

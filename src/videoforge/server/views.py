@@ -6,7 +6,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from videoforge.core.models import Issue, Severity, track_key, with_copies
+from videoforge.core.job import track_defaults
+from videoforge.core.models import AudioTrack, Issue, Severity, SubTrack, track_key, with_copies
 from videoforge.core.pipeline.build import indexed, output_path
 from videoforge.core.plan_io import to_json
 from videoforge.core.video import info, target
@@ -93,15 +94,23 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
         src = e.probed.source
         tracks = [*src.audio, *e.probed.external_audio, *src.subs, *e.probed.external_subs]
         audio = [*src.audio, *(e.probed.external_audio if profile.external_audio else [])]
+        # The track editor shows each track as the profile has it with no hand edit (auto), and saves
+        # only what differs from that.
+        auto: dict[str, dict[str, Any]] | None = None
         if profile.track_editor:
             audio = with_copies(audio, e.spec.overrides.copies)
+            if e.plan is not None:
+                auto = track_defaults(e.spec, e.probed, profile)
+
+        def track(t: AudioTrack | SubTrack) -> dict[str, Any]:
+            key = track_key(t)
+            row = to_json(t) | {"key": key, "detected": profile.detected_flags(t)}
+            return row if auto is None else row | {"auto": auto.get(key, {"kept": False})}
+
         out["tracks"] = {
             "video": to_json(src.video) if src.video else None,
-            "audio": [to_json(t) | {"key": track_key(t), "detected": profile.detected_flags(t)} for t in audio],
-            "subs": [
-                to_json(t) | {"key": track_key(t), "detected": profile.detected_flags(t)}
-                for t in [*src.subs, *e.probed.external_subs]
-            ],
+            "audio": [track(t) for t in audio],
+            "subs": [track(t) for t in [*src.subs, *e.probed.external_subs]],
             "has_chapters": src.has_chapters,
             "count": len(tracks),
         }

@@ -30,7 +30,11 @@ class Profile(ABC):
     track_properties: ClassVar[tuple[TrackProperty, ...]] = ()
     # True: the plan follows the user's track order (Overrides.order), titles and per-track audio
     # encodes (TrackOverride.action/bitrate_kbps/layout), so the UI offers the full track editor.
+    # TrackOverride.exclude False keeps a track the profile's own choice leaves out.
     track_editor: ClassVar[bool] = False
+    # True: the profile picks the output tracks by its own rules (e.g. a group's spec), so Settings'
+    # default subtitle rules leave its new jobs alone; a template's rules, picked for the job, still apply.
+    picks_tracks: ClassVar[bool] = False
 
     @abstractmethod
     def plan(self, probed: ProbedInputs, original_language: str | None, overrides: Overrides) -> Plan:

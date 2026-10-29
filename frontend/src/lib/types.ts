@@ -294,6 +294,7 @@ export interface AudioTrack {
   size_bytes: number | null
   duration_ms: number | null
   copy: number // 1, 2, ...: another output track from the same source track
+  auto?: TrackAuto
 }
 
 export interface SubTrack {
@@ -312,6 +313,18 @@ export interface SubTrack {
   element_count: number | null
   external_path: string | null
   detected: Record<string, boolean>
+  auto?: TrackAuto
+}
+
+// A track as the profile has it with no hand edit (track editor profiles): the editor starts from these
+// values and saves only what differs. Not kept: the profile's own choice leaves it out.
+export interface TrackAuto {
+  kept: boolean
+  title?: string
+  language?: string
+  action?: AudioAction // audio only, as are layout and bitrate
+  layout?: string
+  bitrate_kbps?: number | null
 }
 
 export interface PlannedAudio {
@@ -449,6 +462,7 @@ export interface Profile {
   external_subtitles: boolean
   track_properties: TrackProperty[]
   track_editor: boolean // follows the user's track order, titles and audio encodes
+  picks_tracks?: boolean // its own rules pick the tracks: Settings' default subtitle rules don't apply
   defaults: { video: VideoSettings; encoder: EncoderSettings; template: Template }
   default: boolean
 }

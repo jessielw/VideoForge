@@ -14,6 +14,12 @@ languages, and flags. Use the job's **Audio** and **Subtitles** tabs to change t
 The available controls also depend on the selected profile. A profile can impose its own track
 rules instead of offering the full manual editor.
 
+A profile with its own rules can also offer the full editor. Its rules then pick, order, title and
+encode the tracks first, and the editor starts from that. A change you make wins over the rules.
+Setting a value back to what the rules chose removes your change. Ticking a track the rules left out
+keeps it. The order follows the rules until you move a track. The profile's checks still block an
+output its rules don't allow.
+
 ### Name subtitles
 
 **Name subtitles** on the Subtitles tab titles the kept tracks from their language and flags:

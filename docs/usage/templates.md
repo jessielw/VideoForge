@@ -112,7 +112,8 @@ A track with a title keeps it.
 **Settings → Default subtitles** holds subtitle rules that every new job gets unless its template sets
 its own. Use it for a standing policy, such as "keep English and forced English, name them, leave out
 the rest", without putting it in each template. Jobs already in the queue keep their subtitles. A
-profile that chooses subtitles by its own rules ignores it, as it does a template's.
+profile that picks tracks by its own rules ignores it. Its jobs still take the rules of a template
+you pick for them, if the profile has the full track editor.
 
 A typical policy is forced English first and default, then full English, with other subtitles
 excluded. Check the flags and order on several episodes before using it for a season.

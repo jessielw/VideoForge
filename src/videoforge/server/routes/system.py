@@ -216,6 +216,7 @@ def profiles(request: Request) -> list[dict[str, Any]]:
                 ],
                 "track_properties": [to_json(t) for t in p.track_properties],
                 "track_editor": p.track_editor,
+                "picks_tracks": p.picks_tracks,
                 "defaults": {
                     "video": to_json(video),
                     "encoder": to_json(encoder),

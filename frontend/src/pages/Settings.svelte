@@ -521,7 +521,7 @@
 
       <section class="col-span-full min-w-0 space-y-3" aria-label="Default subtitles">
         <h2 class="font-medium">Default subtitles</h2>
-        {#if !defaultProfile?.track_editor}
+        {#if !defaultProfile?.track_editor || defaultProfile.picks_tracks}
           <p class="text-xs text-muted-foreground">
             {defaultProfile?.name}'s rules choose its jobs' subtitles; these apply to other profiles' jobs.
           </p>

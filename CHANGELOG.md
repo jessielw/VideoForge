@@ -17,6 +17,11 @@ source), or in Docker on Linux.
   Configuration backups are version 3 (they carry the default rules); version 1 and 2 backups still
   import.
 
+- A profile with its own track rules can offer the full track editor (`picks_tracks` with
+  `track_editor`). The editor starts from the profile's picks, titles and encodes, and saves only what
+  you change. Ticking a track the rules left out keeps it (`exclude: false`). The track order is saved
+  only once you move a track. Settings' default subtitle rules leave such a profile's jobs alone.
+
 - **Name subtitles** on a job's Subtitles tab (StaxRip's "Set names"): titles the kept tracks from their
   language and flags, `English`, `English (Forced)`, `English (SDH)`; the untitled ones, or all.
 

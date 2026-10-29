@@ -372,7 +372,8 @@ class JobQueue:
         subs_default: TemplateSubs | None = None,
     ) -> tuple[list[Entry], list[str]]:
         """One job per matched source, starting from the profile's video defaults, or the template,
-        then the given settings; subs_default (Settings' subtitle rules) for a job its template sets none for.
+        then the given settings; subs_default (Settings' subtitle rules) for a job its template sets none for
+        (unless the profile picks tracks by its own rules).
         A source already in the queue is kept unless its exact job ID is explicitly replaced.
         Returns (new jobs, names skipped because they are busy)."""
         profile = self.profiles(profile_id)
@@ -399,7 +400,7 @@ class JobQueue:
                 )
                 if template is not None:
                     template.apply(spec)
-                if spec.subs_template is None and subs_default is not None:
+                if spec.subs_template is None and subs_default is not None and not profile.picks_tracks:
                     spec.subs_template = _copy(subs_default)
                 if video:
                     spec.video = _copy(video)

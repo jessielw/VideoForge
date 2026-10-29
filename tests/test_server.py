@@ -1387,6 +1387,40 @@ def test_default_subtitle_rules_apply_to_new_jobs_without_their_own(tmp_path):
         assert client.put("/api/presets/subs-default", json=None).json()["subs_default"] is None
 
 
+def test_default_subtitle_rules_leave_a_profile_that_picks_its_tracks(tmp_path, monkeypatch):
+    monkeypatch.setattr(ManualProfile, "picks_tracks", True)
+    make_files(tmp_path, "S01E01")
+    with make_client(tmp_path) as client:
+        client.put("/api/presets/subs-default", json={"rules": [], "others": "exclude"})
+        assert client.get("/api/profiles").json()[0]["picks_tracks"] is True
+        (job_id,) = add(client, tmp_path)
+        job = wait_for(client, job_id, "ready", "warn")
+        assert job["spec"]["overrides"]["tracks"] == {} and len(job["plan"]["subs"]) == 3
+
+
+def test_tracks_carry_the_profiles_own_choice(tmp_path):
+    """The track editor's starting values: each track as the profile plans it with no hand edit, so a
+    track left out by hand is still one the profile keeps."""
+    make_files(tmp_path, "S01E01")
+    with make_client(tmp_path) as client:
+        (job_id,) = add(client, tmp_path)
+        job = wait_for(client, job_id, "ready", "warn")
+        sub = job["tracks"]["subs"][0]
+        overrides = job["spec"]["overrides"] | {"tracks": {sub["key"]: {"exclude": True, "title": "Mine"}}}
+        job = client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides}).json()
+        assert sub["key"] not in [f"id:{s['source']['id']}" for s in job["plan"]["subs"]]
+        assert job["tracks"]["subs"][0]["auto"] == {"kept": True, "title": sub["title"], "language": sub["language"]}
+        audio = job["tracks"]["audio"][0]
+        assert audio["auto"] | {"title": None} == {
+            "kept": True,
+            "title": None,
+            "language": audio["language"],
+            "action": "copy",
+            "layout": audio["layout"],
+            "bitrate_kbps": None,
+        }
+
+
 def test_template_audio_is_dropped_without_a_track_editor(tmp_path, monkeypatch):
     """A profile whose rules choose the tracks keeps its own picks: the template's audio and subtitles are dropped."""
     monkeypatch.setattr(ManualProfile, "track_editor", False)

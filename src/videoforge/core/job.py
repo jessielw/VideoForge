@@ -18,7 +18,7 @@ from enum import StrEnum
 from fractions import Fraction
 from pathlib import Path
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 import uuid
 
 from videoforge.core.config import AppConfig, Tools
@@ -34,6 +34,7 @@ from videoforge.core.models import (
     TemplateChoice,
     TemplateSubs,
     VideoInfo,
+    track_key,
 )
 from videoforge.core.tools import tool_issues
 from videoforge.core.video import encoders, filters, hdr, options, target
@@ -274,3 +275,28 @@ def plan_spec(spec: JobSpec, probed: ProbedInputs, profile: Profile, tools: Tool
         plan.issues += filters.field_issues(probed.source.video, spec.video)
         plan.issues += target.issues(spec.encoder, plan, spec.container(profile))
     return plan
+
+
+def track_defaults(spec: JobSpec, probed: ProbedInputs, profile: Profile) -> dict[str, dict[str, Any]]:
+    """What the profile makes of each planned track with no hand edits, by track key: the track editor's
+    starting values, which it saves no override for. A track missing here is one the profile leaves out."""
+    o = spec.overrides
+    plan = plan_job(
+        profile,
+        replan(spec, probed),
+        o.original_language,
+        Overrides(original_language=o.original_language, copies=list(o.copies)),
+    )
+    out: dict[str, dict[str, Any]] = {}
+    for a in plan.audio:
+        out[track_key(a.source)] = {
+            "kept": True,
+            "title": a.title,
+            "language": a.language,
+            "action": a.action.value,
+            "layout": str(a.out_layout),
+            "bitrate_kbps": a.bitrate_kbps,
+        }
+    for s in plan.subs:
+        out[track_key(s.source)] = {"kept": True, "title": s.title, "language": s.language}
+    return out
