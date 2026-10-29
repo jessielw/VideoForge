@@ -7,7 +7,7 @@
   // Files can be added to the job here and removed again, and an audio track can be used more
   // than once ("Add a track from…": a copy with its own encode, title and flags).
   import type { InputChanges } from '../lib/api'
-  import { emptyOverride, isEmpty, shownOptions } from '../lib/format'
+  import { emptyOverride, isEmpty, shownOptions, subtitleName } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type { AudioAction, AudioEncodeInfo, AudioTrack, EncodeOptionInfo, JobDetail, Overrides, PlannedAudio, SubTrack, TrackOverride } from '../lib/types'
   import FileBrowser from './FileBrowser.svelte'
@@ -21,6 +21,7 @@
   import AudioLinesIcon from '@lucide/svelte/icons/audio-lines'
   import CaptionsIcon from '@lucide/svelte/icons/captions'
   import CheckIcon from '@lucide/svelte/icons/check'
+  import ChevronDownIcon from '@lucide/svelte/icons/chevron-down'
   import CopyPlusIcon from '@lucide/svelte/icons/copy-plus'
   import FilePlusIcon from '@lucide/svelte/icons/file-plus'
   import FlameIcon from '@lucide/svelte/icons/flame'
@@ -28,6 +29,7 @@
   import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
   import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal'
+  import TagIcon from '@lucide/svelte/icons/tag'
   import XIcon from '@lucide/svelte/icons/x'
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
@@ -150,6 +152,28 @@
   function selectSubs(include: (t: SubTrack) => boolean) {
     const o = draft()
     selectSubtitles(o, subRows, include)
+    commit(o)
+  }
+
+  // Name the kept subtitles from their language and flags ("English (SDH)"), StaxRip's "Set names": the
+  // untitled ones, or all. A flag the profile doesn't offer is the track's own.
+  const titleOf = (t: Track) => ovOf(t)?.title ?? t.title
+  const nameFlag = (t: SubTrack, key: 'forced' | 'hearing_impaired' | 'commentary') =>
+    properties.some(p => p.key === key) ? flagOn(t, key) : t[key]
+  const subName = (t: SubTrack) =>
+    subtitleName(ovOf(t)?.language ?? t.language, {
+      forced: nameFlag(t, 'forced'),
+      hearing_impaired: nameFlag(t, 'hearing_impaired'),
+      commentary: nameFlag(t, 'commentary'),
+    })
+  const untitled = $derived(subRows.filter(t => !excluded(t) && !titleOf(t).trim()).length)
+  function nameSubs(all: boolean) {
+    const o = draft()
+    for (const t of subRows as SubTrack[]) {
+      if (excluded(t) || (!all && titleOf(t).trim())) continue
+      const name = subName(t)
+      edit(o, t.key, ov => (ov.title = name === t.title ? null : name))
+    }
     commit(o)
   }
 
@@ -701,8 +725,22 @@
         >
       </div>
       {#if kind === 'sub'}
-        <div class="mb-3">
+        <div class="mb-3 flex flex-wrap gap-2">
           <SubtitleSelectionMenu tracks={subRows} {overrides} disabled={!editable} onselect={selectSubs} />
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger disabled={!editable || !subRows.length} title="Title the kept subtitles from their language and flags">
+              {#snippet child({ props })}
+                <Button {...props} variant="outline" size="sm"><TagIcon />Name subtitles<ChevronDownIcon class="size-3.5 text-muted-foreground" /></Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="start" class="w-72">
+              <DropdownMenu.Label>Language and flags: English (Forced), English (SDH)</DropdownMenu.Label>
+              <DropdownMenu.Item disabled={!untitled} onSelect={() => nameSubs(false)}>
+                Name untitled tracks<span class="ml-auto text-xs text-muted-foreground tabular-nums">{untitled}</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => nameSubs(true)}>Rename all kept tracks</DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         </div>
       {/if}
       {#if rows.length}

@@ -12,6 +12,9 @@ source), or in Docker on Linux.
 
 ### Added
 
+- **Name subtitles** on a job's Subtitles tab (StaxRip's "Set names"): titles the kept tracks from their
+  language and flags, `English`, `English (Forced)`, `English (SDH)`; the untitled ones, or all.
+
 - Template folders: a folder box before a template's name (`Group / 1080p`, `/` for nested ones). The
   Templates list shows them as a tree you can fold; New jobs groups its template picker by folder. The
   folder is part of the name, so defaults, exports and imports keep it.

@@ -136,6 +136,13 @@ export function languageName(tag: string): string {
   }
 }
 
+/** A subtitle's title from its language and flags: "English", "English (Forced)", "Spanish (Latin America) (SDH)".
+ * The same names as the server's (core/template.py sub_title), which templates use. */
+export function subtitleName(language: string, flags: { forced?: boolean; hearing_impaired?: boolean; commentary?: boolean }): string {
+  const tags = [flags.forced && 'Forced', flags.hearing_impaired && 'SDH', flags.commentary && 'Commentary'].filter(Boolean)
+  return [languageName(language.trim() || 'und'), ...tags.map(t => `(${t})`)].join(' ')
+}
+
 export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number): (...a: A) => void {
   let t: ReturnType<typeof setTimeout> | undefined
   return (...a: A) => {

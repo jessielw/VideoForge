@@ -14,6 +14,14 @@ languages, and flags. Use the job's **Audio** and **Subtitles** tabs to change t
 The available controls also depend on the selected profile. A profile can impose its own track
 rules instead of offering the full manual editor.
 
+### Name subtitles
+
+**Name subtitles** on the Subtitles tab titles the kept tracks from their language and flags:
+`English`, `English (Forced)`, `English (SDH)`, `Spanish (Latin America) (Commentary)`. **Name untitled
+tracks** fills only the empty titles; **Rename all kept tracks** replaces every title. Each is an
+ordinary title edit, so it can be changed or reset afterwards. Template subtitle rules can do the same
+on their own ([Name untitled tracks](templates.md#subtitle-rules)).
+
 ## Audio encoders
 
 | Output | Tools |
