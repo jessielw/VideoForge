@@ -2,9 +2,12 @@
   // Templates without a file: a job's whole run (video, crop, encoder, container, AutoQPF, audio, subtitles), set up
   // once and picked when adding jobs. Each profile's own defaults are built in; star a template to
   // make it the profile's default (New jobs starts on it). A job's Template menu saves one from a job.
+  // A template's folder is part of its name ("Group / 1080p / Film"); the list shows them as a tree.
   import { toast } from 'svelte-sonner'
   import { onDestroy } from 'svelte'
+  import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
   import CopyIcon from '@lucide/svelte/icons/copy'
+  import FolderIcon from '@lucide/svelte/icons/folder'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import SaveIcon from '@lucide/svelte/icons/save'
   import StarIcon from '@lucide/svelte/icons/star'
@@ -27,17 +30,30 @@
   import { drafts } from '../lib/drafts'
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
+  import { buildTree, joinName, SEP, splitName, type TreeNode } from '../lib/templateFolders'
   import { SOURCE_FILTERS, type CropMode, type SourceFilter, type Template } from '../lib/types'
 
   type Choice = { name: string; data: Template; builtin: boolean }
   // What the editor holds: the saved template it started from (name null = not saved yet).
   type Open = { name: string | null; builtin: boolean; data: Template }
 
-  const restored = drafts.read<{ profile: string; opened: Open | null; draft: Template | null; draftName: string }>('templates')
+  const restored = drafts.read<{ profile: string; opened: Open | null; draft: Template | null; draftName: string; collapsed?: string[] }>('templates')
   let profile = $state(restored?.profile ?? '')
   let opened = $state<Open | null>(restored?.opened ?? null)
   let draft = $state<Template | null>(restored?.draft ?? null)
-  let draftName = $state(restored?.draftName ?? '')
+  // The name as two boxes: its folder (as typed, "a/b") and its own label; draftName is the stored form.
+  let draftFolder = $state(splitName(restored?.draftName ?? '').folder.join(SEP))
+  let draftLabel = $state(splitName(restored?.draftName ?? '').label)
+  const draftName = $derived(joinName(draftFolder, draftLabel))
+  function setName(name: string) {
+    const { folder, label } = splitName(name)
+    draftFolder = folder.join(SEP)
+    draftLabel = label
+  }
+  let collapsed = $state<string[]>(restored?.collapsed ?? [])
+  function toggleFolder(path: string) {
+    collapsed = collapsed.includes(path) ? collapsed.filter(p => p !== path) : [...collapsed, path]
+  }
   let pending = $state<(() => void) | null>(null)
   let busy = $state(false)
   let error = $state('')
@@ -50,6 +66,7 @@
   ]
 
   const choices = $derived<Choice[]>(app.presetChoices('template', profile))
+  const tree = $derived(buildTree(choices.filter(c => !c.builtin), c => c.name))
   const starred = $derived(app.defaultTemplate(profile))
   const userNames = $derived(new Set(app.presets.template.map(t => t.name)))
   const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
@@ -64,7 +81,7 @@
     !!opened && !!draft && !opened.builtin && (opened.name === null || draftName.trim() !== opened.name || canon(draft) !== canon(opened.data)),
   )
 
-  function persist() { drafts.write('templates', $state.snapshot({ profile, opened, draft, draftName })) }
+  function persist() { drafts.write('templates', $state.snapshot({ profile, opened, draft, draftName, collapsed })) }
   function request(proceed: () => void) {
     if (busy) return
     if (dirty) pending = proceed
@@ -94,7 +111,7 @@
   function open(c: Choice) {
     opened = { name: c.builtin ? null : c.name, builtin: c.builtin, data: copy(c.data) }
     draft = copy(c.data)
-    draftName = c.name
+    setName(c.name)
     pending = null
     error = ''
   }
@@ -112,23 +129,24 @@
   function startNew() {
     const base = choices[0]?.data
     if (!base) return
+    const folder = opened && !opened.builtin ? draftFolder : '' // in the open template's folder
     opened = { name: null, builtin: false, data: copy(base) }
     draft = copy(base)
-    draftName = unique('New template')
+    setName(unique(joinName(folder, 'New template')))
     error = ''
   }
 
   function duplicate() {
     if (!draft) return
     opened = { name: null, builtin: false, data: copy(draft) }
-    draftName = unique(`${draftName} copy`)
+    setName(unique(`${draftName} copy`))
     error = ''
   }
 
   async function save(): Promise<boolean> {
     if (!opened || !draft) return false
     const name = draftName.trim()
-    if (!name) {
+    if (!draftLabel.trim()) {
       error = 'Give the template a name'
       return false
     }
@@ -142,7 +160,7 @@
       if (opened.name && opened.name !== name) app.presets = await api.renamePreset('template', opened.name, name)
       app.presets = await api.savePreset('template', name, saved)
       opened = { name, builtin: false, data: saved }
-      if (draftName.trim() === name) draftName = name
+      if (draftName === name) setName(name) // the folder as stored ("a / b")
       error = ''
       toast.success(`Saved ${name}`)
       return draftName.trim() === name && canon(draft) === canon(saved)
@@ -179,8 +197,8 @@
     if (action === 'stay' || !next) { pending = null; return }
     if (action === 'save' && !(await save())) return
     if (action === 'discard' && opened) {
-      if (opened.name === null) { opened = null; draft = null; draftName = '' }
-      else { draft = copy(opened.data); draftName = opened.name }
+      if (opened.name === null) { opened = null; draft = null; setName('') }
+      else { draft = copy(opened.data); setName(opened.name) }
     }
     pending = null
     next()
@@ -203,26 +221,50 @@
         </NativeSelect>
       </label>
     </div>
-    <ul class="min-h-0 flex-1 overflow-auto p-2" aria-label="Templates">
-      {#each choices as c (`${c.builtin}:${c.name}`)}
-        {@const active = opened && (c.builtin ? opened.builtin && draftName === c.name : opened.name === c.name)}
-        <li class="flex items-center gap-1 rounded-md {active ? 'bg-primary/15 text-primary' : 'hover:bg-accent'}">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            class={c.name === starred ? 'text-warning hover:text-warning' : 'text-muted-foreground opacity-50 hover:opacity-100'}
-            title={c.name === starred ? `New jobs start on this template for ${profile}` : 'Make this the default for New jobs'}
-            aria-label="Default: {c.name}"
-            aria-pressed={c.name === starred}
-            onclick={() => star(c)}
-          >
-            <StarIcon class={c.name === starred ? 'fill-current' : ''} />
-          </Button>
-          <button class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm" onclick={() => pick(c)}>
-            {c.name}{#if c.builtin}<span class="ml-2 text-xs text-muted-foreground">built in</span>{/if}
-          </button>
-        </li>
+    {#snippet row(c: Choice, label: string, depth: number)}
+      {@const active = opened && (c.builtin ? opened.builtin && draftName === c.name : opened.name === c.name)}
+      <li class="flex items-center gap-1 rounded-md {active ? 'bg-primary/15 text-primary' : 'hover:bg-accent'}" style:padding-left="{depth * 1.25}rem">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          class={c.name === starred ? 'text-warning hover:text-warning' : 'text-muted-foreground opacity-50 hover:opacity-100'}
+          title={c.name === starred ? `New jobs start on this template for ${profile}` : 'Make this the default for New jobs'}
+          aria-label="Default: {c.name}"
+          aria-pressed={c.name === starred}
+          onclick={() => star(c)}
+        >
+          <StarIcon class={c.name === starred ? 'fill-current' : ''} />
+        </Button>
+        <button class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm" title={c.name} onclick={() => pick(c)}>
+          {label}{#if c.builtin}<span class="ml-2 text-xs text-muted-foreground">built in</span>{/if}
+        </button>
+      </li>
+    {/snippet}
+    {#snippet nodes(list: TreeNode<Choice>[], depth: number)}
+      {#each list as n (n.kind === 'folder' ? `folder:${n.path}` : `${n.item.builtin}:${n.item.name}`)}
+        {#if n.kind === 'folder'}
+          {@const open = !collapsed.includes(n.path)}
+          <li style:padding-left="{depth * 1.25}rem">
+            <button
+              class="flex w-full items-center gap-1.5 rounded-md py-1.5 pr-2 pl-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-expanded={open}
+              onclick={() => toggleFolder(n.path)}
+            >
+              <ChevronRightIcon class="size-4 shrink-0 transition-transform {open ? 'rotate-90' : ''}" />
+              <FolderIcon class="size-4 shrink-0" />
+              <span class="min-w-0 flex-1 truncate font-medium">{n.name}</span>
+              <span class="text-xs tabular-nums">{n.count}</span>
+            </button>
+          </li>
+          {#if open}{@render nodes(n.children, depth + 1)}{/if}
+        {:else}
+          {@render row(n.item, n.label, depth)}
+        {/if}
       {/each}
+    {/snippet}
+    <ul class="min-h-0 flex-1 overflow-auto p-2" aria-label="Templates">
+      {#each choices.filter(c => c.builtin) as c (`${c.builtin}:${c.name}`)}{@render row(c, c.name, 0)}{/each}
+      {@render nodes(tree, 0)}
     </ul>
     <div class="space-y-2 border-t p-2">
       <Button variant="outline" class="w-full" onclick={() => request(startNew)}><PlusIcon />New template</Button>
@@ -234,7 +276,17 @@
     {#if draft && opened}
       <div class="space-y-4 p-6">
         <header class="flex flex-wrap items-center gap-2">
-          <Input class="max-w-sm text-base font-semibold" aria-label="Template name" bind:value={draftName} disabled={readOnly} />
+          {#if !readOnly}
+            <Input
+              class="w-44"
+              aria-label="Template folder"
+              placeholder="No folder"
+              title="Folder: use / for nested folders (Group / 1080p)"
+              bind:value={draftFolder}
+            />
+            <span class="text-muted-foreground" aria-hidden="true">/</span>
+          {/if}
+          <Input class="max-w-sm text-base font-semibold" aria-label="Template name" bind:value={draftLabel} disabled={readOnly} />
           {#if dirty}<span class="text-xs text-warning">{opened.name === null ? 'Not saved yet' : 'Unsaved changes'}</span>{/if}
           <div class="ml-auto flex gap-2">
             {#if !readOnly}<Button onclick={save} disabled={busy || !dirty}><SaveIcon />Save</Button>{/if}

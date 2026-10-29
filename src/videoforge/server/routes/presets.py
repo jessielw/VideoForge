@@ -210,7 +210,7 @@ def set_template_default(request: Request, profile_id: str, body: dict[str, Any]
     return _all(request)
 
 
-@router.put("/{kind}/{name}")
+@router.put("/{kind}/{name:path}")
 def save_preset(request: Request, kind: str, name: str, data: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     store = request.app.state.store
     name = _check_name(name)
@@ -259,7 +259,7 @@ def _save_grouped(request: Request, kind: str, body: GroupedPresetBody) -> dict[
     return _all(request)
 
 
-@router.post("/{kind}/{name}/rename")
+@router.post("/{kind}/{name:path}/rename")
 def rename_preset(request: Request, kind: str, name: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     """{to}: a new name (replacing a preset of that name); a default template stays the default."""
     _kind(kind)
@@ -281,7 +281,7 @@ def rename_preset(request: Request, kind: str, name: str, body: dict[str, Any] =
     return _all(request)
 
 
-@router.delete("/{kind}/{name}")
+@router.delete("/{kind}/{name:path}")
 def delete_preset(request: Request, kind: str, name: str) -> dict[str, Any]:
     _kind(kind)
     request.app.state.store.delete_preset(kind, name)  # a default it was falls back to the profile's

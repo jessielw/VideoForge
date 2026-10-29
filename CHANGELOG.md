@@ -12,6 +12,10 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Template folders: a folder box before a template's name (`Group / 1080p`, `/` for nested ones). The
+  Templates list shows them as a tree you can fold; New jobs groups its template picker by folder. The
+  folder is part of the name, so defaults, exports and imports keep it.
+
 - Language boxes (template audio and subtitle rules, a track's language, the original language) are a
   searchable picker: type part of a name or a tag, or pick from the list; rules show their languages as
   chips. Any other tag can still be typed. It replaces the browser's own suggestion popup.

@@ -17,6 +17,14 @@ switching profiles, or starting another template offers **Save**, **Discard**, o
 Applying a template copies settings into each job. Verify one episode from a batch before running
 the rest, especially when the sources differ in resolution, languages, or channel layouts.
 
+## Folders
+
+Put a template in a folder with the box before its name: `Group / 1080p` puts `Film` in `1080p`
+inside `Group` (use `/` for nested folders; leave it empty for none). The template list shows the
+folders as a tree you can fold, the New jobs picker groups them, and moving a template is editing its
+folder and saving. The folder is part of the template's name (`Group / 1080p / Film`), so a starred
+default, an export, or an import keeps it.
+
 Use **Encoder preset** to choose a saved compression configuration while editing a template, or
 override just the encoder in New jobs. Presets are organized under each encoder with optional nested
 folders; see [saved encoder presets](encoders.md#saved-encoder-presets). Templates store a copy of

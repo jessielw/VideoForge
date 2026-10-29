@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+from urllib.parse import quote
 
 from conftest import audio, source, sub
 from fastapi.testclient import TestClient
@@ -1104,6 +1105,21 @@ def test_encoder_preset_settings_are_snapshots(tmp_path):
         assert client.patch(f"/api/jobs/{job_id}", json={"encoder": settings}).status_code == 200
         after = client.get(f"/api/jobs/{job_id}").json()["spec"]
         assert after == before | {"encoder": settings}
+
+
+def test_a_template_in_a_folder_is_saved_renamed_starred_and_deleted(tmp_path):
+    """A template's folder is part of its name ("a / b / Film"): the / goes through the routes encoded."""
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        name, moved = "Group / 1080p / Film", "Group / Archive / Film"
+        url = f"/api/presets/template/{quote(name, safe='')}"
+        assert client.put(url, json={"qpf": False}).status_code == 200
+        assert client.put("/api/presets/template-default/manual", json={"name": name}).json()["template_defaults"] == {
+            "manual": name
+        }
+        presets = client.post(f"{url}/rename", json={"to": moved}).json()
+        assert [t["name"] for t in presets["template"]] == [moved] and presets["template_defaults"] == {"manual": moved}
+        assert client.delete(f"/api/presets/template/{quote(moved, safe='')}").json()["template"] == []
 
 
 def test_keep_ar_resize_is_fitted_on_the_server(tmp_path):

@@ -6,6 +6,7 @@
   import { api } from '../lib/api'
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
+  import { splitName } from '../lib/templateFolders'
   import { Checkbox } from '$lib/components/ui/checkbox'
   import type { CropMode, JobSpec, Template, TemplateAudio, TrackOverride } from '../lib/types'
   import CheckIcon from '@lucide/svelte/icons/check'
@@ -128,13 +129,14 @@
   <Popover.Content align="end" class="w-80 gap-2 p-2" onEscapeKeydown={e => e.stopPropagation()}>
     <ul class="max-h-64 overflow-auto">
       {#each choices as c (`${c.builtin}:${c.name}`)}
+        {@const { folder, label } = splitName(c.name)}
         <li class="group flex items-center gap-1">
           <button
             class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-accent"
             onclick={() => load(c.data)}
           >
             <span class="w-3.5 shrink-0">{#if c.name === matched}<CheckIcon class="size-3.5 text-primary" />{/if}</span>
-            <span class="truncate">{c.name}</span>
+            <span class="truncate" title={c.name}>{#if folder.length}<span class="text-muted-foreground">{folder.join(' / ')} / </span>{/if}{label || c.name}</span>
             <span class="ml-auto shrink-0 text-xs text-muted-foreground">{c.builtin ? 'profile' : cropNote(c.data)}</span>
           </button>
           {#if !c.builtin}

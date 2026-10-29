@@ -15,6 +15,7 @@
   import { LatestRequest } from '../lib/latestRequest'
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
+  import { groupByFolder } from '../lib/templateFolders'
   import { ENCODERS, type EncoderSettings, type MatchResult } from '../lib/types'
   import LanguagePicker from '../components/LanguagePicker.svelte'
 
@@ -40,6 +41,7 @@
   let encoder = $state<EncoderSettings | null>(restored?.encoder ?? null)
   let container = $state(restored?.container ?? '')
   const templateChoices = $derived(app.presetChoices('template', profile))
+  const templateGroups = $derived(groupByFolder(templateChoices, c => c.name))
   const template = $derived(templateChoices.find(c => c.name === (templateName ?? app.defaultTemplate(profile))) ?? templateChoices[0])
   const templateKey = $derived(JSON.stringify([profile, templateName ?? app.defaultTemplate(profile)]))
   let previousProfile = restored?.profile ?? ''
@@ -191,9 +193,14 @@
       </div>
       <div class="text-sm text-muted-foreground">Template</div>
       <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+        {#snippet templateOptions(items: { item: (typeof templateChoices)[number]; label: string }[])}
+          {#each items as { item: c, label } (`${c.builtin}:${c.name}`)}
+            <option value={c.name}>{label}{c.name === app.defaultTemplate(profile) ? ' (default)' : ''}</option>
+          {/each}
+        {/snippet}
         <NativeSelect class="min-w-0 max-w-full" aria-label="Template" value={template?.name ?? ''} onchange={e => (templateName = e.currentTarget.value)}>
-          {#each templateChoices as c (`${c.builtin}:${c.name}`)}
-            <option value={c.name}>{c.name}{c.name === app.defaultTemplate(profile) ? ' (default)' : ''}</option>
+          {#each templateGroups as g (g.folder)}
+            {#if g.folder}<optgroup label={g.folder}>{@render templateOptions(g.items)}</optgroup>{:else}{@render templateOptions(g.items)}{/if}
           {/each}
         </NativeSelect>
         <button class="underline underline-offset-2" onclick={() => router.go('templates')}>Edit templates…</button>
