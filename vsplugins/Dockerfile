@@ -12,7 +12,9 @@ ARG FFMPEG_VERSION=n9.0.2
 # before it (its version string is `git describe` from there).
 ARG GPAC_COMMIT=39c23ed6f027741c154cd1fe4adbc087a503cc4b
 ARG GPAC_TAG=v26.07.0
-ARG X264_COMMIT=0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee
+# x264: Patman's mod at tag 0.165.3223+44, on VideoLAN's r3223.
+ARG X264_COMMIT=518da5b681a7a2c60afd91703778aeca426e9616
+ARG X264_BASE=0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee
 ARG VAPOURSYNTH_VERSION=81
 ARG MESON_VERSION=1.12.1
 # The Zig versions manifest.toml's zig plugins ask for, with their tarballs' sha256.
@@ -53,12 +55,17 @@ RUN git init -q /src/gpac && cd /src/gpac \
     && MP4Box -version \
     && gpac -h filters 2>&1 | grep -q ffdmx
 
-# --- x264 (reads y4m from vspipe, so no input libraries; the whole history: its version counts commits) ---
+# --- x264, Patman's mod (StaxRip's and the Windows tools' build: --aq-bias-strength etc.). It reads y4m from
+# vspipe, so no input libraries. The whole history: its version counts commits, the "+N" past X264_BASE
+# (VideoLAN's commit it's based on, taken as origin/master). The mod's configure isn't executable in git --
 ARG X264_COMMIT
+ARG X264_BASE
 RUN git init -q /src/x264 && cd /src/x264 \
-    && git fetch -q https://code.videolan.org/videolan/x264.git "${X264_COMMIT}" && git checkout -q FETCH_HEAD \
-    && ./configure --prefix=/opt/vf --bit-depth=all --disable-lavf --disable-ffms --disable-gpac --disable-lsmash \
-        --disable-swscale --enable-strip \
+    && git fetch -q https://github.com/Patman86/x264-Mod-by-Patman.git "${X264_COMMIT}" \
+        "+${X264_BASE}:refs/remotes/origin/master" \
+    && git checkout -q "${X264_COMMIT}" \
+    && bash ./configure --prefix=/opt/vf --bit-depth=all --disable-avs --disable-vpy --disable-lavf --disable-ffms \
+        --disable-gpac --disable-lsmash --disable-swscale --enable-strip \
     && make -j"$(nproc)" && make install \
     && cd / && rm -rf /src/x264 \
     && x264 --version | head -1

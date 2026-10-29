@@ -18,6 +18,10 @@ source), or in Docker on Linux.
   The image honors `PUID` / `PGID`, `UMASK` and `TZ`: started as root, it runs as that user (through gosu)
   and hands `/data` to it.
 
+- The Docker image's x264 is Patman's mod (0.165.3223+44, on VideoLAN's r3223), the build StaxRip and the
+  Windows tools use, so its options (`--aq-bias-strength` and others) work in the container too. VideoLAN's
+  x264 refused them ("unrecognized option").
+
 - Auto crop of a Dolby Vision source takes the bars from its RPU's L5 active area (DoviCrop's method), not
   only the luma: the detected borders stop short of a bar's soft edge (Godzilla Minus One: 274 where L5 says
   276 / 277). Per side the smallest bar of the presets in use (a varying-aspect film keeps every frame), rounded
