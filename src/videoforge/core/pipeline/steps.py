@@ -98,6 +98,7 @@ class StepProgress:
     reused: bool = False
     fps: float | None = None  # this step's encoder (or vspipe), when it prints one
     eta: int | None = None  # seconds left in this step, by the encoder's own count
+    rest: float = 0.0  # of the job, 0..1: the work still to do outside this step (the steps after it, background)
 
 
 ProgressFn = Callable[[StepProgress], None]
@@ -186,8 +187,11 @@ def run_steps(
             # the lead may not have reported yet (it is set just before its step starts)
             shown_frac = partial.get(shown, 0.0)
             fps, eta = rates.get(shown, (None, None))
+            rest = max(0.0, round(1 - overall - steps[shown].weight * (1 - shown_frac) / total_weight, 6))
             progress(
-                StepProgress(shown, len(steps), steps[shown], shown_frac, overall, reused and shown == i, fps, eta)
+                StepProgress(
+                    shown, len(steps), steps[shown], shown_frac, overall, reused and shown == i, fps, eta, rest
+                )
             )
 
     def finished(i: int) -> None:

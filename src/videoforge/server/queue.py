@@ -1099,10 +1099,11 @@ class JobQueue:
 
     def _progress(self, e: Entry, token: CancelToken | None) -> ProgressFn:
         """A run's progress callback (a job's or the index lane's): sets e.progress, with the step's fps and eta
-        when its encoder prints them, the seconds since the run started, and the job's time left (from how fast
-        overall moved since this run's own work began: steps reused from an earlier run don't count), and
-        publishes it at most every _PROGRESS_INTERVAL (a step's start and end always). Time paused (the token's)
-        doesn't count."""
+        when its encoder prints them, the seconds since the run started, and the job's time left: the step's eta
+        where its encoder gives one, plus the rest of the job at the pace overall moved since this run's own work
+        began (steps reused from an earlier run don't count). A pace alone would count a fast pass 1's speed for
+        a slow pass 2, and barely move through it. Publishes it at most every _PROGRESS_INTERVAL (a step's start
+        and end always). Time paused (the token's) doesn't count."""
 
         def clock() -> float:
             return _now() - (token.paused_seconds if token is not None else 0.0)
@@ -1116,9 +1117,14 @@ class JobQueue:
             now = clock()
             if base is None and not p.reused:
                 base = (now, p.overall)
-            left = None
+            pace = None  # of the job a second
             if base is not None and p.overall - base[1] >= _ETA_AFTER[0] and now - base[0] >= _ETA_AFTER[1]:
-                left = round((now - base[0]) * (1 - p.overall) / (p.overall - base[1]))
+                pace = (p.overall - base[1]) / (now - base[0])
+            left = None
+            if p.eta is not None and (pace or not p.rest):
+                left = p.eta + (round(p.rest / pace) if pace and p.rest else 0)
+            elif pace:
+                left = round((1 - p.overall) / pace)
             e.progress = {
                 "step": p.step.label,
                 "index": p.index,

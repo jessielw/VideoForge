@@ -404,8 +404,15 @@ def test_progress_guesses_the_jobs_time_left(tmp_path, monkeypatch):
         progress(StepProgress(1, 3, step, 0.0, 0.4))
         assert entry.progress["left"] is None
         clock[0] = 130.0
+        progress(StepProgress(1, 3, step, 0.0, 0.4, eta=50, rest=0.3))
+        assert entry.progress["left"] is None  # the eta, but no pace yet for the rest
+        clock[0] = 130.0
         progress(StepProgress(1, 3, step, 0.5, 0.6))  # 0.2 in 30 s: 0.4 left takes 60 s
         assert (entry.progress["elapsed"], entry.progress["left"]) == (30, 60)
+        clock[0] = 160.0
+        # a slower step with an eta: its eta, plus the 0.2 after it at the pace so far (0.3 in 60 s), not 0.3 by pace
+        progress(StepProgress(1, 3, step, 0.75, 0.7, eta=90, rest=0.2))
+        assert entry.progress["left"] == 90 + 40
 
 
 def test_queue_runs_jobs_and_streams_events(tmp_path):
@@ -430,7 +437,7 @@ def test_queue_runs_jobs_and_streams_events(tmp_path):
             assert tool_line["step"] == "video"
             p = next(ev for ev in events if ev["type"] == "progress")
             assert (p["step"], p["overall"], p["fps"], p["eta"], p["elapsed"]) == ("Video (x264)", 0.5, 24.0, 10, 0)
-            assert p["left"] is None  # too soon to guess the job's time left
+            assert p["left"] == 10  # too soon for a pace, but the encoder's eta and nothing after it
             # The worker's last queue event says the queue stopped (it once said running until a reload).
             while not ((ev := ws.receive_json())["type"] == "queue" and ev["queued"] == 0 and ev["current"] is None):
                 pass

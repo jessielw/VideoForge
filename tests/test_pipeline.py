@@ -1507,6 +1507,26 @@ def test_progress_carries_the_encoders_fps_and_eta(tmp_path: Path):
     ]
 
 
+def test_progress_carries_the_jobs_work_outside_the_step(tmp_path: Path):
+    from videoforge.core.pipeline.steps import Step, StepProgress, run_steps
+
+    first, second = tmp_path / "pass1", tmp_path / "video.264"
+
+    def runner(argvs, log, cancel):
+        out = first if argvs[0][0] == "pass1" else second
+        log("[x264] [ 50.0%] 120/240 frames, 30.00 fps, 900 kb/s, eta 0:00:08")
+        out.write_text("264", encoding="utf-8")
+
+    events: list[StepProgress] = []
+    steps = [
+        Step("video.pass1", "Pass 1", argvs=(("pass1",),), outputs=(first,), weight=40),
+        Step("video.pass2", "Pass 2", argvs=(("pass2",),), outputs=(second,), weight=60),
+    ]
+    run_steps(steps, {}, log=lambda _line: None, runner=runner, progress=events.append)
+    halves = [(e.index, e.rest) for e in events if e.fraction == 0.5]
+    assert halves == [(0, 0.6), (1, 0.0)]  # pass 1 halfway: pass 2's 0.6 is still to do; pass 2: nothing after it
+
+
 def test_work_dir_is_next_to_the_source_and_separate_from_staxrip(tmp_path: Path):
     from videoforge.core.workdir import remove_work_dir, work_dir
 
