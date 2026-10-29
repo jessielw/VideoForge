@@ -391,6 +391,7 @@
     {:else if current}
       <FramePreview
         {jobId}
+        source={job.spec.inputs.source}
         {stage}
         frames={current.frames}
         fps={current.fps}

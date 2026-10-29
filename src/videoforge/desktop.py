@@ -155,6 +155,10 @@ def run_window(app: Any, host: str, port: int, url: str, data_dir: Path) -> int:
     data_dir.mkdir(parents=True, exist_ok=True)
     app_icon().save(icon_path, sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (256, 256)])
 
+    # pywebview cancels downloads unless allowed: with it, a saved frame or an export asks where to save
+    # (a Save As starting in Downloads, the page's file name filled in).
+    webview.settings["ALLOW_DOWNLOADS"] = True
+
     # Without a screen, Windows centers it across two monitors: open maximized on the primary one (at 0,0),
     # with a restore size that fits it.
     screen = next((s for s in webview.screens if s.x == 0 and s.y == 0), None)

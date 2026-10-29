@@ -18,16 +18,20 @@
   // stay put while it loads (a spinner shows over it when a load takes a moment); a failed load
   // keeps the last frame under an error banner. Zoom, edges and scroll are bindable so the caller
   // can bring a view back as it was left.
+  // Save (S) downloads the shown frame's PNG as the server rendered it: full size, lossless, without the
+  // edges view, the crop lines or the matte (the crop view's has its margins on).
   // `sar` is the frame's pixel shape (width / height): an anamorphic frame is shown widened (or narrowed)
   // to the shape it plays at, zoom counting the frame's rows; the crop lines and the pointer follow. The
   // AR toggle shows the stored pixels instead (one screen pixel per frame pixel both ways at 100%).
   import { tick, untrack, type Snippet } from 'svelte'
   import { api } from '../lib/api'
+  import { frameFilename } from '../lib/format'
   import type { Crop } from '../lib/types'
   import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left'
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
   import ChevronsLeftIcon from '@lucide/svelte/icons/chevrons-left'
   import ChevronsRightIcon from '@lucide/svelte/icons/chevrons-right'
+  import DownloadIcon from '@lucide/svelte/icons/download'
   import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle'
   import ZoomInIcon from '@lucide/svelte/icons/zoom-in'
   import ZoomOutIcon from '@lucide/svelte/icons/zoom-out'
@@ -38,6 +42,7 @@
 
   let {
     jobId,
+    source = '',
     stage,
     frames,
     fps = 24,
@@ -55,6 +60,7 @@
     tools,
   }: {
     jobId: string
+    source?: string // the source's path, for a saved frame's name
     stage: 'crop' | 'output'
     frames: number
     fps?: number
@@ -82,6 +88,7 @@
   let matte = $state<Matte>(readMatte())
   let shaped = $state(readShaped()) // an anamorphic frame shown at its display shape
   let src = $state<string | null>(null)
+  let shownAt = $state({ n: 0, stage: 'output' as 'crop' | 'output' }) // the frame and stage src holds
   let loading = $state(false)
   let slow = $state(false) // a load past a short delay: show the spinner (quick steps don't flash it)
   let error = $state('')
@@ -129,6 +136,7 @@
       }
       if (src) URL.revokeObjectURL(src)
       src = url
+      shownAt = { n, stage: st as 'crop' | 'output' }
       nat = { w: img.naturalWidth, h: img.naturalHeight }
       pictType = res.headers.get('X-Frame-Type') ?? ''
       cropView = res.headers.get('X-Crop-View') === '1'
@@ -179,6 +187,7 @@
     else if (e.key === 'End') seek(frames - 1)
     else if (e.key === '+' || e.key === '=') zoomBy(1)
     else if (e.key === '-') zoomBy(-1)
+    else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey && !e.altKey) saveFrame()
     else return
     e.preventDefault()
   }
@@ -514,6 +523,16 @@
     img.src = src
   }
 
+  function saveFrame() {
+    if (!src) return
+    const link = document.createElement('a')
+    link.href = src // the PNG blob as it came: revoked only when the next frame replaces it
+    link.download = frameFilename(source, shownAt.n, frames, shownAt.stage)
+    document.body.append(link)
+    link.click()
+    link.remove()
+  }
+
   function toggleEdges() {
     edges = !edges
     if (edges) makeEdges()
@@ -552,6 +571,9 @@
         AR
       </Toggle>
     {/if}
+    <Button variant="ghost" onclick={saveFrame} disabled={!src} title="Save frame {shownAt.n} as a PNG: full size, lossless (S)">
+      <DownloadIcon />Save
+    </Button>
     {@render tools?.()}
     <span class="ml-auto text-xs whitespace-nowrap text-muted-foreground tabular-nums">
       {W}×{H}{lined ? ` → ${outW}×${outH}` : ''}{anamorphic ? ` · plays ${((W * sar) / H).toFixed(2)}:1` : ''} · {Math.round(scale * 100)}%

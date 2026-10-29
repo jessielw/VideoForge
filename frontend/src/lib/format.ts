@@ -56,6 +56,15 @@ export function basename(path: string | null | undefined): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path
 }
 
+// A saved preview frame's file name: the source's name, the frame number padded to the clip's length
+// (so a folder of them sorts in frame order), and the crop view marked (its frame has the margins on).
+export function frameFilename(source: string, n: number, frames: number, stage: 'crop' | 'output'): string {
+  const stem = basename(source).replace(/\.[^.]+$/, '')
+  const safe = stem.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/g, '').slice(0, 120) || 'frame'
+  const num = String(n).padStart(String(Math.max(frames - 1, 0)).length, '0')
+  return `${safe} - ${num}${stage === 'crop' ? ' (crop view)' : ''}.png`
+}
+
 export function bytes(n: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   let i = 0

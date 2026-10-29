@@ -17,6 +17,13 @@ source), or in Docker on Linux.
   only queued jobs (it no longer takes every ready job when none is queued), and a job ticked while
   the queue runs is picked up in its turn. Unticking a job that ran before keeps its last result.
 
+- **Save** on the preview's toolbar (or **S**) downloads the shown frame as a PNG: full size and
+  lossless, without the edges view, crop lines or matte. It's named after the source with the frame
+  number padded to the clip's length (`Show S01E01 - 00042.png`), so a folder of them sorts in order;
+  one saved from the crop view is marked `(crop view)`, as it has the cropped-off margins on.
+  In the desktop window (`serve --window`) downloads now open a Save As dialog: before, pywebview
+  dropped them, so saved frames and preset or configuration exports went nowhere.
+
 - The preview's frame bar scrubs smoothly on long sources: it loads the frame where a drag rests,
   and the one it's let go on.
 
