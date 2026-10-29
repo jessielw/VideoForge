@@ -371,7 +371,7 @@ class JobQueue:
         replace_existing: Iterable[str] = (),
         subs_default: TemplateSubs | None = None,
     ) -> tuple[list[Entry], list[str]]:
-        """One job per matched source, starting from the profile's video defaults, or the template,
+        """One job per matched source, starting from the profile's video and mux defaults, or the template,
         then the given settings; subs_default (Settings' subtitle rules) for a job its template sets none for
         (unless the profile picks tracks by its own rules).
         A source already in the queue is kept unless its exact job ID is explicitly replaced.
@@ -396,6 +396,7 @@ class JobQueue:
                     overrides=Overrides(original_language=original_language),
                     video=v,
                     encoder=enc,
+                    mux=profile.mux_defaults(),
                     output_dir=output_dir,
                 )
                 if template is not None:

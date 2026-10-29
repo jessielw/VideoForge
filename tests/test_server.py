@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 import shutil
 import subprocess
@@ -24,6 +25,7 @@ from test_pipeline import fake_tool_files
 from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools
 from videoforge.core.events import JobFinished
 from videoforge.core.execute.control import Priority
+from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import Cancelled, ToolError
 from videoforge.core.job import JobResult, JobSpec, JobStatus, StepRecord, StepStatus, planned_encode
 from videoforge.core.jobs import ProbedInputs, external_tracks
@@ -1396,6 +1398,17 @@ def test_default_subtitle_rules_leave_a_profile_that_picks_its_tracks(tmp_path, 
         (job_id,) = add(client, tmp_path)
         job = wait_for(client, job_id, "ready", "warn")
         assert job["spec"]["overrides"]["tracks"] == {} and len(job["plan"]["subs"]) == 3
+
+
+def test_new_jobs_start_on_the_profiles_mux_defaults(tmp_path, monkeypatch):
+    mux = MuxSettings(extra="--chapter-language und", pgs_zlib=True)
+    monkeypatch.setattr(ManualProfile, "mux_defaults", lambda self: replace(mux))
+    make_files(tmp_path, "S01E01")
+    with make_client(tmp_path) as client:
+        defaults = client.get("/api/profiles").json()[0]["defaults"]["template"]["mux"]
+        assert defaults == {"container": "", "extra": "--chapter-language und", "pgs_zlib": True}
+        (job_id,) = add(client, tmp_path)
+        assert client.get(f"/api/jobs/{job_id}").json()["spec"]["mux"] == defaults
 
 
 def test_tracks_carry_the_profiles_own_choice(tmp_path):

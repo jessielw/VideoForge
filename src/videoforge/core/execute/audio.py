@@ -590,6 +590,9 @@ def _deezy(
         "--output",
         str(output),
         *_deezy_temp(temp_dir / f"deezy.{output.stem}"),  # its own: audio encodes may run at the same time
+        # logs and batch results; DeeZy's default is beside its exe, which may not be writable (/usr/local/bin)
+        "--working-dir",
+        str(temp_dir / "deezy-work"),
         "--overwrite",
         "--ffmpeg",
         tools.ffmpeg,

@@ -64,7 +64,7 @@ class Template:
     def defaults(cls, profile: Profile) -> Template:
         """A profile's own settings for a new job, as a template."""
         video, encoder = profile.video_defaults()
-        return cls(video, encoder)
+        return cls(video, encoder, profile.mux_defaults())
 
     def apply(self, spec: JobSpec) -> None:
         """Set the job's settings from the template. A job reusing an encode has nothing to crop."""

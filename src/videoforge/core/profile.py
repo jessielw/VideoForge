@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from videoforge.core.execute.audio import AudioSettings
+from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.jobs import ProbedInputs
 from videoforge.core.models import AudioTrack, Issue, Overrides, Plan, SourceInfo, SubTrack, TrackProperty
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
@@ -43,6 +44,10 @@ class Profile(ABC):
     def video_defaults(self) -> tuple[VideoSettings, EncoderSettings]:
         """What a new job's video processing and encode start as (fresh copies)."""
         return VideoSettings(), EncoderSettings()
+
+    def mux_defaults(self) -> MuxSettings:
+        """What a new job's muxer settings start as (extra arguments, PGS compression); a fresh copy."""
+        return MuxSettings()
 
     def audio_settings(self) -> AudioSettings:
         """Encoder settings for the audio tracks the plan encodes."""

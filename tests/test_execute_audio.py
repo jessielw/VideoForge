@@ -71,6 +71,12 @@ def test_deezy_temp_dir_is_left_to_deezy_when_too_deep_for_dee(deep, monkeypatch
     assert ("--temp-dir" in argv) is not deep
 
 
+def test_deezy_working_dir_is_in_the_job_folder():
+    # DeeZy's default is beside its exe, which fails when that isn't writable (/usr/local/bin)
+    (argv,) = command(planned(C.TRUEHD, "7.1", A.DDP, "5.1", 640)).argvs
+    assert argv[argv.index("--working-dir") + 1] == str(TMP / "deezy-work")
+
+
 def test_ddp_50_upmixes():
     (argv,) = command(planned(C.DTS_HD_MA, "5.0", A.DDP, "5.1", 640, upmix=True)).argvs
     assert "--upmix-50-to-51" in argv and "--channels=6" in argv
