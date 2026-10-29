@@ -6,9 +6,9 @@ VapourSynth on an ffmpeg-made clip and skip without the tools.
 
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 import os
-from dataclasses import replace
 from pathlib import Path
 import shutil
 import subprocess

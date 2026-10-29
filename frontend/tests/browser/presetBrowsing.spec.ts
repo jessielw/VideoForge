@@ -191,6 +191,7 @@ test('empty custom libraries omit My presets and keep built-ins available', asyn
       await expect(menu.getByRole('heading', { name: 'Built-in', exact: true })).toBeVisible()
     }
     await page.keyboard.press('Escape')
+    await expect(menu).toHaveCount(0)
   }
   expect(errors).toEqual([])
 })
