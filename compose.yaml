@@ -4,7 +4,11 @@ services:
     image: ghcr.io/jessielw/videoforge:latest
     # build: .
     container_name: videoforge
-    user: "1000:1000"  # who owns the files it writes; any id works
+    user: "1000:1000"  # who owns the files it writes; any id works (or drop it and set PUID / PGID below)
+    # environment:
+    #   - TZ=America/New_York
+    #   - VIDEOFORGE_ALLOW_HOST=192.168.1.50  # the address you open it at, if not this machine
+    #   - UMASK=002
     ports:
       - "127.0.0.1:8765:8765"  # there's no login: keep it on this machine (or behind your own proxy and auth)
     volumes:

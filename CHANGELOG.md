@@ -15,7 +15,8 @@ source), or in Docker on Linux.
 - `serve` reads its settings from `VIDEOFORGE_*` variables too (`VIDEOFORGE_ALLOW_HOST`,
   `VIDEOFORGE_ALLOW_ORIGIN`, `VIDEOFORGE_PLUGIN_MANAGEMENT`, `VIDEOFORGE_HOST`, `VIDEOFORGE_PORT`,
   `VIDEOFORGE_DATA_DIR`), so a Docker or Unraid template sets them without replacing the image's command.
-  The image honors `PUID` / `PGID` and `UMASK`: started as root, it runs as that user and hands `/data` to it.
+  The image honors `PUID` / `PGID`, `UMASK` and `TZ`: started as root, it runs as that user (through gosu)
+  and hands `/data` to it.
 
 - Auto crop of a Dolby Vision source takes the bars from its RPU's L5 active area (DoviCrop's method), not
   only the luma: the detected borders stop short of a bar's soft edge (Godzilla Minus One: 274 where L5 says

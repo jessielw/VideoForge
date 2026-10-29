@@ -104,7 +104,7 @@ FROM ${PYTHON_IMAGE} AS app
 # The Debian libraries the plugins image's binaries link to are listed in it.
 COPY --from=plugins /opt/vf/runtime-packages.txt /tmp/runtime-packages.txt
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends mkvtoolnix opus-tools tini $(cat /tmp/runtime-packages.txt) \
+    && apt-get install -y --no-install-recommends mkvtoolnix opus-tools tini gosu tzdata $(cat /tmp/runtime-packages.txt) \
     && rm -rf /var/lib/apt/lists/* /tmp/runtime-packages.txt
 COPY --from=plugins /opt/vf /opt/vf
 RUN echo /opt/vf/lib > /etc/ld.so.conf.d/vf.conf && ldconfig
@@ -148,7 +148,8 @@ RUN uv sync --frozen --no-dev --extra filters
 COPY --from=frontend /src/frontend/dist frontend/dist
 COPY docker/videoforge.toml videoforge.toml
 
-# Any user id works (docker run --user, or PUID / PGID): HOME only holds VapourSynth's small config.
+# Any user id works (docker run --user, or PUID / PGID: docker/entrypoint.sh): HOME only holds VapourSynth's
+# small config and the Wine prefixes.
 RUN mkdir -p /data /tools /home/videoforge && chmod 0777 /data /tools /home/videoforge
 ENV VIDEOFORGE_ROOT=/app HOME=/home/videoforge PATH=/app/.venv/bin:/opt/vf/bin:$PATH PYTHONUNBUFFERED=1
 # serve's settings as variables, for a template to change: 0.0.0.0 inside the container; publish the port on

@@ -1,28 +1,68 @@
 #!/bin/sh
-# PUID / PGID (Unraid's 99 / 100) and UMASK, for a container started as root: the files it writes go to that
-# user, as with `docker run --user`. /data (the app's own folder) is handed over first, so a container that ran
-# as root before keeps its queue; your media and /tools are left as they are.
-if [ "$(id -u)" = 0 ] && [ -n "${PUID:-}" ]; then
-    uid="$PUID"
-    gid="${PGID:-$PUID}"
-    case "$uid$gid" in
-    *[!0-9]*)
-        echo "videoforge: PUID and PGID must be numeric ids, not '$uid' / '$gid'" >&2
-        exit 1
-        ;;
+# LinuxServer-style controls for a container started as root (Unraid's template sets TZ; PUID 99 / PGID 100):
+#   TZ:          the container's time zone (log and job record times)
+#   PUID / PGID: run as that user and group (set both), as with `docker run --user`. /data (the app's own
+#                folder) is handed over first, so a queue made while it ran as root stays usable; your media
+#                and /tools are left as they are.
+#   UMASK:       the file-creation mask for what it writes (022, 002, 000)
+set -eu
+
+fail() {
+    echo "videoforge: $*" >&2
+    exit 1
+}
+
+is_numeric() {
+    case "$1" in
+    *[!0-9]* | "") return 1 ;;
+    *) return 0 ;;
     esac
-    if [ "$uid" != 0 ]; then
-        find /data \( ! -user "$uid" -o ! -group "$gid" \) -exec chown "$uid:$gid" {} +
+}
+
+if [ "$(id -u)" = 0 ]; then
+    if [ -n "${PUID:-}" ] || [ -n "${PGID:-}" ]; then
+        [ -n "${PUID:-}" ] && [ -n "${PGID:-}" ] || fail "PUID and PGID must be set together"
+        is_numeric "$PUID" || fail "PUID must be a numeric user id, not '$PUID'"
+        is_numeric "$PGID" || fail "PGID must be a numeric group id, not '$PGID'"
+    fi
+    if [ -n "${TZ:-}" ]; then
+        [ -e "/usr/share/zoneinfo/$TZ" ] || fail "TZ '$TZ' is not a time zone in /usr/share/zoneinfo"
+        ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime
+        echo "$TZ" >/etc/timezone
+    fi
+    if [ -n "${PUID:-}" ] && { [ "$PUID" != 0 ] || [ "$PGID" != 0 ]; }; then
+        # A named user for the ids (an existing one if the image has it), so gosu sets its groups. A restarted
+        # container with other ids renumbers the videoforge user and group it made before.
+        group="$(getent group "$PGID" | cut -d: -f1 || true)"
+        if [ -z "$group" ]; then
+            group=videoforge
+            if getent group "$group" >/dev/null; then
+                groupmod -o -g "$PGID" "$group"
+            else
+                groupadd -o -g "$PGID" "$group"
+            fi
+        fi
+        user="$(getent passwd "$PUID" | cut -d: -f1 || true)"
+        if [ -n "$user" ]; then
+            usermod -g "$PGID" "$user"
+        elif getent passwd videoforge >/dev/null; then
+            user=videoforge
+            usermod -o -u "$PUID" -g "$PGID" "$user"
+        else
+            user=videoforge
+            useradd -o -u "$PUID" -g "$PGID" -d "$HOME" -s /usr/sbin/nologin "$user"
+        fi
+        find /data \( ! -user "$PUID" -o ! -group "$PGID" \) -exec chown "$PUID:$PGID" {} +
         unset PUID PGID
-        exec python -c 'import os, sys
-os.setgroups([])
-os.setgid(int(sys.argv[2]))
-os.setuid(int(sys.argv[1]))
-os.execvp(sys.argv[3], sys.argv[3:])' "$uid" "$gid" "$0" "$@"
+        # gosu sets HOME to the user's own: keep the image's (VapourSynth's config, the Wine prefixes).
+        exec gosu "$user:$group" env HOME="$HOME" "$0" "$@"
     fi
 fi
 if [ -n "${UMASK:-}" ]; then
-    umask "$UMASK" || exit 1
+    case "$UMASK" in
+    *[!0-7]* | "" | ?????*) fail "UMASK must be 1-4 octal digits such as 022 or 002, not '$UMASK'" ;;
+    esac
+    umask "$UMASK"
 fi
 
 # Your tools in /tools, found on PATH by the image's config (dee = "dee", qaac = "qaac"): a launcher each in a
