@@ -32,6 +32,7 @@
     return app.presetChoices('encoder', profile)
   }}
   removePreset={async name => { app.presets = await api.deletePreset('encoder', name) }}
+  removePresets={async names => { app.presets = await api.deletePresets('encoder', names) }}
   applyLabel="Apply encoder settings"
 >
   {#snippet editor(value, onchange)}<EncoderSettingsEditor {value} {onchange} advancedCollapsed />{/snippet}

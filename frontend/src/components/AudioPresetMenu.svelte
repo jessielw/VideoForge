@@ -33,6 +33,7 @@
     return [...audioPresetDefaults(app.encodes), ...savedChoices()]
   }}
   removePreset={async name => { app.presets = await api.deletePreset('audio', name) }}
+  removePresets={async names => { app.presets = await api.deletePresets('audio', names) }}
   applyLabel="Apply to this output"
 >
   {#snippet editor(value, onchange)}<AudioSettingsEditor {value} {onchange} editTitle />{/snippet}

@@ -24,12 +24,16 @@ async def _read(request: Request) -> dict[str, Any]:
         raise HTTPException(422, f"Invalid preset pack: {ex}") from None
 
 
-def _names(request: Request, bundle: dict[str, Any], *, preview: bool = False) -> dict[str, list[str]]:
-    state = request.app.state
-    reserved = tuple(f"{state.queue.profiles(pid).name} defaults" for pid in state.profile_ids)
-    return state.store.import_preset_pack(
-        bundle["presets"], max_name=MAX_NAME, preview=preview, reserved={"template": reserved, "video": reserved}
+def _names(request: Request, bundle: dict[str, Any], *, preview: bool = False) -> dict[str, Any]:
+    reserved = presets.reserved_names(request)
+    names, actions = request.app.state.store.import_preset_pack(
+        bundle["presets"],
+        max_name=MAX_NAME,
+        preview=preview,
+        reserved={"template": reserved, "video": reserved},
+        keep_both=presets.keep_both(request),
     )
+    return {"names": names, "actions": actions}
 
 
 @router.post("/export")
@@ -40,11 +44,11 @@ async def export_preset_pack(request: Request) -> dict[str, Any]:
 @router.post("/preview")
 async def preview_preset_pack(request: Request) -> dict[str, Any]:
     bundle = await _read(request)
-    return {"bundle": bundle, "names": _names(request, bundle, preview=True)}
+    return {"bundle": bundle} | _names(request, bundle, preview=True)
 
 
 @router.post("/import")
 async def import_preset_pack(request: Request) -> dict[str, Any]:
     bundle = await _read(request)
     names = _names(request, bundle)
-    return {"presets": presets._all(request), "names": names}
+    return {"presets": presets._all(request)} | names

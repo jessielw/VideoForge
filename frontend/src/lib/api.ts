@@ -29,6 +29,8 @@ import type {
   Presets,
   PresetPack,
   PresetPackPreview,
+  ImportAction,
+  ImportPlan,
   Priority,
   Profile,
   QueueState,
@@ -81,6 +83,8 @@ async function pluginZip<T>(path: string, file: File): Promise<T> {
 
 const get = <T>(path: string) => request<T>('GET', path)
 const post = <T>(path: string, body: unknown = {}) => request<T>('POST', path, body)
+// An import keeps a preset of the same name and adds a numbered copy (Keep both), or replaces it.
+const keep = (keepBoth: boolean) => (keepBoth ? '?keep_both=true' : '')
 const patch = <T>(path: string, body: unknown) => request<T>('PATCH', path, body)
 
 export interface InputSlots {
@@ -110,14 +114,20 @@ export const api = {
   profiles:() => get<Profile[]>('/api/profiles'),
   presets: () => get<Presets>('/api/presets'),
   exportAudio: (bundle: AudioBundle) => post<AudioBundle>('/api/presets/audio/export', bundle),
-  previewAudio: (bundle: unknown) => post<{ bundle: AudioBundle; names: string[] }>('/api/presets/audio/preview', bundle),
-  importAudio: (bundle: AudioBundle) => post<{ presets: Presets; names: string[] }>('/api/presets/audio/import', bundle),
+  previewAudio: (bundle: unknown, keepBoth = false) =>
+    post<{ bundle: AudioBundle } & ImportPlan>(`/api/presets/audio/preview${keep(keepBoth)}`, bundle),
+  importAudio: (bundle: AudioBundle, keepBoth = false) =>
+    post<{ presets: Presets } & ImportPlan>(`/api/presets/audio/import${keep(keepBoth)}`, bundle),
   exportEncoders: (bundle: EncoderBundle) => post<EncoderBundle>('/api/presets/encoders/export', bundle),
-  previewEncoders: (bundle: unknown) => post<{ bundle: EncoderBundle; names: string[] }>('/api/presets/encoders/preview', bundle),
-  importEncoders: (bundle: EncoderBundle) => post<{ presets: Presets; names: string[] }>('/api/presets/encoders/import', bundle),
+  previewEncoders: (bundle: unknown, keepBoth = false) =>
+    post<{ bundle: EncoderBundle } & ImportPlan>(`/api/presets/encoders/preview${keep(keepBoth)}`, bundle),
+  importEncoders: (bundle: EncoderBundle, keepBoth = false) =>
+    post<{ presets: Presets } & ImportPlan>(`/api/presets/encoders/import${keep(keepBoth)}`, bundle),
   exportTemplates: (bundle: TemplateBundle) => post<TemplateBundle>('/api/presets/templates/export', bundle),
-  previewTemplates: (bundle: unknown) => post<{ bundle: TemplateBundle; names: string[] }>('/api/presets/templates/preview', bundle),
-  importTemplates: (bundle: TemplateBundle) => post<{ presets: Presets; names: string[] }>('/api/presets/templates/import', bundle),
+  previewTemplates: (bundle: unknown, keepBoth = false) =>
+    post<{ bundle: TemplateBundle } & ImportPlan>(`/api/presets/templates/preview${keep(keepBoth)}`, bundle),
+  importTemplates: (bundle: TemplateBundle, keepBoth = false) =>
+    post<{ presets: Presets } & ImportPlan>(`/api/presets/templates/import${keep(keepBoth)}`, bundle),
   filterPresets: () => get<FilterPreset[]>('/api/filter-presets'),
   savePreset: (kind: PresetKind, name: string, data: unknown) =>
     request<Presets>('PUT', `/api/presets/${kind}/${encodeURIComponent(name)}`, data),
@@ -126,6 +136,7 @@ export const api = {
   saveAudioPreset: (preset: { name?: string; label: string; group: string[]; data: AudioPresetSettings }) =>
     post<Presets>('/api/presets/audio', preset),
   deletePreset: (kind: PresetKind, name: string) => request<Presets>('DELETE', `/api/presets/${kind}/${encodeURIComponent(name)}`),
+  deletePresets: (kind: PresetKind, names: string[]) => post<Presets>('/api/presets/delete', { kind, names }),
   renamePreset: (kind: PresetKind, name: string, to: string) =>
     post<Presets>(`/api/presets/${kind}/${encodeURIComponent(name)}/rename`, { to }),
   setTemplateDefault: (profile: string, name: string | null) =>
@@ -144,8 +155,12 @@ export const api = {
     request<PluginInventory>('PUT', '/api/plugins/settings', { id, values, reset }),
   exportConfiguration: () => get<ConfigurationBundle>('/api/configuration/export'),
   exportPresetPack: (bundle: PresetPack) => post<PresetPack>('/api/preset-packs/export', bundle),
-  previewPresetPack: (bundle: unknown) => post<PresetPackPreview>('/api/preset-packs/preview', bundle),
-  importPresetPack: (bundle: PresetPack) => post<{ presets: Presets; names: Record<PresetKind, string[]> }>('/api/preset-packs/import', bundle),
+  previewPresetPack: (bundle: unknown, keepBoth = false) => post<PresetPackPreview>(`/api/preset-packs/preview${keep(keepBoth)}`, bundle),
+  importPresetPack: (bundle: PresetPack, keepBoth = false) =>
+    post<{ presets: Presets; names: Record<PresetKind, string[]>; actions: Record<PresetKind, ImportAction[]> }>(
+      `/api/preset-packs/import${keep(keepBoth)}`,
+      bundle,
+    ),
   previewConfiguration: (bundle: unknown) => post<ConfigurationPreview>('/api/configuration/preview', bundle),
   importConfiguration: (bundle: ConfigurationBundle) => post<{ config: ConfigState; presets: Presets; warnings: string[] }>('/api/configuration/import', bundle),
   saveConfig: (changes: {

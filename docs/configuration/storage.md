@@ -80,9 +80,10 @@ audio encoder presets, and video processing presets for a group. The resulting p
 display names, nested folders, and encoding settings. It excludes application settings, tool paths,
 saved folder choices, notification URLs, actions, plugin configuration, and default selections.
 
-Use **Import presets…** in the same panel to preview and select entries from a pack. Imports add
-presets without replacing existing ones or changing local settings and defaults. Matching names
-in the same encoder and folder get numbered copies. Review any custom scripts and extra arguments
+Use **Import presets…** in the same panel to preview and select entries from a pack. A matching
+name (for encoder and audio presets: in the same encoder and folder) replaces yours, so importing an
+updated pack again adds no duplicates; tick **Keep both** for numbered copies instead. Local settings
+and defaults stay the same. Review any custom scripts and extra arguments
 before sharing: user-authored text is preserved and can contain private paths or values.
 
 ### Full configuration backup

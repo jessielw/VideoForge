@@ -6,11 +6,13 @@
   import { Checkbox } from '$lib/components/ui/checkbox'
   import * as Dialog from '$lib/components/ui/dialog'
   import { api } from '../lib/api'
+  import ImportNote from './ImportNote.svelte'
+  import ImportOptions from './ImportOptions.svelte'
   import { app } from '../lib/state.svelte'
   import { downloadEncoders, encoderBundle, MAX_ENCODER_BYTES } from '../lib/encoderTransfer'
   import { folderParts, presetLabel, type PresetDraft } from '../lib/presetDraft'
   import { templateFilename } from '../lib/templateTransfer'
-  import type { EncoderBundle, EncoderSettings, Preset } from '../lib/types'
+  import type { ImportAction, EncoderBundle, EncoderSettings, Preset } from '../lib/types'
 
   let { current, disabled = false }: { current: PresetDraft<EncoderSettings> | null; disabled?: boolean } = $props()
   let mode = $state<'import' | 'export' | null>(null)
@@ -19,6 +21,9 @@
   let error = $state('')
   let bundle = $state<EncoderBundle | null>(null)
   let names = $state<string[]>([])
+  let actions = $state<ImportAction[]>([])
+  let keepBoth = $state(false)
+  let raw: unknown = null // the file read, previewed again when Keep both changes
   let selected = $state<boolean[]>([])
   const count = $derived(selected.filter(Boolean).length)
   const exportEntries = $derived(app.presets.encoder.filter(entry => exportSelected.includes(entry.name)))
@@ -31,6 +36,7 @@
     error = ''
     bundle = null
     selected = []
+    keepBoth = false
     exportSelected = app.presets.encoder.map(entry => entry.name)
     mode = next
   }
@@ -65,20 +71,32 @@
       let data: unknown
       try { data = JSON.parse((await file.text()).replace(/^\uFEFF/, '')) }
       catch { throw new Error('This file is not valid JSON. Choose a VideoForge encoder preset export.') }
-      const preview = await api.previewEncoders(data)
-      bundle = preview.bundle
-      names = preview.names
-      selected = names.map(() => true)
+      raw = data
+      await previewFile(true)
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally { busy = false }
+  }
+  // fresh: a new file (all selected); else the same file again after Keep both changed (the selection stays)
+  async function previewFile(fresh: boolean) {
+    const preview = await api.previewEncoders(raw, keepBoth)
+    bundle = preview.bundle
+    names = preview.names
+    actions = preview.actions ?? []
+    if (fresh) selected = names.map(() => true)
+  }
+  async function setKeepBoth(on: boolean) {
+    keepBoth = on
+    busy = true
+    error = ''
+    try { await previewFile(false) } catch (e) { error = e instanceof Error ? e.message : String(e) } finally { busy = false }
   }
   async function importFile() {
     if (!bundle || !count) return
     busy = true
     error = ''
     try {
-      const result = await api.importEncoders({ ...bundle, encoders: bundle.encoders.filter((_, i) => selected[i]) })
+      const result = await api.importEncoders({ ...bundle, encoders: bundle.encoders.filter((_, i) => selected[i]) }, keepBoth)
       app.presets = result.presets
       toast.success(`Imported ${result.names.length} encoder preset${result.names.length === 1 ? '' : 's'}`)
       mode = null
@@ -104,7 +122,7 @@
       <Dialog.Title>{mode === 'export' ? 'Export' : 'Import'} encoder presets</Dialog.Title>
       <Dialog.Description>
         {#if mode === 'export'}Choose saved presets to share with their folders. Use Export current settings to include unsaved edits.
-        {:else}Choose a VideoForge encoder preset file. Names and folders are preserved; matching names in the same encoder and folder get a numbered copy. Importing adds presets to your library.{/if}
+        {:else}Choose a VideoForge encoder preset file. Names and folders are preserved; a preset with the same name in the same encoder and folder replaces yours, unless you keep both.{/if}
       </Dialog.Description>
     </Dialog.Header>
     {#if mode === 'export'}
@@ -130,17 +148,18 @@
           onchange={e => readFile(e.currentTarget.files?.[0])} />
       </label>
       {#if bundle}
+        <ImportOptions {keepBoth} actions={actions.filter((_, i) => selected[i])} disabled={busy} onchange={setKeepBoth} />
         <div class="max-h-[45vh] space-y-2 overflow-auto" role="group" aria-label="Encoder presets to import">
           {#each bundle.encoders as entry, i (i)}
             <label class="flex items-start gap-2 rounded-md border p-3 text-sm">
               <Checkbox checked={selected[i]} disabled={busy} onCheckedChange={checked => (selected[i] = checked)} />
-              <span class="min-w-0 break-all">{entry.label}{#if names[i] !== entry.label}<span class="text-muted-foreground"> → {names[i]}</span>{/if}
+              <span class="min-w-0 break-all">{entry.label}<ImportNote action={actions[i]} name={names[i]} original={entry.label} />
                 <span class="block text-xs text-muted-foreground">{location(entry)} · {entry.data.depth}-bit · {rate(entry.data)} · {entry.data.preset || 'default speed'}</span>
               </span>
             </label>
           {/each}
         </div>
-        <p class="text-xs text-muted-foreground">Copy numbers may change if you select fewer presets or another browser saves a matching name.</p>
+        {#if actions.includes('copy')}<p class="text-xs text-muted-foreground">Copy numbers may change if you select fewer presets or another browser saves a matching name.</p>{/if}
       {/if}
     {/if}
     {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}

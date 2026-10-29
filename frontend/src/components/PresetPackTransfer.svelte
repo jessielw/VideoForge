@@ -6,6 +6,8 @@
   import { Checkbox } from '$lib/components/ui/checkbox'
   import * as Dialog from '$lib/components/ui/dialog'
   import { api } from '../lib/api'
+  import ImportNote from './ImportNote.svelte'
+  import ImportOptions from './ImportOptions.svelte'
   import { app } from '../lib/state.svelte'
   import { saves } from '../lib/saves'
   import { presetPack } from '../lib/presetPack'
@@ -19,6 +21,8 @@
   let busy = $state(false)
   let error = $state('')
   let preview = $state<PresetPackPreview | null>(null)
+  let keepBoth = $state(false)
+  let raw: unknown = null // the file read, previewed again when Keep both changes
   let selected = $state<string[]>([])
   const count = $derived(selected.length)
   const available = $derived(labels.reduce((n, [kind]) => n + app.presets[kind].length, 0))
@@ -36,6 +40,7 @@
     mode = next
     error = ''
     preview = null
+    keepBoth = false
     selected = next === 'export' ? keys() : []
   }
   async function exportFile() {
@@ -74,11 +79,22 @@
       let data: unknown
       try { data = JSON.parse((await file.text()).replace(/^\uFEFF/, '')) }
       catch { throw new Error('This file is not valid JSON. Choose a VideoForge preset pack.') }
-      preview = await api.previewPresetPack(data)
+      raw = data
+      preview = await api.previewPresetPack(data, keepBoth)
       selected = keys()
     } catch (e) { error = e instanceof Error ? e.message : String(e) }
     finally { busy = false }
   }
+  // The same file again after Keep both changed: the selection stays.
+  async function setKeepBoth(on: boolean) {
+    keepBoth = on
+    busy = true
+    error = ''
+    try { preview = await api.previewPresetPack(raw, keepBoth) }
+    catch (e) { error = e instanceof Error ? e.message : String(e) }
+    finally { busy = false }
+  }
+  const selectedActions = $derived(preview ? labels.flatMap(([kind]) => (preview!.actions?.[kind] ?? []).filter((_, i) => selected.includes(`${kind}:${i}`))) : [])
   async function importFile() {
     if (!preview || !count) return
     busy = true
@@ -91,7 +107,7 @@
         template: choose('template', libraries.template), encoder: choose('encoder', libraries.encoder),
         audio: choose('audio', libraries.audio), video: choose('video', libraries.video),
       } }
-      const result = await api.importPresetPack(bundle)
+      const result = await api.importPresetPack(bundle, keepBoth)
       app.presets = result.presets
       toast.success(`Imported ${Object.values(result.names).flat().length} presets`)
       mode = null
@@ -117,13 +133,16 @@
       <Dialog.Title>{mode === 'export' ? 'Export' : 'Import'} preset pack</Dialog.Title>
       <Dialog.Description>
         {#if mode === 'export'}Choose the templates and presets to share. The file contains only their settings, display names, and folders.
-        {:else}Choose a VideoForge preset pack. Imported presets are added to your library; matching names get numbered copies. Your app settings and default selections stay the same.{/if}
+        {:else}Choose a VideoForge preset pack. A preset with the same name replaces yours (an encoder or audio preset: in the same encoder and folder), unless you keep both; one that's already the same is left alone. Your app settings and default selections stay the same.{/if}
       </Dialog.Description>
     </Dialog.Header>
     {#if mode === 'import'}
       <label class="space-y-2 text-sm"><span>Preset pack (.json, up to 20 MiB)</span>
         <input class="block w-full rounded-md border p-2 text-sm" type="file" accept=".json,application/json" disabled={busy} onchange={e => readFile(e.currentTarget.files?.[0])} />
       </label>
+    {/if}
+    {#if mode === 'import' && preview}
+      <ImportOptions {keepBoth} actions={selectedActions} disabled={busy} onchange={setKeepBoth} />
     {/if}
     {#if mode === 'export' || preview}
       <div class="flex flex-wrap items-center gap-2">
@@ -141,7 +160,7 @@
                 {@const key = `${kind}:${mode === 'export' && 'name' in entry ? entry.name : i}`}
                 <label class="flex items-start gap-2 rounded-md border p-2 text-sm">
                   <Checkbox checked={selected.includes(key)} disabled={busy} onCheckedChange={on => toggle(key, on)} />
-                  <span class="min-w-0 break-all">{name}{#if mode === 'import' && preview?.names[kind][i] !== name}<span class="text-muted-foreground">{' → '}{preview?.names[kind][i]}</span>{/if}
+                  <span class="min-w-0 break-all">{name}{#if mode === 'import'}<ImportNote action={preview?.actions?.[kind]?.[i]} name={preview?.names[kind][i]} original={name} />{/if}
                     {#if 'group' in entry && entry.group?.length}<span class="block text-xs text-muted-foreground">{entry.group.join(' / ')}</span>{/if}
                   </span>
                 </label>
@@ -151,7 +170,7 @@
         {/each}
       </div>
       {#if mode === 'import'}
-        <p class="text-xs text-muted-foreground">Copy numbers may change with your selection or other library edits. Tools and plugins referenced by presets must be available on this computer.</p>
+        <p class="text-xs text-muted-foreground">{selectedActions.includes('copy') ? 'Copy numbers may change with your selection or other library edits. ' : ''}Tools and plugins referenced by presets must be available on this computer.</p>
         {#if scripts.length}<details class="space-y-2 text-xs"><summary class="cursor-pointer font-medium">Review included scripts ({scripts.length})</summary>
           {#each scripts as script, i (i)}<p class="font-medium">{script.name}</p><pre class="max-h-40 overflow-auto rounded bg-muted p-2">{script.script}</pre>{/each}
         </details>{/if}

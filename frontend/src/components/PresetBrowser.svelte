@@ -2,13 +2,15 @@
   import CheckIcon from '@lucide/svelte/icons/check'
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
   import FolderIcon from '@lucide/svelte/icons/folder'
+  import { Checkbox } from '$lib/components/ui/checkbox'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import { canonical, presetKey, presetLabel, type PresetChoice } from '../lib/presetDraft'
 
   let { title, choices, parents, parentOf, summary, onselect, selected = null,
     encoder = $bindable(''), path = $bindable<string[]>([]), search = $bindable(''),
-    problem = () => '', allowIncompatible = false, builtinLabel = 'built-in', disabled = false }: {
+    problem = () => '', allowIncompatible = false, builtinLabel = 'built-in', disabled = false,
+    selecting = false, picked = $bindable<string[]>([]) }: {
     title: string
     choices: PresetChoice<T>[]
     parents: [string, string][]
@@ -23,6 +25,8 @@
     allowIncompatible?: boolean
     builtinLabel?: string
     disabled?: boolean
+    selecting?: boolean // saved presets get checkboxes (picked: their names); a folder's picks all inside it
+    picked?: string[]
   } = $props()
 
   const parentChoices = $derived(choices.filter(c => !encoder || parentOf(c.data) === encoder))
@@ -38,14 +42,27 @@
     .sort((a, b) => presetLabel(a).localeCompare(presetLabel(b), undefined, { numeric: true })
       || encoderLabel(a.data).localeCompare(encoderLabel(b.data))))
   const builtins = $derived(visible.filter(c => c.builtin))
+  // The saved presets in a folder (at any depth) under the encoder filter, for its checkbox.
+  const inFolder = (part: string) => parentChoices.filter(c => !c.builtin
+    && canonical((c.group ?? []).slice(0, path.length + 1)) === canonical([...path, part])).map(c => c.name)
+  function pickMany(names: string[], on: boolean) {
+    picked = on ? [...new Set([...picked, ...names])] : picked.filter(n => !names.includes(n))
+  }
 </script>
 
 {#snippet choiceRow(c: PresetChoice<T>)}
   {@const reason = problem(c.data)}
-  <li>
+  {@const chosen = picked.includes(c.name)}
+  <li class={selecting ? 'flex items-center gap-1' : ''}>
+    {#if selecting}
+      <span class="flex w-6 shrink-0 justify-center">
+        {#if !c.builtin}<Checkbox checked={chosen} {disabled} aria-label="Select {presetLabel(c)}" onCheckedChange={on => pickMany([c.name], on)} />{/if}
+      </span>
+    {/if}
     <button class="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent disabled:opacity-60 {presetKey(c) === selected ? 'bg-accent' : ''}"
       disabled={disabled || (!allowIncompatible && !!reason)} title={reason || undefined}
-      aria-current={presetKey(c) === selected ? 'true' : undefined} onclick={() => onselect(c)}>
+      aria-current={presetKey(c) === selected ? 'true' : undefined}
+      onclick={() => (selecting ? !c.builtin && pickMany([c.name], !chosen) : onselect(c))}>
       <span class="w-4 shrink-0">{#if presetKey(c) === selected}<CheckIcon class="size-4 text-primary" />{/if}</span>
       <span class="min-w-0 flex-1">
         <span class="block break-words">{presetLabel(c)}</span>
@@ -84,7 +101,15 @@
         <ul aria-label="My {title.toLowerCase()} presets">
           {#if !query}
             {#each folders as part (part)}
-              <li>
+              {@const inside = inFolder(part)}
+              {@const some = inside.filter(n => picked.includes(n)).length}
+              <li class={selecting ? 'flex items-center gap-1' : ''}>
+                {#if selecting}
+                  <span class="flex w-6 shrink-0 justify-center">
+                    <Checkbox checked={some === inside.length} indeterminate={some > 0 && some < inside.length} {disabled}
+                      aria-label="Select everything in {part}" onCheckedChange={on => pickMany(inside, on)} />
+                  </span>
+                {/if}
                 <button class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent" {disabled} onclick={() => (path = [...path, part])}>
                   <FolderIcon class="size-4 shrink-0 text-muted-foreground" /><span class="min-w-0 flex-1 break-words">{part}</span><ChevronRightIcon class="size-4 shrink-0" />
                 </button>

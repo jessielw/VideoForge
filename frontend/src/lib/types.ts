@@ -537,6 +537,14 @@ export interface PresetPack {
 export interface PresetPackPreview {
   bundle: PresetPack
   names: Record<PresetKind, string[]>
+  actions?: Record<PresetKind, ImportAction[]> // absent from a server before replacing imports
+}
+// What an import does with each entry: adds it, adds a numbered copy (its name is taken and Keep both is on,
+// or it's a built-in's name), replaces the saved preset of its name, or leaves that one as it is (the same settings).
+export type ImportAction = 'new' | 'copy' | 'replaced' | 'unchanged'
+export interface ImportPlan {
+  names: string[]
+  actions?: ImportAction[]
 }
 // A template's audio (source tracks only), by position or by rules. Position: slot n is for the
 // source's nth audio track (extra slots are ignored). Rules: each track takes the first rule it

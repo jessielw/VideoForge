@@ -69,7 +69,7 @@ def test_share_selected_libraries_without_private_configuration_and_import_on_an
     with make_client(tmp_path / "recipient") as recipient:
         seed(recipient, tmp_path)
         before = export(recipient)
-        preview = recipient.post("/api/preset-packs/preview", json=shared)
+        preview = recipient.post("/api/preset-packs/preview?keep_both=true", json=shared)
         assert preview.status_code == 200, preview.text
         assert preview.json()["names"] == {
             "template": ["Feature (2)"],
@@ -78,7 +78,7 @@ def test_share_selected_libraries_without_private_configuration_and_import_on_an
             "video": [],
         }
         assert export(recipient) == before
-        imported = recipient.post("/api/preset-packs/import", json=shared)
+        imported = recipient.post("/api/preset-packs/import?keep_both=true", json=shared)
         assert imported.status_code == 200, imported.text
         after = export(recipient)
         for key in ("application", "settings", "folders", "template_defaults"):
@@ -103,13 +103,13 @@ def test_conflicts_reallocated_after_preview_and_scoped_to_encoder_and_folder(tm
             copy.deepcopy(encoder) | {"data": encoder["data"] | {"encoder": "x264"}},
         ]
         doc["presets"]["template"][0]["name"] = "Manual defaults"
-        preview = client.post("/api/preset-packs/preview", json=doc).json()
+        preview = client.post("/api/preset-packs/preview?keep_both=true", json=doc).json()
         assert preview["names"]["encoder"] == ["Film (2)", "Film", "Film"]
         assert preview["names"]["template"] == ["Manual defaults (2)"]
         client.post(
             "/api/presets/encoder", json={"label": "Film (2)", "group": encoder["group"], "data": encoder["data"]}
         )
-        result = client.post("/api/preset-packs/import", json=doc)
+        result = client.post("/api/preset-packs/import?keep_both=true", json=doc)
         assert result.status_code == 200, result.text
         assert result.json()["names"]["encoder"] == ["Film (3)", "Film", "Film"]
 
@@ -173,7 +173,7 @@ def test_multiple_libraries_are_atomic_and_concurrent_imports_keep_both_copies()
     try:
         with ThreadPoolExecutor(max_workers=4) as pool:
             results = list(pool.map(lambda _: store.import_preset_pack(libraries, max_name=80), range(8)))
-        assert len({result["template"][0] for result in results}) == 8
+        assert len({names["template"][0] for names, _ in results}) == 8
         assert len(store.presets("template")) == len(store.presets("audio")) == 8
         before = store.configuration_snapshot((), ("template", "audio"))
         store._db.execute(
@@ -185,3 +185,74 @@ def test_multiple_libraries_are_atomic_and_concurrent_imports_keep_both_copies()
         assert store.configuration_snapshot((), ("template", "audio")) == before
     finally:
         store.close()
+
+
+def test_importing_the_same_pack_again_replaces_in_place_and_adds_nothing(tmp_path):
+    """A preset of the same name (an encoder or audio preset: in the same encoder or action and folder) is
+    replaced, keeping its identity and a default template's place; one with the same settings is left alone."""
+    with make_client(tmp_path) as client:
+        seed(client, tmp_path)
+        before = export(client)
+        doc = portable(before)
+        again = client.post("/api/preset-packs/import", json=doc).json()
+        assert again["actions"] == {kind: ["unchanged"] * len(doc["presets"][kind]) for kind in doc["presets"]}
+        assert export(client)["presets"] == before["presets"]
+
+        doc["presets"]["template"][0]["data"]["qpf"] = True
+        doc["presets"]["encoder"][0]["data"]["crf"] = 21
+        doc["presets"]["template"].append(copy.deepcopy(doc["presets"]["template"][0]))  # the same name twice
+        manual = copy.deepcopy(doc["presets"]["template"][0]) | {"name": "Manual defaults"}  # a built-in's name
+        doc["presets"]["template"].append(manual)
+        preview = client.post("/api/preset-packs/preview", json=doc).json()
+        assert preview["names"]["template"] == ["Feature", "Feature (2)", "Manual defaults (2)"]
+        assert preview["actions"]["template"] == ["replaced", "copy", "copy"]
+        assert preview["actions"]["encoder"] == ["replaced"] and preview["actions"]["audio"] == ["unchanged"]
+        assert export(client)["presets"] == before["presets"]  # a preview writes nothing
+
+        client.post("/api/preset-packs/import", json=doc)
+        after = export(client)
+        feature = next(t for t in after["presets"]["template"] if t["name"] == "Feature")
+        assert feature["data"]["qpf"] is True
+        assert after["template_defaults"] == before["template_defaults"] == {"manual": "Feature"}
+        (encoder,) = after["presets"]["encoder"]
+        assert encoder["name"] == before["presets"]["encoder"][0]["name"] and encoder["data"]["crf"] == 21
+
+
+def test_keep_both_imports_a_numbered_copy_of_each(tmp_path):
+    with make_client(tmp_path) as client:
+        seed(client, tmp_path)
+        doc = portable(export(client))
+        result = client.post("/api/preset-packs/import?keep_both=true", json=doc).json()
+        assert result["names"]["template"] == ["Feature (2)"] and result["actions"]["encoder"] == ["copy"]
+        assert len(client.get("/api/presets").json()["encoder"]) == 2
+
+
+def test_one_library_import_replaces_too(tmp_path):
+    with make_client(tmp_path) as client:
+        seed(client, tmp_path)
+        doc = client.post(
+            "/api/presets/templates/export",
+            json={
+                "format": "videoforge.templates",
+                "version": 1,
+                "templates": [{"name": "Feature", "data": {"qpf": True}}],
+            },
+        ).json()
+        result = client.post("/api/presets/templates/import", json=doc).json()
+        assert result["names"] == ["Feature"] and result["actions"] == ["replaced"]
+        assert [t["name"] for t in result["presets"]["template"]] == ["Feature"]
+
+
+def test_several_presets_delete_at_once(tmp_path):
+    with make_client(tmp_path) as client:
+        seed(client, tmp_path)
+        for name in ("Group / 1080p / Film", "Group / 1080p / Grain"):
+            client.put(f"/api/presets/template/{name.replace('/', '%2F')}", json={})
+        names = ["Group / 1080p / Film", "Group / 1080p / Grain", "Feature", "Gone already"]
+        presets = client.post("/api/presets/delete", json={"kind": "template", "names": names}).json()
+        assert (
+            presets["template"] == [] and presets["template_defaults"] == {}
+        )  # the default goes back to the profile's
+        encoder = presets["encoder"][0]["name"]
+        assert client.post("/api/presets/delete", json={"kind": "encoder", "names": [encoder]}).json()["encoder"] == []
+        assert client.post("/api/presets/delete", json={"kind": "nope", "names": []}).status_code == 404

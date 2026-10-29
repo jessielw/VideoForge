@@ -12,6 +12,7 @@
   import SaveIcon from '@lucide/svelte/icons/save'
   import StarIcon from '@lucide/svelte/icons/star'
   import Trash2Icon from '@lucide/svelte/icons/trash-2'
+  import ListChecksIcon from '@lucide/svelte/icons/list-checks'
   import { Button } from '$lib/components/ui/button'
   import * as Card from '$lib/components/ui/card'
   import * as Dialog from '$lib/components/ui/dialog'
@@ -67,6 +68,35 @@
 
   const choices = $derived<Choice[]>(app.presetChoices('template', profile))
   const tree = $derived(buildTree(choices.filter(c => !c.builtin), c => c.name))
+
+  // Selecting several saved templates (a folder: all inside it) to delete at once.
+  let selecting = $state(false)
+  let picked = $state<string[]>([])
+  let confirmDelete = $state(false)
+  const leafNames = (n: TreeNode<Choice>): string[] => (n.kind === 'item' ? [n.item.name] : n.children.flatMap(leafNames))
+  function pickMany(names: string[], on: boolean) {
+    picked = on ? [...new Set([...picked, ...names])] : picked.filter(n => !names.includes(n))
+    confirmDelete = false
+  }
+  function stopSelecting() {
+    selecting = false
+    picked = []
+    confirmDelete = false
+  }
+  async function deletePicked() {
+    const names = [...picked]
+    busy = true
+    try {
+      app.presets = await api.deletePresets('template', names)
+      toast.success(`Deleted ${names.length} template${names.length === 1 ? '' : 's'}`)
+      if (opened?.name && names.includes(opened.name)) opened = null // the effect opens the profile's default
+      stopSelecting()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      busy = false
+    }
+  }
   const starred = $derived(app.defaultTemplate(profile))
   const userNames = $derived(new Set(app.presets.template.map(t => t.name)))
   const containers = $derived(app.profiles.find(p => p.id === profile)?.containers ?? [])
@@ -210,7 +240,12 @@
 <div class="flex h-full">
   <section class="flex w-72 shrink-0 flex-col border-r">
     <div class="space-y-3 border-b p-4">
-      <h1 class="text-xl font-semibold">Templates</h1>
+      <div class="flex items-center justify-between gap-2">
+        <h1 class="text-xl font-semibold">Templates</h1>
+        <Button variant={selecting ? 'secondary' : 'ghost'} size="sm" disabled={!tree.length && !selecting}
+          aria-pressed={selecting} title="Select saved templates to delete several at once"
+          onclick={() => (selecting ? stopSelecting() : (selecting = true))}><ListChecksIcon />Select</Button>
+      </div>
       <label class="flex items-center gap-2 text-sm text-muted-foreground">
         Profile
         <NativeSelect class="min-w-0 flex-1" aria-label="Profile" value={profile} onchange={e => {
@@ -223,7 +258,17 @@
     </div>
     {#snippet row(c: Choice, label: string, depth: number)}
       {@const active = opened && (c.builtin ? opened.builtin && draftName === c.name : opened.name === c.name)}
-      <li class="flex items-center gap-1 rounded-md {active ? 'bg-primary/15 text-primary' : 'hover:bg-accent'}" style:padding-left="{depth * 1.25}rem">
+      {@const chosen = picked.includes(c.name)}
+      <li class="flex items-center gap-1 rounded-md {active && !selecting ? 'bg-primary/15 text-primary' : 'hover:bg-accent'}" style:padding-left="{depth * 1.25}rem">
+        {#if selecting}
+          <span class="flex size-8 shrink-0 items-center justify-center">
+            {#if !c.builtin}<Checkbox checked={chosen} aria-label="Select {c.name}" onCheckedChange={on => pickMany([c.name], on)} />{/if}
+          </span>
+          <button class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm {c.builtin ? 'text-muted-foreground' : ''}" title={c.name}
+            disabled={c.builtin} onclick={() => pickMany([c.name], !chosen)}>
+            {label}{#if c.builtin}<span class="ml-2 text-xs">built in</span>{/if}
+          </button>
+        {:else}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -238,13 +283,22 @@
         <button class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm" title={c.name} onclick={() => pick(c)}>
           {label}{#if c.builtin}<span class="ml-2 text-xs text-muted-foreground">built in</span>{/if}
         </button>
+        {/if}
       </li>
     {/snippet}
     {#snippet nodes(list: TreeNode<Choice>[], depth: number)}
       {#each list as n (n.kind === 'folder' ? `folder:${n.path}` : `${n.item.builtin}:${n.item.name}`)}
         {#if n.kind === 'folder'}
           {@const open = !collapsed.includes(n.path)}
-          <li style:padding-left="{depth * 1.25}rem">
+          {@const inside = leafNames(n)}
+          {@const some = inside.filter(name => picked.includes(name)).length}
+          <li class="flex items-center gap-1" style:padding-left="{depth * 1.25}rem">
+            {#if selecting}
+              <span class="flex size-8 shrink-0 items-center justify-center">
+                <Checkbox checked={some === inside.length} indeterminate={some > 0 && some < inside.length}
+                  aria-label="Select everything in {n.name}" onCheckedChange={on => pickMany(inside, on)} />
+              </span>
+            {/if}
             <button
               class="flex w-full items-center gap-1.5 rounded-md py-1.5 pr-2 pl-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               aria-expanded={open}
@@ -267,8 +321,26 @@
       {@render nodes(tree, 0)}
     </ul>
     <div class="space-y-2 border-t p-2">
-      <Button variant="outline" class="w-full" onclick={() => request(startNew)}><PlusIcon />New template</Button>
-      <TemplateTransfer current={draft ? { name: draftName.trim(), data: draft } : null} disabled={busy} />
+      {#if selecting}
+        {#if confirmDelete}
+          <p class="px-1 text-sm" role="alert">Delete {picked.length} template{picked.length === 1 ? '' : 's'}? This can't be undone.</p>
+          <div class="grid grid-cols-2 gap-2">
+            <Button variant="destructive" disabled={busy} onclick={deletePicked}><Trash2Icon />Delete</Button>
+            <Button variant="outline" disabled={busy} onclick={() => (confirmDelete = false)}>Keep them</Button>
+          </div>
+        {:else}
+          <p class="px-1 text-sm text-muted-foreground" aria-live="polite">{picked.length} selected</p>
+          <div class="grid grid-cols-2 gap-2">
+            <Button variant="destructive" disabled={busy || !picked.length} onclick={() => (confirmDelete = true)}>
+              <Trash2Icon />Delete{picked.length ? ` ${picked.length}` : ''}
+            </Button>
+            <Button variant="outline" disabled={busy} onclick={stopSelecting}>Done</Button>
+          </div>
+        {/if}
+      {:else}
+        <Button variant="outline" class="w-full" onclick={() => request(startNew)}><PlusIcon />New template</Button>
+        <TemplateTransfer current={draft ? { name: draftName.trim(), data: draft } : null} disabled={busy} />
+      {/if}
     </div>
   </section>
 

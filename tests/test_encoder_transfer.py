@@ -61,11 +61,11 @@ def test_conflicts_are_scoped_and_preview_does_not_reserve_names(tmp_path):
         client.put("/api/presets/template-default/manual", json={"name": "Local"})
         before = client.get("/api/presets").json()
         doc = bundle(entry(label), entry(label), entry(label, ["SDR"]), entry(label, encoder="x265"))
-        preview = client.post("/api/presets/encoders/preview", json=doc).json()
+        preview = client.post("/api/presets/encoders/preview?keep_both=true", json=doc).json()
         assert preview["names"] == [label[:76] + " (2)", label[:76] + " (3)", label, label]
         # Another browser saves a name after preview; import must reallocate it.
         client.put(f"/api/presets/encoder/{label[:76]} (2)", json={"crf": 23})
-        result = client.post("/api/presets/encoders/import", json=doc).json()
+        result = client.post("/api/presets/encoders/import?keep_both=true", json=doc).json()
         assert result["names"] == [label[:76] + " (3)", label[:76] + " (4)", label, label]
         assert result["presets"]["template"] == before["template"]
         assert result["presets"]["template_defaults"] == before["template_defaults"]
@@ -141,7 +141,7 @@ def test_concurrent_imports_are_additive_and_failed_imports_are_atomic():
     try:
 
         def add(_):
-            return store.import_encoder_presets([entry()], max_name=MAX_NAME)[0]
+            return store.import_encoder_presets([entry()], max_name=MAX_NAME)[0][0]
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             labels = list(pool.map(add, range(8)))

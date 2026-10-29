@@ -59,7 +59,7 @@ def test_export_import_round_trip_and_preview(tmp_path):
         assert client.get("/api/presets").json()["template"] == []
         preview = client.post("/api/presets/templates/preview", json=doc)
         assert preview.status_code == 200
-        assert preview.json() == {"bundle": doc, "names": ["日本語 setup", "Stereo"]}
+        assert preview.json() == {"bundle": doc, "names": ["日本語 setup", "Stereo"], "actions": ["new", "new"]}
         assert client.get("/api/presets").json()["template"] == []
         imported = client.post("/api/presets/templates/import", json=doc)
         assert imported.status_code == 200, imported.text
@@ -79,11 +79,11 @@ def test_conflicts_keep_existing_templates_defaults_and_other_presets(tmp_path):
         client.put("/api/presets/encoder/Local", json={})
         before = client.get("/api/presets").json()
         doc = bundle(entry(name), entry(name))
-        preview = client.post("/api/presets/templates/preview", json=doc).json()
+        preview = client.post("/api/presets/templates/preview?keep_both=true", json=doc).json()
         assert preview["names"] == [name[:76] + " (2)", name[:76] + " (3)"]
         # A save in another tab between preview and import must not be overwritten.
         client.put(f"/api/presets/template/{preview['names'][0]}", json={"qpf": False})
-        result = client.post("/api/presets/templates/import", json=doc).json()
+        result = client.post("/api/presets/templates/import?keep_both=true", json=doc).json()
         assert result["names"] == [name[:76] + " (3)", name[:76] + " (4)"]
         assert result["presets"]["template_defaults"] == before["template_defaults"]
         assert result["presets"]["encoder"] == before["encoder"]
@@ -157,8 +157,8 @@ def test_imported_built_in_defaults_get_a_distinct_name(tmp_path):
         profile = client.get("/api/profiles").json()[0]
         name = f"{profile['name']} defaults"
         doc = bundle({"name": name, "data": profile["defaults"]["template"]})
-        assert client.post("/api/presets/templates/preview", json=doc).json()["names"] == [f"{name} (2)"]
-        assert client.post("/api/presets/templates/import", json=doc).json()["names"] == [f"{name} (2)"]
+        assert client.post("/api/presets/templates/preview?keep_both=true", json=doc).json()["names"] == [f"{name} (2)"]
+        assert client.post("/api/presets/templates/import?keep_both=true", json=doc).json()["names"] == [f"{name} (2)"]
 
 
 def test_old_fields_get_defaults_and_filter_upgrade_without_mutating_input():
@@ -176,7 +176,7 @@ def test_concurrent_imports_keep_every_copy_and_failed_batch_rolls_back():
     try:
 
         def add(_):
-            return store.import_presets("template", [entry()], max_name=MAX_NAME)[0]
+            return store.import_presets("template", [entry()], max_name=MAX_NAME)[0][0]
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             names = list(pool.map(add, range(8)))

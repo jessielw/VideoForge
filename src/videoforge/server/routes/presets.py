@@ -152,15 +152,14 @@ async def export_audio(request: Request) -> dict[str, Any]:
 @router.post("/audio/preview")
 async def preview_audio(request: Request) -> dict[str, Any]:
     bundle = await _bundle(request, audio=True)
-    names = request.app.state.store.import_preset_pack({"audio": bundle["audio"]}, max_name=MAX_NAME, preview=True)
-    return {"bundle": bundle, "names": names["audio"]}
+    return {"bundle": bundle} | _imported(request, "audio", bundle["audio"], preview=True)
 
 
 @router.post("/audio/import")
 async def import_audio(request: Request) -> dict[str, Any]:
     bundle = await _bundle(request, audio=True)
-    names = request.app.state.store.import_preset_pack({"audio": bundle["audio"]}, max_name=MAX_NAME)
-    return {"presets": _all(request), "names": names["audio"]}
+    imported = _imported(request, "audio", bundle["audio"])
+    return {"presets": _all(request)} | imported
 
 
 @router.post("/encoders/export")
@@ -171,15 +170,14 @@ async def export_encoders(request: Request) -> dict[str, Any]:
 @router.post("/encoders/preview")
 async def preview_encoders(request: Request) -> dict[str, Any]:
     bundle = await _bundle(request, encoder=True)
-    names = request.app.state.store.import_encoder_presets(bundle["encoders"], max_name=MAX_NAME, preview=True)
-    return {"bundle": bundle, "names": names}
+    return {"bundle": bundle} | _imported(request, "encoder", bundle["encoders"], preview=True)
 
 
 @router.post("/encoders/import")
 async def import_encoders(request: Request) -> dict[str, Any]:
     bundle = await _bundle(request, encoder=True)
-    names = request.app.state.store.import_encoder_presets(bundle["encoders"], max_name=MAX_NAME)
-    return {"presets": _all(request), "names": names}
+    imported = _imported(request, "encoder", bundle["encoders"])
+    return {"presets": _all(request)} | imported
 
 
 @router.post("/templates/export")
@@ -191,23 +189,36 @@ async def export_templates(request: Request) -> dict[str, Any]:
 @router.post("/templates/preview")
 async def preview_templates(request: Request) -> dict[str, Any]:
     bundle = await _bundle(request)
-    names = _import_names(request, bundle, preview=True)
-    return {"bundle": bundle, "names": names}
+    return {"bundle": bundle} | _imported(request, "template", bundle["templates"], preview=True)
 
 
 @router.post("/templates/import")
 async def import_templates(request: Request) -> dict[str, Any]:
     bundle = await _bundle(request)
-    names = _import_names(request, bundle)
-    return {"presets": _all(request), "names": names}
+    imported = _imported(request, "template", bundle["templates"])
+    return {"presets": _all(request)} | imported
 
 
-def _import_names(request: Request, bundle: dict[str, Any], *, preview: bool = False) -> list[str]:
+def keep_both(request: Request) -> bool:
+    """?keep_both=true: an import keeps a saved preset of the same name and adds a numbered copy;
+    by default it replaces it."""
+    return request.query_params.get("keep_both", "").lower() in ("1", "true", "yes")
+
+
+def reserved_names(request: Request) -> tuple[str, ...]:
+    """The built-in templates' names ("Manual defaults"): never replaced, so an import of one is a copy."""
     state = request.app.state
-    reserved = tuple(f"{state.queue.profiles(pid).name} defaults" for pid in state.profile_ids)
-    return state.store.import_presets(
-        "template", bundle["templates"], max_name=MAX_NAME, preview=preview, reserved=reserved
+    return tuple(f"{state.queue.profiles(pid).name} defaults" for pid in state.profile_ids)
+
+
+def _imported(
+    request: Request, kind: str, entries: list[dict[str, Any]], *, preview: bool = False
+) -> dict[str, list[str]]:
+    reserved = reserved_names(request) if kind == "template" else ()
+    names, actions = request.app.state.store.import_presets(
+        kind, entries, max_name=MAX_NAME, preview=preview, reserved=reserved, keep_both=keep_both(request)
     )
+    return {"names": names, "actions": actions}
 
 
 @router.put("/template-default/{profile_id}")
@@ -235,6 +246,20 @@ def set_subs_default(request: Request, body: dict[str, Any] | None = Body(None))
         except (TypeError, ValueError, KeyError, AttributeError) as ex:
             raise HTTPException(422, f"Bad subtitle rules: {ex}") from None
         store.set_setting(SUBS_DEFAULT, to_json(rules))
+    return _all(request)
+
+
+class DeleteBody(BaseModel):
+    kind: str
+    names: list[str] = Field(max_length=10_000)
+
+
+@router.post("/delete")
+def delete_presets(request: Request, body: DeleteBody) -> dict[str, Any]:
+    """Several presets of one kind at once (the library's selection); a default template among them
+    falls back to the profile's own defaults."""
+    _kind(body.kind)
+    request.app.state.store.delete_presets(body.kind, body.names)
     return _all(request)
 
 

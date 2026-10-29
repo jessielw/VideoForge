@@ -25,11 +25,11 @@ def test_audio_round_trip_conflicts_and_restart(tmp_path):
         exported = client.post("/api/presets/audio/export", json=doc)
         assert exported.status_code == 200, exported.text
         assert exported.json() == doc
-        preview = client.post("/api/presets/audio/preview", json=doc).json()
-        assert preview == {"bundle": doc, "names": ["Surround", "Surround"]}
+        preview = client.post("/api/presets/audio/preview?keep_both=true", json=doc).json()
+        assert preview == {"bundle": doc, "names": ["Surround", "Surround"], "actions": ["new", "new"]}
         assert client.get("/api/presets").json()["audio"] == []
-        first = client.post("/api/presets/audio/import", json=doc).json()
-        second = client.post("/api/presets/audio/import", json=doc).json()
+        first = client.post("/api/presets/audio/import?keep_both=true", json=doc).json()
+        second = client.post("/api/presets/audio/import?keep_both=true", json=doc).json()
         assert second["names"] == ["Surround (2)", "Surround (2)"]
         assert len(second["presets"]["audio"]) == 4
         for original in first["presets"]["audio"]:

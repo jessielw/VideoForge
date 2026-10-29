@@ -12,6 +12,11 @@ source), or in Docker on Linux.
 
 ### Added
 
+- Importing a template or preset with the same name replaces yours instead of adding `Name (2)`, so
+  importing an updated pack again adds no duplicates. The preview marks each entry (**replaces yours**,
+  **already the same**); **Keep both** brings back numbered copies. **Select** on the Templates list
+  and in the preset managers deletes several at once (a folder's box picks everything inside it).
+
 - **Settings → Default subtitles**: subtitle rules every new job gets unless its template sets its own.
   Subtitle rules (templates and the default) can **name untitled tracks** from their language and flags.
   Configuration backups are version 3 (they carry the default rules); version 1 and 2 backups still

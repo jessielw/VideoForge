@@ -47,7 +47,10 @@ Use **Import** and **Export…** in the manager to share encoder presets as a Vi
 Export one or several saved presets, or choose **Export current settings** to include the open
 configuration's unsaved edits, including built-in configurations. Files preserve encoder settings,
 names, and nested folders. Import previews the file and lets you choose which presets to add.
-Existing presets are kept; a matching name in the same encoder and folder gets a numbered copy.
+A matching name in the same encoder and folder replaces your preset (one that's already the same is
+left alone), unless you tick **Keep both** for a numbered copy.
+To delete several presets, choose **Select** in the manager, tick them (a folder's box ticks everything
+inside it), then **Delete N** and confirm.
 Importing does not apply settings to jobs or templates. Files support up to 500 presets and 5 MiB.
 
 Built-in choices are marked **profile** (the profile's own defaults) or **starter**. The starters,

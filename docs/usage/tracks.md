@@ -96,8 +96,9 @@ when no custom title has been set. Templates retain custom titles for primary an
 
 Open **Settings → Encoder presets → Manage audio presets** to manage the same library without
 a job. **Import**, **Export…**, and **Export current settings** share audio preset JSON files,
-including custom titles, encoder options, and folders. Import previews name conflicts and creates
-numbered copies instead of replacing saved presets; you can select which entries to import or export.
+including custom titles, encoder options, and folders. A preset with the same name in the same
+encoder and folder replaces yours unless you tick **Keep both** for a numbered copy; the preview shows
+which. You can select which entries to import or export, and **Select** deletes several at once.
 
 Applying a preset preserves the track's language, flags, inclusion, timing, and position.
 It replaces encoder options rather than keeping options from a previous encoder. Copy clears

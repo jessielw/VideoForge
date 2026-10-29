@@ -165,6 +165,17 @@ class Store:
         with self._lock:
             self._db.execute("DELETE FROM presets WHERE kind = ? AND name = ?", (kind, name))
 
+    def delete_presets(self, kind: str, names: list[str]) -> None:
+        """Several at once, in one transaction."""
+        with self._lock:
+            self._db.execute("BEGIN")
+            try:
+                self._db.executemany("DELETE FROM presets WHERE kind = ? AND name = ?", [(kind, n) for n in names])
+                self._db.execute("COMMIT")
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
+
     def import_presets(
         self,
         kind: str,
@@ -173,43 +184,18 @@ class Store:
         max_name: int,
         preview: bool = False,
         reserved: tuple[str, ...] = (),
-    ) -> list[str]:
-        """Add a whole bundle atomically, keeping both copies when names collide.
-
-        Allocate names under the write lock as well as during preview: another browser may
-        have saved a preset since the preview. Never overwrite an existing preset.
-        """
-        with self._lock:
-            names = {row[0] for row in self._db.execute("SELECT name FROM presets WHERE kind = ?", (kind,))}
-            names.update(reserved)
-            added = []
-            for entry in entries:
-                base = entry["name"]
-                name = base
-                i = 2
-                while name in names:
-                    suffix = f" ({i})"
-                    name = base[: max_name - len(suffix)] + suffix
-                    i += 1
-                names.add(name)
-                added.append(name)
-            if not preview:
-                self._db.execute("BEGIN")
-                try:
-                    self._db.executemany(
-                        "INSERT INTO presets (kind, name, data) VALUES (?, ?, ?)",
-                        [(kind, name, json.dumps(entry["data"])) for name, entry in zip(added, entries, strict=True)],
-                    )
-                    self._db.execute("COMMIT")
-                except Exception:
-                    self._db.execute("ROLLBACK")
-                    raise
-        return added
+        keep_both: bool = True,
+    ) -> tuple[list[str], list[str]]:
+        """One library's import_preset_pack: (the names, what happened to each)."""
+        names, actions = self.import_preset_pack(
+            {kind: entries}, max_name=max_name, preview=preview, reserved={kind: reserved}, keep_both=keep_both
+        )
+        return names[kind], actions[kind]
 
     def import_encoder_presets(
-        self, entries: list[dict[str, Any]], *, max_name: int, preview: bool = False
-    ) -> list[str]:
-        return self.import_preset_pack({"encoder": entries}, max_name=max_name, preview=preview)["encoder"]
+        self, entries: list[dict[str, Any]], *, max_name: int, preview: bool = False, keep_both: bool = True
+    ) -> tuple[list[str], list[str]]:
+        return self.import_presets("encoder", entries, max_name=max_name, preview=preview, keep_both=keep_both)
 
     def import_preset_pack(
         self,
@@ -218,15 +204,26 @@ class Store:
         max_name: int,
         preview: bool = False,
         reserved: dict[str, tuple[str, ...]] | None = None,
-    ) -> dict[str, list[str]]:
-        """Add every library atomically, allocating fresh identities and nonconflicting labels."""
+        keep_both: bool = True,
+    ) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+        """Import every library atomically: (the names, by kind; what happened to each entry, by kind).
+
+        A preset matches a saved one by name (an encoder or audio preset: by label within its encoder or
+        action and folder). keep_both: a match is kept and the import gets a numbered copy ("copy"); else
+        the match is replaced in place ("replaced", keeping its identity, so a default stays one) or left
+        alone when it already holds the same settings ("unchanged"). A reserved name, or a second entry
+        of the same name, always gets a copy. Names are allocated under the write lock as well as during
+        preview: another browser may have saved a preset since the preview.
+        """
         with self._lock:
-            names, rows = {}, []
+            names: dict[str, list[str]] = {}
+            actions: dict[str, list[str]] = {}
+            rows, updates = [], []
             for kind, entries in libraries.items():
                 grouped = kind in ("encoder", "audio")
                 parent = "encoder" if kind == "encoder" else "action"
                 records = self._db.execute("SELECT name, data FROM presets WHERE kind = ?", (kind,)).fetchall()
-                used = set()
+                saved: dict[tuple, tuple[str, Any]] = {}
                 for name, raw in records:
                     record = json.loads(raw)
                     settings = record.get("settings", record)
@@ -235,13 +232,26 @@ class Store:
                         if grouped
                         else ()
                     )
-                    used.add((*scope, record.get("label", name) if grouped else name))
+                    saved[(*scope, record.get("label", name) if grouped else name)] = (name, record)
+                used = set(saved)
                 used.update((name,) for name in (reserved or {}).get(kind, ()))
-                names[kind] = []
+                names[kind], actions[kind] = [], []
+                replaced: set[tuple] = set()
                 for entry in entries:
                     base, data = entry["label" if grouped else "name"], entry["data"]
                     group = entry.get("group", [])
                     scope = (data[parent], tuple(group)) if grouped else ()
+                    match = saved.get((*scope, base))
+                    if not keep_both and match is not None and (*scope, base) not in replaced:
+                        replaced.add((*scope, base))
+                        name, old = match
+                        record = {**old, "label": base, "group": group, "settings": data} if grouped else data
+                        same = json.dumps(record, sort_keys=True) == json.dumps(old, sort_keys=True)
+                        if not same:
+                            updates.append((json.dumps(record), kind, name))
+                        names[kind].append(base)
+                        actions[kind].append("unchanged" if same else "replaced")
+                        continue
                     label, i = base, 2
                     while (*scope, label) in used:
                         suffix = f" ({i})"
@@ -249,14 +259,16 @@ class Store:
                         i += 1
                     used.add((*scope, label))
                     names[kind].append(label)
+                    actions[kind].append("new" if label == base else "copy")
                     record = {"label": label, "group": group, "settings": data} if grouped else data
                     rows.append((kind, uuid4().hex if grouped else label, json.dumps(record)))
             if not preview:
                 self._db.execute("BEGIN")
                 try:
                     self._db.executemany("INSERT INTO presets (kind, name, data) VALUES (?, ?, ?)", rows)
+                    self._db.executemany("UPDATE presets SET data = ? WHERE kind = ? AND name = ?", updates)
                     self._db.execute("COMMIT")
                 except Exception:
                     self._db.execute("ROLLBACK")
                     raise
-        return names
+        return names, actions

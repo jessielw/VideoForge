@@ -11,6 +11,7 @@ async function fixture(page: Page) {
   const errors: string[] = []
   const exports: EncoderBundle[] = []
   const imports: EncoderBundle[] = []
+  const deletes: { kind: string; names: string[] }[] = []
   page.on('pageerror', error => errors.push(error.message))
   const template: Template = {
     video: { source_filter: 'ffms2', crop: { left: 0, top: 0, right: 0, bottom: 0 }, resize: null, filters: [], custom: null },
@@ -31,6 +32,11 @@ async function fixture(page: Page) {
     } else if (path === '/api/presets/encoders/preview') {
       const bundle: EncoderBundle = request.postDataJSON()
       await route.fulfill({ json: { bundle, names: bundle.encoders.map(entry => `${entry.label} (2)`) } })
+    } else if (path === '/api/presets/delete') {
+      const body = request.postDataJSON() as { kind: string; names: string[] }
+      deletes.push(body)
+      presets.encoder = presets.encoder.filter(entry => !body.names.includes(entry.name))
+      await route.fulfill({ json: presets })
     } else if (path === '/api/presets/encoders/import') {
       const bundle: EncoderBundle = request.postDataJSON()
       imports.push(bundle)
@@ -50,8 +56,24 @@ async function fixture(page: Page) {
   await page.getByRole('button', { name: 'Manage presets…' }).click()
   const manager = page.getByRole('dialog', { name: 'Encoder presets', exact: true })
   await expect(manager).toBeVisible()
-  return { manager, errors, exports, imports }
+  return { manager, errors, exports, imports, deletes }
 }
+
+test('Select deletes several saved presets at once, a folder picking everything inside it', async ({ page }, testInfo) => {
+  const { manager, errors, deletes } = await fixture(page)
+  await manager.getByRole('button', { name: 'Select', exact: true }).click()
+  await expect(manager.getByRole('button', { name: 'New from current settings', exact: true })).toHaveCount(0)
+  await manager.getByRole('checkbox', { name: 'Select everything in 1080p' }).check()
+  await expect(manager.getByText('1 selected')).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('preset-select.png') })
+  await manager.getByRole('button', { name: 'Delete 1', exact: true }).click()
+  await expect(manager.getByRole('alert')).toContainText("Delete 1 preset? This can't be undone.")
+  await manager.getByRole('button', { name: 'Delete', exact: true }).click()
+  await expect.poll(() => deletes).toEqual([{ kind: 'encoder', names: ['library-id'] }])
+  await expect(manager.getByRole('button', { name: 'New from current settings', exact: true })).toBeVisible()
+  await expect(manager.getByText('Deleted 1 preset.')).toBeVisible()
+  expect(errors).toEqual([])
+})
 
 test('New from current settings copies the selected library preset and its draft edits', async ({ page }, testInfo) => {
   const { manager, errors, exports } = await fixture(page)
@@ -105,7 +127,7 @@ test('import previews conflicts, imports selected presets, and preserves the ope
   await dialog.locator('input[type=file]').setInputFiles({ name: 'encoder-presets.json', mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({ format: 'videoforge.encoders', version: 1, encoders: entries })) })
   await expect(dialog).toContainText('Selected film (2)')
-  await dialog.getByRole('checkbox').nth(1).uncheck()
+  await dialog.getByRole('group', { name: 'Encoder presets to import' }).getByRole('checkbox').nth(1).uncheck()
   await dialog.getByRole('button', { name: 'Import 1', exact: true }).click()
   expect(imports).toEqual([{ format: 'videoforge.encoders', version: 1, encoders: [entries[0]] }])
   await expect(manager.getByRole('spinbutton', { name: 'CRF', exact: true })).toHaveValue('21')

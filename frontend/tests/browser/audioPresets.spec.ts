@@ -131,7 +131,7 @@ test('audio export includes the open draft; import preserves edits and selects e
   await dialog.locator('input[type=file]').setInputFiles({ name: 'audio-presets.json', mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({ format: 'videoforge.audio', version: 1, audio: entries })) })
   await expect(dialog).toContainText('Surround (2)')
-  await dialog.getByRole('checkbox').nth(1).uncheck()
+  await dialog.getByRole('group', { name: 'Audio presets to import' }).getByRole('checkbox').nth(1).uncheck()
   await dialog.getByRole('button', { name: 'Import 1', exact: true }).click()
   expect(imports).toEqual([{ format: 'videoforge.audio', version: 1, audio: [entries[0]] }])
   await expect(manager.getByRole('textbox', { name: 'Track title', exact: true })).toHaveValue('Unsaved title')

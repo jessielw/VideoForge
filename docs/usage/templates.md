@@ -30,6 +30,12 @@ override just the encoder in New jobs. Presets are organized under each encoder 
 folders; see [saved encoder presets](encoders.md#saved-encoder-presets). Templates store a copy of
 the selected settings, so later preset edits do not alter saved templates or queued jobs.
 
+## Delete several templates
+
+Choose **Select** at the top of the template list, tick the templates to delete (a folder's box ticks
+everything inside it), then **Delete N** and confirm. Built-in defaults can't be deleted. **Done**
+leaves select mode without deleting anything.
+
 ## Share templates
 
 1. On **Templates**, open a setup and choose **Export current template**. This includes any unsaved
@@ -41,8 +47,11 @@ the selected settings, so later preset edits do not alter saved templates or que
 4. Select the templates to keep and click **Import**. They appear in the template list, ready to edit,
    star, or apply to jobs.
 
-Import creates new saved templates. A matching name gets a numbered copy, such as `Group setup (2)`;
-existing templates, current editor drafts, and default selections stay as they are. Files are checked
+A template with the same name (folder included) replaces yours, so importing an updated pack again
+adds nothing new; one that's already the same is left alone. The preview marks each one (**replaces
+yours**, **already the same**) and counts them. Tick **Keep both** to add a numbered copy instead, such
+as `Group setup (2)`. A replaced template keeps its name, so a starred default still points to it;
+current editor drafts and default selections stay as they are. Files are checked
 in full before any templates are saved. Unsupported versions or settings are rejected rather than
 silently dropped. A file can contain up to 500 templates and be up to 5 MiB.
 

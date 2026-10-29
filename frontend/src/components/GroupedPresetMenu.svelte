@@ -8,7 +8,7 @@
   import PresetManager from './PresetManager.svelte'
   import { matchingPreset, presetKey, presetLabel, type PresetChoice, type PresetDraft } from '../lib/presetDraft'
 
-  let { title, current, choices, parents, parentOf, summary, apply, savePreset, removePreset, editor,
+  let { title, current, choices, parents, parentOf, summary, apply, savePreset, removePreset, removePresets, editor,
     folderExample, nameExample, folderHint = 'Use / for nested folders.', builtinLabel = 'built-in',
     problem = () => '', showTitle = false, applyLabel = 'Apply settings', disabled = false, transfer, manageOnly = false }: {
     title: string
@@ -20,6 +20,7 @@
     apply: (settings: T) => void | Promise<void>
     savePreset: (preset: { name?: string; label: string; group: string[]; data: T }) => Promise<PresetChoice<T>[]>
     removePreset: (name: string) => Promise<void>
+    removePresets?: (names: string[]) => Promise<void>
     editor: Snippet<[T, (value: T) => void]>
     folderExample: string
     nameExample: string
@@ -104,7 +105,7 @@
 
 {#if managerOpen}
   <PresetManager {title} {current} {choices} {parents} {parentOf} {summary} {problem} {builtinLabel} {editor}
-    {nameExample} {folderExample} {folderHint} {apply} {savePreset} {removePreset} {applyLabel} {transfer} {manageOnly}
+    {nameExample} {folderExample} {folderHint} {apply} {savePreset} {removePreset} {removePresets} {applyLabel} {transfer} {manageOnly}
     initialSelected={matched ? presetKey(matched) : null}
     onclose={closeManager} onapplied={key => (selected = key)} />
 {/if}
