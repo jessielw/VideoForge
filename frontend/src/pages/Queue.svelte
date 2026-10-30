@@ -8,6 +8,7 @@
   import { saves } from '../lib/saves'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
+  import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left'
   import CopyPlusIcon from '@lucide/svelte/icons/copy-plus'
   import CropIcon from '@lucide/svelte/icons/crop'
   import DatabaseCheckIcon from '@lucide/svelte/icons/database-check'
@@ -428,11 +429,12 @@
   const single = $derived(selected.length === 1 ? selected[0] : null)
 
   // A narrow window gives an open job the room: the list is a rail, and opens over the editor (peek)
-  // until a job is picked, Esc or a click elsewhere.
+  // until a job is picked, Esc or a click elsewhere. A phone shows one or the other: the list, or the
+  // job with a bar back to the list (no rail, and the list opens over the whole page).
   let peek = $state(false)
   let railEl = $state<HTMLElement>()
   let listEl = $state<HTMLElement>()
-  const rail = $derived(layout.queueCollapsed || (layout.narrow && single !== null))
+  const rail = $derived(layout.small ? single !== null : layout.queueCollapsed || (layout.narrow && single !== null))
   $effect(() => {
     if (!rail) peek = false
   })
@@ -549,7 +551,9 @@
 />
 
 <div class="relative flex h-full">
-  {#if rail}
+  {#if rail && layout.small}
+    {#if peek}{@render list('absolute inset-0 z-30 w-full bg-background')}{/if}
+  {:else if rail}
     <!-- The list as a rail: one chip per job (its place, coloured by status). -->
     <section
       bind:this={railEl}
@@ -640,6 +644,7 @@
         <Button
           variant="ghost"
           size="icon"
+          class={peek ? '' : 'max-sm:hidden'}
           onclick={hideList}
           aria-label={peek ? 'Hide the queue list' : 'Collapse the queue list'}
           title={peek ? 'Hide the list (Esc)' : 'Collapse the list, for more room'}
@@ -666,14 +671,16 @@
         {/if}
         {#if working || app.queue.paused}
           {#if app.queue.paused}
-            <Button onclick={() => act(api.resume)} title="Go on with the paused tools"><PlayIcon />Resume</Button>
+            <Button onclick={() => act(api.resume)} title="Go on with the paused tools"
+              ><PlayIcon /><span class="max-sm:sr-only">Resume</span></Button
+            >
           {:else}
             <Button
               variant="outline"
               onclick={() => act(api.pause)}
               title="Suspend the running job's tools and the index lane's (they use no CPU until resumed)"
             >
-              <PauseIcon />Pause
+              <PauseIcon /><span class="max-sm:sr-only">Pause</span>
             </Button>
           {/if}
           <DropdownMenu.Root>
@@ -701,6 +708,7 @@
         {/if}
         <Button
           variant="outline"
+          class={selected.length ? '' : 'max-sm:hidden'}
           disabled={starting || !selected.length}
           onclick={() => act(() => run(selected))}
           title="Queue the selected jobs and start"
@@ -729,7 +737,7 @@
             onclick={() => act(() => app.stopIndexing())}
             title="Stop indexing: cancel the job being indexed and the ones waiting"
           >
-            <DatabaseXIcon />Stop indexing
+            <DatabaseXIcon /><span class="max-sm:sr-only">Stop indexing</span>
           </Button>
         {/if}
         <span class="flex-1"></span>
@@ -845,7 +853,7 @@
             ? `${selected.length} selected jobs`
             : `all ${app.jobs.length} jobs`}.
         </p>
-        <p id="queue-keys" class="text-xs text-muted-foreground">
+        <p id="queue-keys" class="text-xs text-muted-foreground pointer-coarse:hidden">
           Arrows/Home/End navigate; Shift extends selection; Ctrl/Cmd+A selects matching jobs across pages.
         </p>
       </div>
@@ -999,93 +1007,102 @@
   {/snippet}
 
   <section
-    class="min-w-0 flex-1 overflow-auto {layout.small && !rail ? 'hidden' : ''}"
+    class="flex min-w-0 flex-1 flex-col {layout.small && !rail ? 'hidden' : ''}"
     inert={peek}
     aria-label="Job settings"
   >
-    {#if single}
-      {#key single}<JobEditor jobId={single} />{/key}
-    {:else if selected.length > 1}
-      <div class="max-w-3xl space-y-6 p-6">
-        <h2 class="text-lg font-semibold">{selected.length} jobs selected</h2>
-        <p class="text-sm text-muted-foreground">
-          Settings here apply to every selected job (queued or running ones are skipped). Starting values are the first
-          job's. Audio and subtitle choices stay per job unless the template sets them.
-        </p>
-        <div class="flex flex-wrap items-center gap-3">
-          <Button variant="outline" disabled={!batchToIndex} onclick={() => index(selected)}>
-            <DatabaseZapIcon />{batchToIndex
-              ? `Index ${batchToIndex} job${batchToIndex > 1 ? 's' : ''}`
-              : 'All indexed'}
-          </Button>
-          <span class="text-sm text-muted-foreground">
-            One at a time: the work folder, script and source index, nothing else. Their video then opens at once, and
-            the encode reuses the index.{batchToIndex && batchToIndex < selected.length
-              ? ` ${selected.length - batchToIndex} already indexed.`
-              : ''}
-          </span>
-        </div>
-        {#if batchSource}
-          <Card.Root class="gap-2 p-4">
-            <div class="flex flex-wrap items-center gap-3">
-              <span class="text-sm">Template</span>
-              <NativeSelect
-                aria-label="Template for the selected jobs"
-                value={picked?.name ?? ''}
-                onchange={(e) => (batchTemplate = e.currentTarget.value)}
-              >
-                {#each batchTemplates as c (`${c.builtin}:${c.name}`)}<option value={c.name}>{c.name}</option>{/each}
-              </NativeSelect>
-              <Button class="ml-auto" onclick={applyTemplate} disabled={!picked}
-                ><LayoutTemplateIcon />Apply to {selected.length} jobs</Button
-              >
-            </div>
-            <p class="text-xs text-muted-foreground">
-              Sets video, encoder, container, AutoQPF{picked?.data.audio ? ', audio' : ''}{picked?.data.crop_mode ===
-              'auto'
-                ? '; the crop is detected for each job'
-                : picked?.data.crop_mode === 'fixed'
-                  ? `; crop ${picked.data.video.crop.left}/${picked.data.video.crop.top}/${picked.data.video.crop.right}/${picked.data.video.crop.bottom} on every job`
-                  : '; each job keeps its crop'}. Save templates from a job's Template menu.
-            </p>
-          </Card.Root>
-          {#if batchContainers.length > 1}
-            <Card.Root class="flex-row flex-wrap items-center gap-3 p-4">
-              <span class="text-sm">Container</span>
-              <ToggleGroup.Root
-                type="single"
-                variant="outline"
-                spacing={1}
-                class="w-fit max-w-full flex-wrap"
-                value={batchSource.spec.mux.container || batchContainers[0].id}
-                onValueChange={(v) => v && applyContainer(v)}
-              >
-                {#each batchContainers as c (c.id)}
-                  <ToggleGroup.Item
-                    value={c.id}
-                    class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                    >{c.label}</ToggleGroup.Item
-                  >
-                {/each}
-              </ToggleGroup.Root>
-              <span class="text-xs text-muted-foreground">Each job keeps its extra muxer arguments.</span>
+    {#if layout.small && rail}
+      <div class="shrink-0 border-b border-border px-1 py-1">
+        <Button variant="ghost" size="sm" onclick={showList} aria-label="Show the queue list" aria-expanded={peek}>
+          <ChevronLeftIcon />Queue list
+        </Button>
+      </div>
+    {/if}
+    <div class="min-h-0 flex-1 overflow-auto">
+      {#if single}
+        {#key single}<JobEditor jobId={single} />{/key}
+      {:else if selected.length > 1}
+        <div class="max-w-3xl space-y-6 p-6">
+          <h2 class="text-lg font-semibold">{selected.length} jobs selected</h2>
+          <p class="text-sm text-muted-foreground">
+            Settings here apply to every selected job (queued or running ones are skipped). Starting values are the
+            first job's. Audio and subtitle choices stay per job unless the template sets them.
+          </p>
+          <div class="flex flex-wrap items-center gap-3">
+            <Button variant="outline" disabled={!batchToIndex} onclick={() => index(selected)}>
+              <DatabaseZapIcon />{batchToIndex
+                ? `Index ${batchToIndex} job${batchToIndex > 1 ? 's' : ''}`
+                : 'All indexed'}
+            </Button>
+            <span class="text-sm text-muted-foreground">
+              One at a time: the work folder, script and source index, nothing else. Their video then opens at once, and
+              the encode reuses the index.{batchToIndex && batchToIndex < selected.length
+                ? ` ${selected.length - batchToIndex} already indexed.`
+                : ''}
+            </span>
+          </div>
+          {#if batchSource}
+            <Card.Root class="gap-2 p-4">
+              <div class="flex flex-wrap items-center gap-3">
+                <span class="text-sm">Template</span>
+                <NativeSelect
+                  aria-label="Template for the selected jobs"
+                  value={picked?.name ?? ''}
+                  onchange={(e) => (batchTemplate = e.currentTarget.value)}
+                >
+                  {#each batchTemplates as c (`${c.builtin}:${c.name}`)}<option value={c.name}>{c.name}</option>{/each}
+                </NativeSelect>
+                <Button class="ml-auto" onclick={applyTemplate} disabled={!picked}
+                  ><LayoutTemplateIcon />Apply to {selected.length} jobs</Button
+                >
+              </div>
+              <p class="text-xs text-muted-foreground">
+                Sets video, encoder, container, AutoQPF{picked?.data.audio ? ', audio' : ''}{picked?.data.crop_mode ===
+                'auto'
+                  ? '; the crop is detected for each job'
+                  : picked?.data.crop_mode === 'fixed'
+                    ? `; crop ${picked.data.video.crop.left}/${picked.data.video.crop.top}/${picked.data.video.crop.right}/${picked.data.video.crop.bottom} on every job`
+                    : '; each job keeps its crop'}. Save templates from a job's Template menu.
+              </p>
+            </Card.Root>
+            {#if batchContainers.length > 1}
+              <Card.Root class="flex-row flex-wrap items-center gap-3 p-4">
+                <span class="text-sm">Container</span>
+                <ToggleGroup.Root
+                  type="single"
+                  variant="outline"
+                  spacing={1}
+                  class="w-fit max-w-full flex-wrap"
+                  value={batchSource.spec.mux.container || batchContainers[0].id}
+                  onValueChange={(v) => v && applyContainer(v)}
+                >
+                  {#each batchContainers as c (c.id)}
+                    <ToggleGroup.Item
+                      value={c.id}
+                      class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                      >{c.label}</ToggleGroup.Item
+                    >
+                  {/each}
+                </ToggleGroup.Root>
+                <span class="text-xs text-muted-foreground">Each job keeps its extra muxer arguments.</span>
+              </Card.Root>
+            {/if}
+            <Card.Root class="p-4">
+              <EncoderPanel profile={batchSource.profile} value={batchSource.spec.encoder} onchange={applyEncoder} />
+            </Card.Root>
+            <Card.Root class="flex-row items-center gap-3 p-4">
+              <span class="text-sm">
+                Crop from {batchSource.name}: {batchSource.spec.video.crop.left}/{batchSource.spec.video.crop
+                  .top}/{batchSource.spec.video.crop.right}/{batchSource.spec.video.crop.bottom}
+              </span>
+              <Button variant="outline" class="ml-auto" onclick={applyCrop}><CropIcon />Apply this crop to all</Button>
             </Card.Root>
           {/if}
-          <Card.Root class="p-4">
-            <EncoderPanel profile={batchSource.profile} value={batchSource.spec.encoder} onchange={applyEncoder} />
-          </Card.Root>
-          <Card.Root class="flex-row items-center gap-3 p-4">
-            <span class="text-sm">
-              Crop from {batchSource.name}: {batchSource.spec.video.crop.left}/{batchSource.spec.video.crop
-                .top}/{batchSource.spec.video.crop.right}/{batchSource.spec.video.crop.bottom}
-            </span>
-            <Button variant="outline" class="ml-auto" onclick={applyCrop}><CropIcon />Apply this crop to all</Button>
-          </Card.Root>
-        {/if}
-      </div>
-    {:else}
-      <div class="flex h-full items-center justify-center text-muted-foreground">Select a job to edit it.</div>
-    {/if}
+        </div>
+      {:else}
+        <div class="flex h-full items-center justify-center text-muted-foreground">Select a job to edit it.</div>
+      {/if}
+    </div>
   </section>
 </div>
 

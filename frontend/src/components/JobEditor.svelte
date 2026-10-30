@@ -7,6 +7,7 @@
   import { basename, duration, SEVERITY_TONE, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { queueable } from '../lib/queueView'
   import { app } from '../lib/state.svelte'
+  import { layout } from '../lib/layout.svelte'
   import type { CommandStep, JobDetail } from '../lib/types'
   import EncoderPanel from './EncoderPanel.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
@@ -52,6 +53,8 @@
     try {
       const fresh = await api.job(id)
       if (request !== loadSeq || id !== jobId || pending || at !== edits) return
+      // A phone is for checking on runs: a job that has one opens on its log, not the video.
+      if (!job && layout.small && ['running', 'failed', 'invalid', 'done'].includes(fresh.status)) tab = 'log'
       job = fresh
       error = ''
     } catch (e) {
@@ -63,6 +66,13 @@
     void jobId
     void app.versions[jobId]
     load()
+  })
+
+  // A phone scrolls the tab strip: keep the open tab in sight (a run opens on Log, the last one).
+  let tabList = $state<HTMLElement | null>(null)
+  $effect(() => {
+    void tab
+    tabList?.querySelector('[data-state="active"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   })
 
   let commandsSeq = 0
@@ -135,8 +145,8 @@
   <div class="p-6 text-muted-foreground">{error || 'Loading…'}</div>
 {:else}
   <Tabs.Root bind:value={tab} class="h-full min-h-0 gap-0">
-    <header class="space-y-2 border-b px-5 pt-3">
-      <div class="flex items-center gap-3">
+    <header class="space-y-2 border-b px-5 pt-3 max-sm:px-3">
+      <div class="flex items-center gap-3 max-sm:flex-wrap max-sm:gap-x-2 max-sm:gap-y-1">
         <label
           class="flex shrink-0 items-center gap-2 rounded-md border px-2.5 py-1 text-sm font-medium has-disabled:opacity-60
             {queued ? 'border-info/40 bg-info/10 text-info' : 'border-border'}"
@@ -155,7 +165,9 @@
           />
           {queued ? 'Queued · locked' : 'Queue'}
         </label>
-        <h2 class="truncate text-lg font-semibold" title={job.source}>{job.name}</h2>
+        <h2 class="truncate text-lg font-semibold max-sm:order-first max-sm:basis-full" title={job.source}>
+          {job.name}
+        </h2>
         {#if job.label}<Badge variant="outline" class="shrink-0" title="Label (Output tab)">{job.label}</Badge>{/if}
         <span class="text-sm {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
         <span class="text-sm text-muted-foreground"
@@ -176,8 +188,8 @@
       </div>
       {#if live?.progress && (live.status === 'running' || live.status === 'indexing')}
         {@const p = live.progress}
-        <div class="flex items-center gap-3 text-xs text-muted-foreground">
-          <div class="h-1.5 flex-1 overflow-hidden rounded bg-muted">
+        <div class="flex items-center gap-3 text-xs text-muted-foreground max-sm:flex-wrap max-sm:gap-y-1">
+          <div class="h-1.5 flex-1 overflow-hidden rounded bg-muted max-sm:basis-full">
             <div class="h-full bg-info transition-[width]" style="width:{p.overall * 100}%"></div>
           </div>
           <span class="tabular-nums">
@@ -209,14 +221,18 @@
         >
       {/if}
       {#if error}<div class="text-sm text-destructive">{error}</div>{/if}
-      <Tabs.List variant="line" class="-mx-2 h-9">
+      <Tabs.List
+        bind:ref={tabList}
+        variant="line"
+        class="-mx-2 h-9 max-sm:max-w-[calc(100%+1rem)] max-sm:justify-start max-sm:overflow-x-auto max-sm:[scrollbar-width:none]"
+      >
         {#each TABS as t (t.id)}
           <Tabs.Trigger value={t.id} class="px-3">{t.label}</Tabs.Trigger>
         {/each}
       </Tabs.List>
     </header>
 
-    <div class="min-h-0 flex-1 overflow-auto p-5">
+    <div class="min-h-0 flex-1 overflow-auto p-5 max-sm:p-3">
       {#if tab === 'video'}
         {#if job.spec.inputs.encode}
           <p class="text-muted-foreground">

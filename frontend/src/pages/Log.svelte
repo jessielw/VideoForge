@@ -27,10 +27,10 @@
   })
 </script>
 
-<div class="flex h-full flex-col gap-3 p-6">
+<div class="flex h-full flex-col gap-3 p-6 max-sm:p-3">
   <header class="flex items-center gap-3">
     <h1 class="text-xl font-semibold">Log</h1>
-    <NativeSelect bind:value={filter} aria-label="Job">
+    <NativeSelect bind:value={filter} class="min-w-0" aria-label="Job">
       <option value="">All jobs</option>
       {#each jobs as id (id)}<option value={id}>{app.jobName(id)}</option>{/each}
     </NativeSelect>
@@ -40,7 +40,7 @@
   </header>
   <pre
     bind:this={box}
-    class="min-h-0 flex-1 overflow-auto rounded-lg border bg-card p-3 font-mono text-xs leading-relaxed">{#each lines as l, i (i)}<div
+    class="min-h-0 flex-1 overflow-auto rounded-lg border bg-card p-3 font-mono text-xs leading-relaxed max-sm:p-2 max-sm:wrap-anywhere max-sm:whitespace-pre-wrap max-sm:[&>div]:pl-4 max-sm:[&>div]:-indent-4">{#each lines as l, i (i)}<div
         class={tone(l.line)}>{filter ? '' : `${app.jobName(l.job)}: `}{l.line}</div>{:else}<span
         class="text-muted-foreground">Output from probes and runs appears here.</span
       >{/each}</pre>

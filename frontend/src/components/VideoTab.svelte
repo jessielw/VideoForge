@@ -350,8 +350,13 @@
 
 <svelte:window {onkeydown} />
 
-<div class="flex min-h-0 gap-4 {layout.videoExpanded ? 'fixed inset-0 z-40 bg-background p-4' : 'h-full'}">
-  <div class="flex min-w-0 flex-1 flex-col gap-2">
+<!-- A phone stacks the frame over the side panel, and the page scrolls. -->
+<div
+  class="flex min-h-0 gap-4 max-sm:flex-col {layout.videoExpanded
+    ? 'fixed inset-0 z-40 bg-background p-4 max-sm:overflow-y-auto max-sm:p-2'
+    : 'h-full max-sm:h-auto'}"
+>
+  <div class="flex min-w-0 flex-1 flex-col gap-2 max-sm:h-[60vh] max-sm:flex-none">
     <div class="flex h-9 items-center gap-2">
       {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
       {#if infoError && !scripting}<span class="truncate text-xs text-destructive" title={infoError}>{infoError}</span
@@ -479,7 +484,9 @@
     {/if}
   </div>
 
-  <div class="flex shrink-0 flex-col gap-2 {vv.panel === 'script' ? 'w-[45%]' : 'w-72'}">
+  <div
+    class="flex shrink-0 flex-col gap-2 max-sm:min-h-[60vh] max-sm:w-full {vv.panel === 'script' ? 'w-[45%]' : 'w-72'}"
+  >
     <Tabs.Root value={vv.panel} onValueChange={(v) => (v === 'script' ? openScript() : (vv.panel = 'settings'))}>
       <Tabs.List aria-label="Side panel">
         <Tabs.Trigger value="settings" class="px-3">Settings</Tabs.Trigger>

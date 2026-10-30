@@ -143,7 +143,7 @@
       Couldn't load the log: {error}
       <Button size="sm" onclick={() => load(jobId)}>Retry</Button>
     </div>{/if}
-  <div class="flex items-center gap-3">
+  <div class="flex flex-wrap items-center gap-3 max-sm:gap-x-2 max-sm:gap-y-1">
     <Tabs.Root bind:value={view}>
       <Tabs.List>
         <Tabs.Trigger value="steps" class="px-3">Steps</Tabs.Trigger>
@@ -168,7 +168,7 @@
 
   {#if view === 'full'}
     <pre
-      class="min-h-0 flex-1 overflow-auto rounded-lg border bg-card p-3 font-mono text-xs leading-relaxed"
+      class="min-h-0 flex-1 overflow-auto rounded-lg border bg-card p-3 font-mono text-xs leading-relaxed max-sm:p-2 max-sm:wrap-anywhere max-sm:whitespace-pre-wrap"
       use:follow={fullLines.length}>{fullLines.join('\n') || 'No output yet.'}</pre>
   {:else if !steps.length}
     <p class="text-sm text-muted-foreground">
@@ -185,21 +185,21 @@
           class="overflow-hidden rounded-lg border bg-card {s.status === 'failed' ? 'border-destructive/60' : ''}"
         >
           <button
-            class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent/50"
+            class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent/50 max-sm:gap-2 max-sm:px-2"
             aria-expanded={isOpen}
             onclick={() => (open[s.id] = !isOpen)}
           >
             {#if isOpen}<ChevronDownIcon class="size-3.5 shrink-0 text-muted-foreground" />{:else}<ChevronRightIcon
                 class="size-3.5 shrink-0 text-muted-foreground"
               />{/if}
-            <span class="w-10 shrink-0 text-xs text-muted-foreground">{i + 1}/{steps.length}</span>
+            <span class="w-10 shrink-0 text-xs text-muted-foreground max-sm:hidden">{i + 1}/{steps.length}</span>
             <span class="min-w-0 flex-1 truncate {s.status === 'pending' ? 'text-muted-foreground' : ''}"
               >{s.label}</span
             >
             <span class="flex shrink-0 items-center gap-1 text-xs {look.tone}">
               <look.icon class="size-3.5 {s.status === 'running' ? 'animate-spin' : ''}" />{look.text}
             </span>
-            <span class="w-24 shrink-0 text-right text-xs text-muted-foreground">{outcome(s)}</span>
+            <span class="w-24 shrink-0 text-right text-xs text-muted-foreground max-sm:w-auto">{outcome(s)}</span>
           </button>
           {#if isOpen}
             {@const lines = linesOf(s.id)}
@@ -239,7 +239,7 @@
                   </p>
                 {/if}
                 <pre
-                  class="max-h-96 overflow-auto rounded-lg border bg-background p-2 font-mono text-[11px] leading-relaxed"
+                  class="max-h-96 overflow-auto rounded-lg border bg-background p-2 font-mono text-[11px] leading-relaxed max-sm:wrap-anywhere max-sm:whitespace-pre-wrap"
                   use:follow={lines.length}>{shown.join('\n')}</pre>
               {:else if s.status !== 'pending'}
                 <p class="text-xs text-muted-foreground">No output.</p>
