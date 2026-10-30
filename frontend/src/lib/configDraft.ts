@@ -6,7 +6,7 @@ export type ConfigChanges = Parameters<typeof api.saveConfig>[0]
 // Keep the next edit based on what the user just entered, including whole-list settings.
 export function configDraft(config: ConfigState, changes: ConfigChanges): ConfigState {
   const next = { ...config }
-  for (const key of ['notifications', 'actions', 'index_waits_for_disk'] as const) {
+  for (const key of ['notifications', 'actions', 'index_waits_for_disk', 'sample_quality'] as const) {
     if (changes[key] !== undefined) Object.assign(next, { [key]: changes[key] })
   }
   for (const key of ['profile', 'parallel_audio', 'delete_work_dir', 'encoder_priority', 'tool_priority'] as const) {

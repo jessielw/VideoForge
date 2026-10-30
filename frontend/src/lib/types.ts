@@ -441,6 +441,10 @@ export interface SampleResult {
   estimate_mb: number | null // the whole video's encode, decimal MB, no container overhead
   estimate_seconds: number | null // the whole video's encode time at the sample's pace (one pass)
   encode_fps: number | null
+  // Its quality against the encoder's input, when Settings' quality score was on (core/video/metrics.py)
+  ssimulacra2: number | null // the frames' mean: 100 identical, ~90 visually lossless, ~70 high quality
+  ssimulacra2_p5: number | null // 5% of the frames score below it
+  xpsnr: number | null // luma, dB; null for RGB or an odd size
   current: boolean // made with the job's script and encoder settings as they are now
   file: string // its MKV
 }
@@ -747,6 +751,7 @@ export interface ConfigState {
   profiles: { id: string; name: string }[]
   restart: string[]
   index_waits_for_disk: boolean // batch indexing holds a job back while an encode reads its disk
+  sample_quality: boolean // a test encode measures its quality (SSIMULACRA2, XPSNR) after it
   parallel_audio: number // audio encodes at once beside a job's video; 0 = one by one
   parallel_audio_default: number // videoforge.toml's
   delete_work_dir: boolean // delete a done job's <source>_tmp/ (records and log copied to records_dir first)

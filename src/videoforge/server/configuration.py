@@ -15,10 +15,12 @@ from videoforge.server.routes.presets import KINDS
 from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
 
 FORMAT = "videoforge.configuration"
-VERSION = 3  # 3: subs_default
+VERSION = 4  # 3: subs_default; 4: settings.sample_quality
 MAX_BYTES = 20 * 1024 * 1024
 BASE_KEY = "configuration_base"
 SETTING_KEYS = tuple(f.name for f in fields(SavedSettings))
+# Saved settings added since version 1: the version each came in, and its value in an older backup
+SETTINGS_SINCE = {"plugin_settings": (2, {}), "sample_quality": (4, False)}
 FOLDER_KEYS = ("output_dir", "last_dir")
 
 
@@ -36,7 +38,7 @@ def _name(value: Any, path: str, *, limit: int = MAX_NAME) -> str:
 def read_configuration(doc: Any) -> dict[str, Any]:
     if not isinstance(doc, dict) or doc.get("format") != FORMAT:
         raise ValueError("Choose a VideoForge configuration export (.json)")
-    if type(doc.get("version")) is not int or doc["version"] not in (1, 2, VERSION):
+    if type(doc.get("version")) is not int or doc["version"] not in range(1, VERSION + 1):
         raise ValueError(f"Unsupported configuration version; this app supports version {VERSION}")
     keys = {"format", "version", "application", "settings", "folders", "presets", "template_defaults"}
     _object(doc, keys | {"subs_default"} if doc["version"] >= 3 else keys, "Configuration")
@@ -50,10 +52,9 @@ def read_configuration(doc: Any) -> dict[str, Any]:
     if not isinstance(application.plugins, dict) or any(not isinstance(v, dict) for v in application.plugins.values()):
         raise ValueError("Plugin settings must be objects")
     saved_values = doc["settings"]
-    if doc["version"] == 1:
-        _object(saved_values, set(SETTING_KEYS) - {"plugin_settings"}, "Saved settings")
-        saved_values = saved_values | {"plugin_settings": {}}
-    _object(saved_values, set(SETTING_KEYS), "Saved settings")
+    added = {key: default for key, (since, default) in SETTINGS_SINCE.items() if doc["version"] < since}
+    _object(saved_values, set(SETTING_KEYS) - added.keys(), "Saved settings")
+    saved_values = saved_values | added
     check_settings(SavedSettings, saved_values, "Saved settings")
     settings = from_json(SavedSettings, saved_values)
     if any(not isinstance(value, dict) for value in settings.plugin_settings.values()):

@@ -66,6 +66,7 @@ def _state(request: Request) -> dict[str, Any]:
         "profiles": [{"id": pid, "name": profiles(pid).name} for pid in ids],
         "restart": [RESTART_FOR[n] for n in sorted(s.restart_for)],
         "index_waits_for_disk": saved.index_waits_for_disk,
+        "sample_quality": saved.sample_quality,
         "parallel_audio": s.config.parallel_audio,
         "parallel_audio_default": s.base_config.parallel_audio,
         "delete_work_dir": s.config.delete_work_dir,
@@ -97,6 +98,7 @@ def get_config(request: Request) -> dict[str, Any]:
 def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     """Change any of: tools ({name: path, or "" / null for the default}), roots (a list, or null
     for every drive), profile (an id, or null for videoforge.toml's), index_waits_for_disk (bool),
+    sample_quality (bool: a test encode measures its SSIMULACRA2 and XPSNR),
     parallel_audio (audio encodes at once beside the video, 0 to MAX_PARALLEL_AUDIO; null for videoforge.toml's),
     delete_work_dir (bool: delete a done job's work folder; null for videoforge.toml's),
     encoder_priority / tool_priority (a Priority; null for videoforge.toml's),
@@ -125,6 +127,7 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         if profile is not None and profile not in s.profile_ids:
             raise HTTPException(422, f"No profile {profile!r} is installed")
     waits = bool(body["index_waits_for_disk"]) if "index_waits_for_disk" in body else saved.index_waits_for_disk
+    quality = bool(body["sample_quality"]) if "sample_quality" in body else saved.sample_quality
     parallel = saved.parallel_audio
     if "parallel_audio" in body:
         parallel = body["parallel_audio"]
@@ -172,6 +175,7 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         parallel,
         delete_work,
         plugin_settings=saved.plugin_settings,
+        sample_quality=quality,
         **priorities,
     )
     new.save(s.store)
@@ -185,6 +189,7 @@ def apply_settings(request: Request, new: SavedSettings) -> None:
     before = s.config.tools
     s.saved = new
     s.queue.set_index_waits_for_disk(new.index_waits_for_disk)
+    s.queue.set_sample_quality(new.sample_quality)
     s.notifier.destinations = new.notifications
     s.actions.actions = new.actions
     s.actions.allow_commands = s.base_config.allow_commands

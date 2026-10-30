@@ -26,6 +26,7 @@ def seed(client, tmp_path):
         "parallel_audio": 4,
         "delete_work_dir": True,
         "index_waits_for_disk": False,
+        "sample_quality": True,
         "encoder_priority": "idle",
         "tool_priority": "below_normal",
         "notifications": [
@@ -110,8 +111,23 @@ def test_a_version_2_backup_has_no_default_subtitle_rules(tmp_path):
         with pytest.raises(ValueError, match="missing or unknown fields"):
             read_configuration(old)  # version 2 had no subs_default
         del old["subs_default"]
+        del old["settings"]["sample_quality"]
         assert read_configuration(old)["subs_default"] is None
         assert client.post("/api/configuration/import", json=old).json()["presets"]["subs_default"] is None
+
+
+def test_a_version_3_backup_has_no_quality_score_setting(tmp_path):
+    with make_client(tmp_path) as client:
+        seed(client, tmp_path)
+        old = export(client)
+        assert old["version"] == 4 and old["settings"]["sample_quality"] is True
+        old["version"] = 3
+        with pytest.raises(ValueError, match="missing or unknown fields"):
+            read_configuration(old)  # version 3 had no sample_quality
+        del old["settings"]["sample_quality"]
+        assert read_configuration(old)["settings"]["sample_quality"] is False
+        assert client.post("/api/configuration/import", json=old).json()["config"]["sample_quality"] is False
+        assert client.app.state.queue.sample_quality is False
 
 
 def test_restore_empty_libraries_preserves_jobs_and_queue_bookkeeping(tmp_path):
@@ -137,13 +153,14 @@ def test_restore_empty_libraries_preserves_jobs_and_queue_bookkeeping(tmp_path):
     "location,value",
     [
         (("version",), True),
-        (("version",), 4),
+        (("version",), 5),
         (("subs_default",), {"rules": [], "others": "everything"}),
         (("settings", "parallel_audio"), True),
         (("settings", "parallel_audio"), 99),
         (("settings", "actions"), [{"name": "bad"}]),
         (("settings", "notifications"), [{"name": "bad", "url": "invalid"}]),
         (("settings", "index_waits_for_disk"), "false"),
+        (("settings", "sample_quality"), "true"),
         (("settings", "disabled_plugins"), "plugin"),
         (("application", "matching", "encode_suffixes"), [4]),
         (("application", "plugins"), {"bad": []}),

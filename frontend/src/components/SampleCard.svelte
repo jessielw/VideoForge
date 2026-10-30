@@ -139,6 +139,26 @@
           ? ` (${s.encode_fps.toFixed(1)} fps)`
           : ''}
       </dd>
+      {#if s.ssimulacra2 != null}
+        <dt class="text-muted-foreground">Quality</dt>
+        <dd class="flex flex-wrap gap-x-3 tabular-nums">
+          <span title="SSIMULACRA2 against the encoder's input, the frames' mean">
+            SSIMULACRA2 {s.ssimulacra2.toFixed(1)}
+          </span>
+          {#if s.ssimulacra2_p5 != null}
+            <span class="text-muted-foreground" title="5% of the frames score below it">
+              worst 5% {s.ssimulacra2_p5.toFixed(1)}
+            </span>
+          {/if}
+          {#if s.xpsnr != null}
+            <span title="XPSNR of the luma: higher is closer to the encoder's input">XPSNR {s.xpsnr.toFixed(1)} dB</span
+            >
+          {/if}
+          <span class="basis-full text-xs text-muted-foreground">
+            SSIMULACRA2: 100 identical, 90 visually lossless, 80 very high, 70 high quality
+          </span>
+        </dd>
+      {/if}
       <dt class="text-muted-foreground">Sample</dt>
       <dd class="tabular-nums">
         {s.frames.toLocaleString()} of {s.total_frames.toLocaleString()} frames ({s.percent}%), {s.encoder}

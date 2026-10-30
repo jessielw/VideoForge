@@ -5,6 +5,8 @@ with what went into the encoder.
     <job>/sample/sample.vpy   the job's script, then SelectEvery: `length` frames of every `cycle`
     <job>/sample/video.<ext>  the encode: one pass (a 2-pass job's at the bitrate its first pass gets)
     <job>/sample/sample.mkv   the encode in an MKV (mkvmerge), which the preview opens (FFMS2) and a player plays
+    <job>/sample/sample.quality.json  its SSIMULACRA2 and XPSNR against sample.vpy (Settings' quality score, off
+                              by default; core/video/metrics.py)
     <job>/sample/sample.json  what it gave (SampleResult)
 
 The blocks are StaxRip's: 2 s each, one in every 100 / percent (5%: 2 s of every 40 s). SelectEvery keeps each
@@ -21,6 +23,7 @@ from fractions import Fraction
 import hashlib
 import json
 from pathlib import Path
+import sys
 
 from videoforge.core.config import AppConfig
 from videoforge.core.execute.mux import frame_rate
@@ -30,15 +33,18 @@ from videoforge.core.models import Plan
 from videoforge.core.pipeline.build import info_step, job_script
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.plan_io import to_json
-from videoforge.core.video import burn as burn_in, info, target
+from videoforge.core.video import burn as burn_in, info, metrics, target
 from videoforge.core.video.encoders import TOOLS, encoder_command, output_name, vspipe_command
 from videoforge.core.video.info import ScriptInfo
+from videoforge.core.video.script import ffms2_index
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
 
 SAMPLE_DIR = "sample"  # in the job's folder
 SCRIPT = "sample.vpy"
 MKV = "sample.mkv"
 RESULT = "sample.json"
+QUALITY = "sample.quality.json"
+_METRICS = "ssimulacra2 mean, p5; xpsnr y"  # what the quality step measures: a change measures again
 PERCENTS = (1, 2, 5, 10)  # of the video's length
 DEFAULT_PERCENT = 5  # StaxRip's CompCheckPercentage
 BLOCK_SECONDS = 2  # StaxRip's CompCheckTestblockSeconds
@@ -117,8 +123,11 @@ def prepare_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
     return [info_step(spec, app, job_script(spec, plan.source.video, plan.burn))]
 
 
-def sample_steps(spec: JobSpec, plan: Plan, app: AppConfig, container: str, percent: int) -> list[Step]:
-    """The sample's script, encode and MKV; the script info step (prepare_steps) has run."""
+def sample_steps(
+    spec: JobSpec, plan: Plan, app: AppConfig, container: str, percent: int, quality: bool = False
+) -> list[Step]:
+    """The sample's script, encode and MKV, then with quality its scores against the script; the script info
+    step (prepare_steps) has run."""
     found = info.read(spec.job_dir / info.SCRIPT_INFO)
     if found is None:
         raise ValueError("The script's frames aren't known: its info step hasn't run")
@@ -149,7 +158,7 @@ def sample_steps(spec: JobSpec, plan: Plan, app: AppConfig, container: str, perc
     mux = [app.tools.mkvmerge, "--output", str(mkv)]
     if out.suffix in _RAW and fps:
         mux += ["--default-duration", f"0:{fps}p"]
-    return [
+    steps = [
         Step(
             "sample.script",
             "Write the test encode's script",
@@ -174,8 +183,24 @@ def sample_steps(spec: JobSpec, plan: Plan, app: AppConfig, container: str, perc
             outputs=(mkv,),
             inputs=(out,),
             weight=1,
+            # The last MKV's FFMS2 index (the preview's, the quality step's): Source() won't open a new one by it
+            finalize=lambda: ffms2_index(mkv, home).unlink(missing_ok=True),
         ),
     ]
+    if quality:
+        scores = home / QUALITY
+        steps.append(
+            Step(
+                "sample.quality",
+                "Test encode quality (SSIMULACRA2, XPSNR)",
+                argvs=((sys.executable, "-m", "videoforge.core.video.metrics", str(script), str(mkv), str(scores)),),
+                outputs=(scores,),
+                inputs=(script, mkv),
+                key=_METRICS,
+                weight=20,
+            )
+        )
+    return steps
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +216,10 @@ class SampleResult:
     encoder: str  # describe()
     key: str  # sample_key() when it was made
     finished: str  # ISO time
+    # Its quality against the script (metrics.Scores), when Settings' quality score was on
+    ssimulacra2: float | None = None
+    ssimulacra2_p5: float | None = None
+    xpsnr: float | None = None  # dB
 
     @property
     def kbps(self) -> float | None:
@@ -212,8 +241,16 @@ class SampleResult:
         return self.frames / self.seconds if self.seconds else None
 
 
-def finish(spec: JobSpec, plan: Plan, container: str, percent: int, records: dict[str, StepRecord]) -> SampleResult:
-    """The sample's result from its steps' files and records, written to sample.json."""
+def finish(
+    spec: JobSpec,
+    plan: Plan,
+    container: str,
+    percent: int,
+    records: dict[str, StepRecord],
+    quality: bool = False,
+) -> SampleResult:
+    """The sample's result from its steps' files and records (with quality, the quality step's scores), written
+    to sample.json."""
     found = info.read(spec.job_dir / info.SCRIPT_INFO)
     if found is None:
         raise ValueError("The script's frames aren't known: its info step hasn't run")
@@ -224,6 +261,7 @@ def finish(spec: JobSpec, plan: Plan, container: str, percent: int, records: dic
     out = sample_dir(spec) / output_name(enc)
     record = records.get("sample.video")
     fps = found.fps or source_fps
+    scores = metrics.read(sample_dir(spec) / QUALITY) if quality else None
     result = SampleResult(
         percent=percent,
         cycle=sel.cycle,
@@ -236,18 +274,22 @@ def finish(spec: JobSpec, plan: Plan, container: str, percent: int, records: dic
         encoder=describe(enc),
         key=sample_key(spec, plan),
         finished=datetime.now().isoformat(timespec="seconds"),
+        ssimulacra2=scores.ssimulacra2 if scores else None,
+        ssimulacra2_p5=scores.ssimulacra2_p5 if scores else None,
+        xpsnr=scores.xpsnr if scores else None,
     )
     (sample_dir(spec) / RESULT).write_text(json.dumps(asdict(result), indent=2), encoding="utf-8")
     return result
 
 
 def read_result(spec: JobSpec) -> SampleResult | None:
-    """The job's last sample, while its MKV is there; None without one (or one that can't be read)."""
+    """The job's last sample, while its MKV is there; None without one (or one that can't be read). One from
+    before the quality scores has none."""
     home = sample_dir(spec)
     if not (home / MKV).is_file():
         return None
     try:
         data = json.loads((home / RESULT).read_text(encoding="utf-8"))
-        return SampleResult(**{f.name: data[f.name] for f in fields(SampleResult)})
+        return SampleResult(**{f.name: data[f.name] for f in fields(SampleResult) if f.name in data})
     except (OSError, ValueError, KeyError, TypeError):
         return None

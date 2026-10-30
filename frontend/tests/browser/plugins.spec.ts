@@ -71,6 +71,7 @@ async function fixture(page: Page, options: { installed?: boolean; enabled?: boo
     profiles: [],
     restart: [],
     index_waits_for_disk: true,
+    sample_quality: false,
     parallel_audio: 2,
     parallel_audio_default: 2,
     delete_work_dir: false,

@@ -59,13 +59,23 @@ Two-pass target size uses **decimal MB**. VideoForge budgets for audio, subtitle
 
 - the bitrate the sample came out at,
 - the whole video's size at that bitrate (the video stream, without container overhead),
-- the whole encode's time at the sample's pace, and the encoder's fps.
+- the whole encode's time at the sample's pace, and the encoder's fps,
+- with **Settings → Test encode → Score its quality** on (off by default), its quality against the encoder's input.
 
 A two-pass job is tested as one pass at its bitrate (a target size's, as its first pass works it out). HDR10+ and Dolby Vision metadata and the chapters' keyframes are left out of the sample; the source colour and HDR10 go in as they do for the job.
 
 The test encode runs in the index lane, beside the queue: it indexes the source first if it has to, and jobs waiting to be indexed wait for it. The job is locked meanwhile, but its preview opens. **Stop** (or Stop indexing on the Queue toolbar) cancels it. The result stays with the job until a settings change marks it out of date ("settings changed since"); running the same sample again reuses it. Its files are in the job's folder, under `sample/` (`sample.mkv` plays in any player).
 
 **Compare** opens the sample's frames on the Video tab, against the encoder's input (see [Compare encoded frames](video.md#compare-encoded-frames)).
+
+### Quality score
+
+With **Score its quality** on, a test encode ends by comparing every sample frame with the frame the encoder got, through the bundled vszip plugin, so CRF and preset tuning can go by numbers as well as by eye:
+
+- **SSIMULACRA2**, the frames' mean, and the score 5% of the frames fall below (the worst parts). 100 is identical, 90 visually lossless, 80 very high quality, 70 high quality, 50 medium. Both clips are compared in RGB (a matrix the script doesn't state is taken as BT.709 for HD, BT.601 below), as sRGB, so an HDR encode's score is only a rough guide.
+- **XPSNR** of the luma, in dB (higher is closer), averaged as ffmpeg's `xpsnr` filter does. It needs YUV with an even width and height (a 12- or 16-bit script is compared at 10 bits); an RGB script gets none.
+
+It decodes both clips once more, so the test encode takes longer (SSIMULACRA2 is the slow part). The score is kept with the sample (`sample/sample.quality.json`) and reused while the encode is; with the setting off, nothing is measured or shown.
 
 ## Options and extra arguments
 

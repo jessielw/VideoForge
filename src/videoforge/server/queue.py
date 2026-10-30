@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+import contextlib
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
@@ -82,6 +83,7 @@ from videoforge.core.profile import Profile
 from videoforge.core.record import JsonLines, RunRecorder, event
 from videoforge.core.template import Template, apply_audio, apply_subs, template_choice
 from videoforge.core.tools import versions as tool_versions
+from videoforge.core.video.script import ffms2_index
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.core.workdir import clean_work_dir, work_dir
 from videoforge.server.events import EventHub
@@ -278,6 +280,7 @@ class JobQueue:
         self._index_cancel: CancelToken | None = None
         self._index_wake = threading.Event()
         self.index_waits_for_disk = True  # the lane holds a job back while an encode reads its disk
+        self.sample_quality = False  # a test encode measures its quality (SSIMULACRA2, XPSNR) after it
 
     # --- state ---------------------------------------------------------------------
 
@@ -1008,6 +1011,9 @@ class JobQueue:
             versions=self._versions,
         )
         recorder.started_run()
+        if recorder.output is not None:  # the compare's index of the last output: FFMS2 won't open a new one by it
+            with contextlib.suppress(OSError):
+                ffms2_index(recorder.output, e.spec.job_dir).unlink(missing_ok=True)
         self.bus.emit(JobStarted(_copy(e.spec), recorder.output))
 
         def log(line: str) -> None:
@@ -1248,6 +1254,9 @@ class JobQueue:
             e.sample_percent = None
             return False
 
+    def set_sample_quality(self, on: bool) -> None:
+        self.sample_quality = on  # the next test encode's
+
     def set_index_waits_for_disk(self, on: bool) -> None:
         self.index_waits_for_disk = on
         self._index_wake.set()  # jobs held back go now (or wait from now)
@@ -1433,8 +1442,8 @@ class JobQueue:
         self, e: Entry, percent: int, log: Callable[[str], None], progress: ProgressFn, on_record: Callable
     ) -> None:
         """The lane's test encode of an indexed job: the script's info, then the sample's steps (their records
-        are the job's, so the same sample again is reused). The result goes to sample.json; a failure to
-        e.sample_error."""
+        are the job's, so the same sample again is reused), with sample_quality its quality score. The result
+        goes to sample.json; a failure to e.sample_error."""
         error = ""
         self._queue_event("sample.started", e, percent=percent)
         log(f"### {_variant(e)}: test encode, {percent}% ({datetime.now().isoformat(timespec='seconds')})")
@@ -1443,7 +1452,7 @@ class JobQueue:
                 if e.plan is None:
                     raise ToolError("The job has no plan")
                 spec, plan, container = e.spec, e.plan, e.spec.container(self.profile(e))
-                cancel = self._index_cancel
+                cancel, quality = self._index_cancel, self.sample_quality
             if cancel is None:
                 raise RuntimeError("index lane: no cancel event")
             if self.services.release_preview is not None:
@@ -1458,11 +1467,13 @@ class JobQueue:
                 runner=self.services.runner,
             )
             run(prepare_steps(spec, plan, self.app))
-            run(sample_steps(spec, plan, self.app, container, percent))
-            result = finish(spec, plan, container, percent, e.state.steps)
+            run(sample_steps(spec, plan, self.app, container, percent, quality))
+            result = finish(spec, plan, container, percent, e.state.steps, quality)
             rate = f"{result.kbps:.0f} kb/s" if result.kbps is not None else "no bitrate (no frame rate)"
             size = f", about {result.estimate_mb / 1000:.2f} GB for the whole video" if result.estimate_mb else ""
-            log(f"Test encode: {result.frames} frames of {result.total_frames}, {rate}{size}")
+            score = f", SSIMULACRA2 {result.ssimulacra2:.2f}" if result.ssimulacra2 is not None else ""
+            score += f", XPSNR {result.xpsnr:.2f} dB" if result.xpsnr is not None else ""
+            log(f"Test encode: {result.frames} frames of {result.total_frames}, {rate}{size}{score}")
         except Cancelled:
             error = "Cancelled"
         except (ToolError, OSError, ValueError) as ex:

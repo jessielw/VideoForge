@@ -1,5 +1,6 @@
 """The test encode (core/pipeline/sample.py): its blocks, script, steps and result; its run in the index lane;
-the Video tab's compare stages. The last test encodes for real (x264, mkvmerge, VapourSynth) and skips without them.
+the Video tab's compare stages; its quality score (core/video/metrics.py). The last tests encode for real (x264,
+mkvmerge, VapourSynth, vszip) and skip without them.
 """
 
 from __future__ import annotations
@@ -7,6 +8,8 @@ from __future__ import annotations
 from dataclasses import replace
 from fractions import Fraction
 import io
+import json
+import math
 from pathlib import Path
 import shutil
 import subprocess
@@ -22,6 +25,7 @@ from videoforge.core.execute.process import Cancelled
 from videoforge.core.job import JobSpec, JobStatus
 from videoforge.core.models import JobInputs, Plan, SourceInfo, VideoInfo
 from videoforge.core.pipeline import sample
+from videoforge.core.video import metrics
 from videoforge.core.video.info import ScriptInfo
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
 from videoforge.server.app import create_app
@@ -89,6 +93,10 @@ def test_steps_encode_the_sample_and_mux_it(tmp_path):
     )
     steps[0].call(print)
     assert "SelectEvery(clip, cycle=960, offsets=list(range(48))" in (home / "sample.vpy").read_text()
+    (home / "sample.mkv.ffindex").write_bytes(b"the last MKV's")
+    assert steps[2].finalize is not None
+    steps[2].finalize()
+    assert not (home / "sample.mkv.ffindex").exists()  # FFMS2 won't open a new MKV by it
 
     av1 = replace(spec, encoder=EncoderSettings(Encoder.SVTAV1, RateControl.CRF, crf=30))
     video = sample.sample_steps(av1, plan, APP, "mkv", 5)[1].argvs[1]
@@ -117,9 +125,73 @@ def test_result_and_its_estimates(tmp_path):
     assert result.key != sample.sample_key(spec, plan)  # out of date
 
 
+def test_quality_step_only_when_asked(tmp_path):
+    """Off (the default): the encode, its MKV and nothing after; on: the scores of the MKV against the script,
+    measured again when either changes."""
+    spec, plan = _plan(tmp_path)
+    spec.job_dir.mkdir(parents=True)
+    (spec.job_dir / "video.info.txt").write_text("Frames: 2400\nFPS: 24000/1001 (23.976 fps)\n")
+    assert [s.id for s in sample.sample_steps(spec, plan, APP, "mkv", 5)][-1] == "sample.mux"
+    steps = sample.sample_steps(spec, plan, APP, "mkv", 5, quality=True)
+    assert [s.id for s in steps] == ["sample.script", "sample.video", "sample.mux", "sample.quality"]
+    home, step = sample.sample_dir(spec), steps[-1]
+    assert step.argvs[0][1:] == (
+        "-m",
+        "videoforge.core.video.metrics",
+        str(home / "sample.vpy"),
+        str(home / "sample.mkv"),
+        str(home / "sample.quality.json"),
+    )
+    assert step.inputs == (home / "sample.vpy", home / "sample.mkv") and step.outputs == (home / "sample.quality.json",)
+    home.mkdir()
+    (home / "sample.vpy").write_text("script")
+    (home / "sample.mkv").write_bytes(b"mkv")
+    before = step.fingerprint()
+    (home / "sample.mkv").write_bytes(b"another encode")
+    assert step.fingerprint() != before
+
+
+def test_result_carries_the_scores_when_asked(tmp_path):
+    from videoforge.core.job import StepRecord
+
+    spec, plan = _plan(tmp_path)
+    home = sample.sample_dir(spec)
+    home.mkdir(parents=True)
+    (spec.job_dir / "video.info.txt").write_text("Frames: 2400\nFPS: 24000/1001 (23.976 fps)\n")
+    (home / "video.264").write_bytes(b"\0" * 300_000)
+    (home / "sample.mkv").write_bytes(b"mkv")
+    scores = {"frames": 144, "ssimulacra2": 82.4, "ssimulacra2_p5": 74.1, "xpsnr": 44.1}
+    (home / "sample.quality.json").write_text(json.dumps(scores))
+    records = {"sample.video": StepRecord("sample.video", "f", seconds=12.0)}
+    off = sample.finish(spec, plan, "mkv", 5, records)
+    assert (off.ssimulacra2, off.ssimulacra2_p5, off.xpsnr) == (None, None, None)  # a left-over score isn't read
+    on = sample.finish(spec, plan, "mkv", 5, records, quality=True)
+    assert (on.ssimulacra2, on.ssimulacra2_p5, on.xpsnr) == (82.4, 74.1, 44.1)
+    assert sample.read_result(spec) == on
+
+    # A sample.json from before the scores still reads, without them.
+    old = json.loads((home / "sample.json").read_text())
+    for key in ("ssimulacra2", "ssimulacra2_p5", "xpsnr"):
+        del old[key]
+    (home / "sample.json").write_text(json.dumps(old))
+    assert sample.read_result(spec) == off.__class__(**old)
+    del old["bytes"]  # but not one without a field it always had
+    (home / "sample.json").write_text(json.dumps(old))
+    assert sample.read_result(spec) is None
+
+
+def test_xpsnr_averages_distortion_as_ffmpeg_does():
+    assert metrics.xpsnr_average([40.0, 40.0]) == pytest.approx(40.0)
+    assert metrics.xpsnr_average([30.0, 50.0]) == pytest.approx(-20 * math.log10((10**-1.5 + 10**-2.5) / 2))
+    assert metrics.xpsnr_average([40.0, math.inf]) == pytest.approx(40 + 20 * math.log10(2))  # identical: none
+    assert metrics.xpsnr_average([math.inf]) is None and metrics.xpsnr_average([]) is None
+    assert metrics.percentile([float(n) for n in range(1, 101)], 5) == 5.0
+    assert metrics.percentile([7.0, 3.0], 5) == 3.0
+
+
 class FakeSampler:
     """The index lane's runner for a test encode: the FFMS2 index, the script info (2400 frames, 23.976 fps),
-    the encode (300 kB; it waits for `gate` or a cancel) and the MKV."""
+    the encode (300 kB; it waits for `gate` or a cancel), the MKV and its quality score."""
 
     def __init__(self):
         self.calls: list[str] = []
@@ -135,6 +207,10 @@ class FakeSampler:
                     raise Cancelled()
                 time.sleep(0.01)
             Path(argv[argv.index("--output") + 1]).write_bytes(b"\0" * 300_000)
+        elif "videoforge.core.video.metrics" in argv:
+            self.calls.append("quality")
+            scores = {"frames": 144, "ssimulacra2": 82.4, "ssimulacra2_p5": 74.1, "xpsnr": 44.1}
+            Path(argv[-1]).write_text(json.dumps(scores))
         elif "--info" in argv:
             self.calls.append("info")
             Path(argv[-1]).write_text("Frames: 2400\nFPS: 24000/1001 (23.976 fps)\n")
@@ -191,6 +267,39 @@ def test_test_encode_runs_in_the_index_lane(tmp_path):
         assert not stopped["sample_error"] and runner.calls[-1] == "encode"
 
 
+def test_quality_score_is_opt_in(tmp_path):
+    """Settings' quality score: off, a test encode ends at its MKV; turned on, the same sample again only adds
+    the score (the encode is reused), which shows on the job."""
+    make_files(tmp_path)
+    runner = FakeSampler()
+    runner.gate.set()
+    with make_client(tmp_path, runner=runner) as client:
+        assert client.get("/api/config").json()["sample_quality"] is False
+        (job,) = add(client, tmp_path)
+        wait_for(client, job, "ready", "warn")
+        client.post("/api/queue/sample", json={"id": job, "percent": 5})
+        wait_for(client, job, "sampling", "ready", "warn")
+        found = wait_for(client, job, "ready", "warn")["sample"]
+        assert "quality" not in runner.calls and found["ssimulacra2"] is None and found["xpsnr"] is None
+
+        assert client.put("/api/config", json={"sample_quality": True}).json()["sample_quality"] is True
+        assert client.app.state.queue.sample_quality is True
+        client.post("/api/queue/sample", json={"id": job, "percent": 5})
+        wait_for(client, job, "sampling", "ready", "warn")
+        done = wait_for(client, job, "ready", "warn")
+        assert not done["sample_error"]
+        assert runner.calls == ["index", "info", "encode", "mux", "quality"]
+        assert (done["sample"]["ssimulacra2"], done["sample"]["ssimulacra2_p5"], done["sample"]["xpsnr"]) == (
+            82.4,
+            74.1,
+            44.1,
+        )
+        e = client.app.state.queue.get(job)
+        assert any("SSIMULACRA2 82.40, XPSNR 44.10 dB" in line for line in e.log)
+    with make_client(tmp_path, runner=runner) as client:
+        assert client.app.state.queue.sample_quality is True  # kept
+
+
 def test_compare_stages_need_their_encodes(tmp_path):
     make_files(tmp_path)
     with make_client(tmp_path) as client:
@@ -202,6 +311,24 @@ def test_compare_stages_need_their_encodes(tmp_path):
         for stage in ("sample-in", "sample", "encode"):
             r = client.get(f"/api/jobs/{job}/video/info", params={"stage": stage})
             assert r.status_code == 409, stage
+
+
+def test_a_run_drops_the_compare_index_of_the_output_it_replaces(tmp_path):
+    """A done job's compare indexes its output in the job's folder; running it again writes a new file under the
+    same name, which FFMS2 won't open by the old index, so the run drops it. The source's index stays."""
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        (job,) = add(client, tmp_path)
+        ready = wait_for(client, job, "ready", "warn")
+        e = client.app.state.queue.get(job)
+        e.spec.job_dir.mkdir(parents=True)
+        compare = e.spec.job_dir / (ready["output_name"] + ".ffindex")
+        source = e.spec.work_dir / "Show.S01E01.mkv.ffindex"
+        compare.write_bytes(b"the last output's")
+        source.write_bytes(b"the source's")
+        client.post("/api/queue/start", json={"ids": [job]})
+        wait_for(client, job, "done")
+        assert not compare.exists() and source.exists()
 
 
 def _real_app() -> AppConfig | None:
@@ -273,3 +400,51 @@ def test_a_real_test_encode_compares_frame_for_frame(tmp_path):
         assert client.get(f"/api/jobs/{job}").json()["compare"]["encode"]
         assert client.get(f"{base}/info", params={"stage": "encode"}).json()["frames"] == 96
         assert diff(frame("encode", 60), frame("sample-in", 60)) < 30
+
+
+@pytest.mark.skipif(
+    REAL is None or not (Path(REAL.tools.vs_plugins) / "vszip").is_dir(),
+    reason="needs ffmpeg, x264, mkvmerge and tools/vs-plugins with vszip",
+)
+def test_a_real_quality_score_ranks_crf_18_above_crf_40(tmp_path):
+    """The quality step on a real test encode (x264, 10% of a 20 s clip): crf 18 scores higher than crf 40 on
+    both metrics, and a rerun with the same settings reuses the score."""
+    from videoforge.core.video import vs as vsx
+
+    assert REAL is not None
+    (tmp_path / "src").mkdir()
+    clip = tmp_path / "src" / "Movie.mkv"
+    subprocess.run(
+        [shutil.which("ffmpeg"), "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+         "testsrc2=duration=20:size=320x180:rate=24", "-c:v", "libx264", "-qp", "0", "-pix_fmt", "yuv420p", "-y",
+         str(clip)],
+        check=True,
+    )  # fmt: skip
+    vsx.configure(REAL.tools.vs_plugins)
+    app = create_app(
+        ServerSettings(data_dir=tmp_path / "data", roots=[tmp_path], frontend_dir=tmp_path / "none"),
+        REAL,
+        services=Services(probe=fake_probe),
+        setup_vapoursynth=False,
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+        client.put("/api/config", json={"sample_quality": True})
+        (job,) = add(client, tmp_path, sources=[str(clip)], subtitles=[])
+        wait_for(client, job, "ready", "warn")
+
+        def scores(crf: int, reused: bool = False) -> dict:
+            encoder = client.get(f"/api/jobs/{job}").json()["spec"]["encoder"] | {"crf": crf}
+            client.patch(f"/api/jobs/{job}", json={"encoder": encoder})
+            assert client.post("/api/queue/sample", json={"id": job, "percent": 10}).json()["taken"]
+            wait_for(client, job, "sampling", *(("ready", "warn") if reused else ()), timeout=60)
+            done = wait_for(client, job, "ready", "warn", timeout=120)
+            assert not done["sample_error"], done["sample_error"]
+            return done["sample"]
+
+        good, bad = scores(18), scores(40)
+        assert good["ssimulacra2"] > bad["ssimulacra2"] and good["xpsnr"] > bad["xpsnr"]
+        assert good["ssimulacra2_p5"] <= good["ssimulacra2"] <= 100
+        quality = client.app.state.queue.get(job).state.steps["sample.quality"]
+        again = scores(40, reused=True)
+        assert (again["ssimulacra2"], again["xpsnr"]) == (bad["ssimulacra2"], bad["xpsnr"])
+        assert client.app.state.queue.get(job).state.steps["sample.quality"] == quality  # reused

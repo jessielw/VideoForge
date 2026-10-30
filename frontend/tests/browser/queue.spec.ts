@@ -2,7 +2,12 @@ import { test, expect, type Page, type WebSocketRoute } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import type { JobDetail, JobSummary, Status } from '../../src/lib/types.ts'
 
-async function queueFixture(page: Page, count = 10_000, statuses: Status[] = ['ready', 'done']) {
+async function queueFixture(
+  page: Page,
+  count = 10_000,
+  statuses: Status[] = ['ready', 'done'],
+  sample: JobDetail['sample'] = null,
+) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   const jobs: JobSummary[] = Array.from({ length: count }, (_, i) => ({
@@ -35,8 +40,8 @@ async function queueFixture(page: Page, count = 10_000, statuses: Status[] = ['r
     output_name: null,
     color_args: null,
     target: null,
-    sample: null,
-    compare: { encode: false, sample: false },
+    sample,
+    compare: { encode: false, sample: !!sample },
     spec: {
       id: job.id,
       profile: 'manual',
@@ -182,6 +187,47 @@ test('deep links reveal jobs beyond page one; shrinking a live result clamps its
   await expect(page.getByRole('status')).toContainText('100 of 100 jobs match. 0 selected')
   await expect(page.getByText('Showing 1–100 of 100', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Next queue page', exact: true })).toBeDisabled()
+  expect(fixture.errors).toEqual([])
+})
+
+test('a test encode shows its quality score only when it has one', async ({ page }, testInfo) => {
+  const result: NonNullable<JobDetail['sample']> = {
+    percent: 5,
+    cycle: 960,
+    length: 48,
+    frames: 144,
+    total_frames: 2400,
+    fps: 23.976,
+    bytes: 300_000,
+    seconds: 12,
+    encoder: 'x265 crf 18',
+    finished: '2026-10-30T12:00:00',
+    kbps: 4000,
+    estimate_mb: 50,
+    estimate_seconds: 200,
+    encode_fps: 12,
+    ssimulacra2: 82.43,
+    ssimulacra2_p5: 74.08,
+    xpsnr: 44.12,
+    current: true,
+    file: 'D:\\Show\\0.mkv_tmp\\sample\\sample.mkv',
+  }
+  const fixture = await queueFixture(page, 1, ['ready'], result)
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  const card = page.getByRole('region', { name: 'Test encode', exact: true })
+  await expect(card).toContainText('4,000 kb/s')
+  await expect(card).toContainText('SSIMULACRA2 82.4')
+  await expect(card).toContainText('worst 5% 74.1')
+  await expect(card).toContainText('XPSNR 44.1 dB')
+  await expect(card).toContainText('90 visually lossless')
+  await card.screenshot({ path: testInfo.outputPath('sample-quality.png') })
+
+  Object.assign(result, { ssimulacra2: null, ssimulacra2_p5: null, xpsnr: null }) // the setting was off
+  fixture.refresh()
+  await expect(card).toContainText('4,000 kb/s')
+  await expect(card).not.toContainText('Quality')
+  await expect(card).not.toContainText('SSIMULACRA2')
   expect(fixture.errors).toEqual([])
 })
 

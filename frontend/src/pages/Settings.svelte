@@ -561,6 +561,24 @@
         </label>
       </section>
 
+      <section class="space-y-3">
+        <h2 class="font-medium">Test encode</h2>
+        <label class="flex items-start gap-3 text-sm">
+          <Checkbox
+            class="mt-0.5"
+            checked={config.sample_quality}
+            onCheckedChange={(v) => change({ sample_quality: v })}
+          />
+          <span>
+            Score its quality
+            <span class="block text-xs text-muted-foreground">
+              After a test encode, compare every frame with the encoder's input (SSIMULACRA2 and XPSNR, vszip) and show
+              the scores beside its bitrate. It decodes both once more, so the test encode takes longer.
+            </span>
+          </span>
+        </label>
+      </section>
+
       <section class="col-span-full min-w-0 space-y-3" aria-label="Default subtitles">
         <h2 class="font-medium">Default subtitles</h2>
         {#if !defaultProfile?.track_editor || defaultProfile.picks_tracks}

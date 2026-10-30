@@ -94,6 +94,7 @@ def create_app(
         records_dir=settings.records_dir,
     )
     job_queue.index_waits_for_disk = saved.index_waits_for_disk
+    job_queue.sample_quality = saved.sample_quality
     notifier = Notifier(services.send_notification, list(saved.notifications))
     bus.subscribe(notifier.on_event, JobFinished, QueueFinished, name="notifications")
     actions = ActionRunner(
