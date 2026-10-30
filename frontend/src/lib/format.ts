@@ -1,5 +1,6 @@
 import type {
   EncodeOptionInfo,
+  PreviewStage,
   Priority,
   Progress,
   Severity,
@@ -22,6 +23,7 @@ export const STATUS_LABEL: Record<Status, string> = {
   error: 'Error',
   cropping: 'Detecting crop',
   indexing: 'Indexing',
+  sampling: 'Test encode',
   'index-queued': 'Index queued',
   ready: 'Ready',
   warn: 'Warn',
@@ -41,6 +43,7 @@ export const STATUS_TONE: Record<Status, string> = {
   error: 'text-destructive',
   cropping: 'text-muted-foreground',
   indexing: 'text-info',
+  sampling: 'text-info',
   'index-queued': 'text-muted-foreground',
   ready: 'text-success',
   warn: 'text-warning',
@@ -66,8 +69,17 @@ export function basename(path: string | null | undefined): string {
 }
 
 // A saved preview frame's file name: the source's name, the frame number padded to the clip's length
-// (so a folder of them sorts in frame order), and the crop view marked (its frame has the margins on).
-export function frameFilename(source: string, n: number, frames: number, stage: 'crop' | 'output'): string {
+// (so a folder of them sorts in frame order), and the crop view marked (its frame has the margins on), as are the
+// compare's frames (a test encode's are numbered by the sample's frames).
+const STAGE_MARK: Record<PreviewStage, string> = {
+  crop: ' (crop view)',
+  output: '',
+  encode: ' (encode)',
+  'sample-in': ' (test encode input)',
+  sample: ' (test encode)',
+}
+
+export function frameFilename(source: string, n: number, frames: number, stage: PreviewStage): string {
   const stem = basename(source).replace(/\.[^.]+$/, '')
   const safe =
     stem
@@ -75,7 +87,7 @@ export function frameFilename(source: string, n: number, frames: number, stage: 
       .replace(/[. ]+$/g, '')
       .slice(0, 120) || 'frame'
   const num = String(n).padStart(String(Math.max(frames - 1, 0)).length, '0')
-  return `${safe} - ${num}${stage === 'crop' ? ' (crop view)' : ''}.png`
+  return `${safe} - ${num}${STAGE_MARK[stage]}.png`
 }
 
 export function bytes(n: number): string {

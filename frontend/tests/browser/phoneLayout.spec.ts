@@ -39,6 +39,8 @@ async function phoneFixture(page: Page) {
     indexed: true,
     index_error: '',
     index_held: false,
+    sample_waiting: false,
+    sample_error: '',
     audio: [],
     subs: 0,
   }))
@@ -51,6 +53,8 @@ async function phoneFixture(page: Page) {
     output_name: null,
     color_args: null,
     target: null,
+    sample: null,
+    compare: { encode: false, sample: false },
     spec: {
       id: job.id,
       profile: 'manual',

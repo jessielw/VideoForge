@@ -13,6 +13,10 @@
   // that only change when the content does; otherwise each save would remount the preview.
   // Opening a job never indexes its source: until it's indexed the preview is an index panel (Index
   // now puts the job first in the queue's index lane, one job at a time; it's locked meanwhile).
+  // Compare (with Settings, once there's something to compare): the encoder's input against its output, the
+  // script's frame and the encoded one, flipped with C (each flip's other side is loaded beside it). A done run's
+  // encode has the output's frames; a test encode its own (the sample's blocks back to back), so its frame is kept
+  // apart (sampleFrame) and the notice says which frame of the script it is.
   import { onDestroy, untrack } from 'svelte'
   import { saves } from '../lib/saves'
   import { toast } from 'svelte-sonner'
@@ -27,6 +31,7 @@
     type ClipInfo,
     type Crop,
     type JobDetail,
+    type PreviewStage,
     type SourceFilter,
     type VideoSettings,
   } from '../lib/types'
@@ -45,6 +50,7 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as Tabs from '$lib/components/ui/tabs'
   import { Toggle } from '$lib/components/ui/toggle'
+  import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import FilterChain from './FilterChain.svelte'
   import PresetMenu from './PresetMenu.svelte'
   import ResizeEditor from './ResizeEditor.svelte'
@@ -61,6 +67,14 @@
   const canCrop = $derived(vv.panel === 'settings' && job.spec.video.custom === null)
   const stage = $derived<Stage>(canCrop && vv.cropView ? 'crop' : 'output')
   let info = $state<Record<Stage, ClipInfo | null>>({ crop: null, output: null })
+  const compare = $derived(
+    vv.panel === 'settings' && vv.compare !== 'off' && job.compare[vv.compare] ? vv.compare : 'off',
+  )
+  const pair = $derived<[PreviewStage, PreviewStage] | null>(
+    compare === 'sample' ? ['sample-in', 'sample'] : compare === 'encode' ? ['output', 'encode'] : null,
+  )
+  let pairInfo = $state<[ClipInfo, ClipInfo] | null>(null)
+  let pairError = $state('')
   let infoError = $state('')
   let version = $state(0)
   let auto = $state(readAuto()) // a save renders the frame again; off, it waits for F5 / Refresh
@@ -278,8 +292,55 @@
       e.preventDefault()
       if (!scripting) refreshPreview()
       else if (!running && !saving && ready) run()
+    } else if ((e.key === 'c' || e.key === 'C') && compare !== 'off' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      const t = e.target
+      if (t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)))
+        return
+      e.preventDefault()
+      vv.shows = vv.shows === 'in' ? 'out' : 'in'
     }
   }
+
+  // The compare's two clips (the same frames): again for a new sample or output.
+  const pairKey = $derived(`${compare} ${job.sample?.finished ?? ''} ${job.output ?? ''} ${ready}`)
+  $effect(() => {
+    void pairKey
+    const both = pair
+    pairInfo = null
+    pairError = ''
+    if (!both || !ready) return
+    const id = jobId
+    Promise.all([api.clipInfo(id, both[0]), api.clipInfo(id, both[1])]).then(
+      ([a, b]) => id === jobId && (pairInfo = [a, b]),
+      (e) => id === jobId && (pairError = e instanceof Error ? e.message : String(e)),
+    )
+  })
+  const compared = $derived.by(() => {
+    if (!pair || !pairInfo) return null
+    const side = vv.shows === 'in' ? 0 : 1
+    const i = pairInfo[side]
+    return {
+      stage: pair[side],
+      other: pair[1 - side],
+      info: i,
+      frames: Math.min(pairInfo[0].frames, pairInfo[1].frames),
+    }
+  })
+  // The test encode's frame n is the script's: its block's start, plus how far into the block it is.
+  function scriptFrame(n: number): number {
+    const s = job.sample
+    return s ? Math.floor(n / s.length) * s.cycle + (n % s.length) : n
+  }
+  const compareNotice = $derived.by(() => {
+    if (!compared) return null
+    const side = vv.shows === 'in' ? 'Input (the script)' : compare === 'sample' ? 'Test encode' : 'Encode'
+    const where =
+      compare === 'sample'
+        ? ` · frame ${vv.sampleFrame} of the sample, ${scriptFrame(vv.sampleFrame)} of the script`
+        : ''
+    const stale = compare === 'sample' && job.sample && !job.sample.current ? ' · made before the last changes' : ''
+    return { text: `${side}${where}${stale} · C flips`, tone: 'muted' as const }
+  })
 
   // Crop edits from the side panel show the lines (the picture only shows them in the crop view).
   function setCrop(side: keyof Crop, value: number) {
@@ -350,6 +411,44 @@
 
 <svelte:window {onkeydown} />
 
+{#snippet compareTools()}
+  {#if vv.panel === 'settings' && (job.compare.sample || job.compare.encode)}
+    <NativeSelect
+      aria-label="Compare"
+      value={compare}
+      title="Compare the encoder's input (the script's frames) with what it encoded"
+      onchange={(e) => {
+        vv.compare = e.currentTarget.value as typeof vv.compare
+        vv.shows = 'out'
+      }}
+    >
+      <option value="off">Compare: off</option>
+      {#if job.compare.sample}<option value="sample">Compare: test encode</option>{/if}
+      {#if job.compare.encode}<option value="encode">Compare: encode</option>{/if}
+    </NativeSelect>
+    {#if compare !== 'off'}
+      <ToggleGroup.Root
+        type="single"
+        variant="outline"
+        spacing={1}
+        value={vv.shows}
+        onValueChange={(v) => v && (vv.shows = v as 'in' | 'out')}
+      >
+        <ToggleGroup.Item
+          value="in"
+          class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          title="The encoder's input: the script's frame (C flips)">Input</ToggleGroup.Item
+        >
+        <ToggleGroup.Item
+          value="out"
+          class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          title="The encoded frame (C flips)">Encoded</ToggleGroup.Item
+        >
+      </ToggleGroup.Root>
+    {/if}
+  {/if}
+{/snippet}
+
 <!-- A phone stacks the frame over the side panel, and the page scrolls. -->
 <div
   class="flex min-h-0 gap-4 max-sm:flex-col {layout.videoExpanded
@@ -416,6 +515,38 @@
           <Button onclick={indexNow} disabled={!editable}><DatabaseZapIcon />Index now</Button>
         {/if}
       </div>
+    {:else if compared}
+      <FramePreview
+        {jobId}
+        source={job.spec.inputs.source}
+        stage={compared.stage}
+        prefetch={compared.other}
+        frames={compared.frames}
+        fps={compared.info.fps}
+        width={compared.info.width}
+        height={compared.info.height}
+        {version}
+        bind:frame={
+          () => (compare === 'sample' ? vv.sampleFrame : vv.frame),
+          (n) => (compare === 'sample' ? (vv.sampleFrame = n) : (vv.frame = n))
+        }
+        bind:zoom={vv.zoom}
+        bind:edges={vv.edges}
+        bind:scroll={vv.scroll}
+        notice={compareNotice}
+        sar={previewShape(job.spec.video, source, 'output')}
+      >
+        {#snippet tools()}{@render compareTools()}{/snippet}
+      </FramePreview>
+    {:else if compare !== 'off'}
+      <div class="flex flex-1 flex-col items-center justify-center gap-3 border p-6 text-center text-muted-foreground">
+        {#if pairError}
+          <p class="max-w-md text-sm text-destructive">No compare: {pairError}</p>
+        {:else}
+          <p class="text-sm">Opening the encode… (FFMS2 indexes it the first time)</p>
+        {/if}
+        <Button variant="outline" onclick={() => (vv.compare = 'off')}>Back to the preview</Button>
+      </div>
     {:else if current}
       <FramePreview
         {jobId}
@@ -441,6 +572,7 @@
           : undefined}
       >
         {#snippet tools()}
+          {@render compareTools()}
           {#if vv.panel === 'settings'}
             <Toggle
               pressed={stage === 'crop'}

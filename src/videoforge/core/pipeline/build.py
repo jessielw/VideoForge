@@ -339,6 +339,20 @@ def indexed(spec: JobSpec, video: VideoInfo | None, burn: SubTrack | None) -> bo
     )
 
 
+def info_step(spec: JobSpec, app: AppConfig, text: str) -> Step:
+    """The script's frames and frame rate (core/video/info.py); text is the job's script."""
+    script, info_file = spec.job_dir / "video.vpy", spec.job_dir / info.SCRIPT_INFO
+    return Step(
+        "script.info",
+        "Script frames and frame rate (vspipe --info)",
+        argvs=(info.info_argv(app.tools.vspipe, script, info_file),),
+        outputs=(info_file,),
+        inputs=(script, spec.inputs.source),
+        key=text,
+        weight=0.05,
+    )
+
+
 def video_steps(
     spec: JobSpec, plan: Plan, app: AppConfig, container: str = "mkv", encoded: Mapping[int, Path] | None = None
 ) -> list[Step]:
@@ -350,17 +364,7 @@ def video_steps(
     text = job_script(spec, v, plan.burn)
     steps = index_steps(spec, app, v, plan.burn)
     info_file = home / info.SCRIPT_INFO
-    steps.append(
-        Step(
-            "script.info",
-            "Script frames and frame rate (vspipe --info)",
-            argvs=(info.info_argv(app.tools.vspipe, script, info_file),),
-            outputs=(info_file,),
-            inputs=(script, source),
-            key=text,
-            weight=0.05,
-        )
-    )
+    steps.append(info_step(spec, app, text))
     qpfile = None
     if spec.makes_chapters:
         files = qpf_paths(home)

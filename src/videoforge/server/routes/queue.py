@@ -1,5 +1,5 @@
 """Queue control: queue jobs, start the worker, stop after the current job, cancel it, pause and resume it,
-change its tools' priority; the index lane."""
+change its tools' priority; the index lane, and a job's test encode in it."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Request
 
 from videoforge.core.execute.control import Priority
+from videoforge.core.pipeline.sample import DEFAULT_PERCENT
 from videoforge.server.queue import JobQueue
 
 router = APIRouter(prefix="/api/queue")
@@ -141,3 +142,18 @@ def stop_index(request: Request, body: dict[str, Any] | None = Body(None)) -> di
     q = queue_of(request)
     q.stop_indexing((body or {}).get("ids"))
     return q.queue_state()
+
+
+@router.post("/sample")
+def sample(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """A test encode of job `id`: `percent` (1, 2, 5 or 10) of its video, first in the index lane (Index stop
+    cancels it). The queue's state, plus `taken` (false: the job reuses an encode, isn't probed yet, or is queued,
+    running or being indexed)."""
+    q = queue_of(request)
+    try:
+        taken = q.sample(str(body.get("id")), int(body.get("percent", DEFAULT_PERCENT)))
+    except KeyError:
+        raise HTTPException(404, f"No job {body.get('id')}") from None
+    except (TypeError, ValueError) as ex:
+        raise HTTPException(422, str(ex)) from None
+    return {**q.queue_state(), "taken": taken}

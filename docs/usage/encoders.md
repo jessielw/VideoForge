@@ -53,6 +53,20 @@ Templates and jobs keep copies of the applied settings. Updating or deleting a s
 
 Two-pass target size uses **decimal MB**. VideoForge budgets for audio, subtitles, attachments, HDR metadata, and container overhead before calculating the video bitrate. The Encoder tab shows the budget for a probed job. Treat the target as a size goal; verify the completed file.
 
+## Test encode
+
+**Test encode** on the Encoder tab (StaxRip's compressibility check) encodes part of the video with the job's script and encoder settings: 2-second blocks spread over the whole video, one in every 40 s at 5% (1%, 2% and 10% are offered too). It shows:
+
+- the bitrate the sample came out at,
+- the whole video's size at that bitrate (the video stream, without container overhead),
+- the whole encode's time at the sample's pace, and the encoder's fps.
+
+A two-pass job is tested as one pass at its bitrate (a target size's, as its first pass works it out). HDR10+ and Dolby Vision metadata and the chapters' keyframes are left out of the sample; the source colour and HDR10 go in as they do for the job.
+
+The test encode runs in the index lane, beside the queue: it indexes the source first if it has to, and jobs waiting to be indexed wait for it. The job is locked meanwhile, but its preview opens. **Stop** (or Stop indexing on the Queue toolbar) cancels it. The result stays with the job until a settings change marks it out of date ("settings changed since"); running the same sample again reuses it. Its files are in the job's folder, under `sample/` (`sample.mkv` plays in any player).
+
+**Compare** opens the sample's frames on the Video tab, against the encoder's input (see [Compare encoded frames](video.md#compare-encoded-frames)).
+
 ## Options and extra arguments
 
 Structured options and extra arguments are applied after generated defaults. Overrides can change the color metadata carried by the encoded stream and container. Inspect the generated command when using advanced flags.

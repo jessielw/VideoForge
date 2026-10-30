@@ -1,6 +1,10 @@
 """A job's video in the browser: clip info, frames (source = uncropped, crop = the crop editor's view,
 output = processed), auto-crop, the generated script, and a check that runs it (the script editor's Run).
 
+To compare the encoder's input with its output, two pairs of stages give the same frames: `output` and `encode`
+(the output file a done run wrote), and `sample-in` and `sample` (a test encode's script, as it ran, and its MKV;
+core/pipeline/sample.py). The encodes open through FFMS2, their indexes in the job's folder.
+
 Clips come from the same script generator the encode uses and are loaded and cached per job
 and stage in the preview worker (core/video/preview.py, a child process). Only an indexed source is
 opened (409 otherwise): indexing goes through the queue's index lane, one job at a time, so opening
@@ -12,23 +16,27 @@ from __future__ import annotations
 from contextlib import AbstractContextManager, nullcontext
 from fractions import Fraction
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
 from videoforge.core.job import JobSpec
 from videoforge.core.models import SubTrack
 from videoforge.core.pipeline.build import auto_crop, baked_el, indexed
+from videoforge.core.pipeline.sample import MKV, SCRIPT, read_result, sample_dir
 from videoforge.core.plan_io import to_json
 from videoforge.core.video.info import length_warning
 from videoforge.core.video.preview import FrameError, Preview, PreviewError
-from videoforge.core.video.script import build_script, script_parts
+from videoforge.core.video.script import build_script, encoded_script, script_parts
 from videoforge.core.video.settings import Crop
 from videoforge.core.video.vs import ClipInfo, ScriptError
 from videoforge.server.queue import Entry, JobQueue
+from videoforge.server.views import encode_compare
 
 router = APIRouter(prefix="/api/jobs/{job_id}/video")
-Stage = Literal["source", "crop", "output"]
+ScriptStage = Literal["source", "crop", "output"]  # the job's own script's
+Stage = Literal[ScriptStage, "sample-in", "sample", "encode"]
+_ENCODED = ("sample-in", "sample", "encode")  # the compare's stages (_slot)
 
 
 def _entry(request: Request, job_id: str) -> Entry:
@@ -60,10 +68,26 @@ def _info_json(e: Entry, i: ClipInfo, stage: Stage) -> dict[str, Any]:
 
 
 def script_for(e: Entry, stage: Stage) -> str:
-    return _script(e.spec, stage, baked_el(e.spec, e.source_video), e.burn)
+    if stage == "encode":
+        if (out := encode_compare(e)) is None:
+            raise HTTPException(409, "The job has no finished output to compare with")
+        return encoded_script(out, e.spec.job_dir)
+    if stage in ("sample-in", "sample"):
+        home = sample_dir(e.spec)
+        if read_result(e.spec) is None:
+            raise HTTPException(409, "The job has no test encode to compare with")
+        try:
+            return (
+                (home / SCRIPT).read_text(encoding="utf-8")
+                if stage == "sample-in"
+                else encoded_script(home / MKV, home)
+            )
+        except OSError as ex:
+            raise HTTPException(409, f"The test encode's script can't be read: {ex}") from None
+    return _script(e.spec, cast(ScriptStage, stage), baked_el(e.spec, e.source_video), e.burn)
 
 
-def _script(spec: JobSpec, stage: Stage, el: Path | None = None, burn: SubTrack | None = None) -> str:
+def _script(spec: JobSpec, stage: ScriptStage, el: Path | None = None, burn: SubTrack | None = None) -> str:
     """The job's script at stage; el is a FEL's enhancement layer it bakes in (stage "source" leaves it out:
     auto crop reads the base layer, the same size), burn a subtitle track it burns in (not at stage "source")."""
     spec.work_dir.mkdir(parents=True, exist_ok=True)  # the index lives there
@@ -73,6 +97,11 @@ def _script(spec: JobSpec, stage: Stage, el: Path | None = None, burn: SubTrack 
 
 
 def _slot(spec: JobSpec, stage: Stage) -> str:
+    """The preview's clip slot. The compare's are `<id>:sample:...` and `<id>:encode:...`, so the queue can free
+    them alone (Preview.release) before a run writes their files again."""
+    if stage in _ENCODED:
+        group, _, part = stage.partition("-")
+        return f"{spec.id}:{group}:{part or 'out'}"
     return f"{spec.id}:{stage}"
 
 
@@ -91,7 +120,7 @@ def _failed(ex: Exception) -> HTTPException:
 
 
 @router.get("/script")
-def script(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
+def script(request: Request, job_id: str, stage: ScriptStage = "output") -> dict[str, Any]:
     """The script, and its parts: head and tail are generated, body is what the user edits
     (the custom body, or the lines crop/resize/filters make). Line numbers count from the head."""
     e = _entry(request, job_id)
@@ -115,7 +144,7 @@ def script(request: Request, job_id: str, stage: Stage = "output") -> dict[str, 
 
 
 @router.get("/check")
-def check(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
+def check(request: Request, job_id: str, stage: ScriptStage = "output") -> dict[str, Any]:
     """Run the script and render its first frame: the clip's info, or the error and its script line."""
     e = _entry(request, job_id)
     preview, script, slot = _preview(request), script_for(e, stage), _slot(e.spec, stage)

@@ -10,6 +10,10 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 
 ### Added
 
+- **Test encode** on the Encoder tab (StaxRip's compressibility check): the job's script and encoder settings on 2 s blocks spread over the video (5% by default; 1, 2 or 10%), for the bitrate they give, the whole video's size at it and the whole encode's time. It runs in the index lane beside the queue (indexing the source first if it has to); the job is locked meanwhile, but its preview opens. A 2-pass job is tested as one pass at its bitrate. The result stays with the job, marked once its settings change; the files are in `sample/` in the job's folder.
+
+- **Compare** on the Video tab: the encoder's input against its output at the same frame, flipped with **C** (Input / Encoded), the other side preloaded so a flip is instant. Against a test encode (the overlay gives each sample frame's frame in the script) or a done job's output file. The encodes open through FFMS2, indexed in the job's folder.
+
 - Jobs are queued explicitly: a tick on each queue row (and **Queue** at the top of the job's editor) queues the job and locks its settings, and **Queue (N)** queues a selection. **Start queue** runs only queued jobs (it no longer takes every ready job when none is queued), and a job ticked while the queue runs is picked up in its turn. Unticking a job that ran before keeps its last result.
 
 - **Save** on the preview's toolbar (or **S**) downloads the shown frame as a PNG: full size and lossless, without the edges view, crop lines or matte. It's named after the source with the frame number padded to the clip's length (`Show S01E01 - 00042.png`), so a folder of them sorts in order; one saved from the crop view is marked `(crop view)`, as it has the cropped-off margins on. In the desktop window (`serve --window`) downloads now open a Save As dialog: before, pywebview dropped them, so saved frames and preset or configuration exports went nowhere.

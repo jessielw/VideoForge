@@ -25,6 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
+from functools import partial
 import logging
 import os
 from pathlib import Path
@@ -73,6 +74,7 @@ from videoforge.core.notify import Sender, send as notify_send
 from videoforge.core.pipeline.build import auto_crop, index_steps, job_output
 from videoforge.core.pipeline.reuse import ReuseOffer, reuse_offers
 from videoforge.core.pipeline.run import missing_inputs, run_job
+from videoforge.core.pipeline.sample import PERCENTS, finish, prepare_steps, sample_steps
 from videoforge.core.pipeline.share import Sharing
 from videoforge.core.pipeline.steps import ProgressFn, StepProgress, run_steps
 from videoforge.core.plan_io import to_json
@@ -115,6 +117,7 @@ class JobView(StrEnum):
     ERROR = "error"  # the probe failed
     CROPPING = "cropping"  # detecting the crop (a template's auto crop)
     INDEXING = "indexing"  # the index lane is on it
+    SAMPLING = "sampling"  # the index lane runs its test encode (core/pipeline/sample.py)
     INDEX_QUEUED = "index-queued"  # waiting in the index lane
     READY = "ready"
     WARN = "warn"
@@ -153,6 +156,9 @@ class Entry:
     index_now: bool = False  # asked for by itself (Index now): doesn't wait for an encode on its disk
     index_held: bool = False  # waiting in the lane while an encode reads its disk
     index_error: str = ""
+    sample_percent: int | None = None  # in the lane for a test encode of this much of the video
+    sampling: bool = False  # the lane runs its test encode (indexed by now: the preview opens)
+    sample_error: str = ""
     # Held by whatever may build the source's index: the index lane, auto-crop, and a preview request
     # for a clip the preview worker doesn't hold yet. Two processes never index one source at once.
     # Every job on the source shares it (JobQueue._attach): they share the work folder.
@@ -191,6 +197,7 @@ class Entry:
             and not self.busy
             and not self.cropping
             and not self.indexing
+            and not self.sampling
             and not self.crop_pending
         )
 
@@ -202,6 +209,8 @@ class Entry:
             return JobView.QUEUED
         if self.indexing:
             return JobView.INDEXING
+        if self.sampling:
+            return JobView.SAMPLING
         if self.index_queued:
             return JobView.INDEX_QUEUED
         if self.state.status is not None:
@@ -294,6 +303,7 @@ class JobQueue:
             "priority": next((t.priority for t in self._tokens()), None),  # the Queue's choice, while running
             "queued": sum(e.queued for e in self.entries()),
             "indexing": next((e.id for e in self.entries() if e.indexing), None),
+            "sampling": next((e.id for e in self.entries() if e.sampling), None),
             "index_queued": sum(e.index_queued for e in self.entries()),
         }
 
@@ -675,6 +685,8 @@ class JobQueue:
                 raise Busy(f"{e.spec.name} is queued or running")
             if e.indexing:
                 raise Busy(f"{e.spec.name} is being indexed")
+            if e.sampling:
+                raise Busy(f"{e.spec.name} is running its test encode")
             s = e.spec
             if inputs is not None and inputs != s.inputs:
                 if inputs.source != s.inputs.source:
@@ -728,7 +740,7 @@ class JobQueue:
         with self._lock:
             for job_id in ids:
                 e = self._entries.get(job_id)
-                if e is None or e.busy or e.indexing:
+                if e is None or e.busy or e.indexing or e.sampling:
                     continue
                 self._removed[job_id] = (e, self._order.index(job_id))
                 while len(self._removed) > 100:
@@ -983,6 +995,8 @@ class JobQueue:
             self._save(e)
         self._changed(e)
         self._queue_changed()
+        if self.services.release_preview is not None:
+            self.services.release_preview([f"{e.id}:encode"])  # the compare's clip holds the output open
         log_file = _open_log(e)
         logger.info("Job %s started (%s)", e.spec.name, e.id)
         recorder = RunRecorder(
@@ -1198,7 +1212,7 @@ class JobQueue:
         taken = []
         with self._lock:
             for e in self.entries():
-                if e.id not in wanted or not e.spec.encodes_video or e.busy or e.indexing:
+                if e.id not in wanted or not e.spec.encodes_video or e.busy or e.indexing or e.sampling:
                     continue
                 if not e.index_queued or first:
                     e.index_queued, e.index_error = True, ""
@@ -1217,6 +1231,23 @@ class JobQueue:
         self._queue_changed()
         return taken
 
+    def sample(self, job_id: str, percent: int) -> bool:
+        """A test encode of the job (core/pipeline/sample.py): first in the index lane, which indexes it if it
+        has to, then encodes percent of the video. The job is locked meanwhile, but its preview opens once it's
+        indexed (one waiting in the lane moves up). False for a job that reuses an encode, has no plan yet, or is
+        queued, running or being indexed."""
+        if percent not in PERCENTS:
+            raise ValueError(f"percent: one of {', '.join(map(str, PERCENTS))}")
+        with self._lock:
+            e = self.get(job_id)
+            if e.plan is None or e.probe_error:
+                return False
+            e.sample_percent, e.sample_error = percent, ""
+            if self.index([job_id], first=True):
+                return True
+            e.sample_percent = None
+            return False
+
     def set_index_waits_for_disk(self, on: bool) -> None:
         self.index_waits_for_disk = on
         self._index_wake.set()  # jobs held back go now (or wait from now)
@@ -1228,7 +1259,8 @@ class JobQueue:
             dropped = [e for e in self.entries() if e.index_queued and (wanted is None or e.id in wanted)]
             for e in dropped:
                 e.index_queued = e.index_now = e.index_held = False
-            current = next((e for e in self.entries() if e.indexing), None)
+                e.sample_percent = None
+            current = next((e for e in self.entries() if e.indexing or e.sampling), None)
             if current is not None and (wanted is None or current.id in wanted) and self._index_cancel is not None:
                 self._index_cancel.cancel()
             self._save_lane()
@@ -1379,16 +1411,69 @@ class JobQueue:
         self._queue_event("index.finished", e, error=error or None)
         if not self._closing:
             self.bus.emit(IndexFinished(_copy(e.spec), error or None))
+        if (percent := e.sample_percent) is not None and not error:
+            with self._lock:
+                e.indexing, e.sampling, e.progress = False, True, None
+            self._changed(e)
+            self._queue_changed()
+            self._sample(e, percent, log, progress, on_record)
         if log_file is not None:
             log_file.close()
         with self._lock:
             e.indexing, e.progress, e.index_error = False, None, "" if error == "Cancelled" else error
+            e.sampling, e.sample_percent = False, None
             e.crop_pending = False
             self._index_cancel = None
             self._save(e)
             self._save_lane()
         self._changed(e)
         self._queue_changed()
+
+    def _sample(
+        self, e: Entry, percent: int, log: Callable[[str], None], progress: ProgressFn, on_record: Callable
+    ) -> None:
+        """The lane's test encode of an indexed job: the script's info, then the sample's steps (their records
+        are the job's, so the same sample again is reused). The result goes to sample.json; a failure to
+        e.sample_error."""
+        error = ""
+        self._queue_event("sample.started", e, percent=percent)
+        log(f"### {_variant(e)}: test encode, {percent}% ({datetime.now().isoformat(timespec='seconds')})")
+        try:
+            with self._lock:
+                if e.plan is None:
+                    raise ToolError("The job has no plan")
+                spec, plan, container = e.spec, e.plan, e.spec.container(self.profile(e))
+                cancel = self._index_cancel
+            if cancel is None:
+                raise RuntimeError("index lane: no cancel event")
+            if self.services.release_preview is not None:
+                self.services.release_preview([f"{e.id}:sample"])  # its clips hold the MKV a rerun writes
+            run = partial(
+                run_steps,
+                records=e.state.steps,
+                log=log,
+                cancel=cancel,
+                progress=progress,
+                on_record=on_record,
+                runner=self.services.runner,
+            )
+            run(prepare_steps(spec, plan, self.app))
+            run(sample_steps(spec, plan, self.app, container, percent))
+            result = finish(spec, plan, container, percent, e.state.steps)
+            rate = f"{result.kbps:.0f} kb/s" if result.kbps is not None else "no bitrate (no frame rate)"
+            size = f", about {result.estimate_mb / 1000:.2f} GB for the whole video" if result.estimate_mb else ""
+            log(f"Test encode: {result.frames} frames of {result.total_frames}, {rate}{size}")
+        except Cancelled:
+            error = "Cancelled"
+        except (ToolError, OSError, ValueError) as ex:
+            error = str(ex)
+        except Exception as ex:  # a bug must not stop the lane
+            logger.exception("%s: test encode raised", e.spec.name)
+            error = f"{type(ex).__name__}: {ex}"
+        log(f"{e.spec.name}: test encode " + (f"failed ({error})" if error else "done"))
+        self._queue_event("sample.finished", e, error=error or None)
+        with self._lock:
+            e.sample_error = "" if error == "Cancelled" else error
 
     def _versions(self, names: Sequence[str]) -> dict[str, str]:
         return self.services.versions(self.app.tools, names) if self.services.versions else {}

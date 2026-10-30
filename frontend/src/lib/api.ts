@@ -29,6 +29,7 @@ import type {
   Presets,
   PresetPack,
   PresetPackPreview,
+  PreviewStage,
   ImportAction,
   ImportPlan,
   Priority,
@@ -280,9 +281,11 @@ export const api = {
   priority: (priority: Priority | null) => post<QueueState>('/api/queue/priority', { priority }),
   index: (ids: string[], first = false) => post<QueueState & { taken: string[] }>('/api/queue/index', { ids, first }),
   stopIndex: (ids?: string[]) => post<QueueState>('/api/queue/index/stop', ids ? { ids } : {}),
+  // A test encode of percent of the job's video, first in the index lane (stopIndex cancels it)
+  sample: (id: string, percent: number) => post<QueueState & { taken: boolean }>('/api/queue/sample', { id, percent }),
 
-  clipInfo: (id: string, stage: 'crop' | 'output') => get<ClipInfo>(`/api/jobs/${id}/video/info?stage=${stage}`),
-  frameUrl: (id: string, n: number, stage: 'crop' | 'output', version: number, fmt: 'jpeg' | 'png' = 'jpeg') =>
+  clipInfo: (id: string, stage: PreviewStage) => get<ClipInfo>(`/api/jobs/${id}/video/info?stage=${stage}`),
+  frameUrl: (id: string, n: number, stage: PreviewStage, version: number, fmt: 'jpeg' | 'png' = 'jpeg') =>
     `/api/jobs/${id}/video/frame?n=${n}&stage=${stage}&fmt=${fmt}&v=${version}`,
   // origin: where the crop came from (a Dolby Vision source's RPU L5, or the detected borders)
   autocrop: (id: string, samples = 20) =>

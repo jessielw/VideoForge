@@ -5,6 +5,7 @@ export type Status =
   | 'error'
   | 'cropping'
   | 'indexing' // the index lane is on it
+  | 'sampling' // the index lane runs its test encode (indexed: the preview opens)
   | 'index-queued' // waiting in the index lane
   | 'ready'
   | 'warn'
@@ -162,6 +163,8 @@ export interface JobSummary {
   indexed: boolean // the source index is in the work folder: the video opens at once
   index_error: string // the last batch index failed: why
   index_held: boolean // waiting in the index lane while an encode reads its disk
+  sample_waiting: boolean // in the index lane for a test encode
+  sample_error: string // the last test encode failed: why
   audio: string[]
   subs: number
 }
@@ -418,7 +421,35 @@ export interface JobDetail extends JobSummary {
   output_name: string | null // the file the run will write (null until planned)
   color_args: string[] | null // the source's colour flags for this encoder (null until probed)
   target: SizeBudget | null // where a 2-pass target size goes (null without one, or until planned)
+  sample: SampleResult | null // the last test encode (core/pipeline/sample.py)
+  compare: { encode: boolean; sample: boolean } // what the Video tab can compare the script's frames with
 }
+
+// A test encode: the job's script and encoder on `length` frames of every `cycle` (POST /api/queue/sample)
+export interface SampleResult {
+  percent: number
+  cycle: number
+  length: number
+  frames: number // the sample's
+  total_frames: number // the script's
+  fps: number | null
+  bytes: number // the encoded stream's
+  seconds: number // the encode took
+  encoder: string // the rate it ran at: "x265 crf 18", "x264 8000 kb/s" (a 2-pass job's at its bitrate)
+  finished: string // ISO time
+  kbps: number | null
+  estimate_mb: number | null // the whole video's encode, decimal MB, no container overhead
+  estimate_seconds: number | null // the whole video's encode time at the sample's pace (one pass)
+  encode_fps: number | null
+  current: boolean // made with the job's script and encoder settings as they are now
+  file: string // its MKV
+}
+
+export const SAMPLE_PERCENTS = [1, 2, 5, 10] as const
+
+// The preview's clips: the crop view and the output; to compare encoder input and output, the output and the
+// encode a done run wrote, or a test encode's script and its encode (numbered by the sample's frames).
+export type PreviewStage = 'crop' | 'output' | 'encode' | 'sample-in' | 'sample'
 
 // A target size's bytes: the video gets what the rest leaves (core/video/target.py)
 export interface SizeBudget {
@@ -632,6 +663,7 @@ export interface QueueState {
   priority: Priority | null // chosen on the toolbar for the running ones; null = the Settings'
   queued: number
   indexing: string | null // the job the index lane is on
+  sampling: string | null // the job whose test encode the index lane runs
   index_queued: number
 }
 

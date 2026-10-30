@@ -417,10 +417,11 @@
         })
     })
   }
-  const indexing = $derived(!!app.queue.indexing || app.queue.index_queued > 0)
-  // tools running now (the job's, the index lane's): what Pause and the priority menu reach
-  const working = $derived(!!app.queue.current || !!app.queue.indexing)
-  const paused = (status: string) => app.queue.paused && (status === 'running' || status === 'indexing')
+  const indexing = $derived(!!app.queue.indexing || !!app.queue.sampling || app.queue.index_queued > 0)
+  // tools running now (the job's, the index lane's, a test encode there): what Pause and the priority menu reach
+  const working = $derived(!!app.queue.current || !!app.queue.indexing || !!app.queue.sampling)
+  const LIVE = ['running', 'indexing', 'sampling'] // statuses with progress
+  const paused = (status: string) => app.queue.paused && LIVE.includes(status)
   // The toolbar's Index: the selected jobs, or every job when none is selected.
   const indexTarget = $derived(selected.length ? selected : app.jobs.map((j) => j.id))
   const toIndex = $derived(unindexed(indexTarget).length)
@@ -602,7 +603,7 @@
               : ''}"
           >
             {currentPage * QUEUE_PAGE_SIZE + i + 1}
-            {#if (job.status === 'running' || job.status === 'indexing') && job.progress}
+            {#if LIVE.includes(job.status) && job.progress}
               <span class="absolute inset-x-0 bottom-0 h-1 bg-muted">
                 <span class="block h-full bg-info" style="width:{job.progress.overall * 100}%"></span>
               </span>
@@ -735,7 +736,7 @@
           <Button
             variant="outline"
             onclick={() => act(() => app.stopIndexing())}
-            title="Stop indexing: cancel the job being indexed and the ones waiting"
+            title="Stop indexing: cancel the job being indexed (or test encoded) and the ones waiting"
           >
             <DatabaseXIcon /><span class="max-sm:sr-only">Stop indexing</span>
           </Button>
@@ -931,7 +932,7 @@
                   >
                 {/if}
               </div>
-              {#if (job.status === 'running' || job.status === 'indexing') && job.progress}
+              {#if LIVE.includes(job.status) && job.progress}
                 <div class="mt-1.5 flex items-center gap-2 text-xs text-info">
                   <div class="h-1 flex-1 overflow-hidden rounded bg-muted">
                     <div class="h-full bg-info" style="width:{job.progress.overall * 100}%"></div>

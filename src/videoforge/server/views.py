@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
-from videoforge.core.job import track_defaults
+from videoforge.core.job import JobStatus, track_defaults
 from videoforge.core.models import AudioTrack, Issue, Severity, SubTrack, track_key, with_copies
 from videoforge.core.pipeline.build import indexed, output_path
+from videoforge.core.pipeline.sample import MKV, read_result, sample_dir, sample_key
 from videoforge.core.plan_io import to_json
 from videoforge.core.video import info, target
 from videoforge.core.video.color import color_args
@@ -24,6 +25,14 @@ def encoder_label(enc: EncoderSettings) -> str:
     else:
         rc = f"{'2-pass ' if enc.passes == 2 else ''}{enc.bitrate_kbps} kb/s"
     return f"{enc.encoder.label} {rc}" + (f" {enc.depth}-bit" if enc.depth != 8 else "")
+
+
+def encode_compare(e: Entry) -> Path | None:
+    """The output a done run wrote, for the Video tab to compare with the script's frames; None without one."""
+    out = e.state.output
+    if not e.spec.encodes_video or e.state.status is not JobStatus.DONE or out is None:
+        return None
+    return out if out.is_file() else None
 
 
 def issues(e: Entry) -> list[Issue]:
@@ -62,6 +71,8 @@ def summary(e: Entry) -> dict[str, Any]:
         "indexed": s.encodes_video and not e.indexing and indexed(s, e.source_video, e.burn),
         "index_error": e.index_error,
         "index_held": e.index_held,  # waiting in the lane while an encode reads its disk
+        "sample_waiting": e.sample_percent is not None and not e.sampling,  # in the lane for a test encode
+        "sample_error": e.sample_error,
         "audio": [f"{a.title} ({a.language})" for a in e.plan.audio] if e.plan else [],
         "subs": len(e.plan.subs) if e.plan else 0,
     }
@@ -78,6 +89,9 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     out["tracks"] = None
     out["color_args"] = None  # the source's colour flags for this encoder (added unless source_color is off)
     out["target"] = None  # where a 2-pass target size goes, and the bitrate it leaves the video
+    out["sample"] = None  # the last test encode (core/pipeline/sample.py)
+    # What the Video tab can compare the script's frames with: the encoded output (a done run's) or the sample.
+    out["compare"] = {"encode": encode_compare(e) is not None, "sample": False}
     if e.plan is not None:
         plan = to_json(e.plan)
         for key in ("source", "inputs", "overrides"):  # sent elsewhere
@@ -90,6 +104,16 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
                 enc.target_mb, e.plan, e.spec.container(profile), info.read(e.spec.job_dir / info.SCRIPT_INFO)
             )
             out["target"] = to_json(found) | {"video": found.video, "kbps": found.kbps} if found else None
+        if e.spec.encodes_video and (result := read_result(e.spec)) is not None:
+            out["sample"] = asdict(result) | {
+                "kbps": result.kbps,
+                "estimate_mb": result.estimate_mb,
+                "estimate_seconds": result.estimate_seconds,
+                "encode_fps": result.encode_fps,
+                "current": result.key == sample_key(e.spec, e.plan),
+                "file": str(sample_dir(e.spec) / MKV),
+            }
+            out["compare"]["sample"] = True
     if e.probed is not None:
         src = e.probed.source
         tracks = [*src.audio, *e.probed.external_audio, *src.subs, *e.probed.external_subs]

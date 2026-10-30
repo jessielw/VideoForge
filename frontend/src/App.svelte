@@ -135,6 +135,7 @@
           {@const left = (app.queue.indexing ? 1 : 0) + app.queue.index_queued}
           <div class="truncate text-info">Indexing {left} job{left > 1 ? 's' : ''}</div>
         {/if}
+        {#if app.queue.sampling}<div class="truncate text-info">Test encode</div>{/if}
         <div class={app.connected ? 'text-success' : 'text-destructive'}>
           {app.connected ? '● connected' : '● reconnecting…'}
         </div>

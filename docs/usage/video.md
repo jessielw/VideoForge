@@ -26,6 +26,15 @@ The chain contains crop and resize steps plus the filters you add. Order affects
 
 All bundled filters run on the CPU. Each filter still needs its compatible plugin or Python script. For the shipped set and API compatibility, see the [plugin list](../configuration/tools.md#bundled-vapoursynth-plugins).
 
+## Compare encoded frames
+
+**Compare** on the preview's toolbar (with the Settings panel) shows the encoder's input and what it made of it, frame for frame:
+
+- **Test encode:** the [test encode](encoders.md#test-encode)'s frames against the script's frames it encoded. The sample's blocks are back to back, so its frame numbers are its own; the overlay says which frame of the script each one is.
+- **Encode:** a done job's output file against the script's output.
+
+**Input** and **Encoded** (or **C**) flip between the two at the same frame, zoom and scroll; the other side's frame is loaded beside each one, so a flip shows at once. Edges, zoom and Save work on either side. The encode opens through FFMS2, which indexes it the first time (its index goes in the job's folder). A rerun of the job or of the test encode frees the files the compare holds open.
+
 ## Interlaced sources
 
 When MediaInfo reports the source as interlaced (Interlaced, MBAFF, or PAFF), the Video tab shows its scan type and field order. A job whose chain has no enabled Field filter warns before the run. Add **IVTC** for telecined film or a deinterlacer (**QTGMC**, **Bwdif**) and set its field order to match. Some progressive video is stored as interlaced: if the preview shows no combing, the warning can be ignored. A custom script body is not checked.

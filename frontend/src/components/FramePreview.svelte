@@ -26,7 +26,7 @@
   import { tick, untrack, type Snippet } from 'svelte'
   import { api } from '../lib/api'
   import { frameFilename } from '../lib/format'
-  import type { Crop } from '../lib/types'
+  import type { Crop, PreviewStage } from '../lib/types'
   import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left'
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
   import ChevronsLeftIcon from '@lucide/svelte/icons/chevrons-left'
@@ -58,10 +58,11 @@
     sar = 1,
     oncrop,
     tools,
+    prefetch = null,
   }: {
     jobId: string
     source?: string // the source's path, for a saved frame's name
-    stage: 'crop' | 'output'
+    stage: PreviewStage
     frames: number
     fps?: number
     width: number
@@ -76,6 +77,7 @@
     sar?: number // the frame's pixel aspect ratio (width / height of one pixel)
     oncrop?: (crop: Crop) => void // set: the wheel and the crop lines edit the crop (crop stage only)
     tools?: Snippet // more toolbar controls, after Matte
+    prefetch?: PreviewStage | null // a compare's other side: its frame loads beside each one, and both are kept
   } = $props()
 
   const ZOOMS = [25, 50, 75, 100, 150, 200, 300, 400, 600, 800]
@@ -88,7 +90,7 @@
   let matte = $state<Matte>(readMatte())
   let shaped = $state(readShaped()) // an anamorphic frame shown at its display shape
   let src = $state<string | null>(null)
-  let shownAt = $state({ n: 0, stage: 'output' as 'crop' | 'output' }) // the frame and stage src holds
+  let shownAt = $state<{ n: number; stage: PreviewStage }>({ n: 0, stage: 'output' }) // the frame and stage src holds
   let loading = $state(false)
   let slow = $state(false) // a load past a short delay: show the spinner (quick steps don't flash it)
   let error = $state('')
@@ -109,39 +111,82 @@
   let mapTimer: ReturnType<typeof setTimeout> | undefined
   let scrubTimer: ReturnType<typeof setTimeout> | undefined
 
-  async function load(n: number, st: string, v: number) {
+  type Frame = { url: string; w: number; h: number; pict: string; cropView: boolean }
+  // A compare's frames (prefetch set): the last few of both sides, so flipping between them shows at once.
+  const kept = new Map<string, Frame>()
+  const KEPT = 8
+  const keyOf = (n: number, st: PreviewStage, v: number) => `${st}:${n}:${v}`
+  let warming: AbortController | null = null
+
+  async function fetchFrame(n: number, st: PreviewStage, v: number, signal: AbortSignal): Promise<Frame> {
+    const res = await fetch(api.frameUrl(jobId, n, st, v, 'png'), { signal })
+    if (!res.ok) {
+      let msg = `${res.status}`
+      try {
+        msg = (await res.json()).detail ?? msg
+      } catch {
+        msg = await res.text()
+      }
+      throw new Error(msg)
+    }
+    const url = URL.createObjectURL(await res.blob())
+    const img = new Image()
+    img.src = url
+    await img.decode().catch(() => {})
+    return {
+      url,
+      w: img.naturalWidth,
+      h: img.naturalHeight,
+      pict: res.headers.get('X-Frame-Type') ?? '',
+      cropView: res.headers.get('X-Crop-View') === '1',
+    }
+  }
+
+  function keep(key: string, f: Frame) {
+    kept.set(key, f)
+    while (kept.size > KEPT) {
+      const [k, old] = kept.entries().next().value!
+      kept.delete(k)
+      if (old.url !== src) URL.revokeObjectURL(old.url)
+    }
+  }
+
+  // The shown frame's blob goes once another replaces it, unless it's kept for the compare.
+  function show(f: Frame, n: number, st: PreviewStage) {
+    const old = src
+    src = f.url
+    if (old && old !== f.url && ![...kept.values()].some((k) => k.url === old)) URL.revokeObjectURL(old)
+    shownAt = { n, stage: st }
+    nat = { w: f.w, h: f.h }
+    pictType = f.pict
+    cropView = f.cropView
+    error = ''
+    if (edges) makeEdges()
+  }
+
+  async function load(n: number, st: PreviewStage, v: number) {
     controller?.abort()
+    const hit = prefetch ? kept.get(keyOf(n, st, v)) : undefined
+    if (hit) {
+      controller = null
+      loading = slow = false
+      show(hit, n, st)
+      warm(n, v)
+      return
+    }
     const c = new AbortController()
     controller = c
     loading = true
     const spin = setTimeout(() => controller === c && (slow = true), 250)
     try {
-      const res = await fetch(api.frameUrl(jobId, n, st as 'crop' | 'output', v, 'png'), { signal: c.signal })
-      if (!res.ok) {
-        let msg = `${res.status}`
-        try {
-          msg = (await res.json()).detail ?? msg
-        } catch {
-          msg = await res.text()
-        }
-        throw new Error(msg)
-      }
-      const url = URL.createObjectURL(await res.blob())
-      const img = new Image()
-      img.src = url
-      await img.decode().catch(() => {})
+      const f = await fetchFrame(n, st, v, c.signal)
       if (controller !== c) {
-        URL.revokeObjectURL(url)
+        URL.revokeObjectURL(f.url)
         return
       }
-      if (src) URL.revokeObjectURL(src)
-      src = url
-      shownAt = { n, stage: st as 'crop' | 'output' }
-      nat = { w: img.naturalWidth, h: img.naturalHeight }
-      pictType = res.headers.get('X-Frame-Type') ?? ''
-      cropView = res.headers.get('X-Crop-View') === '1'
-      error = ''
-      if (edges) makeEdges()
+      if (prefetch) keep(keyOf(n, st, v), f)
+      show(f, n, st)
+      warm(n, v)
     } catch (e) {
       if ((e as Error).name !== 'AbortError') error = (e as Error).message
     } finally {
@@ -150,8 +195,37 @@
     }
   }
 
+  // The compare's other side at this frame, loaded beside it.
+  async function warm(n: number, v: number) {
+    const other = prefetch
+    if (!other || kept.has(keyOf(n, other, v))) return
+    warming?.abort()
+    const c = new AbortController()
+    warming = c
+    try {
+      const f = await fetchFrame(n, other, v, c.signal)
+      if (warming === c) keep(keyOf(n, other, v), f)
+      else URL.revokeObjectURL(f.url)
+    } catch {
+      /* the flip loads it */
+    }
+  }
+
+  // On the frame, stage and version only: a kept frame shows at once, and what that reads mustn't rerun it.
   $effect(() => {
-    load(frame, stage, version)
+    const [n, st, v] = [frame, stage, version]
+    untrack(() => load(n, st, v))
+  })
+
+  // A compare's frames go when it ends (or switches), and all of them with the preview.
+  function forget() {
+    warming?.abort()
+    for (const f of kept.values()) if (f.url !== src) URL.revokeObjectURL(f.url)
+    kept.clear()
+  }
+  $effect(() => {
+    void prefetch
+    return forget
   })
 
   $effect(() => {

@@ -47,6 +47,7 @@ class AppState {
     priority: null,
     queued: 0,
     indexing: null,
+    sampling: null,
     index_queued: 0,
   })
   profiles = $state<Profile[]>([])
@@ -204,7 +205,18 @@ class AppState {
       if (before.get(j.id) === 'running' && j.status !== 'running') this.#finished(j)
       if (before.get(j.id) === 'indexing' && j.status !== 'indexing' && j.index_error)
         toast.error(`${j.name}: indexing failed`, { description: j.index_error })
+      if (before.get(j.id) === 'sampling' && j.status !== 'sampling') this.#sampled(j)
     }
+  }
+
+  // A toast when a test encode ends: its result is on the job's Encoder tab.
+  #sampled(job: JobSummary): void {
+    const open = { label: 'Open', onClick: () => (location.hash = `#/queue/${encodeURIComponent(job.id)}`) }
+    if (this.#samplesStopped.delete(job.id)) toast.info(`${job.name}: test encode stopped`)
+    else if (job.sample_error)
+      toast.error(`${job.name}: test encode failed`, { description: job.sample_error, action: open })
+    else
+      toast.success(`${job.name}: test encode done`, { description: 'Its result is on the Encoder tab.', action: open })
   }
 
   // A toast when a run ends: done, or failed / invalid / cancelled with its first issue.
@@ -232,11 +244,19 @@ class AppState {
   }
 
   #indexStopped = false
+  #samplesStopped = new Set<string>() // stopped here: their end is no "done"
 
-  /** Stop the index lane (the job being indexed is cancelled, the waiting ones dropped). */
+  /** Stop the index lane (the job being indexed or test encoded is cancelled, the waiting ones dropped). */
   async stopIndexing(): Promise<void> {
     this.#indexStopped = true
+    if (this.queue.sampling) this.#samplesStopped.add(this.queue.sampling)
     await api.stopIndex()
+  }
+
+  /** Stop a job's test encode (or take it out of the index lane). */
+  async stopSample(id: string): Promise<void> {
+    if (this.queue.sampling === id) this.#samplesStopped.add(id)
+    await api.stopIndex([id])
   }
 
   #bump(id: string): void {
@@ -284,7 +304,9 @@ class AppState {
         const { type: _t, ...q } = event
         const was = this.queue
         this.queue = q as unknown as QueueState
-        if (event.type === 'queue' && was.indexing && !this.queue.indexing && !this.queue.index_queued) {
+        // A test encode indexes first: the lane isn't done until its encode is (which has its own toast).
+        const idle = !this.queue.indexing && !this.queue.index_queued && !this.queue.sampling
+        if (event.type === 'queue' && was.indexing && idle) {
           if (this.#indexStopped) toast.info('Indexing stopped')
           else toast.success('Indexing finished', { description: 'The indexed jobs open at once.' })
           this.#indexStopped = false
@@ -305,7 +327,8 @@ class AppState {
         if (job) {
           const { type: _t, id: _i, ...p } = event
           job.progress = p as unknown as JobSummary['progress']
-          const status = event.id === this.queue.indexing ? 'indexing' : 'running'
+          const status =
+            event.id === this.queue.indexing ? 'indexing' : event.id === this.queue.sampling ? 'sampling' : 'running'
           if (job.status !== status) job.status = status
         }
         break

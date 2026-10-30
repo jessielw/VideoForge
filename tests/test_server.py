@@ -1605,6 +1605,7 @@ def test_index_lane_stop(tmp_path):
             "priority": None,
             "queued": 0,
             "indexing": None,
+            "sampling": None,
             "index_queued": 0,
         }
 

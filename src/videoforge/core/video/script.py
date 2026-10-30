@@ -45,6 +45,25 @@ def source_line(source: Path, source_filter: SourceFilter, index_dir: Path, name
     return f"{name} = core.ffms2.Source({_q(source)}, cachefile={_q(ffms2_index(source, index_dir))})"
 
 
+def encoded_script(path: Path, index_dir: Path) -> str:
+    """A finished encode as a clip (FFMS2, its index in index_dir), for comparing its frames with the script's:
+    the job's output, or a test encode's MKV. The file's size and time are in it, so a new encode is a new clip."""
+    try:
+        st = path.stat()
+        stamp = f"# {st.st_size} {st.st_mtime_ns}"
+    except OSError:
+        stamp = "# missing"
+    lines = [
+        "import vapoursynth as vs",
+        "core = vs.core",
+        stamp,
+        source_line(path, SourceFilter.FFMS2, index_dir),
+        "clip = src",
+        "clip.set_output()",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def bake_lines(el: Path, source_filter: SourceFilter, index_dir: Path) -> list[str]:
     """A profile 7 FEL's enhancement layer (el, an MKV) baked into the base layer `clip` (felbaker's fel.Bake,
     StaxRip's lines): the layer at the base layer's size and format, both at 16 bits, baked (12-bit out, limited

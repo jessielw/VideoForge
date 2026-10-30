@@ -1,5 +1,5 @@
-// Where the video editor was left, per job: the side panel, the crop lines, frame, zoom, scroll, edge view and the
-// script editor's text (unsaved edits too). Switching tabs, jobs or pages comes back to it;
+// Where the video editor was left, per job: the side panel, the crop lines, frame, zoom, scroll, edge view, the
+// script editor's text (unsaved edits too) and the compare. Switching tabs, jobs or pages comes back to it;
 // it goes when the job leaves the queue (or the page reloads).
 import type { ScriptCheck, ScriptParts } from './types'
 
@@ -13,6 +13,11 @@ export type VideoView = {
   parts: ScriptParts | null
   body: string
   checked: ScriptCheck | null
+  // Compare the encoder's input with its output: off, a done run's encode, or the test encode (numbered by its own
+  // frames: sampleFrame). shows: which side the preview has on (C flips it).
+  compare: 'off' | 'encode' | 'sample'
+  shows: 'in' | 'out'
+  sampleFrame: number
 }
 
 const views = new Map<string, VideoView>()
@@ -30,6 +35,9 @@ export function videoView(jobId: string): VideoView {
       parts: null,
       body: '',
       checked: null,
+      compare: 'off',
+      shows: 'out',
+      sampleFrame: 0,
     })
     v = fresh
     views.set(jobId, v)

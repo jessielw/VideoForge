@@ -21,6 +21,8 @@ async function queueFixture(page: Page, count = 10_000, statuses: Status[] = ['r
     indexed: false,
     index_error: '',
     index_held: false,
+    sample_waiting: false,
+    sample_error: '',
     audio: [],
     subs: 0,
   }))
@@ -33,6 +35,8 @@ async function queueFixture(page: Page, count = 10_000, statuses: Status[] = ['r
     output_name: null,
     color_args: null,
     target: null,
+    sample: null,
+    compare: { encode: false, sample: false },
     spec: {
       id: job.id,
       profile: 'manual',

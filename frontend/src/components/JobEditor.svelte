@@ -10,6 +10,8 @@
   import { layout } from '../lib/layout.svelte'
   import type { CommandStep, JobDetail } from '../lib/types'
   import EncoderPanel from './EncoderPanel.svelte'
+  import SampleCard from './SampleCard.svelte'
+  import { videoView } from '../lib/videoView.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
@@ -108,7 +110,7 @@
     )
   }
 
-  const editable = $derived(!!job && !['queued', 'running', 'indexing'].includes(job.status))
+  const editable = $derived(!!job && !['queued', 'running', 'indexing', 'sampling'].includes(job.status))
   const queued = $derived(job?.status === 'queued' || job?.status === 'running')
 
   async function setQueued(on: boolean) {
@@ -173,8 +175,10 @@
         <span class="text-sm text-muted-foreground"
           >· {job.profile} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span
         >
-        {#if job.status === 'indexing'}<Badge variant="outline" class="border-info/40 bg-info/10 text-info"
-            >locked while indexing</Badge
+        {#if job.status === 'indexing' || job.status === 'sampling'}<Badge
+            variant="outline"
+            class="border-info/40 bg-info/10 text-info"
+            >locked {job.status === 'indexing' ? 'while indexing' : 'during its test encode'}</Badge
           >{/if}
         <TemplateMenu
           profile={job.profile}
@@ -186,7 +190,7 @@
           apply={(template) => save({ template })}
         />
       </div>
-      {#if live?.progress && (live.status === 'running' || live.status === 'indexing')}
+      {#if live?.progress && ['running', 'indexing', 'sampling'].includes(live.status)}
         {@const p = live.progress}
         <div class="flex items-center gap-3 text-xs text-muted-foreground max-sm:flex-wrap max-sm:gap-y-1">
           <div class="h-1.5 flex-1 overflow-hidden rounded bg-muted max-sm:basis-full">
@@ -256,6 +260,17 @@
             />
           </div>
           <div class="space-y-2">
+            {#if !job.spec.inputs.encode}
+              <SampleCard
+                {job}
+                {editable}
+                oncompare={() => {
+                  const v = videoView(jobId)
+                  Object.assign(v, { compare: 'sample', shows: 'out', panel: 'settings' })
+                  tab = 'video'
+                }}
+              />
+            {/if}
             <span class="section-label">Commands this job runs</span>
             {#each commands as c (c.id)}
               <div class="rounded-lg border bg-muted/50 p-2">
