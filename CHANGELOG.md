@@ -50,6 +50,8 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 
 - x265's multi-pass analysis (`--multi-pass-opt-analysis` / `-distortion`) goes to `video.analysis` beside the two-pass stats (`--analysis-reuse-file`, as StaxRip does) instead of `x265_analysis.dat` in VideoForge's working directory; pass 2 waits for it like the stats.
 
+- x265 is Patman86's mod, 4.3+22+73 (the one StaxRip ships), on Windows (its generic x86-64 gcc build) and in Docker (built from the same tag), in place of DJATOM's 3.6+30 aMod on Windows and x265 4.1 in Docker. It takes `--dhdr10-info` though its help leaves it out, so `verify_toolchain.py --smoke` now encodes HDR10+ and Dolby Vision and reads them back instead of reading the help.
+
 - The FillBorders filter presets use `fillmargins` (StaxRip's mode) and list the other modes in a comment.
 
 - **Duplicate** on the Queue copies the selected jobs, each right after its original with a label of its own, for a second output from the same source with a few settings changed. The copy reuses the source index and every encode whose settings it kept. Labels now show in the queue list and the job header, and search matches them.
@@ -160,7 +162,7 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 - **Settings.** Tool paths with a check for each, folder browser roots, the disk wait, Shut down. The version shows in the sidebar (and `/api/health`).
 - **Desktop window.** `serve --window`: the app in its own window with a tray icon; Explorer drops carry file paths.
 - **Portable build (Windows x64).** A zip with its own Python: unpack, add the tools, run `VideoForge.exe`. dovi_tool and hdr10plus_tool come with it (`scripts/fetch_tools.py` fetches them for a source install).
-- **Docker (Linux, amd64).** The server with the free tools (MKVToolNix, x264, x265, FFmpeg 9, MP4Box, opus-tools, DeeZy, truehdd, dovi_tool, hdr10plus_tool), in a browser. Its x265 is built with HDR10+. Windows tools run under Wine from `/tools/wine` (qaac, DEE's Windows build).
+- **Docker (Linux, amd64).** The server with the free tools (MKVToolNix, x264, x265, FFmpeg 9, MP4Box, opus-tools, DeeZy, truehdd, dovi_tool, hdr10plus_tool), in a browser. Its x265 is Patman86's mod, built with HDR10+. Windows tools run under Wine from `/tools/wine` (qaac, DEE's Windows build).
 - **Bundled VapourSynth plugins.** Source filters (BestSource, L-SMASH-Works, FFMS2, d2vsource) and common filters (EdgeFixer, FillBorders, MVTools, znedi3, dfttest2, BM3D, zsmooth, vszip, fmtconv, descale, ...) plus havsfunc, mvsfunc and awsmfunc, from one list (`vsplugins/manifest.toml`): built from source in the Docker image, downloaded (pinned, checked) for the portable build or a source install (`scripts/fetch_plugins.py`).
 - **Profiles.** The built-in `manual` profile; other profiles (a release group's rules) install as separate packages under the `videoforge.profiles` entry point group.
 

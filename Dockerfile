@@ -10,9 +10,11 @@
 ARG PYTHON_IMAGE=python:3.12-slim-trixie
 ARG PLUGINS_IMAGE=ghcr.io/jessielw/videoforge-plugins:latest
 ARG DEEZY_VERSION=1.3.15
-# x265 from source: Debian's is built without HDR10+ (--dhdr10-info)
-ARG X265_VERSION=4.1
-ARG X265_SHA256=a31699c6a89806b74b0151e5e6a7df65de4b49050482fe5ebf8a4379d7af8f29
+# x265 from source: Patman's mod (the Windows build's, scripts/tools.toml), at its release tag; Debian's is built
+# without HDR10+ (--dhdr10-info)
+ARG X265_VERSION=4.3+22+73
+ARG X265_COMMIT=1e85ca6eb
+ARG X265_SHA256=bc603457c7e4de3b0349a92a4af50e597d3cd9f2c6dd687c1fc2e753627175db
 # SVT-AV1's SvtAv1EncApp from its tag (Debian's is older)
 ARG SVTAV1_VERSION=v4.2.0
 ARG TRUEHDD_VERSION=0.6.2
@@ -34,18 +36,27 @@ RUN npm run build
 
 # --- x265 ----------------------------------------------------------------------------------------------
 # 8, 10 and 12-bit in one static binary (the usual multilib build), with HDR10+ (ENABLE_HDR10_PLUS). git is there
-# so its CMake reads the version from the tarball's x265Version.txt (without it: "version unknown")
+# so its CMake reads the version from x265Version.txt (without it: "version unknown"). The tarball's is upstream's
+# (4.3+1), so it's rewritten from the tag: "4.3+22+73" is 22 commits past 4.3, 73 of them Patman's, as his
+# Windows builds print it.
 FROM ${PYTHON_IMAGE} AS x265
 ARG X265_VERSION
+ARG X265_COMMIT
 ARG X265_SHA256
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl cmake nasm g++ make git \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
-RUN curl -fsSL -o x265.tar.gz "https://download.videolan.org/pub/videolan/x265/x265_${X265_VERSION}.tar.gz" \
+RUN tag="$(echo "${X265_VERSION}" | sed 's/+/%2B/g')" \
+    && curl -fsSL -o x265.tar.gz "https://github.com/Patman86/x265-Mod-by-Patman/archive/refs/tags/${tag}.tar.gz" \
     && echo "${X265_SHA256}  x265.tar.gz" | sha256sum -c - \
-    && tar -xzf x265.tar.gz && mv "x265_${X265_VERSION}" x265
-RUN set -e; common="-DCMAKE_BUILD_TYPE=Release -DENABLE_HDR10_PLUS=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5"; \
+    && mkdir x265 && tar -xzf x265.tar.gz -C x265 --strip-components=1 \
+    && set -- $(echo "${X265_VERSION}" | tr + ' ') \
+    && printf 'releasetag: %s\nreleasetagdistance: %s\nrepositorychangeset: %s\n' "$1" "$2" "${X265_COMMIT}" \
+        > x265/x265Version.txt \
+    && echo "$3" > /src/x265-patman-commits
+RUN set -e; common="-DCMAKE_BUILD_TYPE=Release -DENABLE_HDR10_PLUS=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DX265_TAG_DISTANCE_COM=$(cat /src/x265-patman-commits)"; \
     mkdir -p b12 b10 b8; \
     cmake -S x265/source -B b12 $common -DHIGH_BIT_DEPTH=ON -DMAIN12=ON -DEXPORT_C_API=OFF -DENABLE_SHARED=OFF \
         -DENABLE_CLI=OFF; \

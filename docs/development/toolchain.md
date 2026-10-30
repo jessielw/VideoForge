@@ -24,7 +24,7 @@ GPAC and Microsoft redistributable installers are extracted as archives. They ar
 3. Provision into a fresh folder, provision its plugins, and run `verify_toolchain.py --tools <folder> --smoke`. Use the same Python environment's `filters` extra and pinned single-file filter scripts.
 4. Build the portable release. Its bundled Python must pass the smoke checks before packaging. Review the applicable source-distribution and license requirements before publishing binaries.
 
-x265 deliberately pins a baseline multilib aMod build with HDR10+ and Dolby Vision support. The newer reviewed Patman and JPSDR builds omitted `--dhdr10-info`; a higher version number alone does not establish compatibility. Opus uses the named RareWares x64 build and pinned Xiph notices.
+x265 pins Patman's generic x86-64 multilib build (the one StaxRip takes). Its `--help` and `--fullhelp` leave out `--dhdr10-info`, but the option works: check a new build by encoding with `--dhdr10-info` and `--dolby-vision-rpu`, then reading the metadata back with `hdr10plus_tool extract` and `dovi_tool extract-rpu`. Its CPU-tuned builds (znver3 and others) measured no faster on Zen 3, since x265 picks its AVX2 assembly at runtime either way. Opus uses the named RareWares x64 build and pinned Xiph notices.
 
 ## Verification scope
 

@@ -92,19 +92,20 @@ sha256 = "32b1062f7da84967e7019d01ab805935caa7ab7321a7ced0e30ebe75e5df1670"
 
 [[tool]]
 name = "x265"
-version = "3.6+30 aMod (baseline multilib gcc13.2.0)"
+version = "4.3+22+73"
 license = "GPL-2.0-or-later"
-source = "https://github.com/DJATOM/x265-aMod/tree/3.6%2B30"
-purpose = "HEVC 8/10/12-bit encoding with HDR10+ and Dolby Vision; newer reviewed builds lacked HDR10+"
+source = "https://github.com/Patman86/x265-Mod-by-Patman/tree/4.3%2B22%2B73"
+purpose = "HEVC 8/10/12-bit encoding with HDR10+ and Dolby Vision (Patman gcc build, generic x86-64)"
 [tool.windows]
-url = "https://github.com/DJATOM/x265-aMod/releases/download/3.6%2B30/x265-x64-v3.6%2B30-aMod-gcc13.2.0-multilib%2Bopt.7z"
-sha256 = "96b9fe008d6c34ad4d12ebc668db98c094173c962989d2f9f940c51569e01898"
+url = "https://github.com/Patman86/x265-Mod-by-Patman/releases/download/4.3%2B22%2B73/x265-4.3%2B22%2B73-1e85ca6eb-.Mod-by-Patman.-x64-x86-64-gcc16.2.0.7z"
+sha256 = "34a7b79df700b76554be3966ffb691c2aaa00482823f7035fd93290159adb9f0"
 directory = "x265"
-files = { "x265.exe" = "x265-x64-v3.6+30-aMod-gcc13.2.0.exe" }
+prefix = ""
+include = ["x265.exe"]
 executables = { x265 = "x265.exe" }
 [[tool.notice]]
 file = "COPYING"
-url = "https://raw.githubusercontent.com/DJATOM/x265-aMod/3.6%2B30/COPYING"
+url = "https://raw.githubusercontent.com/Patman86/x265-Mod-by-Patman/4.3%2B22%2B73/COPYING"
 sha256 = "d8afb1bcc7a2cfc603683b168d6987ef0a48e59e0da3693bf55c5d33b67e2b49"
 
 [[tool]]

@@ -155,10 +155,81 @@ def smoke(paths: dict[str, Path], plugins: Path, env: dict[str, str]) -> None:
             ],
             env,
         )
-        help_text = run([paths["x265"], "--fullhelp"], env, codes=(0, 1))
-        for option in ("--dhdr10-info", "--dolby-vision-rpu"):
-            if option not in help_text:
-                raise ValueError(f"x265 is missing required capability {option}")
+        # HDR10+ and Dolby Vision: encoded in, then read back out. Not from --fullhelp: Patman's build takes
+        # --dhdr10-info but leaves it out of its help.
+        hdr10plus, rpu, dv_hevc = work / "hdr10plus.json", work / "rpu.bin", work / "dv.hevc"
+        scene = {
+            "BezierCurveData": {
+                "Anchors": [102, 205, 307, 410, 512, 614, 717, 819, 922],
+                "KneePointX": 0,
+                "KneePointY": 0,
+            },
+            "LuminanceParameters": {
+                "AverageRGB": 1200,
+                "LuminanceDistributions": {
+                    "DistributionIndex": [1, 5, 10, 25, 50, 75, 90, 95, 99],
+                    "DistributionValues": [10, 50, 120, 400, 900, 2000, 6000, 9000, 20000],
+                },
+                "MaxScl": [30000, 28000, 26000],
+            },
+            "NumberOfWindows": 1,
+            "TargetedSystemDisplayMaximumLuminance": 400,
+            "SceneId": 0,
+        }
+        frames = [{**scene, "SceneFrameIndex": i, "SequenceFrameIndex": i} for i in range(4)]
+        hdr10plus.write_text(
+            json.dumps(
+                {
+                    "JSONInfo": {"HDR10plusProfile": "B", "Version": "1.0"},
+                    "SceneInfo": frames,
+                    "SceneInfoSummary": {"SceneFirstFrameIndex": [0], "SceneFrameNumbers": [4]},
+                }
+            ),
+            encoding="utf-8",
+        )
+        generate = work / "rpu.json"
+        generate.write_text(json.dumps({"cm_version": "V40", "length": 4}), encoding="utf-8")
+        run([paths["dovi_tool"], "generate", "-j", generate, "-o", rpu], env)
+        run(
+            [
+                paths["x265"],
+                "--preset",
+                "ultrafast",
+                "--frame-threads",
+                "1",
+                "--pools",
+                "1",
+                "--output-depth",
+                "10",
+                "--vbv-bufsize",
+                "20000",
+                "--vbv-maxrate",
+                "20000",
+                "--master-display",
+                "G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)",
+                "--max-cll",
+                "1000,400",
+                "--dhdr10-info",
+                hdr10plus,
+                "--dolby-vision-profile",
+                "8.1",
+                "--dolby-vision-rpu",
+                rpu,
+                "--output",
+                dv_hevc,
+                "--y4m",
+                "--input",
+                y4m,
+            ],
+            env,
+        )
+        hdr10plus_out, rpu_out = work / "hdr10plus_out.json", work / "rpu_out.bin"
+        run([paths["hdr10plus_tool"], "extract", dv_hevc, "-o", hdr10plus_out], env)
+        if len(json.loads(hdr10plus_out.read_text(encoding="utf-8"))["SceneInfo"]) != 4:
+            raise ValueError("x265 did not write HDR10+ metadata (--dhdr10-info)")
+        run([paths["dovi_tool"], "extract-rpu", dv_hevc, "-o", rpu_out], env)
+        if "Frames: 4" not in run([paths["dovi_tool"], "info", "-i", rpu_out, "-s"], env):
+            raise ValueError("x265 did not write Dolby Vision RPUs (--dolby-vision-rpu)")
         run([paths["svtav1"], "--preset", "13", "--lp", "1", "-i", y4m, "-b", av1], env)
         for path in (h264, hevc, av1):
             run([ffmpeg, "-v", "error", "-i", path, "-f", "null", "-"], env)
