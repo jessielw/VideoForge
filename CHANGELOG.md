@@ -28,6 +28,8 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 
 - **Settings → Default subtitles**: subtitle rules every new job gets unless its template sets its own. Subtitle rules (templates and the default) can **name untitled tracks** from their language and flags. Configuration backups are version 3 (they carry the default rules); version 1 and 2 backups still import.
 
+- **Settings → Reset VideoForge**: go back to videoforge.toml's settings, empty the preset and template libraries, and/or remove every job, after typing RESET. A configuration backup is saved to `backups/` in the data folder first (import it to undo); installed plugins, work folders and kept job records stay. It's refused while the queue runs.
+
 - A profile with its own track rules can offer the full track editor (`picks_tracks` with `track_editor`). The editor starts from the profile's picks, titles and encodes, and saves only what you change. Ticking a track the rules left out keeps it (`exclude: false`). The track order is saved only once you move a track. Settings' default subtitle rules leave such a profile's jobs alone.
 
 - **Name subtitles** on a job's Subtitles tab (StaxRip's "Set names"): titles the kept tracks from their language and flags, `English`, `English (Forced)`, `English (SDH)`; the untitled ones, or all.

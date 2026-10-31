@@ -183,6 +183,11 @@ export const api = {
   previewConfiguration: (bundle: unknown) => post<ConfigurationPreview>('/api/configuration/preview', bundle),
   importConfiguration: (bundle: ConfigurationBundle) =>
     post<{ config: ConfigState; presets: Presets; warnings: string[] }>('/api/configuration/import', bundle),
+  resetConfiguration: (scopes: { settings: boolean; presets: boolean; jobs: boolean }) =>
+    post<{ config: ConfigState; presets: Presets; backup: string; removed: string[] }>(
+      '/api/configuration/reset',
+      scopes,
+    ),
   saveConfig: (changes: {
     tools?: Record<string, string | null>
     roots?: string[] | null

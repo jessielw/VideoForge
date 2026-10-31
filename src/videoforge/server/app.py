@@ -66,6 +66,7 @@ def create_app(
     services = services or Services()
 
     store = Store(settings.db_path)
+    file_config = base  # what a reset goes back to
     if restored_base := store.get_setting("configuration_base"):
         base = from_json(AppConfig, restored_base)
     saved = SavedSettings.load(store)
@@ -139,6 +140,7 @@ def create_app(
     app.add_middleware(BrowserBoundary, hosts=hosts, origins=settings.allowed_origins)
     app.state.settings = settings
     app.state.base_config = base
+    app.state.file_config = file_config
     app.state.default_roots = default_roots
     app.state.saved = saved
     app.state.restart_for = set()  # settings changed since start that need a restart to take full effect

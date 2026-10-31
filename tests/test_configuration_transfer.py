@@ -1,6 +1,8 @@
 """Full configuration backups restore libraries and preferences together, without touching jobs."""
 
 import copy
+import json
+from pathlib import Path
 import sqlite3
 
 import pytest
@@ -259,3 +261,67 @@ def test_configuration_codec_restores_matching_rules_as_tuples(tmp_path):
         doc = export(client)
     app = from_json(AppConfig, doc["application"])
     assert isinstance(app.matching.encode_extensions, tuple)
+
+
+def test_reset_backs_up_then_restores_defaults_and_keeps_jobs_and_bookkeeping(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        defaults = export(client)
+        seed(client, tmp_path)
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn", "blocked")
+        seeded = export(client)
+        client.app.state.store.set_setting("queue-order-test", [job])
+        response = client.post("/api/configuration/reset", json={"settings": True, "presets": True})
+        assert response.status_code == 200, response.text
+        result = response.json()
+        backup = json.loads(Path(result["backup"]).read_text(encoding="utf-8"))
+        assert backup == seeded
+        assert result["removed"] == []
+        assert result["config"]["parallel_audio"] == defaults["application"]["parallel_audio"]
+        assert result["config"]["notifications"] == [] and result["config"]["actions"] == []
+        assert all(t["custom"] is None for t in result["config"]["tools"])
+        assert result["presets"]["template_defaults"] == {} and result["presets"]["subs_default"] is None
+        assert export(client) == defaults
+        assert client.app.state.queue.sample_quality is False
+        assert client.app.state.store.get_setting("queue-order-test") == [job]
+        assert client.get("/api/jobs").json()[0]["id"] == job
+        assert client.post("/api/configuration/import", json=backup).status_code == 200
+        assert export(client) == seeded
+
+
+def test_reset_one_scope_leaves_the_others(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        seed(client, tmp_path)
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn", "blocked")
+        response = client.post("/api/configuration/reset", json={"presets": True})
+        assert response.status_code == 200, response.text
+        assert all(response.json()["presets"][kind] == [] for kind in ("template", "video", "encoder", "audio"))
+        assert response.json()["config"]["parallel_audio"] == 4
+        response = client.post("/api/configuration/reset", json={"jobs": True})
+        assert response.status_code == 200, response.text
+        assert response.json()["removed"] == [job]
+        assert client.get("/api/jobs").json() == []
+        assert client.app.state.store.load_jobs() == []
+        assert client.get("/api/config").json()["parallel_audio"] == 4
+
+
+@pytest.mark.parametrize("body", [{}, {"settings": False}, {"settings": "yes"}])
+def test_reset_needs_a_scope(tmp_path, body):
+    with make_client(tmp_path) as client:
+        assert client.post("/api/configuration/reset", json=body).status_code == 422
+        assert not (tmp_path / "data" / "backups").exists()
+
+
+def test_reset_is_refused_while_the_queue_runs(tmp_path):
+    with make_client(tmp_path) as client:
+        seed(client, tmp_path)
+        before = export(client)
+        client.app.state.queue._active = True
+        try:
+            assert client.post("/api/configuration/reset", json={"settings": True}).status_code == 409
+        finally:
+            client.app.state.queue._active = False
+        assert export(client) == before

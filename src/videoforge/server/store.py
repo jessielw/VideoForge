@@ -150,6 +150,18 @@ class Store:
                 self._db.execute("ROLLBACK")
                 raise
 
+    def reset_configuration(self, keys: tuple[str, ...], kinds: tuple[str, ...]) -> None:
+        """Delete these settings and whole preset libraries atomically; jobs and other settings stay."""
+        with self._lock:
+            self._db.execute("BEGIN")
+            try:
+                self._db.executemany("DELETE FROM settings WHERE key = ?", [(key,) for key in keys])
+                self._db.executemany("DELETE FROM presets WHERE kind = ?", [(kind,) for kind in kinds])
+                self._db.execute("COMMIT")
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
+
     def presets(self, kind: str) -> dict[str, Any]:
         with self._lock:
             rows = self._db.execute("SELECT name, data FROM presets WHERE kind = ? ORDER BY name", (kind,)).fetchall()

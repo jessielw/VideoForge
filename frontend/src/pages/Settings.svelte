@@ -8,6 +8,7 @@
   import FileBrowser from '../components/FileBrowser.svelte'
   import ConfigurationTransfer from '../components/ConfigurationTransfer.svelte'
   import PresetPackTransfer from '../components/PresetPackTransfer.svelte'
+  import ResetConfiguration from '../components/ResetConfiguration.svelte'
   import PluginManager from '../components/PluginManager.svelte'
   import AudioPresetMenu from '../components/AudioPresetMenu.svelte'
   import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
@@ -792,6 +793,15 @@
         refreshKey={pluginRefresh}
         onupdated={(value) => {
           config = value
+        }}
+      />
+      <ResetConfiguration
+        disabled={pending > 0 || !!saveError || app.queue.running}
+        onreset={(value) => {
+          config = value
+          pluginRefresh++
+          checks = {}
+          checkAll()
         }}
       />
     {/if}

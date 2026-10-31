@@ -1,10 +1,11 @@
-"""Full configuration backup and restore from Settings, with a read-only preview."""
+"""Full configuration backup and restore from Settings, with a read-only preview, and a reset to defaults."""
 
+from datetime import datetime
 import json
 import os
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Body, HTTPException, Request
 
 from videoforge.core.config import AppConfig
 from videoforge.core.plan_io import from_json, to_json
@@ -123,4 +124,43 @@ async def import_configuration(request: Request) -> dict[str, Any]:
         "config": config._state(request),
         "presets": presets._all(request),
         "warnings": _preview(request, bundle)["warnings"],
+    }
+
+
+RESET_SCOPES = ("settings", "presets", "jobs")
+
+
+@router.post("/reset")
+def reset_configuration(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """{settings, presets, jobs}: go back to videoforge.toml's settings (tool paths, folders, notifications,
+    actions, plugin settings), empty the preset libraries (with default templates), and/or remove every job.
+    A backup of the configuration is written to the data folder first. Installed plugins, their files,
+    work folders and kept job records stay. Refused (409) while anything runs."""
+    if any(not isinstance(body.get(scope, False), bool) for scope in RESET_SCOPES):
+        raise HTTPException(422, "settings, presets and jobs: true or false")
+    scopes = {scope for scope in RESET_SCOPES if body.get(scope)}
+    if not scopes:
+        raise HTTPException(422, "Choose what to reset")
+    state = request.app.state
+    q = state.queue
+    if q.running or any(e.busy or e.indexing or e.sampling for e in q.entries()):
+        raise HTTPException(409, "Stop the queue and wait for indexing and test encodes to finish first")
+    backup = state.settings.data_dir / "backups" / f"reset-{datetime.now():%Y%m%d-%H%M%S}.json"
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    backup.write_text(json.dumps(export_configuration(request), indent=2) + "\n", encoding="utf-8")
+    keys = SETTING_KEYS + FOLDER_KEYS + (BASE_KEY, presets.SUBS_DEFAULT) if "settings" in scopes else ()
+    kinds = tuple(presets.KINDS) if "presets" in scopes else ()
+    state.store.reset_configuration(keys + ((presets.DEFAULTS,) if kinds else ()), kinds)
+    if "settings" in scopes:
+        base = state.file_config
+        if base.plugins != state.base_config.plugins:
+            state.restart_for.add("configuration")
+        state.base_config = base
+        config.apply_settings(request, SavedSettings.load(state.store))
+    removed = q.remove([e.id for e in q.entries()]) if "jobs" in scopes else []
+    return {
+        "config": config._state(request),
+        "presets": presets._all(request),
+        "backup": str(backup),
+        "removed": removed,
     }
