@@ -13,9 +13,10 @@ from videoforge.core.template_io import MAX_NAME, check_settings
 from videoforge.core.tools import TOOL_NAMES
 from videoforge.server.routes.presets import KINDS
 from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
+from videoforge.server.store import MAX_PROFILE_NAME
 
 FORMAT = "videoforge.configuration"
-VERSION = 5  # 3: subs_default; 4: settings.sample_quality; 5: profile renamed rule_set
+VERSION = 6  # 3: subs_default; 4: settings.sample_quality; 5: profile renamed rule_set; 6: profile (its name)
 MAX_BYTES = 20 * 1024 * 1024
 BASE_KEY = "configuration_base"
 SETTING_KEYS = tuple(f.name for f in fields(SavedSettings))
@@ -48,7 +49,11 @@ def read_configuration(doc: Any) -> dict[str, Any]:
     if type(doc.get("version")) is not int or doc["version"] not in range(1, VERSION + 1):
         raise ValueError(f"Unsupported configuration version; this app supports version {VERSION}")
     keys = {"format", "version", "application", "settings", "folders", "presets", "template_defaults"}
-    _object(doc, keys | {"subs_default"} if doc["version"] >= 3 else keys, "Configuration")
+    keys |= {"subs_default"} if doc["version"] >= 3 else set()
+    _object(doc, keys | {"profile"} if doc["version"] >= 6 else keys, "Configuration")
+    profile = doc.get("profile")  # version 6: the exported profile's name, the default for a new one
+    if profile is not None:
+        profile = _name(profile, "Profile name", limit=MAX_PROFILE_NAME).strip()
     if doc["version"] < 5:
         doc = doc | {"application": _rule_set(doc["application"]), "settings": _rule_set(doc["settings"])}
     # JSON-native values only, including plugin-owned settings; reject NaN/Infinity anywhere.
@@ -93,6 +98,7 @@ def read_configuration(doc: Any) -> dict[str, Any]:
     return {
         "format": FORMAT,
         "version": VERSION,
+        "profile": profile,
         "application": to_json(application),
         "settings": to_json(settings),
         "folders": doc["folders"],

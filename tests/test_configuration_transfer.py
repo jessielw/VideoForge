@@ -11,7 +11,7 @@ from test_server import add, make_client, make_files, wait_for
 from videoforge.core.config import AppConfig
 from videoforge.core.plan_io import from_json
 from videoforge.server.configuration import MAX_BYTES, read_configuration
-from videoforge.server.store import Store
+from videoforge.server.store import FIRST_PROFILE, Store
 
 
 def export(client):
@@ -83,7 +83,7 @@ def test_export_preview_restore_and_restart_preserve_entire_configuration(tmp_pa
         preview = client.post("/api/configuration/preview", json=original)
         assert preview.status_code == 200, preview.text
         assert preview.json()["counts"] == {"template": 1, "video": 1, "encoder": 1, "audio": 1}
-        assert preview.json()["current_counts"]["template"] == 2
+        assert preview.json()["profile_counts"][client.app.state.store.profile]["template"] == 2
         assert export(client) == before
         response = client.post("/api/configuration/import", json=original)
         assert response.status_code == 200, response.text
@@ -110,6 +110,7 @@ def test_a_version_2_backup_has_no_default_subtitle_rules(tmp_path):
         seed(client, tmp_path)
         old = export(client)
         old["version"] = 2
+        del old["profile"]  # version 6
         with pytest.raises(ValueError, match="missing or unknown fields"):
             read_configuration(old)  # version 2 had no subs_default
         del old["subs_default"]
@@ -122,8 +123,9 @@ def test_a_version_3_backup_has_no_quality_score_setting(tmp_path):
     with make_client(tmp_path) as client:
         seed(client, tmp_path)
         old = export(client)
-        assert old["version"] == 5 and old["settings"]["sample_quality"] is True
+        assert old["version"] == 6 and old["settings"]["sample_quality"] is True
         old["version"] = 3
+        del old["profile"]  # version 6
         with pytest.raises(ValueError, match="missing or unknown fields"):
             read_configuration(old)  # version 3 had no sample_quality
         del old["settings"]["sample_quality"]
@@ -137,12 +139,25 @@ def test_a_version_4_backup_names_the_rule_set_profile(tmp_path):
         seed(client, tmp_path)
         old = export(client)
         old["version"] = 4
+        del old["profile"]  # version 6
         for section in ("application", "settings"):
             old[section] = {("profile" if k == "rule_set" else k): v for k, v in old[section].items()}
         read = read_configuration(old)
         assert read["application"]["rule_set"] == export(client)["application"]["rule_set"]
         assert read["settings"]["rule_set"] == export(client)["settings"]["rule_set"]
         assert "profile" not in read["settings"]
+        assert client.post("/api/configuration/import", json=old).status_code == 200
+
+
+def test_a_version_5_backup_has_no_profile_name(tmp_path):
+    with make_client(tmp_path) as client:
+        old = export(client)
+        assert old["profile"] == FIRST_PROFILE
+        old["version"] = 5
+        with pytest.raises(ValueError, match="missing or unknown fields"):
+            read_configuration(old)
+        del old["profile"]
+        assert read_configuration(old)["profile"] is None
         assert client.post("/api/configuration/import", json=old).status_code == 200
 
 
@@ -169,7 +184,9 @@ def test_restore_empty_libraries_preserves_jobs_and_queue_bookkeeping(tmp_path):
     "location,value",
     [
         (("version",), True),
-        (("version",), 6),
+        (("version",), 7),
+        (("profile",), ""),
+        (("profile",), "x" * 81),
         (("subs_default",), {"rules": [], "others": "everything"}),
         (("settings", "parallel_audio"), True),
         (("settings", "parallel_audio"), 99),

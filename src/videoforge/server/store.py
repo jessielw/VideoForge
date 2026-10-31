@@ -290,10 +290,14 @@ class Store:
                     presets[kind][name] = json.loads(data)
             return {"settings": {k: json.loads(settings[k]) for k in keys if k in settings}, "presets": presets}
 
-    def restore_configuration(self, settings: dict[str, Any], presets: dict[str, dict[str, Any]]) -> None:
-        """Replace the active profile's represented configuration atomically; preserve jobs and queue bookkeeping."""
+    def restore_configuration(
+        self, settings: dict[str, Any], presets: dict[str, dict[str, Any]], profile: str | None = None
+    ) -> None:
+        """Replace a profile's (default: the active one's) represented configuration atomically; preserve jobs
+        and queue bookkeeping."""
         with self._lock:
-            p = self._profile
+            p = self._profile if profile is None else profile
+            self._known(p)
             setting_rows = [(p, key, json.dumps(value)) for key, value in settings.items()]
             preset_rows = [
                 (p, kind, name, json.dumps(data)) for kind, entries in presets.items() for name, data in entries.items()
@@ -311,6 +315,15 @@ class Store:
             except Exception:
                 self._db.execute("ROLLBACK")
                 raise
+
+    def preset_counts(self) -> dict[str, dict[str, int]]:
+        """How many presets of each kind every profile has (a kind it has none of is left out)."""
+        with self._lock:
+            rows = self._db.execute("SELECT profile, kind, COUNT(*) FROM presets GROUP BY profile, kind").fetchall()
+        counts: dict[str, dict[str, int]] = {}
+        for pid, kind, n in rows:
+            counts.setdefault(pid, {})[kind] = n
+        return counts
 
     def reset_configuration(self, keys: tuple[str, ...], kinds: tuple[str, ...]) -> None:
         """Delete the active profile's settings and whole preset libraries atomically; jobs and other settings stay."""

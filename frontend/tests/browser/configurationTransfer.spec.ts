@@ -13,7 +13,8 @@ import { presetPack } from '../../src/lib/presetPack.ts'
 
 async function fixture(page: Page) {
   const errors: string[] = []
-  const imported: ConfigurationBundle[] = []
+  const imported: { bundle: ConfigurationBundle; query: Record<string, string> }[] = []
+  const profiles = { profiles: [{ id: 'default', name: 'Default' }], active: 'default' }
   const exportedPacks: PresetPack[] = []
   const importedPacks: PresetPack[] = []
   page.on('pageerror', (error) => errors.push(error.message))
@@ -151,7 +152,7 @@ async function fixture(page: Page) {
     } else if (path === '/api/configuration/export') await route.fulfill({ json: bundle })
     else if (path === '/api/configuration/preview') {
       const data: ConfigurationBundle = request.postDataJSON()
-      if (data.version !== 1 && data.version !== 2) {
+      if (data.version > 6) {
         await route.fulfill({ status: 422, json: { detail: 'Unsupported configuration version' } })
         return
       }
@@ -159,21 +160,28 @@ async function fixture(page: Page) {
         json: {
           bundle: data,
           counts: { template: 1, encoder: 1, audio: 1, video: 0 },
-          current_counts: { template: 2, encoder: 3, audio: 4, video: 1 },
+          profile_counts: { default: { template: 2, encoder: 3, audio: 4, video: 1 } },
           warnings: ['Check tool paths on this computer.'],
         },
       })
     } else if (path === '/api/configuration/import') {
-      imported.push(request.postDataJSON())
-      config.parallel_audio = 4
-      await route.fulfill({ json: { config, presets, warnings: [] } })
+      const query = Object.fromEntries(new URL(request.url()).searchParams)
+      imported.push({ bundle: request.postDataJSON(), query })
+      let profile = query.profile
+      if (query.new) {
+        profile = `imported-${profiles.profiles.length}`
+        profiles.profiles.push({ id: profile, name: query.new })
+      }
+      if (query.switch === 'true') profiles.active = profile
+      if (profile === profiles.active) config.parallel_audio = 4
+      await route.fulfill({ json: { config, presets, warnings: [], ...profiles, profile } })
     } else {
       const responses: Record<string, unknown> = {
         '/api/jobs': [],
         '/api/rule-sets': [ruleSet],
         '/api/presets': presets,
         '/api/health': { ok: true, version: 'test' },
-        '/api/profiles': { profiles: [{ id: 'default', name: 'Default' }], active: 'default' },
+        '/api/profiles': profiles,
         '/api/filter-presets': [],
         '/api/config/encoders': [],
         '/api/config': config,
@@ -219,7 +227,7 @@ test('audio and video encoder libraries open from Settings with an empty queue',
   expect(errors).toEqual([])
 })
 
-test('previews all libraries and requires replacement confirmation before importing', async ({ page }, testInfo) => {
+test('previews all libraries and requires confirmation to replace the active profile', async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     sessionStorage.setItem(
       'videoforge.draft.templates',
@@ -254,13 +262,16 @@ test('previews all libraries and requires replacement confirmation before import
   await expect(dialog).toContainText('Check tool paths on this computer.')
   await dialog.getByText('Review included scripts and actions', { exact: true }).click()
   await expect(dialog.locator('pre')).toHaveText('clip = src')
+  await dialog.getByRole('combobox', { name: 'Import into', exact: true }).selectOption('default')
+  await expect(dialog.getByRole('checkbox', { name: /Switch to it/ })).toHaveCount(0)
+  await expect(dialog.getByRole('columnheader', { name: 'Default', exact: true })).toBeVisible()
   await expect(button).toBeDisabled()
   expect(imported).toEqual([])
-  await dialog.getByRole('checkbox').check()
+  await dialog.getByRole('checkbox', { name: /Replace Default's configuration/ }).check()
   await page.screenshot({ path: testInfo.outputPath('configuration-import.png') })
   await button.click()
   await expect(dialog).not.toBeVisible()
-  expect(imported).toEqual([bundle])
+  expect(imported).toEqual([{ bundle, query: { profile: 'default', switch: 'false' } }])
   await expect(page.getByRole('spinbutton')).toHaveValue('4')
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('videoforge.draft.templates')!))).toEqual({
     version: 1,
@@ -289,7 +300,7 @@ test('invalid files and cancelled imports leave settings untouched', async ({ pa
   await file.setInputFiles({
     name: 'future.json',
     mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify({ ...bundle, version: 3 })),
+    buffer: Buffer.from(JSON.stringify({ ...bundle, version: 7 })),
   })
   await expect(dialog.getByRole('alert')).toContainText('Unsupported configuration version')
   await expect(dialog.getByRole('button', { name: 'Import configuration', exact: true })).toBeDisabled()
@@ -298,10 +309,42 @@ test('invalid files and cancelled imports leave settings untouched', async ({ pa
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(bundle)),
   })
-  await dialog.getByRole('checkbox').check()
+  await dialog.getByRole('combobox', { name: 'Import into', exact: true }).selectOption('default')
+  await dialog.getByRole('checkbox', { name: /Replace Default's configuration/ }).check()
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
   expect(imported).toEqual([])
   await expect(page.getByRole('spinbutton')).toHaveValue('2')
+  expect(errors).toEqual([])
+})
+
+test('imports into a new profile named after the backup, and switches to it only when asked', async ({ page }) => {
+  const { bundle, imported, errors } = await fixture(page)
+  const file = { name: 'backup.json', mimeType: 'application/json' }
+  await page.getByRole('button', { name: 'Import configuration…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Import configuration', exact: true })
+  await dialog.locator('input[type=file]').setInputFiles({ ...file, buffer: Buffer.from(JSON.stringify(bundle)) })
+  // a version 2 backup has no profile name: the file's
+  await expect(dialog.getByRole('textbox', { name: "New profile's name", exact: true })).toHaveValue('backup')
+  await expect(dialog.getByRole('cell', { name: '0', exact: true })).toHaveCount(5) // the new profile's 4, the backup's video
+  await expect(dialog.getByRole('checkbox', { name: /Replace/ })).toHaveCount(0)
+  await dialog.getByRole('checkbox', { name: /Switch to it/ }).uncheck()
+  await dialog.getByRole('button', { name: 'Import configuration', exact: true }).click()
+  await expect(dialog).not.toBeVisible()
+  expect(imported).toEqual([{ bundle, query: { new: 'backup', switch: 'false' } }])
+  await expect(page.getByText('Configuration imported into backup', { exact: true })).toBeVisible()
+  await expect(page.getByRole('spinbutton')).toHaveValue('2') // the active profile's, as before
+
+  // A backup names its profile; a name already in use gets a number
+  await page.getByRole('button', { name: 'Import configuration…', exact: true }).click()
+  const named = { ...bundle, version: 6, profile: 'backup' } as ConfigurationBundle
+  await dialog.locator('input[type=file]').setInputFiles({ ...file, buffer: Buffer.from(JSON.stringify(named)) })
+  const name = dialog.getByRole('textbox', { name: "New profile's name", exact: true })
+  await expect(name).toHaveValue('backup (2)')
+  await name.fill('Restored')
+  await dialog.getByRole('button', { name: 'Import configuration', exact: true }).click()
+  await expect(dialog).not.toBeVisible()
+  expect(imported[1].query).toEqual({ new: 'Restored', switch: 'true' })
+  await expect(page.getByRole('spinbutton')).toHaveValue('4') // switched: its settings
   expect(errors).toEqual([])
 })
 

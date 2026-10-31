@@ -21,7 +21,7 @@ For settings available in both places, the application uses these layers in orde
 
 Reset a setting in the UI to return to its default (from the imported backup, if one was restored). Editing a TOML file does not override an imported configuration or an existing saved UI value. Restart VideoForge after editing a configuration file.
 
-Use **Settings → Configuration backup** to export or import the active profile's configuration and preset libraries without creating a job. See [Storage and backups](storage.md#back-up).
+Use **Settings → Configuration backup** to export the active profile's configuration and preset libraries, or import one into a new or existing profile, without creating a job. See [Storage and backups](storage.md#back-up).
 
 The command-line `plan`, `run`, and `validate` commands load file configuration; server UI overrides are not a replacement for their file configuration.
 

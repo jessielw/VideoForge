@@ -182,8 +182,12 @@ export const api = {
       bundle,
     ),
   previewConfiguration: (bundle: unknown) => post<ConfigurationPreview>('/api/configuration/preview', bundle),
-  importConfiguration: (bundle: ConfigurationBundle) =>
-    post<{ config: ConfigState; presets: Presets; warnings: string[] }>('/api/configuration/import', bundle),
+  // into: a new profile (its name), or a profile (its id); switch: make it the active one too
+  importConfiguration: (bundle: ConfigurationBundle, into: { new: string } | { profile: string }, switchTo: boolean) =>
+    post<ProfileList & { config: ConfigState; presets: Presets; warnings: string[]; profile: string }>(
+      `/api/configuration/import?${new URLSearchParams({ ...into, switch: String(switchTo) })}`,
+      bundle,
+    ),
   profiles: () => get<ProfileList>('/api/profiles'),
   // copy: start from the active profile's configuration; else a fresh install's
   createProfile: (name: string, copy: boolean) => post<ProfileList>('/api/profiles', { name, copy }),

@@ -567,7 +567,8 @@ export interface AudioBundle {
 }
 export interface ConfigurationBundle {
   format: 'videoforge.configuration'
-  version: 1 | 2 | 3
+  version: 1 | 2 | 3 | 4 | 5 | 6
+  profile?: string | null // version 6: the exported profile's name
   application: Record<string, unknown> & { allow_commands: boolean }
   settings: Record<string, unknown> & {
     notifications: NotificationDestination[]
@@ -588,7 +589,7 @@ export interface ConfigurationBundle {
 export interface ConfigurationPreview {
   bundle: ConfigurationBundle
   counts: Record<PresetKind, number>
-  current_counts: Record<PresetKind, number>
+  profile_counts: Record<string, Record<PresetKind, number>> // each profile's, by id
   warnings: string[]
 }
 export interface PresetPack {

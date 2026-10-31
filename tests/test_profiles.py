@@ -125,3 +125,71 @@ def test_switching_waits_for_the_queue(tmp_path):
         finally:
             client.app.state.queue._active = False
         assert client.post(f"/api/profiles/{other}/activate").json()["active"] == other
+
+
+def test_importing_into_a_new_or_other_profile_leaves_the_active_one(tmp_path):
+    with make_client(tmp_path) as client:
+        seed(client, tmp_path)
+        backup = export(client)
+        assert backup["profile"] == FIRST_PROFILE
+        first = client.get("/api/profiles").json()["active"]
+        client.put("/api/presets/template/Local", json={})
+        before = export(client)
+
+        result = client.post("/api/configuration/import?new=From%20backup", json=backup).json()
+        assert result["active"] == first and [p["name"] for p in result["profiles"]] == [FIRST_PROFILE, "From backup"]
+        restored = result["profile"]
+        assert result["config"]["parallel_audio"] == 4 and len(result["presets"]["template"]) == 2  # still the active
+        assert export(client) == before
+        preview = client.post("/api/configuration/preview", json=backup).json()
+        assert preview["profile_counts"] == {
+            first: {"template": 2, "video": 1, "encoder": 1, "audio": 1},
+            restored: {"template": 1, "video": 1, "encoder": 1, "audio": 1},
+        }
+
+        # an existing profile, not active: replaced, still not applied
+        other = client.post("/api/profiles", json={"name": "Other"}).json()["profiles"][2]["id"]
+        assert client.post(f"/api/configuration/import?profile={other}", json=backup).json()["profile"] == other
+        assert export(client) == before
+        switched = client.post(f"/api/profiles/{other}/activate").json()
+        assert switched["config"]["parallel_audio"] == 4 and [t["name"] for t in switched["presets"]["template"]] == [
+            "Feature"
+        ]
+        assert export(client) == backup | {"profile": "Other"}
+
+        for query, status in (
+            ("new=other", 422),
+            ("new=", 422),
+            ("profile=nope", 404),
+            (f"profile={first}&new=x", 422),
+        ):
+            assert client.post(f"/api/configuration/import?{query}", json=backup).status_code == status, query
+        assert [p["name"] for p in client.get("/api/profiles").json()["profiles"]] == [
+            FIRST_PROFILE,
+            "From backup",
+            "Other",
+        ]
+
+
+def test_importing_and_switching_applies_it_and_waits_for_the_queue(tmp_path):
+    with make_client(tmp_path) as client:
+        seed(client, tmp_path)
+        backup = export(client)
+        client.post("/api/profiles", json={"name": "Clean"})
+        clean = client.get("/api/profiles").json()["profiles"][1]["id"]
+        client.post(f"/api/profiles/{clean}/activate")
+        assert client.get("/api/config").json()["parallel_audio"] == 2
+
+        client.app.state.queue._active = True  # as while the queue runs
+        try:
+            response = client.post("/api/configuration/import?new=Restored&switch=true", json=backup)
+            assert response.status_code == 409
+        finally:
+            client.app.state.queue._active = False
+        assert len(client.get("/api/profiles").json()["profiles"]) == 2  # nothing created
+
+        result = client.post("/api/configuration/import?new=Restored&switch=true", json=backup).json()
+        assert result["active"] == result["profile"] != clean
+        assert result["config"]["parallel_audio"] == 4 and client.app.state.queue.app.parallel_audio == 4
+        assert [t["name"] for t in result["presets"]["template"]] == ["Feature"]
+        assert export(client) == backup | {"profile": "Restored"}

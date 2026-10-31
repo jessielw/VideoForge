@@ -41,9 +41,11 @@ def export_configuration(request: Request) -> dict[str, Any]:
             if kind in ("encoder", "audio"):
                 entry = {**entry, "label": entry.get("label", name), "group": entry.get("group", [])}
             libraries[kind].append(entry)
+    profile = next(p["name"] for p in state.store.profiles() if p["id"] == state.store.profile)
     bundle = {
         "format": FORMAT,
         "version": VERSION,
+        "profile": profile,
         "application": saved.get(BASE_KEY, to_json(state.base_config)),
         "settings": to_json(SavedSettings()) | {key: saved[key] for key in SETTING_KEYS if key in saved},
         "folders": {key: saved.get(key, "") for key in FOLDER_KEYS},
@@ -87,10 +89,15 @@ def _preview(request: Request, bundle: dict[str, Any]) -> dict[str, Any]:
         if not os.path.isdir(root):
             warnings.append(f"Folder browser path is unavailable on this computer: {root}")
     warnings.append("Check tool paths and output folders when moving this backup to another computer.")
+    counts = state.store.preset_counts()
     return {
         "bundle": bundle,
         "counts": {kind: len(entries) for kind, entries in bundle["presets"].items()},
-        "current_counts": {kind: len(state.store.presets(kind)) for kind in presets.KINDS},
+        # every profile's library sizes: what an import into it replaces (a new profile's are all 0)
+        "profile_counts": {
+            p["id"]: {kind: counts.get(p["id"], {}).get(kind, 0) for kind in presets.KINDS}
+            for p in state.store.profiles()
+        },
         "warnings": warnings,
     }
 
@@ -101,9 +108,21 @@ async def preview_configuration(request: Request) -> dict[str, Any]:
 
 
 @router.post("/import")
-async def import_configuration(request: Request) -> dict[str, Any]:
+async def import_configuration(
+    request: Request, profile: str | None = None, new: str | None = None, switch: bool = False
+) -> dict[str, Any]:
+    """Into the active profile, another one (`profile`: its id) or a new one (`new`: its name); `switch`
+    makes it the active profile as well. Only the active profile's settings are applied."""
+    if profile is not None and new is not None:
+        raise HTTPException(422, "Choose a profile or a new profile's name, not both")
     bundle = await _read(request)
     state = request.app.state
+    store = state.store
+    target = store.profile if profile is None else profile
+    if new is None and target not in {p["id"] for p in store.profiles()}:
+        raise HTTPException(404, "No such profile")
+    if switch and (new is not None or target != store.profile):
+        profiles.idle(request)
     base = from_json(AppConfig, bundle["application"])
     saved = from_json(SavedSettings, bundle["settings"])
     saved.app_config(base, default_rule_set_id(saved.rule_set or base.rule_set, state.rule_set_ids))
@@ -116,16 +135,32 @@ async def import_configuration(request: Request) -> dict[str, Any]:
             presets.SUBS_DEFAULT: bundle["subs_default"],
         }
     )
+    if new is not None:
+        try:
+            target = store.create_profile(new)
+        except ValueError as ex:
+            raise HTTPException(422, str(ex)) from None
     # One transaction for every library, default reference, and setting.
-    state.store.restore_configuration(settings, storage_presets(bundle))
-    if base.plugins != state.base_config.plugins:
-        state.restart_for.add("configuration")
-    state.base_config = base
-    config.apply_settings(request, saved)
+    try:
+        store.restore_configuration(settings, storage_presets(bundle), target)
+    except Exception:
+        if new is not None:
+            store.delete_profile(target)
+        raise
+    if switch and target != store.profile:
+        store.switch_profile(target)
+    if target == store.profile:
+        if base.plugins != state.base_config.plugins:
+            state.restart_for.add("configuration")
+        state.base_config = base
+        config.apply_settings(request, saved)
     return {
         "config": config._state(request),
         "presets": presets._all(request),
         "warnings": _preview(request, bundle)["warnings"],
+        "profiles": store.profiles(),
+        "active": store.profile,
+        "profile": target,
     }
 
 
