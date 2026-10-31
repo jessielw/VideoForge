@@ -339,8 +339,8 @@
         {:else}
           <Tip
             text={c.name === starred
-              ? `New jobs start on this template for Profile: ${profileName}`
-              : 'Make this the default for New jobs'}
+              ? `This template is the default for new jobs on Profile: ${profileName}`
+              : `Make this template the default for new jobs on Profile: ${profileName}`}
           >
             <Button
               variant="ghost"
@@ -613,8 +613,7 @@
           <span class="section-label">Audio</span>
           {#if !trackEditor}
             <p class="text-xs text-muted-foreground">
-              {profileName}'s rules choose its jobs' audio: these settings apply to
-              other profiles' jobs.
+              {profileName}'s rules choose its jobs' audio: these settings apply to other profiles' jobs.
             </p>
           {/if}
           <TemplateAudioEditor
@@ -628,8 +627,7 @@
           <span class="section-label">Subtitles</span>
           {#if !trackEditor}
             <p class="text-xs text-muted-foreground">
-              {profileName}'s rules choose its jobs' subtitles: these settings
-              apply to other profiles' jobs.
+              {profileName}'s rules choose its jobs' subtitles: these settings apply to other profiles' jobs.
             </p>
           {/if}
           <TemplateSubsEditor
