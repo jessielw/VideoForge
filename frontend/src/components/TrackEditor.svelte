@@ -49,6 +49,8 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import { Toggle } from '$lib/components/ui/toggle'
   import LanguagePicker from './LanguagePicker.svelte'
+  import Tip from './Tip.svelte'
+  import TrackDetails from './TrackDetails.svelte'
 
   type Kind = 'audio' | 'sub'
   type Track = AudioTrack | SubTrack
@@ -511,23 +513,21 @@
     ondrop={drop}
   >
     <div class="flex items-center gap-2 px-2 py-1.5">
-      <span
-        class="rounded-md p-0.5 text-muted-foreground {editable
-          ? 'cursor-grab hover:bg-accent hover:text-foreground'
-          : 'opacity-40'}"
-        draggable={editable}
-        ondragstart={(e) => dragStart(e, t)}
-        ondragend={() => (drag = dropAt = null)}
-        title="Drag to reorder"
-        role="button"
-        tabindex="-1"><GripVerticalIcon class="size-4" /></span
-      >
-      <Checkbox
-        checked={!off}
-        title="In the output{note(mark(t, (o) => o?.exclude))}"
-        aria-label="In the output"
-        onCheckedChange={(v) => setIncluded(t, v)}
-      />
+      <Tip text="Drag to reorder">
+        <span
+          class="rounded-md p-0.5 text-muted-foreground {editable
+            ? 'cursor-grab hover:bg-accent hover:text-foreground'
+            : 'opacity-40'}"
+          draggable={editable}
+          ondragstart={(e) => dragStart(e, t)}
+          ondragend={() => (drag = dropAt = null)}
+          role="button"
+          tabindex="-1"><GripVerticalIcon class="size-4" /></span
+        >
+      </Tip>
+      <Tip text="In the output{note(mark(t, (o) => o?.exclude))}">
+        <Checkbox checked={!off} aria-label="In the output" onCheckedChange={(v) => setIncluded(t, v)} />
+      </Tip>
       <span class="w-5 text-center text-xs {off ? 'text-muted-foreground' : 'text-primary'}"
         >{pos === undefined ? '–' : pos + 1}</span
       >
@@ -542,48 +542,52 @@
           </div>
         {/if}
       </div>
+      <TrackDetails track={t} />
       {#if !isAudio(t) && (canBurn(t) || ov?.burn)}
-        <Toggle
-          variant="outline"
-          size="sm"
-          class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
-            data-[state=on]:text-primary"
-          pressed={!!ov?.burn}
-          title={burned
+        <Tip
+          text={burned
             ? 'Burned into the video (not muxed): image subtitles before the crop, text after it'
             : 'Burn this track into the video instead of muxing it (one per job)'}
-          onPressedChange={(on) => setBurn(t, on)}><FlameIcon class="size-3" />Burn in</Toggle
         >
+          <Toggle
+            variant="outline"
+            size="sm"
+            class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
+              data-[state=on]:text-primary"
+            pressed={!!ov?.burn}
+            onPressedChange={(on) => setBurn(t, on)}><FlameIcon class="size-3" />Burn in</Toggle
+          >
+        </Tip>
       {/if}
       {#if copy}
-        <Badge
-          variant="outline"
-          class="border-primary/40 bg-primary/10 text-primary"
-          title="Another output track from {sourceLabel(t)}">copy {copy.copy}</Badge
-        >
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          class="hover:text-destructive"
-          onclick={() => removeCopy(copy)}
-          title="Remove this copy"
-          aria-label="Remove this copy"
-        >
-          <XIcon />
-        </Button>
+        <Tip text="Another output track from {sourceLabel(t)}">
+          <Badge variant="outline" class="border-primary/40 bg-primary/10 text-primary">copy {copy.copy}</Badge>
+        </Tip>
+        <Tip text="Remove this copy">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            class="hover:text-destructive"
+            onclick={() => removeCopy(copy)}
+            aria-label="Remove this copy"
+          >
+            <XIcon />
+          </Button>
+        </Tip>
       {:else if t.external_path}
         {@const path = t.external_path}
-        <Badge variant="secondary" class="text-muted-foreground" title={path}>added</Badge>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          class="hover:text-destructive"
-          onclick={() => removeFile(path)}
-          title="Remove this file from the job"
-          aria-label="Remove this file from the job"
-        >
-          <XIcon />
-        </Button>
+        <Tip text={path}><Badge variant="secondary" class="text-muted-foreground">added</Badge></Tip>
+        <Tip text="Remove this file from the job">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            class="hover:text-destructive"
+            onclick={() => removeFile(path)}
+            aria-label="Remove this file from the job"
+          >
+            <XIcon />
+          </Button>
+        </Tip>
       {/if}
       <Button variant="ghost" size="icon-sm" disabled={i === 0} onclick={() => move(t.key, i - 1)} aria-label="Move up">
         <ArrowUpIcon />
@@ -602,37 +606,40 @@
       {@const titleMark = mark(t, (o) => o?.title)}
       {@const langMark = mark(t, (o) => o?.language)}
       <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-3 py-2 text-sm">
-        <Input
-          class="w-64 {titleMark ? INPUT_MARK[titleMark] : ''}"
-          placeholder="No title"
-          value={ov?.title ?? autoTitle(t)}
-          title={titleMark ? `Title${note(titleMark)}` : undefined}
-          aria-label="Title"
-          onchange={(e) => setTitle(t, e.currentTarget.value)}
-        />
-        <LanguagePicker
-          class="w-28 {langMark ? INPUT_MARK[langMark] : ''}"
-          show="tag"
-          clearable={false}
-          value={ov?.language ?? autoLanguage(t)}
-          title={langMark ? `Language${note(langMark)}` : undefined}
-          aria-label="Language"
-          onchange={(v: string) => setLanguage(t, v)}
-        />
+        <Tip text={titleMark ? `Title${note(titleMark)}` : undefined}>
+          <Input
+            class="w-64 {titleMark ? INPUT_MARK[titleMark] : ''}"
+            placeholder="No title"
+            value={ov?.title ?? autoTitle(t)}
+            aria-label="Title"
+            onchange={(e) => setTitle(t, e.currentTarget.value)}
+          />
+        </Tip>
+        <Tip text={langMark ? `Language${note(langMark)}` : undefined}>
+          <LanguagePicker
+            class="w-28 {langMark ? INPUT_MARK[langMark] : ''}"
+            show="tag"
+            clearable={false}
+            value={ov?.language ?? autoLanguage(t)}
+            aria-label="Language"
+            onchange={(v: string) => setLanguage(t, v)}
+          />
+        </Tip>
         <div class="flex flex-wrap gap-1" role="group" aria-label="Track flags">
           {#each properties as f (f.key)}
             {@const on = flagOn(t, f.key)}
             {@const fm = flagMark(t, f.key)}
-            <Toggle
-              variant="outline"
-              size="sm"
-              class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
-                data-[state=on]:text-primary {fm ? FLAG_MARK[fm] : ''}"
-              pressed={on}
-              title="{f.help}{note(fm)}"
-              onPressedChange={() => toggleFlag(t, f.key)}
-              >{#if on}<CheckIcon class="size-3" />{/if}{f.label}</Toggle
-            >
+            <Tip text="{f.help}{note(fm)}">
+              <Toggle
+                variant="outline"
+                size="sm"
+                class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
+                  data-[state=on]:text-primary {fm ? FLAG_MARK[fm] : ''}"
+                pressed={on}
+                onPressedChange={() => toggleFlag(t, f.key)}
+                >{#if on}<CheckIcon class="size-3" />{/if}{f.label}</Toggle
+              >
+            </Tip>
           {/each}
         </div>
       </div>
@@ -651,89 +658,95 @@
             disabled={!editable}
             apply={(preset) => editTrack(t, (value) => Object.assign(value, applyAudioPreset(value, preset)))}
           />
-          <NativeSelect
-            value={action}
-            class={actionMark ? SELECT_MARK[actionMark] : ''}
-            title={actionMark ? `Copy or encode${note(actionMark)}` : undefined}
-            aria-label="Copy or encode"
-            onchange={(e) => setAction(t, e.currentTarget.value as AudioAction)}
-          >
-            <option value="copy">Copy</option>
-            {#each offered(t, action) as e (e.id)}
-              <option value={e.id} disabled={!!e.missing.length && action !== e.id}>Encode: {e.label}{needs(e)}</option>
-            {/each}
-          </NativeSelect>
-          {#if enc && enc.layouts.length > 1}
+          <Tip text={actionMark ? `Copy or encode${note(actionMark)}` : undefined}>
             <NativeSelect
-              value={ov?.layout ?? ''}
-              class={layoutMark ? SELECT_MARK[layoutMark] : ''}
-              title={layoutMark ? `Channels${note(layoutMark)}` : undefined}
-              aria-label="Channels"
-              onchange={(e) => setLayout(t, e.currentTarget.value)}
+              value={action}
+              class={actionMark ? SELECT_MARK[actionMark] : ''}
+              aria-label="Copy or encode"
+              onchange={(e) => setAction(t, e.currentTarget.value as AudioAction)}
             >
-              <option value="">Channels: auto{planned && !ov?.layout ? ` (${planned.out_layout})` : ''}</option>
-              {#each layoutChoices(t, enc) as l (l)}<option value={l}>{l}</option>{/each}
+              <option value="copy">Copy</option>
+              {#each offered(t, action) as e (e.id)}
+                <option value={e.id} disabled={!!e.missing.length && action !== e.id}
+                  >Encode: {e.label}{needs(e)}</option
+                >
+              {/each}
             </NativeSelect>
+          </Tip>
+          {#if enc && enc.layouts.length > 1}
+            <Tip text={layoutMark ? `Channels${note(layoutMark)}` : undefined}>
+              <NativeSelect
+                value={ov?.layout ?? ''}
+                class={layoutMark ? SELECT_MARK[layoutMark] : ''}
+                aria-label="Channels"
+                onchange={(e) => setLayout(t, e.currentTarget.value)}
+              >
+                <option value="">Channels: auto{planned && !ov?.layout ? ` (${planned.out_layout})` : ''}</option>
+                {#each layoutChoices(t, enc) as l (l)}<option value={l}>{l}</option>{/each}
+              </NativeSelect>
+            </Tip>
           {/if}
           {#if enc && enc.bitrates !== null}
-            <label class="flex items-center gap-1.5 text-muted-foreground">
-              {#if enc.bitrate_choices.length}
-                <NativeSelect
-                  value={ov?.bitrate_kbps ?? ''}
-                  class={bitrateMark ? SELECT_MARK[bitrateMark] : ''}
-                  title={bitrateMark ? `Bitrate${note(bitrateMark)}` : undefined}
-                  aria-label="Bitrate"
-                  onchange={(e) => setBitrate(t, e.currentTarget.value)}
-                >
-                  <option value=""
-                    >auto{planned?.bitrate_kbps && !ov?.bitrate_kbps ? ` (${planned.bitrate_kbps})` : ''}</option
+            <Tip text={bitrateMark ? `Bitrate${note(bitrateMark)}` : undefined}>
+              <label class="flex items-center gap-1.5 text-muted-foreground">
+                {#if enc.bitrate_choices.length}
+                  <NativeSelect
+                    value={ov?.bitrate_kbps ?? ''}
+                    class={bitrateMark ? SELECT_MARK[bitrateMark] : ''}
+                    aria-label="Bitrate"
+                    onchange={(e) => setBitrate(t, e.currentTarget.value)}
                   >
-                  {#each enc.bitrate_choices as b (b)}<option value={b}>{b}</option>{/each}
-                </NativeSelect>
-              {:else}
-                <Input
-                  class="w-24 {bitrateMark ? INPUT_MARK[bitrateMark] : ''}"
-                  title={bitrateMark ? `Bitrate${note(bitrateMark)}` : undefined}
-                  type="number"
-                  min="6"
-                  step="8"
-                  placeholder={enc.vbr_default ? 'VBR' : String(planned?.bitrate_kbps ?? '')}
-                  value={ov?.bitrate_kbps ?? ''}
-                  aria-label="Bitrate"
-                  onchange={(e) => setBitrate(t, e.currentTarget.value)}
-                />
-              {/if}kb/s
-            </label>
+                    <option value=""
+                      >auto{planned?.bitrate_kbps && !ov?.bitrate_kbps ? ` (${planned.bitrate_kbps})` : ''}</option
+                    >
+                    {#each enc.bitrate_choices as b (b)}<option value={b}>{b}</option>{/each}
+                  </NativeSelect>
+                {:else}
+                  <Input
+                    class="w-24 {bitrateMark ? INPUT_MARK[bitrateMark] : ''}"
+                    type="number"
+                    min="6"
+                    step="8"
+                    placeholder={enc.vbr_default ? 'VBR' : String(planned?.bitrate_kbps ?? '')}
+                    value={ov?.bitrate_kbps ?? ''}
+                    aria-label="Bitrate"
+                    onchange={(e) => setBitrate(t, e.currentTarget.value)}
+                  />
+                {/if}kb/s
+              </label>
+            </Tip>
           {/if}
-          <label
-            class="flex items-center gap-1.5 text-muted-foreground"
-            title="Total delay relative to video: + later, − earlier. Detected delay: {t.delay_ms > 0
+          <Tip
+            text="Total delay relative to video: + later, − earlier. Detected delay: {t.delay_ms > 0
               ? '+'
               : ''}{t.delay_ms} ms. Clear to restore the detected delay. Only the mux changes: an encode isn't made again."
           >
-            Delay
-            <Input
-              class="w-20 {delayMark ? INPUT_MARK[delayMark] : ''}"
-              type="number"
-              step="1"
-              placeholder={String(t.delay_ms)}
-              value={t.delay_ms + (ov?.sync_ms ?? 0)}
-              aria-label="Delay (ms)"
-              onchange={(e) => setDelay(t, e.currentTarget)}
-            />ms
-          </label>
+            <label class="flex items-center gap-1.5 text-muted-foreground">
+              Delay
+              <Input
+                class="w-20 {delayMark ? INPUT_MARK[delayMark] : ''}"
+                type="number"
+                step="1"
+                placeholder={String(t.delay_ms)}
+                value={t.delay_ms + (ov?.sync_ms ?? 0)}
+                aria-label="Delay (ms)"
+                onchange={(e) => setDelay(t, e.currentTarget)}
+              />ms
+            </label>
+          </Tip>
           {#if enc?.options.length}
             {@const changed = changedOptions(t, enc)}
-            <Button
-              variant="ghost"
-              size="sm"
-              class={openSettings[t.key] ? 'text-primary hover:text-primary' : ''}
-              aria-expanded={!!openSettings[t.key]}
-              onclick={() => (openSettings[t.key] = !openSettings[t.key])}
-              title="{enc.label} settings"
-            >
-              <SlidersHorizontalIcon />Settings{changed ? ` (${changed})` : ''}
-            </Button>
+            <Tip text="{enc.label} settings">
+              <Button
+                variant="ghost"
+                size="sm"
+                class={openSettings[t.key] ? 'text-primary hover:text-primary' : ''}
+                aria-expanded={!!openSettings[t.key]}
+                onclick={() => (openSettings[t.key] = !openSettings[t.key])}
+              >
+                <SlidersHorizontalIcon />Settings{changed ? ` (${changed})` : ''}
+              </Button>
+            </Tip>
           {/if}
           {#if planned}<span class="text-xs text-muted-foreground">→ {audioOut(planned)}</span>{/if}
         </div>
@@ -741,7 +754,9 @@
           <div class="grid gap-x-4 gap-y-2 border-t border-border/60 px-3 py-2 text-sm sm:grid-cols-[12rem_1fr]">
             {#each shownOptions(enc.options, (o) => ov?.options?.[o.key] ?? planned?.options?.[o.key] ?? o.default) as o (o.key)}
               {@const value = ov?.options?.[o.key] ?? planned?.options?.[o.key] ?? o.default}
-              <label class="text-muted-foreground" for="opt-{t.key}-{o.key}" title={o.help}>{o.label}</label>
+              <Tip text={o.help}>
+                <label class="text-muted-foreground" for="opt-{t.key}-{o.key}">{o.label}</label>
+              </Tip>
               <div class="flex items-center gap-2">
                 {#if o.choices.length}
                   <NativeSelect
@@ -804,14 +819,13 @@
       <div class="ml-auto flex flex-wrap gap-2">
         {#if kind === 'audio'}
           <DropdownMenu.Root>
-            <DropdownMenu.Trigger
-              disabled={!editable}
-              title="Use a track again: another output track with its own encode, title and flags"
-            >
-              {#snippet child({ props })}
-                <Button {...props} variant="outline"><CopyPlusIcon />Add a track from…</Button>
-              {/snippet}
-            </DropdownMenu.Trigger>
+            <Tip text="Use a track again: another output track with its own encode, title and flags">
+              <DropdownMenu.Trigger disabled={!editable}>
+                {#snippet child({ props })}
+                  <Button {...props} variant="outline"><CopyPlusIcon />Add a track from…</Button>
+                {/snippet}
+              </DropdownMenu.Trigger>
+            </Tip>
             <DropdownMenu.Content align="end" class="w-auto max-w-[32rem]">
               {#each audioRows.filter((t) => !t.copy) as t (t.key)}
                 <DropdownMenu.Item onSelect={() => addCopy(t)}>
@@ -821,21 +835,17 @@
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         {/if}
-        <Button
-          variant="outline"
-          onclick={() => (browsing = true)}
-          title="Add {kind === 'audio' ? 'audio' : 'subtitle'} files to this job"
-        >
-          <FilePlusIcon />Add files…
-        </Button>
+        <Tip text="Add {kind === 'audio' ? 'audio' : 'subtitle'} files to this job">
+          <Button variant="outline" onclick={() => (browsing = true)}><FilePlusIcon />Add files…</Button>
+        </Tip>
         {#if chosen}
-          <Button variant="outline" onclick={backToTemplate} title="Back to what the template set for these tracks">
-            <LayoutTemplateIcon />Back to template
-          </Button>
+          <Tip text="Back to what the template set for these tracks">
+            <Button variant="outline" onclick={backToTemplate}><LayoutTemplateIcon />Back to template</Button>
+          </Tip>
         {/if}
-        <Button variant="outline" onclick={reset} title="Back to the profile's choices for these tracks"
-          ><RefreshCwIcon />Reset</Button
-        >
+        <Tip text="Back to the profile's choices for these tracks">
+          <Button variant="outline" onclick={reset}><RefreshCwIcon />Reset</Button>
+        </Tip>
       </div>
     </div>
 
@@ -865,16 +875,15 @@
         <div class="mb-3 flex flex-wrap gap-2">
           <SubtitleSelectionMenu tracks={subRows} {overrides} disabled={!editable} onselect={selectSubs} />
           <DropdownMenu.Root>
-            <DropdownMenu.Trigger
-              disabled={!editable || !subRows.length}
-              title="Title the kept subtitles from their language and flags"
-            >
-              {#snippet child({ props })}
-                <Button {...props} variant="outline" size="sm"
-                  ><TagIcon />Name subtitles<ChevronDownIcon class="size-3.5 text-muted-foreground" /></Button
-                >
-              {/snippet}
-            </DropdownMenu.Trigger>
+            <Tip text="Title the kept subtitles from their language and flags">
+              <DropdownMenu.Trigger disabled={!editable || !subRows.length}>
+                {#snippet child({ props })}
+                  <Button {...props} variant="outline" size="sm"
+                    ><TagIcon />Name subtitles<ChevronDownIcon class="size-3.5 text-muted-foreground" /></Button
+                  >
+                {/snippet}
+              </DropdownMenu.Trigger>
+            </Tip>
             <DropdownMenu.Content align="start" class="w-72">
               <DropdownMenu.Label>Language and flags: English (Forced), English (SDH)</DropdownMenu.Label>
               <DropdownMenu.Item disabled={!untitled} onSelect={() => nameSubs(false)}>

@@ -11,6 +11,7 @@
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
   import { Toaster } from '$lib/components/ui/sonner'
+  import * as Tooltip from '$lib/components/ui/tooltip'
   import ThemeToggle from './components/ThemeToggle.svelte'
   import { installDrops } from './lib/dropPaths.svelte'
   import { router, type Page } from './lib/router.svelte'
@@ -55,113 +56,115 @@
   </div>
 {/if}
 
-<div class="flex h-full">
-  <nav
-    class="flex {navCollapsed ? 'w-14' : 'w-48'} shrink-0 flex-col overflow-y-auto border-r bg-card"
-    aria-label="Main navigation"
-  >
-    <div class="flex items-center gap-2 py-4 {navCollapsed ? 'justify-center' : 'px-4'}">
-      <img src="/favicon.svg" alt="" class="size-6" title={app.version ? `VideoForge ${app.version}` : undefined} />
-      {#if !navCollapsed}
-        <span class="text-base font-semibold tracking-wide">VideoForge</span>
-        {#if app.version}<span class="text-xs text-muted-foreground tabular-nums">{app.version}</span>{/if}
-      {/if}
-    </div>
-    <div class="flex flex-col gap-0.5 px-2">
-      {#each NAV as item (item.page)}
+<Tooltip.Provider delayDuration={400}>
+  <div class="flex h-full">
+    <nav
+      class="flex {navCollapsed ? 'w-14' : 'w-48'} shrink-0 flex-col overflow-y-auto border-r bg-card"
+      aria-label="Main navigation"
+    >
+      <div class="flex items-center gap-2 py-4 {navCollapsed ? 'justify-center' : 'px-4'}">
+        <img src="/favicon.svg" alt="" class="size-6" title={app.version ? `VideoForge ${app.version}` : undefined} />
+        {#if !navCollapsed}
+          <span class="text-base font-semibold tracking-wide">VideoForge</span>
+          {#if app.version}<span class="text-xs text-muted-foreground tabular-nums">{app.version}</span>{/if}
+        {/if}
+      </div>
+      <div class="flex flex-col gap-0.5 px-2">
+        {#each NAV as item (item.page)}
+          <Button
+            variant="ghost"
+            class="relative justify-start gap-3 {navCollapsed ? 'justify-center px-0' : 'px-3'}
+            {router.page === item.page
+              ? 'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary'
+              : 'text-muted-foreground'}"
+            aria-current={router.page === item.page ? 'page' : undefined}
+            aria-label={item.label}
+            onclick={() => router.go(item.page)}
+            title={navCollapsed ? item.label : undefined}
+          >
+            <item.icon class="size-[18px]" />
+            {#if !navCollapsed}{item.label}{/if}
+            {#if item.page === 'queue' && app.jobs.length}
+              <Badge
+                variant="secondary"
+                class="tabular-nums {navCollapsed ? 'absolute -top-1 -right-1 h-4 px-1 text-[10px]' : 'ml-auto'}"
+                >{app.jobs.length}</Badge
+              >
+            {/if}
+          </Button>
+        {/each}
+      </div>
+
+      <div class="mt-auto flex flex-col gap-0.5 px-2 pb-1 {navCollapsed ? 'items-center' : ''}">
+        <ThemeToggle compact={navCollapsed} />
         <Button
           variant="ghost"
-          class="relative justify-start gap-3 {navCollapsed ? 'justify-center px-0' : 'px-3'}
-            {router.page === item.page
-            ? 'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary'
-            : 'text-muted-foreground'}"
-          aria-current={router.page === item.page ? 'page' : undefined}
-          aria-label={item.label}
-          onclick={() => router.go(item.page)}
-          title={navCollapsed ? item.label : undefined}
+          size={navCollapsed ? 'icon' : 'default'}
+          class="text-muted-foreground max-sm:hidden {navCollapsed ? '' : 'justify-start gap-3 px-3'}"
+          onclick={() => (layout.navCollapsed = !layout.navCollapsed)}
+          title={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}
+          aria-label={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}
         >
-          <item.icon class="size-[18px]" />
-          {#if !navCollapsed}{item.label}{/if}
-          {#if item.page === 'queue' && app.jobs.length}
-            <Badge
-              variant="secondary"
-              class="tabular-nums {navCollapsed ? 'absolute -top-1 -right-1 h-4 px-1 text-[10px]' : 'ml-auto'}"
-              >{app.jobs.length}</Badge
+          {#if navCollapsed}<PanelLeftOpenIcon />{:else}<PanelLeftCloseIcon />Collapse{/if}
+        </Button>
+      </div>
+      {#if navCollapsed}
+        <div class="flex flex-col items-center gap-1 border-t py-3 text-xs">
+          {#if running}
+            <span class="text-info" title="Running {running.name}{running.progress ? `: ${running.progress.step}` : ''}"
+              >{running.progress ? Math.round(running.progress.overall * 100) + '%' : '▶'}</span
             >
           {/if}
-        </Button>
-      {/each}
-    </div>
-
-    <div class="mt-auto flex flex-col gap-0.5 px-2 pb-1 {navCollapsed ? 'items-center' : ''}">
-      <ThemeToggle compact={navCollapsed} />
-      <Button
-        variant="ghost"
-        size={navCollapsed ? 'icon' : 'default'}
-        class="text-muted-foreground max-sm:hidden {navCollapsed ? '' : 'justify-start gap-3 px-3'}"
-        onclick={() => (layout.navCollapsed = !layout.navCollapsed)}
-        title={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}
-        aria-label={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}
-      >
-        {#if navCollapsed}<PanelLeftOpenIcon />{:else}<PanelLeftCloseIcon />Collapse{/if}
-      </Button>
-    </div>
-    {#if navCollapsed}
-      <div class="flex flex-col items-center gap-1 border-t py-3 text-xs">
-        {#if running}
-          <span class="text-info" title="Running {running.name}{running.progress ? `: ${running.progress.step}` : ''}"
-            >{running.progress ? Math.round(running.progress.overall * 100) + '%' : '▶'}</span
+          <span
+            class={app.connected ? 'text-success' : 'text-destructive'}
+            title={app.connected ? 'Connected' : 'Reconnecting…'}>●</span
           >
-        {/if}
-        <span
-          class={app.connected ? 'text-success' : 'text-destructive'}
-          title={app.connected ? 'Connected' : 'Reconnecting…'}>●</span
-        >
-      </div>
-    {:else}
-      <div class="space-y-1 border-t p-3 text-xs text-muted-foreground">
-        {#if running}
-          <div class="truncate text-info" title={running.name}>▶ {running.name}</div>
-          {#if running.progress}
-            <div class="h-1.5 overflow-hidden rounded bg-muted">
-              <div class="h-full bg-info" style="width: {running.progress.overall * 100}%"></div>
-            </div>
-            <div class="truncate">{running.progress.step}</div>
-          {/if}
-        {:else}
-          <div>{app.queue.queued ? `${app.queue.queued} queued` : 'Idle'}</div>
-        {/if}
-        {#if app.queue.indexing || app.queue.index_queued}
-          {@const left = (app.queue.indexing ? 1 : 0) + app.queue.index_queued}
-          <div class="truncate text-info">Indexing {left} job{left > 1 ? 's' : ''}</div>
-        {/if}
-        {#if app.queue.sampling}<div class="truncate text-info">Test encode</div>{/if}
-        <div class={app.connected ? 'text-success' : 'text-destructive'}>
-          {app.connected ? '● connected' : '● reconnecting…'}
         </div>
-      </div>
-    {/if}
-  </nav>
+      {:else}
+        <div class="space-y-1 border-t p-3 text-xs text-muted-foreground">
+          {#if running}
+            <div class="truncate text-info" title={running.name}>▶ {running.name}</div>
+            {#if running.progress}
+              <div class="h-1.5 overflow-hidden rounded bg-muted">
+                <div class="h-full bg-info" style="width: {running.progress.overall * 100}%"></div>
+              </div>
+              <div class="truncate">{running.progress.step}</div>
+            {/if}
+          {:else}
+            <div>{app.queue.queued ? `${app.queue.queued} queued` : 'Idle'}</div>
+          {/if}
+          {#if app.queue.indexing || app.queue.index_queued}
+            {@const left = (app.queue.indexing ? 1 : 0) + app.queue.index_queued}
+            <div class="truncate text-info">Indexing {left} job{left > 1 ? 's' : ''}</div>
+          {/if}
+          {#if app.queue.sampling}<div class="truncate text-info">Test encode</div>{/if}
+          <div class={app.connected ? 'text-success' : 'text-destructive'}>
+            {app.connected ? '● connected' : '● reconnecting…'}
+          </div>
+        </div>
+      {/if}
+    </nav>
 
-  <main class="min-w-0 flex-1 overflow-hidden">
-    {#if app.connectionError}
-      <div class="m-6 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
-        Couldn't reach the VideoForge server: {app.connectionError}
-        <Button class="ml-3" variant="outline" disabled={app.connection === 'retrying'} onclick={() => app.start()}
-          >Retry now</Button
-        >
-      </div>
-    {/if}
-    {#if router.page === 'new'}
-      <NewJobs />
-    {:else if router.page === 'queue'}
-      <Queue />
-    {:else if router.page === 'templates'}
-      <Templates />
-    {:else if router.page === 'settings'}
-      <Settings />
-    {:else}
-      <Log />
-    {/if}
-  </main>
-</div>
+    <main class="min-w-0 flex-1 overflow-hidden">
+      {#if app.connectionError}
+        <div class="m-6 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
+          Couldn't reach the VideoForge server: {app.connectionError}
+          <Button class="ml-3" variant="outline" disabled={app.connection === 'retrying'} onclick={() => app.start()}
+            >Retry now</Button
+          >
+        </div>
+      {/if}
+      {#if router.page === 'new'}
+        <NewJobs />
+      {:else if router.page === 'queue'}
+        <Queue />
+      {:else if router.page === 'templates'}
+        <Templates />
+      {:else if router.page === 'settings'}
+        <Settings />
+      {:else}
+        <Log />
+      {/if}
+    </main>
+  </div>
+</Tooltip.Provider>

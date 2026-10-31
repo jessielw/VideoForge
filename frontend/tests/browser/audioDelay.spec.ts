@@ -254,3 +254,25 @@ for (const trackEditor of [true, false]) {
     expect(errors).toEqual([])
   })
 }
+
+for (const trackEditor of [true, false]) {
+  test(`the ${trackEditor ? 'track editor' : 'tracks tab'} shows a track's details and styled tooltips`, async ({
+    page,
+  }) => {
+    const { errors } = await fixture(page, 24, 0, 'Main', trackEditor)
+    const info = page.getByRole('button', { name: 'Track details' })
+    await info.hover()
+    await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText('Track details')
+    await info.click()
+    const details = page.locator('[data-slot="popover-content"]')
+    await expect(details).toContainText('E-AC-3')
+    await expect(details).toContainText('48 kHz')
+    await expect(details).toContainText('224 kb/s')
+    await expect(details).toContainText('+24 ms')
+    await expect(details).toContainText('1:01')
+    await expect(details).toContainText('Default')
+    await page.keyboard.press('Escape')
+    await expect(details).toHaveCount(0)
+    expect(errors).toEqual([])
+  })
+}

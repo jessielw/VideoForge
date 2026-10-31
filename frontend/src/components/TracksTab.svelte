@@ -17,6 +17,8 @@
   import SubtitleSelectionMenu from './SubtitleSelectionMenu.svelte'
   import { selectSubtitles } from '../lib/subtitleSelection'
   import LanguagePicker from './LanguagePicker.svelte'
+  import Tip from './Tip.svelte'
+  import TrackDetails from './TrackDetails.svelte'
 
   let {
     job,
@@ -185,7 +187,7 @@
                 <td class="py-1.5"
                   ><Checkbox checked={!!out} aria-label="Use #{t.id}" onCheckedChange={(v) => toggleAudio(t, v)} /></td
                 >
-                <td>{audioLabel(t)}</td>
+                <td><span class="inline-flex items-center gap-1">{audioLabel(t)}<TrackDetails track={t} /></span></td>
                 <td>{t.language}</td>
                 <td class="wrap-anywhere">{t.title}</td>
                 <td class="wrap-anywhere">
@@ -225,7 +227,7 @@
           <thead class="text-left text-xs text-muted-foreground uppercase">
             <tr>
               <th class="w-10"></th><th>Source</th><th>Format</th><th>Lang</th>
-              {#each flags as f (f.key)}<th title={f.help}>{f.label}</th>{/each}
+              {#each flags as f (f.key)}<th><Tip text={f.help}>{f.label}</Tip></th>{/each}
               <th>Output</th>
             </tr>
           </thead>
@@ -241,8 +243,9 @@
                     onCheckedChange={(v) => editTrack(t.key, (o) => (o.exclude = v ? null : true))}
                   />
                 </td>
-                <td class="wrap-anywhere" title={t.external_path ?? undefined}>
+                <td class="wrap-anywhere">
                   {t.external_path ? basename(t.external_path) : `#${t.id}${t.title ? ` · ${t.title}` : ''}`}
+                  <TrackDetails track={t} />
                 </td>
                 <td>{t.format}</td>
                 <td>
@@ -257,13 +260,14 @@
                 </td>
                 {#each flags as f (f.key)}
                   <td>
-                    <Checkbox
-                      class={flagPinned(t, f.key) ? 'ring-2 ring-warning/70' : ''}
-                      title={flagPinned(t, f.key) ? 'Set by override' : 'As detected'}
-                      aria-label={f.label}
-                      checked={flagValue(t, f.key)}
-                      onCheckedChange={(v) => setFlag(t, f.key, v)}
-                    />
+                    <Tip text={flagPinned(t, f.key) ? 'Set by override' : 'As detected'}>
+                      <Checkbox
+                        class={flagPinned(t, f.key) ? 'ring-2 ring-warning/70' : ''}
+                        aria-label={f.label}
+                        checked={flagValue(t, f.key)}
+                        onCheckedChange={(v) => setFlag(t, f.key, v)}
+                      />
+                    </Tip>
                   </td>
                 {/each}
                 <td class="wrap-anywhere">

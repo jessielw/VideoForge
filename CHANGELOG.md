@@ -14,6 +14,8 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 
 - **Compare** on the Video tab: the encoder's input against its output at the same frame, flipped with **C** (Input / Encoded), the other side preloaded so a flip is instant. Against a test encode (the overlay gives each sample frame's frame in the script) or a done job's output file. The encodes open through FFMS2, indexed in the job's folder.
 
+- **Track details** on the Audio and Subtitles tabs: the ⓘ on a track opens what the probe read (format, codec, channels, sample rate, bit depth, bitrate, delay, duration, size and flags; a subtitle's format, line or image count and flags), on a locked or done job too. The track editors' hints are styled tooltips now, and a long track title wraps instead of widening the tab.
+
 - Jobs are queued explicitly: a tick on each queue row (and **Queue** at the top of the job's editor) queues the job and locks its settings, and **Queue (N)** queues a selection. **Start queue** runs only queued jobs (it no longer takes every ready job when none is queued), and a job ticked while the queue runs is picked up in its turn. Unticking a job that ran before keeps its last result.
 
 - **Save** on the preview's toolbar (or **S**) downloads the shown frame as a PNG: full size and lossless, without the edges view, crop lines or matte. It's named after the source with the frame number padded to the clip's length (`Show S01E01 - 00042.png`), so a folder of them sorts in order; one saved from the crop view is marked `(crop view)`, as it has the cropped-off margins on. In the desktop window (`serve --window`) downloads now open a Save As dialog: before, pywebview dropped them, so saved frames and preset or configuration exports went nowhere.
