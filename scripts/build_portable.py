@@ -83,6 +83,10 @@ def install(python: Path, work: Path) -> None:
     run("uv", "pip", "install", "--python", python, "--link-mode", "copy", "--requirement", reqs)
     run("uv", "pip", "install", "--python", python, "--link-mode", "copy", "--no-deps", "--reinstall-package",
         "videoforge", ROOT)  # fmt: skip
+    # The installer's console-script launchers hold this build's absolute python.exe path and fail once the folder
+    # moves ("failed to canonicalize script path"); the app runs `python -m` and the vapoursynth package's vspipe.
+    for exe in (python.parent / "Scripts").glob("*.exe"):
+        exe.unlink()
 
 
 def launcher(python: Path, folder: Path, work: Path) -> None:

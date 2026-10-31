@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
+import importlib.util
 import os
 from pathlib import Path
 import shutil
@@ -76,9 +77,13 @@ def _resolve_tool(value: str, base: Path) -> str:
 
 
 def default_vspipe() -> str:
-    """The vspipe pip's vapoursynth installed: next to this Python (a venv's) or in its scripts folder."""
+    """The vspipe pip's vapoursynth installed: the binary in its package, else next to this Python (a venv's) or
+    in its scripts folder. The package's first: the scripts folder's is an installer launcher holding this
+    Python's absolute path, which a moved portable folder no longer has."""
     name = "vspipe.exe" if sys.platform == "win32" else "vspipe"
-    for folder in (Path(sys.executable).parent, Path(sysconfig.get_path("scripts"))):
+    spec = importlib.util.find_spec("vapoursynth")
+    package = [Path(p) for p in (spec.submodule_search_locations or [])] if spec else []
+    for folder in (*package, Path(sys.executable).parent, Path(sysconfig.get_path("scripts"))):
         if (folder / name).is_file():
             return str(folder / name)
     return shutil.which("vspipe") or "vspipe"

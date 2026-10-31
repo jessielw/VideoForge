@@ -10,13 +10,13 @@ DEE and Apple's runtime are intentionally user supplied and are not required.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
-import sysconfig
 import tempfile
 import tomllib
 
@@ -128,11 +128,11 @@ def smoke(paths: dict[str, Path], plugins: Path, env: dict[str, str]) -> None:
             f"vs.core.ffms2.Source({str(source)!r}, cachefile={str(work / 'source.ffindex')!r}).set_output()\n",
             encoding="utf-8",
         )
-        vspipe = Path(sysconfig.get_path("scripts")) / "vspipe.exe"
+        # The package's binary, as the app uses: the scripts folder's launcher holds the build's absolute path.
+        spec = importlib.util.find_spec("vapoursynth")
+        vspipe = Path(spec.submodule_search_locations[0]) / "vspipe.exe" if spec else Path()
         if not vspipe.is_file():
-            vspipe = Path(sys.executable).with_name("vspipe.exe")
-        if not vspipe.is_file():
-            raise ValueError("vspipe is missing from this Python runtime")
+            raise ValueError("vspipe is missing from this Python runtime's vapoursynth package")
         run([sys.executable, "-m", "vapoursynth", "config"], env)
         y4m = work / "source.y4m"
         run([vspipe, "-c", "y4m", script, y4m], env)
