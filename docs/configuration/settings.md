@@ -74,7 +74,7 @@ scan_source_folder = true
 staxrip_temp = true
 ```
 
-Suffixes match existing video encodes to source stems; episode names can also match by `SxxEyy`. `scan_source_folder` also finds matching SRTs beside the source and one folder down. `staxrip_temp` reads the source's StaxRip temp folder for an encode still running and chapter files.
+Suffixes match existing video encodes to source stems; episode names can also match by `SxxEyy`. `scan_source_folder` also finds matching subtitle files (SRT, ASS/SSA, SUP, VobSub IDX) beside the source and one folder down. `staxrip_temp` reads the source's StaxRip temp folder for an encode still running and chapter files.
 
 ## Actions and plugins
 

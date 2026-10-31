@@ -6,7 +6,7 @@ mixed drop that is sorted first. Everything is matched to a source by stem
 a single source, every added subtitle and chapter file belongs to it.
 
 Extras, each switchable in MatchRules:
-    scan_source_folder   SRTs next to the source and one folder down (e.g. subs/)
+    scan_source_folder   subtitles next to the source and one folder down (e.g. subs/)
     staxrip_temp         <source>_temp/<encode>_staxrip.log ("Job Complete") for the
                          encode state, and a_qpf/qpf_chapters.txt for chapters, while
                          StaxRip still does the video. Without it, an encode still
@@ -32,7 +32,15 @@ _NOISE_WORDS = {"synced", "sync", "full", "default", "srt", "subs", "sub", "clea
 
 # Containers a source can come in (mkvmerge reads them all): MKV, MP4 and MPEG transport streams.
 SOURCE_EXTENSIONS = (".mkv", ".mp4", ".m4v", ".m2ts", ".mts", ".ts")
-SUBTITLE_EXTENSIONS = (".srt",)
+# A VobSub is picked up by its .idx; the .sub beside it goes along.
+SUB_FORMATS = {
+    ".srt": SubFormat.SRT,
+    ".ass": SubFormat.ASS,
+    ".ssa": SubFormat.ASS,
+    ".sup": SubFormat.PGS,
+    ".idx": SubFormat.VOBSUB,
+}
+SUBTITLE_EXTENSIONS = tuple(SUB_FORMATS)
 CHAPTER_EXTENSIONS = (".txt", ".xml")
 _CHAPTER_NAME_RE = re.compile(r"(?i)chapter|qpf")
 
@@ -229,13 +237,13 @@ def find_qpf_chapters(source: Path) -> Path | None:
 
 
 def subtitles_near(folder: Path) -> list[Path]:
-    """SRTs in a folder and one folder down (skipping StaxRip *_temp dirs)."""
+    """Subtitle files in a folder and one folder down (skipping StaxRip *_temp dirs)."""
     folders = [folder] + sorted(d for d in folder.iterdir() if d.is_dir() and not d.name.endswith("_temp"))
     return [p for f in folders for p in f.iterdir() if p.suffix.lower() in SUBTITLE_EXTENSIONS]
 
 
 def find_external_subs(source: Path, near: list[Path] | None = None) -> list[Path]:
-    """SRTs next to the source or one folder down that share its stem or SxxEyy token.
+    """Subtitle files next to the source or one folder down that share its stem or SxxEyy token.
 
     near: subtitles_near(source.parent), when the caller lists it once for many sources.
     """
@@ -309,15 +317,6 @@ def name_delay_ms(stem: str) -> int | None:
     """eac3to-style "DELAY -42ms" in a file name."""
     m = _DELAY_RE.search(stem)
     return int(m.group(1)) if m else None
-
-
-SUB_FORMATS = {
-    ".srt": SubFormat.SRT,
-    ".ass": SubFormat.ASS,
-    ".ssa": SubFormat.ASS,
-    ".sup": SubFormat.PGS,
-    ".idx": SubFormat.VOBSUB,
-}
 
 
 def external_sub_track(path: Path, source_stem: str, index: int, *, keep_unknown: bool = False) -> SubTrack | None:

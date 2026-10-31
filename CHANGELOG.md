@@ -16,6 +16,8 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 
 - **Track details** on the Audio and Subtitles tabs: the ⓘ on a track opens what the probe read (format, codec, channels, sample rate, bit depth, bitrate, delay, duration, size and flags; a subtitle's format, line or image count and flags), on a locked or done job too. The track editors' hints are styled tooltips now, and a long track title wraps instead of widening the tab.
 
+- **New jobs** pairs every subtitle format a job takes, not only SRTs: ASS/SSA, SUP and VobSub (by its `.idx`) added to the Subtitles slot, dropped in a mix, or found beside the source.
+
 - Styled tooltips across the app in place of the browser's plain ones: the queue's toolbar, rows and rail, the menu, the Video tab and frame preview, the job, template, encoder and audio editors, the menus and pickers, and Settings. A disabled button still shows why it's disabled.
 
 - Jobs are queued explicitly: a tick on each queue row (and **Queue** at the top of the job's editor) queues the job and locks its settings, and **Queue (N)** queues a selection. **Start queue** runs only queued jobs (it no longer takes every ready job when none is queued), and a job ticked while the queue runs is picked up in its turn. Unticking a job that ran before keeps its last result.

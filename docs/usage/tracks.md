@@ -62,7 +62,7 @@ In the compact picker for an individual track, incompatible choices are disabled
 
 ## External files
 
-Add subtitle files with the job. Pairing can also scan beside the source and one folder below it for SRTs sharing its name or episode token. Review the matched files before running a batch. Rule sets determine whether external subtitles and audio are accepted.
+Add subtitle files with the job: SRT, ASS/SSA, SUP (PGS) or VobSub (add the `.idx`; its `.sub` must sit beside it). Pairing can also scan beside the source and one folder below it for subtitle files sharing its name or episode token. Review the matched files before running a batch. Rule sets determine whether external subtitles and audio are accepted.
 
 ## MKV versus MP4
 

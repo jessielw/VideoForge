@@ -106,6 +106,16 @@ def test_subtitle_and_chapter_folders_match_by_episode(tmp_path):
     assert [p.name for p in found.unmatched.subtitles] == ["Show.S01E09.en.srt"]
 
 
+def test_every_subtitle_format_pairs_and_vobsub_by_its_idx(tmp_path):
+    src = tmp_path / "Show.S01E01.mkv"
+    names = ["Show.S01E01.en.srt", "Show.S01E01.en.ass", "Show.S01E01.fr.ssa", "Show.S01E01.de.sup"]
+    for p in (src, *(tmp_path / n for n in names), tmp_path / "S01E01.es.idx", tmp_path / "S01E01.es.sub"):
+        p.write_bytes(b"")
+    (job,) = discover([src], RULES, has_audio=lambda p: p.suffix == ".mkv").jobs
+    assert sorted(p.name for p in job.subtitles) == sorted([*names, "S01E01.es.idx"])
+    assert [p.name for p in slot_files([], [], [tmp_path], [], RULES).subtitles] == sorted([*names, "S01E01.es.idx"])
+
+
 def test_lone_source_takes_every_added_subtitle(tmp_path):
     src, enc = tmp_path / "Movie.Remux.mkv", tmp_path / "out.hevc"
     subs = [tmp_path / "Some.Other.Name.en.srt", tmp_path / "forced.en.forced.srt"]

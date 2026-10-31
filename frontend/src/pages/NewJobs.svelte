@@ -327,9 +327,9 @@
     {#if takesSubs}
       <PathSlot
         label="Subtitles"
-        hint="SRTs or folders, matched by name or SxxEyy (plus those next to the source)"
+        hint="Subtitle files or folders, matched by name or SxxEyy (plus those next to the source)"
         bind:paths={subtitles}
-        extensions={['.srt', '.ass', '.ssa', '.sup']}
+        extensions={['.srt', '.ass', '.ssa', '.sup', '.idx']}
       />
     {/if}
     <PathSlot

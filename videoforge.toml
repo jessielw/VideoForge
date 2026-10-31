@@ -35,7 +35,7 @@ vs_plugins = "tools/vs-plugins"
 encode_suffixes = ["_job", "_out", "_new", ""]
 # Raw streams StaxRip writes when muxing is off. MKVs without audio also count.
 encode_extensions = [".h264", ".264", ".avc", ".hevc", ".265", ".h265"]
-# Also take SRTs next to the source and one folder down (e.g. subs/) that share
+# Also take subtitle files (SRT, ASS/SSA, SUP, IDX) next to the source and one folder down (e.g. subs/) that share
 # its stem or SxxEyy token, on top of the subtitle files added to a job.
 scan_source_folder = true
 # Read <source>_temp (StaxRip): the job log for "still encoding", and
