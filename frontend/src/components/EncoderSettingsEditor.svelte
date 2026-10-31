@@ -434,7 +434,9 @@
   </div>
 
   <details bind:open={advancedOpen} class="rounded-lg border p-3">
-    <summary class="cursor-pointer text-sm font-medium">Advanced settings and HDR</summary>
+    <summary class="cursor-pointer text-sm font-medium"
+      >{value.encoder === 'x265' || svt ? 'Advanced settings and HDR' : 'Advanced settings'}</summary
+    >
     <div class="space-y-4 pt-4">
       <label class="flex items-start gap-3 text-sm">
         <Checkbox
@@ -484,116 +486,127 @@
         </span>
       </label>
 
-      <label class="flex items-start gap-3 text-sm">
-        <Checkbox class="mt-0.5" checked={value.hdr10plus} {disabled} onCheckedChange={(v) => set('hdr10plus', v)} />
-        <span class="min-w-0">
-          HDR10+ from the source
-          <span class="block text-xs text-muted-foreground">
-            x265: carries a source's HDR10+ metadata into the encode (hdr10plus_tool reads it, x265's --dhdr10-info
-            writes it). Needs a 10-bit encode and a script that keeps every frame (no trims). Left out when a Dolby
-            Vision FEL is baked in.
-          </span>
-          {#if hdr10plus !== undefined}
-            {#if hdr10plus === null}
-              <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
-            {:else if !hdr10plus}
-              <span class="block text-xs text-muted-foreground">The source has no HDR10+.</span>
-            {:else if value.encoder !== 'x265'}
-              <span class="mt-1 block text-xs text-warning"
-                >{encoderLabel} can't carry HDR10+: the encode keeps HDR10 only.</span
-              >
-            {:else if value.dolby_vision && dv && dv.dv_profile === 7 && dv.dv_el === 'FEL'}
-              <code class="mt-1 block font-mono text-xs break-all text-muted-foreground line-through"
-                >--dhdr10-info hdr10plus.json</code
-              >
-              {#if value.hdr10plus}
-                <span class="mt-1 block text-xs text-warning"
-                  >Left out: it describes the base layer, not the picture with the FEL baked in. The Dolby Vision RPU
-                  and the HDR10 values come from the baked picture.</span
+      <!-- only x265 carries HDR10+ and Dolby Vision (hdr.keeps_hdr10plus / keeps_dv): other encoders just say what
+           the source loses -->
+      {#if value.encoder !== 'x265'}
+        {#if dv && dv.dv_profile === 5}
+          <p class="text-xs text-warning">
+            The source is Dolby Vision profile 5, which has no HDR10 layer: without its RPU (x265 only) the encode's
+            colours look wrong, unless the script maps them.
+          </p>
+        {:else if (dv && dv.dv_profile) || hdr10plus}
+          <p class="text-xs text-warning">
+            {encoderLabel} can't carry the source's {dv && dv.dv_profile
+              ? hdr10plus
+                ? 'Dolby Vision and HDR10+'
+                : 'Dolby Vision'
+              : 'HDR10+'}: pick x265 to keep it.
+          </p>
+        {/if}
+      {:else}
+        <label class="flex items-start gap-3 text-sm">
+          <Checkbox class="mt-0.5" checked={value.hdr10plus} {disabled} onCheckedChange={(v) => set('hdr10plus', v)} />
+          <span class="min-w-0">
+            HDR10+ from the source
+            <span class="block text-xs text-muted-foreground">
+              x265: carries a source's HDR10+ metadata into the encode (hdr10plus_tool reads it, x265's --dhdr10-info
+              writes it). Needs a 10-bit encode and a script that keeps every frame (no trims). Left out when a Dolby
+              Vision FEL is baked in.
+            </span>
+            {#if hdr10plus !== undefined}
+              {#if hdr10plus === null}
+                <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
+              {:else if !hdr10plus}
+                <span class="block text-xs text-muted-foreground">The source has no HDR10+.</span>
+              {:else if value.dolby_vision && dv && dv.dv_profile === 7 && dv.dv_el === 'FEL'}
+                <code class="mt-1 block font-mono text-xs break-all text-muted-foreground line-through"
+                  >--dhdr10-info hdr10plus.json</code
                 >
-              {/if}
-            {:else}
-              <code
-                class="mt-1 block font-mono text-xs break-all {value.hdr10plus
-                  ? ''
-                  : 'text-muted-foreground line-through'}">--dhdr10-info hdr10plus.json</code
-              >
-              {#if value.hdr10plus && value.depth < 10}
-                <span class="mt-1 block text-xs text-warning">HDR10+ needs a 10-bit encode.</span>
+                {#if value.hdr10plus}
+                  <span class="mt-1 block text-xs text-warning"
+                    >Left out: it describes the base layer, not the picture with the FEL baked in. The Dolby Vision RPU
+                    and the HDR10 values come from the baked picture.</span
+                  >
+                {/if}
+              {:else}
+                <code
+                  class="mt-1 block font-mono text-xs break-all {value.hdr10plus
+                    ? ''
+                    : 'text-muted-foreground line-through'}">--dhdr10-info hdr10plus.json</code
+                >
+                {#if value.hdr10plus && value.depth < 10}
+                  <span class="mt-1 block text-xs text-warning">HDR10+ needs a 10-bit encode.</span>
+                {/if}
               {/if}
             {/if}
-          {/if}
-        </span>
-      </label>
-
-      <label class="flex items-start gap-3 text-sm">
-        <Checkbox
-          class="mt-0.5"
-          checked={value.dolby_vision}
-          {disabled}
-          onCheckedChange={(v) => set('dolby_vision', v)}
-        />
-        <span class="min-w-0">
-          Dolby Vision from the source
-          <span class="block text-xs text-muted-foreground">
-            x265: carries a source's Dolby Vision into the encode as profile 8.1, or a profile 5 as 5 (dovi_tool reads
-            the RPU and moves its active area with the crop and resize). Needs a 10-bit encode, --vbv-maxrate and
-            --vbv-bufsize (or --level-idc, whose max bitrate fills the ones not set), and a script that keeps every
-            frame. A FEL's enhancement layer is baked into the picture first (felbaker). 8.4 (HLG) isn't carried yet.
           </span>
-          {#if dv !== undefined}
-            {#if dv === null}
-              <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
-            {:else if !dv || !dv.dv_profile}
-              <span class="block text-xs text-muted-foreground">The source has no Dolby Vision.</span>
-            {:else if dv.dv_profile === 5 && (value.encoder !== 'x265' || !value.dolby_vision)}
-              <span class="mt-1 block text-xs text-warning"
-                >Profile 5 has no HDR10 layer: without its RPU the encode's colours look wrong, unless the script maps
-                them.</span
-              >
-            {:else if value.encoder !== 'x265'}
-              <span class="mt-1 block text-xs text-warning"
-                >{encoderLabel} can't carry Dolby Vision: the encode keeps the HDR10 layer.</span
-              >
-            {:else}
-              <code
-                class="mt-1 block font-mono text-xs break-all {value.dolby_vision
-                  ? ''
-                  : 'text-muted-foreground line-through'}"
-                >--dolby-vision-profile {dv.dv_profile === 5 ? '5' : '8.1'} --dolby-vision-rpu dv_rpu.bin{levelVbv?.length
-                  ? ' ' + levelVbv.join(' ')
-                  : ''}</code
-              >
-              {#if value.dolby_vision}
-                {#if dv.dv_compat === 4}
-                  <span class="mt-1 block text-xs text-warning"
-                    >Dolby Vision 8.4 (HLG) isn't carried yet: untick it to keep the HLG layer.</span
-                  >
-                {/if}
-                {#if dv.dv_profile === 7 && dv.dv_el === 'FEL'}
-                  <span class="mt-1 block text-xs text-muted-foreground"
-                    >FEL: its enhancement layer is baked into the picture (FFMS2 or L-SMASH), and the HDR10 values come
-                    from the RPU.</span
-                  >
-                {:else if dv.dv_profile === 7 && dv.dv_el !== 'MEL'}
-                  <span class="mt-1 block text-xs text-warning"
-                    >The enhancement layer's kind (FEL or MEL) couldn't be read: untick it to keep the base layer.</span
-                  >
-                {/if}
-                {#if value.depth !== 10}
-                  <span class="mt-1 block text-xs text-warning">Dolby Vision needs a 10-bit encode.</span>
-                {/if}
-                {#if levelVbv === null}
-                  <span class="mt-1 block text-xs text-warning"
-                    >Add --vbv-maxrate and --vbv-bufsize below, or --level-idc to fill them with its max bitrate (x265
-                    needs VBV for Dolby Vision).</span
-                  >
+        </label>
+
+        <label class="flex items-start gap-3 text-sm">
+          <Checkbox
+            class="mt-0.5"
+            checked={value.dolby_vision}
+            {disabled}
+            onCheckedChange={(v) => set('dolby_vision', v)}
+          />
+          <span class="min-w-0">
+            Dolby Vision from the source
+            <span class="block text-xs text-muted-foreground">
+              x265: carries a source's Dolby Vision into the encode as profile 8.1, or a profile 5 as 5 (dovi_tool reads
+              the RPU and moves its active area with the crop and resize). Needs a 10-bit encode, --vbv-maxrate and
+              --vbv-bufsize (or --level-idc, whose max bitrate fills the ones not set), and a script that keeps every
+              frame. A FEL's enhancement layer is baked into the picture first (felbaker). 8.4 (HLG) isn't carried yet.
+            </span>
+            {#if dv !== undefined}
+              {#if dv === null}
+                <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
+              {:else if !dv || !dv.dv_profile}
+                <span class="block text-xs text-muted-foreground">The source has no Dolby Vision.</span>
+              {:else if dv.dv_profile === 5 && !value.dolby_vision}
+                <span class="mt-1 block text-xs text-warning"
+                  >Profile 5 has no HDR10 layer: without its RPU the encode's colours look wrong, unless the script maps
+                  them.</span
+                >
+              {:else}
+                <code
+                  class="mt-1 block font-mono text-xs break-all {value.dolby_vision
+                    ? ''
+                    : 'text-muted-foreground line-through'}"
+                  >--dolby-vision-profile {dv.dv_profile === 5 ? '5' : '8.1'} --dolby-vision-rpu dv_rpu.bin{levelVbv?.length
+                    ? ' ' + levelVbv.join(' ')
+                    : ''}</code
+                >
+                {#if value.dolby_vision}
+                  {#if dv.dv_compat === 4}
+                    <span class="mt-1 block text-xs text-warning"
+                      >Dolby Vision 8.4 (HLG) isn't carried yet: untick it to keep the HLG layer.</span
+                    >
+                  {/if}
+                  {#if dv.dv_profile === 7 && dv.dv_el === 'FEL'}
+                    <span class="mt-1 block text-xs text-muted-foreground"
+                      >FEL: its enhancement layer is baked into the picture (FFMS2 or L-SMASH), and the HDR10 values
+                      come from the RPU.</span
+                    >
+                  {:else if dv.dv_profile === 7 && dv.dv_el !== 'MEL'}
+                    <span class="mt-1 block text-xs text-warning"
+                      >The enhancement layer's kind (FEL or MEL) couldn't be read: untick it to keep the base layer.</span
+                    >
+                  {/if}
+                  {#if value.depth !== 10}
+                    <span class="mt-1 block text-xs text-warning">Dolby Vision needs a 10-bit encode.</span>
+                  {/if}
+                  {#if levelVbv === null}
+                    <span class="mt-1 block text-xs text-warning"
+                      >Add --vbv-maxrate and --vbv-bufsize below, or --level-idc to fill them with its max bitrate (x265
+                      needs VBV for Dolby Vision).</span
+                    >
+                  {/if}
                 {/if}
               {/if}
             {/if}
-          {/if}
-        </span>
-      </label>
+          </span>
+        </label>
+      {/if}
 
       <div>
         <div class="section-label mb-2">Options ({dashes}name value, in order; an empty value is a flag)</div>

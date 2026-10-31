@@ -21,7 +21,7 @@ Use **Encoder preset** in a job's Encoder tab, the template editor, or New jobs 
 The compact picker opens with **My presets** and your folders above the built-in configurations, across all encoders. Select a preset to apply its encoder and settings together. Search by name, folder, encoder, or settings across the library, or use the **Encoder** filter to narrow the results. The manager uses the same browser. Choose **Manage presets…** to open the larger editor:
 
 1. Select a preset on the left, or choose **New from current settings**.
-2. Edit its name, folder, encoder, quality, speed, and bit depth on the right. Expand **Advanced settings and HDR** for structured options, extra arguments, and metadata settings.
+2. Edit its name, folder, encoder, quality, speed, and bit depth on the right. Expand **Advanced settings** (**Advanced settings and HDR** for x265 and SVT-AV1) for structured options, extra arguments, and metadata settings. The HDR10+ and Dolby Vision boxes show for x265 only, the one encoder that carries them.
 3. Choose **Save preset** to update the library, or **Save new preset** to create a copy of a built-in configuration. Use `/` in the folder field for nesting, such as `1080p / SDR`.
 
 Saving does not change the current job or template. **Apply encoder settings** applies the edited configuration and closes the dialog; it does not save library changes. **Cancel** discards the open draft. Switching presets with unsaved edits offers Save, Discard, or Keep editing.
