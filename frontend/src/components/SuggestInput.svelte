@@ -7,6 +7,7 @@
   import { Input } from '$lib/components/ui/input'
   import * as Popover from '$lib/components/ui/popover'
   import { cn } from '$lib/utils'
+  import Tip from './Tip.svelte'
 
   export type Suggestion = { value: string; label?: string }
   type Props = Omit<HTMLInputAttributes, 'type' | 'list' | 'files'> & {
@@ -168,8 +169,8 @@
           onkeydown={() => {}}
         >
           <span class="shrink-0 font-mono text-xs">{s.value}</span>
-          {#if s.label}<span class="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={s.label}
-              >{s.label}</span
+          {#if s.label}<Tip class="block min-w-0 flex-1 truncate text-xs text-muted-foreground" text={s.label}
+              >{s.label}</Tip
             >{/if}
         </div>
       {:else}

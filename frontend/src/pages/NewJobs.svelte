@@ -18,6 +18,7 @@
   import { groupByFolder } from '../lib/templateFolders'
   import { ENCODERS, type EncoderSettings, type MatchResult } from '../lib/types'
   import LanguagePicker from '../components/LanguagePicker.svelte'
+  import Tip from '../components/Tip.svelte'
 
   type ImportResult = Awaited<ReturnType<typeof api.addJobs>>
   type Draft = {
@@ -208,7 +209,7 @@
           <ul class="mt-2 space-y-2">
             {#each completion.kept as kept}
               <li>
-                <span title={kept.source}>{kept.name}: {kept.reason}.</span>
+                <Tip text={kept.source}>{kept.name}: {kept.reason}.</Tip>
                 {#if kept.id}<Button size="sm" variant="link" onclick={() => router.go('queue', kept.id)}
                     >Open existing job</Button
                   >{/if}
@@ -358,8 +359,8 @@
           <tbody>
             {#each result.jobs as j (j.source)}
               <tr class="border-t border-border/60">
-                <td class="px-4 py-1.5" title={j.source}>
-                  {basename(j.source)}
+                <td class="px-4 py-1.5">
+                  <Tip text={j.source}>{basename(j.source)}</Tip>
                   {#if j.existing_id}
                     <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <button class="underline" onclick={() => router.go('queue', j.existing_id)}

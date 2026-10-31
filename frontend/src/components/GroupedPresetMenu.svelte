@@ -7,6 +7,7 @@
   import PresetBrowser from './PresetBrowser.svelte'
   import PresetManager from './PresetManager.svelte'
   import { matchingPreset, presetKey, presetLabel, type PresetChoice, type PresetDraft } from '../lib/presetDraft'
+  import Tip from './Tip.svelte'
 
   let {
     title,
@@ -111,13 +112,15 @@
   >
 {:else}
   <Popover.Root {open} onOpenChange={setOpen}>
-    <Popover.Trigger {disabled} title={currentLabel}>
-      {#snippet child({ props })}
-        <Button {...props} bind:ref={trigger} variant="outline" class="max-w-full" aria-label="{title} presets">
-          <span class="truncate">{showTitle ? `${title} preset: ` : ''}{currentLabel}</span><ChevronDownIcon />
-        </Button>
-      {/snippet}
-    </Popover.Trigger>
+    <Tip class="max-w-full" text={currentLabel}>
+      <Popover.Trigger {disabled}>
+        {#snippet child({ props })}
+          <Button {...props} bind:ref={trigger} variant="outline" class="max-w-full" aria-label="{title} presets">
+            <span class="truncate">{showTitle ? `${title} preset: ` : ''}{currentLabel}</span><ChevronDownIcon />
+          </Button>
+        {/snippet}
+      </Popover.Trigger>
+    </Tip>
     <Popover.Content
       align="start"
       collisionPadding={8}

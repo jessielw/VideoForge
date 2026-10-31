@@ -16,6 +16,7 @@
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as Popover from '$lib/components/ui/popover'
+  import Tip from './Tip.svelte'
 
   let {
     profile,
@@ -134,13 +135,15 @@
 </script>
 
 <Popover.Root bind:open>
-  <Popover.Trigger {disabled} title="Apply or save a template: the whole run's settings">
-    {#snippet child({ props })}
-      <Button {...props} variant="outline" size="sm" class="ml-auto max-w-64 shrink-0">
-        <span class="truncate">{matched ? `Template: ${matched}` : 'Template'}</span><ChevronDownIcon />
-      </Button>
-    {/snippet}
-  </Popover.Trigger>
+  <Tip class="ml-auto shrink-0" text="Apply or save a template: the whole run's settings">
+    <Popover.Trigger {disabled}>
+      {#snippet child({ props })}
+        <Button {...props} variant="outline" size="sm" class="max-w-64">
+          <span class="truncate">{matched ? `Template: ${matched}` : 'Template'}</span><ChevronDownIcon />
+        </Button>
+      {/snippet}
+    </Popover.Trigger>
+  </Tip>
   <Popover.Content align="end" class="w-80 gap-2 p-2" onEscapeKeydown={(e) => e.stopPropagation()}>
     <ul class="max-h-64 overflow-auto">
       {#each choices as c (`${c.builtin}:${c.name}`)}
@@ -153,25 +156,26 @@
             <span class="w-3.5 shrink-0"
               >{#if c.name === matched}<CheckIcon class="size-3.5 text-primary" />{/if}</span
             >
-            <span class="truncate" title={c.name}
+            <Tip class="block truncate" text={c.name}
               >{#if folder.length}<span class="text-muted-foreground">{folder.join(' / ')} / </span>{/if}{label ||
-                c.name}</span
+                c.name}</Tip
             >
             <span class="ml-auto shrink-0 text-xs text-muted-foreground"
               >{c.builtin ? 'profile' : cropNote(c.data)}</span
             >
           </button>
           {#if !c.builtin}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              class="opacity-60 group-hover:opacity-100 hover:text-destructive"
-              title="Delete {c.name}"
-              aria-label="Delete {c.name}"
-              onclick={() => remove(c.name)}
-            >
-              <Trash2Icon />
-            </Button>
+            <Tip text="Delete {c.name}">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                class="opacity-60 group-hover:opacity-100 hover:text-destructive"
+                aria-label="Delete {c.name}"
+                onclick={() => remove(c.name)}
+              >
+                <Trash2Icon />
+              </Button>
+            </Tip>
           {/if}
         </li>
       {/each}

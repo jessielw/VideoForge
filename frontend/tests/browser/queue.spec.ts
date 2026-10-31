@@ -270,6 +270,20 @@ test('320 CSS pixel reflow keeps queue controls reachable without horizontal scr
   expect(errors).toEqual([])
 })
 
+test('a disabled control shows its styled tooltip, and tipped text in a row keeps focus on the row', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 3)
+  const start = page.getByRole('button', { name: /Start queue/ })
+  await expect(start).toBeDisabled()
+  // A disabled button takes no pointer events: the tip's wrapper under it gets the hover.
+  await start.hover({ force: true })
+  await expect(page.locator('[data-slot="tooltip-content"]')).toContainText('Nothing is queued')
+  await page.getByText('Episode 00001', { exact: true }).click()
+  await expect(page.locator('button[data-job="job-1"]')).toBeFocused()
+  expect(errors).toEqual([])
+})
+
 for (const theme of ['light', 'dark']) {
   test(`queue controls and every status pass automated WCAG AA checks in ${theme} mode`, async ({ page }) => {
     await page.addInitScript((theme) => localStorage.setItem('videoforge.mode', theme), theme)

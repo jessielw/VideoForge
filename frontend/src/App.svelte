@@ -13,6 +13,7 @@
   import { Toaster } from '$lib/components/ui/sonner'
   import * as Tooltip from '$lib/components/ui/tooltip'
   import ThemeToggle from './components/ThemeToggle.svelte'
+  import Tip from './components/Tip.svelte'
   import { installDrops } from './lib/dropPaths.svelte'
   import { router, type Page } from './lib/router.svelte'
   import { layout } from './lib/layout.svelte'
@@ -63,7 +64,9 @@
       aria-label="Main navigation"
     >
       <div class="flex items-center gap-2 py-4 {navCollapsed ? 'justify-center' : 'px-4'}">
-        <img src="/favicon.svg" alt="" class="size-6" title={app.version ? `VideoForge ${app.version}` : undefined} />
+        <Tip side="right" text={app.version ? `VideoForge ${app.version}` : undefined}>
+          <img src="/favicon.svg" alt="" class="size-6" />
+        </Tip>
         {#if !navCollapsed}
           <span class="text-base font-semibold tracking-wide">VideoForge</span>
           {#if app.version}<span class="text-xs text-muted-foreground tabular-nums">{app.version}</span>{/if}
@@ -71,59 +74,65 @@
       </div>
       <div class="flex flex-col gap-0.5 px-2">
         {#each NAV as item (item.page)}
-          <Button
-            variant="ghost"
-            class="relative justify-start gap-3 {navCollapsed ? 'justify-center px-0' : 'px-3'}
+          <Tip side="right" class="grid" text={navCollapsed ? item.label : undefined}>
+            <Button
+              variant="ghost"
+              class="relative justify-start gap-3 {navCollapsed ? 'justify-center px-0' : 'px-3'}
             {router.page === item.page
-              ? 'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary'
-              : 'text-muted-foreground'}"
-            aria-current={router.page === item.page ? 'page' : undefined}
-            aria-label={item.label}
-            onclick={() => router.go(item.page)}
-            title={navCollapsed ? item.label : undefined}
-          >
-            <item.icon class="size-[18px]" />
-            {#if !navCollapsed}{item.label}{/if}
-            {#if item.page === 'queue' && app.jobs.length}
-              <Badge
-                variant="secondary"
-                class="tabular-nums {navCollapsed ? 'absolute -top-1 -right-1 h-4 px-1 text-[10px]' : 'ml-auto'}"
-                >{app.jobs.length}</Badge
-              >
-            {/if}
-          </Button>
+                ? 'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary'
+                : 'text-muted-foreground'}"
+              aria-current={router.page === item.page ? 'page' : undefined}
+              aria-label={item.label}
+              onclick={() => router.go(item.page)}
+            >
+              <item.icon class="size-[18px]" />
+              {#if !navCollapsed}{item.label}{/if}
+              {#if item.page === 'queue' && app.jobs.length}
+                <Badge
+                  variant="secondary"
+                  class="tabular-nums {navCollapsed ? 'absolute -top-1 -right-1 h-4 px-1 text-[10px]' : 'ml-auto'}"
+                  >{app.jobs.length}</Badge
+                >
+              {/if}
+            </Button>
+          </Tip>
         {/each}
       </div>
 
       <div class="mt-auto flex flex-col gap-0.5 px-2 pb-1 {navCollapsed ? 'items-center' : ''}">
         <ThemeToggle compact={navCollapsed} />
-        <Button
-          variant="ghost"
-          size={navCollapsed ? 'icon' : 'default'}
-          class="text-muted-foreground max-sm:hidden {navCollapsed ? '' : 'justify-start gap-3 px-3'}"
-          onclick={() => (layout.navCollapsed = !layout.navCollapsed)}
-          title={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}
-          aria-label={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}
-        >
-          {#if navCollapsed}<PanelLeftOpenIcon />{:else}<PanelLeftCloseIcon />Collapse{/if}
-        </Button>
+        <Tip side="right" class="grid max-sm:hidden" text={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}>
+          <Button
+            variant="ghost"
+            size={navCollapsed ? 'icon' : 'default'}
+            class="text-muted-foreground {navCollapsed ? '' : 'justify-start gap-3 px-3'}"
+            onclick={() => (layout.navCollapsed = !layout.navCollapsed)}
+            aria-label={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}
+          >
+            {#if navCollapsed}<PanelLeftOpenIcon />{:else}<PanelLeftCloseIcon />Collapse{/if}
+          </Button>
+        </Tip>
       </div>
       {#if navCollapsed}
         <div class="flex flex-col items-center gap-1 border-t py-3 text-xs">
           {#if running}
-            <span class="text-info" title="Running {running.name}{running.progress ? `: ${running.progress.step}` : ''}"
-              >{running.progress ? Math.round(running.progress.overall * 100) + '%' : '▶'}</span
+            <Tip
+              side="right"
+              class="text-info"
+              text="Running {running.name}{running.progress ? `: ${running.progress.step}` : ''}"
+              >{running.progress ? Math.round(running.progress.overall * 100) + '%' : '▶'}</Tip
             >
           {/if}
-          <span
+          <Tip
+            side="right"
             class={app.connected ? 'text-success' : 'text-destructive'}
-            title={app.connected ? 'Connected' : 'Reconnecting…'}>●</span
+            text={app.connected ? 'Connected' : 'Reconnecting…'}>●</Tip
           >
         </div>
       {:else}
         <div class="space-y-1 border-t p-3 text-xs text-muted-foreground">
           {#if running}
-            <div class="truncate text-info" title={running.name}>▶ {running.name}</div>
+            <Tip class="block truncate text-info" text={running.name}>▶ {running.name}</Tip>
             {#if running.progress}
               <div class="h-1.5 overflow-hidden rounded bg-muted">
                 <div class="h-full bg-info" style="width: {running.progress.overall * 100}%"></div>

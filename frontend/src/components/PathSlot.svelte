@@ -7,6 +7,7 @@
   import { drops, pathDrop } from '../lib/dropPaths.svelte'
   import { basename } from '../lib/format'
   import FileBrowser from './FileBrowser.svelte'
+  import Tip from './Tip.svelte'
 
   let {
     label,
@@ -34,33 +35,38 @@
   class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 @min-[40rem]/import:grid-cols-[8rem_minmax(0,1fr)_auto]"
 >
   <div class="col-span-2 pt-1.5 text-sm text-muted-foreground @min-[40rem]/import:col-span-1">{label}</div>
-  <div
-    class="flex min-h-8 min-w-0 flex-wrap gap-1.5 rounded-lg border border-input px-2 py-1 outline-none focus-visible:border-ring
-      focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
-    role="list"
-    aria-label={label}
-    title={drops.desktop ? 'Drop files here, or paste paths' : 'Paste paths here (Explorer: Copy as path)'}
-    use:pathDrop={{ rule: { mode: mode === 'folder' ? 'folder' : 'files', extensions, label }, accept: add }}
+  <Tip
+    class="grid min-w-0"
+    text={drops.desktop ? 'Drop files here, or paste paths' : 'Paste paths here (Explorer: Copy as path)'}
   >
-    {#each paths as p (p)}
-      <span
-        class="flex min-w-0 max-w-full items-center gap-1 rounded-md bg-muted py-0.5 pr-1 pl-2 text-xs break-all"
-        title={p}
-        role="listitem"
-      >
-        {basename(p)}{p.match(/[\\/]$/) || !p.match(/\.[a-z0-9]+$/i) ? '\\' : ''}
-        <button
-          class="rounded-sm text-muted-foreground hover:text-destructive"
-          onclick={() => (paths = paths.filter((x) => x !== p))}
-          aria-label="Remove"
-        >
-          <XIcon class="size-3" />
-        </button>
-      </span>
-    {:else}
-      <span class="py-0.5 text-xs text-muted-foreground">{hint}</span>
-    {/each}
-  </div>
+    <div
+      class="flex min-h-8 min-w-0 flex-wrap gap-1.5 rounded-lg border border-input px-2 py-1 outline-none focus-visible:border-ring
+      focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+      role="list"
+      aria-label={label}
+      use:pathDrop={{ rule: { mode: mode === 'folder' ? 'folder' : 'files', extensions, label }, accept: add }}
+    >
+      {#each paths as p (p)}
+        <Tip class="min-w-0 max-w-full" text={p}>
+          <span
+            class="flex min-w-0 max-w-full items-center gap-1 rounded-md bg-muted py-0.5 pr-1 pl-2 text-xs break-all"
+            role="listitem"
+          >
+            {basename(p)}{p.match(/[\\/]$/) || !p.match(/\.[a-z0-9]+$/i) ? '\\' : ''}
+            <button
+              class="rounded-sm text-muted-foreground hover:text-destructive"
+              onclick={() => (paths = paths.filter((x) => x !== p))}
+              aria-label="Remove"
+            >
+              <XIcon class="size-3" />
+            </button>
+          </span>
+        </Tip>
+      {:else}
+        <span class="py-0.5 text-xs text-muted-foreground">{hint}</span>
+      {/each}
+    </div>
+  </Tip>
   <Button variant="outline" onclick={() => (browsing = true)}><FolderOpenIcon />Browse…</Button>
 </div>
 

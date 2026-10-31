@@ -17,6 +17,7 @@
     templateScripts,
   } from '../lib/templateTransfer'
   import type { ImportAction, Template, TemplateBundle } from '../lib/types'
+  import Tip from './Tip.svelte'
 
   let { current, disabled = false }: { current: { name: string; data: Template } | null; disabled?: boolean } = $props()
   let open = $state(false)
@@ -128,25 +129,26 @@
       open = true
     }}><UploadIcon />Import</Button
   >
-  <Button
-    variant="outline"
-    size="sm"
-    disabled={disabled || busy || !app.presets.template.length}
-    title="Choose saved templates to export"
-    onclick={() => {
-      exportSelected = app.presets.template.map((entry) => entry.name)
-      error = ''
-      exportOpen = true
-    }}><DownloadIcon />Export…</Button
-  >
-  <Button
-    variant="outline"
-    size="sm"
-    class="col-span-2"
-    disabled={disabled || busy || !current?.name.trim()}
-    title="Export the open template, including unsaved edits"
-    onclick={() => exportFile(current ? [current] : [])}><DownloadIcon />Export current template</Button
-  >
+  <Tip class="grid" text="Choose saved templates to export">
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={disabled || busy || !app.presets.template.length}
+      onclick={() => {
+        exportSelected = app.presets.template.map((entry) => entry.name)
+        error = ''
+        exportOpen = true
+      }}><DownloadIcon />Export…</Button
+    >
+  </Tip>
+  <Tip class="col-span-2 grid" text="Export the open template, including unsaved edits">
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={disabled || busy || !current?.name.trim()}
+      onclick={() => exportFile(current ? [current] : [])}><DownloadIcon />Export current template</Button
+    >
+  </Tip>
 </div>
 
 <Dialog.Root

@@ -11,6 +11,7 @@
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import * as Popover from '$lib/components/ui/popover'
+  import Tip from './Tip.svelte'
 
   let {
     kind,
@@ -82,13 +83,15 @@
 </script>
 
 <Popover.Root bind:open>
-  <Popover.Trigger {disabled} title="Load or save a {kind} preset">
-    {#snippet child({ props })}
-      <Button {...props} variant="outline" class="max-w-full">
-        <span class="truncate">{matched ? `Preset: ${matched}` : 'Presets'}</span><ChevronDownIcon />
-      </Button>
-    {/snippet}
-  </Popover.Trigger>
+  <Tip class="max-w-full" text="Load or save a {kind} preset">
+    <Popover.Trigger {disabled}>
+      {#snippet child({ props })}
+        <Button {...props} variant="outline" class="max-w-full">
+          <span class="truncate">{matched ? `Preset: ${matched}` : 'Presets'}</span><ChevronDownIcon />
+        </Button>
+      {/snippet}
+    </Popover.Trigger>
+  </Tip>
   <Popover.Content
     align={align === 'right' ? 'end' : 'start'}
     class="w-72 gap-2 p-2"
@@ -108,16 +111,17 @@
             {#if c.builtin}<span class="ml-auto shrink-0 text-xs text-muted-foreground">profile</span>{/if}
           </button>
           {#if !c.builtin}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              class="opacity-60 group-hover:opacity-100 hover:text-destructive"
-              title="Delete {c.name}"
-              aria-label="Delete {c.name}"
-              onclick={() => remove(c.name)}
-            >
-              <Trash2Icon />
-            </Button>
+            <Tip text="Delete {c.name}">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                class="opacity-60 group-hover:opacity-100 hover:text-destructive"
+                aria-label="Delete {c.name}"
+                onclick={() => remove(c.name)}
+              >
+                <Trash2Icon />
+              </Button>
+            </Tip>
           {/if}
         </li>
       {/each}

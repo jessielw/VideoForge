@@ -24,6 +24,7 @@
   import * as Tabs from '$lib/components/ui/tabs'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import TemplateMenu from './TemplateMenu.svelte'
+  import Tip from './Tip.svelte'
   import FileBrowser from './FileBrowser.svelte'
   import { pastedPaths, pathDrop } from '../lib/dropPaths.svelte'
   import TrackEditor from './TrackEditor.svelte'
@@ -149,10 +150,9 @@
   <Tabs.Root bind:value={tab} class="h-full min-h-0 gap-0">
     <header class="space-y-2 border-b px-5 pt-3 max-sm:px-3">
       <div class="flex items-center gap-3 max-sm:flex-wrap max-sm:gap-x-2 max-sm:gap-y-1">
-        <label
-          class="flex shrink-0 items-center gap-2 rounded-md border px-2.5 py-1 text-sm font-medium has-disabled:opacity-60
-            {queued ? 'border-info/40 bg-info/10 text-info' : 'border-border'}"
-          title={job.status === 'running'
+        <Tip
+          class="shrink-0"
+          text={job.status === 'running'
             ? 'Running: locked until it finishes'
             : queued
               ? 'Queued: locked, and the queue runs it (a running queue too). Untick to edit it; the queue leaves it out.'
@@ -160,17 +160,23 @@
                 ? 'Tick when the job is set up: it locks, and the queue runs it'
                 : `Can't be queued while ${STATUS_LABEL[job.status].toLowerCase()}`}
         >
-          <Checkbox
-            checked={queued}
-            disabled={job.status === 'running' || (!queued && !queueable(job.status))}
-            onCheckedChange={setQueued}
-          />
-          {queued ? 'Queued · locked' : 'Queue'}
-        </label>
-        <h2 class="truncate text-lg font-semibold max-sm:order-first max-sm:basis-full" title={job.source}>
-          {job.name}
-        </h2>
-        {#if job.label}<Badge variant="outline" class="shrink-0" title="Label (Output tab)">{job.label}</Badge>{/if}
+          <label
+            class="flex items-center gap-2 rounded-md border px-2.5 py-1 text-sm font-medium has-disabled:opacity-60
+              {queued ? 'border-info/40 bg-info/10 text-info' : 'border-border'}"
+          >
+            <Checkbox
+              checked={queued}
+              disabled={job.status === 'running' || (!queued && !queueable(job.status))}
+              onCheckedChange={setQueued}
+            />
+            {queued ? 'Queued · locked' : 'Queue'}
+          </label>
+        </Tip>
+        <Tip class="min-w-0 max-sm:order-first max-sm:basis-full" text={job.source}>
+          <h2 class="truncate text-lg font-semibold">{job.name}</h2>
+        </Tip>
+        {#if job.label}<Tip class="shrink-0" text="Label (Output tab)"><Badge variant="outline">{job.label}</Badge></Tip
+          >{/if}
         <span class="text-sm {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
         <span class="text-sm text-muted-foreground"
           >· {job.profile} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span
@@ -201,8 +207,7 @@
             {p.step} · {(p.fraction * 100).toFixed(1)}%{p.eta != null ? ` (${duration(p.eta)} left)` : ''}
             {#if p.fps != null}· {p.fps < 10 ? p.fps.toFixed(2) : p.fps.toFixed(1)} fps{/if}
             {#if p.elapsed != null}· {duration(p.elapsed)} elapsed{/if}
-            {#if p.left != null}<span title="A guess from the job's pace so far">· job ~{duration(p.left)} left</span
-              >{/if}
+            {#if p.left != null}<Tip text="A guess from the job's pace so far">· job ~{duration(p.left)} left</Tip>{/if}
           </span>
         </div>
       {/if}
@@ -321,14 +326,18 @@
               >
             </div>
             <span class="text-muted-foreground">Output name</span>
-            <Input
-              aria-label="Output name"
-              placeholder="Default name"
-              title="The output's file name, without its extension; empty = the profile's name for it (the source's). The label and the container's extension go after it"
-              value={job.spec.output_name}
-              disabled={!editable}
-              onchange={(e) => save({ output_name: (e.target as HTMLInputElement).value.trim() })}
-            />
+            <Tip
+              class="grid"
+              text="The output's file name, without its extension; empty = the profile's name for it (the source's). The label and the container's extension go after it"
+            >
+              <Input
+                aria-label="Output name"
+                placeholder="Default name"
+                value={job.spec.output_name}
+                disabled={!editable}
+                onchange={(e) => save({ output_name: (e.target as HTMLInputElement).value.trim() })}
+              />
+            </Tip>
             <label for="output-policy" class="text-muted-foreground">Existing output</label>
             <div class="space-y-1">
               <NativeSelect
@@ -348,18 +357,19 @@
             </div>
             <span class="text-muted-foreground">Label</span>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <Input
-                class="w-48"
-                aria-label="Label"
-                placeholder="e.g. dubbed"
-                title="Tells runs of one source apart: added to the output name, and kept in the job record"
-                value={job.spec.label}
-                disabled={!editable}
-                onchange={(e) => save({ label: (e.target as HTMLInputElement).value.trim() })}
-              />
+              <Tip text="Tells runs of one source apart: added to the output name, and kept in the job record">
+                <Input
+                  class="w-48"
+                  aria-label="Label"
+                  placeholder="e.g. dubbed"
+                  value={job.spec.label}
+                  disabled={!editable}
+                  onchange={(e) => save({ label: (e.target as HTMLInputElement).value.trim() })}
+                />
+              </Tip>
               {#if job.output_name}
-                <span class="font-mono text-xs break-all text-muted-foreground" title="The file this job writes"
-                  >{job.output_name}</span
+                <Tip class="block font-mono text-xs break-all text-muted-foreground" text="The file this job writes"
+                  >{job.output_name}</Tip
                 >
               {/if}
             </div>

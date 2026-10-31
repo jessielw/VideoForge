@@ -15,6 +15,7 @@
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
   import { NativeSelect } from '$lib/components/ui/native-select'
+  import Tip from './Tip.svelte'
 
   let { job, editable, oncompare }: { job: JobDetail; editable: boolean; oncompare: () => void } = $props()
 
@@ -107,19 +108,15 @@
       >
         {#each SAMPLE_PERCENTS as v (v)}<option value={v}>{v}%</option>{/each}
       </NativeSelect>
-      <Button
-        onclick={run}
-        disabled={!editable || starting || !job.plan}
-        title={editable ? 'Encode the sample with the job as it is now' : `Not while ${status}`}
-      >
-        <FlaskConicalIcon />{s ? 'Run again' : 'Run test encode'}
-      </Button>
+      <Tip text={editable ? 'Encode the sample with the job as it is now' : `Not while ${status}`}>
+        <Button onclick={run} disabled={!editable || starting || !job.plan}>
+          <FlaskConicalIcon />{s ? 'Run again' : 'Run test encode'}
+        </Button>
+      </Tip>
       {#if s}
-        <Button
-          variant="outline"
-          onclick={oncompare}
-          title="The sample's frames against the encoder's input (Video tab)"><SplitIcon />Compare</Button
-        >
+        <Tip text="The sample's frames against the encoder's input (Video tab)">
+          <Button variant="outline" onclick={oncompare}><SplitIcon />Compare</Button>
+        </Tip>
       {/if}
     </div>
   {/if}
@@ -130,29 +127,32 @@
       <dt class="text-muted-foreground">Bitrate</dt>
       <dd class="tabular-nums">{s.kbps != null ? `${Math.round(s.kbps).toLocaleString()} kb/s` : '—'}</dd>
       <dt class="text-muted-foreground">Whole video</dt>
-      <dd class="tabular-nums" title="The video stream at the sample's bitrate, without container overhead">
-        {s.estimate_mb != null ? `≈ ${gb(s.estimate_mb)}` : '—'}
+      <dd class="tabular-nums">
+        <Tip text="The video stream at the sample's bitrate, without container overhead">
+          {s.estimate_mb != null ? `≈ ${gb(s.estimate_mb)}` : '—'}
+        </Tip>
       </dd>
       <dt class="text-muted-foreground">Encode time</dt>
-      <dd class="tabular-nums" title="At the sample's pace, one pass">
-        {s.estimate_seconds != null ? `≈ ${duration(s.estimate_seconds)}` : '—'}{s.encode_fps != null
-          ? ` (${s.encode_fps.toFixed(1)} fps)`
-          : ''}
+      <dd class="tabular-nums">
+        <Tip text="At the sample's pace, one pass">
+          {s.estimate_seconds != null ? `≈ ${duration(s.estimate_seconds)}` : '—'}{s.encode_fps != null
+            ? ` (${s.encode_fps.toFixed(1)} fps)`
+            : ''}
+        </Tip>
       </dd>
       {#if s.ssimulacra2 != null}
         <dt class="text-muted-foreground">Quality</dt>
         <dd class="flex flex-wrap gap-x-3 tabular-nums">
-          <span title="SSIMULACRA2 against the encoder's input, the frames' mean">
+          <Tip text="SSIMULACRA2 against the encoder's input, the frames' mean">
             SSIMULACRA2 {s.ssimulacra2.toFixed(1)}
-          </span>
+          </Tip>
           {#if s.ssimulacra2_p5 != null}
-            <span class="text-muted-foreground" title="5% of the frames score below it">
+            <Tip class="text-muted-foreground" text="5% of the frames score below it">
               worst 5% {s.ssimulacra2_p5.toFixed(1)}
-            </span>
+            </Tip>
           {/if}
           {#if s.xpsnr != null}
-            <span title="XPSNR of the luma: higher is closer to the encoder's input">XPSNR {s.xpsnr.toFixed(1)} dB</span
-            >
+            <Tip text="XPSNR of the luma: higher is closer to the encoder's input">XPSNR {s.xpsnr.toFixed(1)} dB</Tip>
           {/if}
           <span class="basis-full text-xs text-muted-foreground">
             SSIMULACRA2: 100 identical, 90 visually lossless, 80 very high, 70 high quality
@@ -164,8 +164,8 @@
         {s.frames.toLocaleString()} of {s.total_frames.toLocaleString()} frames ({s.percent}%), {s.encoder}
       </dd>
     </dl>
-    <p class="truncate text-xs text-muted-foreground" title={s.file}>
+    <Tip class="block truncate text-xs text-muted-foreground" text={s.file}>
       {new Date(s.finished).toLocaleString()} · {s.file}
-    </p>
+    </Tip>
   {/if}
 </section>

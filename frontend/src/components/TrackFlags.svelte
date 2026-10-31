@@ -5,6 +5,7 @@
   import XIcon from '@lucide/svelte/icons/x'
   import { Toggle } from '$lib/components/ui/toggle'
   import type { TrackProperty } from '../lib/types'
+  import Tip from './Tip.svelte'
 
   let {
     value,
@@ -31,18 +32,19 @@
 <div class="flex flex-wrap gap-1" role="group" aria-label="Flags">
   {#each flags as f (f.key)}
     {@const state = value[f.key]}
-    <Toggle
-      variant="outline"
-      size="sm"
-      class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
-        data-[state=on]:text-primary {state === false ? 'line-through decoration-destructive' : ''}"
-      pressed={state === true}
-      {disabled}
-      title="{f.label}: {state === undefined ? "the source's" : state ? 'on' : 'off'} (click to change). {f.help}"
-      onPressedChange={() => cycle(f.key)}
-      >{#if state === true}<CheckIcon class="size-3" />{:else if state === false}<XIcon
-          class="size-3"
-        />{/if}{f.label}</Toggle
-    >
+    <Tip text="{f.label}: {state === undefined ? "the source's" : state ? 'on' : 'off'} (click to change). {f.help}">
+      <Toggle
+        variant="outline"
+        size="sm"
+        class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
+          data-[state=on]:text-primary {state === false ? 'line-through decoration-destructive' : ''}"
+        pressed={state === true}
+        {disabled}
+        onPressedChange={() => cycle(f.key)}
+        >{#if state === true}<CheckIcon class="size-3" />{:else if state === false}<XIcon
+            class="size-3"
+          />{/if}{f.label}</Toggle
+      >
+    </Tip>
   {/each}
 </div>

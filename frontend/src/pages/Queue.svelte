@@ -36,6 +36,7 @@
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import JobEditor from '../components/JobEditor.svelte'
   import ReuseDialog from '../components/ReuseDialog.svelte'
+  import Tip from '../components/Tip.svelte'
   import { api } from '../lib/api'
   import { bytes, percent, PRIORITY_LABEL, progressTimes, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { router } from '../lib/router.svelte'
@@ -562,22 +563,21 @@
       aria-label="Queue rail"
       inert={peek}
     >
-      <Button
-        variant="ghost"
-        size="icon"
+      <Tip
+        side="right"
         class="my-2"
-        onclick={showList}
-        title={layout.narrow && single !== null
+        text={layout.narrow && single !== null
           ? 'Show the queue list (over the editor: the window is narrow)'
           : 'Show the queue list'}
-        aria-label="Show the queue list"
-        aria-expanded={peek}
       >
-        <PanelLeftOpenIcon />
-      </Button>
-      <span
+        <Button variant="ghost" size="icon" onclick={showList} aria-label="Show the queue list" aria-expanded={peek}>
+          <PanelLeftOpenIcon />
+        </Button>
+      </Tip>
+      <Tip
+        side="right"
         class="pb-1 text-[10px] text-muted-foreground"
-        title={`${matching.length} matching jobs of ${app.jobs.length}`}>{matching.length}</span
+        text={`${matching.length} matching jobs of ${app.jobs.length}`}>{matching.length}</Tip
       >
       <div
         data-scroller
@@ -586,29 +586,34 @@
         class="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-auto border-t border-border py-2 select-none"
       >
         {#each pageJobs as job, i (job.id)}
-          <button
-            data-job={job.id}
-            aria-label={`${job.name}${job.label ? ` (${job.label})` : ''}: ${STATUS_LABEL[job.status]}`}
-            aria-pressed={selectedSet.has(job.id)}
-            tabindex={job.id === tabStop ? 0 : -1}
-            onfocus={() => (cursor = job.id)}
-            onkeydown={keys}
-            class="relative flex h-9 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border text-xs focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring
-              {selectedSet.has(job.id) ? 'border-primary bg-card' : 'hover:bg-accent'}
-              {STATUS_TONE[job.status]}"
-            onpointerdown={(e) => dragStart(e, job.id)}
-            onclick={(e) => click(e, job.id)}
-            title="{job.name}{job.label ? ` (${job.label})` : ''}: {STATUS_LABEL[job.status]}{job.issue
+          <Tip
+            side="right"
+            class="shrink-0"
+            text="{job.name}{job.label ? ` (${job.label})` : ''}: {STATUS_LABEL[job.status]}{job.issue
               ? ` (${job.issue})`
               : ''}"
           >
-            {currentPage * QUEUE_PAGE_SIZE + i + 1}
-            {#if LIVE.includes(job.status) && job.progress}
-              <span class="absolute inset-x-0 bottom-0 h-1 bg-muted">
-                <span class="block h-full bg-info" style="width:{job.progress.overall * 100}%"></span>
-              </span>
-            {/if}
-          </button>
+            <button
+              data-job={job.id}
+              aria-label={`${job.name}${job.label ? ` (${job.label})` : ''}: ${STATUS_LABEL[job.status]}`}
+              aria-pressed={selectedSet.has(job.id)}
+              tabindex={job.id === tabStop ? 0 : -1}
+              onfocus={() => (cursor = job.id)}
+              onkeydown={keys}
+              class="relative flex h-9 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border text-xs focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring
+              {selectedSet.has(job.id) ? 'border-primary bg-card' : 'hover:bg-accent'}
+              {STATUS_TONE[job.status]}"
+              onpointerdown={(e) => dragStart(e, job.id)}
+              onclick={(e) => click(e, job.id)}
+            >
+              {currentPage * QUEUE_PAGE_SIZE + i + 1}
+              {#if LIVE.includes(job.status) && job.progress}
+                <span class="absolute inset-x-0 bottom-0 h-1 bg-muted">
+                  <span class="block h-full bg-info" style="width:{job.progress.overall * 100}%"></span>
+                </span>
+              {/if}
+            </button>
+          </Tip>
         {/each}
       </div>
       {#if matching.length > QUEUE_PAGE_SIZE}
@@ -642,57 +647,59 @@
       aria-label="Queue list"
     >
       <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-border p-2">
-        <Button
-          variant="ghost"
-          size="icon"
+        <Tip
           class={peek ? '' : 'max-sm:hidden'}
-          onclick={hideList}
-          aria-label={peek ? 'Hide the queue list' : 'Collapse the queue list'}
-          title={peek ? 'Hide the list (Esc)' : 'Collapse the list, for more room'}
+          text={peek ? 'Hide the list (Esc)' : 'Collapse the list, for more room'}
         >
-          <PanelLeftCloseIcon />
-        </Button>
-        {#if app.queue.running}
-          <Button variant="outline" onclick={() => act(api.stop)} title="Finish the current job, then stop">
-            <ListEndIcon />{app.queue.stop_after_current ? 'Stopping…' : 'Stop after current'}
-          </Button>
-          <Button variant="outline" onclick={() => act(api.cancel)} title="Cancel the running job"
-            ><SquareIcon />Cancel</Button
-          >
-        {:else}
           <Button
-            disabled={starting || !startJobs.length}
-            onclick={() => act(() => run())}
-            title={startJobs.length
+            variant="ghost"
+            size="icon"
+            onclick={hideList}
+            aria-label={peek ? 'Hide the queue list' : 'Collapse the queue list'}
+          >
+            <PanelLeftCloseIcon />
+          </Button>
+        </Tip>
+        {#if app.queue.running}
+          <Tip text="Finish the current job, then stop">
+            <Button variant="outline" onclick={() => act(api.stop)}>
+              <ListEndIcon />{app.queue.stop_after_current ? 'Stopping…' : 'Stop after current'}
+            </Button>
+          </Tip>
+          <Tip text="Cancel the running job">
+            <Button variant="outline" onclick={() => act(api.cancel)}><SquareIcon />Cancel</Button>
+          </Tip>
+        {:else}
+          <Tip
+            text={startJobs.length
               ? `Run the ${startJobs.length} queued jobs, in queue order`
               : 'Nothing is queued: tick the jobs to run (or Queue a selection)'}
           >
-            <PlayIcon />Start queue ({startJobs.length})
-          </Button>
+            <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())}>
+              <PlayIcon />Start queue ({startJobs.length})
+            </Button>
+          </Tip>
         {/if}
         {#if working || app.queue.paused}
           {#if app.queue.paused}
-            <Button onclick={() => act(api.resume)} title="Go on with the paused tools"
-              ><PlayIcon /><span class="max-sm:sr-only">Resume</span></Button
-            >
+            <Tip text="Go on with the paused tools">
+              <Button onclick={() => act(api.resume)}><PlayIcon /><span class="max-sm:sr-only">Resume</span></Button>
+            </Tip>
           {:else}
-            <Button
-              variant="outline"
-              onclick={() => act(api.pause)}
-              title="Suspend the running job's tools and the index lane's (they use no CPU until resumed)"
-            >
-              <PauseIcon /><span class="max-sm:sr-only">Pause</span>
-            </Button>
+            <Tip text="Suspend the running job's tools and the index lane's (they use no CPU until resumed)">
+              <Button variant="outline" onclick={() => act(api.pause)}>
+                <PauseIcon /><span class="max-sm:sr-only">Pause</span>
+              </Button>
+            </Tip>
           {/if}
           <DropdownMenu.Root>
-            <DropdownMenu.Trigger
-              disabled={!working}
-              title="Process priority of the running tools, for the rest of their run (Settings has the default)"
-            >
-              {#snippet child({ props })}
-                <Button {...props} variant="ghost" size="icon" aria-label="Process priority"><GaugeIcon /></Button>
-              {/snippet}
-            </DropdownMenu.Trigger>
+            <Tip text="Process priority of the running tools, for the rest of their run (Settings has the default)">
+              <DropdownMenu.Trigger disabled={!working}>
+                {#snippet child({ props })}
+                  <Button {...props} variant="ghost" size="icon" aria-label="Process priority"><GaugeIcon /></Button>
+                {/snippet}
+              </DropdownMenu.Trigger>
+            </Tip>
             <DropdownMenu.Content align="start" class="w-48">
               <DropdownMenu.Label>Priority, this run</DropdownMenu.Label>
               <DropdownMenu.RadioGroup
@@ -707,110 +714,107 @@
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         {/if}
-        <Button
-          variant="outline"
-          class={selected.length ? '' : 'max-sm:hidden'}
-          disabled={starting || !selected.length}
-          onclick={() => act(() => run(selected))}
-          title="Queue the selected jobs and start"
-        >
-          <PlayIcon />Run selected ({selected.length})
-        </Button>
+        <Tip class={selected.length ? '' : 'max-sm:hidden'} text="Queue the selected jobs and start">
+          <Button variant="outline" disabled={starting || !selected.length} onclick={() => act(() => run(selected))}>
+            <PlayIcon />Run selected ({selected.length})
+          </Button>
+        </Tip>
         {#if queueableSelected.length}
-          <Button
-            variant="outline"
-            onclick={() => act(() => queue())}
-            title="Queue the selected jobs: locked until they run, and the queue runs them (a running queue too)"
-            >Queue ({queueableSelected.length})</Button
-          >
+          <Tip text="Queue the selected jobs: locked until they run, and the queue runs them (a running queue too)">
+            <Button variant="outline" onclick={() => act(() => queue())}>Queue ({queueableSelected.length})</Button>
+          </Tip>
         {/if}
         {#if waitingSelected.length}
-          <Button
-            variant="outline"
-            onclick={() => act(() => unqueue())}
-            title="Take the selected jobs out of the run, to edit them; their settings and files stay"
-            >Unqueue ({waitingSelected.length})</Button
-          >
+          <Tip text="Take the selected jobs out of the run, to edit them; their settings and files stay">
+            <Button variant="outline" onclick={() => act(() => unqueue())}>Unqueue ({waitingSelected.length})</Button>
+          </Tip>
         {/if}
         {#if indexing}
-          <Button
-            variant="outline"
-            onclick={() => act(() => app.stopIndexing())}
-            title="Stop indexing: cancel the job being indexed (or test encoded) and the ones waiting"
-          >
-            <DatabaseXIcon /><span class="max-sm:sr-only">Stop indexing</span>
-          </Button>
+          <Tip text="Stop indexing: cancel the job being indexed (or test encoded) and the ones waiting">
+            <Button variant="outline" onclick={() => act(() => app.stopIndexing())}>
+              <DatabaseXIcon /><span class="max-sm:sr-only">Stop indexing</span>
+            </Button>
+          </Tip>
         {/if}
         <span class="flex-1"></span>
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={!matching.length}
-          onclick={selectMatching}
-          title={`Select all ${matching.length} matching jobs across pages (Ctrl+A in the list)`}
-          aria-label="Select matching jobs"><ListChecksIcon /></Button
-        >
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={!toIndex}
-          onclick={() => index(indexTarget)}
-          title="Index {selected.length
+        <Tip text={`Select all ${matching.length} matching jobs across pages (Ctrl+A in the list)`}>
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!matching.length}
+            onclick={selectMatching}
+            aria-label="Select matching jobs"><ListChecksIcon /></Button
+          >
+        </Tip>
+        <Tip
+          text="Index {selected.length
             ? 'the selected jobs'
             : 'every job'} not indexed yet ({toIndex}): one at a time, each gets its work folder, script and source index, and nothing else, so its video opens at once (runs next to the queue)"
-          aria-label={selected.length ? 'Index the selected jobs' : 'Index every job not indexed yet'}
-          ><DatabaseZapIcon /></Button
         >
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={!selected.length}
-          onclick={() => move(-1)}
-          title="Move up in the full queue"
-          aria-label="Move selected jobs up"><ArrowUpIcon /></Button
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!toIndex}
+            onclick={() => index(indexTarget)}
+            aria-label={selected.length ? 'Index the selected jobs' : 'Index every job not indexed yet'}
+            ><DatabaseZapIcon /></Button
+          >
+        </Tip>
+        <Tip text="Move up in the full queue">
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!selected.length}
+            onclick={() => move(-1)}
+            aria-label="Move selected jobs up"><ArrowUpIcon /></Button
+          >
+        </Tip>
+        <Tip text="Move down in the full queue">
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!selected.length}
+            onclick={() => move(1)}
+            aria-label="Move selected jobs down"><ArrowDownIcon /></Button
+          >
+        </Tip>
+        <Tip
+          text="Duplicate: a copy of each selected job right after it, with a label of its own, to change a few settings for a second output"
         >
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={!selected.length}
-          onclick={() => move(1)}
-          title="Move down in the full queue"
-          aria-label="Move selected jobs down"><ArrowDownIcon /></Button
-        >
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={!selected.length}
-          onclick={duplicate}
-          title="Duplicate: a copy of each selected job right after it, with a label of its own, to change a few settings for a second output"
-          aria-label="Duplicate selected jobs"><CopyPlusIcon /></Button
-        >
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={!selected.length}
-          onclick={() => act(() => api.reprobe(selected))}
-          title="Probe again"
-          aria-label="Probe selected jobs again"
-        >
-          <RefreshCwIcon />
-        </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!selected.length}
+            onclick={duplicate}
+            aria-label="Duplicate selected jobs"><CopyPlusIcon /></Button
+          >
+        </Tip>
+        <Tip text="Probe again">
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!selected.length}
+            onclick={() => act(() => api.reprobe(selected))}
+            aria-label="Probe selected jobs again"
+          >
+            <RefreshCwIcon />
+          </Button>
+        </Tip>
         <DropdownMenu.Root>
-          <DropdownMenu.Trigger disabled={!selected.length} title="Remove">
-            {#snippet child({ props })}
-              <Button {...props} variant="ghost" size="icon" class="hover:text-destructive" aria-label="Remove"
-                ><Trash2Icon /></Button
-              >
-            {/snippet}
-          </DropdownMenu.Trigger>
+          <Tip text="Remove">
+            <DropdownMenu.Trigger disabled={!selected.length}>
+              {#snippet child({ props })}
+                <Button {...props} variant="ghost" size="icon" class="hover:text-destructive" aria-label="Remove"
+                  ><Trash2Icon /></Button
+                >
+              {/snippet}
+            </DropdownMenu.Trigger>
+          </Tip>
           <DropdownMenu.Content align="end" class="w-auto">
             <DropdownMenu.Item onSelect={() => remove()}>Remove from the queue</DropdownMenu.Item>
-            <DropdownMenu.Item
-              onSelect={confirmRemoval}
-              title="Review the work folders before deleting their intermediate files"
-            >
-              Remove and delete work folders
-            </DropdownMenu.Item>
+            <Tip class="block" side="left" text="Review the work folders before deleting their intermediate files">
+              <DropdownMenu.Item onSelect={confirmRemoval}>Remove and delete work folders</DropdownMenu.Item>
+            </Tip>
           </DropdownMenu.Content>
         </DropdownMenu.Root>
       </div>
@@ -882,20 +886,23 @@
           >
             <div class="flex shrink-0 items-start pt-2.5 pl-3">
               <!-- Out of the tab order (the list is one stop): the keyboard queues a selection with Queue (N). -->
-              <Checkbox
-                checked={queued}
-                disabled={job.status === 'running' || (!queued && !queueable(job.status))}
-                onCheckedChange={(on) => act(() => (on ? queue([job.id]) : unqueue([job.id])))}
-                tabindex={-1}
-                aria-label={`Queued: ${job.name}${job.label ? ` (${job.label})` : ''}`}
-                title={job.status === 'running'
+              <Tip
+                text={job.status === 'running'
                   ? 'Running'
                   : queued
                     ? 'Queued: locked, the queue runs it (untick to edit)'
                     : queueable(job.status)
                       ? 'Tick to queue: locks it, and the queue runs it'
                       : `Can't be queued while ${STATUS_LABEL[job.status].toLowerCase()}`}
-              />
+              >
+                <Checkbox
+                  checked={queued}
+                  disabled={job.status === 'running' || (!queued && !queueable(job.status))}
+                  onCheckedChange={(on) => act(() => (on ? queue([job.id]) : unqueue([job.id])))}
+                  tabindex={-1}
+                  aria-label={`Queued: ${job.name}${job.label ? ` (${job.label})` : ''}`}
+                />
+              </Tip>
             </div>
             <button
               data-job={job.id}
@@ -908,9 +915,9 @@
               onclick={(e) => click(e, job.id)}
             >
               <div class="flex items-center gap-2">
-                <span class="truncate font-medium" title={job.source}>{job.name}</span>
-                {#if job.label}<Badge variant="outline" class="shrink-0 px-1.5 py-0 text-xs font-normal" title="Label"
-                    >{job.label}</Badge
+                <Tip class="block truncate font-medium" text={job.source}>{job.name}</Tip>
+                {#if job.label}<Tip class="shrink-0" text="Label"
+                    ><Badge variant="outline" class="px-1.5 py-0 text-xs font-normal">{job.label}</Badge></Tip
                   >{/if}
                 {#if paused(job.status)}
                   <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
@@ -927,8 +934,8 @@
                 {/if}
                 <span>· {job.audio.length} audio · {job.subs} subs</span>
                 {#if job.indexed}
-                  <span class="ml-auto flex shrink-0 items-center" title="Indexed: the video opens at once"
-                    ><DatabaseCheckIcon class="size-3.5" /></span
+                  <Tip class="ml-auto shrink-0 items-center" text="Indexed: the video opens at once"
+                    ><DatabaseCheckIcon class="size-3.5" /></Tip
                   >
                 {/if}
               </div>
@@ -941,10 +948,10 @@
                 </div>
                 <div class="flex gap-2 text-xs text-muted-foreground">
                   <span class="truncate">{job.progress.step}</span>
-                  <span
+                  <Tip
                     class="ml-auto shrink-0 tabular-nums"
-                    title="Encoder speed · time since the run started · the job's time left (a guess from its pace so far)"
-                    >{progressTimes(job.progress)}</span
+                    text="Encoder speed · time since the run started · the job's time left (a guess from its pace so far)"
+                    >{progressTimes(job.progress)}</Tip
                   >
                 </div>
               {:else if job.issue}
@@ -957,14 +964,14 @@
                 </div>
               {/if}
               {#if job.index_held && job.status === 'index-queued'}
-                <div class="mt-0.5 truncate text-xs text-muted-foreground" title="Settings, Batch indexing">
+                <Tip class="mt-0.5 block truncate text-xs text-muted-foreground" text="Settings, Batch indexing">
                   Waits: an encode is reading this disk
-                </div>
+                </Tip>
               {/if}
               {#if job.index_error && job.status !== 'indexing'}
-                <div class="mt-0.5 truncate text-xs text-warning" title={job.index_error}>
+                <Tip class="mt-0.5 block truncate text-xs text-warning" text={job.index_error}>
                   Index failed: {job.index_error}
-                </div>
+                </Tip>
               {/if}
             </button>
           </div>

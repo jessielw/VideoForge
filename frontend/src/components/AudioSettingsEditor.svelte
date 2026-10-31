@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
+  import Tip from './Tip.svelte'
   import { shownOptions } from '../lib/format'
   import { audioEncodeLayouts } from '../lib/audioPresets'
   import { app } from '../lib/state.svelte'
@@ -116,7 +117,7 @@
         {#each shownOptions(enc.options, (o) => value.options[o.key] ?? o.default) as o (o.key)}
           {@const v = value.options[o.key] ?? o.default}
           {@const id = `${uid}-${o.key}`}
-          <label class="text-muted-foreground" for={id} title={o.help}>{o.label}</label>
+          <Tip text={o.help}><label class="text-muted-foreground" for={id}>{o.label}</label></Tip>
           <div class="min-w-0 space-y-1">
             {#if o.choices.length}
               <NativeSelect {id} value={v} onchange={(e) => setOption(o, e.currentTarget.value)}>

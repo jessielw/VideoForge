@@ -12,6 +12,7 @@
   import AudioPresetMenu from '../components/AudioPresetMenu.svelte'
   import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
   import TemplateSubsEditor from '../components/TemplateSubsEditor.svelte'
+  import Tip from '../components/Tip.svelte'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import CheckIcon from '@lucide/svelte/icons/check'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
@@ -389,13 +390,9 @@
                 <Button variant="outline" onclick={() => (browse = { kind: 'tool', tool: t })}
                   ><FolderOpenIcon />Browse…</Button
                 >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!t.custom}
-                  title="Back to the default: {t.default || '(none)'}"
-                  onclick={() => setTool(t, '')}>Reset</Button
-                >
+                <Tip text="Back to the default: {t.default || '(none)'}">
+                  <Button variant="ghost" size="sm" disabled={!t.custom} onclick={() => setTool(t, '')}>Reset</Button>
+                </Tip>
               </div>
               <div></div>
               <div class="flex min-w-0 items-center gap-2 text-xs">
@@ -405,10 +402,10 @@
                   <span class="flex shrink-0 items-center gap-1 {look.tone}"
                     ><look.icon class="size-3.5" />{look.text}</span
                   >
-                  {#if c.version}<span class="truncate" title={c.version}>{c.version}</span>{/if}
-                  {#if c.detail}<span class="truncate text-muted-foreground" title={c.detail}>{c.detail}</span>{/if}
-                  {#if c.found && c.found !== t.path}<span class="truncate text-muted-foreground" title={c.found}
-                      >· {c.found}</span
+                  {#if c.version}<Tip class="block truncate" text={c.version}>{c.version}</Tip>{/if}
+                  {#if c.detail}<Tip class="block truncate text-muted-foreground" text={c.detail}>{c.detail}</Tip>{/if}
+                  {#if c.found && c.found !== t.path}<Tip class="block truncate text-muted-foreground" text={c.found}
+                      >· {c.found}</Tip
                     >{/if}
                 {/if}
               </div>
@@ -632,12 +629,13 @@
           {#each config.notifications as d, i (i)}
             <div class="space-y-2 px-4 py-3 {d.enabled ? '' : 'opacity-60'}">
               <div class="flex min-w-0 items-center gap-2">
-                <Checkbox
-                  checked={d.enabled}
-                  aria-label="Send to {d.name}"
-                  title={d.enabled ? 'On' : 'Off: nothing is sent here'}
-                  onCheckedChange={(v) => editNotification(i, { enabled: v })}
-                />
+                <Tip text={d.enabled ? 'On' : 'Off: nothing is sent here'}>
+                  <Checkbox
+                    checked={d.enabled}
+                    aria-label="Send to {d.name}"
+                    onCheckedChange={(v) => editNotification(i, { enabled: v })}
+                  />
+                </Tip>
                 <Input
                   class="w-40 text-sm"
                   value={d.name}
@@ -700,12 +698,9 @@
         {#snippet actionRow(a: ActionSetting, set: (changes: Partial<ActionSetting>) => void, index: number | 'draft')}
           <div class="flex min-w-0 items-center gap-2">
             {#if index !== 'draft'}
-              <Checkbox
-                checked={a.enabled}
-                aria-label="Run {a.name}"
-                title={a.enabled ? 'On' : 'Off: it never runs'}
-                onCheckedChange={(v) => set({ enabled: v })}
-              />
+              <Tip text={a.enabled ? 'On' : 'Off: it never runs'}>
+                <Checkbox checked={a.enabled} aria-label="Run {a.name}" onCheckedChange={(v) => set({ enabled: v })} />
+              </Tip>
             {/if}
             <Input
               class="w-40 text-sm"

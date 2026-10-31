@@ -113,7 +113,6 @@
         ? 'bg-accent'
         : ''}"
       disabled={disabled || (!allowIncompatible && !!reason)}
-      title={reason || undefined}
       aria-current={presetKey(c) === selected ? 'true' : undefined}
       onclick={() => (selecting ? !c.builtin && pickMany([c.name], !chosen) : onselect(c))}
     >

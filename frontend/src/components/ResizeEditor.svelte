@@ -23,6 +23,7 @@
   import { Checkbox } from '$lib/components/ui/checkbox'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
+  import Tip from './Tip.svelte'
 
   let {
     resize = $bindable(),
@@ -93,32 +94,36 @@
       />
       ×
       {#if auto}
-        <Input aria-label="Height" disabled value="auto" title="Each job's: the width at the source's aspect ratio" />
+        <Tip class="grid" text="Each job's: the width at the source's aspect ratio">
+          <Input aria-label="Height" disabled value="auto" />
+        </Tip>
       {:else}
-        <Input
-          type="number"
-          step={r.mod}
-          min={r.mod}
-          aria-label="Height"
-          {disabled}
-          value={r.height}
-          title={r.keep_ar ? 'Typing a height sets the width that makes it' : undefined}
-          onchange={(e) => setHeight(r, +(e.target as HTMLInputElement).value)}
-        />
+        <Tip class="grid" text={r.keep_ar ? 'Typing a height sets the width that makes it' : undefined}>
+          <Input
+            type="number"
+            step={r.mod}
+            min={r.mod}
+            aria-label="Height"
+            {disabled}
+            value={r.height}
+            onchange={(e) => setHeight(r, +(e.target as HTMLInputElement).value)}
+          />
+        </Tip>
       {/if}
     </div>
     <div class="flex flex-wrap gap-1">
       {#each WIDTHS as w (w.width)}
-        <button
-          type="button"
-          class="rounded border px-1.5 py-0.5 text-xs tabular-nums hover:bg-accent disabled:opacity-50 {r.width ===
-          w.width
-            ? 'border-primary text-primary'
-            : 'text-muted-foreground'}"
-          {disabled}
-          title="{w.width} wide{input && w.width > input.width ? ' (upscales)' : ''}"
-          onclick={() => setWidth(r, w.width)}>{w.label}</button
-        >
+        <Tip text="{w.width} wide{input && w.width > input.width ? ' (upscales)' : ''}">
+          <button
+            type="button"
+            class="rounded border px-1.5 py-0.5 text-xs tabular-nums hover:bg-accent disabled:opacity-50 {r.width ===
+            w.width
+              ? 'border-primary text-primary'
+              : 'text-muted-foreground'}"
+            {disabled}
+            onclick={() => setWidth(r, w.width)}>{w.label}</button
+          >
+        </Tip>
       {/each}
     </div>
     <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
@@ -131,22 +136,23 @@
       >
         {#each KERNELS as k (k)}<option value={k}>{k}</option>{/each}
       </NativeSelect>
-      <NativeSelect
-        aria-label="Mod"
-        title="Both sides a multiple of this"
-        {disabled}
-        value={String(r.mod)}
-        onchange={(e) => {
-          const mod = +(e.target as HTMLSelectElement).value
-          set(
-            r.keep_ar
-              ? fitted({ ...r, mod }, input)
-              : { ...r, mod, width: snap(r.width, mod), height: snap(r.height, mod) },
-          )
-        }}
-      >
-        {#each MODS as m (m)}<option value={String(m)}>Mod {m}</option>{/each}
-      </NativeSelect>
+      <Tip text="Both sides a multiple of this">
+        <NativeSelect
+          aria-label="Mod"
+          {disabled}
+          value={String(r.mod)}
+          onchange={(e) => {
+            const mod = +(e.target as HTMLSelectElement).value
+            set(
+              r.keep_ar
+                ? fitted({ ...r, mod }, input)
+                : { ...r, mod, width: snap(r.width, mod), height: snap(r.height, mod) },
+            )
+          }}
+        >
+          {#each MODS as m (m)}<option value={String(m)}>Mod {m}</option>{/each}
+        </NativeSelect>
+      </Tip>
     </div>
     <label class="flex items-center gap-2 text-sm">
       <Checkbox checked={r.keep_ar} {disabled} onCheckedChange={(on) => set(fitted({ ...r, keep_ar: on }, input))} />

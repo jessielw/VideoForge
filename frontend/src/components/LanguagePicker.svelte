@@ -6,6 +6,7 @@
   import XIcon from '@lucide/svelte/icons/x'
   import * as Popover from '$lib/components/ui/popover'
   import { cn } from '$lib/utils'
+  import Tip from './Tip.svelte'
   import { languageName, PICKER_LANGUAGES } from '../lib/format'
 
   type Props = {
@@ -16,7 +17,6 @@
     clearable?: boolean // one language: an x sets it to ''
     show?: 'name' | 'tag' // one language: what the closed box shows (a narrow track row: the tag)
     class?: string
-    title?: string
     'aria-label'?: string
   }
   let {
@@ -27,7 +27,6 @@
     clearable = true,
     show = 'name',
     class: className = '',
-    title,
     'aria-label': ariaLabel,
   }: Props = $props()
 
@@ -134,13 +133,12 @@
       disabled && 'bg-input/50 dark:bg-input/80 cursor-not-allowed opacity-50',
       className,
     )}
-    {title}
   >
     {#if many}
       {#each chosen as tag (tag)}
-        <span
-          class="inline-flex max-w-full items-center gap-0.5 rounded-md bg-secondary py-0.5 pr-0.5 pl-1.5 text-xs text-secondary-foreground"
-          title={tag}
+        <Tip
+          class="max-w-full items-center gap-0.5 rounded-md bg-secondary py-0.5 pr-0.5 pl-1.5 text-xs text-secondary-foreground"
+          text={tag}
         >
           <span class="truncate">{languageName(tag)}</span>
           {#if !disabled}
@@ -151,7 +149,7 @@
               onclick={() => remove(tag)}><XIcon class="size-3" /></button
             >
           {/if}
-        </span>
+        </Tip>
       {/each}
     {/if}
     <input
@@ -183,14 +181,15 @@
       {onkeydown}
     />
     {#if !many && clearable && value && !disabled}
-      <button
-        type="button"
-        class="rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
-        aria-label="Clear the language"
-        title="Clear"
-        onmousedown={(e) => e.preventDefault()}
-        onclick={() => emit('')}><XIcon class="size-3.5" /></button
-      >
+      <Tip text="Clear">
+        <button
+          type="button"
+          class="rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+          aria-label="Clear the language"
+          onmousedown={(e) => e.preventDefault()}
+          onclick={() => emit('')}><XIcon class="size-3.5" /></button
+        >
+      </Tip>
     {/if}
   </div>
   <Popover.Content

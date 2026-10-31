@@ -39,6 +39,7 @@
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import { Toggle } from '$lib/components/ui/toggle'
+  import Tip from './Tip.svelte'
 
   let {
     jobId,
@@ -636,48 +637,51 @@
 <div class="flex h-full min-h-0 flex-col gap-2">
   <div class="flex flex-wrap items-center gap-2 text-sm">
     <div class="flex items-center gap-1">
-      <Button variant="ghost" size="icon" onclick={() => zoomBy(-1)} title="Zoom out (-)" aria-label="Zoom out"
-        ><ZoomOutIcon /></Button
-      >
+      <Tip text="Zoom out (-)">
+        <Button variant="ghost" size="icon" onclick={() => zoomBy(-1)} aria-label="Zoom out"><ZoomOutIcon /></Button>
+      </Tip>
       <NativeSelect value={zoom} aria-label="Zoom" onchange={(e) => setZoom(+e.currentTarget.value)}>
         <option value={0}>Fit ({Math.round(fitScale * 100)}%)</option>
         {#each ZOOMS as z (z)}<option value={z}>{z}%</option>{/each}
       </NativeSelect>
-      <Button variant="ghost" size="icon" onclick={() => zoomBy(1)} title="Zoom in (+)" aria-label="Zoom in"
-        ><ZoomInIcon /></Button
-      >
+      <Tip text="Zoom in (+)">
+        <Button variant="ghost" size="icon" onclick={() => zoomBy(1)} aria-label="Zoom in"><ZoomInIcon /></Button>
+      </Tip>
     </div>
-    <Toggle
-      pressed={edges}
-      onPressedChange={toggleEdges}
-      class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
-      title="Show edges, to judge borders"
-    >
-      Edges
-    </Toggle>
-    <Button variant="ghost" onclick={nextMatte} title="Background around the frame: {matte} (click to change)">
-      <span class="inline-block size-3.5 border" style="background:{MATTES[matte]}"></span>Matte
-    </Button>
-    {#if anamorphic}
+    <Tip text="Show edges, to judge borders">
       <Toggle
-        pressed={shaped}
-        onPressedChange={toggleShaped}
+        pressed={edges}
+        onPressedChange={toggleEdges}
         class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
-        title="Anamorphic frame (pixels {+sar.toFixed(
+      >
+        Edges
+      </Toggle>
+    </Tip>
+    <Tip text="Background around the frame: {matte} (click to change)">
+      <Button variant="ghost" onclick={nextMatte}>
+        <span class="inline-block size-3.5 border" style="background:{MATTES[matte]}"></span>Matte
+      </Button>
+    </Tip>
+    {#if anamorphic}
+      <Tip
+        text="Anamorphic frame (pixels {+sar.toFixed(
           4,
         )}:1). On: shown at the shape it plays at. Off: the stored pixels (exact at 100% and up)"
       >
-        AR
-      </Toggle>
+        <Toggle
+          pressed={shaped}
+          onPressedChange={toggleShaped}
+          class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+        >
+          AR
+        </Toggle>
+      </Tip>
     {/if}
-    <Button
-      variant="ghost"
-      onclick={saveFrame}
-      disabled={!src}
-      title="Save frame {shownAt.n} as a PNG: full size, lossless (S)"
-    >
-      <DownloadIcon />Save
-    </Button>
+    <Tip text="Save frame {shownAt.n} as a PNG: full size, lossless (S)">
+      <Button variant="ghost" onclick={saveFrame} disabled={!src}>
+        <DownloadIcon />Save
+      </Button>
+    </Tip>
     {@render tools?.()}
     <span class="ml-auto text-xs whitespace-nowrap text-muted-foreground tabular-nums">
       {W}×{H}{lined ? ` → ${outW}×${outH}` : ''}{anamorphic ? ` · plays ${((W * sar) / H).toFixed(2)}:1` : ''} · {Math.round(
@@ -825,17 +829,14 @@
   </div>
 
   <div class="@container flex items-center gap-1 @lg:gap-2">
-    <Button
-      variant="ghost"
-      size="icon"
-      class="hidden @md:inline-flex"
-      onclick={() => seek(0)}
-      title="First (Home)"
-      aria-label="First frame"><ChevronsLeftIcon /></Button
-    >
-    <Button variant="ghost" size="icon" onclick={() => seek(frame - 1)} title="Previous (←)" aria-label="Previous frame"
-      ><ChevronLeftIcon /></Button
-    >
+    <Tip class="hidden shrink-0 @md:inline-flex" text="First (Home)">
+      <Button variant="ghost" size="icon" onclick={() => seek(0)} aria-label="First frame"><ChevronsLeftIcon /></Button>
+    </Tip>
+    <Tip class="shrink-0" text="Previous (←)">
+      <Button variant="ghost" size="icon" onclick={() => seek(frame - 1)} aria-label="Previous frame"
+        ><ChevronLeftIcon /></Button
+      >
+    </Tip>
     <input
       type="range"
       class="scrub mx-2 min-w-10 flex-1"
@@ -848,17 +849,16 @@
       onchange={() => seek(scrub)}
       aria-label="Frame"
     />
-    <Button variant="ghost" size="icon" onclick={() => seek(frame + 1)} title="Next (→)" aria-label="Next frame"
-      ><ChevronRightIcon /></Button
-    >
-    <Button
-      variant="ghost"
-      size="icon"
-      class="hidden @md:inline-flex"
-      onclick={() => seek(frames - 1)}
-      title="Last (End)"
-      aria-label="Last frame"><ChevronsRightIcon /></Button
-    >
+    <Tip class="shrink-0" text="Next (→)">
+      <Button variant="ghost" size="icon" onclick={() => seek(frame + 1)} aria-label="Next frame"
+        ><ChevronRightIcon /></Button
+      >
+    </Tip>
+    <Tip class="hidden shrink-0 @md:inline-flex" text="Last (End)">
+      <Button variant="ghost" size="icon" onclick={() => seek(frames - 1)} aria-label="Last frame"
+        ><ChevronsRightIcon /></Button
+      >
+    </Tip>
     <Input
       class="w-20 shrink-0 text-right font-mono"
       aria-label="Frame number"

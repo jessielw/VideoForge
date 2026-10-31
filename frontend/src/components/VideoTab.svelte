@@ -51,6 +51,7 @@
   import * as Tabs from '$lib/components/ui/tabs'
   import { Toggle } from '$lib/components/ui/toggle'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
+  import Tip from './Tip.svelte'
   import FilterChain from './FilterChain.svelte'
   import PresetMenu from './PresetMenu.svelte'
   import ResizeEditor from './ResizeEditor.svelte'
@@ -413,19 +414,20 @@
 
 {#snippet compareTools()}
   {#if vv.panel === 'settings' && (job.compare.sample || job.compare.encode)}
-    <NativeSelect
-      aria-label="Compare"
-      value={compare}
-      title="Compare the encoder's input (the script's frames) with what it encoded"
-      onchange={(e) => {
-        vv.compare = e.currentTarget.value as typeof vv.compare
-        vv.shows = 'out'
-      }}
-    >
-      <option value="off">Compare: off</option>
-      {#if job.compare.sample}<option value="sample">Compare: test encode</option>{/if}
-      {#if job.compare.encode}<option value="encode">Compare: encode</option>{/if}
-    </NativeSelect>
+    <Tip text="Compare the encoder's input (the script's frames) with what it encoded">
+      <NativeSelect
+        aria-label="Compare"
+        value={compare}
+        onchange={(e) => {
+          vv.compare = e.currentTarget.value as typeof vv.compare
+          vv.shows = 'out'
+        }}
+      >
+        <option value="off">Compare: off</option>
+        {#if job.compare.sample}<option value="sample">Compare: test encode</option>{/if}
+        {#if job.compare.encode}<option value="encode">Compare: encode</option>{/if}
+      </NativeSelect>
+    </Tip>
     {#if compare !== 'off'}
       <ToggleGroup.Root
         type="single"
@@ -434,16 +436,16 @@
         value={vv.shows}
         onValueChange={(v) => v && (vv.shows = v as 'in' | 'out')}
       >
-        <ToggleGroup.Item
-          value="in"
-          class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-          title="The encoder's input: the script's frame (C flips)">Input</ToggleGroup.Item
-        >
-        <ToggleGroup.Item
-          value="out"
-          class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-          title="The encoded frame (C flips)">Encoded</ToggleGroup.Item
-        >
+        <Tip text="The encoder's input: the script's frame (C flips)">
+          <ToggleGroup.Item value="in" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+            >Input</ToggleGroup.Item
+          >
+        </Tip>
+        <Tip text="The encoded frame (C flips)">
+          <ToggleGroup.Item value="out" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+            >Encoded</ToggleGroup.Item
+          >
+        </Tip>
       </ToggleGroup.Root>
     {/if}
   {/if}
@@ -458,16 +460,17 @@
   <div class="flex min-w-0 flex-1 flex-col gap-2 max-sm:h-[60vh] max-sm:flex-none">
     <div class="flex h-9 items-center gap-2">
       {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
-      {#if infoError && !scripting}<span class="truncate text-xs text-destructive" title={infoError}>{infoError}</span
+      {#if infoError && !scripting}<Tip class="block truncate text-xs text-destructive" text={infoError}
+          >{infoError}</Tip
         >{/if}
-      <Button
-        variant="ghost"
+      <Tip
         class="ml-auto"
-        onclick={() => (layout.videoExpanded = !layout.videoExpanded)}
-        title={layout.videoExpanded ? 'Back to the page (Esc)' : 'Fill the window with the video editor'}
+        text={layout.videoExpanded ? 'Back to the page (Esc)' : 'Fill the window with the video editor'}
       >
-        {#if layout.videoExpanded}<MinimizeIcon />Restore{:else}<MaximizeIcon />Expand{/if}
-      </Button>
+        <Button variant="ghost" onclick={() => (layout.videoExpanded = !layout.videoExpanded)}>
+          {#if layout.videoExpanded}<MinimizeIcon />Restore{:else}<MaximizeIcon />Expand{/if}
+        </Button>
+      </Tip>
     </div>
     {#if !ready}
       <div
@@ -574,33 +577,35 @@
         {#snippet tools()}
           {@render compareTools()}
           {#if vv.panel === 'settings'}
-            <Toggle
-              pressed={stage === 'crop'}
-              disabled={!canCrop}
-              onPressedChange={(on) => (vv.cropView = on)}
-              class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
-              title={canCrop
+            <Tip
+              text={canCrop
                 ? 'Crop lines: the output with the cropped-off margins shown (a resize after the crop is left out). Off: the output as encoded'
                 : 'A custom script body is in use: it has no crop step to show'}
             >
-              <CropIcon />Crop
-            </Toggle>
-            <Toggle
-              pressed={auto}
-              onPressedChange={setAuto}
-              class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
-              title="Auto refresh: each change renders the frame again. Off: the frame waits for F5 or Refresh"
-            >
-              Auto
-            </Toggle>
-            {#if !auto}
-              <Button
-                variant={stale ? 'default' : 'ghost'}
-                onclick={refreshPreview}
-                title="Render the frame with the saved settings (F5)"
+              <Toggle
+                pressed={stage === 'crop'}
+                disabled={!canCrop}
+                onPressedChange={(on) => (vv.cropView = on)}
+                class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
               >
-                <RefreshCwIcon />Refresh
-              </Button>
+                <CropIcon />Crop
+              </Toggle>
+            </Tip>
+            <Tip text="Auto refresh: each change renders the frame again. Off: the frame waits for F5 or Refresh">
+              <Toggle
+                pressed={auto}
+                onPressedChange={setAuto}
+                class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+              >
+                Auto
+              </Toggle>
+            </Tip>
+            {#if !auto}
+              <Tip text="Render the frame with the saved settings (F5)">
+                <Button variant={stale ? 'default' : 'ghost'} onclick={refreshPreview}>
+                  <RefreshCwIcon />Refresh
+                </Button>
+              </Tip>
             {/if}
           {/if}
         {/snippet}
@@ -628,22 +633,18 @@
     {#if vv.panel === 'script'}
       <section class="flex min-h-0 flex-1 flex-col gap-2">
         <div class="flex items-center gap-2">
-          <Button
-            onclick={run}
-            disabled={running || saving || !ready}
-            title={ready
-              ? 'Save the body and run the script (Ctrl+Enter)'
-              : 'Index the source first (the preview side)'}
+          <Tip
+            text={ready ? 'Save the body and run the script (Ctrl+Enter)' : 'Index the source first (the preview side)'}
           >
-            <PlayIcon />{running ? 'Running…' : dirty && editable ? 'Save & run' : 'Run'}
-          </Button>
+            <Button onclick={run} disabled={running || saving || !ready}>
+              <PlayIcon />{running ? 'Running…' : dirty && editable ? 'Save & run' : 'Run'}
+            </Button>
+          </Tip>
           {#if vv.parts?.custom}
-            <Button
-              variant="outline"
-              onclick={useGenerated}
-              disabled={!editable || running}
-              title="Drop the custom body: crop, resize and filters make the script again">Back to generated</Button
-            >
+            <Tip text="Drop the custom body: crop, resize and filters make the script again">
+              <Button variant="outline" onclick={useGenerated} disabled={!editable || running}>Back to generated</Button
+              >
+            </Tip>
           {/if}
           <span class="ml-auto text-xs text-muted-foreground">
             {#if !editable}read-only while {job.status}{:else if dirty}edited, not saved{:else if vv.parts?.custom}custom
@@ -766,15 +767,11 @@
               {/each}
             </div>
             <div class="flex gap-2">
-              <Button
-                variant="outline"
-                class="flex-1"
-                onclick={autoCrop}
-                disabled={detecting || !ready}
-                title={ready ? undefined : 'Index the source first'}
-              >
-                <WandSparklesIcon />{detecting ? 'Detecting…' : 'Auto-crop'}
-              </Button>
+              <Tip class="grid flex-1" text={ready ? undefined : 'Index the source first'}>
+                <Button variant="outline" onclick={autoCrop} disabled={detecting || !ready}>
+                  <WandSparklesIcon />{detecting ? 'Detecting…' : 'Auto-crop'}
+                </Button>
+              </Tip>
               <Button
                 variant="outline"
                 onclick={() => {

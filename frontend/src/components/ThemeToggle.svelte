@@ -7,6 +7,7 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { buttonVariants } from '$lib/components/ui/button'
   import { cn } from '$lib/utils'
+  import Tip from './Tip.svelte'
 
   let { compact = false }: { compact?: boolean } = $props()
 
@@ -20,18 +21,19 @@
 </script>
 
 <DropdownMenu.Root bind:open>
-  <DropdownMenu.Trigger
-    class={cn(
-      buttonVariants({ variant: 'ghost', size: compact ? 'icon' : 'default' }),
-      'text-muted-foreground',
-      compact ? '' : 'w-full justify-start gap-3 px-3',
-    )}
-    aria-label="Theme: {current.label}"
-    title={compact ? `Theme: ${current.label}` : undefined}
-  >
-    <current.icon />
-    {#if !compact}Theme: {current.label}{/if}
-  </DropdownMenu.Trigger>
+  <Tip side="right" class="grid" text={compact ? `Theme: ${current.label}` : undefined}>
+    <DropdownMenu.Trigger
+      class={cn(
+        buttonVariants({ variant: 'ghost', size: compact ? 'icon' : 'default' }),
+        'text-muted-foreground',
+        compact ? '' : 'w-full justify-start gap-3 px-3',
+      )}
+      aria-label="Theme: {current.label}"
+    >
+      <current.icon />
+      {#if !compact}Theme: {current.label}{/if}
+    </DropdownMenu.Trigger>
+  </Tip>
   <DropdownMenu.Content side={compact ? 'right' : 'top'} align="start" class="w-36">
     <DropdownMenu.RadioGroup
       value={current.id}

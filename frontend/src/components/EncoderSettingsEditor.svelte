@@ -34,6 +34,7 @@
   import { api } from '../lib/api'
   import { extraFlags, parseOptions, unknownHint, type OptionHelp } from '../lib/encoderOptions'
   import SuggestInput from './SuggestInput.svelte'
+  import Tip from './Tip.svelte'
 
   // colorArgs: the job's source's colour flags for this encoder; hdr10plus: whether the source has HDR10+; dv: its
   // Dolby Vision (false: none); budget: where a 2-pass target size goes (the job editor; null until probed or
@@ -608,15 +609,16 @@
               class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 border-b border-border/60 px-2 py-1 last:border-b-0"
             >
               <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
-              <SuggestInput
-                class="font-mono text-xs {warn ? 'border-warning' : ''}"
-                value={key}
-                suggestions={optionSuggestions}
-                title={known?.get(key) || undefined}
-                aria-label="Option name"
-                onpick={(name) => setOption(key, val, name)}
-                onchange={(e) => setOption(key, val, (e.target as HTMLInputElement).value.trim().replace(/^-+/, ''))}
-              />
+              <Tip class="grid min-w-0" text={known?.get(key)}>
+                <SuggestInput
+                  class="font-mono text-xs {warn ? 'border-warning' : ''}"
+                  value={key}
+                  suggestions={optionSuggestions}
+                  aria-label="Option name"
+                  onpick={(name) => setOption(key, val, name)}
+                  onchange={(e) => setOption(key, val, (e.target as HTMLInputElement).value.trim().replace(/^-+/, ''))}
+                />
+              </Tip>
               <Input
                 class="min-w-0 font-mono text-xs"
                 value={val}
@@ -636,9 +638,12 @@
               {#if warn}
                 <p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{warn}</p>
               {:else if known?.get(key)}
-                <p class="col-start-2 col-end-5 truncate pb-0.5 text-xs text-muted-foreground" title={known.get(key)}>
+                <Tip
+                  class="col-start-2 col-end-5 block truncate pb-0.5 text-xs text-muted-foreground"
+                  text={known.get(key)}
+                >
                   {known.get(key)}
-                </p>
+                </Tip>
               {/if}
             </div>
           {/each}
@@ -646,16 +651,17 @@
             class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 bg-muted/50 px-2 py-1"
           >
             <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
-            <SuggestInput
-              class="font-mono text-xs"
-              placeholder="name, or paste {dashes}ref 4 {dashes}bframes 8"
-              title="One option name, or a whole command line: Enter adds a row for each option"
-              aria-label="New option name"
-              suggestions={optionSuggestions}
-              bind:value={newKey}
-              oninput={() => (notAdded = '')}
-              onkeydown={(e) => e.key === 'Enter' && addOption()}
-            />
+            <Tip class="grid min-w-0" text="One option name, or a whole command line: Enter adds a row for each option">
+              <SuggestInput
+                class="font-mono text-xs"
+                placeholder="name, or paste {dashes}ref 4 {dashes}bframes 8"
+                aria-label="New option name"
+                suggestions={optionSuggestions}
+                bind:value={newKey}
+                oninput={() => (notAdded = '')}
+                onkeydown={(e) => e.key === 'Enter' && addOption()}
+              />
+            </Tip>
             <Input
               class="min-w-0 font-mono text-xs"
               placeholder="value"
@@ -667,9 +673,12 @@
             {#if newName && hint(newName)}
               <p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{hint(newName)}</p>
             {:else if newName && known?.get(newName)}
-              <p class="col-start-2 col-end-5 truncate pb-0.5 text-xs text-muted-foreground" title={known.get(newName)}>
+              <Tip
+                class="col-start-2 col-end-5 block truncate pb-0.5 text-xs text-muted-foreground"
+                text={known.get(newName)}
+              >
                 {known.get(newName)}
-              </p>
+              </Tip>
             {/if}
             {#if notAdded}<p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{notAdded}</p>{/if}
           </div>

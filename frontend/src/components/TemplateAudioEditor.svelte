@@ -17,6 +17,7 @@
   import AudioOutputEditor from './AudioOutputEditor.svelte'
   import type { AudioCodec, AudioRule, TemplateAudio, TrackOverride, TrackProperty } from '../lib/types'
   import LanguagePicker from './LanguagePicker.svelte'
+  import Tip from './Tip.svelte'
 
   let {
     value,
@@ -134,15 +135,16 @@
     <div class="space-y-2 border-l-2 border-primary/40 pl-3">
       <div class="flex items-center gap-2 text-sm text-muted-foreground">
         Another output from {from}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          class="hover:text-destructive"
-          title="Remove this output"
-          aria-label="Remove output {n + 2} of {name}"
-          {disabled}
-          onclick={() => change((a) => at(a).extra.splice(n, 1))}><XIcon /></Button
-        >
+        <Tip text="Remove this output">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            class="hover:text-destructive"
+            aria-label="Remove output {n + 2} of {name}"
+            {disabled}
+            onclick={() => change((a) => at(a).extra.splice(n, 1))}><XIcon /></Button
+          >
+        </Tip>
       </div>
       <AudioOutputEditor
         value={x}
@@ -215,15 +217,16 @@
               />
               Leave out
             </label>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              class="ml-auto hover:text-destructive"
-              title="Remove audio track {i + 1}"
-              aria-label="Remove audio track {i + 1}"
-              {disabled}
-              onclick={() => change((a) => a.slots.splice(i, 1))}><XIcon /></Button
-            >
+            <Tip class="ml-auto" text="Remove audio track {i + 1}">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                class="hover:text-destructive"
+                aria-label="Remove audio track {i + 1}"
+                {disabled}
+                onclick={() => change((a) => a.slots.splice(i, 1))}><XIcon /></Button
+              >
+            </Tip>
           </div>
           {#if !slot.track.exclude}
             {@render outputs(
@@ -282,66 +285,69 @@
               <option value="keep">Keep</option>
               <option value="exclude">Leave out</option>
             </NativeSelect>
-            <label
-              class="ml-2 flex items-center gap-2 text-sm text-muted-foreground"
-              title="Only the first matching track (in source order) takes this rule"
-            >
-              <Checkbox
-                checked={r.first_only}
+            <Tip class="ml-2" text="Only the first matching track (in source order) takes this rule">
+              <label class="flex items-center gap-2 text-sm text-muted-foreground">
+                <Checkbox
+                  checked={r.first_only}
+                  {disabled}
+                  onCheckedChange={(on) => change((a) => (a.rules[i].first_only = on))}
+                />
+                Only the first
+              </label>
+            </Tip>
+            <Tip class="ml-auto" text="Move rule {i + 1} up">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Move audio rule {i + 1} up"
+                disabled={disabled || i === 0}
+                onclick={() => move(i, -1)}><ArrowUpIcon /></Button
+              >
+            </Tip>
+            <Tip text="Move rule {i + 1} down">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Move audio rule {i + 1} down"
+                disabled={disabled || i === rules.length - 1}
+                onclick={() => move(i, 1)}><ArrowDownIcon /></Button
+              >
+            </Tip>
+            <Tip text="Remove rule {i + 1}">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                class="hover:text-destructive"
+                aria-label="Remove audio rule {i + 1}"
                 {disabled}
-                onCheckedChange={(on) => change((a) => (a.rules[i].first_only = on))}
-              />
-              Only the first
-            </label>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              class="ml-auto"
-              title="Move rule {i + 1} up"
-              aria-label="Move audio rule {i + 1} up"
-              disabled={disabled || i === 0}
-              onclick={() => move(i, -1)}><ArrowUpIcon /></Button
-            >
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              title="Move rule {i + 1} down"
-              aria-label="Move audio rule {i + 1} down"
-              disabled={disabled || i === rules.length - 1}
-              onclick={() => move(i, 1)}><ArrowDownIcon /></Button
-            >
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              class="hover:text-destructive"
-              title="Remove rule {i + 1}"
-              aria-label="Remove audio rule {i + 1}"
-              {disabled}
-              onclick={() => change((a) => a.rules.splice(i, 1))}><XIcon /></Button
-            >
+                onclick={() => change((a) => a.rules.splice(i, 1))}><XIcon /></Button
+              >
+            </Tip>
           </div>
           <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
             <span class="w-8 text-xs text-muted-foreground">Match</span>
-            <LanguagePicker
-              class="w-56"
-              aria-label="Audio rule {i + 1}: languages"
-              placeholder="Language: any"
-              title="Languages (en matches en-US too; es-419 only itself)"
-              value={r.languages}
-              {disabled}
-              onchange={(v: string[]) => change((a) => (a.rules[i].languages = v))}
-            />
-            <NativeSelect
-              aria-label="Audio rule {i + 1}: original language"
-              title="The job's original language (the profile's guess, or the one set on the job)"
-              value={tri(r.original)}
-              {disabled}
-              onchange={(e) => change((a) => (a.rules[i].original = fromTri(e.currentTarget.value)))}
-            >
-              <option value="any">Original or not</option>
-              <option value="yes">Original language</option>
-              <option value="no">Not the original</option>
-            </NativeSelect>
+            <Tip text="Languages (en matches en-US too; es-419 only itself)">
+              <LanguagePicker
+                class="w-56"
+                aria-label="Audio rule {i + 1}: languages"
+                placeholder="Language: any"
+                value={r.languages}
+                {disabled}
+                onchange={(v: string[]) => change((a) => (a.rules[i].languages = v))}
+              />
+            </Tip>
+            <Tip text="The job's original language (the profile's guess, or the one set on the job)">
+              <NativeSelect
+                aria-label="Audio rule {i + 1}: original language"
+                value={tri(r.original)}
+                {disabled}
+                onchange={(e) => change((a) => (a.rules[i].original = fromTri(e.currentTarget.value)))}
+              >
+                <option value="any">Original or not</option>
+                <option value="yes">Original language</option>
+                <option value="no">Not the original</option>
+              </NativeSelect>
+            </Tip>
             <NativeSelect
               aria-label="Audio rule {i + 1}: codec"
               value={codecKey(r.codecs)}
@@ -381,19 +387,21 @@
               </NativeSelect>
             </label>
             {#each TRAITS as t (t.key)}
-              <label class="flex items-center gap-1.5 text-muted-foreground" title={t.help}>
-                {t.label}
-                <NativeSelect
-                  aria-label="Audio rule {i + 1}: {t.label}"
-                  value={tri(r[t.key])}
-                  {disabled}
-                  onchange={(e) => change((a) => (a.rules[i][t.key] = fromTri(e.currentTarget.value)))}
-                >
-                  <option value="any">any</option>
-                  <option value="yes">yes</option>
-                  <option value="no">no</option>
-                </NativeSelect>
-              </label>
+              <Tip text={t.help}>
+                <label class="flex items-center gap-1.5 text-muted-foreground">
+                  {t.label}
+                  <NativeSelect
+                    aria-label="Audio rule {i + 1}: {t.label}"
+                    value={tri(r[t.key])}
+                    {disabled}
+                    onchange={(e) => change((a) => (a.rules[i][t.key] = fromTri(e.currentTarget.value)))}
+                  >
+                    <option value="any">any</option>
+                    <option value="yes">yes</option>
+                    <option value="no">no</option>
+                  </NativeSelect>
+                </label>
+              </Tip>
             {/each}
           </div>
           {#if !r.track.exclude}

@@ -27,6 +27,7 @@
   import TemplateAudioEditor from '../components/TemplateAudioEditor.svelte'
   import TemplateSubsEditor from '../components/TemplateSubsEditor.svelte'
   import TemplateTransfer from '../components/TemplateTransfer.svelte'
+  import Tip from '../components/Tip.svelte'
   import { api } from '../lib/api'
   import { drafts } from '../lib/drafts'
   import { router } from '../lib/router.svelte'
@@ -280,14 +281,15 @@
     <div class="space-y-3 border-b p-4">
       <div class="flex items-center justify-between gap-2">
         <h1 class="text-xl font-semibold">Templates</h1>
-        <Button
-          variant={selecting ? 'secondary' : 'ghost'}
-          size="sm"
-          disabled={!tree.length && !selecting}
-          aria-pressed={selecting}
-          title="Select saved templates to delete several at once"
-          onclick={() => (selecting ? stopSelecting() : (selecting = true))}><ListChecksIcon />Select</Button
-        >
+        <Tip text="Select saved templates to delete several at once">
+          <Button
+            variant={selecting ? 'secondary' : 'ghost'}
+            size="sm"
+            disabled={!tree.length && !selecting}
+            aria-pressed={selecting}
+            onclick={() => (selecting ? stopSelecting() : (selecting = true))}><ListChecksIcon />Select</Button
+          >
+        </Tip>
       </div>
       <label class="flex items-center gap-2 text-sm text-muted-foreground">
         Profile
@@ -324,33 +326,39 @@
                 onCheckedChange={(on) => pickMany([c.name], on)}
               />{/if}
           </span>
-          <button
-            class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm {c.builtin ? 'text-muted-foreground' : ''}"
-            title={c.name}
-            disabled={c.builtin}
-            onclick={() => pickMany([c.name], !chosen)}
-          >
-            {label}{#if c.builtin}<span class="ml-2 text-xs">built in</span>{/if}
-          </button>
+          <Tip class="flex min-w-0 flex-1" text={c.name}>
+            <button
+              class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm {c.builtin ? 'text-muted-foreground' : ''}"
+              disabled={c.builtin}
+              onclick={() => pickMany([c.name], !chosen)}
+            >
+              {label}{#if c.builtin}<span class="ml-2 text-xs">built in</span>{/if}
+            </button>
+          </Tip>
         {:else}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            class={c.name === starred
-              ? 'text-warning hover:text-warning'
-              : 'text-muted-foreground opacity-50 hover:opacity-100'}
-            title={c.name === starred
+          <Tip
+            text={c.name === starred
               ? `New jobs start on this template for ${profile}`
               : 'Make this the default for New jobs'}
-            aria-label="Default: {c.name}"
-            aria-pressed={c.name === starred}
-            onclick={() => star(c)}
           >
-            <StarIcon class={c.name === starred ? 'fill-current' : ''} />
-          </Button>
-          <button class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm" title={c.name} onclick={() => pick(c)}>
-            {label}{#if c.builtin}<span class="ml-2 text-xs text-muted-foreground">built in</span>{/if}
-          </button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              class={c.name === starred
+                ? 'text-warning hover:text-warning'
+                : 'text-muted-foreground opacity-50 hover:opacity-100'}
+              aria-label="Default: {c.name}"
+              aria-pressed={c.name === starred}
+              onclick={() => star(c)}
+            >
+              <StarIcon class={c.name === starred ? 'fill-current' : ''} />
+            </Button>
+          </Tip>
+          <Tip class="flex min-w-0 flex-1" text={c.name}>
+            <button class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm" onclick={() => pick(c)}>
+              {label}{#if c.builtin}<span class="ml-2 text-xs text-muted-foreground">built in</span>{/if}
+            </button>
+          </Tip>
         {/if}
       </li>
     {/snippet}
@@ -423,13 +431,9 @@
       <div class="space-y-4 p-6">
         <header class="flex flex-wrap items-center gap-2">
           {#if !readOnly}
-            <Input
-              class="w-44"
-              aria-label="Template folder"
-              placeholder="No folder"
-              title="Folder: use / for nested folders (Group / 1080p)"
-              bind:value={draftFolder}
-            />
+            <Tip text="Folder: use / for nested folders (Group / 1080p)">
+              <Input class="w-44" aria-label="Template folder" placeholder="No folder" bind:value={draftFolder} />
+            </Tip>
             <span class="text-muted-foreground" aria-hidden="true">/</span>
           {/if}
           <Input

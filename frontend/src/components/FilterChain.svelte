@@ -13,6 +13,7 @@
   import { Checkbox } from '$lib/components/ui/checkbox'
   import * as Popover from '$lib/components/ui/popover'
   import { Textarea } from '$lib/components/ui/textarea'
+  import Tip from './Tip.svelte'
 
   let {
     filters = $bindable(),
@@ -72,11 +73,13 @@
   <div class="flex items-center justify-between">
     <span class="section-label">Filters</span>
     <Popover.Root bind:open>
-      <Popover.Trigger {disabled} title="Add a built-in filter: it goes in its category's place">
-        {#snippet child({ props })}
-          <Button {...props} variant="outline" size="sm"><PlusIcon />Add filter</Button>
-        {/snippet}
-      </Popover.Trigger>
+      <Tip text="Add a built-in filter: it goes in its category's place">
+        <Popover.Trigger {disabled}>
+          {#snippet child({ props })}
+            <Button {...props} variant="outline" size="sm"><PlusIcon />Add filter</Button>
+          {/snippet}
+        </Popover.Trigger>
+      </Tip>
       <!-- To the side, two columns: the whole menu fits without scrolling on most screens. -->
       <Popover.Content
         side="left"
@@ -86,17 +89,17 @@
       >
         {#each groups as g (g.id)}
           <div class="mb-3 break-inside-avoid space-y-1">
-            <div class="section-label" title={g.title}>{g.label}</div>
+            <Tip class="section-label block" text={g.title}>{g.label}</Tip>
             {#each g.families as [family, presets] (family)}
               <!-- Every row alike: the filter, then a button per variant (Add when it has none). -->
-              <div class="flex items-center gap-1" title={presets[0].description}>
+              <Tip class="flex items-center gap-1" side="left" text={presets[0].description}>
                 <span class="w-36 shrink-0 truncate text-sm">{family}</span>
                 {#each presets as p (p.name)}
                   <Button size="xs" variant={inChain.has(p.name) ? 'default' : 'outline'} onclick={() => add(p)}
                     >{p.variant || 'Add'}</Button
                   >
                 {/each}
-              </div>
+              </Tip>
             {/each}
           </div>
         {/each}
@@ -122,17 +125,19 @@
               onCheckedChange={(on) => set(filters.map((x, j) => (j === i ? { ...x, enabled: !!on } : x)))}
             />
           {/if}
-          <button
-            class="flex min-w-0 flex-1 items-baseline gap-2 text-left disabled:cursor-default"
-            disabled={fixed}
-            title={fixed ? `Set in the ${s.name} section` : 'Show its lines'}
-            onclick={() => (expanded = expanded === i ? null : i)}
-          >
-            <span class="truncate {fixed ? 'font-medium' : ''} {s.enabled ? '' : 'text-muted-foreground line-through'}"
-              >{s.name}</span
+          <Tip class="flex min-w-0 flex-1" text={fixed ? `Set in the ${s.name} section` : 'Show its lines'}>
+            <button
+              class="flex min-w-0 flex-1 items-baseline gap-2 text-left disabled:cursor-default"
+              disabled={fixed}
+              onclick={() => (expanded = expanded === i ? null : i)}
             >
-            <span class="ml-auto shrink-0 text-xs text-muted-foreground">{summary(s)}</span>
-          </button>
+              <span
+                class="truncate {fixed ? 'font-medium' : ''} {s.enabled ? '' : 'text-muted-foreground line-through'}"
+                >{s.name}</span
+              >
+              <span class="ml-auto shrink-0 text-xs text-muted-foreground">{summary(s)}</span>
+            </button>
+          </Tip>
           <Button
             variant="ghost"
             size="icon-xs"

@@ -10,6 +10,7 @@
   import { LANGUAGES } from '../lib/format'
   import { subtitleFormat, subtitleLanguage } from '../lib/subtitleSelection'
   import type { Overrides, SubTrack } from '../lib/types'
+  import Tip from './Tip.svelte'
 
   let {
     tracks,
@@ -92,7 +93,7 @@
             {disabled}
             onSelect={() => select((t) => subtitleLanguage(t, overrides) === language.value)}
           >
-            <span class="min-w-0 flex-1 truncate" title={language.label}>{language.label}</span>
+            <Tip class="block min-w-0 flex-1 truncate" text={language.label}>{language.label}</Tip>
             <span class="ml-auto text-xs text-muted-foreground tabular-nums">{language.count}</span>
           </DropdownMenu.Item>
         {/each}

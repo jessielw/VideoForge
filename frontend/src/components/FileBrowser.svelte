@@ -17,6 +17,7 @@
   import * as Dialog from '$lib/components/ui/dialog'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
+  import Tip from './Tip.svelte'
 
   let {
     title,
@@ -136,32 +137,28 @@
     </header>
 
     <div class="flex items-center gap-2 border-b p-2">
-      <Button
-        variant="ghost"
-        size="icon"
-        disabled={!listing?.parent}
-        onclick={() => listing?.parent && open(listing.parent)}
-        title="Up"
-        aria-label="Up"
-      >
-        <ArrowUpIcon />
-      </Button>
+      <Tip text="Up">
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={!listing?.parent}
+          onclick={() => listing?.parent && open(listing.parent)}
+          aria-label="Up"
+        >
+          <ArrowUpIcon />
+        </Button>
+      </Tip>
       <Input
         class="flex-1 font-mono text-xs"
         aria-label="Path"
         bind:value={pathInput}
         onkeydown={(e) => e.key === 'Enter' && open(pathInput)}
       />
-      <Button
-        variant="ghost"
-        size="icon"
-        disabled={!listing}
-        onclick={() => (newName = '')}
-        title="New folder"
-        aria-label="New folder"
-      >
-        <FolderPlusIcon />
-      </Button>
+      <Tip text="New folder">
+        <Button variant="ghost" size="icon" disabled={!listing} onclick={() => (newName = '')} aria-label="New folder">
+          <FolderPlusIcon />
+        </Button>
+      </Tip>
     </div>
 
     {#if error}<div class="px-3 py-2 text-sm text-destructive">{error}</div>{/if}
@@ -207,16 +204,17 @@
             <button class="flex flex-1 items-center gap-2 text-left" onclick={() => open(d.path)}>
               <FolderIcon class="size-4 text-primary" />{d.name}
             </button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              class="opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
-              onclick={() => askDelete(d)}
-              title="Delete {d.name}"
-              aria-label="Delete {d.name}"
-            >
-              <Trash2Icon />
-            </Button>
+            <Tip text="Delete {d.name}">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                class="opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+                onclick={() => askDelete(d)}
+                aria-label="Delete {d.name}"
+              >
+                <Trash2Icon />
+              </Button>
+            </Tip>
           </div>
         {/each}
         {#if mode === 'files'}

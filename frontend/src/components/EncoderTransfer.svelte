@@ -13,6 +13,7 @@
   import { folderParts, presetLabel, type PresetDraft } from '../lib/presetDraft'
   import { templateFilename } from '../lib/templateTransfer'
   import type { ImportAction, EncoderBundle, EncoderSettings, Preset } from '../lib/types'
+  import Tip from './Tip.svelte'
 
   let { current, disabled = false }: { current: PresetDraft<EncoderSettings> | null; disabled?: boolean } = $props()
   let mode = $state<'import' | 'export' | null>(null)
@@ -138,14 +139,11 @@
     disabled={disabled || busy || !app.presets.encoder.length}
     onclick={() => open('export')}><DownloadIcon />Export…</Button
   >
-  <Button
-    variant="outline"
-    size="sm"
-    class="col-span-2"
-    disabled={disabled || busy || !current}
-    title="Export the open encoder settings, including unsaved edits"
-    onclick={exportCurrent}><DownloadIcon />Export current settings</Button
-  >
+  <Tip class="col-span-2 grid" text="Export the open encoder settings, including unsaved edits">
+    <Button variant="outline" size="sm" disabled={disabled || busy || !current} onclick={exportCurrent}
+      ><DownloadIcon />Export current settings</Button
+    >
+  </Tip>
 </div>
 
 <Dialog.Root

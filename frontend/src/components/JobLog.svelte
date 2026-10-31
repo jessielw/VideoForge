@@ -17,6 +17,7 @@
   import XIcon from '@lucide/svelte/icons/x'
   import { Button } from '$lib/components/ui/button'
   import * as Tabs from '$lib/components/ui/tabs'
+  import Tip from './Tip.svelte'
 
   let { jobId, running }: { jobId: string; running: boolean } = $props()
 
@@ -210,16 +211,11 @@
                   <code class="min-w-0 flex-1 rounded-md bg-muted px-2 py-1 font-mono text-[11px] break-all"
                     >{s.command}</code
                   >
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    class="shrink-0"
-                    title="Copy the command line"
-                    aria-label="Copy the command line"
-                    onclick={() => copy(s)}
-                  >
-                    {#if copied === s.id}<CheckIcon />{:else}<CopyIcon />{/if}
-                  </Button>
+                  <Tip class="shrink-0" text="Copy the command line">
+                    <Button variant="ghost" size="icon-sm" aria-label="Copy the command line" onclick={() => copy(s)}>
+                      {#if copied === s.id}<CheckIcon />{:else}<CopyIcon />{/if}
+                    </Button>
+                  </Tip>
                 </div>
               {:else}
                 <p class="text-xs text-muted-foreground">Runs inside VideoForge (no external command).</p>

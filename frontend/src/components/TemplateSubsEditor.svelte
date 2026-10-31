@@ -14,6 +14,7 @@
   import TrackFlags from './TrackFlags.svelte'
   import type { SubFormat, SubRule, TemplateSubs, TrackProperty } from '../lib/types'
   import LanguagePicker from './LanguagePicker.svelte'
+  import Tip from './Tip.svelte'
 
   let {
     value,
@@ -120,44 +121,47 @@
               >Burn in</option
             >
           </NativeSelect>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            class="ml-auto"
-            title="Move rule {i + 1} up"
-            aria-label="Move rule {i + 1} up"
-            disabled={disabled || i === 0}
-            onclick={() => move(i, -1)}><ArrowUpIcon /></Button
-          >
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Move rule {i + 1} down"
-            aria-label="Move rule {i + 1} down"
-            disabled={disabled || i === value.rules.length - 1}
-            onclick={() => move(i, 1)}><ArrowDownIcon /></Button
-          >
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            class="hover:text-destructive"
-            title="Remove rule {i + 1}"
-            aria-label="Remove rule {i + 1}"
-            {disabled}
-            onclick={() => change((s) => s.rules.splice(i, 1))}><XIcon /></Button
-          >
+          <Tip class="ml-auto" text="Move rule {i + 1} up">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Move rule {i + 1} up"
+              disabled={disabled || i === 0}
+              onclick={() => move(i, -1)}><ArrowUpIcon /></Button
+            >
+          </Tip>
+          <Tip text="Move rule {i + 1} down">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Move rule {i + 1} down"
+              disabled={disabled || i === value.rules.length - 1}
+              onclick={() => move(i, 1)}><ArrowDownIcon /></Button
+            >
+          </Tip>
+          <Tip text="Remove rule {i + 1}">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              class="hover:text-destructive"
+              aria-label="Remove rule {i + 1}"
+              {disabled}
+              onclick={() => change((s) => s.rules.splice(i, 1))}><XIcon /></Button
+            >
+          </Tip>
         </div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
           <span class="w-8 text-xs text-muted-foreground">Match</span>
-          <LanguagePicker
-            class="w-56"
-            aria-label="Rule {i + 1}: languages"
-            placeholder="Language: any"
-            title="Languages (en matches en-US too; es-419 only itself)"
-            value={r.languages}
-            {disabled}
-            onchange={(v: string[]) => change((s) => (s.rules[i].languages = v))}
-          />
+          <Tip text="Languages (en matches en-US too; es-419 only itself)">
+            <LanguagePicker
+              class="w-56"
+              aria-label="Rule {i + 1}: languages"
+              placeholder="Language: any"
+              value={r.languages}
+              {disabled}
+              onchange={(v: string[]) => change((s) => (s.rules[i].languages = v))}
+            />
+          </Tip>
           <NativeSelect
             aria-label="Rule {i + 1}: format"
             value={r.formats[0] ?? ''}
@@ -169,19 +173,21 @@
             {#each FORMATS as f (f.id)}<option value={f.id}>{f.label}</option>{/each}
           </NativeSelect>
           {#each TRAITS as t (t.key)}
-            <label class="flex items-center gap-1.5 text-muted-foreground" title={t.help}>
-              {t.label}
-              <NativeSelect
-                aria-label="Rule {i + 1}: {t.label}"
-                value={tri(r[t.key])}
-                {disabled}
-                onchange={(e) => change((s) => (s.rules[i][t.key] = fromTri(e.currentTarget.value)))}
-              >
-                <option value="any">any</option>
-                <option value="yes">yes</option>
-                <option value="no">no</option>
-              </NativeSelect>
-            </label>
+            <Tip text={t.help}>
+              <label class="flex items-center gap-1.5 text-muted-foreground">
+                {t.label}
+                <NativeSelect
+                  aria-label="Rule {i + 1}: {t.label}"
+                  value={tri(r[t.key])}
+                  {disabled}
+                  onchange={(e) => change((s) => (s.rules[i][t.key] = fromTri(e.currentTarget.value)))}
+                >
+                  <option value="any">any</option>
+                  <option value="yes">yes</option>
+                  <option value="no">no</option>
+                </NativeSelect>
+              </label>
+            </Tip>
           {/each}
         </div>
         {#if !r.track.exclude && !r.track.burn}
@@ -209,18 +215,17 @@
       <Button variant="outline" size="sm" {disabled} onclick={() => change((s) => s.rules.push(rule()))}>
         <PlusIcon />Rule {value.rules.length + 1}
       </Button>
-      <label
-        class="flex items-center gap-2 text-sm"
-        title="A kept track with no title (none from its rule or the source) is named from its language and flags"
-      >
-        <Checkbox
-          checked={!!value.name_untitled}
-          {disabled}
-          aria-label="Name untitled tracks"
-          onCheckedChange={(on) => change((s) => (s.name_untitled = on))}
-        />
-        Name untitled tracks <span class="text-xs text-muted-foreground">English (SDH)</span>
-      </label>
+      <Tip text="A kept track with no title (none from its rule or the source) is named from its language and flags">
+        <label class="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={!!value.name_untitled}
+            {disabled}
+            aria-label="Name untitled tracks"
+            onCheckedChange={(on) => change((s) => (s.name_untitled = on))}
+          />
+          Name untitled tracks <span class="text-xs text-muted-foreground">English (SDH)</span>
+        </label>
+      </Tip>
       <label class="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
         Tracks no rule matches
         <NativeSelect

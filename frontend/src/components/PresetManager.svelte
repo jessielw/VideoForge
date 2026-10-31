@@ -10,6 +10,7 @@
   import { Input } from '$lib/components/ui/input'
   import * as Dialog from '$lib/components/ui/dialog'
   import PresetBrowser from './PresetBrowser.svelte'
+  import Tip from './Tip.svelte'
   import {
     canonical,
     draftFromChoice,
@@ -319,15 +320,15 @@
           {#if transfer}{@render transfer(draft, busy)}{/if}
         {/if}
         {#if removePresets}
-          <Button
-            variant={selecting ? 'secondary' : 'ghost'}
-            size="sm"
-            class="shrink-0 self-start"
-            aria-pressed={selecting}
-            disabled={busy || (!selecting && !choices.some((c) => !c.builtin))}
-            title="Select saved presets to delete several at once"
-            onclick={() => (selecting ? stopSelecting() : (selecting = true))}><ListChecksIcon />Select</Button
-          >
+          <Tip class="shrink-0 self-start" text="Select saved presets to delete several at once">
+            <Button
+              variant={selecting ? 'secondary' : 'ghost'}
+              size="sm"
+              aria-pressed={selecting}
+              disabled={busy || (!selecting && !choices.some((c) => !c.builtin))}
+              onclick={() => (selecting ? stopSelecting() : (selecting = true))}><ListChecksIcon />Select</Button
+            >
+          </Tip>
         {/if}
         <div class="flex min-h-52 flex-1 flex-col">
           <PresetBrowser

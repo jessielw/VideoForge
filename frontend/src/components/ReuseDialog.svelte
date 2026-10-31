@@ -10,6 +10,7 @@
   import * as Dialog from '$lib/components/ui/dialog'
   import { basename, bytes, duration } from '../lib/format'
   import type { ReuseJob } from '../lib/types'
+  import Tip from './Tip.svelte'
 
   let {
     open = $bindable(false),
@@ -52,8 +53,8 @@
     <div class="max-h-[60vh] space-y-4 overflow-y-auto pr-1" aria-label="Finished files">
       {#each jobs as job (job.id)}
         <section aria-label={job.name}>
-          {#if jobs.length > 1}<h3 class="mb-1 truncate text-sm font-medium" title={job.name}>
-              {job.name}{job.label ? ` (${job.label})` : ''}
+          {#if jobs.length > 1}<h3 class="mb-1 text-sm font-medium">
+              <Tip class="block truncate" text={job.name}>{job.name}{job.label ? ` (${job.label})` : ''}</Tip>
             </h3>{/if}
           <ul class="divide-y divide-border rounded-md border border-border">
             {#each job.offers as offer (offer.id)}
@@ -69,11 +70,9 @@
                     <span class="flex items-center gap-2 text-sm">
                       <span class="truncate">{offer.label}</span>
                       {#if offer.origin}
-                        <Badge
-                          variant="outline"
-                          title="Made by the job in {offer.origin}/: linked into this job's folder"
-                          >from {offer.origin}</Badge
-                        >
+                        <Tip text="Made by the job in {offer.origin}/: linked into this job's folder">
+                          <Badge variant="outline">from {offer.origin}</Badge>
+                        </Tip>
                       {/if}
                       {#if !offer.current}
                         <Badge variant="outline" class="border-warning/40 bg-warning/10 text-warning"
@@ -81,7 +80,7 @@
                         >
                       {/if}
                     </span>
-                    <span class="block truncate text-xs text-muted-foreground" title={offer.file}>
+                    <Tip class="block truncate text-xs text-muted-foreground" text={offer.file}>
                       {[
                         basename(offer.file),
                         bytes(offer.size),
@@ -90,7 +89,7 @@
                       ]
                         .filter(Boolean)
                         .join(' · ')}
-                    </span>
+                    </Tip>
                   </span>
                 </label>
               </li>
