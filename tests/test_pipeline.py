@@ -1806,6 +1806,27 @@ def test_fel_bake_needs_ffms2_or_lsmas(tmp_path, source_filter, codes):
     assert [i.code for i in hdr.issues(plan.source.video, job.encoder, None, job.video)] == codes
 
 
+@pytest.mark.parametrize(
+    ("el", "encoder", "codes", "carried"),
+    [
+        ("FEL", {}, ["hdr.hdr10plus_fel"], False),  # measured on the base layer, not the baked picture
+        ("FEL", {"hdr10plus": False}, [], False),
+        ("FEL", {"dolby_vision": False}, [], True),  # nothing baked: the base layer is the picture
+        ("MEL", {}, [], True),
+    ],
+)
+def test_hdr10plus_with_a_profile7_source(profile, tmp_path, el, encoder, codes, carried):
+    plan = make_plan(tmp_path)
+    job = fel_job(plan, tmp_path, **encoder)
+    plan.source.video.hdr = replace(plan.source.video.hdr, dv_el=el, hdr10plus=True)
+    assert [i.code for i in hdr.issues(plan.source.video, job.encoder, None, job.video)] == codes
+    assert hdr.keeps_hdr10plus(plan.source.video, job.encoder) is carried
+    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    assert ("hdr10plus" in [s.id for s in built.steps]) is carried
+    video = next(s for s in built.steps if s.id == "video")
+    assert ("--dhdr10-info" in video.argvs[-1]) is carried
+
+
 SUMMARY = """Summary:
   Frames: 240
   Profile: 7 (FEL)

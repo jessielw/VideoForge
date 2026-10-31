@@ -27,7 +27,9 @@ source filter can seek it) and indexes it; the script's head bakes it into the b
 source (script.bake_lines), and the RPU goes on as above. The HDR10 SEI then comes from the RPU, as
 Parse-Fel-Master-Data and DoVi_Scripts do it (fel_color): the mastering display's luminance from "RPU
 mastering display" and MaxCLL / MaxFALL from the whole RPU's L1 (measured on the reconstructed picture, which
-can be brighter than the base layer), else L6, else the source's.
+can be brighter than the base layer), else L6, else the source's. A source's HDR10+ is left out then (as
+DoVi_Scripts' bake leaves it out): it was measured on the base layer, so its per-scene values don't fit the
+baked picture.
 """
 
 from __future__ import annotations
@@ -172,8 +174,15 @@ def _el_type(source: str, _size: int, _mtime: int, ffmpeg: str, dovi_tool: str) 
 
 
 def keeps_hdr10plus(video: VideoInfo | None, settings: EncoderSettings) -> bool:
-    """Whether the encode carries the source's HDR10+: x265, the source has it, and the job didn't untick it."""
-    return video is not None and video.hdr.hdr10plus and settings.hdr10plus and settings.encoder is Encoder.X265
+    """Whether the encode carries the source's HDR10+: x265, the source has it, the job didn't untick it, and no
+    FEL is baked in (its HDR10+ was measured on the base layer, which the baked picture no longer is)."""
+    return (
+        video is not None
+        and video.hdr.hdr10plus
+        and settings.hdr10plus
+        and settings.encoder is Encoder.X265
+        and not bakes_fel(video, settings)
+    )
 
 
 def keeps_dv(video: VideoInfo | None, settings: EncoderSettings) -> bool:
@@ -310,6 +319,15 @@ def _hdr10plus_issues(video: VideoInfo, settings: EncoderSettings, tools: Tools 
                 Severity.WARN,
                 "hdr.hdr10plus_x264",
                 f"{settings.encoder.label} can't carry HDR10+: the encode keeps HDR10 only",
+            )
+        ]
+    if bakes_fel(video, settings):
+        return [
+            Issue(
+                Severity.WARN,
+                "hdr.hdr10plus_fel",
+                "HDR10+ is left out: it describes the base layer, not the picture with the FEL baked in (which can "
+                "be brighter); the Dolby Vision RPU and the HDR10 values come from the baked picture",
             )
         ]
     out = []

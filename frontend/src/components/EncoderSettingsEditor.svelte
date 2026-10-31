@@ -490,7 +490,8 @@
           HDR10+ from the source
           <span class="block text-xs text-muted-foreground">
             x265: carries a source's HDR10+ metadata into the encode (hdr10plus_tool reads it, x265's --dhdr10-info
-            writes it). Needs a 10-bit encode and a script that keeps every frame (no trims).
+            writes it). Needs a 10-bit encode and a script that keeps every frame (no trims). Left out when a Dolby
+            Vision FEL is baked in.
           </span>
           {#if hdr10plus !== undefined}
             {#if hdr10plus === null}
@@ -501,6 +502,16 @@
               <span class="mt-1 block text-xs text-warning"
                 >{encoderLabel} can't carry HDR10+: the encode keeps HDR10 only.</span
               >
+            {:else if value.dolby_vision && dv && dv.dv_profile === 7 && dv.dv_el === 'FEL'}
+              <code class="mt-1 block font-mono text-xs break-all text-muted-foreground line-through"
+                >--dhdr10-info hdr10plus.json</code
+              >
+              {#if value.hdr10plus}
+                <span class="mt-1 block text-xs text-warning"
+                  >Left out: it describes the base layer, not the picture with the FEL baked in. The Dolby Vision RPU
+                  and the HDR10 values come from the baked picture.</span
+                >
+              {/if}
             {:else}
               <code
                 class="mt-1 block font-mono text-xs break-all {value.hdr10plus

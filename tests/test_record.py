@@ -193,8 +193,13 @@ def test_the_record_says_what_the_encode_carried_of_the_sources_hdr():
         },
         "dolby_vision": "8.1",
         "fel_baked": True,
-        "hdr10plus": True,
+        "hdr10plus": False,  # measured on the base layer: left out of a baked FEL
     }
+    # a MEL isn't baked: its HDR10+ goes in
+    mel = VideoInfo(3840, 2160, hdr=VideoHdr(7, 6, 6, "BL+EL+RPU", dv_el="MEL", hdr10plus=True))
+    assert _hdr(mel, x265)["hdr10plus"] is True
+    # without the Dolby Vision, nothing is baked: the HDR10+ fits the base layer
+    assert _hdr(fel, EncoderSettings(encoder=Encoder.X265, dolby_vision=False))["hdr10plus"] is True
     # x264 carries none of it; an unticked choice drops it
     assert _hdr(fel, EncoderSettings())["dolby_vision"] is None and not _hdr(fel, EncoderSettings())["fel_baked"]
     dropped = _hdr(fel, EncoderSettings(encoder=Encoder.X265, dolby_vision=False, hdr10plus=False))

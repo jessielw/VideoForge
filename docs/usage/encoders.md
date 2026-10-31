@@ -106,10 +106,10 @@ Supported metadata preservation uses **x265** with the relevant option enabled:
 | HDR10+ | Extract metadata with `hdr10plus_tool` and pass it to x265 |
 | Dolby Vision profile 8.1 | Carry as profile 8.1 |
 | Dolby Vision profile 7 MEL | Convert to profile 8.1 |
-| Dolby Vision profile 7 FEL | Bake the enhancement layer into the picture and carry profile 8.1 metadata |
+| Dolby Vision profile 7 FEL | Bake the enhancement layer into the picture and carry profile 8.1 metadata; HDR10+ is left out |
 | Dolby Vision profile 5 | Carry as profile 5 |
 | Dolby Vision profile 8.4 (HLG) | Not supported for Dolby Vision preservation |
 
-Dolby Vision requires a **10-bit encode** and x265 VBV values. Set `--vbv-maxrate` and `--vbv-bufsize`, or use a supported `--level-idc` to fill the missing values. FEL processing uses FFMS2 or L-SMASH. Crop and resize adjust the RPU's active-area information, and auto crop reads it (see [Crop and resize](video.md#crop-and-resize)).
+Dolby Vision requires a **10-bit encode** and x265 VBV values. Set `--vbv-maxrate` and `--vbv-bufsize`, or use a supported `--level-idc` to fill the missing values. FEL processing uses FFMS2 or L-SMASH. A FEL source's HDR10+ is left out of the encode: it was measured on the base layer, so its values don't fit the picture with the enhancement layer baked in, which can be brighter. The Dolby Vision RPU and the HDR10 values describe the baked picture. Crop and resize adjust the RPU's active-area information, and auto crop reads it (see [Crop and resize](video.md#crop-and-resize)).
 
 Changes to frame count or frame rate can make dynamic metadata incompatible with the output. Resolve the job's HDR planning issues before starting. Selecting another encoder does not preserve Dolby Vision metadata; review the warning and intended base-layer output in the editor.
