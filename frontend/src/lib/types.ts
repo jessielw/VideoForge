@@ -131,6 +131,7 @@ export interface VideoHdr {
   dv_level: number
   dv_layers: string // 'BL+EL+RPU', 'BL+RPU'
   dv_el: string // a profile 7 enhancement layer: 'FEL' or 'MEL' ('' = none, or not read)
+  dv_stream: number // the video stream holding the RPU and enhancement layer: 1 for a UHD Blu-ray M2TS, else 0
   hdr10plus: boolean
 }
 

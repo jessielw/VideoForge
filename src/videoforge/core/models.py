@@ -164,6 +164,9 @@ class VideoHdr:
     dv_level: int = 0
     dv_layers: str = ""  # "BL+EL+RPU", "BL+RPU"
     dv_el: str = ""  # a profile 7 enhancement layer: "FEL" or "MEL" (from the RPU); "" = none, or not read
+    # The video stream (ffmpeg's 0:v:N) holding the RPU and enhancement layer: 1 for a UHD Blu-ray's M2TS, whose
+    # enhancement layer is a track of its own (hdr.dual_layer), else 0.
+    dv_stream: int = 0
     hdr10plus: bool = False  # SMPTE ST 2094-40 dynamic metadata (SEI in the stream)
 
     @property
@@ -197,6 +200,9 @@ class VideoInfo:
     # as StaxRip shows them; "" = not read (a job probed before they were).
     scan_type: str = ""
     scan_order: str = ""
+    # A second HEVC video track (MediaInfo's): a UHD Blu-ray M2TS's Dolby Vision enhancement layer, which MediaInfo
+    # doesn't read as Dolby Vision; jobs.probe_inputs reads its RPU (hdr.dual_layer).
+    second_hevc: bool = False
 
     @property
     def interlaced(self) -> bool:

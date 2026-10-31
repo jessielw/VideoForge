@@ -223,12 +223,12 @@ def index_steps(
     if el is not None and video is not None:
         if not video.default_duration_ns:
             raise ToolError("The source has no frame rate to time its enhancement layer by")
-        hevc = work / hdr.DV_EL_HEVC
+        hevc, stream = work / hdr.DV_EL_HEVC, video.hdr.dv_stream
         steps += [
             Step(
                 "dovi.el",
-                "Dolby Vision enhancement layer (dovi_tool demux)",
-                argvs=hdr.el_argvs(app.tools, source, hevc),
+                f"Dolby Vision enhancement layer ({'ffmpeg, its own track' if stream else 'dovi_tool demux'})",
+                argvs=hdr.el_argvs(app.tools, source, hevc, stream),
                 outputs=(hevc,),
                 inputs=(source,),
                 weight=1,
@@ -308,7 +308,7 @@ def index_steps(
             Step(
                 "dovi.rpu",
                 "Dolby Vision RPU (dovi_tool)",
-                argvs=hdr.rpu_argvs(app.tools, source, rpu),
+                argvs=hdr.rpu_argvs(app.tools, source, rpu, video.hdr.dv_stream if video is not None else 0),
                 outputs=(rpu,),
                 inputs=(source,),
                 weight=1,

@@ -1895,6 +1895,30 @@ def test_fel_is_baked_into_the_encode(profile, tmp_path, monkeypatch, source_fil
     assert "x265" not in tools_called(runner)
 
 
+def test_a_uhd_bluray_m2ts_bakes_its_second_track(profile, tmp_path):
+    """A UHD Blu-ray M2TS's enhancement layer is a video track of its own (hdr.dual_layer): the RPU and the layer
+    come from it (copied out, no demux), the HDR10+ and the picture from the first."""
+    plan = make_plan(tmp_path)
+    job = fel_job(plan, tmp_path, hdr10plus=False)
+    plan.source.video.hdr = replace(plan.source.video.hdr, dv_level=0, dv_stream=1)
+    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    step = {s.id: s for s in built.steps}
+    hevc = job.work_dir / "dv_el.hevc"
+    (copy,) = step["dovi.el"].argvs
+    assert copy[copy.index("-map") + 1] == "0:v:1" and copy[-2:] == ("-y", str(hevc))
+    assert step["dovi.el"].label == "Dolby Vision enhancement layer (ffmpeg, its own track)"
+    rpu = step["dovi.rpu"].argvs[0]
+    assert rpu[rpu.index("-map") + 1] == "0:v:1"
+    assert step["dovi.el_mkv"].argvs[0][-1] == str(hevc)
+
+    plan.source.video.hdr = replace(plan.source.video.hdr, hdr10plus=True)
+    job.encoder.hdr10plus = True
+    job.encoder.dolby_vision = False  # nothing baked: HDR10+ carried, from the base layer
+    step = {s.id: s for s in build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    hdr10plus = step["hdr10plus"].argvs[0]
+    assert hdr10plus[hdr10plus.index("-map") + 1] == "0:v:0" and "dovi.el" not in step
+
+
 @pytest.mark.parametrize("policy", list(OutputPolicy))
 def test_existing_output_policy(profile, tmp_path, policy):
     plan = make_plan(tmp_path)

@@ -180,6 +180,13 @@ def _delay(mi: Any, video_mi: Any) -> int:
     return max(edit, 0) - max(_int(getattr(video_mi, "source_delay", None)) or 0, 0)
 
 
+def _second_hevc(mi_all: list[Any], mi: Any) -> bool:
+    """Whether an HEVC video track follows the source's video (mi) in MediaInfo's: a UHD Blu-ray M2TS's Dolby
+    Vision enhancement layer (mkvmerge lists the two as one track, and merges them on a remux)."""
+    videos = [t for t in mi_all if t.track_type == "Video"]
+    return getattr(mi, "format", None) == "HEVC" and any(t is not mi and t.format == "HEVC" for t in videos[1:])
+
+
 def probe(path: Path, mkvmerge: str, ffprobe: str = "") -> SourceInfo:
     """The source's tracks. With ffprobe, a source that isn't Matroska is timed by it too."""
     ident = mkvmerge_identify(path, mkvmerge)
@@ -242,6 +249,7 @@ def probe(path: Path, mkvmerge: str, ffprobe: str = "") -> SourceInfo:
                 duration_ms=_int(getattr(mi, "duration", None)) or 0,
                 scan_type=str(getattr(mi, "scan_type", None) or ""),
                 scan_order=str(getattr(mi, "scan_order", None) or ""),
+                second_hevc=_second_hevc(mi_all, mi),
             )
         elif kind == "audio":
             if mi is None and len(audio) < len(mi_audio) and mi_audio[len(audio)].track_id is None:

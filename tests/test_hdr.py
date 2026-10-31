@@ -82,6 +82,70 @@ def test_video_stream_argv():
     assert argv.index("-ss") < argv.index("-i") < argv.index("-t")
     assert argv[-9:] == ["-map", "0:v:0", "-c:v:0", "copy", "-bsf:v", "hevc_mp4toannexb", "-f", "hevc", "-"]
     assert "-ss" not in video_stream_argv("ffmpeg", Path("a.mkv"))
+    assert "0:v:1" in video_stream_argv("ffmpeg", Path("a.m2ts"), stream=1)
+
+
+# A UHD Blu-ray M2TS (Godzilla Minus One's 00035.m2ts), as MediaInfo 25 reads it: the base layer and its
+# enhancement layer, each HDR10 only
+_BL = SimpleNamespace(track_type="Video", track_id=4113, format="HEVC", width=3840, hdr_format="SMPTE ST 2086")
+_EL = SimpleNamespace(track_type="Video", track_id=4117, format="HEVC", width=1920, hdr_format="SMPTE ST 2086")
+
+
+def test_a_second_hevc_track_is_noted():
+    from videoforge.core.probe import _second_hevc
+
+    general = SimpleNamespace(track_type="General", format="BDAV")
+    assert _second_hevc([general, _BL, _EL], _BL)
+    assert not _second_hevc([general, _BL], _BL)
+    mvc = SimpleNamespace(track_type="Video", track_id=4114, format="AVC")  # a 3D disc's second view
+    avc = SimpleNamespace(track_type="Video", track_id=4113, format="AVC")
+    assert not _second_hevc([general, avc, mvc], avc)
+    assert from_mediainfo(_BL) == VideoHdr()  # MediaInfo doesn't see the Dolby Vision
+
+
+@pytest.mark.parametrize(
+    ("sample", "expected"),
+    [
+        ((7, "FEL"), VideoHdr(7, 6, 0, "BL+EL+RPU", dv_el="FEL", dv_stream=1, hdr10plus=True)),
+        ((7, "MEL"), VideoHdr(7, 6, 0, "BL+EL+RPU", dv_el="MEL", dv_stream=1, hdr10plus=True)),
+        ((0, ""), VideoHdr(hdr10plus=True)),  # no RPU in the second track: MediaInfo's, as it is
+    ],
+)
+def test_dual_layer_reads_the_second_track(monkeypatch, tmp_path, sample, expected):
+    source = tmp_path / "00035.m2ts"
+    source.write_bytes(b"ts")
+    streams = []
+
+    def fake_sample(_source, _size, _mtime, _ffmpeg, _dovi, stream):
+        streams.append(stream)
+        return sample
+
+    monkeypatch.setattr(hdr, "_sample", fake_sample)
+    tools = SimpleNamespace(ffmpeg="ffmpeg", dovi_tool="dovi_tool")
+    assert hdr.dual_layer(source, tools, VideoHdr(hdr10plus=True)) == expected
+    assert streams == [1]
+
+
+def test_the_second_track_gives_the_rpu_and_the_enhancement_layer():
+    tools = SimpleNamespace(ffmpeg="ffmpeg", dovi_tool="dovi_tool")
+    src, rpu, el = Path("00035.m2ts"), Path("rpu.bin"), Path("el.hevc")
+    assert "0:v:1" in hdr.rpu_argvs(tools, src, rpu, 1)[0]
+    assert "0:v:0" in hdr.rpu_argvs(tools, src, rpu)[0]
+    # the track is the enhancement layer already: ffmpeg copies it out, no demux
+    (copy,) = hdr.el_argvs(tools, src, el, 1)
+    assert copy[0] == "ffmpeg" and "0:v:1" in copy and copy[-3:] == ("hevc", "-y", str(el))
+    assert hdr.el_argvs(tools, src, el)[1][:3] == ("dovi_tool", "demux", "--el-only")
+
+
+def test_an_unread_second_track_warns(tmp_path):
+    video = VideoInfo(3840, 2160, second_hevc=True)
+    settings = EncoderSettings(encoder=Encoder.X265, depth=10)
+    nope = str(tmp_path / "nope.exe")
+    missing = SimpleNamespace(ffmpeg=nope, dovi_tool=nope, mkvmerge=nope, hdr10plus_tool=nope)
+    assert [i.code for i in hdr.issues(video, settings, missing)] == ["hdr.dv_second_track"]
+    assert hdr.issues(video, settings, None) == []
+    found = VideoInfo(3840, 2160, second_hevc=True, hdr=VideoHdr(7, 6, dv_el="FEL", dv_stream=1))
+    assert "hdr.dv_second_track" not in [i.code for i in hdr.issues(found, settings, missing)]
 
 
 def test_hdr10plus_frames_and_x264(tmp_path):

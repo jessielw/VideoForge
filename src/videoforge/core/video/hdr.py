@@ -30,6 +30,11 @@ mastering display" and MaxCLL / MaxFALL from the whole RPU's L1 (measured on the
 can be brighter than the base layer), else L6, else the source's. A source's HDR10+ is left out then (as
 DoVi_Scripts' bake leaves it out): it was measured on the base layer, so its per-scene values don't fit the
 baked picture.
+
+A UHD Blu-ray's M2TS has its enhancement layer (with the RPU) in a video track of its own, which MediaInfo
+doesn't read as Dolby Vision (dual_layer): its profile and FEL / MEL come from a second of that track's RPU,
+and the RPU and the enhancement layer are taken from it (`-map 0:v:1`; the track is the enhancement layer
+already, so ffmpeg copies it out without dovi_tool's demux). The HDR10+, as the picture, is the base layer's.
 """
 
 from __future__ import annotations
@@ -122,14 +127,17 @@ def from_mediainfo(track: Any) -> VideoHdr:
     )
 
 
-def video_stream_argv(ffmpeg: str, source: Path, *, start_s: float = 0, seconds: float = 0) -> list[str]:
-    """ffmpeg writing the source's first video stream as raw HEVC (Annex B) to stdout, as dovi_tool and
-    hdr10plus_tool read it (StaxRip's command); start_s / seconds take a part of it."""
+def video_stream_argv(
+    ffmpeg: str, source: Path, *, start_s: float = 0, seconds: float = 0, stream: int = 0
+) -> list[str]:
+    """ffmpeg writing one of the source's video streams (the first; VideoHdr.dv_stream for its RPU and
+    enhancement layer) as raw HEVC (Annex B) to stdout, as dovi_tool and hdr10plus_tool read it (StaxRip's
+    command); start_s / seconds take a part of it."""
     argv = [ffmpeg, "-hide_banner", "-loglevel", "error", "-analyzeduration", "100M", "-probesize", "50M"]
     argv += ["-ss", f"{start_s:g}"] if start_s else []
     argv += ["-i", str(source)]
     argv += ["-t", f"{seconds:g}"] if seconds else []
-    return [*argv, "-map", "0:v:0", "-c:v:0", "copy", "-bsf:v", "hevc_mp4toannexb", "-f", "hevc", "-"]
+    return [*argv, "-map", f"0:v:{stream}", "-c:v:0", "copy", "-bsf:v", "hevc_mp4toannexb", "-f", "hevc", "-"]
 
 
 def rpu_info(dovi_tool: str, rpu: Path, frame: int = 0) -> dict[str, Any]:
@@ -151,26 +159,44 @@ def rpu_info(dovi_tool: str, rpu: Path, frame: int = 0) -> dict[str, Any]:
 def read_el_type(source: Path, tools: Tools) -> str:
     """ "FEL" or "MEL" for a profile 7 source, from a second of its RPU (10 s in, or the start of a shorter
     file); "" when it can't be read. Cached per file, size and mtime."""
+    return _rpu_sample(source, tools, 0)[1]
+
+
+def dual_layer(source: Path, tools: Tools, found: VideoHdr) -> VideoHdr:
+    """A UHD Blu-ray M2TS's Dolby Vision (VideoInfo.second_hevc), which MediaInfo doesn't see: profile 7 (7.6, as
+    the disc's MKV remux reads) with its FEL / MEL and the stream it's in, from a second of the second video
+    track's RPU. found (MediaInfo's: the HDR10+ is the base layer's) as it is when that track has no RPU."""
+    profile, el_type = _rpu_sample(source, tools, 1)
+    if profile != 7:
+        return found
+    return replace(found, dv_profile=7, dv_compat=6, dv_layers="BL+EL+RPU", dv_el=el_type, dv_stream=1)
+
+
+def _rpu_sample(source: Path, tools: Tools, stream: int) -> tuple[int, str]:
+    """A video stream's RPU from a second of it (10 s in, or the start of a shorter file): its dovi_profile and
+    el_type; (0, "") when it has none or it can't be read. Cached per file, size and mtime."""
     try:
         st = source.stat()
     except OSError:
-        return ""
-    return _el_type(str(source), st.st_size, st.st_mtime_ns, tools.ffmpeg, tools.dovi_tool)
+        return 0, ""
+    return _sample(str(source), st.st_size, st.st_mtime_ns, tools.ffmpeg, tools.dovi_tool, stream)
 
 
 @functools.lru_cache(maxsize=64)
-def _el_type(source: str, _size: int, _mtime: int, ffmpeg: str, dovi_tool: str) -> str:
+def _sample(source: str, _size: int, _mtime: int, ffmpeg: str, dovi_tool: str, stream: int) -> tuple[int, str]:
     with tempfile.TemporaryDirectory(prefix="vf_dv_") as tmp:
         rpu = Path(tmp) / "sample.bin"
         for start in (10, 0):
             dovi = [dovi_tool, "extract-rpu", "-", "-o", str(rpu)]
+            ffmpeg_argv = video_stream_argv(ffmpeg, Path(source), start_s=start, seconds=1, stream=stream)
             try:
-                run([video_stream_argv(ffmpeg, Path(source), start_s=start, seconds=1), dovi], lambda _line: None)
+                run([ffmpeg_argv, dovi], lambda _line: None)
                 if rpu.is_file() and os.path.getsize(rpu) > 0:
-                    return str(rpu_info(dovi_tool, rpu).get("el_type") or "")
+                    info = rpu_info(dovi_tool, rpu)
+                    return int(info.get("dovi_profile") or 0), str(info.get("el_type") or "")
             except (OSError, ToolError, ValueError) as ex:
-                logger.info("%s: no RPU sample from %s s: %s", Path(source).name, start, ex)
-    return ""
+                logger.info("%s: no RPU sample from 0:v:%s at %s s: %s", Path(source).name, stream, start, ex)
+    return 0, ""
 
 
 def keeps_hdr10plus(video: VideoInfo | None, settings: EncoderSettings) -> bool:
@@ -240,6 +266,15 @@ def _dv_issues(
     video: VideoInfo, settings: EncoderSettings, tools: Tools | None, video_settings: VideoSettings | None
 ) -> list[Issue]:
     dv = video.hdr
+    if video.second_hevc and not dv.dv_profile and _missing_tools(tools, ("dovi_tool",)):
+        return [
+            Issue(
+                Severity.WARN,
+                "hdr.dv_second_track",
+                "The source has a second HEVC video track (a UHD Blu-ray's Dolby Vision enhancement layer?) that "
+                "couldn't be read: set dovi_tool in Settings, or the encode keeps the base layer only",
+            )
+        ]
     if dv.dv_profile == 5 and not keeps_dv(video, settings):
         return [
             Issue(
@@ -381,10 +416,11 @@ def check_frames(vspipe: str, script: Path, metadata: Path, log: LogFn) -> None:
     _same_frames(script_frames(vspipe, script), hdr10plus_frames(metadata), "HDR10+ metadata", "HDR10+", log)
 
 
-def rpu_argvs(tools: Tools, source: Path, out: Path) -> tuple[tuple[str, ...], ...]:
-    """The source's Dolby Vision RPU into a file: ffmpeg | dovi_tool extract-rpu (as it is: mode 0)."""
+def rpu_argvs(tools: Tools, source: Path, out: Path, stream: int = 0) -> tuple[tuple[str, ...], ...]:
+    """The source's Dolby Vision RPU into a file: ffmpeg | dovi_tool extract-rpu (as it is: mode 0), from the
+    video stream holding it (VideoHdr.dv_stream)."""
     extract = (tools.dovi_tool, "-m", "0", "extract-rpu", "-", "-o", str(out))
-    return (tuple(video_stream_argv(tools.ffmpeg, source)), extract)
+    return (tuple(video_stream_argv(tools.ffmpeg, source, stream=stream)), extract)
 
 
 def rpu_frames(dovi_tool: str, rpu: Path) -> int:
@@ -402,8 +438,11 @@ def check_rpu_frames(vspipe: str, dovi_tool: str, script: Path, rpu: Path, log: 
     _same_frames(script_frames(vspipe, script), rpu_frames(dovi_tool, rpu), "Dolby Vision RPU", "Dolby Vision", log)
 
 
-def el_argvs(tools: Tools, source: Path, out: Path) -> tuple[tuple[str, ...], ...]:
-    """A profile 7 source's enhancement layer into a raw HEVC file: ffmpeg | dovi_tool demux --el-only."""
+def el_argvs(tools: Tools, source: Path, out: Path, stream: int = 0) -> tuple[tuple[str, ...], ...]:
+    """A profile 7 source's enhancement layer into a raw HEVC file: ffmpeg | dovi_tool demux --el-only. A stream
+    of its own (VideoHdr.dv_stream: a UHD Blu-ray M2TS's) is the layer already: ffmpeg copies it out."""
+    if stream:
+        return ((*video_stream_argv(tools.ffmpeg, source, stream=stream)[:-1], "-y", str(out)),)
     demux = (tools.dovi_tool, "demux", "--el-only", "-", "-e", str(out))
     return (tuple(video_stream_argv(tools.ffmpeg, source)), demux)
 
