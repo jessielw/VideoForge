@@ -111,6 +111,7 @@
     }
   }
   const starred = $derived(app.defaultTemplate(profile))
+  const profileName = $derived(app.profiles.find((p) => p.id === profile)?.name ?? profile)
   const userNames = $derived(new Set(app.presets.template.map((t) => t.name)))
   const containers = $derived(app.profiles.find((p) => p.id === profile)?.containers ?? [])
   const container = $derived(containers.find((c) => c.id === draft?.mux.container) ?? containers[0])
@@ -338,7 +339,7 @@
         {:else}
           <Tip
             text={c.name === starred
-              ? `New jobs start on this template for ${profile}`
+              ? `New jobs start on this template for Profile: ${profileName}`
               : 'Make this the default for New jobs'}
           >
             <Button
@@ -612,7 +613,7 @@
           <span class="section-label">Audio</span>
           {#if !trackEditor}
             <p class="text-xs text-muted-foreground">
-              {app.profiles.find((p) => p.id === profile)?.name}'s rules choose its jobs' audio: these settings apply to
+              {profileName}'s rules choose its jobs' audio: these settings apply to
               other profiles' jobs.
             </p>
           {/if}
@@ -627,7 +628,7 @@
           <span class="section-label">Subtitles</span>
           {#if !trackEditor}
             <p class="text-xs text-muted-foreground">
-              {app.profiles.find((p) => p.id === profile)?.name}'s rules choose its jobs' subtitles: these settings
+              {profileName}'s rules choose its jobs' subtitles: these settings
               apply to other profiles' jobs.
             </p>
           {/if}
