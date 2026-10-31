@@ -33,6 +33,7 @@ import type {
   ImportAction,
   ImportPlan,
   Priority,
+  ProfileList,
   RuleSet,
   QueueState,
   ReuseJob,
@@ -183,6 +184,14 @@ export const api = {
   previewConfiguration: (bundle: unknown) => post<ConfigurationPreview>('/api/configuration/preview', bundle),
   importConfiguration: (bundle: ConfigurationBundle) =>
     post<{ config: ConfigState; presets: Presets; warnings: string[] }>('/api/configuration/import', bundle),
+  profiles: () => get<ProfileList>('/api/profiles'),
+  // copy: start from the active profile's configuration; else a fresh install's
+  createProfile: (name: string, copy: boolean) => post<ProfileList>('/api/profiles', { name, copy }),
+  renameProfile: (id: string, name: string) =>
+    request<ProfileList>('PATCH', `/api/profiles/${encodeURIComponent(id)}`, { name }),
+  deleteProfile: (id: string) => request<ProfileList>('DELETE', `/api/profiles/${encodeURIComponent(id)}`),
+  activateProfile: (id: string) =>
+    post<ProfileList & { config: ConfigState; presets: Presets }>(`/api/profiles/${encodeURIComponent(id)}/activate`),
   resetConfiguration: (scopes: { settings: boolean; presets: boolean; jobs: boolean }) =>
     post<{ config: ConfigState; presets: Presets; backup: string; removed: string[] }>(
       '/api/configuration/reset',

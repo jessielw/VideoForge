@@ -8,7 +8,7 @@
   import { api } from '../lib/api'
   import { app } from '../lib/state.svelte'
   import { saves } from '../lib/saves'
-  import { drafts } from '../lib/drafts'
+  import { forgetConfigurationDrafts } from '../lib/drafts'
   import type { ConfigState } from '../lib/types'
 
   let { disabled = false, onreset }: { disabled?: boolean; onreset: (config: ConfigState) => void } = $props()
@@ -28,17 +28,7 @@
       await saves.flush()
       const result = await api.resetConfiguration($state.snapshot(scopes))
       app.presets = result.presets
-      if (scopes.presets) drafts.write('templates', null)
-      const newJobs = drafts.read<Record<string, unknown>>('new-jobs')
-      if (newJobs)
-        drafts.write('new-jobs', {
-          ...newJobs,
-          ruleSet: '',
-          templateName: null,
-          encoder: null,
-          container: '',
-          output: [],
-        })
+      forgetConfigurationDrafts(scopes.presets)
       onreset(result.config)
       open = false
       toast.success('VideoForge reset', {

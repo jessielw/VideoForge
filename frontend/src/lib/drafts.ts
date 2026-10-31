@@ -31,3 +31,12 @@ function session(): Storage | undefined {
   }
 }
 export const drafts = createDraftStore(session())
+
+// After the whole configuration changed (an import, a reset, another profile): the editors' drafts named its
+// templates and presets, so they start again from its defaults. The New jobs form keeps its files.
+export function forgetConfigurationDrafts(templates = true): void {
+  if (templates) drafts.write('templates', null)
+  const newJobs = drafts.read<Record<string, unknown>>('new-jobs')
+  if (newJobs)
+    drafts.write('new-jobs', { ...newJobs, ruleSet: '', templateName: null, encoder: null, container: '', output: [] })
+}

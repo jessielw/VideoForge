@@ -136,6 +136,7 @@ async function fixture(page: Page, options: { installed?: boolean; enabled?: boo
       '/api/jobs': [],
       '/api/rule-sets': [],
       '/api/health': { ok: true, version: 'test' },
+      '/api/profiles': { profiles: [{ id: 'default', name: 'Default' }], active: 'default' },
       '/api/presets': { video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] },
       '/api/filter-presets': [],
       '/api/config/encoders': [],

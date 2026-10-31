@@ -99,6 +99,7 @@ async function layoutFixture(page: Page) {
       '/api/jobs': [],
       '/api/rule-sets': [ruleSet],
       '/api/health': { ok: true, version: 'test' },
+      '/api/profiles': { profiles: [{ id: 'default', name: 'Default' }], active: 'default' },
       '/api/presets': {
         video: [],
         encoder: [],

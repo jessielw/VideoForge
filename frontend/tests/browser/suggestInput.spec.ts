@@ -96,6 +96,7 @@ async function fixture(page: Page) {
       '/api/rule-sets': [ruleSet],
       '/api/presets': presets,
       '/api/health': { ok: true, version: 'test' },
+      '/api/profiles': { profiles: [{ id: 'default', name: 'Default' }], active: 'default' },
       '/api/filter-presets': [],
       '/api/config/encoders': [],
       '/api/config/video-options/x264': { dashes: '--', options },

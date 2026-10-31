@@ -11,6 +11,7 @@ import type {
   Preset,
   PresetKind,
   Presets,
+  ProfileList,
   RuleSet,
   QueueState,
   StepRun,
@@ -51,6 +52,7 @@ class AppState {
     index_queued: 0,
   })
   ruleSets = $state<RuleSet[]>([])
+  profiles = $state<ProfileList>({ profiles: [], active: '' })
   log = $state<LogLine[]>([])
   connected = $state(false)
   connectionVersion = $state(0)
@@ -98,6 +100,18 @@ class AppState {
     } catch {
       /* only the rule sets' defaults are offered */
     }
+  }
+
+  async loadProfiles(): Promise<void> {
+    try {
+      this.profiles = await api.profiles()
+    } catch {
+      /* named only in Settings and the Templates page's hints */
+    }
+  }
+
+  get activeProfile(): string {
+    return this.profiles.profiles.find((p) => p.id === this.profiles.active)?.name ?? ''
   }
 
   async loadFilterPresets(): Promise<void> {
@@ -176,6 +190,7 @@ class AppState {
         this.encodes = encodes
         this.version = health.version
         this.connectionError = ''
+        void this.loadProfiles()
         this.connect()
       } catch (e) {
         this.connectionError = e instanceof Error ? e.message : String(e)

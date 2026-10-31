@@ -104,6 +104,7 @@ async function phoneFixture(page: Page) {
     let json: unknown
     if (path === '/api/jobs') json = jobs
     else if (path === '/api/health') json = { ok: true, version: 'test' }
+    else if (path === '/api/profiles') json = { profiles: [{ id: 'default', name: 'Default' }], active: 'default' }
     else if (path === '/api/presets')
       json = { video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] }
     else if (/^\/api\/jobs\/job-\d+$/.test(path)) json = detail(jobs.find((job) => job.id === path.split('/')[3])!)

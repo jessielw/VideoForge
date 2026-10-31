@@ -9,6 +9,7 @@
   import ConfigurationTransfer from '../components/ConfigurationTransfer.svelte'
   import PresetPackTransfer from '../components/PresetPackTransfer.svelte'
   import ResetConfiguration from '../components/ResetConfiguration.svelte'
+  import ProfileManager from '../components/ProfileManager.svelte'
   import PluginManager from '../components/PluginManager.svelte'
   import AudioPresetMenu from '../components/AudioPresetMenu.svelte'
   import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
@@ -86,6 +87,7 @@
     }
     draft.events = defaultEvents()
     checkAll()
+    void app.loadProfiles()
   })
 
   async function change(changes: Parameters<typeof api.saveConfig>[0]): Promise<boolean> {
@@ -327,6 +329,16 @@
     {#each config?.restart ?? [] as note (note)}
       <div class="col-span-full rounded-md border border-warning/50 bg-warning/10 p-3 text-sm text-warning">{note}</div>
     {/each}
+
+    <ProfileManager
+      disabled={pending > 0 || !!saveError}
+      onswitched={(value) => {
+        config = value
+        pluginRefresh++
+        checks = {}
+        checkAll()
+      }}
+    />
 
     <section class="col-span-full space-y-3">
       <h2 class="font-medium">Encoder presets</h2>

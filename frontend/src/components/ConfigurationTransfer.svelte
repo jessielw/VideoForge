@@ -8,7 +8,7 @@
   import { api } from '../lib/api'
   import { app } from '../lib/state.svelte'
   import { saves } from '../lib/saves'
-  import { drafts } from '../lib/drafts'
+  import { forgetConfigurationDrafts } from '../lib/drafts'
   import { templateScripts } from '../lib/templateTransfer'
   import type { ConfigState, ConfigurationPreview, PresetKind } from '../lib/types'
 
@@ -99,17 +99,7 @@
       await saves.flush()
       const result = await api.importConfiguration(preview.bundle)
       app.presets = result.presets
-      drafts.write('templates', null)
-      const newJobs = drafts.read<Record<string, unknown>>('new-jobs')
-      if (newJobs)
-        drafts.write('new-jobs', {
-          ...newJobs,
-          ruleSet: '',
-          templateName: null,
-          encoder: null,
-          container: '',
-          output: [],
-        })
+      forgetConfigurationDrafts()
       onimported(result.config)
       toast.success('Configuration imported')
       open = false

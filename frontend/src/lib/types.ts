@@ -513,6 +513,17 @@ export interface RuleSet {
   default: boolean
 }
 
+// A profile: a whole configuration (Settings, templates, presets); one is active, the queue is shared.
+export interface Profile {
+  id: string
+  name: string
+}
+
+export interface ProfileList {
+  profiles: Profile[]
+  active: string // the active profile's id
+}
+
 export interface ContainerInfo {
   id: string
   label: string

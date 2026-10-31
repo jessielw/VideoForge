@@ -97,6 +97,7 @@ test('Settings: default subtitle rules save as they change, naming included, and
       '/api/rule-sets': [ruleSet],
       '/api/presets': presets,
       '/api/health': { ok: true, version: 'test' },
+      '/api/profiles': { profiles: [{ id: 'default', name: 'Default' }], active: 'default' },
       '/api/filter-presets': [],
       '/api/config/encoders': [],
       '/api/config': config,
