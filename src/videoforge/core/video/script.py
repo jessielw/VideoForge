@@ -26,7 +26,7 @@ from typing import Literal
 
 from videoforge.core.models import SubTrack
 from videoforge.core.video import burn as burn_in
-from videoforge.core.video.settings import FilterCategory, SourceFilter, VideoSettings
+from videoforge.core.video.settings import DEFAULT_KERNEL, KERNELS, FilterCategory, SourceFilter, VideoSettings
 
 Stage = Literal["source", "crop", "output"]
 
@@ -128,7 +128,8 @@ def processing_lines(
                 lines += sub
         elif step.category is FilterCategory.RESIZE:
             if r is not None and not cropped:
-                lines.append(f"clip = core.resize.{r.kernel}(clip, width={r.width}, height={r.height})")
+                kernel = r.kernel if r.kernel in KERNELS else DEFAULT_KERNEL
+                lines.append(f"clip = core.resize.{kernel}(clip, width={r.width}, height={r.height})")
         elif step.enabled and step.script.strip():
             lines += step.script.strip().splitlines()
     if cropped:

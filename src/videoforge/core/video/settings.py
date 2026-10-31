@@ -31,15 +31,24 @@ class Crop:
         return not (self.left or self.top or self.right or self.bottom)
 
 
+KERNELS = ("Spline36", "Spline64", "Lanczos", "Bicubic", "Bilinear", "Point")  # frontend/src/lib/resize.ts
+DEFAULT_KERNEL = "Spline36"
+
+
 @dataclass(slots=True)
 class Resize:
     width: int
     height: int  # with keep_ar, the last fitted height: each replan fits it to the job's source and crop
-    kernel: str = "Spline36"  # a core.resize function: Spline36, Bicubic, Lanczos, Point, ...
+    kernel: str = DEFAULT_KERNEL  # one of KERNELS: it is written into the script as a core.resize function name
     # StaxRip's resize: the height follows the width, so the square-pixel output keeps the display aspect
     # ratio of the picture going in (the cropped source, an anamorphic one's pixel aspect included).
     keep_ar: bool = False
     mod: int = 2  # both sides are a multiple of this
+
+    def __post_init__(self) -> None:
+        # Imported or stored data can't put code in the script: anything else falls back to the default.
+        if self.kernel not in KERNELS:
+            self.kernel = DEFAULT_KERNEL
 
 
 SQUARE_ENOUGH = Fraction(1, 100)  # a pixel this close to square is written as square
