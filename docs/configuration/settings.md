@@ -2,6 +2,12 @@
 
 Use **Settings** for tool paths, the default rule set, folder browser roots, indexing behavior, the test encode's [quality score](../usage/encoders.md#quality-score), parallel audio, priorities, cleanup, notifications, actions, and plugin switches. Changes save immediately to the application database.
 
+## Profiles
+
+A profile is a whole configuration: every **Settings** value, the templates, the encoder and video processing presets, and the default template selections. **Settings → Profiles** lists them: create, rename, switch to, or delete one. A new profile starts as a fresh install does, from `videoforge.toml`, or as a copy of the active profile. One profile is active at a time; the first one, made from an existing installation's configuration, is named **Default**.
+
+The queue is shared: every profile sees the same jobs, and a job keeps the settings it was made with. Switching waits for the queue to stop and for indexing and test encodes to finish, then applies the other profile's settings at once. Installed plugins are shared; each profile keeps its own plugin settings and switches, which take effect when VideoForge starts again. The last profile, and the active one, can't be deleted.
+
 Use **Settings → Encoder presets** to manage audio and video encoder libraries without opening a job or template. Both managers support folders, editing, duplication, import, and export, including the open draft's unsaved settings. Saving a library preset leaves existing jobs and templates as they are.
 
 ## Configuration precedence
@@ -11,11 +17,11 @@ For settings available in both places, the application uses these layers in orde
 1. `videoforge.toml`: shipped defaults in the application folder.
 2. `videoforge.local.toml`: machine-specific overrides beside that file; tables merge recursively.
 3. An imported configuration backup, if present: supplies restored server defaults, including pairing and plugin settings. The TOML files themselves are not rewritten.
-4. Saved **Settings** values in `videoforge.db`: override those defaults for the server.
+4. The active profile's saved **Settings** values in `videoforge.db`: override those defaults for the server.
 
 Reset a setting in the UI to return to its default (from the imported backup, if one was restored). Editing a TOML file does not override an imported configuration or an existing saved UI value. Restart VideoForge after editing a configuration file.
 
-Use **Settings → Configuration backup** to export or import the complete server configuration and all preset libraries without creating a job. See [Storage and backups](storage.md#back-up).
+Use **Settings → Configuration backup** to export or import the active profile's configuration and preset libraries without creating a job. See [Storage and backups](storage.md#back-up).
 
 The command-line `plan`, `run`, and `validate` commands load file configuration; server UI overrides are not a replacement for their file configuration.
 

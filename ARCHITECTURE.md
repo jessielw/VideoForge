@@ -92,12 +92,13 @@ src/videoforge/
   server/                FastAPI. The only place that knows about HTTP.
     app.py               create_app(): /api routers + the built frontend (SPA fallback)
     settings.py          Port, data folder, browsable roots
-    store.py             SQLite (app data): jobs (spec + state JSON, order), presets (video, encoder, template)
+    store.py             SQLite (app data): jobs (spec + state JSON, order), shared; profiles, each with its own
+                         settings and presets (video, encoder, template), one active (routes/profiles.py)
     queue.py             The queue: one worker thread runs jobs in order; start/stop/cancel, pause/resume, priority;
                          the index lane (its own thread: work folder, script, source index; nothing else)
     events.py            Progress, log lines and job changes -> WebSocket /api/events
     routes/              fs (folder browser), jobs, media (probe), video (frames, crop, script),
-                         rule sets, presets
+                         rule sets, presets, profiles
   applog.py              The app log (stdlib logging under "videoforge"): <data dir>/logs, a file per session
   cli.py                 `videoforge serve` (opens the browser), plus validate/plan/run
   desktop.py             `serve --window`: the app in a pywebview window with a tray icon (pystray; the `desktop`

@@ -120,8 +120,8 @@
 <section class="col-span-full space-y-3 rounded-xl border bg-card p-4" aria-label="Configuration backup">
   <h2 class="font-medium">Configuration backup</h2>
   <p class="text-sm text-muted-foreground">
-    Save or restore app settings, templates, video and audio encoder presets, video processing presets, and template
-    defaults in one file.
+    Save or restore the {app.activeProfile ? `${app.activeProfile} profile's` : "active profile's"} settings, templates, video
+    and audio encoder presets, video processing presets, and template defaults in one file.
   </p>
   <p class="text-xs text-muted-foreground">
     Includes tool paths, folder choices, notifications, actions, and plugin settings. Notification URLs, action targets,
@@ -166,8 +166,9 @@
     <Dialog.Header>
       <Dialog.Title>Import configuration</Dialog.Title>
       <Dialog.Description
-        >Restore the configuration from a VideoForge backup. This replaces your saved settings and preset libraries,
-        including default template selections. Existing jobs keep their settings.</Dialog.Description
+        >Restore the configuration from a VideoForge backup into the active profile. This replaces its saved settings
+        and preset libraries, including default template selections. Other profiles and existing jobs keep their
+        settings.</Dialog.Description
       >
     </Dialog.Header>
     <label class="space-y-2 text-sm">

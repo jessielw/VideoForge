@@ -52,7 +52,8 @@
 <section class="col-span-full space-y-3 rounded-xl border border-destructive/40 bg-card p-4" aria-label="Reset">
   <h2 class="font-medium">Reset VideoForge</h2>
   <p class="text-sm text-muted-foreground">
-    Go back to the defaults from videoforge.toml. A configuration backup is saved to the data folder first.
+    Set the {app.activeProfile ? `${app.activeProfile} profile` : 'active profile'} back to the defaults from videoforge.toml.
+    Its configuration backup is saved to the data folder first.
   </p>
   <Button
     variant="outline"
@@ -85,8 +86,8 @@
     <Dialog.Header>
       <Dialog.Title>Reset VideoForge</Dialog.Title>
       <Dialog.Description
-        >Choose what to remove. The queue must be stopped. Installed plugins and their files, work folders, and kept job
-        records stay.</Dialog.Description
+        >Choose what to remove. Settings and presets are the active profile's; other profiles keep theirs. The queue
+        must be stopped. Installed plugins and their files, work folders, and kept job records stay.</Dialog.Description
       >
     </Dialog.Header>
     <div class="space-y-3 text-sm">
@@ -111,7 +112,7 @@
         <Checkbox bind:checked={scopes.jobs} disabled={busy} />
         <span
           >Jobs<span class="block text-xs text-muted-foreground"
-            >Every job in the queue, finished or not. Not part of the backup.</span
+            >Every job in the queue, finished or not, from every profile. Not part of the backup.</span
           ></span
         >
       </label>
