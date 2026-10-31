@@ -1,7 +1,12 @@
-"""SQLite persistence: the queue's jobs (spec + state as JSON, their order) and small settings.
+"""SQLite persistence: the queue's jobs (spec + state as JSON, their order), and each profile's settings
+and preset libraries.
 
 The queue survives restarts: on load, a job that was running is marked
 interrupted and queued again; its finished steps are kept, so it resumes.
+
+A profile is a whole configuration (what Settings, Templates and the preset libraries hold): the store
+reads and writes the active one's. The queue is shared by every profile; a new profile starts as a fresh
+install does.
 """
 
 from __future__ import annotations
@@ -28,14 +33,25 @@ CREATE TABLE IF NOT EXISTS jobs (
     running INTEGER NOT NULL DEFAULT 0,
     updated TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS presets (
-    kind TEXT NOT NULL,
-    name TEXT NOT NULL,
-    data TEXT NOT NULL,
-    PRIMARY KEY (kind, name)
-);
+CREATE TABLE IF NOT EXISTS profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL, position REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
+# A profile's configuration. Separate statements: they're also made inside the migration's transaction.
+PROFILE_TABLES = (
+    "CREATE TABLE IF NOT EXISTS settings ("
+    " profile TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (profile, key))",
+    "CREATE TABLE IF NOT EXISTS presets ("
+    " profile TEXT NOT NULL, kind TEXT NOT NULL, name TEXT NOT NULL, data TEXT NOT NULL,"
+    " PRIMARY KEY (profile, kind, name))",
+)
+ACTIVE = "profile"  # app_settings: the active profile's id
+GLOBAL_KEYS = ("index_lane",)  # settings the queue keeps for every profile (queue.LANE_SETTING)
+FIRST_PROFILE = "Default"
+MAX_PROFILE_NAME = 80
+
+
+class ProfileInUse(Exception):
+    """A profile that can't go: the active one, or the last."""
 
 
 @dataclass(slots=True)
@@ -53,13 +69,144 @@ class Store:
         self._db = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(SCHEMA)
+        self._migrate()
         # Saved before 0.1.0-beta.11, when the default rule set was the default profile
         self._db.execute("UPDATE OR IGNORE settings SET key = 'rule_set' WHERE key = 'profile'")
+        ids = [i for (i,) in self._db.execute("SELECT id FROM profiles ORDER BY position")]
+        if not ids:
+            ids = [uuid4().hex]
+            self._db.execute("INSERT INTO profiles (id, name, position) VALUES (?, ?, 1)", (ids[0], FIRST_PROFILE))
+        row = self._db.execute("SELECT value FROM app_settings WHERE key = ?", (ACTIVE,)).fetchone()
+        self._profile = json.loads(row[0]) if row and json.loads(row[0]) in ids else ids[0]
         self._lock = threading.Lock()
+
+    def _migrate(self) -> None:
+        """Settings and presets saved before profiles (0.1.0-beta.11) become the first profile's."""
+        columns = [row[1] for row in self._db.execute("PRAGMA table_info(settings)")]
+        if not columns or "profile" in columns:
+            for sql in PROFILE_TABLES:
+                self._db.execute(sql)
+            return
+        pid = uuid4().hex
+        self._db.execute("BEGIN")
+        try:
+            self._db.execute("ALTER TABLE settings RENAME TO settings_v1")
+            self._db.execute("ALTER TABLE presets RENAME TO presets_v1")
+            for sql in PROFILE_TABLES:
+                self._db.execute(sql)
+            self._db.execute("INSERT INTO profiles (id, name, position) VALUES (?, ?, 1)", (pid, FIRST_PROFILE))
+            self._db.execute("INSERT INTO settings SELECT ?, key, value FROM settings_v1", (pid,))
+            for key in GLOBAL_KEYS:
+                self._db.execute("INSERT INTO app_settings SELECT key, value FROM settings_v1 WHERE key = ?", (key,))
+                self._db.execute("DELETE FROM settings WHERE profile = ? AND key = ?", (pid, key))
+            self._db.execute("INSERT INTO presets SELECT ?, kind, name, data FROM presets_v1", (pid,))
+            self._db.execute("DROP TABLE settings_v1")
+            self._db.execute("DROP TABLE presets_v1")
+            self._db.execute("INSERT INTO app_settings (key, value) VALUES (?, ?)", (ACTIVE, json.dumps(pid)))
+            self._db.execute("COMMIT")
+        except Exception:
+            self._db.execute("ROLLBACK")
+            raise
 
     def close(self) -> None:
         with self._lock:
             self._db.close()
+
+    # --- profiles -------------------------------------------------------------------
+
+    @property
+    def profile(self) -> str:
+        """The active profile's id: settings and presets are read and written in it."""
+        return self._profile
+
+    def profiles(self) -> list[dict[str, str]]:
+        with self._lock:
+            rows = self._db.execute("SELECT id, name FROM profiles ORDER BY position").fetchall()
+        return [{"id": pid, "name": name} for pid, name in rows]
+
+    def _profile_name(self, name: str, pid: str | None = None) -> str:
+        name = name.strip() if isinstance(name, str) else ""
+        if not 1 <= len(name) <= MAX_PROFILE_NAME:
+            raise ValueError(f"A profile name is 1 to {MAX_PROFILE_NAME} characters")
+        taken = self._db.execute(
+            "SELECT 1 FROM profiles WHERE lower(name) = lower(?) AND id != ?", (name, pid or "")
+        ).fetchone()
+        if taken:
+            raise ValueError(f"There's already a profile named {name!r}")
+        return name
+
+    def _known(self, pid: str) -> None:
+        if not self._db.execute("SELECT 1 FROM profiles WHERE id = ?", (pid,)).fetchone():
+            raise KeyError(pid)
+
+    def create_profile(self, name: str, copy_of: str | None = None) -> str:
+        """A new profile, empty (a fresh install's configuration) or with a copy of another's; its id."""
+        pid = uuid4().hex
+        with self._lock:
+            name = self._profile_name(name)
+            if copy_of is not None:
+                self._known(copy_of)
+            self._db.execute("BEGIN")
+            try:
+                self._db.execute(
+                    "INSERT INTO profiles (id, name, position)"
+                    " VALUES (?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM profiles))",
+                    (pid, name),
+                )
+                if copy_of is not None:
+                    self._db.execute(
+                        "INSERT INTO settings SELECT ?, key, value FROM settings WHERE profile = ?", (pid, copy_of)
+                    )
+                    self._db.execute(
+                        "INSERT INTO presets SELECT ?, kind, name, data FROM presets WHERE profile = ?", (pid, copy_of)
+                    )
+                self._db.execute("COMMIT")
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
+        return pid
+
+    def rename_profile(self, pid: str, name: str) -> None:
+        with self._lock:
+            self._known(pid)
+            self._db.execute("UPDATE profiles SET name = ? WHERE id = ?", (self._profile_name(name, pid), pid))
+
+    def delete_profile(self, pid: str) -> None:
+        """Remove a profile and its whole configuration; not the active one, nor the last."""
+        with self._lock:
+            self._known(pid)
+            if self._db.execute("SELECT COUNT(*) FROM profiles").fetchone()[0] == 1:
+                raise ProfileInUse("The last profile can't be deleted")
+            if pid == self._profile:
+                raise ProfileInUse("Switch to another profile before deleting this one")
+            self._db.execute("BEGIN")
+            try:
+                self._db.execute("DELETE FROM settings WHERE profile = ?", (pid,))
+                self._db.execute("DELETE FROM presets WHERE profile = ?", (pid,))
+                self._db.execute("DELETE FROM profiles WHERE id = ?", (pid,))
+                self._db.execute("COMMIT")
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
+
+    def switch_profile(self, pid: str) -> None:
+        """Make another profile the active one (the caller applies its settings)."""
+        with self._lock:
+            self._known(pid)
+            self._db.execute(
+                "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)", (ACTIVE, json.dumps(pid))
+            )
+            self._profile = pid
+
+    def get_global(self, key: str, default: Any = None) -> Any:
+        """A setting every profile shares (GLOBAL_KEYS: the queue's)."""
+        with self._lock:
+            row = self._db.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+        return json.loads(row[0]) if row else default
+
+    def set_global(self, key: str, value: Any) -> None:
+        with self._lock:
+            self._db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)", (key, json.dumps(value)))
 
     # --- jobs ---------------------------------------------------------------------
 
@@ -107,58 +254,74 @@ class Store:
 
     def get_setting(self, key: str, default: Any = None) -> Any:
         with self._lock:
-            row = self._db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+            row = self._db.execute(
+                "SELECT value FROM settings WHERE profile = ? AND key = ?", (self._profile, key)
+            ).fetchone()
         return json.loads(row[0]) if row else default
 
     def set_setting(self, key: str, value: Any) -> None:
         with self._lock:
-            self._db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, json.dumps(value)))
+            self._db.execute(
+                "INSERT OR REPLACE INTO settings (profile, key, value) VALUES (?, ?, ?)",
+                (self._profile, key, json.dumps(value)),
+            )
 
     def set_settings(self, settings: dict[str, Any]) -> None:
-        rows = [(key, json.dumps(value)) for key, value in settings.items()]
         with self._lock:
+            rows = [(self._profile, key, json.dumps(value)) for key, value in settings.items()]
             self._db.execute("BEGIN")
             try:
-                self._db.executemany("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", rows)
+                self._db.executemany("INSERT OR REPLACE INTO settings (profile, key, value) VALUES (?, ?, ?)", rows)
                 self._db.execute("COMMIT")
             except Exception:
                 self._db.execute("ROLLBACK")
                 raise
 
     def configuration_snapshot(self, keys: tuple[str, ...], kinds: tuple[str, ...]) -> dict[str, Any]:
-        """Read a consistent settings/library snapshot without queue data."""
+        """Read a consistent settings/library snapshot of the active profile, without queue data."""
         with self._lock:
-            settings = dict(self._db.execute("SELECT key, value FROM settings"))
+            settings = dict(self._db.execute("SELECT key, value FROM settings WHERE profile = ?", (self._profile,)))
             presets = {kind: {} for kind in kinds}
-            for kind, name, data in self._db.execute("SELECT kind, name, data FROM presets ORDER BY kind, name"):
+            rows = self._db.execute(
+                "SELECT kind, name, data FROM presets WHERE profile = ? ORDER BY kind, name", (self._profile,)
+            )
+            for kind, name, data in rows:
                 if kind in presets:
                     presets[kind][name] = json.loads(data)
             return {"settings": {k: json.loads(settings[k]) for k in keys if k in settings}, "presets": presets}
 
     def restore_configuration(self, settings: dict[str, Any], presets: dict[str, dict[str, Any]]) -> None:
-        """Replace the represented configuration atomically; preserve jobs and queue bookkeeping."""
-        setting_rows = [(key, json.dumps(value)) for key, value in settings.items()]
-        preset_rows = [
-            (kind, name, json.dumps(data)) for kind, entries in presets.items() for name, data in entries.items()
-        ]
+        """Replace the active profile's represented configuration atomically; preserve jobs and queue bookkeeping."""
         with self._lock:
+            p = self._profile
+            setting_rows = [(p, key, json.dumps(value)) for key, value in settings.items()]
+            preset_rows = [
+                (p, kind, name, json.dumps(data)) for kind, entries in presets.items() for name, data in entries.items()
+            ]
             self._db.execute("BEGIN")
             try:
-                self._db.executemany("DELETE FROM presets WHERE kind = ?", [(kind,) for kind in presets])
-                self._db.executemany("INSERT INTO presets (kind, name, data) VALUES (?, ?, ?)", preset_rows)
-                self._db.executemany("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", setting_rows)
+                self._db.executemany(
+                    "DELETE FROM presets WHERE profile = ? AND kind = ?", [(p, kind) for kind in presets]
+                )
+                self._db.executemany("INSERT INTO presets (profile, kind, name, data) VALUES (?, ?, ?, ?)", preset_rows)
+                self._db.executemany(
+                    "INSERT OR REPLACE INTO settings (profile, key, value) VALUES (?, ?, ?)", setting_rows
+                )
                 self._db.execute("COMMIT")
             except Exception:
                 self._db.execute("ROLLBACK")
                 raise
 
     def reset_configuration(self, keys: tuple[str, ...], kinds: tuple[str, ...]) -> None:
-        """Delete these settings and whole preset libraries atomically; jobs and other settings stay."""
+        """Delete the active profile's settings and whole preset libraries atomically; jobs and other settings stay."""
         with self._lock:
+            p = self._profile
             self._db.execute("BEGIN")
             try:
-                self._db.executemany("DELETE FROM settings WHERE key = ?", [(key,) for key in keys])
-                self._db.executemany("DELETE FROM presets WHERE kind = ?", [(kind,) for kind in kinds])
+                self._db.executemany("DELETE FROM settings WHERE profile = ? AND key = ?", [(p, key) for key in keys])
+                self._db.executemany(
+                    "DELETE FROM presets WHERE profile = ? AND kind = ?", [(p, kind) for kind in kinds]
+                )
                 self._db.execute("COMMIT")
             except Exception:
                 self._db.execute("ROLLBACK")
@@ -166,25 +329,33 @@ class Store:
 
     def presets(self, kind: str) -> dict[str, Any]:
         with self._lock:
-            rows = self._db.execute("SELECT name, data FROM presets WHERE kind = ? ORDER BY name", (kind,)).fetchall()
+            rows = self._db.execute(
+                "SELECT name, data FROM presets WHERE profile = ? AND kind = ? ORDER BY name", (self._profile, kind)
+            ).fetchall()
         return {name: json.loads(data) for name, data in rows}
 
     def save_preset(self, kind: str, name: str, data: Any) -> None:
         with self._lock:
             self._db.execute(
-                "INSERT OR REPLACE INTO presets (kind, name, data) VALUES (?, ?, ?)", (kind, name, json.dumps(data))
+                "INSERT OR REPLACE INTO presets (profile, kind, name, data) VALUES (?, ?, ?, ?)",
+                (self._profile, kind, name, json.dumps(data)),
             )
 
     def delete_preset(self, kind: str, name: str) -> None:
         with self._lock:
-            self._db.execute("DELETE FROM presets WHERE kind = ? AND name = ?", (kind, name))
+            self._db.execute(
+                "DELETE FROM presets WHERE profile = ? AND kind = ? AND name = ?", (self._profile, kind, name)
+            )
 
     def delete_presets(self, kind: str, names: list[str]) -> None:
         """Several at once, in one transaction."""
         with self._lock:
             self._db.execute("BEGIN")
             try:
-                self._db.executemany("DELETE FROM presets WHERE kind = ? AND name = ?", [(kind, n) for n in names])
+                self._db.executemany(
+                    "DELETE FROM presets WHERE profile = ? AND kind = ? AND name = ?",
+                    [(self._profile, kind, n) for n in names],
+                )
                 self._db.execute("COMMIT")
             except Exception:
                 self._db.execute("ROLLBACK")
@@ -236,7 +407,9 @@ class Store:
             for kind, entries in libraries.items():
                 grouped = kind in ("encoder", "audio")
                 parent = "encoder" if kind == "encoder" else "action"
-                records = self._db.execute("SELECT name, data FROM presets WHERE kind = ?", (kind,)).fetchall()
+                records = self._db.execute(
+                    "SELECT name, data FROM presets WHERE profile = ? AND kind = ?", (self._profile, kind)
+                ).fetchall()
                 saved: dict[tuple, tuple[str, Any]] = {}
                 for name, raw in records:
                     record = json.loads(raw)
@@ -262,7 +435,7 @@ class Store:
                         record = {**old, "label": base, "group": group, "settings": data} if grouped else data
                         same = json.dumps(record, sort_keys=True) == json.dumps(old, sort_keys=True)
                         if not same:
-                            updates.append((json.dumps(record), kind, name))
+                            updates.append((json.dumps(record), self._profile, kind, name))
                         names[kind].append(base)
                         actions[kind].append("unchanged" if same else "replaced")
                         continue
@@ -275,12 +448,14 @@ class Store:
                     names[kind].append(label)
                     actions[kind].append("new" if label == base else "copy")
                     record = {"label": label, "group": group, "settings": data} if grouped else data
-                    rows.append((kind, uuid4().hex if grouped else label, json.dumps(record)))
+                    rows.append((self._profile, kind, uuid4().hex if grouped else label, json.dumps(record)))
             if not preview:
                 self._db.execute("BEGIN")
                 try:
-                    self._db.executemany("INSERT INTO presets (kind, name, data) VALUES (?, ?, ?)", rows)
-                    self._db.executemany("UPDATE presets SET data = ? WHERE kind = ? AND name = ?", updates)
+                    self._db.executemany("INSERT INTO presets (profile, kind, name, data) VALUES (?, ?, ?, ?)", rows)
+                    self._db.executemany(
+                        "UPDATE presets SET data = ? WHERE profile = ? AND kind = ? AND name = ?", updates
+                    )
                     self._db.execute("COMMIT")
                 except Exception:
                     self._db.execute("ROLLBACK")

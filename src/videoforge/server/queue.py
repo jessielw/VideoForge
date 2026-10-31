@@ -355,7 +355,7 @@ class JobQueue:
                 self._entries[e.id] = e
                 self._order.append(e.id)
             self._save(e)
-        lane = [i for i in self.store.get_setting(LANE_SETTING) or [] if i in self._entries]
+        lane = [i for i in self.store.get_global(LANE_SETTING) or [] if i in self._entries]
         logger.info(
             "%d job(s) loaded, %d queued, %d to index",
             len(self._entries),
@@ -1286,7 +1286,7 @@ class JobQueue:
         ids = [e.id for e in self.entries() if e.indexing] + [
             i for i in self._index_order if i in self._entries and self._entries[i].index_queued
         ]
-        self.store.set_setting(LANE_SETTING, ids)
+        self.store.set_global(LANE_SETTING, ids)
 
     def _encode_disks(self) -> frozenset[str]:
         """Under the lock: the disks the encode queue reads now, or is about to (between two jobs)."""

@@ -1675,16 +1675,16 @@ def test_index_lane_survives_a_restart(tmp_path):
         indexer.wait(3)  # (jobs still probing let the others go first, so the order isn't checked)
         for i in ids:
             assert wait_for(client, i, "ready", "warn")["indexed"]
-        assert store.get_setting("index_lane") == []
+        assert store.get_global("index_lane") == []
 
         indexer.gates["Show.S01E01.mkv"] = threading.Event()
         (tmp_path / "src" / "Show.S01E01.mkv_tmp" / "Show.S01E01.mkv.ffindex").unlink()
         client.post("/api/queue/index", json={"ids": [ids[0]]})
         wait_for(client, ids[0], "indexing")
-        assert store.get_setting("index_lane") == [ids[0]]
+        assert store.get_global("index_lane") == [ids[0]]
         client.post("/api/queue/index/stop")
         wait_for(client, ids[0], "ready", "warn")
-        assert store.get_setting("index_lane") == []
+        assert store.get_global("index_lane") == []
 
 
 def test_index_lane_waits_for_an_encode_on_its_disk(tmp_path, monkeypatch):

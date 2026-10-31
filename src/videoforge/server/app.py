@@ -39,6 +39,7 @@ from videoforge.server.routes import (
     plugins as plugin_routes,
     preset_packs,
     presets,
+    profiles,
     queue,
     system,
     video,
@@ -153,11 +154,12 @@ def create_app(
     app.state.plugins = plugins
     app.state.plugin_manager = plugin_manager
     app.state.plugin_settings_at_start = saved.plugin_settings
+    app.state.plugin_base_at_start = base.plugins
     app.state.plugins_off_at_start = frozenset(saved.disabled_plugins)
     app.state.preview = preview
     app.state.rule_set_ids = ids
     app.state.default_rule_set = default
-    for module in (jobs, queue, video, system, config, presets, configuration, preset_packs, plugin_routes):
+    for module in (jobs, queue, video, system, config, presets, configuration, preset_packs, plugin_routes, profiles):
         app.include_router(module.router)
     _mount_frontend(app, settings)
     return app

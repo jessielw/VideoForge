@@ -34,6 +34,7 @@ router = APIRouter(prefix="/api/config")
 RESTART_FOR: dict[str, str] = {  # setting -> why VideoForge needs a restart for it
     "plugins": "Plugins switched on or off load (or stop loading) when VideoForge starts again.",
     "configuration": "Imported plugin settings take effect when VideoForge starts again.",
+    "profile": "This profile's plugin settings take effect when VideoForge starts again.",
     "plugin_files": "Installed, replaced or removed plugins take effect when VideoForge starts again.",
     "plugin_settings": "Plugin settings take effect when VideoForge starts again.",
 }

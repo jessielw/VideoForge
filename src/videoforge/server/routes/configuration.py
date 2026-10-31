@@ -20,7 +20,7 @@ from videoforge.server.configuration import (
     read_configuration,
     storage_presets,
 )
-from videoforge.server.routes import config, presets
+from videoforge.server.routes import config, presets, profiles
 from videoforge.server.settings import SavedSettings
 
 router = APIRouter(prefix="/api/configuration")
@@ -145,8 +145,7 @@ def reset_configuration(request: Request, body: dict[str, Any] = Body(...)) -> d
         raise HTTPException(422, "Choose what to reset")
     state = request.app.state
     q = state.queue
-    if q.running or any(e.busy or e.indexing or e.sampling for e in q.entries()):
-        raise HTTPException(409, "Stop the queue and wait for indexing and test encodes to finish first")
+    profiles.idle(request)
     backup = state.settings.data_dir / "backups" / f"reset-{datetime.now():%Y%m%d-%H%M%S}.json"
     backup.parent.mkdir(parents=True, exist_ok=True)
     backup.write_text(json.dumps(export_configuration(request), indent=2) + "\n", encoding="utf-8")
