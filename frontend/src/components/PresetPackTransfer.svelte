@@ -277,7 +277,7 @@
             ? 'Copy numbers may change with your selection or other library edits. '
             : ''}Tools and plugins referenced by presets must be available on this computer.
         </p>
-        {#if scripts.length}<details class="space-y-2 text-xs">
+        {#if scripts.length}<details class="min-w-0 space-y-2 text-xs">
             <summary class="cursor-pointer font-medium">Review included scripts ({scripts.length})</summary>
             {#each scripts as script, i (i)}<p class="font-medium">{script.name}</p>
               <pre class="max-h-40 overflow-auto rounded bg-muted p-2">{script.script}</pre>{/each}

@@ -207,7 +207,7 @@
       </p>
       {#each preview.warnings as warning (warning)}<p class="text-xs text-warning">{warning}</p>{/each}
       {#if scripts.length || preview.bundle.settings.actions.length}
-        <details class="space-y-2 text-xs">
+        <details class="min-w-0 space-y-2 text-xs">
           <summary class="cursor-pointer font-medium">Review included scripts and actions</summary>
           <p class="text-muted-foreground">
             Scripts run when processing video. Enabled actions run on their selected job or queue events. Command
