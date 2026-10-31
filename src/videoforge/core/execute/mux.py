@@ -2,9 +2,12 @@
 
 mkvmerge:
 Inputs, in order: the encode (video only), the source (copied audio and
-subtitles, its attachments and global tags), then one file per encoded audio track, per copied track of an added
+subtitles, and its attachments: an ASS subtitle's fonts), then one file per encoded audio track, per copied track of an added
 audio file or copy of a track (Overrides.copies: mkvmerge takes a track once per
 input), and per external subtitle.
+No input's metadata reaches the output: the segment title is set empty (mkvmerge would take the first
+input's, e.g. the source's old movie name) and no input's global or track tags are taken (mkvmerge writes
+its own statistics tags). Track names, languages and flags come from the plan.
 
 Timing: the encode starts at 0. Source tracks are shifted by the source video's
 start offset so they line up with it (mkvmerge keeps an MKV's timestamps, and a TS's
@@ -157,7 +160,8 @@ def mux_command(
     start_ms = video.start_ms if video else 0
     external_chapters = plan.chapters_path is not None
 
-    argv: list[str] = [mkvmerge, "--output", str(output), *(extra or [])]
+    # An empty --title stops mkvmerge taking an input's; the user's own --title (in extra) still wins.
+    argv: list[str] = [mkvmerge, "--output", str(output), "--title", "", *(extra or [])]
     order: list[str] = ["0:0"]
 
     # 0: the encode, video only.
@@ -182,6 +186,7 @@ def mux_command(
             "--no-chapters",
             "--no-attachments",
             "--no-global-tags",
+            "--no-track-tags",
         ]
     if sar is not None and sar != 1:
         argv += ["--aspect-ratio-factor", f"0:{sar.numerator}/{sar.denominator}"]
@@ -213,11 +218,10 @@ def mux_command(
         str(plan.encode_path),
     ]
 
-    # 1: the source, copied audio and subtitles, and its attachments (an ASS subtitle's fonts) and global tags
-    # (as StaxRip carries them).
+    # 1: the source, copied audio and subtitles, and its attachments (an ASS subtitle's fonts); none of its tags.
     copied = [a for a in plan.audio if a.action is AudioAction.COPY and not a.source.is_external and not a.source.copy]
     internal_subs = [s for s in plan.subs if not s.source.is_external]
-    argv += ["--no-video"]
+    argv += ["--no-video", "--no-global-tags", "--no-track-tags"]
     if external_chapters:
         argv += ["--no-chapters"]
     argv += ["--audio-tracks", ",".join(str(a.source.id) for a in copied)] if copied else ["--no-audio"]
@@ -247,6 +251,7 @@ def mux_command(
                 "--no-chapters",
                 "--no-attachments",
                 "--no-global-tags",
+                "--no-track-tags",
                 "--audio-tracks",
                 str(tid),
             ]
@@ -262,7 +267,7 @@ def mux_command(
         path = encoded_audio.get(pos)
         if path is None:
             raise MuxError(f"No encoded file for audio {pos + 1} ({a.title})")
-        argv += _track_args(0, a)
+        argv += ["--no-global-tags", "--no-track-tags", *_track_args(0, a)]
         argv += _sync(0, (0 if delay_in_encode(a.action) else a.source.delay_ms) + a.sync_ms)
         argv.append(str(path))
         audio_order.append(f"{file_id}:0")
@@ -273,7 +278,7 @@ def mux_command(
         if not s.source.is_external:
             sub_order.append(f"1:{s.source.id}")
             continue
-        argv += ["--sub-charset", "0:UTF-8"]
+        argv += ["--sub-charset", "0:UTF-8", "--no-global-tags", "--no-track-tags"]
         argv += _track_args(0, s)
         if s.source.format is SubFormat.PGS:
             argv += ["--compression", f"0:{'zlib' if pgs_zlib else 'none'}"]

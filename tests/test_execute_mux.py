@@ -167,15 +167,25 @@ def test_av1_encode_is_tagged_with_its_hdr10():
     assert argv.index("--max-luminance") < argv.index("video.ivf")
 
 
-def test_source_attachments_and_global_tags_are_kept():
-    """An ASS subtitle's fonts are the source's attachments: they go into the output (as StaxRip does), and so
-    do its global tags; the encode's and other inputs' don't."""
+def test_source_attachments_kept_and_no_input_metadata():
+    """An ASS subtitle's fonts are the source's attachments: they go into the output (as StaxRip does). No
+    input's title or tags do: a renamed movie mustn't keep the source's name."""
     plan = aot_plan(encode="Show.S01E01_job.mkv")
     argv = mux_command(plan, {0: Path("a.m4a"), 1: Path("b.ec3")}, OUT, "mkvmerge", RAW)
     encode_args = argv[: argv.index("Show.S01E01_job.mkv")]
     source_args = argv[argv.index("Show.S01E01_job.mkv") + 1 : argv.index("Show.S01E01.mkv")]
-    assert {"--no-attachments", "--no-global-tags"} <= set(encode_args)
-    assert "--no-attachments" not in source_args and "--no-global-tags" not in source_args
+    assert {"--no-attachments", "--no-global-tags", "--no-track-tags"} <= set(encode_args)
+    assert "--no-attachments" not in source_args
+    assert {"--no-global-tags", "--no-track-tags"} <= set(source_args)
+    assert value(argv, "--title") == [""]
+    inputs = [a for a in argv[1:] if a.endswith((".mkv", ".m4a", ".ec3", ".srt", ".sup")) and a != str(OUT)]
+    assert argv.count("--no-track-tags") == len(inputs)
+
+
+def test_user_title_overrides_the_empty_one():
+    plan = aot_plan()
+    argv = mux_command(plan, {0: Path("a.m4a"), 1: Path("b.ec3")}, OUT, "mkvmerge", RAW, ["--title", "New Name"])
+    assert value(argv, "--title") == ["", "New Name"]
 
 
 def test_titles_and_flags_follow_plan():
