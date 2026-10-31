@@ -31,7 +31,7 @@ def lines(path: Path) -> list[dict]:
 
 
 def run(
-    profile,
+    rule_set,
     tmp_path: Path,
     runner=None,
     label: str = "dubbed",
@@ -43,15 +43,15 @@ def run(
     spec.label = label
     spec.output_policy = output_policy
     state = JobState()
-    output = job_output(spec, plan, profile)
+    output = job_output(spec, plan, rule_set)
     rec = RunRecorder(
-        spec, plan, profile, output, queue_events=queue, versions=lambda names: dict.fromkeys(names, "v1")
+        spec, plan, rule_set, output, queue_events=queue, versions=lambda names: dict.fromkeys(names, "v1")
     )
     rec.started_run()
     result = run_job(
         spec,
         plan,
-        profile,
+        rule_set,
         APP,
         state=state,
         runner=runner or FakeRunner(),
@@ -62,9 +62,9 @@ def run(
     return spec, output, result, rec
 
 
-def test_a_finished_run_writes_its_record_and_events(profile, tmp_path):
+def test_a_finished_run_writes_its_record_and_events(rule_set, tmp_path):
     queue = JsonLines(tmp_path / "data" / "logs" / "events.jsonl")
-    spec, output, result, rec = run(profile, tmp_path, queue=queue)
+    spec, output, result, rec = run(rule_set, tmp_path, queue=queue)
     assert result.status is JobStatus.DONE and output == tmp_path / "out" / "Show.S01E01.dubbed.mkv"
     work = tmp_path / "Show.S01E01.mkv_tmp" / "dubbed"  # the job's folder, by its label
 
@@ -96,7 +96,8 @@ def test_a_finished_run_writes_its_record_and_events(profile, tmp_path):
         "id": None,
         "name": "Show.S01E01.mkv",
         "label": "dubbed",
-        "profile": spec.profile,
+        "rule_set": spec.rule_set,
+        "profile": spec.rule_set,
         "episode": "S01E01",
     }
     assert doc["source"]["path"] == str(tmp_path / "Show.S01E01.mkv") and doc["source"]["size"] == 1
@@ -134,12 +135,12 @@ def test_a_finished_run_writes_its_record_and_events(profile, tmp_path):
     assert doc["job_dir"] == str(work) and doc["work_dir"] == str(work.parent)
 
 
-def test_a_failed_run_keeps_the_last_record(profile, tmp_path):
-    _, output, _, first = run(profile, tmp_path)
+def test_a_failed_run_keeps_the_last_record(rule_set, tmp_path):
+    _, output, _, first = run(rule_set, tmp_path)
     assert first.record_file is not None
     before = first.record_file.read_text(encoding="utf-8")
     _, _, result, rec = run(
-        profile, tmp_path, runner=FakeRunner(fail_on="mkvmerge"), output_policy=OutputPolicy.REPLACE
+        rule_set, tmp_path, runner=FakeRunner(fail_on="mkvmerge"), output_policy=OutputPolicy.REPLACE
     )
     assert result.status is JobStatus.FAILED and rec.record_file is None
     assert first.record_file.read_text(encoding="utf-8") == before  # it still describes the file that's there
@@ -151,11 +152,11 @@ def test_a_failed_run_keeps_the_last_record(profile, tmp_path):
     assert (failed["step"], failed["status"]) == ("mux", "failed")
 
 
-def test_a_cancelled_run(profile, tmp_path):
+def test_a_cancelled_run(rule_set, tmp_path):
     def cancelled(*_):
         raise Cancelled()
 
-    _, output, result, rec = run(profile, tmp_path, runner=cancelled, label="")
+    _, output, result, rec = run(rule_set, tmp_path, runner=cancelled, label="")
     assert result.status is JobStatus.CANCELLED and rec.record_file is None
     events = lines(tmp_path / "Show.S01E01.mkv_tmp" / "main" / "Show.S01E01.mkv.videoforge.jsonl")
     assert [e["event"] for e in events] == ["run.started", "step.started", "step.finished", "run.finished"]

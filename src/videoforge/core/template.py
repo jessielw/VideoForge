@@ -40,7 +40,7 @@ from videoforge.core.models import (
     copy_base,
     track_key,
 )
-from videoforge.core.profile import Profile
+from videoforge.core.rule_set import RuleSet
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
 
 
@@ -61,10 +61,10 @@ class Template:
     subs: TemplateSubs | None = None  # None: ... and its subtitles
 
     @classmethod
-    def defaults(cls, profile: Profile) -> Template:
-        """A profile's own settings for a new job, as a template."""
-        video, encoder = profile.video_defaults()
-        return cls(video, encoder, profile.mux_defaults())
+    def defaults(cls, rule_set: RuleSet) -> Template:
+        """A rule set's own settings for a new job, as a template."""
+        video, encoder = rule_set.video_defaults()
+        return cls(video, encoder, rule_set.mux_defaults())
 
     def apply(self, spec: JobSpec) -> None:
         """Set the job's settings from the template. A job reusing an encode has nothing to crop."""

@@ -3,7 +3,7 @@ import type { Template, TemplateBundle } from './types'
 export const MAX_TEMPLATE_BYTES = 5 * 1024 * 1024
 
 export function templateBundle(templates: { name: string; data: Template }[]): TemplateBundle {
-  // Copy only the portable fields, not UI metadata or default profile selections.
+  // Copy only the portable fields, not UI metadata or default rule set selections.
   return { format: 'videoforge.templates', version: 1, templates: templates.map(({ name, data }) => ({ name, data })) }
 }
 

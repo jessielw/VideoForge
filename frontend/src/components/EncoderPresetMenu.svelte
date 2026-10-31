@@ -7,13 +7,13 @@
   import { ENCODERS, type EncoderSettings } from '../lib/types'
 
   let {
-    profile,
+    ruleSet,
     current,
     apply,
     disabled = false,
     manageOnly = false,
   }: {
-    profile: string
+    ruleSet: string
     current: EncoderSettings
     apply: (settings: EncoderSettings) => void | Promise<void>
     disabled?: boolean
@@ -37,17 +37,17 @@
   {apply}
   {disabled}
   {manageOnly}
-  choices={app.presetChoices('encoder', profile)}
+  choices={app.presetChoices('encoder', ruleSet)}
   parents={ENCODERS}
   parentOf={(data) => data.encoder}
   {summary}
-  builtinLabel="profile"
+  builtinLabel="rule set"
   nameExample="Grain"
   folderExample="1080p / SDR"
   folderHint="Use / for nested folders. Folder names do not change resize or HDR processing."
   savePreset={async (preset) => {
     app.presets = await api.saveEncoderPreset(preset)
-    return app.presetChoices('encoder', profile)
+    return app.presetChoices('encoder', ruleSet)
   }}
   removePreset={async (name) => {
     app.presets = await api.deletePreset('encoder', name)

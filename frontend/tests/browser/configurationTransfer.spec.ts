@@ -6,7 +6,7 @@ import type {
   PresetKind,
   PresetPack,
   Presets,
-  Profile,
+  RuleSet,
   Template,
 } from '../../src/lib/types.ts'
 import { presetPack } from '../../src/lib/presetPack.ts'
@@ -46,7 +46,7 @@ async function fixture(page: Page) {
     audio: null,
     subs: null,
   }
-  const profile: Profile = {
+  const ruleSet: RuleSet = {
     id: 'manual',
     name: 'Manual',
     default: true,
@@ -72,9 +72,9 @@ async function fixture(page: Page) {
     roots: ['D:\\Media'],
     roots_custom: false,
     default_roots: ['D:\\Media'],
-    profile: 'manual',
-    profile_default: 'manual',
-    profiles: [profile],
+    rule_set: 'manual',
+    rule_set_default: 'manual',
+    rule_sets: [ruleSet],
     restart: [],
     index_waits_for_disk: true,
     sample_quality: false,
@@ -170,7 +170,7 @@ async function fixture(page: Page) {
     } else {
       const responses: Record<string, unknown> = {
         '/api/jobs': [],
-        '/api/profiles': [profile],
+        '/api/rule-sets': [ruleSet],
         '/api/presets': presets,
         '/api/health': { ok: true, version: 'test' },
         '/api/filter-presets': [],
@@ -230,7 +230,7 @@ test('previews all libraries and requires replacement confirmation before import
         version: 1,
         value: {
           sources: ['movie.mkv'],
-          profile: 'old-profile',
+          ruleSet: 'old-rule-set',
           templateName: 'Old template',
           encoder: { crf: 25 },
           container: 'mp4',
@@ -267,7 +267,7 @@ test('previews all libraries and requires replacement confirmation before import
   })
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('videoforge.draft.new-jobs')!).value)).toEqual({
     sources: ['movie.mkv'],
-    profile: '',
+    ruleSet: '',
     templateName: null,
     encoder: null,
     container: '',

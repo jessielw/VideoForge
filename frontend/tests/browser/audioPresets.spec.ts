@@ -5,7 +5,7 @@ import type {
   AudioEncodeInfo,
   AudioPresetSettings,
   Presets,
-  Profile,
+  RuleSet,
   Template,
   TrackOverride,
 } from '../../src/lib/types.ts'
@@ -54,7 +54,7 @@ async function fixture(page: Page) {
     subs: null,
     audio: { mode: 'position', slots: [{ track, extra: [] }], rules: [], others: 'keep' },
   }
-  const profile: Profile = {
+  const ruleSet: RuleSet = {
     id: 'manual',
     name: 'Manual',
     default: true,
@@ -124,7 +124,7 @@ async function fixture(page: Page) {
     } else {
       const responses: Record<string, unknown> = {
         '/api/jobs': [],
-        '/api/profiles': [profile],
+        '/api/rule-sets': [ruleSet],
         '/api/presets': presets,
         '/api/health': { ok: true, version: 'test' },
         '/api/filter-presets': [],

@@ -55,7 +55,7 @@ def _plan(tmp_path: Path) -> tuple[JobSpec, Plan]:
     src = tmp_path / "Movie.mkv"
     src.write_bytes(b"x")
     video = VideoInfo(1920, 1080, default_duration_ns=41708333)
-    spec = JobSpec(inputs=JobInputs(source=src), profile="manual")
+    spec = JobSpec(inputs=JobInputs(source=src), rule_set="manual")
     plan = Plan(SourceInfo(path=src, name=src.name, video=video), None, "1080p", "en")
     return spec, plan
 
@@ -338,7 +338,7 @@ def _real_app() -> AppConfig | None:
         Path(p).is_file() for p in (t.x264, t.mkvmerge, Path(t.vs_plugins) / "ffms2.dll")
     ):
         return None
-    return replace(app, profile="manual")
+    return replace(app, rule_set="manual")
 
 
 REAL = _real_app()

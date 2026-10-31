@@ -11,7 +11,7 @@ import type {
   Preset,
   PresetKind,
   Presets,
-  Profile,
+  RuleSet,
   QueueState,
   StepRun,
   Template,
@@ -50,7 +50,7 @@ class AppState {
     sampling: null,
     index_queued: 0,
   })
-  profiles = $state<Profile[]>([])
+  ruleSets = $state<RuleSet[]>([])
   log = $state<LogLine[]>([])
   connected = $state(false)
   connectionVersion = $state(0)
@@ -96,7 +96,7 @@ class AppState {
     try {
       this.presets = await api.presets()
     } catch {
-      /* only the profiles' defaults are offered */
+      /* only the rule sets' defaults are offered */
     }
   }
 
@@ -108,18 +108,18 @@ class AppState {
     }
   }
 
-  // A kind's presets for a profile: its defaults first (built in), the encoder starters, then the user's.
+  // A kind's presets for a rule set: its defaults first (built in), the encoder starters, then the user's.
   presetChoices<K extends PresetKind>(
     kind: K,
-    profileId: string,
+    ruleSetId: string,
   ): (Preset<PresetData<K>> & { builtin: boolean; badge?: string })[] {
-    const p = this.profiles.find((x) => x.id === profileId)
+    const p = this.ruleSets.find((x) => x.id === ruleSetId)
     const own =
       p && kind !== 'audio'
         ? [
             {
               name: `${p.name} defaults`,
-              data: p.defaults[kind as keyof Profile['defaults']] as unknown as PresetData<K>,
+              data: p.defaults[kind as keyof RuleSet['defaults']] as unknown as PresetData<K>,
               builtin: true,
             },
           ]
@@ -140,14 +140,14 @@ class AppState {
     ]
   }
 
-  // The name of the template New jobs starts on: the user's starred one, else the profile's own.
-  defaultTemplate(profileId: string): string {
-    const p = this.profiles.find((x) => x.id === profileId)
-    return this.presets.template_defaults[profileId] ?? (p ? `${p.name} defaults` : '')
+  // The name of the template New jobs starts on: the user's starred one, else the rule set's own.
+  defaultTemplate(ruleSetId: string): string {
+    const p = this.ruleSets.find((x) => x.id === ruleSetId)
+    return this.presets.template_defaults[ruleSetId] ?? (p ? `${p.name} defaults` : '')
   }
 
-  get defaultProfile(): Profile | undefined {
-    return this.profiles.find((p) => p.default) ?? this.profiles[0]
+  get defaultRuleSet(): RuleSet | undefined {
+    return this.ruleSets.find((p) => p.default) ?? this.ruleSets[0]
   }
 
   jobName(id: string | null): string {
@@ -162,15 +162,15 @@ class AppState {
     this.connection = this.connectionError ? 'retrying' : 'connecting'
     this.#starting = (async () => {
       try {
-        const [profiles, presets, filters, encodes, health] = await Promise.all([
-          api.profiles(),
+        const [ruleSets, presets, filters, encodes, health] = await Promise.all([
+          api.ruleSets(),
           api.presets(),
           api.filterPresets(),
           api.encoders(),
           api.health(),
         ])
         await this.refreshJobs()
-        this.profiles = profiles
+        this.ruleSets = ruleSets
         this.presets = presets
         this.filterPresets = filters
         this.encodes = encodes

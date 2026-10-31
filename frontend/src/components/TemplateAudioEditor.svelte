@@ -256,7 +256,7 @@
             {disabled}
             onchange={(e) => change((a) => (a.others = e.currentTarget.value as TemplateAudio['others']))}
           >
-            <option value="keep">Keep (as the profile decides)</option>
+            <option value="keep">Keep (as the rule set decides)</option>
             <option value="exclude">Leave out</option>
           </NativeSelect>
         </label>
@@ -336,7 +336,7 @@
                 onchange={(v: string[]) => change((a) => (a.rules[i].languages = v))}
               />
             </Tip>
-            <Tip text="The job's original language (the profile's guess, or the one set on the job)">
+            <Tip text="The job's original language (the rule set's guess, or the one set on the job)">
               <NativeSelect
                 aria-label="Audio rule {i + 1}: original language"
                 value={tri(r.original)}

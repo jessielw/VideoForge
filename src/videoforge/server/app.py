@@ -1,6 +1,6 @@
 """The FastAPI app: the API under /api, the built Svelte app everywhere else.
 
-create_app() wires the engine to the web: app config, profiles, the SQLite store,
+create_app() wires the engine to the web: app config, rule sets, the SQLite store,
 the job queue (and its worker) and the event hub. Tests pass their own settings
 and fake services.
 """
@@ -23,8 +23,8 @@ from videoforge.core.config import AppConfig, load_app_config
 from videoforge.core.events import EventBus, JobFinished, QueueFinished
 from videoforge.core.notify import Notifier
 from videoforge.core.plan_io import from_json
-from videoforge.core.profile import Profile
 from videoforge.core.record import QUEUE_EVENTS, QUEUE_EVENTS_MAX, JsonLines, event
+from videoforge.core.rule_set import RuleSet
 from videoforge.core.video import vs as vsx
 from videoforge.core.video.preview import Preview
 from videoforge.plugins.loader import PluginHost, load_plugins
@@ -53,16 +53,16 @@ def create_app(
     settings: ServerSettings | None = None,
     app_config: AppConfig | None = None,
     *,
-    profiles: Callable[[str], Profile] | None = None,
-    profile_ids: list[str] | None = None,
+    rule_sets: Callable[[str], RuleSet] | None = None,
+    rule_set_ids: list[str] | None = None,
     services: Services | None = None,
     setup_vapoursynth: bool = True,
 ) -> FastAPI:
-    from videoforge.profiles import default_profile_id, get_profile, profile_ids as registered
+    from videoforge.rule_sets import default_rule_set_id, get_rule_set, rule_set_ids as registered
 
     settings = settings or ServerSettings()
     base = app_config or load_app_config()  # videoforge.toml (+ .local); the Settings page layers over it
-    ids = profile_ids or registered()
+    ids = rule_set_ids or registered()
     services = services or Services()
 
     store = Store(settings.db_path)
@@ -70,7 +70,7 @@ def create_app(
     if restored_base := store.get_setting("configuration_base"):
         base = from_json(AppConfig, restored_base)
     saved = SavedSettings.load(store)
-    default = default_profile_id(saved.profile or base.profile, ids)
+    default = default_rule_set_id(saved.rule_set or base.rule_set, ids)
     cfg = saved.app_config(base, default)
     default_roots = list(settings.roots)
     if saved.roots:
@@ -85,7 +85,7 @@ def create_app(
     bus = EventBus()  # what runs do, for notifications, actions and plugins
     job_queue = JobQueue(
         cfg,
-        profiles or get_profile,
+        rule_sets or get_rule_set,
         store,
         events,
         services,
@@ -120,7 +120,7 @@ def create_app(
             vsx.configure(cfg.tools.vs_plugins)
             await asyncio.to_thread(vsx.ensure_vspipe, cfg.tools.vspipe)
         job_queue.load()
-        logger.info("Data folder %s, default profile %s", settings.data_dir, default)
+        logger.info("Data folder %s, default rule set %s", settings.data_dir, default)
         try:
             yield
         finally:
@@ -155,8 +155,8 @@ def create_app(
     app.state.plugin_settings_at_start = saved.plugin_settings
     app.state.plugins_off_at_start = frozenset(saved.disabled_plugins)
     app.state.preview = preview
-    app.state.profile_ids = ids
-    app.state.default_profile = default
+    app.state.rule_set_ids = ids
+    app.state.default_rule_set = default
     for module in (jobs, queue, video, system, config, presets, configuration, preset_packs, plugin_routes):
         app.include_router(module.router)
     _mount_frontend(app, settings)

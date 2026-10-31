@@ -68,7 +68,7 @@ APP = AppConfig(
 
 
 def encode_audio(plan: Plan) -> None:
-    """Japanese FLAC 2.0 -> AAC, English TrueHD 5.1 -> DDP 640 (the manual profile copies by default)."""
+    """Japanese FLAC 2.0 -> AAC, English TrueHD 5.1 -> DDP 640 (the manual rule set copies by default)."""
     ja, en = plan.audio
     ja.action, ja.out_codec = AudioAction.AAC, C.AAC
     en.action, en.out_codec, en.out_layout, en.bitrate_kbps = AudioAction.DDP, C.EAC3, Layout(5, 1), 640
@@ -94,20 +94,20 @@ def make_plan(root: Path):
     return plan
 
 
-def test_pgs_compression_changes_only_the_mux_step(profile, tmp_path):
+def test_pgs_compression_changes_only_the_mux_step(rule_set, tmp_path):
     plan = make_plan(tmp_path)
-    job = JobSpec(inputs=plan.inputs, profile="manual")
+    job = JobSpec(inputs=plan.inputs, rule_set="manual")
     output = tmp_path / "out.mkv"
-    before = {s.id: s for s in build_steps(job, plan, profile, APP, output).steps}
+    before = {s.id: s for s in build_steps(job, plan, rule_set, APP, output).steps}
     job.mux.pgs_zlib = True
-    after = {s.id: s for s in build_steps(job, plan, profile, APP, output).steps}
+    after = {s.id: s for s in build_steps(job, plan, rule_set, APP, output).steps}
     argv = after["mux"].argvs[0]
     assert argv[argv.index("--compression") + 1] == "10:zlib"
     assert before["mux"].fingerprint() != after["mux"].fingerprint()
     for key in before.keys() - {"mux"}:
         assert before[key].fingerprint() == after[key].fingerprint()
     job.mux.container = "mp4"
-    mp4 = build_steps(job, plan, profile, APP, tmp_path / "out.mp4")
+    mp4 = build_steps(job, plan, rule_set, APP, tmp_path / "out.mp4")
     assert "--compression" not in next(s for s in mp4.steps if s.id == "mux").argvs[0]
 
 
@@ -143,14 +143,14 @@ def tools_called(runner: FakeRunner) -> list[str]:
     return [Path(c[-1][0]).stem for c in runner.calls]
 
 
-def test_run_plan_happy_path(profile, tmp_path):
+def test_run_plan_happy_path(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     runner = FakeRunner()
     events, lines = [], []
     result = run_plan(
         plan,
         tmp_path / "out",
-        profile,
+        rule_set,
         APP,
         runner=runner,
         prober=lambda path, _mkv: simulate_output(plan),
@@ -170,20 +170,20 @@ def test_run_plan_happy_path(profile, tmp_path):
     assert all(p.parent == work and p.is_file() for p in result.encoded_audio.values())
 
 
-def test_rerun_reuses_finished_steps(profile, tmp_path):
+def test_rerun_reuses_finished_steps(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     state = JobState()
     prober = lambda *_: simulate_output(plan)
     first = FakeRunner()
     assert (
-        run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=first, prober=prober).status
+        run_plan(plan, tmp_path / "out", rule_set, APP, state=state, runner=first, prober=prober).status
         is JobStatus.DONE
     )
     assert set(state.steps) == {"audio.1", "audio.2", "mux"} and state.status is JobStatus.DONE
 
     again = FakeRunner()
     assert (
-        run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=again, prober=prober).status
+        run_plan(plan, tmp_path / "out", rule_set, APP, state=state, runner=again, prober=prober).status
         is JobStatus.DONE
     )
     assert again.calls == []  # nothing changed: every step reused
@@ -191,84 +191,84 @@ def test_rerun_reuses_finished_steps(profile, tmp_path):
     srt = tmp_path / "Show.S01E01.en.srt"
     srt.write_bytes(b"changed subtitle")  # a new SRT: only the mux runs again
     third = FakeRunner()
-    run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=third, prober=prober)
+    run_plan(plan, tmp_path / "out", rule_set, APP, state=state, runner=third, prober=prober)
     assert tools_called(third) == ["mkvmerge"]
 
 
-def test_stale_output_does_not_pass_for_a_new_one(profile, tmp_path):
+def test_stale_output_does_not_pass_for_a_new_one(rule_set, tmp_path):
     """A step's outputs are deleted before it runs, so a tool that writes nothing fails."""
     plan = make_plan(tmp_path)
-    run_plan(plan, tmp_path / "out", profile, APP, runner=FakeRunner(), prober=lambda *_: simulate_output(plan))
+    run_plan(plan, tmp_path / "out", rule_set, APP, runner=FakeRunner(), prober=lambda *_: simulate_output(plan))
     again = run_plan(
-        plan, tmp_path / "out", profile, APP, output_policy=OutputPolicy.REPLACE, runner=lambda *_: None
+        plan, tmp_path / "out", rule_set, APP, output_policy=OutputPolicy.REPLACE, runner=lambda *_: None
     )  # no state: nothing reused
     assert again.status is JobStatus.FAILED and "was not written" in again.error
 
 
-def test_invalid_output_is_reported(profile, tmp_path):
+def test_invalid_output_is_reported(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     bad = simulate_output(plan)
     bad.subs[0].title = "Wrong"
-    result = run_plan(plan, tmp_path / "out", profile, APP, runner=FakeRunner(), prober=lambda *_: bad)
+    result = run_plan(plan, tmp_path / "out", rule_set, APP, runner=FakeRunner(), prober=lambda *_: bad)
     assert result.status is JobStatus.INVALID
     assert any(i.code == "plan.subs" for i in result.issues)
 
 
-def test_blocked_plan_is_skipped(profile, tmp_path):
+def test_blocked_plan_is_skipped(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     plan.issues.append(Issue(Severity.BLOCK, "pair.no_encode", "No encode"))
     runner = FakeRunner()
-    result = run_plan(plan, tmp_path / "out", profile, APP, runner=runner)
+    result = run_plan(plan, tmp_path / "out", rule_set, APP, runner=runner)
     assert result.status is JobStatus.SKIPPED and "No encode" in result.error
     assert not runner.calls
 
 
-def test_missing_input_fails_before_running(profile, tmp_path):
+def test_missing_input_fails_before_running(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     (tmp_path / "Show.S01E01.en.srt").unlink()
     runner = FakeRunner()
-    result = run_plan(plan, tmp_path / "out", profile, APP, runner=runner)
+    result = run_plan(plan, tmp_path / "out", rule_set, APP, runner=runner)
     assert result.status is JobStatus.FAILED and "Show.S01E01.en.srt" in result.error
     assert not runner.calls
 
 
-def test_missing_encoder_tool_fails_before_running(profile, tmp_path):
+def test_missing_encoder_tool_fails_before_running(rule_set, tmp_path):
     plan = make_plan(tmp_path)  # encodes AAC and DDP
     app = replace(APP, tools=replace(APP.tools, qaac=str(tmp_path / "qaac64.exe")))
     runner = FakeRunner()
-    result = run_plan(plan, tmp_path / "out", profile, app, runner=runner)
+    result = run_plan(plan, tmp_path / "out", rule_set, app, runner=runner)
     assert result.status is JobStatus.FAILED and result.error == "AAC (qaac) needs qaac: set it in Settings"
     assert not runner.calls
 
 
-def test_tool_failure_leaves_no_output(profile, tmp_path):
+def test_tool_failure_leaves_no_output(rule_set, tmp_path):
     plan = make_plan(tmp_path)
-    result = run_plan(plan, tmp_path / "out", profile, APP, runner=FakeRunner(fail_on="mkvmerge"))
+    result = run_plan(plan, tmp_path / "out", rule_set, APP, runner=FakeRunner(fail_on="mkvmerge"))
     assert result.status is JobStatus.FAILED and "mkvmerge" in result.error
     assert not (tmp_path / "out" / "Show.S01E01.mkv").exists()
     assert not list((tmp_path / "out").glob("*.partial"))
 
 
-def test_cancel_is_reported(profile, tmp_path):
+def test_cancel_is_reported(rule_set, tmp_path):
     plan = make_plan(tmp_path)
 
     def cancelled(*_):
         raise Cancelled()
 
     state = JobState()
-    assert run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=cancelled).status is JobStatus.CANCELLED
+    assert run_plan(plan, tmp_path / "out", rule_set, APP, state=state, runner=cancelled).status is JobStatus.CANCELLED
     assert [r.status for r in state.run] == [StepStatus.CANCELLED] + [StepStatus.PENDING] * 3
 
 
 # --- the per-step record the Log tab shows ---------------------------------------------
 
 
-def test_step_runs_record_each_step(profile, tmp_path):
+def test_step_runs_record_each_step(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     state, seen = JobState(), []
     prober = lambda *_: simulate_output(plan)
     on_step = lambda r: seen.append((r.id, r.status))
-    run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=FakeRunner(), prober=prober, on_step=on_step)
+    run_plan(plan, tmp_path / "out", rule_set, APP, state=state, runner=FakeRunner(), prober=prober, on_step=on_step)
     ids = ["audio.1", "audio.2", "mux", "validate"]
     assert [r.id for r in state.run] == ids
     assert seen[:4] == [(i, StepStatus.PENDING) for i in ids]  # the whole list first
@@ -279,14 +279,14 @@ def test_step_runs_record_each_step(profile, tmp_path):
     assert mux.tail == ["[mkvmerge] [ 50.0%] 1/2 frames"]  # its own lines, not the step header
     assert state.run[-1].command == "" and state.run[-1].exit_code is None
 
-    run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=FakeRunner(), prober=prober)
+    run_plan(plan, tmp_path / "out", rule_set, APP, state=state, runner=FakeRunner(), prober=prober)
     assert [r.status for r in state.run] == [StepStatus.REUSED] * 3 + [StepStatus.DONE]
 
 
-def test_failed_step_is_named(profile, tmp_path):
+def test_failed_step_is_named(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     state = JobState()
-    result = run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=FakeRunner(fail_on="deezy"))
+    result = run_plan(plan, tmp_path / "out", rule_set, APP, state=state, runner=FakeRunner(fail_on="deezy"))
     assert [r.status for r in state.run] == [StepStatus.DONE, StepStatus.FAILED, StepStatus.PENDING, StepStatus.PENDING]
     failed = state.run[1]
     assert failed.exit_code == 2 and "exited with code 2" in failed.error
@@ -295,23 +295,23 @@ def test_failed_step_is_named(profile, tmp_path):
     assert state.error == result.error
 
 
-def test_failed_validation_is_the_last_step(profile, tmp_path):
+def test_failed_validation_is_the_last_step(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     bad = simulate_output(plan)
     bad.subs[0].title = "Wrong"
     state = JobState()
-    run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=FakeRunner(), prober=lambda *_: bad)
+    run_plan(plan, tmp_path / "out", rule_set, APP, state=state, runner=FakeRunner(), prober=lambda *_: bad)
     v = state.run[-1]
     assert v.status is StepStatus.FAILED and v.error and any(line.startswith("block:") for line in v.tail)
 
     def broken_probe(*_):
         raise ToolError("mkvmerge could not read the output")
 
-    result = run_plan(plan, tmp_path / "out", profile, APP, state=state, runner=FakeRunner(), prober=broken_probe)
+    result = run_plan(plan, tmp_path / "out", rule_set, APP, state=state, runner=FakeRunner(), prober=broken_probe)
     assert state.run[-1].status is StepStatus.FAILED and result.error.startswith("Step 4/4 · Validate: mkvmerge")
 
 
-def test_vp9_steps(profile, tmp_path):
+def test_vp9_steps(rule_set, tmp_path):
     """VP9 runs through ffmpeg into an IVF: its first pass writes ffmpeg's "-0.log", the chapters' qpfile becomes
     forced keyframes once written (the encode refreshes when its turn comes), and the mux tags the pixel aspect
     and colour."""
@@ -320,13 +320,13 @@ def test_vp9_steps(profile, tmp_path):
     plan.source.video.color = VideoColor("bt709", "bt709", "bt709", "limited")
     job = JobSpec(
         inputs=JobInputs(plan.source.path, subtitles=plan.inputs.subtitles),
-        profile="manual",
+        rule_set="manual",
         encoder=EncoderSettings(Encoder.VP9, rate_control=RateControl.TWO_PASS, bitrate_kbps=3000, preset="4"),
         output_dir=tmp_path / "out",
     )
     plan.encode_path = job.video_output
     assert job.video_output.name == "video.ivf"
-    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
     steps = {s.id: s for s in built.steps}
     pass1, pass2, mux = steps["video.pass1"], steps["video.pass2"], steps["mux"]
     assert pass1.argvs[1][0] == APP.tools.ffmpeg and "libvpx-vp9" in pass1.argvs[1]
@@ -343,7 +343,7 @@ def test_vp9_steps(profile, tmp_path):
     assert "--default-duration" not in argv  # the IVF times itself
 
 
-def test_svtav1_steps(profile, tmp_path):
+def test_svtav1_steps(rule_set, tmp_path):
     """SVT-AV1 runs SvtAv1EncApp into an IVF: once the info step and the chapters step have written their files
     (the encode refreshes when its turn comes), it's given the script's frames (its rate control needs the length)
     and, in CRF, the qpfile's keyframes; the mux tags the pixel aspect, the colour and the HDR10."""
@@ -353,12 +353,12 @@ def test_svtav1_steps(profile, tmp_path):
     plan.source.video.color = VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", 2, p3, 1000, 400)
     job = JobSpec(
         inputs=JobInputs(plan.source.path, subtitles=plan.inputs.subtitles),
-        profile="manual",
+        rule_set="manual",
         encoder=EncoderSettings(Encoder.SVTAV1, crf=30, preset="6", depth=10),
         output_dir=tmp_path / "out",
     )
     plan.encode_path = job.video_output
-    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
     steps = {s.id: s for s in built.steps}
     video, mux = steps["video"], steps["mux"]
     assert video.argvs[1][0] == APP.tools.svtav1 and job.video_output.name == "video.ivf"
@@ -378,24 +378,24 @@ def test_svtav1_steps(profile, tmp_path):
 
     # a bitrate: no forced keyframes (SvtAv1EncApp refuses them), still the frames
     two = replace(job, encoder=replace(job.encoder, rate_control=RateControl.TWO_PASS, bitrate_kbps=3000))
-    steps = {s.id: s for s in build_steps(two, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    steps = {s.id: s for s in build_steps(two, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
     for k in ("video.pass1", "video.pass2"):
         argv = steps[k].argvs[1]
         assert argv[argv.index("--frames") + 1] == "1440" and "--force-key-frames" not in argv, k
 
 
-def test_video_steps_two_pass(profile, tmp_path):
+def test_video_steps_two_pass(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     job = JobSpec(
         inputs=JobInputs(plan.source.path, subtitles=plan.inputs.subtitles),
-        profile="manual",
+        rule_set="manual",
         encoder=EncoderSettings(rate_control=RateControl.TWO_PASS, bitrate_kbps=9000),
         qpf=False,
         output_dir=tmp_path / "out",
     )
     job.video.crop = Crop(0, 140, 0, 140)
     plan.encode_path = job.video_output
-    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
     ids = ["script", "index", "script.info", "audio.1", "audio.2", "video.pass1", "video.pass2", "mux"]
     assert [s.id for s in built.steps] == ids
     pass1, pass2 = built.steps[5], built.steps[6]
@@ -406,7 +406,7 @@ def test_video_steps_two_pass(profile, tmp_path):
 
     runner = FakeRunner()
     state = JobState()
-    result = run_job(job, plan, profile, APP, state=state, runner=runner, prober=lambda *_: simulate_output(plan))
+    result = run_job(job, plan, rule_set, APP, state=state, runner=runner, prober=lambda *_: simulate_output(plan))
     assert result.status is JobStatus.DONE, result.error
     assert "core.std.Crop(clip, left=0, right=0, top=140, bottom=140)" in (job.job_dir / "video.vpy").read_text()
     # FFMS2 (the default) is indexed by core/video/ffindex.py, with progress
@@ -416,23 +416,23 @@ def test_video_steps_two_pass(profile, tmp_path):
     (job.work_dir / "Show.S01E01.mkv.ffindex").write_bytes(b"index")  # what the real one leaves
     job.video.crop = Crop(0, 138, 0, 138)  # a new crop: script and video again; the index and audio reused
     again = FakeRunner()
-    run_job(job, plan, profile, APP, state=state, runner=again, prober=lambda *_: simulate_output(plan))
+    run_job(job, plan, rule_set, APP, state=state, runner=again, prober=lambda *_: simulate_output(plan))
     assert tools_called(again) == ["vspipe", "x264", "x264", "mkvmerge"]
 
     job.video.source_filter = SourceFilter.LSMASH  # another filter: its own index, by opening the script
     third = FakeRunner()
-    run_job(job, plan, profile, APP, state=state, runner=third, prober=lambda *_: simulate_output(plan))
+    run_job(job, plan, rule_set, APP, state=state, runner=third, prober=lambda *_: simulate_output(plan))
     assert tools_called(third) == ["vspipe", "vspipe", "x264", "x264", "mkvmerge"]
 
 
-def test_the_encode_is_timed_by_the_scripts_frame_rate(profile, tmp_path):
+def test_the_encode_is_timed_by_the_scripts_frame_rate(rule_set, tmp_path):
     """An IVTC of a 29.97 source: the mux and AutoQPF take the script's 23.976 (vspipe --info), not the source's."""
     plan = make_plan(tmp_path)
     plan.source.video = VideoInfo(720, 480, default_duration_ns=33366667, frames=300)
     job = video_job(plan, tmp_path)
     job.qpf = True
     out = tmp_path / "out" / "Show.S01E01.mkv"
-    built = build_steps(job, plan, profile, APP, out)
+    built = build_steps(job, plan, rule_set, APP, out)
     step = {s.id: s for s in built.steps}
     ids = [s.id for s in built.steps]
     assert ids.index("index") < ids.index("script.info") < ids.index("chapters")
@@ -451,21 +451,21 @@ def test_the_encode_is_timed_by_the_scripts_frame_rate(profile, tmp_path):
 
     job.qpf = False  # AutoQPF reads a real source; the rest runs with the fake tools
     runner = FakeRunner()
-    result = run_job(job, plan, profile, APP, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
     assert result.status is JobStatus.DONE, result.error
     mux = runner.calls[-1][0]
     assert mux[mux.index("--default-duration") + 1] == "0:24000/1001p"
     assert not [i for i in result.issues if i.code == "video.length"]  # 240 frames at 23.976 = 300 at 29.97
 
 
-def test_a_vfr_source_keeps_its_timestamps(profile, tmp_path):
+def test_a_vfr_source_keeps_its_timestamps(rule_set, tmp_path):
     """A VFR source's timestamps (mkvextract) time the encode while they fit the script's frames; an IVTC that
     drops frames is muxed at the script's rate. MP4Box takes none: no timestamps step."""
     plan = make_plan(tmp_path)
     plan.source.video = VideoInfo(1920, 1080, default_duration_ns=41708333, frames=240, vfr=True, id=0)
     job = video_job(plan, tmp_path)
     out = tmp_path / "out" / "Show.S01E01.mkv"
-    built = build_steps(job, plan, profile, APP, out)
+    built = build_steps(job, plan, rule_set, APP, out)
     step = {s.id: s for s in built.steps}
     ids = [s.id for s in built.steps]
     stamps = job.work_dir / "timestamps.txt"
@@ -488,20 +488,20 @@ def test_a_vfr_source_keeps_its_timestamps(profile, tmp_path):
     assert "--timestamps" not in mux and mux[mux.index("--default-duration") + 1] == "0:24000/1001p"
 
     job.mux = MuxSettings(container="mp4")
-    mp4 = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mp4")
+    mp4 = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mp4")
     assert "timestamps" not in [s.id for s in mp4.steps]
 
     job.mux = MuxSettings()
     shutil.rmtree(job.work_dir)
     runner = FakeRunner()
-    result = run_job(job, plan, profile, APP, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
     assert result.status is JobStatus.DONE, result.error
     mux = runner.calls[-1][0]
     assert mux[mux.index("--timestamps") + 1] == f"0:{stamps}"
     assert not [i for i in result.issues if i.code == "video.length"]
 
 
-def test_a_vfr_mp4_source_is_copied_into_an_mkv_for_its_timestamps(profile, tmp_path):
+def test_a_vfr_mp4_source_is_copied_into_an_mkv_for_its_timestamps(rule_set, tmp_path):
     """mkvextract reads Matroska only: an MP4's video track is copied into an MKV (mkvmerge) to read them from."""
     plan = make_plan(tmp_path)
     mp4 = tmp_path / "Show.S01E01.mp4"
@@ -509,7 +509,7 @@ def test_a_vfr_mp4_source_is_copied_into_an_mkv_for_its_timestamps(profile, tmp_
     plan.source.path = mp4
     plan.source.video = VideoInfo(1920, 1080, default_duration_ns=41708333, frames=240, vfr=True, id=0)
     job = video_job(plan, tmp_path)
-    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
     step = {s.id: s for s in built.steps}
     ids = [s.id for s in built.steps]
     mkv, stamps = job.work_dir / "timestamps.mkv", job.work_dir / "timestamps.source.txt"
@@ -521,11 +521,11 @@ def test_a_vfr_mp4_source_is_copied_into_an_mkv_for_its_timestamps(profile, tmp_
     assert step["timestamps"].argvs == (argv,) and step["timestamps"].inputs == (mkv,)
 
 
-def test_a_script_shorter_than_the_source_warns(profile, tmp_path):
+def test_a_script_shorter_than_the_source_warns(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     plan.source.video = VideoInfo(1920, 1080, default_duration_ns=41708333, frames=480)  # 20 s; the script's 10 s
     job = video_job(plan, tmp_path)
-    result = run_job(job, plan, profile, APP, runner=FakeRunner(), prober=lambda *_: simulate_output(plan))
+    result = run_job(job, plan, rule_set, APP, runner=FakeRunner(), prober=lambda *_: simulate_output(plan))
     assert result.status is JobStatus.DONE, result.error
     assert [i.code for i in result.issues if i.severity is Severity.WARN] == ["video.length"]
 
@@ -536,7 +536,7 @@ def test_a_script_shorter_than_the_source_warns(profile, tmp_path):
 def video_job(plan, tmp_path):
     job = JobSpec(
         inputs=JobInputs(plan.source.path, subtitles=plan.inputs.subtitles),
-        profile="manual",
+        rule_set="manual",
         qpf=False,
         output_dir=tmp_path / "out",
     )
@@ -573,7 +573,7 @@ class OverlapRunner(FakeRunner):
                 self.active.remove(name)
 
 
-def test_audio_encodes_run_beside_the_video(profile, tmp_path):
+def test_audio_encodes_run_beside_the_video(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     job = video_job(plan, tmp_path)
     runner = OverlapRunner(
@@ -582,7 +582,7 @@ def test_audio_encodes_run_beside_the_video(profile, tmp_path):
     state, events = JobState(), []
     app = replace(APP, parallel_audio=2)
     prober = lambda *_: simulate_output(plan)
-    result = run_job(job, plan, profile, app, state=state, runner=runner, prober=prober, progress=events.append)
+    result = run_job(job, plan, rule_set, app, state=state, runner=runner, prober=prober, progress=events.append)
     assert result.status is JobStatus.DONE, result.error
     assert any({"qaac64", "deezy", "x264"} <= t for t in runner.together)
     assert tools_called(runner)[0] == "python" and tools_called(runner)[-1] == "mkvmerge"  # index first, mux last
@@ -591,18 +591,18 @@ def test_audio_encodes_run_beside_the_video(profile, tmp_path):
     assert events[-1].overall == pytest.approx(1.0)
 
     again = OverlapRunner()  # a rerun reuses the background steps like any other
-    run_job(job, plan, profile, app, state=state, runner=again, prober=prober)
+    run_job(job, plan, rule_set, app, state=state, runner=again, prober=prober)
     assert tools_called(again) == ["python"]  # the fake leaves no index file, so only that runs again
 
 
-def test_a_target_size_sets_the_two_pass_bitrate(profile, tmp_path):
+def test_a_target_size_sets_the_two_pass_bitrate(rule_set, tmp_path):
     """Pass 1 by the planned audio sizes; pass 2 waits for the audio encodes (beside pass 1) and counts their files."""
     plan = make_plan(tmp_path)
     plan.source.video = VideoInfo(1920, 1080, default_duration_ns=41708333, frames=240)
     job = video_job(plan, tmp_path)
     job.encoder = EncoderSettings(rate_control=RateControl.TWO_PASS, target_mb=10)
     out = tmp_path / "out" / "Show.S01E01.mkv"
-    built = build_steps(job, plan, profile, APP, out)
+    built = build_steps(job, plan, rule_set, APP, out)
     step = {s.id: s for s in built.steps}
     assert set(built.encoded_audio.values()) <= set(step["video.pass2"].inputs)  # so run_steps waits for the audio
 
@@ -617,7 +617,7 @@ def test_a_target_size_sets_the_two_pass_bitrate(profile, tmp_path):
         waits={"x264": {"qaac64", "deezy"}, "qaac64": {"x264", "deezy"}, "deezy": {"x264", "qaac64"}}
     )
     app = replace(APP, parallel_audio=2)
-    result = run_job(job, plan, profile, app, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
+    result = run_job(job, plan, rule_set, app, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
     assert result.status is JobStatus.DONE, result.error
     assert any({"qaac64", "deezy", "x264"} <= t for t in runner.together)  # pass 1 beside the audio
     encodes = [c[1] for c in runner.calls if Path(c[-1][0]).stem == "x264"]
@@ -630,11 +630,11 @@ def test_a_target_size_sets_the_two_pass_bitrate(profile, tmp_path):
 
 
 @pytest.mark.parametrize("parallel", [0, 2])
-def test_a_normalized_track_is_measured_first(profile, tmp_path, parallel):
+def test_a_normalized_track_is_measured_first(rule_set, tmp_path, parallel):
     plan = make_plan(tmp_path)
     plan.audio[0].options = {"normalize": "peak"}  # the AAC (ffmpeg | qaac)
     job = video_job(plan, tmp_path)
-    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
     ids = [s.id for s in built.steps]
     assert ids.index("audio.1.measure") + 1 == ids.index("audio.1") and "audio.2.measure" not in ids
     step = {s.id: s for s in built.steps}
@@ -642,7 +642,7 @@ def test_a_normalized_track_is_measured_first(profile, tmp_path, parallel):
 
     runner = OverlapRunner(waits={"x264": {"measure"}, "measure": {"x264"}} if parallel else {})
     app = replace(APP, parallel_audio=parallel)
-    result = run_job(job, plan, profile, app, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
+    result = run_job(job, plan, rule_set, app, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
     assert result.status is JobStatus.DONE, result.error
     if parallel:
         assert any({"measure", "x264"} <= t for t in runner.together)  # the measure beside the video
@@ -651,17 +651,17 @@ def test_a_normalized_track_is_measured_first(profile, tmp_path, parallel):
 
 
 @pytest.mark.parametrize("parallel", [1, 2])
-def test_parallel_audio_limit(profile, tmp_path, parallel):
+def test_parallel_audio_limit(rule_set, tmp_path, parallel):
     plan = make_plan(tmp_path)  # a reused encode: only the audio and the mux
     runner = OverlapRunner(waits={"qaac64": {"deezy"}, "deezy": {"qaac64"}} if parallel == 2 else {})
     app = replace(APP, parallel_audio=parallel)
-    result = run_plan(plan, tmp_path / "out", profile, app, runner=runner, prober=lambda *_: simulate_output(plan))
+    result = run_plan(plan, tmp_path / "out", rule_set, app, runner=runner, prober=lambda *_: simulate_output(plan))
     assert result.status is JobStatus.DONE, result.error
     assert max(len(t - {"mkvmerge"}) for t in runner.together) == parallel
     assert not any("mkvmerge" in t and len(t) > 1 for t in runner.together)  # the mux waits for the audio
 
 
-def test_failed_audio_stops_the_video(profile, tmp_path):
+def test_failed_audio_stops_the_video(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     job = video_job(plan, tmp_path)
 
@@ -679,7 +679,7 @@ def test_failed_audio_stops_the_video(profile, tmp_path):
 
     runner = Runner(waits={"deezy": {"x264"}}, fail_on="deezy")
     state = JobState()
-    result = run_job(job, plan, profile, replace(APP, parallel_audio=2), state=state, runner=runner)
+    result = run_job(job, plan, rule_set, replace(APP, parallel_audio=2), state=state, runner=runner)
     assert result.status is JobStatus.FAILED and "deezy" in result.error
     status = {r.id: r.status for r in state.run}
     assert status["audio.2"] is StepStatus.FAILED and status["video"] is StepStatus.CANCELLED
@@ -688,7 +688,7 @@ def test_failed_audio_stops_the_video(profile, tmp_path):
     assert "mux" not in state.steps and "audio.2" not in state.steps
 
 
-def test_cancel_stops_the_background_steps(profile, tmp_path):
+def test_cancel_stops_the_background_steps(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     token = CancelToken()
 
@@ -700,7 +700,7 @@ def test_cancel_stops_the_background_steps(profile, tmp_path):
 
     state = JobState()
     result = run_plan(
-        plan, tmp_path / "out", profile, replace(APP, parallel_audio=1), state=state, runner=runner, cancel=token
+        plan, tmp_path / "out", rule_set, replace(APP, parallel_audio=1), state=state, runner=runner, cancel=token
     )
     assert result.status is JobStatus.CANCELLED
     assert [r.status for r in state.run] == [StepStatus.CANCELLED] + [StepStatus.PENDING] * 3
@@ -873,7 +873,7 @@ def test_real_plan_warns_on_an_unlisted_option(tmp_path):
     """A mistyped x264 option warns in the plan (x264's --fullhelp), before anything runs; a real one doesn't."""
     from videoforge.core.config import load_app_config
     from videoforge.core.job import plan_spec, probe_spec
-    from videoforge.profiles import get_profile
+    from videoforge.rule_sets import get_rule_set
 
     app = load_app_config()
     src = tmp_path / "clip.mkv"
@@ -884,12 +884,12 @@ def test_real_plan_warns_on_an_unlisted_option(tmp_path):
     )  # fmt: skip
     job = JobSpec(
         inputs=JobInputs(src),
-        profile="manual",
+        rule_set="manual",
         output_dir=tmp_path / "out",
         encoder=EncoderSettings(preset="ultrafast", options={"bframes": "4", "bfrmaes": "4"}),
         qpf=False,
     )
-    plan = plan_spec(job, probe_spec(job, app), get_profile("manual"), app.tools)
+    plan = plan_spec(job, probe_spec(job, app), get_rule_set("manual"), app.tools)
     unknown = [i for i in plan.issues if i.code == "video.option_unknown"]
     assert len(unknown) == 1 and "--bfrmaes: did you mean --bframes?" in unknown[0].message, plan.issues
 
@@ -909,7 +909,7 @@ def test_real_anamorphic_job_keeps_its_shape(tmp_path, keep_ar, container):
     from videoforge.core.probe import probe
     from videoforge.core.video import vs as vsx
     from videoforge.core.video.settings import Resize
-    from videoforge.profiles import get_profile
+    from videoforge.rule_sets import get_rule_set
 
     app = load_app_config()
     vsx.configure(app.tools.vs_plugins)
@@ -924,7 +924,7 @@ def test_real_anamorphic_job_keeps_its_shape(tmp_path, keep_ar, container):
     )  # fmt: skip
     job = JobSpec(
         inputs=JobInputs(src),
-        profile="manual",
+        rule_set="manual",
         output_dir=tmp_path / "out",
         encoder=EncoderSettings(preset="ultrafast", crf=30),
         qpf=False,
@@ -936,11 +936,11 @@ def test_real_anamorphic_job_keeps_its_shape(tmp_path, keep_ar, container):
     probed = probe_spec(job, app)
     assert probed.source.video is not None and probed.source.video.sar == Fraction(32, 27)
     job.video.fit_resize(720, 480, probed.source.video.sar)
-    profile = get_profile("manual")
-    plan = plan_spec(job, probed, profile)
+    rule_set = get_rule_set("manual")
+    plan = plan_spec(job, probed, rule_set)
     assert not plan.blocked, plan.issues
     lines: list[str] = []
-    result = run_job(job, plan, profile, app, log=lines.append)
+    result = run_job(job, plan, rule_set, app, log=lines.append)
     assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
     out = probe(result.output, app.tools.mkvmerge).video
     assert out is not None
@@ -963,7 +963,7 @@ def test_real_decimated_job_keeps_the_scripts_frame_rate(tmp_path):
     from videoforge.core.probe import mkvmerge_identify, probe
     from videoforge.core.video import vs as vsx
     from videoforge.core.video.settings import FilterCategory, FilterStep
-    from videoforge.profiles import get_profile
+    from videoforge.rule_sets import get_rule_set
 
     app = load_app_config()
     vsx.configure(app.tools.vs_plugins)
@@ -990,18 +990,18 @@ def test_real_decimated_job_keeps_the_scripts_frame_rate(tmp_path):
     )  # fmt: skip
     job = JobSpec(
         inputs=JobInputs(src),
-        profile="manual",
+        rule_set="manual",
         output_dir=tmp_path / "out",
         encoder=EncoderSettings(preset="ultrafast", crf=30),
     )
     decimate = "clip = core.std.SelectEvery(clip, 5, [0, 1, 2, 3])\nclip = core.std.AssumeFPS(clip, fpsnum=24)"
     job.video.filters.insert(0, FilterStep(FilterCategory.FIELD, "Decimate", decimate))
-    profile = get_profile("manual")
-    plan = plan_spec(job, probe_spec(job, app), profile)
+    rule_set = get_rule_set("manual")
+    plan = plan_spec(job, probe_spec(job, app), rule_set)
     assert not plan.blocked, plan.issues
 
     lines: list[str] = []
-    result = run_job(job, plan, profile, app, log=lines.append)
+    result = run_job(job, plan, rule_set, app, log=lines.append)
     assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
     assert not [i for i in result.issues if i.code == "video.length"]
     out = probe(result.output, app.tools.mkvmerge)
@@ -1021,7 +1021,7 @@ def test_real_vfr_job_keeps_the_sources_timestamps(tmp_path, offset, encode_audi
     from videoforge.core.config import load_app_config
     from videoforge.core.job import plan_spec, probe_spec
     from videoforge.core.video import vs as vsx
-    from videoforge.profiles import get_profile
+    from videoforge.rule_sets import get_rule_set
 
     app = load_app_config()
     vsx.configure(app.tools.vs_plugins)
@@ -1049,12 +1049,12 @@ def test_real_vfr_job_keeps_the_sources_timestamps(tmp_path, offset, encode_audi
     )  # fmt: skip
     job = JobSpec(
         inputs=JobInputs(src),
-        profile="manual",
+        rule_set="manual",
         output_dir=tmp_path / "out",
         encoder=EncoderSettings(preset="ultrafast", crf=30),
     )
-    profile = get_profile("manual")
-    plan = plan_spec(job, probe_spec(job, app), profile)
+    rule_set = get_rule_set("manual")
+    plan = plan_spec(job, probe_spec(job, app), rule_set)
     assert plan.source.video is not None and plan.source.video.vfr
     assert not plan.blocked, plan.issues
 
@@ -1062,7 +1062,7 @@ def test_real_vfr_job_keeps_the_sources_timestamps(tmp_path, offset, encode_audi
         plan.audio[0].action = AudioAction.FLAC
         plan.audio[0].out_codec = C.FLAC
     lines: list[str] = []
-    result = run_job(job, plan, profile, app, log=lines.append)
+    result = run_job(job, plan, rule_set, app, log=lines.append)
     assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
     assert not [i for i in result.issues if i.code == "video.length"]
 
@@ -1098,7 +1098,7 @@ def test_real_job_end_to_end(tmp_path):
     from videoforge.core.job import plan_spec, probe_spec
     from videoforge.core.probe import probe
     from videoforge.core.video import vs as vsx
-    from videoforge.profiles import get_profile
+    from videoforge.rule_sets import get_rule_set
 
     app = load_app_config()
     vsx.configure(app.tools.vs_plugins)
@@ -1122,18 +1122,18 @@ def test_real_job_end_to_end(tmp_path):
 
     job = JobSpec(
         inputs=JobInputs(src, subtitles=[srt]),
-        profile="manual",
+        rule_set="manual",
         output_dir=tmp_path / "out",
         encoder=EncoderSettings(preset="ultrafast", crf=30),
     )
     job.video.crop = Crop(0, 22, 0, 22)
-    profile = get_profile("manual")
-    plan = plan_spec(job, probe_spec(job, app), profile)
+    rule_set = get_rule_set("manual")
+    plan = plan_spec(job, probe_spec(job, app), rule_set)
     assert not plan.blocked, plan.issues
     assert plan.encode_path == job.video_output and plan.chapters_path == job.job_dir / "chapters_chapters.txt"
 
     lines: list[str] = []
-    result = run_job(job, plan, profile, app, log=lines.append)
+    result = run_job(job, plan, rule_set, app, log=lines.append)
     assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
     out = probe(result.output, app.tools.mkvmerge)
     assert (out.video.width, out.video.height) == (320, 136)
@@ -1153,7 +1153,7 @@ def test_real_mp4_job_end_to_end(tmp_path, embedded, offset_ms):
     from videoforge.core.models import SubFormat
     from videoforge.core.probe import probe
     from videoforge.core.video import vs as vsx
-    from videoforge.profiles import get_profile
+    from videoforge.rule_sets import get_rule_set
 
     app = load_app_config()
     vsx.configure(app.tools.vs_plugins)
@@ -1188,18 +1188,18 @@ def test_real_mp4_job_end_to_end(tmp_path, embedded, offset_ms):
 
     job = JobSpec(
         inputs=JobInputs(src, subtitles=[] if embedded else [srt]),
-        profile="manual",
+        rule_set="manual",
         output_dir=tmp_path / "out",
         qpf=False,
         encoder=EncoderSettings(preset="ultrafast", crf=30),
         mux=MuxSettings(container="mp4"),
     )
-    profile = get_profile("manual")
-    plan = plan_spec(job, probe_spec(job, app), profile, app.tools)
+    rule_set = get_rule_set("manual")
+    plan = plan_spec(job, probe_spec(job, app), rule_set, app.tools)
     assert not plan.blocked, plan.issues
 
     lines: list[str] = []
-    result = run_job(job, plan, profile, app, log=lines.append)
+    result = run_job(job, plan, rule_set, app, log=lines.append)
     assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
     assert result.output == tmp_path / "out" / "Clip.mp4"
     out = probe(result.output, app.tools.mkvmerge)
@@ -1236,7 +1236,7 @@ def test_real_mp4_and_ts_sources_run_end_to_end(tmp_path, ext, container):
     from videoforge.core.job import plan_spec, probe_spec
     from videoforge.core.models import AudioAction, Overrides, TrackOverride
     from videoforge.core.video import vs as vsx
-    from videoforge.profiles import get_profile
+    from videoforge.rule_sets import get_rule_set
 
     app = load_app_config()
     vsx.configure(app.tools.vs_plugins)
@@ -1265,14 +1265,14 @@ def test_real_mp4_and_ts_sources_run_end_to_end(tmp_path, ext, container):
     )  # fmt: skip
     job = JobSpec(
         inputs=JobInputs(src),
-        profile="manual",
+        rule_set="manual",
         output_dir=tmp_path / "out",
         encoder=EncoderSettings(preset="ultrafast", crf=30),
         overrides=Overrides(original_language="en", tracks={"id:2": TrackOverride(action=AudioAction.FLAC)}),
         mux=MuxSettings(container=container),
     )
-    profile = get_profile("manual")
-    plan = plan_spec(job, probe_spec(job, app), profile, app.tools)
+    rule_set = get_rule_set("manual")
+    plan = plan_spec(job, probe_spec(job, app), rule_set, app.tools)
     assert not plan.blocked, plan.issues
     ms = round(delay * 1000)
     assert [(a.source.id, a.source.delay_ms, a.action) for a in plan.audio] == [
@@ -1281,7 +1281,7 @@ def test_real_mp4_and_ts_sources_run_end_to_end(tmp_path, ext, container):
     ]
 
     lines: list[str] = []
-    result = run_job(job, plan, profile, app, log=lines.append)
+    result = run_job(job, plan, rule_set, app, log=lines.append)
     assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
     assert result.output == tmp_path / "out" / f"Movie.2020.{container}"
     shown = subprocess.run(
@@ -1541,14 +1541,14 @@ def test_work_dir_is_next_to_the_source_and_separate_from_staxrip(tmp_path: Path
 # --- HDR10+ ------------------------------------------------------------------------
 
 
-def test_hdr10plus_is_carried_into_x265(profile, tmp_path, monkeypatch):
+def test_hdr10plus_is_carried_into_x265(rule_set, tmp_path, monkeypatch):
     plan = make_plan(tmp_path)
     assert plan.source.video is not None
     plan.source.video.hdr = VideoHdr(hdr10plus=True)
     job = video_job(plan, tmp_path)
     job.encoder = EncoderSettings(encoder=Encoder.X265, depth=10, preset="fast")
     out = tmp_path / "out" / "Show.S01E01.mkv"
-    built = build_steps(job, plan, profile, APP, out)
+    built = build_steps(job, plan, rule_set, APP, out)
     ids = [s.id for s in built.steps]
     assert ids.index("hdr10plus") < ids.index("hdr10plus.check") < ids.index("video")
     meta = job.work_dir / "hdr10plus.json"
@@ -1561,7 +1561,7 @@ def test_hdr10plus_is_carried_into_x265(profile, tmp_path, monkeypatch):
     monkeypatch.setattr(hdr, "script_frames", lambda *_: 240)
     monkeypatch.setattr(hdr, "hdr10plus_frames", lambda _p: 240)
     result = run_job(
-        job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: simulate_output(plan)
+        job, plan, rule_set, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: simulate_output(plan)
     )
     assert result.status is JobStatus.DONE, result.error
 
@@ -1569,14 +1569,14 @@ def test_hdr10plus_is_carried_into_x265(profile, tmp_path, monkeypatch):
     job.output_policy = OutputPolicy.REPLACE
     # the output lost it: invalid
     lost = replace(simulate_output(plan), video=replace(plan.source.video, hdr=VideoHdr()))
-    result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: lost)
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: lost)
     assert result.status is JobStatus.INVALID
     assert [i.code for i in result.issues] == ["hdr.hdr10plus_missing"]
 
     # a script with other frames than the metadata stops before the encode
     monkeypatch.setattr(hdr, "script_frames", lambda *_: 238)
     runner = FakeRunner()
-    result = run_job(job, plan, profile, APP, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
     assert result.status is JobStatus.FAILED and "238 frames" in (result.error or "")
     assert "x265" not in tools_called(runner)
 
@@ -1590,7 +1590,7 @@ def test_hdr10plus_is_carried_into_x265(profile, tmp_path, monkeypatch):
         (Encoder.X265, 10, True, []),
     ],
 )
-def test_hdr10plus_plan(profile, tmp_path, encoder, depth, on, codes):
+def test_hdr10plus_plan(rule_set, tmp_path, encoder, depth, on, codes):
     plan = make_plan(tmp_path)
     assert plan.source.video is not None
     plan.source.video.hdr = VideoHdr(hdr10plus=True)
@@ -1598,7 +1598,7 @@ def test_hdr10plus_plan(profile, tmp_path, encoder, depth, on, codes):
     job.encoder = EncoderSettings(encoder=encoder, depth=depth, hdr10plus=on)
     tools = replace(APP.tools, hdr10plus_tool=fake_tool_files("hdr10plus_tool")["hdr10plus_tool"])
     assert [i.code for i in hdr.issues(plan.source.video, job.encoder, tools)] == codes
-    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
     carried = encoder is Encoder.X265 and on
     assert ("hdr10plus" in [s.id for s in built.steps]) is carried
     missing = replace(APP.tools, hdr10plus_tool=str(tmp_path / "nope.exe"))
@@ -1619,11 +1619,11 @@ def dv_job(plan, tmp_path, **encoder):
     return job
 
 
-def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
+def test_dolby_vision_is_carried_into_x265(rule_set, tmp_path, monkeypatch):
     plan = make_plan(tmp_path)
     job = dv_job(plan, tmp_path)
     out = tmp_path / "out" / "Show.S01E01.mkv"
-    built = build_steps(job, plan, profile, APP, out)
+    built = build_steps(job, plan, rule_set, APP, out)
     ids = [s.id for s in built.steps]
     assert ids.index("dovi.rpu") < ids.index("dovi.edit") < ids.index("dovi.check") < ids.index("video")
     source_rpu, rpu = job.work_dir / "dv_source.bin", job.job_dir / "dv_rpu.bin"  # the source's; the job's crop
@@ -1635,8 +1635,8 @@ def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
 
     edits = []
 
-    def edit(_dovi, src, dst, video_settings, width, height, log, profile):
-        edits.append((src, video_settings.crop, profile))
+    def edit(_dovi, src, dst, video_settings, width, height, log, rule_set):
+        edits.append((src, video_settings.crop, rule_set))
         dst.write_bytes(b"rpu")
 
     monkeypatch.setattr(hdr, "edit_rpu", edit)
@@ -1644,7 +1644,7 @@ def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
     monkeypatch.setattr(hdr, "rpu_frames", lambda *_: 240)
     dv = replace(plan.source.video, hdr=VideoHdr(dv_profile=8, dv_compat=1))
     carried = replace(simulate_output(plan), video=dv)
-    result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: carried)
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: carried)
     assert result.status is JobStatus.DONE, result.error
     assert edits == [(source_rpu, job.video.crop, "8.1")]
 
@@ -1652,14 +1652,14 @@ def test_dolby_vision_is_carried_into_x265(profile, tmp_path, monkeypatch):
     job.output_policy = OutputPolicy.REPLACE
     # the output lost it: invalid
     lost = replace(simulate_output(plan), video=replace(plan.source.video, hdr=VideoHdr()))
-    result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: lost)
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: lost)
     assert result.status is JobStatus.INVALID
     assert [i.code for i in result.issues] == ["hdr.dv_missing"]
 
     # a script with other frames than the RPU stops before the encode
     monkeypatch.setattr(hdr, "script_frames", lambda *_: 238)
     runner = FakeRunner()
-    result = run_job(job, plan, profile, APP, state=JobState(), runner=runner, prober=lambda *_: carried)
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=runner, prober=lambda *_: carried)
     assert result.status is JobStatus.FAILED and "238 frames" in (result.error or "")
     assert "x265" not in tools_called(runner)
 
@@ -1704,7 +1704,7 @@ def test_dolby_vision_rpu_comes_with_the_index_and_crops(tmp_path, monkeypatch):
     assert build.auto_crop(job, video, dovi, detected)[1].endswith("couldn't be read: dovi_tool export failed)")
 
 
-def test_dolby_vision_profile_5_stays_profile_5(profile, tmp_path, monkeypatch):
+def test_dolby_vision_profile_5_stays_profile_5(rule_set, tmp_path, monkeypatch):
     """A profile 5 source (no HDR10 layer, no mastering display) is written as profile 5, as StaxRip does: the RPU
     edited as it is (mode 0) but for its L5, and the output checked for profile 5."""
     plan = make_plan(tmp_path)
@@ -1713,7 +1713,7 @@ def test_dolby_vision_profile_5_stays_profile_5(profile, tmp_path, monkeypatch):
     video.hdr = VideoHdr(dv_profile=5, dv_level=9, dv_layers="BL+RPU")
     video.color = replace(video.color, master_display="", range="full")
     assert hdr.issues(video, job.encoder, None, job.video) == []
-    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
     step = {s.id: s for s in built.steps}
     argv = step["video"].argvs[1]
     i = argv.index("--dolby-vision-profile")
@@ -1723,20 +1723,20 @@ def test_dolby_vision_profile_5_stays_profile_5(profile, tmp_path, monkeypatch):
 
     edits = []
 
-    def edit(_dovi, src, dst, video_settings, width, height, log, profile):
-        edits.append(profile)
+    def edit(_dovi, src, dst, video_settings, width, height, log, rule_set):
+        edits.append(rule_set)
         dst.write_bytes(b"rpu")
 
     monkeypatch.setattr(hdr, "edit_rpu", edit)
     monkeypatch.setattr(hdr, "script_frames", lambda *_: 240)
     monkeypatch.setattr(hdr, "rpu_frames", lambda *_: 240)
     carried = replace(simulate_output(plan), video=replace(video, hdr=VideoHdr(dv_profile=5)))
-    result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: carried)
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: carried)
     assert result.status is JobStatus.DONE, result.error
     assert edits == ["5"]
     job.output_policy = OutputPolicy.REPLACE
     as_81 = replace(simulate_output(plan), video=replace(video, hdr=VideoHdr(dv_profile=8, dv_compat=1)))
-    result = run_job(job, plan, profile, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: as_81)
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=FakeRunner(), prober=lambda *_: as_81)
     assert result.status is JobStatus.INVALID
     assert [i.message for i in result.issues] == ["The output has Dolby Vision 8.1, not 5"]
 
@@ -1765,7 +1765,7 @@ def test_dolby_vision_profile_5_stays_profile_5(profile, tmp_path, monkeypatch):
         ({"dv_profile": 7, "dv_compat": 6, "dv_el": ""}, {}, ["hdr.dv_el"]),
     ],
 )
-def test_dolby_vision_plan(profile, tmp_path, hdr_info, encoder, codes):
+def test_dolby_vision_plan(rule_set, tmp_path, hdr_info, encoder, codes):
     plan = make_plan(tmp_path)
     job = dv_job(plan, tmp_path, **encoder)
     video = plan.source.video
@@ -1815,13 +1815,13 @@ def test_fel_bake_needs_ffms2_or_lsmas(tmp_path, source_filter, codes):
         ("MEL", {}, [], True),
     ],
 )
-def test_hdr10plus_with_a_profile7_source(profile, tmp_path, el, encoder, codes, carried):
+def test_hdr10plus_with_a_profile7_source(rule_set, tmp_path, el, encoder, codes, carried):
     plan = make_plan(tmp_path)
     job = fel_job(plan, tmp_path, **encoder)
     plan.source.video.hdr = replace(plan.source.video.hdr, dv_el=el, hdr10plus=True)
     assert [i.code for i in hdr.issues(plan.source.video, job.encoder, None, job.video)] == codes
     assert hdr.keeps_hdr10plus(plan.source.video, job.encoder) is carried
-    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
     assert ("hdr10plus" in [s.id for s in built.steps]) is carried
     video = next(s for s in built.steps if s.id == "video")
     assert ("--dhdr10-info" in video.argvs[-1]) is carried
@@ -1852,12 +1852,12 @@ def test_fel_color_from_the_rpu(l1, l1f, cll):
 
 
 @pytest.mark.parametrize("source_filter", [SourceFilter.FFMS2, SourceFilter.LSMASH])
-def test_fel_is_baked_into_the_encode(profile, tmp_path, monkeypatch, source_filter):
+def test_fel_is_baked_into_the_encode(rule_set, tmp_path, monkeypatch, source_filter):
     plan = make_plan(tmp_path)
     job = fel_job(plan, tmp_path)
     job.video.source_filter = source_filter
     out = tmp_path / "out" / "Show.S01E01.mkv"
-    built = build_steps(job, plan, profile, APP, out)
+    built = build_steps(job, plan, rule_set, APP, out)
     ids = [s.id for s in built.steps]
     work = job.work_dir
     el, hevc = work / "dv_el.mkv", work / "dv_el.hevc"
@@ -1881,7 +1881,7 @@ def test_fel_is_baked_into_the_encode(profile, tmp_path, monkeypatch, source_fil
     runner = FakeRunner()
     carried = replace(simulate_output(plan), video=replace(plan.source.video, hdr=VideoHdr(dv_profile=8, dv_compat=1)))
     state = JobState()
-    result = run_job(job, plan, profile, APP, state=state, runner=runner, prober=lambda *_: carried)
+    result = run_job(job, plan, rule_set, APP, state=state, runner=runner, prober=lambda *_: carried)
     assert result.status is JobStatus.DONE, result.error
     # the encode ran with the RPU's values (L6 here: L1 reads 0), and its Log tab line says so
     x265 = next(c[-1] for c in runner.calls if Path(c[-1][0]).stem == "x265")
@@ -1890,18 +1890,18 @@ def test_fel_is_baked_into_the_encode(profile, tmp_path, monkeypatch, source_fil
     assert "--max-cll 2573,684" in next(r.command for r in state.run if r.id == "video")
     # a rerun reuses the encode (its fingerprint has the RPU's values)
     runner = FakeRunner()
-    result = run_job(job, plan, profile, APP, state=state, runner=runner, prober=lambda *_: carried)
+    result = run_job(job, plan, rule_set, APP, state=state, runner=runner, prober=lambda *_: carried)
     assert result.status is JobStatus.DONE, result.error
     assert "x265" not in tools_called(runner)
 
 
-def test_a_uhd_bluray_m2ts_bakes_its_second_track(profile, tmp_path):
+def test_a_uhd_bluray_m2ts_bakes_its_second_track(rule_set, tmp_path):
     """A UHD Blu-ray M2TS's enhancement layer is a video track of its own (hdr.dual_layer): the RPU and the layer
     come from it (copied out, no demux), the HDR10+ and the picture from the first."""
     plan = make_plan(tmp_path)
     job = fel_job(plan, tmp_path, hdr10plus=False)
     plan.source.video.hdr = replace(plan.source.video.hdr, dv_level=0, dv_stream=1)
-    built = build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
     step = {s.id: s for s in built.steps}
     hevc = job.work_dir / "dv_el.hevc"
     (copy,) = step["dovi.el"].argvs
@@ -1914,20 +1914,20 @@ def test_a_uhd_bluray_m2ts_bakes_its_second_track(profile, tmp_path):
     plan.source.video.hdr = replace(plan.source.video.hdr, hdr10plus=True)
     job.encoder.hdr10plus = True
     job.encoder.dolby_vision = False  # nothing baked: HDR10+ carried, from the base layer
-    step = {s.id: s for s in build_steps(job, plan, profile, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    step = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
     hdr10plus = step["hdr10plus"].argvs[0]
     assert hdr10plus[hdr10plus.index("-map") + 1] == "0:v:0" and "dovi.el" not in step
 
 
 @pytest.mark.parametrize("policy", list(OutputPolicy))
-def test_existing_output_policy(profile, tmp_path, policy):
+def test_existing_output_policy(rule_set, tmp_path, policy):
     plan = make_plan(tmp_path)
     out = tmp_path / "out/Show.S01E01.mkv"
     out.parent.mkdir()
     out.write_bytes(b"previous good output")
     runner = FakeRunner()
     result = run_plan(
-        plan, out.parent, profile, APP, output_policy=policy, runner=runner, prober=lambda *_: simulate_output(plan)
+        plan, out.parent, rule_set, APP, output_policy=policy, runner=runner, prober=lambda *_: simulate_output(plan)
     )
     if policy in (OutputPolicy.STOP, OutputPolicy.SKIP):
         assert result.status is (JobStatus.FAILED if policy is OutputPolicy.STOP else JobStatus.SKIPPED)
@@ -1939,7 +1939,7 @@ def test_existing_output_policy(profile, tmp_path, policy):
         assert out.read_bytes() == b"previous good output"
 
 
-def test_invalid_replacement_preserves_good_output(profile, tmp_path):
+def test_invalid_replacement_preserves_good_output(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     out = tmp_path / "out/Show.S01E01.mkv"
     out.parent.mkdir()
@@ -1947,7 +1947,7 @@ def test_invalid_replacement_preserves_good_output(profile, tmp_path):
     bad = simulate_output(plan)
     bad.subs[0].title = "Wrong"
     result = run_plan(
-        plan, out.parent, profile, APP, output_policy=OutputPolicy.REPLACE, runner=FakeRunner(), prober=lambda *_: bad
+        plan, out.parent, rule_set, APP, output_policy=OutputPolicy.REPLACE, runner=FakeRunner(), prober=lambda *_: bad
     )
     assert result.status is JobStatus.INVALID
     assert out.read_bytes() == b"previous good output"
@@ -1956,7 +1956,7 @@ def test_invalid_replacement_preserves_good_output(profile, tmp_path):
 
 
 @pytest.mark.parametrize("existing", [False, True])
-def test_output_changed_during_run_is_never_replaced(profile, tmp_path, existing):
+def test_output_changed_during_run_is_never_replaced(rule_set, tmp_path, existing):
     plan = make_plan(tmp_path)
     out = tmp_path / "out/Show.S01E01.mkv"
     out.parent.mkdir()
@@ -1969,7 +1969,7 @@ def test_output_changed_during_run_is_never_replaced(profile, tmp_path, existing
         return simulate_output(plan)
 
     result = run_plan(
-        plan, out.parent, profile, APP, output_policy=OutputPolicy.REPLACE, runner=FakeRunner(), prober=probe_candidate
+        plan, out.parent, rule_set, APP, output_policy=OutputPolicy.REPLACE, runner=FakeRunner(), prober=probe_candidate
     )
     assert result.status is JobStatus.FAILED and "changed during" in result.error
     assert out.read_bytes() == b"another application's output"

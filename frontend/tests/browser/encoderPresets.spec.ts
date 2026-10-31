@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { test, expect, type Page } from '@playwright/test'
-import type { EncoderBundle, EncoderSettings, Presets, Profile, Template } from '../../src/lib/types.ts'
+import type { EncoderBundle, EncoderSettings, Presets, RuleSet, Template } from '../../src/lib/types.ts'
 
 const defaults: EncoderSettings = {
   encoder: 'x264',
@@ -45,7 +45,7 @@ async function fixture(page: Page) {
     audio: null,
     subs: null,
   }
-  const profile: Profile = {
+  const ruleSet: RuleSet = {
     id: 'manual',
     name: 'Manual',
     default: true,
@@ -88,7 +88,7 @@ async function fixture(page: Page) {
     } else {
       const responses: Record<string, unknown> = {
         '/api/jobs': [],
-        '/api/profiles': [profile],
+        '/api/rule-sets': [ruleSet],
         '/api/presets': presets,
         '/api/health': { ok: true, version: 'test' },
         '/api/filter-presets': [],

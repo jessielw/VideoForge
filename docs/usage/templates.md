@@ -2,7 +2,7 @@
 
 A template saves a job setup without its source file. It can include video processing, encoder settings, container, AutoQPF, crop policy, and optional audio and subtitle selections.
 
-Template drafts survive navigation and refresh in the same browser tab. Leaving an edited template, switching profiles, or starting another template offers **Save**, **Discard**, or **Stay**.
+Template drafts survive navigation and refresh in the same browser tab. Leaving an edited template, switching rule sets, or starting another template offers **Save**, **Discard**, or **Stay**.
 
 ## Create and apply
 
@@ -26,16 +26,16 @@ Choose **Select** at the top of the template list, tick the templates to delete 
 
 ## Share templates
 
-1. On **Templates**, open a setup and choose **Export current template**. This includes any unsaved edits, and also works for a profile's built-in defaults. To share several saved templates, choose **Export…**, check the ones to include, and click **Export N selected**. All are selected initially; use **Clear selection** to start with none or **Select all** to bundle everything.
+1. On **Templates**, open a setup and choose **Export current template**. This includes any unsaved edits, and also works for a rule set's built-in defaults. To share several saved templates, choose **Export…**, check the ones to include, and click **Export N selected**. All are selected initially; use **Clear selection** to start with none or **Select all** to bundle everything.
 2. Share the downloaded `.videoforge.json` file with your group.
 3. The recipient chooses **Import**, selects the file, and reviews the templates and included scripts.
 4. Select the templates to keep and click **Import**. They appear in the template list, ready to edit, star, or apply to jobs.
 
 A template with the same name (folder included) replaces yours, so importing an updated pack again adds nothing new; one that's already the same is left alone. The preview marks each one (**replaces yours**, **already the same**) and counts them. Tick **Keep both** to add a numbered copy instead, such as `Group setup (2)`. A replaced template keeps its name, so a starred default still points to it; current editor drafts and default selections stay as they are. Files are checked in full before any templates are saved. Unsupported versions or settings are rejected rather than silently dropped. A file can contain up to 500 templates and be up to 5 MiB.
 
-The file includes video processing and scripts, crop policy, encoder settings, audio and subtitle rules, container settings, and AutoQPF. Encoder and audio settings are embedded, so recipients do not need the sender's saved presets. Source media, external files, installed tools/plugins, profile packages, and application settings are not bundled. Paths typed into scripts or extra arguments remain as typed and may need adjusting on the recipient's computer.
+The file includes video processing and scripts, crop policy, encoder settings, audio and subtitle rules, container settings, and AutoQPF. Encoder and audio settings are embedded, so recipients do not need the sender's saved presets. Source media, external files, installed tools/plugins, rule set packages, and application settings are not bundled. Paths typed into scripts or extra arguments remain as typed and may need adjusting on the recipient's computer.
 
-Review scripts from shared templates before using them: they contain Python that runs during video processing. The import preview displays custom bodies and filter scripts, including disabled filters. Import itself does not execute them. Recipients still need compatible tools, plugins, and profiles.
+Review scripts from shared templates before using them: they contain Python that runs during video processing. The import preview displays custom bodies and filter scripts, including disabled filters. Import itself does not execute them. Recipients still need compatible tools, plugins, and rule sets.
 
 Exports use a versioned JSON envelope with `format: "videoforge.templates"`, `version: 1`, and a `templates` array of `{ "name": "…", "data": { … } }` entries. One template and a group bundle use the same format.
 
@@ -73,10 +73,10 @@ Subtitle rules match language, format, forced, SDH, and commentary traits. They 
 
 ### Default subtitles for every job
 
-**Settings → Default subtitles** holds subtitle rules that every new job gets unless its template sets its own. Use it for a standing policy, such as "keep English and forced English, name them, leave out the rest", without putting it in each template. Jobs already in the queue keep their subtitles. A profile that picks tracks by its own rules ignores it. Its jobs still take the rules of a template you pick for them, if the profile has the full track editor.
+**Settings → Default subtitles** holds subtitle rules that every new job gets unless its template sets its own. Use it for a standing policy, such as "keep English and forced English, name them, leave out the rest", without putting it in each template. Jobs already in the queue keep their subtitles. A rule set that picks tracks by its own rules ignores it. Its jobs still take the rules of a template you pick for them, if the rule set has the full track editor.
 
 A typical policy is forced English first and default, then full English, with other subtitles excluded. Check the flags and order on several episodes before using it for a season.
 
-## Templates and profiles
+## Templates and rule sets
 
-A **profile** defines planning rules and output checks in Python. A **template** saves settings applied to a job. The built-in manual profile plus templates covers ordinary interactive use; custom release policies can use a [profile package](../development/profiles.md).
+A **rule set** defines planning rules and output checks in Python. A **template** saves settings applied to a job. The built-in manual rule set plus templates covers ordinary interactive use; custom release policies can use a [rule set package](../development/rule-sets.md).

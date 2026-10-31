@@ -1,5 +1,5 @@
 <script lang="ts">
-  // New jobs: profile + language, input slots, output folder, live match preview, Add to queue.
+  // New jobs: rule set + language, input slots, output folder, live match preview, Add to queue.
   import { onDestroy, onMount, untrack } from 'svelte'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import { Button } from '$lib/components/ui/button'
@@ -22,7 +22,7 @@
 
   type ImportResult = Awaited<ReturnType<typeof api.addJobs>>
   type Draft = {
-    profile: string
+    ruleSet: string
     language: string
     sources: string[]
     encodes: string[]
@@ -35,7 +35,7 @@
     completion?: ImportResult | null
   }
   const restored = drafts.read<Draft>('new-jobs')
-  let profile = $state(restored?.profile ?? '')
+  let ruleSet = $state(restored?.ruleSet ?? '')
   let language = $state(restored?.language ?? '')
   let sources = $state<string[]>(restored?.sources ?? [])
   let encodes = $state<string[]>(restored?.encodes ?? [])
@@ -48,25 +48,25 @@
   let adding = $state(false)
   let replacements = $state<string[]>([])
   let completion = $state<ImportResult | null>(restored?.completion ?? null)
-  // The template (by name; the profile's starred one first) and the container it sets, which can
+  // The template (by name; the rule set's starred one first) and the container it sets, which can
   // be changed here.
   let templateName = $state<string | null>(restored?.templateName ?? null)
   let encoder = $state<EncoderSettings | null>(restored?.encoder ?? null)
   let container = $state(restored?.container ?? '')
-  const templateChoices = $derived(app.presetChoices('template', profile))
+  const templateChoices = $derived(app.presetChoices('template', ruleSet))
   const templateGroups = $derived(groupByFolder(templateChoices, (c) => c.name))
   const template = $derived(
-    templateChoices.find((c) => c.name === (templateName ?? app.defaultTemplate(profile))) ?? templateChoices[0],
+    templateChoices.find((c) => c.name === (templateName ?? app.defaultTemplate(ruleSet))) ?? templateChoices[0],
   )
-  const templateKey = $derived(JSON.stringify([profile, templateName ?? app.defaultTemplate(profile)]))
-  let previousProfile = restored?.profile ?? ''
-  let appliedKey = restored ? JSON.stringify([restored.profile, restored.templateName]) : ''
+  const templateKey = $derived(JSON.stringify([ruleSet, templateName ?? app.defaultTemplate(ruleSet)]))
+  let previousRuleSet = restored?.ruleSet ?? ''
+  let appliedKey = restored ? JSON.stringify([restored.ruleSet, restored.templateName]) : ''
 
   function persist() {
     drafts.write(
       'new-jobs',
       $state.snapshot({
-        profile,
+        ruleSet,
         language,
         sources,
         encodes,
@@ -81,18 +81,18 @@
     )
   }
   onDestroy(persist)
-  const containers = $derived(app.profiles.find((p) => p.id === profile)?.containers ?? [])
+  const containers = $derived(app.ruleSets.find((p) => p.id === ruleSet)?.containers ?? [])
 
   $effect(() => {
-    // A manual selection survives preset saves; a profile switch starts on its default.
-    if (profile !== previousProfile) {
-      previousProfile = profile
+    // A manual selection survives preset saves; a rule set switch starts on its default.
+    if (ruleSet !== previousRuleSet) {
+      previousRuleSet = ruleSet
       templateName = null
     }
   })
   $effect(() => {
     // Switching templates resets the override, but saving/renaming an encoder preset does not.
-    if (!template || template.name !== (templateName ?? app.defaultTemplate(profile)) || templateKey === appliedKey)
+    if (!template || template.name !== (templateName ?? app.defaultTemplate(ruleSet)) || templateKey === appliedKey)
       return
     appliedKey = templateKey
     untrack(() => {
@@ -102,16 +102,16 @@
     })
   })
 
-  const takesSubs = $derived(app.profiles.find((p) => p.id === profile)?.external_subtitles ?? true)
+  const takesSubs = $derived(app.ruleSets.find((p) => p.id === ruleSet)?.external_subtitles ?? true)
 
   onMount(async () => {
-    if (!profile) profile = app.defaultProfile?.id ?? ''
+    if (!ruleSet) ruleSet = app.defaultRuleSet?.id ?? ''
     const s = await api.settings().catch(() => null)
     if (s?.output_dir && !output.length) output = [s.output_dir]
   })
 
   $effect(() => {
-    if (!profile && app.defaultProfile) profile = app.defaultProfile.id
+    if (!ruleSet && app.defaultRuleSet) ruleSet = app.defaultRuleSet.id
   })
 
   const slots = () => ({
@@ -119,7 +119,7 @@
     encodes,
     subtitles: takesSubs ? subtitles : [],
     chapters,
-    profile,
+    rule_set: ruleSet,
   })
 
   const matches = new LatestRequest()
@@ -235,10 +235,10 @@
 
   <Card.Root class="@container/import shrink-0 gap-3 p-4">
     <div class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 @min-[40rem]/import:grid-cols-[8rem_minmax(0,1fr)]">
-      <div class="text-sm text-muted-foreground">Profile</div>
+      <div class="text-sm text-muted-foreground">Rule set</div>
       <div class="flex flex-wrap items-center gap-3">
-        <NativeSelect bind:value={profile} aria-label="Profile">
-          {#each app.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+        <NativeSelect bind:value={ruleSet} aria-label="Rule set">
+          {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
         </NativeSelect>
         <label class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           Original language
@@ -255,7 +255,7 @@
       <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
         {#snippet templateOptions(items: { item: (typeof templateChoices)[number]; label: string }[])}
           {#each items as { item: c, label } (`${c.builtin}:${c.name}`)}
-            <option value={c.name}>{label}{c.name === app.defaultTemplate(profile) ? ' (default)' : ''}</option>
+            <option value={c.name}>{label}{c.name === app.defaultTemplate(ruleSet) ? ' (default)' : ''}</option>
           {/each}
         {/snippet}
         <NativeSelect
@@ -290,7 +290,7 @@
         <div class="min-w-0 space-y-2">
           <div class="flex flex-wrap items-center gap-3">
             <EncoderPresetMenu
-              {profile}
+              {ruleSet}
               current={encoder}
               apply={(value) => {
                 encoder = value

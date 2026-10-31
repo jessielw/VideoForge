@@ -95,9 +95,9 @@ def plan_from_dict(data: dict[str, Any]) -> Plan:
 
 
 def _upgrade_v1(plan: dict[str, Any]) -> dict[str, Any]:
-    """v1 -> v2: overrides.subs became overrides.tracks with profile flags.
+    """v1 -> v2: overrides.subs became overrides.tracks with rule set flags.
 
-    v1 plans carry no profile; Plan.profile stays "" and the caller picks one.
+    v1 plans carry no rule set; Plan.rule_set stays "" and the caller picks one.
     """
     plan = dict(plan)
     overrides = dict(plan.get("overrides") or {})

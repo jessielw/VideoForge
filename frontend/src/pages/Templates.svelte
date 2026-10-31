@@ -1,7 +1,7 @@
 <script lang="ts">
   // Templates without a file: a job's whole run (video, crop, encoder, container, AutoQPF, audio, subtitles), set up
-  // once and picked when adding jobs. Each profile's own defaults are built in; star a template to
-  // make it the profile's default (New jobs starts on it). A job's Template menu saves one from a job.
+  // once and picked when adding jobs. Each rule set's own defaults are built in; star a template to
+  // make it the rule set's default (New jobs starts on it). A job's Template menu saves one from a job.
   // A template's folder is part of its name ("Group / 1080p / Film"); the list shows them as a tree.
   import { toast } from 'svelte-sonner'
   import { onDestroy } from 'svelte'
@@ -40,13 +40,13 @@
   type Open = { name: string | null; builtin: boolean; data: Template }
 
   const restored = drafts.read<{
-    profile: string
+    ruleSet: string
     opened: Open | null
     draft: Template | null
     draftName: string
     collapsed?: string[]
   }>('templates')
-  let profile = $state(restored?.profile ?? '')
+  let ruleSet = $state(restored?.ruleSet ?? '')
   let opened = $state<Open | null>(restored?.opened ?? null)
   let draft = $state<Template | null>(restored?.draft ?? null)
   // The name as two boxes: its folder (as typed, "a/b") and its own label; draftName is the stored form.
@@ -73,7 +73,7 @@
     { id: 'auto', label: 'Detect per job' },
   ]
 
-  const choices = $derived<Choice[]>(app.presetChoices('template', profile))
+  const choices = $derived<Choice[]>(app.presetChoices('template', ruleSet))
   const tree = $derived(
     buildTree(
       choices.filter((c) => !c.builtin),
@@ -102,7 +102,7 @@
     try {
       app.presets = await api.deletePresets('template', names)
       toast.success(`Deleted ${names.length} template${names.length === 1 ? '' : 's'}`)
-      if (opened?.name && names.includes(opened.name)) opened = null // the effect opens the profile's default
+      if (opened?.name && names.includes(opened.name)) opened = null // the effect opens the rule set's default
       stopSelecting()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
@@ -110,14 +110,14 @@
       busy = false
     }
   }
-  const starred = $derived(app.defaultTemplate(profile))
-  const profileName = $derived(app.profiles.find((p) => p.id === profile)?.name ?? profile)
+  const starred = $derived(app.defaultTemplate(ruleSet))
+  const ruleSetName = $derived(app.ruleSets.find((p) => p.id === ruleSet)?.name ?? ruleSet)
   const userNames = $derived(new Set(app.presets.template.map((t) => t.name)))
-  const containers = $derived(app.profiles.find((p) => p.id === profile)?.containers ?? [])
+  const containers = $derived(app.ruleSets.find((p) => p.id === ruleSet)?.containers ?? [])
   const container = $derived(containers.find((c) => c.id === draft?.mux.container) ?? containers[0])
-  // templates are shared; a profile without a track editor ignores their audio and subtitles
-  const trackEditor = $derived(app.profiles.find((p) => p.id === profile)?.track_editor ?? false)
-  const trackFlags = $derived(app.profiles.find((p) => p.id === profile)?.track_properties ?? [])
+  // templates are shared; a rule set without a track editor ignores their audio and subtitles
+  const trackEditor = $derived(app.ruleSets.find((p) => p.id === ruleSet)?.track_editor ?? false)
+  const trackFlags = $derived(app.ruleSets.find((p) => p.id === ruleSet)?.track_properties ?? [])
   const audioFlags = $derived(trackFlags.filter((f) => f.kind === 'audio'))
   const subFlags = $derived(trackFlags.filter((f) => f.kind === 'sub'))
   const readOnly = $derived(!!opened?.builtin)
@@ -129,7 +129,7 @@
   )
 
   function persist() {
-    drafts.write('templates', $state.snapshot({ profile, opened, draft, draftName, collapsed }))
+    drafts.write('templates', $state.snapshot({ ruleSet, opened, draft, draftName, collapsed }))
   }
   function request(proceed: () => void) {
     if (busy) return
@@ -145,10 +145,10 @@
   onDestroy(persist)
 
   $effect(() => {
-    if (!profile && app.defaultProfile) profile = app.defaultProfile.id
+    if (!ruleSet && app.defaultRuleSet) ruleSet = app.defaultRuleSet.id
   })
   $effect(() => {
-    // the first time the profile's templates are known, open its default
+    // the first time the rule set's templates are known, open its default
     if (!opened && choices.length) open(choices.find((c) => c.name === starred) ?? choices[0])
   })
 
@@ -231,7 +231,7 @@
     try {
       app.presets = await api.deletePreset('template', name)
       toast.success(`Deleted ${name}`)
-      opened = null // the effect opens the profile's default
+      opened = null // the effect opens the rule set's default
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     }
@@ -239,7 +239,7 @@
 
   async function star(c: Choice) {
     try {
-      app.presets = await api.setTemplateDefault(profile, c.builtin ? null : c.name)
+      app.presets = await api.setTemplateDefault(ruleSet, c.builtin ? null : c.name)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     }
@@ -293,20 +293,20 @@
         </Tip>
       </div>
       <label class="flex items-center gap-2 text-sm text-muted-foreground">
-        Profile
+        Rule set
         <NativeSelect
           class="min-w-0 flex-1"
-          aria-label="Profile"
-          value={profile}
+          aria-label="Rule set"
+          value={ruleSet}
           onchange={(e) => {
             const next = e.currentTarget.value
             request(() => {
-              profile = next
+              ruleSet = next
               opened = null
             })
           }}
         >
-          {#each app.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+          {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
         </NativeSelect>
       </label>
     </div>
@@ -339,8 +339,8 @@
         {:else}
           <Tip
             text={c.name === starred
-              ? `This template is the default for new jobs on Profile: ${profileName}`
-              : `Make this template the default for new jobs on Profile: ${profileName}`}
+              ? `This template is the default for new jobs on Rule set: ${ruleSetName}`
+              : `Make this template the default for new jobs on Rule set: ${ruleSetName}`}
           >
             <Button
               variant="ghost"
@@ -457,7 +457,7 @@
           </div>
         </header>
         {#if readOnly}<p class="text-sm text-muted-foreground">
-            The profile's own settings for a new job. Duplicate it to make your own.
+            The rule set's own settings for a new job. Duplicate it to make your own.
           </p>{/if}
         {#if error}<p class="text-sm text-destructive">{error}</p>{/if}
 
@@ -570,7 +570,7 @@
                 {:else}
                   <span
                     >{containers[0]?.label ?? '—'}{draft.mux.container && draft.mux.container !== containers[0]?.id
-                      ? ` (this profile can't make ${draft.mux.container.toUpperCase()})`
+                      ? ` (this rule set can't make ${draft.mux.container.toUpperCase()})`
                       : ''}</span
                   >
                 {/if}
@@ -601,7 +601,7 @@
             </Card.Root>
             <Card.Root class="p-4">
               <EncoderPanel
-                {profile}
+                {ruleSet}
                 value={draft.encoder}
                 disabled={readOnly}
                 onchange={(v) => (draft!.encoder = v)}
@@ -613,7 +613,7 @@
           <span class="section-label">Audio</span>
           {#if !trackEditor}
             <p class="text-xs text-muted-foreground">
-              {profileName}'s rules choose its jobs' audio: these settings apply to other profiles' jobs.
+              {ruleSetName}'s rules choose its jobs' audio: these settings apply to other rule sets' jobs.
             </p>
           {/if}
           <TemplateAudioEditor
@@ -627,7 +627,7 @@
           <span class="section-label">Subtitles</span>
           {#if !trackEditor}
             <p class="text-xs text-muted-foreground">
-              {profileName}'s rules choose its jobs' subtitles: these settings apply to other profiles' jobs.
+              {ruleSetName}'s rules choose its jobs' subtitles: these settings apply to other rule sets' jobs.
             </p>
           {/if}
           <TemplateSubsEditor

@@ -1,6 +1,6 @@
 <script lang="ts">
   // Settings: where each tool is (found or not, and its version), what the folder browser
-  // may show, the profile new jobs start with, whether batch indexing waits for an encode's disk, where
+  // may show, the rule set new jobs start with, whether batch indexing waits for an encode's disk, where
   // notifications go (Apprise URLs), the actions run after a job or the queue ends, and which plugins load.
   // Each change saves at once and is used by
   // new jobs and runs; Reset goes back to the server's configuration defaults.
@@ -139,16 +139,16 @@
     }
   }
 
-  async function setProfile(id: string) {
-    if (await change({ profile: id === config?.profile_default ? null : id })) app.profiles = await api.profiles()
+  async function setRuleSet(id: string) {
+    if (await change({ rule_set: id === config?.rule_set_default ? null : id })) app.ruleSets = await api.ruleSets()
   }
 
   // Subtitle rules for new jobs whose template sets none: shown as changed at once, saved in order.
   let subsEdit = $state<{ value: TemplateSubs | null } | null>(null)
   let subsSent = 0
   const subsDefault = $derived(subsEdit ? subsEdit.value : (app.presets.subs_default ?? null))
-  const defaultProfile = $derived(app.profiles.find((p) => p.id === config?.profile) ?? app.defaultProfile)
-  const subFlags = $derived(defaultProfile?.track_properties.filter((f) => f.kind === 'sub') ?? [])
+  const defaultRuleSet = $derived(app.ruleSets.find((p) => p.id === config?.rule_set) ?? app.defaultRuleSet)
+  const subFlags = $derived(defaultRuleSet?.track_properties.filter((f) => f.kind === 'sub') ?? [])
   async function setSubsDefault(value: TemplateSubs | null) {
     const sent = ++subsSent
     subsEdit = { value }
@@ -334,10 +334,10 @@
         Create, edit, organize, import, and export presets without opening a job or template.
       </p>
       <div class="flex flex-wrap gap-2">
-        {#if app.defaultProfile}
+        {#if app.defaultRuleSet}
           <EncoderPresetMenu
-            profile={app.defaultProfile.id}
-            current={app.defaultProfile.defaults.encoder}
+            ruleSet={app.defaultRuleSet.id}
+            current={app.defaultRuleSet.defaults.encoder}
             apply={() => {}}
             manageOnly
           />
@@ -464,13 +464,13 @@
       </section>
 
       <section class="space-y-3">
-        <h2 class="font-medium">Profile</h2>
+        <h2 class="font-medium">Rule set</h2>
         <label class="flex items-center gap-3 text-sm">
           <span class="text-muted-foreground">New jobs start with</span>
-          <NativeSelect value={config.profile} onchange={(e) => setProfile(e.currentTarget.value)}>
-            {#each config.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+          <NativeSelect value={config.rule_set} onchange={(e) => setRuleSet(e.currentTarget.value)}>
+            {#each config.rule_sets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
           </NativeSelect>
-          <span class="text-xs text-muted-foreground">Default: {config.profile_default}</span>
+          <span class="text-xs text-muted-foreground">Default: {config.rule_set_default}</span>
         </label>
       </section>
 
@@ -579,9 +579,9 @@
 
       <section class="col-span-full min-w-0 space-y-3" aria-label="Default subtitles">
         <h2 class="font-medium">Default subtitles</h2>
-        {#if !defaultProfile?.track_editor || defaultProfile.picks_tracks}
+        {#if !defaultRuleSet?.track_editor || defaultRuleSet.picks_tracks}
           <p class="text-xs text-muted-foreground">
-            {defaultProfile?.name}'s rules choose its jobs' subtitles; these apply to other profiles' jobs.
+            {defaultRuleSet?.name}'s rules choose its jobs' subtitles; these apply to other rule sets' jobs.
           </p>
         {/if}
         <TemplateSubsEditor

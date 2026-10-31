@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import type { ConfigState, Profile, Template } from '../../src/lib/types.ts'
+import type { ConfigState, RuleSet, Template } from '../../src/lib/types.ts'
 
 async function layoutFixture(page: Page) {
   const errors: string[] = []
@@ -33,7 +33,7 @@ async function layoutFixture(page: Page) {
     audio: null,
     subs: null,
   }
-  const profile: Profile = {
+  const ruleSet: RuleSet = {
     id: 'manual',
     name: 'Manual',
     default: true,
@@ -62,9 +62,9 @@ async function layoutFixture(page: Page) {
     roots: ['D:\\Media'],
     roots_custom: false,
     default_roots: ['D:\\Media'],
-    profile: 'manual',
-    profile_default: 'manual',
-    profiles: [profile],
+    rule_set: 'manual',
+    rule_set_default: 'manual',
+    rule_sets: [ruleSet],
     restart: [],
     index_waits_for_disk: true,
     sample_quality: false,
@@ -97,7 +97,7 @@ async function layoutFixture(page: Page) {
     const path = new URL(route.request().url()).pathname
     const responses: Record<string, unknown> = {
       '/api/jobs': [],
-      '/api/profiles': [profile],
+      '/api/rule-sets': [ruleSet],
       '/api/health': { ok: true, version: 'test' },
       '/api/presets': {
         video: [],

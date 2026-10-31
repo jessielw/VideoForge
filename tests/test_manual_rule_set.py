@@ -1,4 +1,4 @@
-"""The built-in manual profile: every track in source order, shaped only by the user's overrides."""
+"""The built-in manual rule set: every track in source order, shaped only by the user's overrides."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ from videoforge.core.models import (
     SubFormat as F,
     TrackOverride,
 )
-from videoforge.profiles import default_profile_id, get_profile, profile_ids
-from videoforge.profiles.manual import ManualProfile
+from videoforge.rule_sets import default_rule_set_id, get_rule_set, rule_set_ids
+from videoforge.rule_sets.manual import ManualRuleSet
 
 NORMALIZE_OFF = {"normalize": "", "loudnorm_i": "-24", "loudnorm_tp": "-2", "loudnorm_lra": "7"}
 
@@ -32,10 +32,10 @@ def movie():
 
 
 def test_builtin_is_registered_and_the_default():
-    assert profile_ids()[0] == "manual"
-    assert isinstance(get_profile("manual"), ManualProfile)
-    assert default_profile_id(None) == "manual"
-    assert default_profile_id("not-installed") == "manual"
+    assert rule_set_ids()[0] == "manual"
+    assert isinstance(get_rule_set("manual"), ManualRuleSet)
+    assert default_rule_set_id(None) == "manual"
+    assert default_rule_set_id("not-installed") == "manual"
 
 
 def test_keeps_every_track_in_source_order_unchanged():
@@ -187,16 +187,16 @@ def test_only_missing_inputs_block():
 
 def test_output_is_checked_against_the_plan():
     plan = plan_for(movie(), source(name="Movie_job.mkv"))
-    profile = ManualProfile()
-    assert profile.validate_output(plan, simulate_output(plan)) == []
+    rule_set = ManualRuleSet()
+    assert rule_set.validate_output(plan, simulate_output(plan)) == []
 
     out = simulate_output(plan)
     out.audio[1].commentary = False
     out.subs[1].title = "Francais"
     out.subs.pop(0)
-    codes = [i.code for i in profile.validate_output(plan, out)]
+    codes = [i.code for i in rule_set.validate_output(plan, out)]
     assert "plan.audio" in codes and "plan.subs_count" in codes and "plan.subs" in codes
-    assert profile.validate_release(out) == []  # no group rules
+    assert rule_set.validate_release(out) == []  # no group rules
 
 
 def test_ffmpeg_encodes_keep_the_layout_they_can_and_pick_bitrates():
@@ -277,8 +277,8 @@ def test_encode_options_default_and_are_checked():
     assert loud.audio[0].options["loudnorm_tp"] == "-1.5" and loud.audio[0].options["loudnorm_i"] == "-24"
 
 
-def test_encode_options_take_the_profiles_defaults():
-    class Bluray(ManualProfile):
+def test_encode_options_take_the_rule_sets_defaults():
+    class Bluray(ManualRuleSet):
         id = "bluray-test"
 
         def audio_settings(self):
@@ -297,5 +297,5 @@ def test_encode_options_take_the_profiles_defaults():
     plan = Bluray().plan(ProbedInputs(inputs, src, source(name="E.mkv"), []), None, ov)
     atmos, aac = plan.audio
     assert atmos.options["atmos_mode"] == "bluray" and atmos.options["drc_line"] == ""
-    assert aac.options["quality"] == "91"  # 200 is out of range, so the profile's default stands in
+    assert aac.options["quality"] == "91"  # 200 is out of range, so the rule set's default stands in
     assert [i.code for i in plan.issues] == ["audio.option"]

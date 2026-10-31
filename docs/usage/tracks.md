@@ -1,6 +1,6 @@
 # Audio and subtitles
 
-The built-in **manual** profile starts with source tracks in source order, copied with their titles, languages, and flags. Use the job's **Audio** and **Subtitles** tabs to change the output.
+The built-in **manual** rule set starts with source tracks in source order, copied with their titles, languages, and flags. Use the job's **Audio** and **Subtitles** tabs to change the output.
 
 ## Select and arrange tracks
 
@@ -10,9 +10,9 @@ The built-in **manual** profile starts with source tracks in source order, copie
 4. For audio, choose copy or an encode and review its layout and bitrate.
 5. Review planning issues after choosing MKV or MP4.
 
-The available controls also depend on the selected profile. A profile can impose its own track rules instead of offering the full manual editor.
+The available controls also depend on the selected rule set. A rule set can impose its own track rules instead of offering the full manual editor.
 
-A profile with its own rules can also offer the full editor. Its rules then pick, order, title and encode the tracks first, and the editor starts from that. A change you make wins over the rules. Setting a value back to what the rules chose removes your change. Ticking a track the rules left out keeps it. The order follows the rules until you move a track. The profile's checks still block an output its rules don't allow.
+A rule set with its own rules can also offer the full editor. Its rules then pick, order, title and encode the tracks first, and the editor starts from that. A change you make wins over the rules. Setting a value back to what the rules chose removes your change. Ticking a track the rules left out keeps it. The order follows the rules until you move a track. The rule set's checks still block an output its rules don't allow.
 
 ### Name subtitles
 
@@ -62,7 +62,7 @@ In the compact picker for an individual track, incompatible choices are disabled
 
 ## External files
 
-Add subtitle files with the job. Pairing can also scan beside the source and one folder below it for SRTs sharing its name or episode token. Review the matched files before running a batch. Profiles determine whether external subtitles and audio are accepted.
+Add subtitle files with the job. Pairing can also scan beside the source and one folder below it for SRTs sharing its name or episode token. Review the matched files before running a batch. Rule sets determine whether external subtitles and audio are accepted.
 
 ## MKV versus MP4
 

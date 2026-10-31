@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import type { ConfigState, Presets, Profile, Template, TemplateSubs } from '../../src/lib/types.ts'
+import type { ConfigState, Presets, RuleSet, Template, TemplateSubs } from '../../src/lib/types.ts'
 
 test('Settings: default subtitle rules save as they change, naming included, and turn off', async ({ page }) => {
   const errors: string[] = []
@@ -34,7 +34,7 @@ test('Settings: default subtitle rules save as they change, naming included, and
     audio: null,
     subs: null,
   }
-  const profile: Profile = {
+  const ruleSet: RuleSet = {
     id: 'manual',
     name: 'Manual',
     default: true,
@@ -50,9 +50,9 @@ test('Settings: default subtitle rules save as they change, naming included, and
     roots: [],
     roots_custom: false,
     default_roots: [],
-    profile: 'manual',
-    profile_default: 'manual',
-    profiles: [profile],
+    rule_set: 'manual',
+    rule_set_default: 'manual',
+    rule_sets: [ruleSet],
     restart: [],
     index_waits_for_disk: true,
     sample_quality: false,
@@ -94,7 +94,7 @@ test('Settings: default subtitle rules save as they change, naming included, and
     }
     const responses: Record<string, unknown> = {
       '/api/jobs': [],
-      '/api/profiles': [profile],
+      '/api/rule-sets': [ruleSet],
       '/api/presets': presets,
       '/api/health': { ok: true, version: 'test' },
       '/api/filter-presets': [],

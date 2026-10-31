@@ -41,12 +41,12 @@ def _paths(body: dict[str, Any], key: str) -> list[Path]:
 
 def _match(request: Request, body: dict[str, Any]):
     q = queue_of(request)
-    profile = q.profiles(body.get("profile") or request.app.state.default_profile)
+    rule_set = q.rule_sets(body.get("rule_set") or request.app.state.default_rule_set)
     rules = q.app.matching
     sets = slot_files(
         _paths(body, "sources"),
         _paths(body, "encodes"),
-        _paths(body, "subtitles") if profile.external_subtitles else [],
+        _paths(body, "subtitles") if rule_set.external_subtitles else [],
         _paths(body, "chapters"),
         rules,
     )
@@ -83,7 +83,7 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         request.app.state.store.set_setting("output_dir", str(out_dir))
     added, skipped = q.add(
         result.jobs,
-        body.get("profile") or request.app.state.default_profile,
+        body.get("rule_set") or request.app.state.default_rule_set,
         original_language=body.get("original_language") or None,
         output_dir=out_dir,
         video=from_json(VideoSettings, body["video"]) if body.get("video") else None,
@@ -135,15 +135,15 @@ def get_job(request: Request, job_id: str) -> dict[str, Any]:
 
 
 def _template(body: dict[str, Any]) -> Template | None:
-    """A template's settings, sent whole (the UI has the user's and each profile's defaults)."""
+    """A template's settings, sent whole (the UI has the user's and each rule set's defaults)."""
     return from_json(Template, body["template"]) if body.get("template") else None
 
 
 def _default_template(request: Request, body: dict[str, Any]) -> Template | None:
-    """Jobs added with no settings of their own get the profile's default template, if it has one."""
+    """Jobs added with no settings of their own get the rule set's default template, if it has one."""
     if body.get("video") or body.get("encoder") or "template" in body:
         return None
-    return default_template(request.app.state.store, body.get("profile") or request.app.state.default_profile)
+    return default_template(request.app.state.store, body.get("rule_set") or request.app.state.default_rule_set)
 
 
 def _changes(body: dict[str, Any]) -> dict[str, Any]:
@@ -166,8 +166,8 @@ def _changes(body: dict[str, Any]) -> dict[str, Any]:
         changes["mux"] = from_json(MuxSettings, body["mux"])
     if body.get("container") is not None:
         changes["container"] = str(body["container"])
-    if body.get("profile"):
-        changes["profile"] = body["profile"]
+    if body.get("rule_set"):
+        changes["rule_set"] = body["rule_set"]
     if body.get("label") is not None:
         changes["label"] = str(body["label"])
     if body.get("output_name") is not None:
@@ -217,7 +217,7 @@ def _inputs(current: JobInputs, body: dict[str, Any]) -> JobInputs:
 
 @router.patch("/jobs/{job_id}")
 def update_job(request: Request, job_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    """Change a job: any of template, video, encoder, overrides, output_dir, output_name, label, qpf, profile, mux,
+    """Change a job: any of template, video, encoder, overrides, output_dir, output_name, label, qpf, rule_set, mux,
     container, and inputs
     ({subtitles?, audio?: [paths or folders], chapters?: path | null, encode?: path | null})."""
     q = queue_of(request)
@@ -319,15 +319,15 @@ def job_commands(request: Request, job_id: str) -> list[dict[str, Any]]:
     e = _entry(q, job_id)
     if e.plan is None:
         raise HTTPException(409, "The job hasn't been probed yet")
-    profile = q.profile(e)
+    rule_set = q.rule_set(e)
     out_dir = e.spec.output_dir or Path("<output folder>")
     try:
         built = build_steps(
             e.spec,
             e.plan,
-            profile,
+            rule_set,
             q.app,
-            output_path(e.spec, e.plan, profile, out_dir),
+            output_path(e.spec, e.plan, rule_set, out_dir),
         )
     except (ToolError, ValueError) as ex:
         raise HTTPException(422, str(ex)) from None

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 
 from videoforge.core.config import AppConfig
 from videoforge.core.plan_io import from_json, to_json
-from videoforge.profiles import default_profile_id
+from videoforge.rule_sets import default_rule_set_id
 from videoforge.server.configuration import (
     BASE_KEY,
     FOLDER_KEYS,
@@ -76,10 +76,12 @@ async def _read(request: Request) -> dict[str, Any]:
 def _preview(request: Request, bundle: dict[str, Any]) -> dict[str, Any]:
     state = request.app.state
     warnings = []
-    profiles = {bundle["application"]["profile"], bundle["settings"]["profile"], *bundle["template_defaults"]} - {None}
-    for profile in sorted(profiles - set(state.profile_ids)):
+    rule_sets = {bundle["application"]["rule_set"], bundle["settings"]["rule_set"], *bundle["template_defaults"]} - {
+        None
+    }
+    for rule_set in sorted(rule_sets - set(state.rule_set_ids)):
         warnings.append(
-            f"Profile {profile!r} is not installed. Install it to use its defaults; new jobs use an available profile."
+            f"Rule set {rule_set!r} is not installed. Install it to use its defaults; new jobs use an available rule set."
         )
     for root in bundle["settings"]["roots"] or []:
         if not os.path.isdir(root):
@@ -104,7 +106,7 @@ async def import_configuration(request: Request) -> dict[str, Any]:
     state = request.app.state
     base = from_json(AppConfig, bundle["application"])
     saved = from_json(SavedSettings, bundle["settings"])
-    saved.app_config(base, default_profile_id(saved.profile or base.profile, state.profile_ids))
+    saved.app_config(base, default_rule_set_id(saved.rule_set or base.rule_set, state.rule_set_ids))
     settings = (
         bundle["settings"]
         | bundle["folders"]

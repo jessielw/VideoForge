@@ -43,7 +43,7 @@ from videoforge.core.video.qpf import qpf_paths
 from videoforge.core.video.settings import EncoderSettings
 
 if TYPE_CHECKING:
-    from videoforge.core.profile import Profile
+    from videoforge.core.rule_set import RuleSet
 
 logger = logging.getLogger(__name__)
 
@@ -378,7 +378,7 @@ def used_tools(spec: JobSpec, plan: Plan, container: str) -> list[str]:
 def build_record(
     spec: JobSpec,
     plan: Plan,
-    profile: Profile,
+    rule_set: RuleSet,
     result: JobResult,
     state: JobState,
     *,
@@ -391,7 +391,7 @@ def build_record(
     previous: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """previous: the record this one replaces (what it says of an encode this run reused)."""
-    container = spec.container(profile)
+    container = spec.container(rule_set)
     commands = _commands(state)
     home = spec.job_dir
     return {
@@ -409,7 +409,8 @@ def build_record(
             "id": spec.id,
             "name": spec.name,
             "label": spec.label,
-            "profile": spec.profile,
+            "rule_set": spec.rule_set,
+            "profile": spec.rule_set,  # the rule set's id under its old name, for readers of schema v1 before it
             "episode": episode_token(spec.inputs.source.stem),
         },
         "source": _file(spec.inputs.source),
@@ -440,13 +441,13 @@ class RunRecorder:
         self,
         spec: JobSpec,
         plan: Plan,
-        profile: Profile,
+        rule_set: RuleSet,
         output: Path | None,
         *,
         queue_events: JsonLines | None = None,
         versions: VersionsFn | None = None,
     ) -> None:
-        self.spec, self.plan, self.profile, self.output = spec, plan, profile, output
+        self.spec, self.plan, self.rule_set, self.output = spec, plan, rule_set, output
         self.run_id = uuid.uuid4().hex[:12]
         self.versions = versions
         self.started = now()
@@ -466,10 +467,11 @@ class RunRecorder:
             "run.started",
             name=self.spec.name,
             label=self.spec.label,
-            profile=self.spec.profile,
+            rule_set=self.spec.rule_set,
+            profile=self.spec.rule_set,  # its old name, as in the record
             source=str(self.spec.inputs.source),
             output=str(self.output) if self.output else None,
-            container=self.spec.container(self.profile),
+            container=self.spec.container(self.rule_set),
             work_dir=str(self.spec.work_dir),
             job_dir=str(self.spec.job_dir),
             issues=[_issue("plan", i) for i in self.plan.issues],
@@ -492,13 +494,13 @@ class RunRecorder:
         finished = now()
         if result.output is not None:
             try:
-                container = self.spec.container(self.profile)
+                container = self.spec.container(self.rule_set)
                 versions = self.versions(used_tools(self.spec, self.plan, container)) if self.versions else {}
                 path = record_path(self.spec.job_dir, result.output)
                 doc = build_record(
                     self.spec,
                     self.plan,
-                    self.profile,
+                    self.rule_set,
                     result,
                     state,
                     run_id=self.run_id,

@@ -30,7 +30,7 @@ Names can repeat in different folders or under different encoders. Edit the name
 
 Use **Import** and **Export…** in the manager to share encoder presets as a VideoForge JSON file. Export one or several saved presets, or choose **Export current settings** to include the open configuration's unsaved edits, including built-in configurations. Files preserve encoder settings, names, and nested folders. Import previews the file and lets you choose which presets to add. A matching name in the same encoder and folder replaces your preset (one that's already the same is left alone), unless you tick **Keep both** for a numbered copy. To delete several presets, choose **Select** in the manager, tick them (a folder's box ticks everything inside it), then **Delete N** and confirm. Importing does not apply settings to jobs or templates. Files support up to 500 presets and 5 MiB.
 
-Built-in choices are marked **profile** (the profile's own defaults) or **starter**. The starters, all 10-bit:
+Built-in choices are marked **rule set** (the rule set's own defaults) or **starter**. The starters, all 10-bit:
 
 | Starter | Settings |
 | --- | --- |

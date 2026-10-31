@@ -1,4 +1,4 @@
-"""Run one job end to end: its steps (resuming past finished ones), then the profile's checks.
+"""Run one job end to end: its steps (resuming past finished ones), then the rule set's checks.
 
 UI-free: progress, log lines and cancel come in as callables/tokens, so the
 server's queue worker and the CLI drive the same code.
@@ -27,7 +27,7 @@ from videoforge.core.tools import tool_issues
 from videoforge.core.video import hdr, info
 
 if TYPE_CHECKING:
-    from videoforge.core.profile import Profile
+    from videoforge.core.rule_set import RuleSet
 
 Prober = Callable[[Path, str], SourceInfo]
 
@@ -54,7 +54,7 @@ def missing_inputs(spec: JobSpec) -> list[Path]:
 def run_job(
     spec: JobSpec,
     plan: Plan,
-    profile: Profile,
+    rule_set: RuleSet,
     app: AppConfig,
     *,
     state: JobState | None = None,
@@ -79,7 +79,7 @@ def run_job(
     state.run = []
     log = log or (lambda _line: None)
     on_step = on_step or (lambda _run: None)
-    result = _run(spec, plan, profile, app, state, log, cancel, progress, on_record, on_step, step_log, runner, prober)
+    result = _run(spec, plan, rule_set, app, state, log, cancel, progress, on_record, on_step, step_log, runner, prober)
     state.status, state.output, state.issues, state.error = result.status, result.output, result.issues, result.error
     return result
 
@@ -97,7 +97,7 @@ def _failed_step(state: JobState, error: str) -> str:
 
 
 def _run(
-    spec, plan, profile, app, state, log, cancel, progress, on_record, on_step, step_log, runner, prober
+    spec, plan, rule_set, app, state, log, cancel, progress, on_record, on_step, step_log, runner, prober
 ) -> JobResult:
     if plan.blocked:
         reasons = "; ".join(i.message for i in plan.issues if i.severity is Severity.BLOCK)
@@ -105,11 +105,11 @@ def _run(
     missing = missing_inputs(spec)
     if missing:
         return JobResult(plan, JobStatus.FAILED, error="Missing input: " + ", ".join(str(p) for p in missing))
-    if no_tools := tool_issues(plan, app.tools, spec.container(profile)):  # a plan made before a tool went missing
+    if no_tools := tool_issues(plan, app.tools, spec.container(rule_set)):  # a plan made before a tool went missing
         return JobResult(plan, JobStatus.FAILED, error="; ".join(i.message for i in no_tools))
     if spec.output_dir is None:
         return JobResult(plan, JobStatus.FAILED, error="No output folder set")
-    output = output_path(spec, plan, profile, spec.output_dir)
+    output = output_path(spec, plan, rule_set, spec.output_dir)
     if output.resolve() == spec.inputs.source.resolve():
         return JobResult(plan, JobStatus.FAILED, error=f"Output would overwrite the source: {output}")
 
@@ -150,7 +150,7 @@ def _run(
             started = time.monotonic()
             # Probe temporary bytes, but validate the intended container/name (e.g. MP4, not .partial).
             found = replace(prober(path, app.tools.mkvmerge), path=output, name=output.name)
-            issues = profile.validate_output(plan, found)
+            issues = rule_set.validate_output(plan, found)
             if spec.encodes_video:
                 issues += hdr.output_issues(plan.source.video, spec.encoder, found)
                 issues += info.length_issues(plan.source.video, info.read(work / info.SCRIPT_INFO))
@@ -185,7 +185,7 @@ def _run(
                     log(f"Unpublished output kept for inspection: {rejected}")
                 raise
 
-        built = build_steps(spec, plan, profile, app, output, publish=publish)
+        built = build_steps(spec, plan, rule_set, app, output, publish=publish)
         encoded = built.encoded_audio
         state.run = [s.to_run() for s in built.steps] + [validate]
         for r in state.run:
@@ -240,13 +240,13 @@ def spec_from_plan(plan: Plan, out_dir: Path) -> JobSpec:
             [s.source.external_path for s in plan.subs if s.source.external_path],
             plan.chapters_path,
         )
-    return JobSpec(inputs=inputs, profile=plan.profile, overrides=plan.overrides, output_dir=out_dir)
+    return JobSpec(inputs=inputs, rule_set=plan.rule_set, overrides=plan.overrides, output_dir=out_dir)
 
 
 def run_plan(
     plan: Plan,
     out_dir: Path,
-    profile: Profile,
+    rule_set: RuleSet,
     app: AppConfig,
     *,
     output_policy: OutputPolicy = OutputPolicy.STOP,
@@ -255,4 +255,4 @@ def run_plan(
     """Run a ready-made plan (plan.json; the encode already exists)."""
     spec = spec_from_plan(plan, out_dir)
     spec.output_policy = output_policy
-    return run_job(spec, plan, profile, app, **kwargs)
+    return run_job(spec, plan, rule_set, app, **kwargs)

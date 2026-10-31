@@ -1,6 +1,6 @@
 <script lang="ts">
   // Templates, StaxRip-style: a job's whole run (video, encoder, container, AutoQPF, what to do with
-  // the crop, audio, subtitle rules). The profile's defaults are built in; click one to apply it; save
+  // the crop, audio, subtitle rules). The rule set's defaults are built in; click one to apply it; save
   // this job's settings as one (its audio by position; replacing one keeps its subtitle rules and audio
   // rules: they're set on the Templates page); delete your own. The button names the template the job's settings match, if any.
   import { api } from '../lib/api'
@@ -19,13 +19,13 @@
   import Tip from './Tip.svelte'
 
   let {
-    profile,
+    ruleSet,
     spec,
     audioKeys,
     apply,
     disabled = false,
   }: {
-    profile: string
+    ruleSet: string
     spec: JobSpec
     audioKeys: string[] // the source's audio tracks, in source order (not added files or copies)
     apply: (template: Template) => void | Promise<void>
@@ -39,9 +39,9 @@
   let error = $state('')
   let busy = $state(false)
 
-  const choices = $derived(app.presetChoices('template', profile))
-  // a profile without a track editor chooses the audio by its own rules, so there's none to save
-  const trackEditor = $derived(app.profiles.find((p) => p.id === profile)?.track_editor ?? false)
+  const choices = $derived(app.presetChoices('template', ruleSet))
+  // a rule set without a track editor chooses the audio by its own rules, so there's none to save
+  const trackEditor = $derived(app.ruleSets.find((p) => p.id === ruleSet)?.track_editor ?? false)
   const userNames = $derived(new Set(app.presets.template.map((p) => p.name)))
   // replacing a template whose audio is by rules keeps them (rules can't be made from a job)
   const replaced = $derived(app.presets.template.find((p) => p.name === name.trim())?.data ?? null)
@@ -161,7 +161,7 @@
                 c.name}</Tip
             >
             <span class="ml-auto shrink-0 text-xs text-muted-foreground"
-              >{c.builtin ? 'profile' : cropNote(c.data)}</span
+              >{c.builtin ? 'rule set' : cropNote(c.data)}</span
             >
           </button>
           {#if !c.builtin}

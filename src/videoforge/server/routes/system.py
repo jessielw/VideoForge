@@ -1,4 +1,4 @@
-"""Folder browser, profiles, app settings, health, and the event WebSocket."""
+"""Folder browser, rule sets, app settings, health, and the event WebSocket."""
 
 from __future__ import annotations
 
@@ -195,14 +195,14 @@ def show_window(request: Request) -> dict[str, Any]:
     return {"ok": True}
 
 
-# --- profiles and settings -----------------------------------------------------------
+# --- rule sets and settings -----------------------------------------------------------
 
 
-@router.get("/profiles")
-def profiles(request: Request) -> list[dict[str, Any]]:
+@router.get("/rule-sets")
+def rule_sets(request: Request) -> list[dict[str, Any]]:
     out = []
-    for pid in request.app.state.profile_ids:
-        p = request.app.state.queue.profiles(pid)
+    for pid in request.app.state.rule_set_ids:
+        p = request.app.state.queue.rule_sets(pid)
         video, encoder = p.video_defaults()
         out.append(
             {
@@ -222,7 +222,7 @@ def profiles(request: Request) -> list[dict[str, Any]]:
                     "encoder": to_json(encoder),
                     "template": to_json(Template.defaults(p)),
                 },
-                "default": pid == request.app.state.default_profile,
+                "default": pid == request.app.state.default_rule_set,
             }
         )
     return out

@@ -15,7 +15,7 @@ async function queueFixture(
     name: `Episode ${String(i).padStart(5, '0')}`,
     label: '',
     source: `D:\\Show\\Season${i < count / 2 ? 1 : 2}\\${i}.mkv`,
-    profile: 'manual',
+    rule_set: 'manual',
     status: statuses[i % statuses.length],
     progress: null,
     issue: '',
@@ -44,7 +44,7 @@ async function queueFixture(
     compare: { encode: false, sample: !!sample },
     spec: {
       id: job.id,
-      profile: 'manual',
+      rule_set: 'manual',
       inputs: { source: job.source, encode: null, subtitles: [], chapters: null, encode_state: '', audio: [] },
       video: {
         source_filter: 'ffms2',
@@ -102,7 +102,7 @@ async function queueFixture(
     else if (/^\/api\/jobs\/job-\d+$/.test(path)) json = detail(jobs.find((job) => job.id === path.split('/').at(-1))!)
     else if (path === '/api/queue/start') json = {}
     else if (path === '/api/queue/enqueue') json = { enqueued: request.postDataJSON().ids }
-    else if (['/api/profiles', '/api/config/encoders', '/api/filter-presets'].includes(path)) json = []
+    else if (['/api/rule-sets', '/api/config/encoders', '/api/filter-presets'].includes(path)) json = []
     else throw new Error(`Unhandled queue fixture request: ${request.method()} ${path}`)
     await route.fulfill({ json })
   })

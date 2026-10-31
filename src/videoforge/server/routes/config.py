@@ -1,5 +1,5 @@
 """The Settings page: tool paths (with each tool found and its version), folder-browser roots,
-the default profile, whether batch indexing waits for an encode on the same disk, where
+the default rule set, whether batch indexing waits for an encode on the same disk, where
 notifications go (Apprise URLs, each with the events it wants), the actions run after a job or the
 queue ends, and which plugins load.
 
@@ -27,7 +27,7 @@ from videoforge.core.tools import TOOL_NAMES, TOOLS, check, detect, missing_for_
 from videoforge.core.video import options as video_options, vs as vsx
 from videoforge.core.video.settings import Encoder
 from videoforge.plugins.loader import describe as describe_plugins
-from videoforge.profiles import default_profile_id
+from videoforge.rule_sets import default_rule_set_id
 from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
 
 router = APIRouter(prefix="/api/config")
@@ -43,8 +43,8 @@ def _state(request: Request) -> dict[str, Any]:
     s = request.app.state
     saved: SavedSettings = s.saved
     base_tools, tools = asdict(s.base_config.tools), asdict(s.config.tools)
-    ids = s.profile_ids
-    profiles = s.queue.profiles
+    ids = s.rule_set_ids
+    rule_sets = s.queue.rule_sets
     return {
         "tools": [
             {
@@ -61,9 +61,9 @@ def _state(request: Request) -> dict[str, Any]:
         "roots": [str(r) for r in s.settings.roots],
         "roots_custom": saved.roots is not None,
         "default_roots": [str(r) for r in s.default_roots],
-        "profile": s.default_profile,
-        "profile_default": default_profile_id(s.base_config.profile, ids),
-        "profiles": [{"id": pid, "name": profiles(pid).name} for pid in ids],
+        "rule_set": s.default_rule_set,
+        "rule_set_default": default_rule_set_id(s.base_config.rule_set, ids),
+        "rule_sets": [{"id": pid, "name": rule_sets(pid).name} for pid in ids],
         "restart": [RESTART_FOR[n] for n in sorted(s.restart_for)],
         "index_waits_for_disk": saved.index_waits_for_disk,
         "sample_quality": saved.sample_quality,
@@ -97,7 +97,7 @@ def get_config(request: Request) -> dict[str, Any]:
 @router.put("")
 def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     """Change any of: tools ({name: path, or "" / null for the default}), roots (a list, or null
-    for every drive), profile (an id, or null for videoforge.toml's), index_waits_for_disk (bool),
+    for every drive), rule_set (an id, or null for videoforge.toml's), index_waits_for_disk (bool),
     sample_quality (bool: a test encode measures its SSIMULACRA2 and XPSNR),
     parallel_audio (audio encodes at once beside the video, 0 to MAX_PARALLEL_AUDIO; null for videoforge.toml's),
     delete_work_dir (bool: delete a done job's work folder; null for videoforge.toml's),
@@ -121,11 +121,11 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         if missing:
             raise HTTPException(422, "Not a folder: " + ", ".join(missing))
         roots = roots or None
-    profile = saved.profile
-    if "profile" in body:
-        profile = body["profile"] or None
-        if profile is not None and profile not in s.profile_ids:
-            raise HTTPException(422, f"No profile {profile!r} is installed")
+    rule_set = saved.rule_set
+    if "rule_set" in body:
+        rule_set = body["rule_set"] or None
+        if rule_set is not None and rule_set not in s.rule_set_ids:
+            raise HTTPException(422, f"No rule set {rule_set!r} is installed")
     waits = bool(body["index_waits_for_disk"]) if "index_waits_for_disk" in body else saved.index_waits_for_disk
     quality = bool(body["sample_quality"]) if "sample_quality" in body else saved.sample_quality
     parallel = saved.parallel_audio
@@ -167,7 +167,7 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     new = SavedSettings(
         tools,
         roots,
-        profile,
+        rule_set,
         waits,
         destinations,
         actions,
@@ -201,8 +201,8 @@ def apply_settings(request: Request, new: SavedSettings) -> None:
         s.restart_for.add("plugin_settings")
     else:
         s.restart_for.discard("plugin_settings")
-    s.default_profile = default_profile_id(new.profile or s.base_config.profile, s.profile_ids)
-    cfg = new.app_config(s.base_config, s.default_profile)
+    s.default_rule_set = default_rule_set_id(new.rule_set or s.base_config.rule_set, s.rule_set_ids)
+    cfg = new.app_config(s.base_config, s.default_rule_set)
     s.config = cfg
     s.queue.app = cfg  # new probes and runs use it; a running job keeps the one it started with
     s.settings.roots = [Path(r) for r in new.roots] if new.roots else list(s.default_roots)

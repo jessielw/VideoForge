@@ -58,7 +58,7 @@ def summary(e: Entry) -> dict[str, Any]:
         "name": s.name,
         "label": s.label,  # tells jobs on one source apart
         "source": str(s.inputs.source),
-        "profile": s.profile,
+        "rule_set": s.rule_set,
         "status": e.status.value,
         "progress": e.progress,
         "issue": first.message if first else "",
@@ -79,7 +79,7 @@ def summary(e: Entry) -> dict[str, Any]:
 
 
 def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
-    profile = queue.profile(e)
+    rule_set = queue.rule_set(e)
     out = summary(e)
     out["spec"] = to_json(e.spec)
     out["issues"] = [to_json(i) for i in issues(e)]
@@ -97,11 +97,11 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
         for key in ("source", "inputs", "overrides"):  # sent elsewhere
             plan.pop(key, None)
         out["plan"] = plan
-        out["output_name"] = output_path(e.spec, e.plan, profile, Path()).name
+        out["output_name"] = output_path(e.spec, e.plan, rule_set, Path()).name
         enc = e.spec.encoder
         if e.spec.encodes_video and target.applies(enc) and enc.target_mb is not None:
             found = target.budget(
-                enc.target_mb, e.plan, e.spec.container(profile), info.read(e.spec.job_dir / info.SCRIPT_INFO)
+                enc.target_mb, e.plan, e.spec.container(rule_set), info.read(e.spec.job_dir / info.SCRIPT_INFO)
             )
             out["target"] = to_json(found) | {"video": found.video, "kbps": found.kbps} if found else None
         if e.spec.encodes_video and (result := read_result(e.spec)) is not None:
@@ -117,18 +117,18 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     if e.probed is not None:
         src = e.probed.source
         tracks = [*src.audio, *e.probed.external_audio, *src.subs, *e.probed.external_subs]
-        audio = [*src.audio, *(e.probed.external_audio if profile.external_audio else [])]
-        # The track editor shows each track as the profile has it with no hand edit (auto), and saves
+        audio = [*src.audio, *(e.probed.external_audio if rule_set.external_audio else [])]
+        # The track editor shows each track as the rule set has it with no hand edit (auto), and saves
         # only what differs from that.
         auto: dict[str, dict[str, Any]] | None = None
-        if profile.track_editor:
+        if rule_set.track_editor:
             audio = with_copies(audio, e.spec.overrides.copies)
             if e.plan is not None:
-                auto = track_defaults(e.spec, e.probed, profile)
+                auto = track_defaults(e.spec, e.probed, rule_set)
 
         def track(t: AudioTrack | SubTrack) -> dict[str, Any]:
             key = track_key(t)
-            row = to_json(t) | {"key": key, "detected": profile.detected_flags(t)}
+            row = to_json(t) | {"key": key, "detected": rule_set.detected_flags(t)}
             return row if auto is None else row | {"auto": auto.get(key, {"kept": False})}
 
         out["tracks"] = {

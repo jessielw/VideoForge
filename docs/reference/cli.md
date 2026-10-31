@@ -40,15 +40,15 @@ Forward WebSocket upgrades too. Configure the public address explicitly; forward
 
 ## Plan
 
-Pair sources with existing encodes, subtitles, and chapters, then inspect the profile's track plan:
+Pair sources with existing encodes, subtitles, and chapters, then inspect the rule set's track plan:
 
 ```sh
-uv run videoforge plan "D:\Sources\Season 01" --profile manual --orig-lang en --out plan.json
+uv run videoforge plan "D:\Sources\Season 01" --rule-set manual --orig-lang en --out plan.json
 ```
 
 `--only` limits sources by substrings in their filenames. `--out` writes serialized plans for `run`. A blocking plan returns exit code **1**; an unblocked set returns **0**.
 
-The CLI plans from discovered inputs and profile rules. It does not export the queue editor's templates or per-job UI settings. Use the web queue for the full interactive video workflow.
+The CLI plans from discovered inputs and rule set rules. It does not export the queue editor's templates or per-job UI settings. Use the web queue for the full interactive video workflow.
 
 ## Run
 
@@ -62,13 +62,13 @@ The command returns **0** when every run is done, **1** for other job results, a
 
 ## Validate
 
-Run the chosen profile's release checks on media files or MediaInfo `.txt` reports:
+Run the chosen rule set's release checks on media files or MediaInfo `.txt` reports:
 
 ```sh
-uv run videoforge validate "D:\Finished\Episode.mkv" --profile manual
-uv run videoforge validate report.txt --profile manual --summary --min-severity block
+uv run videoforge validate "D:\Finished\Episode.mkv" --rule-set manual
+uv run videoforge validate report.txt --rule-set manual --summary --min-severity block
 ```
 
 `--summary` prints issue counts instead of per-file details. `--min-severity` accepts `warn` or `block`. A blocking result returns **1**.
 
-Standalone validation uses `Profile.validate_release`. The manual profile's detailed **plan-versus-output** checks happen during job execution; standalone `validate --profile manual` does not reconstruct those checks without the original plan. A custom profile can supply release-wide rules.
+Standalone validation uses `RuleSet.validate_release`. The manual rule set's detailed **plan-versus-output** checks happen during job execution; standalone `validate --rule-set manual` does not reconstruct those checks without the original plan. A custom rule set can supply release-wide rules.

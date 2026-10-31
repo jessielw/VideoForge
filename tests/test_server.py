@@ -33,7 +33,7 @@ from videoforge.core.models import AudioCodec as C, SubFormat as F, VideoInfo
 from videoforge.core.pipeline.steps import Step, StepProgress
 from videoforge.core.video.settings import Crop
 from videoforge.core.workdir import keep_records, note_finished, work_dir
-from videoforge.profiles.manual import ManualProfile
+from videoforge.rule_sets.manual import ManualRuleSet
 from videoforge.server.app import create_app
 from videoforge.server.queue import Services
 from videoforge.server.settings import ServerSettings
@@ -50,7 +50,7 @@ APP = AppConfig(
         ffmpeg=_TOOLS["ffmpeg"],
         vs_plugins=str(PROJECT_ROOT / "tools" / "vs-plugins"),
     ),
-    profile="manual",
+    rule_set="manual",
 )
 
 
@@ -81,7 +81,7 @@ class FakeRun:
         self.runs: list[str] = []
         self.block = block
 
-    def __call__(self, spec, plan, profile, app, *, state, log, cancel, progress, on_record, on_step, step_log):
+    def __call__(self, spec, plan, rule_set, app, *, state, log, cancel, progress, on_record, on_step, step_log):
         self.runs.append(spec.name)
         step = Step("video", "Video (x264)", argvs=(("x264", "--crf", "18"),))
         run = step.to_run()
@@ -231,7 +231,7 @@ def add(client: TestClient, root: Path, **extra) -> list[str]:
     body = {
         "sources": [str(root / "src")],
         "subtitles": [str(root / "src")],
-        "profile": "manual",
+        "rule_set": "manual",
         "original_language": "ja",
         "output_dir": str(root / "out"),
     } | extra
@@ -249,7 +249,7 @@ def test_add_inspect_and_edit(tmp_path):
         ids = add(client, tmp_path)
         assert len(ids) == 2
         job = wait_for(client, ids[0], "ready", "warn")
-        assert job["encoder"] == "x264 crf 18"  # the manual profile's default encode
+        assert job["encoder"] == "x264 crf 18"  # the manual rule set's default encode
         assert job["spec"]["encoder"]["preset"] == "slow"
         assert [a["action"] for a in job["plan"]["audio"]] == ["copy", "copy"]
         assert Path(job["plan"]["encode_path"]).parts[-3:] == ("Show.S01E01.mkv_tmp", "main", "video.264")
@@ -299,7 +299,7 @@ def test_add_inspect_and_edit(tmp_path):
             "Show.S01E01.dubbed JA.mkv"
         )
         assert client.get("/api/jobs/nope").status_code == 404
-        (manual,) = client.get("/api/profiles").json()
+        (manual,) = client.get("/api/rule-sets").json()
         assert manual["id"] == "manual" and manual["default"] and manual["defaults"]["encoder"]["crf"] == 18
 
 
@@ -373,7 +373,7 @@ def test_files_added_to_a_job(tmp_path):
             ("Signs.ass", "ass", "und"),
         ]
         assert job["plan"]["chapters_path"] == str(chapters)
-        assert [i["code"] for i in job["issues"]] == ["subs.language"]  # the manual profile asks for a language
+        assert [i["code"] for i in job["issues"]] == ["subs.language"]  # the manual rule set asks for a language
 
         key = next(s["key"] for s in added if s["language"] == "und")
         overrides = job["spec"]["overrides"] | {"tracks": {key: {"language": "en", "flags": {"forced": True}}}}
@@ -491,9 +491,9 @@ def test_pause_resume_and_priority_reach_the_running_job(tmp_path):
     tokens = []
 
     class Run(FakeRun):
-        def __call__(self, spec, plan, profile, app, *, cancel, **kw):
+        def __call__(self, spec, plan, rule_set, app, *, cancel, **kw):
             tokens.append(cancel)
-            return super().__call__(spec, plan, profile, app, cancel=cancel, **kw)
+            return super().__call__(spec, plan, rule_set, app, cancel=cancel, **kw)
 
     with make_client(tmp_path, run=Run(block=True)) as client:
         (job_id,) = add(client, tmp_path)
@@ -582,8 +582,8 @@ def test_notifications(tmp_path):
 class WritingRun(FakeRun):
     """FakeRun that also writes the output file (for actions that move it)."""
 
-    def __call__(self, spec, plan, profile, app, **kw):
-        result = super().__call__(spec, plan, profile, app, **kw)
+    def __call__(self, spec, plan, rule_set, app, **kw):
+        result = super().__call__(spec, plan, rule_set, app, **kw)
         if result.output is not None:
             result.output.parent.mkdir(parents=True, exist_ok=True)
             result.output.write_bytes(b"mkv")
@@ -661,10 +661,10 @@ def test_actions_and_plugins(tmp_path):
 class EncodingRun(WritingRun):
     """WritingRun that leaves an encode in the work folder, as a real run does."""
 
-    def __call__(self, spec, plan, profile, app, **kw):
+    def __call__(self, spec, plan, rule_set, app, **kw):
         spec.job_dir.mkdir(parents=True, exist_ok=True)
         (spec.job_dir / "video.264").write_bytes(b"264")
-        return super().__call__(spec, plan, profile, app, **kw)
+        return super().__call__(spec, plan, rule_set, app, **kw)
 
 
 class KeepSpyRun(EncodingRun):
@@ -674,9 +674,9 @@ class KeepSpyRun(EncodingRun):
         super().__init__()
         self.seen: list[tuple[list[str], set[str]]] = []
 
-    def __call__(self, spec, plan, profile, app, **kw):
+    def __call__(self, spec, plan, rule_set, app, **kw):
         self.seen.append((list(kw["state"].keep), set(kw["state"].steps)))
-        return super().__call__(spec, plan, profile, app, **kw)
+        return super().__call__(spec, plan, rule_set, app, **kw)
 
 
 def test_reuse_question(tmp_path):
@@ -878,7 +878,7 @@ def test_a_job_that_wont_stop_is_requeued_after_shutdown(tmp_path):
     release = threading.Event()
 
     class Stubborn(FakeRun):
-        def __call__(self, spec, plan, profile, app, *, state, log, cancel, progress, on_record, on_step, step_log):
+        def __call__(self, spec, plan, rule_set, app, *, state, log, cancel, progress, on_record, on_step, step_log):
             run = Step("video", "Video (x264)", argvs=(("x264",),)).to_run()
             state.run = [run]
             run.status = StepStatus.RUNNING
@@ -936,7 +936,7 @@ def test_settings_page_config(tmp_path):
         cfg = client.get("/api/config").json()
         tools = {t["name"]: t for t in cfg["tools"]}
         assert tools["x264"]["path"] == "x264" and tools["x264"]["custom"] is None
-        assert cfg["profile"] == "manual" and not cfg["roots_custom"] and cfg["restart"] == []
+        assert cfg["rule_set"] == "manual" and not cfg["roots_custom"] and cfg["restart"] == []
 
         changed = client.put("/api/config", json={"tools": {"x264": sys.executable}, "roots": [str(folder)]}).json()
         assert {t["name"]: t for t in changed["tools"]}["x264"]["path"] == sys.executable
@@ -950,7 +950,7 @@ def test_settings_page_config(tmp_path):
 
         assert client.put("/api/config", json={"tools": {"nope": "x"}}).status_code == 422
         assert client.put("/api/config", json={"roots": [str(tmp_path / "missing")]}).status_code == 422
-        assert client.put("/api/config", json={"profile": "not-installed"}).status_code == 422
+        assert client.put("/api/config", json={"rule_set": "not-installed"}).status_code == 422
         changed = client.put("/api/config", json={"tools": {"vs_plugins": str(folder)}}).json()
         assert not changed["restart"]  # the preview worker restarts with the new folder
 
@@ -966,7 +966,7 @@ def test_settings_page_config(tmp_path):
         assert cfg["roots"] == [str(folder)] and cfg["parallel_audio"] == 0
         assert client.app.state.queue.app.parallel_audio == 0
         reset = client.put(
-            "/api/config", json={"tools": {"x264": None}, "roots": None, "profile": None, "parallel_audio": None}
+            "/api/config", json={"tools": {"x264": None}, "roots": None, "rule_set": None, "parallel_audio": None}
         ).json()
         assert {t["name"]: t for t in reset["tools"]}["x264"]["path"] == "x264" and not reset["roots_custom"]
         assert reset["parallel_audio"] == 2
@@ -1219,10 +1219,10 @@ def test_templates(tmp_path):
 
         saved = client.put("/api/presets/template/Show", json=fixed).json()["template"]
         assert saved[0]["data"]["video"]["crop"]["left"] == 4  # a template keeps its crop
-        assert client.get("/api/profiles").json()[0]["defaults"]["template"]["crop_mode"] == "keep"
+        assert client.get("/api/rule-sets").json()[0]["defaults"]["template"]["crop_mode"] == "keep"
 
-        # The profile's default template: jobs added with no settings of their own get it; it follows a
-        # rename and falls back to the profile's own defaults when deleted.
+        # The rule set's default template: jobs added with no settings of their own get it; it follows a
+        # rename and falls back to the rule set's own defaults when deleted.
         assert client.put("/api/presets/template-default/manual", json={"name": "Nope"}).status_code == 404
         assert client.put("/api/presets/template-default/other", json={"name": "Show"}).status_code == 404
         listed = client.put("/api/presets/template-default/manual", json={"name": "Show"}).json()
@@ -1289,7 +1289,7 @@ def test_template_audio(tmp_path):
 
 
 def test_template_audio_rules(tmp_path):
-    """Audio by rules once the tracks are known: "original" is the profile's guess (the first track's
+    """Audio by rules once the tracks are known: "original" is the rule set's guess (the first track's
     language, ja), pinned before the rules run; output in rule order, one default."""
     make_files(tmp_path, "S01E01")  # ja FLAC 2.0, en TrueHD 5.1
     template = {
@@ -1398,31 +1398,31 @@ def test_default_subtitle_rules_apply_to_new_jobs_without_their_own(tmp_path):
         assert client.put("/api/presets/subs-default", json=None).json()["subs_default"] is None
 
 
-def test_default_subtitle_rules_leave_a_profile_that_picks_its_tracks(tmp_path, monkeypatch):
-    monkeypatch.setattr(ManualProfile, "picks_tracks", True)
+def test_default_subtitle_rules_leave_a_rule_set_that_picks_its_tracks(tmp_path, monkeypatch):
+    monkeypatch.setattr(ManualRuleSet, "picks_tracks", True)
     make_files(tmp_path, "S01E01")
     with make_client(tmp_path) as client:
         client.put("/api/presets/subs-default", json={"rules": [], "others": "exclude"})
-        assert client.get("/api/profiles").json()[0]["picks_tracks"] is True
+        assert client.get("/api/rule-sets").json()[0]["picks_tracks"] is True
         (job_id,) = add(client, tmp_path)
         job = wait_for(client, job_id, "ready", "warn")
         assert job["spec"]["overrides"]["tracks"] == {} and len(job["plan"]["subs"]) == 3
 
 
-def test_new_jobs_start_on_the_profiles_mux_defaults(tmp_path, monkeypatch):
+def test_new_jobs_start_on_the_rule_sets_mux_defaults(tmp_path, monkeypatch):
     mux = MuxSettings(extra="--chapter-language und", pgs_zlib=True)
-    monkeypatch.setattr(ManualProfile, "mux_defaults", lambda self: replace(mux))
+    monkeypatch.setattr(ManualRuleSet, "mux_defaults", lambda self: replace(mux))
     make_files(tmp_path, "S01E01")
     with make_client(tmp_path) as client:
-        defaults = client.get("/api/profiles").json()[0]["defaults"]["template"]["mux"]
+        defaults = client.get("/api/rule-sets").json()[0]["defaults"]["template"]["mux"]
         assert defaults == {"container": "", "extra": "--chapter-language und", "pgs_zlib": True}
         (job_id,) = add(client, tmp_path)
         assert client.get(f"/api/jobs/{job_id}").json()["spec"]["mux"] == defaults
 
 
-def test_tracks_carry_the_profiles_own_choice(tmp_path):
-    """The track editor's starting values: each track as the profile plans it with no hand edit, so a
-    track left out by hand is still one the profile keeps."""
+def test_tracks_carry_the_rule_sets_own_choice(tmp_path):
+    """The track editor's starting values: each track as the rule set plans it with no hand edit, so a
+    track left out by hand is still one the rule set keeps."""
     make_files(tmp_path, "S01E01")
     with make_client(tmp_path) as client:
         (job_id,) = add(client, tmp_path)
@@ -1444,8 +1444,8 @@ def test_tracks_carry_the_profiles_own_choice(tmp_path):
 
 
 def test_template_audio_is_dropped_without_a_track_editor(tmp_path, monkeypatch):
-    """A profile whose rules choose the tracks keeps its own picks: the template's audio and subtitles are dropped."""
-    monkeypatch.setattr(ManualProfile, "track_editor", False)
+    """A rule set whose rules choose the tracks keeps its own picks: the template's audio and subtitles are dropped."""
+    monkeypatch.setattr(ManualRuleSet, "track_editor", False)
     make_files(tmp_path, "S01E01")
     template = {
         "audio": {"slots": [{"track": {"exclude": True}}], "others": "exclude"},

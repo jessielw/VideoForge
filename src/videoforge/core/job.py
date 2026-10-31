@@ -1,13 +1,13 @@
 """A job: what to build (JobSpec, edited in the UI) and what its last run did (JobState).
 
-Both are plain data persisted through plan_io's codec. The Plan (the profile's
+Both are plain data persisted through plan_io's codec. The Plan (the rule set's
 audio/subtitle decisions) isn't stored with the spec: it is recomputed from the
 probed inputs on every edit.
 
 A job either encodes its own video (VapourSynth + x264/x265 into its work
 folder) or reuses an existing encode given in its inputs (e.g. from StaxRip).
 For the first kind the planner is handed a *planned* encode: the file the video
-steps will write, with the size and frame rate it will have, so the profile's
+steps will write, with the size and frame rate it will have, so the rule set's
 rules don't need to know where the encode comes from.
 """
 
@@ -43,7 +43,7 @@ from videoforge.core.video.settings import EncoderSettings, VideoSettings
 from videoforge.core.workdir import job_dir, work_dir
 
 if TYPE_CHECKING:
-    from videoforge.core.profile import Profile
+    from videoforge.core.rule_set import RuleSet
 
 
 class JobStatus(StrEnum):
@@ -77,7 +77,7 @@ class JobResult:
 @dataclass(slots=True)
 class JobSpec:
     inputs: JobInputs  # inputs.encode set = reuse that encode instead of encoding the video
-    profile: str
+    rule_set: str
     overrides: Overrides = field(default_factory=Overrides)  # incl. the original language
     video: VideoSettings = field(default_factory=VideoSettings)
     encoder: EncoderSettings = field(default_factory=EncoderSettings)
@@ -93,12 +93,17 @@ class JobSpec:
     # What the last template set for the audio / the subtitles (template.template_choice).
     audio_from_template: TemplateChoice | None = None
     subs_from_template: TemplateChoice | None = None
-    # The output's file name without its extension; "" = the profile's name for it (the source's).
+    # The output's file name without its extension; "" = the rule set's name for it (the source's).
     output_name: str = ""
     # Tells runs of one source apart (e.g. "dubbed"): added to the output name, and in the job record.
     label: str = ""
     output_policy: OutputPolicy = OutputPolicy.STOP
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+
+    @staticmethod
+    def upgrade_json(data: dict[str, Any]) -> dict[str, Any]:
+        """Jobs saved before rule sets had their name: `profile` held the rule set's id."""
+        return {"rule_set": data["profile"], **data} if "profile" in data else data
 
     @property
     def name(self) -> str:
@@ -126,9 +131,9 @@ class JobSpec:
     def makes_chapters(self) -> bool:
         return self.encodes_video and self.qpf and self.inputs.chapters is None
 
-    def container(self, profile: Profile) -> str:
-        """The job's container: its own pick when the profile offers it, else the profile's."""
-        return self.mux.container if self.mux.container in profile.containers else profile.container
+    def container(self, rule_set: RuleSet) -> str:
+        """The job's container: its own pick when the rule set offers it, else the rule set's."""
+        return self.mux.container if self.mux.container in rule_set.containers else rule_set.container
 
 
 def clean_label(text: str) -> str:
@@ -261,28 +266,28 @@ def replan(spec: JobSpec, probed: ProbedInputs) -> ProbedInputs:
     return replace(probed, inputs=spec_inputs(spec))
 
 
-def plan_spec(spec: JobSpec, probed: ProbedInputs, profile: Profile, tools: Tools | None = None) -> Plan:
-    """The profile's plan for the job. With tools, an audio encode whose tools are missing blocks it."""
-    plan = plan_job(profile, replan(spec, probed), spec.overrides.original_language, spec.overrides)
+def plan_spec(spec: JobSpec, probed: ProbedInputs, rule_set: RuleSet, tools: Tools | None = None) -> Plan:
+    """The rule set's plan for the job. With tools, an audio encode whose tools are missing blocks it."""
+    plan = plan_job(rule_set, replan(spec, probed), spec.overrides.original_language, spec.overrides)
     plan.inputs = spec.inputs  # what the user gave; generated files aren't inputs
     if tools is not None:
-        plan.issues += tool_issues(plan, tools, spec.container(profile))
-    plan.issues += mux_issues(plan, spec.container(profile))
+        plan.issues += tool_issues(plan, tools, spec.container(rule_set))
+    plan.issues += mux_issues(plan, spec.container(rule_set))
     if spec.encodes_video:
         plan.issues += encoders.issues(spec.encoder, probed.source.video, spec.makes_chapters)
         plan.issues += options.option_issues(spec.encoder, tools)
         plan.issues += hdr.issues(probed.source.video, spec.encoder, tools, spec.video)
         plan.issues += filters.field_issues(probed.source.video, spec.video)
-        plan.issues += target.issues(spec.encoder, plan, spec.container(profile))
+        plan.issues += target.issues(spec.encoder, plan, spec.container(rule_set))
     return plan
 
 
-def track_defaults(spec: JobSpec, probed: ProbedInputs, profile: Profile) -> dict[str, dict[str, Any]]:
-    """What the profile makes of each planned track with no hand edits, by track key: the track editor's
-    starting values, which it saves no override for. A track missing here is one the profile leaves out."""
+def track_defaults(spec: JobSpec, probed: ProbedInputs, rule_set: RuleSet) -> dict[str, dict[str, Any]]:
+    """What the rule set makes of each planned track with no hand edits, by track key: the track editor's
+    starting values, which it saves no override for. A track missing here is one the rule set leaves out."""
     o = spec.overrides
     plan = plan_job(
-        profile,
+        rule_set,
         replan(spec, probed),
         o.original_language,
         Overrides(original_language=o.original_language, copies=list(o.copies)),

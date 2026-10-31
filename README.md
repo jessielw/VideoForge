@@ -104,7 +104,7 @@ uv run videoforge serve          # http://127.0.0.1:8765, opens the browser
 
 To drop files from Explorer onto path fields, run it in its own window instead (a browser never tells a page where a dropped file lives): `uv sync --extra desktop`, then `uv run videoforge serve --window` (pywebview; on Windows it uses Edge WebView2). Closing the window keeps VideoForge running in the tray (encodes go on); Quit from the tray icon or Ctrl+C stops it, and starting it again brings up the running one. Pasting paths (Explorer: Ctrl+Shift+C, then Ctrl+V on a field) works in the browser too.
 
-Machine-specific settings (tool paths, default profile) go in `videoforge.local.toml` next to `videoforge.toml`. Its tables are merged over the defaults. The Settings page's changes are kept in the app's database and win over both.
+Machine-specific settings (tool paths, default rule set) go in `videoforge.local.toml` next to `videoforge.toml`. Its tables are merged over the defaults. The Settings page's changes are kept in the app's database and win over both.
 
 Extra encoder, audio, and mux arguments use double quotes around values with spaces, for example `--chapters "C:\My Clips\chapters.txt"`. Backslashes stay literal except before a double quote: use `\"` for a literal quote and double trailing backslashes before a closing quote. This syntax is the same on Windows and Linux; apostrophes and shell operators are literal.
 
@@ -124,11 +124,11 @@ Extra encoder, audio, and mux arguments use double quotes around values with spa
 - **The output folder:** the finished file (written as `<output>.partial`, validated before publishing). Existing unmanaged files default to Stop; Output offers Skip, Rename or Replace. Rejected candidates are kept with an `.unpublished-<id>` name for inspection.
 - **The data folder, `%APPDATA%\VideoForge`** (or `--data-dir`): `videoforge.db` (the queue, templates, settings), `logs/` (an app log per session, the newest 50 kept, and `events.jsonl` with every job's events) and `records/` (the job records and logs of deleted work folders, the newest 100 kept).
 
-## Profiles
+## Rule sets
 
-A profile decides what goes into the output: which tracks, copy or encode, titles, flags, and the checks on the finished file. VideoForge ships one, `manual`: every source track in source order, copied, and you exclude, reorder, retitle and flag tracks yourself (or let a template's rules do it).
+A rule set decides what goes into the output: which tracks, copy or encode, titles, flags, and the checks on the finished file. VideoForge ships one, `manual`: every source track in source order, copied, and you exclude, reorder, retitle and flag tracks yourself (or let a template's rules do it).
 
-Other profiles (for example a release group's rules) are separate Python packages that register under the `videoforge.profiles` entry point group. See [ARCHITECTURE.md](ARCHITECTURE.md).
+Other rule sets (for example a release group's rules) are separate Python packages that register under the `videoforge.rule_sets` entry point group. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Development
 

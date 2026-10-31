@@ -25,7 +25,7 @@ from videoforge.core.models import (
 )
 from videoforge.core.pipeline.build import build_steps, mp4_subtitle_steps, output_path
 from videoforge.core.video.color import ContainerColor
-from videoforge.profiles.manual import ManualProfile, output_matches_plan
+from videoforge.rule_sets.manual import ManualRuleSet, output_matches_plan
 
 RAW = (".h264", ".hevc")
 
@@ -121,9 +121,9 @@ def test_mp4_pipeline_extracts_source_srt_with_one_timing_shift(tmp_path, start_
     assert prepared.subs[0].title == original_sub.title
     assert prepared.subs[0].forced == original_sub.forced
     spec = JobSpec(
-        inputs=JobInputs(plan.source.path, encode=plan.encode_path), profile="manual", mux=MuxSettings(container="mp4")
+        inputs=JobInputs(plan.source.path, encode=plan.encode_path), rule_set="manual", mux=MuxSettings(container="mp4")
     )
-    job = build_steps(spec, plan, ManualProfile(), app, tmp_path / "out.mp4")
+    job = build_steps(spec, plan, ManualRuleSet(), app, tmp_path / "out.mp4")
     assert "subs.1.extract" in [step.id for step in job.steps]
     mux = job.steps[-1]
     expected = spec.job_dir / "subtitle.1.srt"
@@ -131,7 +131,7 @@ def test_mp4_pipeline_extracts_source_srt_with_one_timing_shift(tmp_path, start_
     sub_arg = adds(mux.argvs[0])[-1]
     assert sub_arg == f"{expected}:lang=en:group=2:name=English:disable:txtflags=C0000000"
     spec.mux.container = "mkv"
-    mkv = build_steps(spec, plan, ManualProfile(), app, tmp_path / "out.mkv")
+    mkv = build_steps(spec, plan, ManualRuleSet(), app, tmp_path / "out.mkv")
     assert not any(s.id.startswith("subs.") for s in mkv.steps)
 
 
@@ -174,15 +174,15 @@ def test_a_vfr_source_into_mp4_warns():
 
 
 def test_job_container_and_output_name():
-    profile = ManualProfile()
-    spec = JobSpec(inputs=JobInputs(Path("Movie.mkv")), profile="manual")
+    rule_set = ManualRuleSet()
+    spec = JobSpec(inputs=JobInputs(Path("Movie.mkv")), rule_set="manual")
     plan = mp4_plan()
-    assert spec.container(profile) == "mkv"
+    assert spec.container(rule_set) == "mkv"
     spec.mux = MuxSettings(container="mp4")
-    assert spec.container(profile) == "mp4"
-    assert output_path(spec, plan, profile, Path("out")) == Path("out/Movie.mp4")
-    spec.mux = MuxSettings(container="avi")  # not offered: the profile's
-    assert spec.container(profile) == "mkv"
+    assert spec.container(rule_set) == "mp4"
+    assert output_path(spec, plan, rule_set, Path("out")) == Path("out/Movie.mp4")
+    spec.mux = MuxSettings(container="avi")  # not offered: the rule set's
+    assert spec.container(rule_set) == "mkv"
     assert muxer_for(Path("x.MP4")) is MUXERS["mp4"] and muxer_for(Path("x.mkv")) is MUXERS["mkv"]
 
 

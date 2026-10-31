@@ -1,5 +1,5 @@
-"""Starter encoder presets: built-in settings for the encoders a profile's defaults don't cover, offered next to
-the profile's own (x264 CRF 18 slow) in every preset picker. The user saves a copy to change one.
+"""Starter encoder presets: built-in settings for the encoders a rule set's defaults don't cover, offered next to
+the rule set's own (x264 CRF 18 slow) in every preset picker. The user saves a copy to change one.
 
 The colour and HDR10 flags come from the source either way (EncoderSettings.source_color, color.py): "SDR" and
 "HDR10" say what the preset is tuned for, not what it tags. Quality and speed follow StaxRip's defaults where it

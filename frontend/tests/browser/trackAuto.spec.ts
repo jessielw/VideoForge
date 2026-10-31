@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
-import type { AudioEncodeInfo, AudioTrack, JobDetail, Overrides, Profile, SubTrack } from '../../src/lib/types.ts'
+import type { AudioEncodeInfo, AudioTrack, JobDetail, Overrides, RuleSet, SubTrack } from '../../src/lib/types.ts'
 
-// A profile with its own rules (track_editor + picks_tracks): the editor starts from each track's auto values.
+// A rule set with its own rules (track_editor + picks_tracks): the editor starts from each track's auto values.
 const sub = (id: number, language: string, title: string, format: string, auto: SubTrack['auto']): SubTrack => ({
   key: `id:${id}`,
   id,
@@ -98,7 +98,7 @@ async function fixture(page: Page) {
     name: 'Rules',
     label: '',
     source: 'D:/Film.mkv',
-    profile: 'group',
+    rule_set: 'group',
     status: 'ready',
     progress: null,
     issue: '',
@@ -157,7 +157,7 @@ async function fixture(page: Page) {
       ],
       burn: null,
       issues: [],
-      profile: 'group',
+      rule_set: 'group',
     },
     output_name: null,
     color_args: null,
@@ -167,7 +167,7 @@ async function fixture(page: Page) {
     tracks: { video: null, audio: [audio], subs, has_chapters: false, count: 3 },
     spec: {
       id: 'auto',
-      profile: 'group',
+      rule_set: 'group',
       inputs: { source: 'D:/Film.mkv', encode: null, subtitles: [], chapters: null, encode_state: '', audio: [] },
       video,
       encoder,
@@ -185,7 +185,7 @@ async function fixture(page: Page) {
       label: '',
     },
   }
-  const profile: Profile = {
+  const ruleSet: RuleSet = {
     id: 'group',
     name: 'Group',
     default: true,
@@ -212,7 +212,7 @@ async function fixture(page: Page) {
     const responses: Record<string, unknown> = {
       '/api/jobs': [job],
       '/api/jobs/auto': job,
-      '/api/profiles': [profile],
+      '/api/rule-sets': [ruleSet],
       '/api/presets': { video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] },
       '/api/health': { ok: true, version: 'test' },
       '/api/filter-presets': [],
@@ -226,7 +226,7 @@ async function fixture(page: Page) {
   return { saves, errors }
 }
 
-test("the editor shows the profile's picks and saves only what differs from them", async ({ page }) => {
+test("the editor shows the rule set's picks and saves only what differs from them", async ({ page }) => {
   const { saves, errors } = await fixture(page)
   await page.getByRole('tab', { name: 'Subtitles', exact: true }).click()
   const rows = page.getByRole('listitem')
@@ -236,7 +236,7 @@ test("the editor shows the profile's picks and saves only what differs from them
 
   await rows.nth(1).getByRole('checkbox', { name: 'In the output' }).click() // keep what the rules left out
   await expect.poll(() => saves.at(-1)?.tracks['id:3']?.exclude).toBe(false)
-  expect(saves.at(-1)?.order).toBeNull() // no move: the profile still orders the tracks
+  expect(saves.at(-1)?.order).toBeNull() // no move: the rule set still orders the tracks
 
   const title = rows.nth(0).getByRole('textbox', { name: 'Title' })
   await title.fill('English')

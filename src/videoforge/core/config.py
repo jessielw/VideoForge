@@ -1,4 +1,4 @@
-"""Load videoforge.toml (and videoforge.local.toml over it): tool paths, matching rules, the default profile."""
+"""Load videoforge.toml (and videoforge.local.toml over it): tool paths, matching rules, the default rule set."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ class Tools:
 class AppConfig:
     tools: Tools
     matching: MatchRules = field(default_factory=MatchRules)
-    profile: str | None = None  # default profile id for new jobs; None = the built-in one
+    rule_set: str | None = None  # default rule set id for new jobs; None = the built-in one
     allow_commands: bool = False  # [actions] commands: the Settings page's command actions may run
     plugins: dict[str, dict] = field(default_factory=dict)  # [plugins.<id>]: each plugin's own settings
     parallel_audio: int = 2  # audio encodes run alongside a job's video, this many at once; 0 = one by one
@@ -59,6 +59,11 @@ class AppConfig:
     # StaxRip's defaults: the video encode (the encoder and the vspipe feeding it) below normal, other tools normal
     encoder_priority: Priority = Priority.BELOW_NORMAL
     tool_priority: Priority = Priority.NORMAL
+
+    @staticmethod
+    def upgrade_json(data: dict) -> dict:
+        """Settings saved before rule sets had their name: `profile` held the default rule set's id."""
+        return {"rule_set": data["profile"], **data} if "profile" in data else data
 
 
 # Tools found next to another unless set: MKVToolNix's next to mkvmerge, ffprobe next to ffmpeg.
@@ -146,7 +151,7 @@ def load_app_config(path: Path | None = None) -> AppConfig:
     return AppConfig(
         tools=tools,
         matching=matching,
-        profile=data.get("profile"),
+        rule_set=data.get("rule_set", data.get("profile")),  # `profile`: its name before 0.1.0-beta.11
         allow_commands=allow_commands,
         plugins=plugins,
         parallel_audio=parallel_audio,

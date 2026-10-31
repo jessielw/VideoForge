@@ -49,7 +49,7 @@ Run browser tests with `npm run test:browser`. To check the built app, build fir
 
 ## Extension points
 
-Use a [profile](profiles.md) for track planning and release checks. Use an [action](../actions.md) or [plugin](../plugins.md) for work triggered by job and queue events. Keep HTTP-specific behavior in `server/` and the shared execution engine under `core/`.
+Use a [rule set](rule-sets.md) for track planning and release checks. Use an [action](../actions.md) or [plugin](../plugins.md) for work triggered by job and queue events. Keep HTTP-specific behavior in `server/` and the shared execution engine under `core/`.
 
 ## Documentation
 

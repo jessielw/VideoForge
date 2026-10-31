@@ -109,7 +109,7 @@ def test_audio_slots_go_to_the_source_tracks_by_position():
     assert (
         out.tracks["id:1+1"].language is None and ddp.language == "fr"
     )  # language is per source; the slot is untouched
-    assert out.tracks["id:2"].exclude and "id:3" not in out.tracks  # a track past the slots: as the profile decides
+    assert out.tracks["id:2"].exclude and "id:3" not in out.tracks  # a track past the slots: as the rule set decides
     assert out.tracks["id:10"].title == "Subs" and out.tracks["ext:extra.ac3"].title == "Mine"  # subs, added files kept
     assert out.order == ["id:10"] and out.audio_track_ids is None
 

@@ -153,7 +153,7 @@ export interface JobSummary {
   name: string
   label: string // tells jobs on one source apart (spec.label)
   source: string
-  profile: string
+  rule_set: string
   status: Status
   progress: Progress | null
   issue: string
@@ -213,7 +213,7 @@ export interface TrackOverride {
   language: string | null
   title: string | null
   flags: Record<string, boolean>
-  // Audio, for profiles with the track editor (null = the profile's choice / the default)
+  // Audio, for rule sets with the track editor (null = the rule set's choice / the default)
   action: AudioAction | null
   bitrate_kbps: number | null
   layout: string | null // "2.0", "5.1", ...
@@ -235,13 +235,13 @@ export interface Overrides {
   original_language: string | null
   audio_track_ids: number[] | null
   tracks: Record<string, TrackOverride>
-  order: string[] | null // track keys in output order (profiles that let the user reorder)
+  order: string[] | null // track keys in output order (rule sets that let the user reorder)
   copies: string[] // more output tracks from an audio track: "<track key>+<n>"
 }
 
 // What a template set for one kind of track (src/videoforge/core/models.py TemplateChoice).
 export interface TemplateChoice {
-  tracks: Record<string, TrackOverride> // each track it decided; an empty one = as the profile has it
+  tracks: Record<string, TrackOverride> // each track it decided; an empty one = as the rule set has it
   copies: string[]
   order: string[] | null
 }
@@ -257,7 +257,7 @@ export interface JobInputs {
 
 export interface JobSpec {
   inputs: JobInputs
-  profile: string
+  rule_set: string
   overrides: Overrides
   video: VideoSettings
   encoder: EncoderSettings
@@ -270,12 +270,12 @@ export interface JobSpec {
   subs_template: TemplateSubs | null // ... and its subtitle rules
   audio_from_template: TemplateChoice | null // what the last template set for the audio
   subs_from_template: TemplateChoice | null // ... and for the subtitles
-  output_name: string // the output's file name without its extension; '' = the profile's (the source's)
+  output_name: string // the output's file name without its extension; '' = the rule set's (the source's)
   label: string // tells runs of one source apart (e.g. "dubbed"): added to the output name, in the job record
   id: string
 }
 
-// The job's muxer: container ('' = the profile's), extra arguments and MKV PGS compression.
+// The job's muxer: container ('' = the rule set's), extra arguments and MKV PGS compression.
 export interface MuxSettings {
   container: string
   extra: string
@@ -330,8 +330,8 @@ export interface SubTrack {
   auto?: TrackAuto
 }
 
-// A track as the profile has it with no hand edit (track editor profiles): the editor starts from these
-// values and saves only what differs. Not kept: the profile's own choice leaves it out.
+// A track as the rule set has it with no hand edit (track editor rule sets): the editor starts from these
+// values and saves only what differs. Not kept: the rule set's own choice leaves it out.
 export interface TrackAuto {
   kept: boolean
   title?: string
@@ -363,7 +363,7 @@ export interface PlannedAudio {
 
 export interface PlannedSub {
   source: Omit<SubTrack, 'key' | 'detected'>
-  slot: string // the profile's category; '' when it has none
+  slot: string // the rule set's category; '' when it has none
   language: string
   title: string
   default: boolean
@@ -376,14 +376,14 @@ export interface PlannedSub {
 
 export interface Plan {
   encode_path: string | null
-  resolution: string // a profile's size class ("1080p") or a plain size ("1920x1080")
+  resolution: string // a rule set's size class ("1080p") or a plain size ("1920x1080")
   original_language: string
   chapters_path: string | null
   audio: PlannedAudio[]
   subs: PlannedSub[]
   burn: Omit<SubTrack, 'key' | 'detected'> | null // the subtitle track burned into the video, not muxed
   issues: Issue[]
-  profile: string
+  rule_set: string
 }
 
 export interface Tracks {
@@ -500,11 +500,11 @@ export interface TrackProperty {
   help: string
 }
 
-export interface Profile {
+export interface RuleSet {
   id: string
   name: string
   container: string
-  containers: ContainerInfo[] // the profile's own first; a job may pick any of them
+  containers: ContainerInfo[] // the rule set's own first; a job may pick any of them
   external_subtitles: boolean
   track_properties: TrackProperty[]
   track_editor: boolean // follows the user's track order, titles and audio encodes
@@ -520,7 +520,7 @@ export interface ContainerInfo {
   tool: string
 }
 
-// A user preset (the built-in ones are each profile's defaults and the encoder starters). Video presets have no crop.
+// A user preset (the built-in ones are each rule set's defaults and the encoder starters). Video presets have no crop.
 export type VideoPresetData = Omit<VideoSettings, 'crop'>
 export interface Preset<T> {
   name: string
@@ -651,9 +651,9 @@ export interface Presets {
   encoder: Preset<EncoderSettings>[]
   audio: Preset<AudioPresetSettings>[]
   template: Preset<Template>[]
-  template_defaults: Record<string, string> // profile id -> its default template's name
+  template_defaults: Record<string, string> // rule set id -> its default template's name
   subs_default?: TemplateSubs | null // Settings: subtitle rules for new jobs whose template has none
-  encoder_starters: Preset<EncoderSettings>[] // built in for every profile (core/video/starters.py)
+  encoder_starters: Preset<EncoderSettings>[] // built in for every rule set (core/video/starters.py)
 }
 export type PresetKind = 'video' | 'encoder' | 'audio' | 'template'
 
@@ -747,9 +747,9 @@ export interface ConfigState {
   roots: string[]
   roots_custom: boolean
   default_roots: string[]
-  profile: string
-  profile_default: string
-  profiles: { id: string; name: string }[]
+  rule_set: string
+  rule_set_default: string
+  rule_sets: { id: string; name: string }[]
   restart: string[]
   index_waits_for_disk: boolean // batch indexing holds a job back while an encode reads its disk
   sample_quality: boolean // a test encode measures its quality (SSIMULACRA2, XPSNR) after it

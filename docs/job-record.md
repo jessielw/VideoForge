@@ -42,7 +42,8 @@ VideoForge also appends every job's events, plus the index lane's, to one stream
     "id": "a1b2c3d4e5f6",                  // VideoForge's job id (stable while the job is in the queue)
     "name": "Show.S01E01.mkv",             // the source file name
     "label": "dubbed",                     // the user's label for this run ("" for none)
-    "profile": "manual",                   // the profile whose rules planned it
+    "rule_set": "manual",                  // the rule set whose rules planned it
+    "profile": "manual",                   // the same, under its old name (kept for older readers)
     "episode": "S01E01"                    // from the source name (SxxEyy), or null
   },
   "source": { "path": "...", "name": "...", "size": 123, "modified": "..." },
@@ -201,7 +202,7 @@ Each line of a `.videoforge.jsonl` (and of the queue-wide `events.jsonl`) is one
 
 | `event` | Fields |
 | --- | --- |
-| `run.started` | `name`, `label`, `profile`, `source`, `output` (planned path, or null), `container`, `work_dir`, `job_dir`, `issues` (the plan's) |
+| `run.started` | `name`, `label`, `rule_set` (also as `profile`, its old name), `source`, `output` (planned path, or null), `container`, `work_dir`, `job_dir`, `issues` (the plan's) |
 | `step.started` | `step` (id), `label`, `n` (1-based), `total`, `command`. Not sent for a reused step |
 | `step.finished` | `step`, `label`, `n`, `total`, `status` (`done`, `reused`, `failed`, `cancelled`), `seconds`, `exit_code`, `command`, `error` |
 | `run.finished` | `status` (`done`, `invalid`, `failed`, `skipped`, `cancelled`), `output`, `error`, `seconds`, `record` (its path, or null), `issues` (the output check's) |

@@ -104,7 +104,7 @@
       if (newJobs)
         drafts.write('new-jobs', {
           ...newJobs,
-          profile: '',
+          ruleSet: '',
           templateName: null,
           encoder: null,
           container: '',
@@ -114,11 +114,11 @@
       toast.success('Configuration imported')
       open = false
       await Promise.all([
-        api.profiles().then((profiles) => {
-          app.profiles = profiles
+        api.ruleSets().then((ruleSets) => {
+          app.ruleSets = ruleSets
         }),
         app.loadEncoders(),
-      ]).catch(() => toast.error('Configuration imported. Reload the page to refresh available profiles.'))
+      ]).catch(() => toast.error('Configuration imported. Reload the page to refresh available rule sets.'))
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {

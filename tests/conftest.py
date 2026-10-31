@@ -17,12 +17,12 @@ from videoforge.core.models import (
     SubTrack,
     VideoInfo,
 )
-from videoforge.profiles.manual import ManualProfile
+from videoforge.rule_sets.manual import ManualRuleSet
 
 
 @pytest.fixture(scope="session")
-def profile():
-    return ManualProfile()
+def rule_set():
+    return ManualRuleSet()
 
 
 def plan_for(
@@ -34,10 +34,10 @@ def plan_for(
     chapters: Path | None = None,
     external_audio: list[AudioTrack] | None = None,
 ) -> Plan:
-    """The manual profile's plan for already-probed inputs."""
+    """The manual rule set's plan for already-probed inputs."""
     inputs = JobInputs(source=src.path or Path(src.name), encode=encode.path if encode else None, chapters=chapters)
     probed = ProbedInputs(inputs, src, encode, list(external_subs or []), external_audio=list(external_audio or []))
-    return ManualProfile().plan(probed, None, overrides or Overrides())
+    return ManualRuleSet().plan(probed, None, overrides or Overrides())
 
 
 def audio(

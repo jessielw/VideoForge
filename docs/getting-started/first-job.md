@@ -16,7 +16,7 @@ If preview is unavailable, check the job's log and the [preview troubleshooting 
 
 On **Encoder**, select your installed encoder and a rate-control mode. For an initial test, leave advanced options alone. On **Audio** and **Subtitles**, exclude unwanted tracks and check the retained tracks' order, language, titles, and default or forced flags.
 
-The **manual** profile copies tracks by default. An audio encode needs its corresponding tool; copying audio does not need a separate audio encoder.
+The **manual** rule set copies tracks by default. An audio encode needs its corresponding tool; copying audio does not need a separate audio encoder.
 
 ## 4. Set the output and run
 

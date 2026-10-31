@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import type { AudioTrack, JobDetail, Overrides, Profile } from '../../src/lib/types.ts'
+import type { AudioTrack, JobDetail, Overrides, RuleSet } from '../../src/lib/types.ts'
 
 async function fixture(page: Page, delay: number, correction = 0, title = '', trackEditor = true) {
   const errors: string[] = []
@@ -36,7 +36,7 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
     name: 'Audio delay',
     label: '',
     source: 'D:/Show.mkv',
-    profile: 'manual',
+    rule_set: 'manual',
     status: 'ready',
     progress: null,
     issue: '',
@@ -82,7 +82,7 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
       subs: [],
       burn: null,
       issues: [],
-      profile: 'manual',
+      rule_set: 'manual',
     },
     output_name: null,
     color_args: null,
@@ -92,7 +92,7 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
     tracks: { video: null, audio: [track], subs: [], has_chapters: false, count: 1 },
     spec: {
       id: 'delay',
-      profile: 'manual',
+      rule_set: 'manual',
       inputs: { source: 'D:/Show.mkv', encode: null, subtitles: [], chapters: null, encode_state: '', audio: [] },
       video: {
         source_filter: 'ffms2',
@@ -150,7 +150,7 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
       label: '',
     },
   }
-  const profile: Profile = {
+  const ruleSet: RuleSet = {
     id: 'manual',
     name: 'Manual',
     default: true,
@@ -184,7 +184,7 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
     const responses: Record<string, unknown> = {
       '/api/jobs': [job],
       '/api/jobs/delay': job,
-      '/api/profiles': [profile],
+      '/api/rule-sets': [ruleSet],
       '/api/presets': { video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] },
       '/api/health': { ok: true, version: 'test' },
       '/api/filter-presets': [],

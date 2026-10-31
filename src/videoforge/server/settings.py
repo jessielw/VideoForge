@@ -74,7 +74,7 @@ class SavedSettings:
 
     tools: dict[str, str] = field(default_factory=dict)  # Tools field -> path
     roots: list[str] | None = None  # folder-browser roots; None = every drive
-    profile: str | None = None  # default profile for new jobs
+    rule_set: str | None = None  # default rule set for new jobs
     index_waits_for_disk: bool = True  # batch indexing holds a job back while an encode reads its disk
     notifications: list[Destination] = field(default_factory=list)  # where job and queue news goes
     actions: list[Action] = field(default_factory=list)  # what runs after a job ends or the queue finishes
@@ -92,7 +92,7 @@ class SavedSettings:
         return cls(
             {k: v for k, v in tools.items() if isinstance(v, str) and v},
             store.get_setting("roots"),
-            store.get_setting("profile"),
+            store.get_setting("rule_set"),
             bool(store.get_setting("index_waits_for_disk", True)),
             load_destinations(store.get_setting("notifications") or []),
             load_actions(store.get_setting("actions") or []),
@@ -108,9 +108,9 @@ class SavedSettings:
     def save(self, store) -> None:
         store.set_settings(to_json(self))
 
-    def app_config(self, base: AppConfig, profile: str) -> AppConfig:
+    def app_config(self, base: AppConfig, rule_set: str) -> AppConfig:
         """base (videoforge.toml) with these settings over it."""
-        cfg = replace(with_tools(base, self.tools), profile=profile)
+        cfg = replace(with_tools(base, self.tools), rule_set=rule_set)
         if self.parallel_audio is not None:
             cfg = replace(cfg, parallel_audio=self.parallel_audio)
         if self.delete_work_dir is not None:

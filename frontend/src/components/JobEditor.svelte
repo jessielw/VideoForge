@@ -138,8 +138,8 @@
     { id: 'log', label: 'Log' },
   ]
   const problems = $derived((job?.issues ?? []).filter((i) => i.severity !== 'info'))
-  const profile = $derived(app.profiles.find((p) => p.id === job?.profile))
-  const containers = $derived(profile?.containers ?? [])
+  const ruleSet = $derived(app.ruleSets.find((p) => p.id === job?.rule_set))
+  const containers = $derived(ruleSet?.containers ?? [])
   const container = $derived(containers.find((c) => c.id === job?.spec.mux.container) ?? containers[0])
   const muxCommands = $derived(commands.filter((c) => c.id === 'mux' || c.id === 'chapters.mp4'))
 </script>
@@ -179,7 +179,7 @@
           >{/if}
         <span class="text-sm {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
         <span class="text-sm text-muted-foreground"
-          >· {job.profile} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span
+          >· {job.rule_set} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span
         >
         {#if job.status === 'indexing' || job.status === 'sampling'}<Badge
             variant="outline"
@@ -187,7 +187,7 @@
             >locked {job.status === 'indexing' ? 'while indexing' : 'during its test encode'}</Badge
           >{/if}
         <TemplateMenu
-          profile={job.profile}
+          ruleSet={job.rule_set}
           spec={job.spec}
           audioKeys={(job.tracks?.audio ?? [])
             .filter((t) => !t.external_path && !t.key.includes('+'))
@@ -254,7 +254,7 @@
         <div class="grid max-w-6xl gap-6 2xl:grid-cols-2">
           <div class="space-y-4">
             <EncoderPanel
-              profile={job.profile}
+              ruleSet={job.rule_set}
               value={job.spec.encoder}
               disabled={!editable}
               colorArgs={job.color_args}
@@ -289,7 +289,7 @@
         </div>
       {:else if tab === 'audio' || tab === 'subs'}
         {@const kind = tab === 'audio' ? 'audio' : 'sub'}
-        {#if app.profiles.find((p) => p.id === job?.profile)?.track_editor}
+        {#if app.ruleSets.find((p) => p.id === job?.rule_set)?.track_editor}
           <TrackEditor
             {job}
             {editable}
@@ -328,7 +328,7 @@
             <span class="text-muted-foreground">Output name</span>
             <Tip
               class="grid"
-              text="The output's file name, without its extension; empty = the profile's name for it (the source's). The label and the container's extension go after it"
+              text="The output's file name, without its extension; empty = the rule set's name for it (the source's). The label and the container's extension go after it"
             >
               <Input
                 aria-label="Output name"
@@ -453,14 +453,14 @@
               <Checkbox checked={job.spec.qpf} disabled={!editable} onCheckedChange={(v) => save({ qpf: v })} />
               AutoQPF: chapters from the source (or every 5%) and keyframes on them
             </label>
-            <span class="text-muted-foreground">Profile</span>
+            <span class="text-muted-foreground">Rule set</span>
             <NativeSelect
               class="w-48"
-              value={job.profile}
+              value={job.rule_set}
               disabled={!editable}
-              onchange={(e) => save({ profile: e.currentTarget.value })}
+              onchange={(e) => save({ rule_set: e.currentTarget.value })}
             >
-              {#each app.profiles as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+              {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
             </NativeSelect>
             <span class="text-muted-foreground">Work folder</span>
             <code class="text-xs break-all text-muted-foreground">{job.source}_tmp</code>

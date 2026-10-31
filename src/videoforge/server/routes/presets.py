@@ -1,10 +1,10 @@
 """User presets for a job's video processing and its encoder, and templates (core.template: the
 whole run's settings), saved in the store.
 
-Each profile's own defaults are the built-in presets (the UI has them from /api/profiles), with the
+Each rule set's own defaults are the built-in presets (the UI has them from /api/rule-sets), with the
 starter encoder presets (core.video.starters, listed here); these are the user's, on top. A video preset holds the source filter, resize, filter chain
 and custom body, not the crop: that belongs to each source (a template says what to do with it).
-Each profile can have one of the user's templates as its default: New jobs starts on it, and
+Each rule set can have one of the user's templates as its default: New jobs starts on it, and
 jobs added with no settings of their own get it.
 """
 
@@ -34,7 +34,7 @@ KINDS: dict[str, type] = {
     "audio": AudioPresetSettings,
     "template": Template,
 }
-DEFAULTS = "template_defaults"  # setting: {profile id: template name}
+DEFAULTS = "template_defaults"  # setting: {rule set id: template name}
 SUBS_DEFAULT = "subs_default"  # setting: subtitle rules (TemplateSubs) for new jobs whose template has none
 
 
@@ -72,7 +72,7 @@ def _upgraded(kind: str, data: Any) -> Any:
 
 
 def template_defaults(store: Any) -> dict[str, str]:
-    """Each profile's default template, by name (only ones that still exist)."""
+    """Each rule set's default template, by name (only ones that still exist)."""
     saved = store.presets("template")
     return {pid: name for pid, name in (store.get_setting(DEFAULTS) or {}).items() if name in saved}
 
@@ -86,17 +86,17 @@ def subs_default(store: Any) -> TemplateSubs | None:
         return None
 
 
-def default_template(store: Any, profile_id: str) -> Template | None:
-    name = template_defaults(store).get(profile_id)
+def default_template(store: Any, rule_set_id: str) -> Template | None:
+    name = template_defaults(store).get(rule_set_id)
     return from_json(Template, store.presets("template")[name]) if name else None
 
 
-def _set_default(store: Any, profile_id: str, name: str | None) -> None:
+def _set_default(store: Any, rule_set_id: str, name: str | None) -> None:
     defaults = template_defaults(store)
     if name:
-        defaults[profile_id] = name
+        defaults[rule_set_id] = name
     else:
-        defaults.pop(profile_id, None)
+        defaults.pop(rule_set_id, None)
     store.set_setting(DEFAULTS, defaults)
 
 
@@ -208,7 +208,7 @@ def keep_both(request: Request) -> bool:
 def reserved_names(request: Request) -> tuple[str, ...]:
     """The built-in templates' names ("Manual defaults"): never replaced, so an import of one is a copy."""
     state = request.app.state
-    return tuple(f"{state.queue.profiles(pid).name} defaults" for pid in state.profile_ids)
+    return tuple(f"{state.queue.rule_sets(pid).name} defaults" for pid in state.rule_set_ids)
 
 
 def _imported(
@@ -221,16 +221,16 @@ def _imported(
     return {"names": names, "actions": actions}
 
 
-@router.put("/template-default/{profile_id}")
-def set_template_default(request: Request, profile_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    """{name}: the profile's default template; null: back to the profile's own defaults."""
+@router.put("/template-default/{rule_set_id}")
+def set_template_default(request: Request, rule_set_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """{name}: the rule set's default template; null: back to the rule set's own defaults."""
     store = request.app.state.store
-    if profile_id not in request.app.state.profile_ids:
-        raise HTTPException(404, f"No profile {profile_id!r}")
+    if rule_set_id not in request.app.state.rule_set_ids:
+        raise HTTPException(404, f"No rule set {rule_set_id!r}")
     name = body.get("name")
     if name and name not in store.presets("template"):
         raise HTTPException(404, f"No template {name!r}")
-    _set_default(store, profile_id, name or None)
+    _set_default(store, rule_set_id, name or None)
     return _all(request)
 
 
@@ -257,7 +257,7 @@ class DeleteBody(BaseModel):
 @router.post("/delete")
 def delete_presets(request: Request, body: DeleteBody) -> dict[str, Any]:
     """Several presets of one kind at once (the library's selection); a default template among them
-    falls back to the profile's own defaults."""
+    falls back to the rule set's own defaults."""
     _kind(body.kind)
     request.app.state.store.delete_presets(body.kind, body.names)
     return _all(request)
@@ -337,5 +337,5 @@ def rename_preset(request: Request, kind: str, name: str, body: dict[str, Any] =
 @router.delete("/{kind}/{name:path}")
 def delete_preset(request: Request, kind: str, name: str) -> dict[str, Any]:
     _kind(kind)
-    request.app.state.store.delete_preset(kind, name)  # a default it was falls back to the profile's
+    request.app.state.store.delete_preset(kind, name)  # a default it was falls back to the rule set's
     return _all(request)

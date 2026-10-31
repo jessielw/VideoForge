@@ -818,10 +818,10 @@ def test_vspipe_into_svtav1_and_mux(clip_file, tmp_path, override):
         assert [n.split()[0] for n in light] == (["500", "100"] if override else ["1000", "400"]), file
 
 
-def test_manual_encode_defaults_are_fresh_copies(profile):
-    video, enc = profile.video_defaults()
+def test_manual_encode_defaults_are_fresh_copies(rule_set):
+    video, enc = rule_set.video_defaults()
     assert (enc.encoder, enc.rate_control, enc.crf, enc.preset) == (Encoder.X264, RateControl.CRF, 18.0, "slow")
     enc.options["ref"] = "9"
     video.crop.top = 2
-    again_video, again = profile.video_defaults()
+    again_video, again = rule_set.video_defaults()
     assert again.options == {} and again_video.crop.top == 0

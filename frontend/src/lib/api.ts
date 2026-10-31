@@ -33,7 +33,7 @@ import type {
   ImportAction,
   ImportPlan,
   Priority,
-  Profile,
+  RuleSet,
   QueueState,
   ReuseJob,
   StepOutput,
@@ -93,7 +93,7 @@ export interface InputSlots {
   encodes: string[]
   subtitles: string[]
   chapters: string[]
-  profile: string
+  rule_set: string
 }
 
 // A job's files, each replaced when given (a folder adds its files of that kind).
@@ -113,7 +113,7 @@ export type SpecChanges = Partial<
     | 'output_dir'
     | 'output_policy'
     | 'qpf'
-    | 'profile'
+    | 'rule_set'
     | 'mux'
     | 'label'
     | 'output_name'
@@ -126,7 +126,7 @@ export type SpecChanges = Partial<
 
 export const api = {
   health: () => get<{ ok: boolean; version: string }>('/api/health'),
-  profiles: () => get<Profile[]>('/api/profiles'),
+  ruleSets: () => get<RuleSet[]>('/api/rule-sets'),
   presets: () => get<Presets>('/api/presets'),
   exportAudio: (bundle: AudioBundle) => post<AudioBundle>('/api/presets/audio/export', bundle),
   previewAudio: (bundle: unknown, keepBoth = false) =>
@@ -155,8 +155,8 @@ export const api = {
   deletePresets: (kind: PresetKind, names: string[]) => post<Presets>('/api/presets/delete', { kind, names }),
   renamePreset: (kind: PresetKind, name: string, to: string) =>
     post<Presets>(`/api/presets/${kind}/${encodeURIComponent(name)}/rename`, { to }),
-  setTemplateDefault: (profile: string, name: string | null) =>
-    request<Presets>('PUT', `/api/presets/template-default/${encodeURIComponent(profile)}`, { name }),
+  setTemplateDefault: (ruleSet: string, name: string | null) =>
+    request<Presets>('PUT', `/api/presets/template-default/${encodeURIComponent(ruleSet)}`, { name }),
   setSubsDefault: (subs: TemplateSubs | null) => request<Presets>('PUT', '/api/presets/subs-default', subs),
   config: () => get<ConfigState>('/api/config'),
   plugins: () => get<PluginInventory>('/api/plugins'),
@@ -191,7 +191,7 @@ export const api = {
   saveConfig: (changes: {
     tools?: Record<string, string | null>
     roots?: string[] | null
-    profile?: string | null
+    rule_set?: string | null
     index_waits_for_disk?: boolean
     sample_quality?: boolean
     parallel_audio?: number | null

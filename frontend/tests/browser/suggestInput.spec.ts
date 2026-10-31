@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import type { ConfigState, EncoderSettings, Presets, Profile, Template } from '../../src/lib/types.ts'
+import type { ConfigState, EncoderSettings, Presets, RuleSet, Template } from '../../src/lib/types.ts'
 
 const video: EncoderSettings = {
   encoder: 'x264',
@@ -35,7 +35,7 @@ async function fixture(page: Page) {
     audio: null,
     subs: null,
   }
-  const profile: Profile = {
+  const ruleSet: RuleSet = {
     id: 'manual',
     name: 'Manual',
     default: true,
@@ -59,9 +59,9 @@ async function fixture(page: Page) {
     roots: [],
     roots_custom: false,
     default_roots: [],
-    profile: 'manual',
-    profile_default: 'manual',
-    profiles: [profile],
+    rule_set: 'manual',
+    rule_set_default: 'manual',
+    rule_sets: [ruleSet],
     restart: [],
     index_waits_for_disk: true,
     sample_quality: false,
@@ -93,7 +93,7 @@ async function fixture(page: Page) {
     const path = new URL(route.request().url()).pathname
     const responses: Record<string, unknown> = {
       '/api/jobs': [],
-      '/api/profiles': [profile],
+      '/api/rule-sets': [ruleSet],
       '/api/presets': presets,
       '/api/health': { ok: true, version: 'test' },
       '/api/filter-presets': [],

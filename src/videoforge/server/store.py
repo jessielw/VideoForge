@@ -53,6 +53,8 @@ class Store:
         self._db = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(SCHEMA)
+        # Saved before 0.1.0-beta.11, when the default rule set was the default profile
+        self._db.execute("UPDATE OR IGNORE settings SET key = 'rule_set' WHERE key = 'profile'")
         self._lock = threading.Lock()
 
     def close(self) -> None:

@@ -28,7 +28,7 @@ test('startup and reconnect recover catalogs with one bounded retry loop', async
   Object.assign(globalThis, {
     __connectionDeps: {
       api: {
-        profiles: read,
+        ruleSets: read,
         jobs: read,
         presets: read,
         encoders: read,

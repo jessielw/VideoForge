@@ -7,7 +7,7 @@ export const subtitleLanguage = (t: SubTrack, overrides: Overrides) =>
 export const subtitleFormat = (t: SubTrack) => t.format.trim().toLowerCase() || 'unknown'
 
 // Change all subtitle choices in one save, preserving order and other track edits. A track the
-// profile keeps on its own (auto) needs no override to stay; one it leaves out needs exclude: false.
+// rule set keeps on its own (auto) needs no override to stay; one it leaves out needs exclude: false.
 export function selectSubtitles(overrides: Overrides, tracks: SubTrack[], include: (t: SubTrack) => boolean) {
   for (const t of tracks) {
     const on = include(t)

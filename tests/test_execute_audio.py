@@ -228,7 +228,7 @@ def test_deezy_options():
         "--custom-dialnorm=-27",
         "--stereo-down-mix=dpl2",
     } <= set(argv)
-    assert argv[-4:] == ("--x", "--metering-mode", "1770_3", str(SRC))  # the profile's extras, then the track's
+    assert argv[-4:] == ("--x", "--metering-mode", "1770_3", str(SRC))  # the rule set's extras, then the track's
 
     atmos = planned(C.TRUEHD, "7.1", A.ATMOS, "5.1", 1024, atmos=True)
     atmos.options = {"atmos_mode": "bluray", "warp": "loro", "bed_conform": "on"}
@@ -236,18 +236,18 @@ def test_deezy_options():
     assert {"--atmos-mode=bluray", "--thd-warp-mode=loro", "--bed-conform"} <= set(argv)
 
 
-def test_profile_defaults_stand_in_for_unset_options():
+def test_rule_set_defaults_stand_in_for_unset_options():
     settings = AudioSettings(atmos_mode="bluray", qaac_tvbr=91)
     (argv,) = command(planned(C.TRUEHD, "7.1", A.ATMOS, "5.1", 1024, atmos=True), settings).argvs
     assert "--atmos-mode=bluray" in argv
     aac = planned(C.FLAC, "2.0", A.AAC)
     aac.options = {"quality": "100", "extra": "--lowpass 20000"}
     _, qaac = command(aac, settings).argvs
-    assert qaac[qaac.index("--tvbr") + 1] == "100"  # the track's own beats the profile's
+    assert qaac[qaac.index("--tvbr") + 1] == "100"  # the track's own beats the rule set's
     assert qaac[-5:] == ("--lowpass", "20000", "-o", qaac[-2], "-")
 
 
-def test_a_profile_dialnorm_goes_to_deezy_unless_the_track_sets_one():
+def test_a_rule_set_dialnorm_goes_to_deezy_unless_the_track_sets_one():
     settings = AudioSettings(dialnorm=-31)
     ddp = planned(C.TRUEHD, "5.1", A.DDP, "5.1", 640)
     atmos = planned(C.TRUEHD, "7.1", A.ATMOS, "5.1", 1024, atmos=True)

@@ -688,7 +688,7 @@
       <aside class="min-h-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto pr-1">
         <PresetMenu
           kind="video"
-          profile={job.profile}
+          ruleSet={job.rule_set}
           current={video}
           disabled={!editable}
           apply={(data) => {

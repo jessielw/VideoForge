@@ -22,7 +22,7 @@ from videoforge.core.pipeline.steps import Step
 from videoforge.core.workdir import finished_files
 
 if TYPE_CHECKING:
-    from videoforge.core.profile import Profile
+    from videoforge.core.rule_set import RuleSet
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,12 +50,12 @@ def _sections(steps: list[Step]) -> list[tuple[str, str, list[Step]]]:
 
 
 def reuse_offers(
-    spec: JobSpec, plan: Plan, profile: Profile, app: AppConfig, records: dict[str, StepRecord]
+    spec: JobSpec, plan: Plan, rule_set: RuleSet, app: AppConfig, records: dict[str, StepRecord]
 ) -> list[ReuseOffer]:
     """The sections whose finished files a run of the job could reuse, in step order."""
     if spec.output_dir is None or plan.blocked or plan.source.path is None:
         return []
-    built = build_steps(spec, plan, profile, app, output_path(spec, plan, profile, spec.output_dir))
+    built = build_steps(spec, plan, rule_set, app, output_path(spec, plan, rule_set, spec.output_dir))
     home = spec.job_dir
     finished = finished_files(home)
     share = Sharing(spec.work_dir, home, tuple(built.steps))

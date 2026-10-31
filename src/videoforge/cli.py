@@ -15,8 +15,8 @@ from rich.table import Table
 
 from videoforge.core.config import load_app_config
 from videoforge.core.models import Issue, Plan, Severity, SourceInfo
-from videoforge.core.profile import Profile
-from videoforge.profiles import default_profile_id, get_profile
+from videoforge.core.rule_set import RuleSet
+from videoforge.rule_sets import default_rule_set_id, get_rule_set
 
 console = Console()
 
@@ -32,12 +32,14 @@ def _print_issues(issues: list[Issue], min_sev: Severity = Severity.INFO) -> Non
             )
 
 
-def report_validation(profile: Profile, targets: list[tuple[str, SourceInfo]], min_sev: Severity, summary: bool) -> int:
-    """Check each release with the profile's release checks and print the results; 1 if any is blocked."""
+def report_validation(
+    rule_set: RuleSet, targets: list[tuple[str, SourceInfo]], min_sev: Severity, summary: bool
+) -> int:
+    """Check each release with the rule set's release checks and print the results; 1 if any is blocked."""
     codes: Counter[str] = Counter()
     failed = 0
     for name, info in targets:
-        issues = profile.validate_release(info)
+        issues = rule_set.validate_release(info)
         shown = [
             i
             for i in issues
@@ -64,14 +66,14 @@ def cmd_validate(args: argparse.Namespace) -> int:
     from videoforge.core.probe import probe
 
     app = load_app_config()
-    profile = get_profile(args.profile or default_profile_id(app.profile))
+    rule_set = get_rule_set(args.rule_set or default_rule_set_id(app.rule_set))
     targets: list[tuple[str, SourceInfo]] = []
     for path in args.paths:
         if path.suffix == ".txt":
             targets.append((path.name, parse_mediainfo_text(path.read_text(encoding="utf-8"), name=path.stem)))
         else:
             targets.append((path.name, probe(path, app.tools.mkvmerge)))
-    return report_validation(profile, targets, Severity(args.min_severity), args.summary)
+    return report_validation(rule_set, targets, Severity(args.min_severity), args.summary)
 
 
 _FLAG_NAMES = (
@@ -118,7 +120,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     from videoforge.core.jobs import discover_jobs, plan_job, probe_inputs
 
     app = load_app_config()
-    profile = get_profile(args.profile or default_profile_id(app.profile))
+    rule_set = get_rule_set(args.rule_set or default_rule_set_id(app.rule_set))
     found = discover_jobs(args.paths, app)
     for e in found.unmatched.encodes:
         console.print(f"[yellow]Unmatched encode:[/] {escape(e.name)}")
@@ -129,7 +131,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     for job in found.jobs:
         if args.only and not any(o in job.source.name for o in args.only):
             continue
-        plan = plan_job(profile, probe_inputs(job, app), original_language=args.orig_lang)
+        plan = plan_job(rule_set, probe_inputs(job, app), original_language=args.orig_lang)
         plans.append(plan)
         print_plan(plan)
         if job.subtitles:
@@ -185,7 +187,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             result = run_plan(
                 plan,
                 args.out_dir,
-                get_profile(plan.profile or default_profile_id(app.profile)),
+                get_rule_set(plan.rule_set or default_rule_set_id(app.rule_set)),
                 app,
                 progress=progress,
                 log=log,
@@ -309,17 +311,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("validate", help="check finished releases with a profile's checks (MKV or MediaInfo .txt)")
+    p = sub.add_parser("validate", help="check finished releases with a rule set's checks (MKV or MediaInfo .txt)")
     p.add_argument("paths", nargs="+", type=Path)
     p.add_argument("--summary", action="store_true", help="only print issue counts")
     p.add_argument("--min-severity", choices=["warn", "block"], default="warn")
-    p.add_argument("--profile", help="rules to check against (default: videoforge.toml `profile`)")
+    p.add_argument(
+        "--rule-set", "--profile", dest="rule_set", help="rules to check against (default: videoforge.toml `rule_set`)"
+    )
     p.set_defaults(func=cmd_validate)
 
     p = sub.add_parser("plan", help="pair sources with encodes and show what would be muxed")
     p.add_argument("paths", nargs="+", type=Path, help="MKV files or folders")
     p.add_argument("--orig-lang", help="original language for the batch (e.g. en, ja)")
-    p.add_argument("--profile", help="rules to plan with (default: videoforge.toml `profile`)")
+    p.add_argument(
+        "--rule-set", "--profile", dest="rule_set", help="rules to plan with (default: videoforge.toml `rule_set`)"
+    )
     p.add_argument("--only", nargs="*", help="only print plans whose source name contains one of these")
     p.add_argument("--out", type=Path, help="write the plans to this plan.json for `videoforge run`")
     p.set_defaults(func=cmd_plan)

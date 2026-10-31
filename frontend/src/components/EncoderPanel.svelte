@@ -4,18 +4,18 @@
   import EncoderPresetMenu from './EncoderPresetMenu.svelte'
 
   let {
-    profile,
+    ruleSet,
     ...settings
-  }: Omit<ComponentProps<typeof EncoderSettingsEditor>, 'presetControl'> & { profile?: string } = $props()
+  }: Omit<ComponentProps<typeof EncoderSettingsEditor>, 'presetControl'> & { ruleSet?: string } = $props()
 </script>
 
 {#snippet presetControl()}
-  {#if profile}<EncoderPresetMenu
-      {profile}
+  {#if ruleSet}<EncoderPresetMenu
+      {ruleSet}
       current={settings.value}
       apply={settings.onchange}
       disabled={settings.disabled}
     />{/if}
 {/snippet}
 
-<EncoderSettingsEditor {...settings} presetControl={profile ? presetControl : undefined} />
+<EncoderSettingsEditor {...settings} presetControl={ruleSet ? presetControl : undefined} />

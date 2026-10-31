@@ -1,4 +1,4 @@
-"""Engine flow for one job: discover inputs, probe them once, plan with a profile.
+"""Engine flow for one job: discover inputs, probe them once, plan with a rule set.
 
 Probing is the slow part (network shares), so ProbedInputs is kept by callers and
 any override replans from it without touching the files again.
@@ -37,7 +37,7 @@ from videoforge.core.tools import locate
 from videoforge.core.video import burn, hdr
 
 if TYPE_CHECKING:
-    from videoforge.core.profile import Profile
+    from videoforge.core.rule_set import RuleSet
 
 
 def has_audio_via_mkvmerge(app: AppConfig) -> Callable[[Path], bool]:
@@ -68,7 +68,7 @@ def external_tracks(source: SourceInfo, paths: list[Path]) -> tuple[list[SubTrac
     """Parse external subtitle files into tracks.
 
     A file whose name has no language is kept as "und" with a WARN; plan_job drops it
-    unless the profile has a track editor (where the user sets the language).
+    unless the rule set has a track editor (where the user sets the language).
     A file extracted from the source ("_trackN_") inherits that track's title and
     forced/SDH flags, so "English (ASS Foreign)" converted to SRT is still forced.
     """
@@ -133,27 +133,27 @@ def probe_inputs(inputs: JobInputs, app: AppConfig) -> ProbedInputs:
 
 
 def plan_job(
-    profile: Profile,
+    rule_set: RuleSet,
     probed: ProbedInputs,
     original_language: str | None = None,
     overrides: Overrides | None = None,
 ) -> Plan:
-    """The profile's plan, plus what the engine knows about the inputs."""
+    """The rule set's plan, plus what the engine knows about the inputs."""
     inputs = probed.inputs
-    if not profile.external_audio and probed.external_audio:
+    if not rule_set.external_audio and probed.external_audio:
         probed = replace(probed, external_audio=[])
-    if not profile.external_subtitles and probed.external_subs:
+    if not rule_set.external_subtitles and probed.external_subs:
         probed = replace(probed, external_subs=[])
-    elif profile.track_editor:  # the user sets a missing language there (the profile warns while it's unset)
+    elif rule_set.track_editor:  # the user sets a missing language there (the rule set warns while it's unset)
         probed = replace(probed, issues=[i for i in probed.issues if i.code != "subs.external_name"])
     else:
         probed = replace(probed, external_subs=[t for t in probed.external_subs if t.language != "und"])
     overrides = overrides or Overrides()
-    plan = profile.plan(probed, original_language, overrides)
-    plan.profile = profile.id
+    plan = rule_set.plan(probed, original_language, overrides)
+    plan.rule_set = rule_set.id
     plan.inputs = inputs
     plan.issues[:0] = probed.issues
-    # A subtitle burned into the video leaves the mux, whatever the profile chose for it.
+    # A subtitle burned into the video leaves the mux, whatever the rule set chose for it.
     marked = burn.picked(probed.source.subs + probed.external_subs, overrides) if inputs.encode is None else []
     if marked:
         plan.burn = marked[0]
@@ -169,7 +169,7 @@ HIGH_DELAY_MS = 2000  # StaxRip's: a delay beyond it suggests a sync problem
 
 
 def apply_sync(plan: Plan, overrides: Overrides) -> list[Issue]:
-    """Each output audio track's sync correction from its override (for every profile: it's a correction of the
+    """Each output audio track's sync correction from its override (for every rule set: it's a correction of the
     source, not a policy), and a warning for a track that ends up further than HIGH_DELAY_MS off the video."""
     issues = []
     for a in plan.audio:

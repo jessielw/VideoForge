@@ -3,7 +3,7 @@
 DeeZy makes DDP and DDP Atmos, ffmpeg | qaac makes AAC, ffmpeg | opusenc makes Opus,
 and ffmpeg's own encoders make FLAC, Opus, AAC, AC-3 and E-AC-3. ENCODES is the one list
 the planner, the tool checks and the UI read: a new encode is an AudioAction, an entry
-here and its command. Each encode's options are per-track settings; a profile's
+here and its command. Each encode's options are per-track settings; a rule set's
 AudioSettings can change some of their defaults (option_defaults).
 
 Delay: the source's "delay relative to video" is applied exactly once. DeeZy
@@ -160,7 +160,7 @@ class AudioEncode:
     def resolve_options(
         self, given: dict[str, str], defaults: dict[str, str] | None = None
     ) -> tuple[dict[str, str], list[str]]:
-        """Every option's value (the given one, else the profile's default, else the option's own),
+        """Every option's value (the given one, else the rule set's default, else the option's own),
         and the problems with given ones. Keys this encode doesn't have are dropped (another encode's)."""
         out, problems = {}, []
         for o in self.options:
@@ -442,7 +442,7 @@ def delay_in_encode(action: AudioAction) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class AudioSettings:
-    """Encoder knobs a profile sets once (per-track choices live on PlannedAudio)."""
+    """Encoder knobs a rule set sets once (per-track choices live on PlannedAudio)."""
 
     atmos_mode: str = "streaming"
     qaac_tvbr: int = 127
@@ -451,7 +451,7 @@ class AudioSettings:
     dialnorm: int | None = None  # DeeZy's --custom-dialnorm (-31..-1) for DDP / Atmos; None: DEE measures it
 
     def option_defaults(self, action: AudioAction) -> dict[str, str]:
-        """This profile's defaults for an encode's options (ENCODES[action].options keys)."""
+        """This rule set's defaults for an encode's options (ENCODES[action].options keys)."""
         out: dict[str, str] = {}
         if self.dialnorm is not None and action in (AudioAction.DDP, AudioAction.ATMOS):
             out["dialnorm"] = str(self.dialnorm)
@@ -655,7 +655,7 @@ def _aac(
     )
     # --ignorelength: a piped WAV header has no real data size.
     # --no-delay: compensate encoder priming in the stream itself; MKV has no gapless metadata.
-    # A bitrate means constrained VBR at about that rate; none means true VBR at the profile's quality.
+    # A bitrate means constrained VBR at about that rate; none means true VBR at the rule set's quality.
     mode = (
         ("--cvbr", str(planned.bitrate_kbps))
         if planned.bitrate_kbps
@@ -730,7 +730,7 @@ _FFMPEG_LAYOUT = {"1.0": "mono", "2.0": "stereo"}
 
 
 def _opt(p: PlannedAudio, key: str, settings: AudioSettings | None = None) -> str:
-    """A track's option: its own value, else the profile's default, else the encode's ("" for a key it lacks)."""
+    """A track's option: its own value, else the rule set's default, else the encode's ("" for a key it lacks)."""
     if value := p.options.get(key):
         return value
     if settings and (value := settings.option_defaults(p.action).get(key)):

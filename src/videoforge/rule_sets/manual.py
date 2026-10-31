@@ -1,4 +1,4 @@
-"""The built-in manual profile: no group rules, the output is what the user sets up.
+"""The built-in manual rule set: no group rules, the output is what the user sets up.
 
 Every source track (and every added subtitle file) goes into an MKV in source
 order, copied unchanged with its language, title and flags. The user excludes,
@@ -38,7 +38,7 @@ from videoforge.core.models import (
     track_key,
     with_copies,
 )
-from videoforge.core.profile import Profile
+from videoforge.core.rule_set import RuleSet
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl, VideoSettings
 
 # Track flags the user can set (Matroska's track flags), worded per kind; each key is a field of
@@ -168,7 +168,7 @@ def _guess_original(tracks: Sequence[AudioTrack]) -> str | None:
     return None
 
 
-class ManualProfile(Profile):
+class ManualRuleSet(RuleSet):
     id = "manual"
     name = "Manual"
     container = "mkv"
@@ -259,7 +259,7 @@ class ManualProfile(Profile):
             subs=subs,
             issues=issues,
             overrides=overrides,
-            profile=self.id,
+            rule_set=self.id,
         )
 
     def video_defaults(self) -> tuple[VideoSettings, EncoderSettings]:

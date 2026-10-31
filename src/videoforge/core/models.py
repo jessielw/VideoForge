@@ -290,7 +290,7 @@ class PlannedAudio:
 @dataclass(slots=True)
 class PlannedSub:
     source: SubTrack
-    slot: str  # the profile's category for this track (shown, and used for its ordering); "" for none
+    slot: str  # the rule set's category for this track (shown, and used for its ordering); "" for none
     language: str
     title: str
     default: bool = False
@@ -308,7 +308,7 @@ class TrackKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class TrackProperty:
-    """A per-track on/off property a profile reads from the file and lets the user override."""
+    """A per-track on/off property a rule set reads from the file and lets the user override."""
 
     key: str  # TrackOverride.flags key, e.g. "forced"
     label: str  # column/checkbox text, e.g. "Forced"
@@ -324,7 +324,7 @@ class TrackOverride:
     language: str | None = None
     title: str | None = None
     flags: dict[str, bool] = field(default_factory=dict)  # TrackProperty.key -> value
-    # Audio, for profiles with a track editor: copy or encode it (None = the profile's choice),
+    # Audio, for rule sets with a track editor: copy or encode it (None = the rule set's choice),
     # the bitrate (None = the encoder's default / AAC's quality mode) and the output layout (None = the default).
     action: AudioAction | None = None
     bitrate_kbps: int | None = None
@@ -333,7 +333,7 @@ class TrackOverride:
     # Subtitles: burned into the video instead of muxed (core.video.burn; one per job).
     burn: bool | None = None
     # Audio: move the track by this many ms (+ later, - earlier) on top of its own delay, as StaxRip's audio
-    # Delay field corrects an out-of-sync track. Applied by the engine (jobs.plan_job), whatever the profile.
+    # Delay field corrects an out-of-sync track. Applied by the engine (jobs.plan_job), whatever the rule set.
     sync_ms: int | None = None
 
     @property
@@ -359,7 +359,7 @@ class Overrides:
     audio_track_ids: list[int] | None = None
     # Keyed by track_key(track): "id:<mkvmerge id>" or "ext:<file name>".
     tracks: dict[str, TrackOverride] = field(default_factory=dict)
-    # Output order as track keys, for profiles that let the user reorder. Audio and
+    # Output order as track keys, for rule sets that let the user reorder. Audio and
     # subtitles each keep their own order; unlisted tracks follow in source order.
     order: list[str] | None = None
     # More output tracks made from an audio track, as "<track key>+<n>" (e.g. "id:1+1"): the same
@@ -370,7 +370,7 @@ class Overrides:
 class OtherTracks(StrEnum):
     """What a template does with the tracks it doesn't set: audio past its slots, subtitles no rule matches."""
 
-    KEEP = "keep"  # as the profile decides
+    KEEP = "keep"  # as the rule set decides
     EXCLUDE = "exclude"  # left out
 
 
@@ -445,7 +445,7 @@ class TemplateSubs:
 @dataclass(slots=True)
 class TemplateChoice:
     """What a template set for one kind of track once the job's tracks were known: each track it
-    decided (an empty override: as the profile has it), the copies it made and its output order for
+    decided (an empty override: as the rule set has it), the copies it made and its output order for
     them (None: source order). The track editor tells these from hand edits and can go back to them."""
 
     tracks: dict[str, TrackOverride] = field(default_factory=dict)
@@ -486,7 +486,7 @@ def with_copies(tracks: list[AudioTrack], copies: list[str]) -> list[AudioTrack]
 class Plan:
     source: SourceInfo
     encode_path: Path | None
-    resolution: str  # the profile's size class (e.g. "1080p") or a plain size label ("1920x1080")
+    resolution: str  # the rule set's size class (e.g. "1080p") or a plain size label ("1920x1080")
     original_language: str
     chapters_path: Path | None = None  # external chapters (StaxRip qpf); None = take the encode's/source's
     audio: list[PlannedAudio] = field(default_factory=list)
@@ -494,8 +494,13 @@ class Plan:
     burn: SubTrack | None = None  # the subtitle track burned into the video (core.video.burn), not muxed
     issues: list[Issue] = field(default_factory=list)
     overrides: Overrides = field(default_factory=Overrides)  # what produced this plan; kept for replanning
-    profile: str = ""  # id of the profile whose rules made this plan (and whose checks validate it)
+    rule_set: str = ""  # id of the rule set whose rules made this plan (and whose checks validate it)
     inputs: JobInputs | None = None  # the files it was planned from; Load re-probes these and replans
+
+    @staticmethod
+    def upgrade_json(data: dict) -> dict:
+        """Plans saved before rule sets had their name: `profile` held the rule set's id."""
+        return {"rule_set": data["profile"], **data} if "profile" in data else data
 
     @property
     def dual_audio(self) -> bool:

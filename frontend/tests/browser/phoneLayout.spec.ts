@@ -14,7 +14,7 @@ async function phoneFixture(page: Page) {
     name: i === 0 ? LONG : `Show S01E0${i + 1}`,
     label: '',
     source: `D:\\Media\\Show\\Season 01\\Show.S01E0${i + 1}.mkv`,
-    profile: 'manual',
+    rule_set: 'manual',
     status,
     progress:
       status === 'running'
@@ -57,7 +57,7 @@ async function phoneFixture(page: Page) {
     compare: { encode: false, sample: false },
     spec: {
       id: job.id,
-      profile: 'manual',
+      rule_set: 'manual',
       inputs: { source: job.source, encode: null, subtitles: [], chapters: null, encode_state: '', audio: [] },
       video: {
         source_filter: 'ffms2',
@@ -109,7 +109,7 @@ async function phoneFixture(page: Page) {
     else if (/^\/api\/jobs\/job-\d+$/.test(path)) json = detail(jobs.find((job) => job.id === path.split('/')[3])!)
     else if (/^\/api\/jobs\/job-\d+\/log-snapshot$/.test(path)) json = { seq: 0, steps: [], lines: [] }
     else if (path === '/api/config/video-options/x265') json = { dashes: '--', options: [] }
-    else if (['/api/profiles', '/api/config/encoders', '/api/filter-presets'].includes(path)) json = []
+    else if (['/api/rule-sets', '/api/config/encoders', '/api/filter-presets'].includes(path)) json = []
     else return route.fulfill({ status: 404, json: { detail: `not mocked: ${path}` } })
     await route.fulfill({ json })
   })

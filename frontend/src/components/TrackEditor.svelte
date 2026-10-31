@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The full track editor, for profiles that follow it (track_editor, e.g. manual): the audio or
+  // The full track editor, for rule sets that follow it (track_editor, e.g. manual): the audio or
   // the subtitle tracks (one kind per tab) in output order. Drag a track by its handle (or use
   // the arrows) to reorder, untick it to leave it out, edit its title, language and flags, and
   // copy or encode each audio track, or burn one subtitle track into the video. Every change saves and
@@ -114,7 +114,7 @@
   const plan = $derived(job.plan)
   const tracks = $derived(job.tracks)
   const properties = $derived(
-    app.profiles.find((p) => p.id === job.profile)?.track_properties.filter((p) => p.kind === kind) ?? [],
+    app.ruleSets.find((p) => p.id === job.rule_set)?.track_properties.filter((p) => p.kind === kind) ?? [],
   )
 
   const isAudio = (t: Track): t is AudioTrack => 'codec' in t
@@ -168,12 +168,12 @@
       !t.copy &&
       !overrides.audio_track_ids.includes(t.id))
   const outPos = (t: Track) => (isAudio(t) ? plannedAudio.get(t.key)?.pos : plannedSubs.get(t.key))
-  // The track as the profile has it with no hand edit (a profile with its own rules, e.g. a group's,
+  // The track as the rule set has it with no hand edit (a rule set with its own rules, e.g. a group's,
   // titles, encodes and picks tracks itself): shown until changed, and changing back saves no override.
   const autoKept = (t: Track) => t.auto?.kept ?? true
   const autoTitle = (t: Track) => t.auto?.title ?? t.title
   const autoLanguage = (t: Track) => t.auto?.language ?? t.language
-  // Out of the output: left out by hand or by the profile, or burned into the video.
+  // Out of the output: left out by hand or by the rule set, or burned into the video.
   const isOff = (t: Track) => excluded(t) || burnKey === t.key || (!!plan && outPos(t) === undefined)
 
   // A copy of the overrides to change, in the editor's terms: an audio id list becomes
@@ -198,7 +198,7 @@
     else o.tracks[key] = ov
   }
 
-  // The order is saved once one is set (a track moved); until then the profile orders the tracks.
+  // The order is saved once one is set (a track moved); until then the rule set orders the tracks.
   function commit(o: Overrides, audio?: Track[], subs?: Track[]) {
     if (audio || subs || o.order) o.order = [...(audio ?? audioRows), ...(subs ?? subRows)].map((t) => t.key)
     save(o)
@@ -219,7 +219,7 @@
   }
 
   // Name the kept subtitles from their language and flags ("English (SDH)"), StaxRip's "Set names": the
-  // untitled ones, or all. A flag the profile doesn't offer is the track's own.
+  // untitled ones, or all. A flag the rule set doesn't offer is the track's own.
   const titleOf = (t: Track) => ovOf(t)?.title ?? autoTitle(t)
   const nameFlag = (t: SubTrack, key: 'forced' | 'hearing_impaired' | 'commentary') =>
     properties.some((p) => p.key === key) ? flagOn(t, key) : t[key]
@@ -257,7 +257,7 @@
     editTrack(t, (ov) => (ov.language = !v || v === autoLanguage(t) ? null : v))
 
   // Where a set value comes from: the last template set it for this track, or a hand edit
-  // (a template's value changed counts as one). Unset: as the profile has it, no mark.
+  // (a template's value changed counts as one). Unset: as the rule set has it, no mark.
   type Mark = 'template' | 'hand' | null
   const chosen = $derived(kind === 'audio' ? job.spec.audio_from_template : job.spec.subs_from_template)
   function mark(t: Track, get: (ov: TrackOverride | undefined) => unknown): Mark {
@@ -465,7 +465,7 @@
     drag = dropAt = null
   }
 
-  // Back to the profile's choices for this kind (the other tab's edits stay).
+  // Back to the rule set's choices for this kind (the other tab's edits stay).
   function reset() {
     const o = draft()
     const mine = new Set(rows.map((t) => t.key))
@@ -476,7 +476,7 @@
   }
 
   // Back to what the last template set for this kind: its tracks, copies and order; tracks it
-  // didn't decide (e.g. added files) go back to the profile's choices.
+  // didn't decide (e.g. added files) go back to the rule set's choices.
   function backToTemplate() {
     if (!chosen) return
     const tpl = $state.snapshot(chosen) as typeof chosen
@@ -843,7 +843,7 @@
             <Button variant="outline" onclick={backToTemplate}><LayoutTemplateIcon />Back to template</Button>
           </Tip>
         {/if}
-        <Tip text="Back to the profile's choices for these tracks">
+        <Tip text="Back to the rule set's choices for these tracks">
           <Button variant="outline" onclick={reset}><RefreshCwIcon />Reset</Button>
         </Tip>
       </div>

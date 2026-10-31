@@ -28,7 +28,7 @@ from videoforge.core.template import apply_subs
 from videoforge.core.video import burn
 from videoforge.core.video.script import build_script, script_parts
 from videoforge.core.video.settings import Crop, VideoSettings
-from videoforge.profiles.manual import ManualProfile
+from videoforge.rule_sets.manual import ManualRuleSet
 
 BURN = TrackOverride(burn=True)
 
@@ -44,26 +44,26 @@ def subs_issues(plan: Plan) -> list[Issue]:
 
 def test_the_burned_track_leaves_the_mux():
     en, fr = sub(F.SRT, "en", index=0), sub(F.PGS, "fr", index=1)
-    plan = plan_job(ManualProfile(), probed(en, fr), overrides=Overrides(tracks={"id:10": BURN}))
+    plan = plan_job(ManualRuleSet(), probed(en, fr), overrides=Overrides(tracks={"id:10": BURN}))
     assert plan.burn is en and [s.source.id for s in plan.subs] == [11]
     assert not subs_issues(plan)
 
     # An added file can be burned; a second marked one warns (the first, in source order, is burned).
     added = sub(F.ASS, "en", external="Movie.en.ass")
     ov = Overrides(tracks={"id:11": BURN, "ext:Movie.en.ass": BURN})
-    plan = plan_job(ManualProfile(), probed(en, fr, external=[added]), overrides=ov)
+    plan = plan_job(ManualRuleSet(), probed(en, fr, external=[added]), overrides=ov)
     assert plan.burn is fr and [s.source.id for s in plan.subs] == [10, -1]
     assert [i.code for i in subs_issues(plan)] == ["subs.burn_many"]
 
     # Only an encode burns: a reused one muxes the track as it is.
     plan = plan_job(
-        ManualProfile(), probed(en, fr, encode=Path("enc.mkv")), overrides=Overrides(tracks={"id:10": BURN})
+        ManualRuleSet(), probed(en, fr, encode=Path("enc.mkv")), overrides=Overrides(tracks={"id:10": BURN})
     )
     assert plan.burn is None and len(plan.subs) == 2
 
 
 def test_a_format_subtext_cant_draw_blocks():
-    plan = plan_job(ManualProfile(), probed(sub(F.TX3G, "en")), overrides=Overrides(tracks={"id:10": BURN}))
+    plan = plan_job(ManualRuleSet(), probed(sub(F.TX3G, "en")), overrides=Overrides(tracks={"id:10": BURN}))
     assert [(i.severity, i.code) for i in subs_issues(plan)] == [(Severity.BLOCK, "subs.burn_format")]
 
 
@@ -89,7 +89,7 @@ def test_text_is_drawn_after_the_crop_and_an_image_before_it():
 
 def test_a_source_track_is_extracted_with_the_index(tmp_path):
     src = tmp_path / "Movie.mkv"
-    job = JobSpec(inputs=JobInputs(src), profile="manual")
+    job = JobSpec(inputs=JobInputs(src), rule_set="manual")
     names = ("mkvmerge", "deezy", "dee", "truehdd", "qaac", "ffmpeg", "mkvextract", "vspipe")
     app = AppConfig(tools=Tools(**{n: n for n in names}))
     track = sub(F.ASS, index=3)
@@ -113,7 +113,7 @@ def test_a_source_track_is_extracted_with_the_index(tmp_path):
 def test_a_track_of_an_m2ts_is_copied_into_an_mks_for_mkvextract(tmp_path):
     """mkvextract reads Matroska only: from another container, mkvmerge copies the track out first."""
     src = tmp_path / "00005.m2ts"
-    job = JobSpec(inputs=JobInputs(src), profile="manual")
+    job = JobSpec(inputs=JobInputs(src), rule_set="manual")
     names = ("mkvmerge", "deezy", "dee", "truehdd", "qaac", "ffmpeg", "mkvextract", "vspipe")
     app = AppConfig(tools=Tools(**{n: n for n in names}))
     steps = index_steps(job, app, None, sub(F.PGS, index=4))
@@ -139,7 +139,7 @@ def test_a_templates_burn_rule_takes_the_first_track_it_matches():
 def test_source_burns_shift_but_standalone_files_do_not(tmp_path):
     from test_pipeline import APP
 
-    job = JobSpec(inputs=JobInputs(tmp_path / "source.mkv"), profile="manual")
+    job = JobSpec(inputs=JobInputs(tmp_path / "source.mkv"), rule_set="manual")
     video = VideoInfo(640, 360, start_ms=500)
     for fmt in (F.SRT, F.ASS, F.PGS, F.VOBSUB):
         steps = index_steps(job, APP, video, sub(fmt))
@@ -174,7 +174,7 @@ def test_real_burn_cue_uses_video_origin(tmp_path):
     src = tmp_path / "source.mkv"
     subprocess.run([app.tools.mkvmerge, "-o", str(src), str(cue)], check=True, capture_output=True)
     track = probe(src, app.tools.mkvmerge).subs[0]
-    job = JobSpec(inputs=JobInputs(src), profile="manual")
+    job = JobSpec(inputs=JobInputs(src), rule_set="manual")
     job.work_dir.mkdir()
     steps = index_steps(job, app, VideoInfo(640, 360, start_ms=500), track)
     for step in steps:
@@ -212,7 +212,7 @@ def test_editing_burn_inputs_invalidates_video_and_preview(tmp_path, two_pass, f
     def video_steps():
         return [
             s
-            for s in build_steps(job, plan, ManualProfile(), APP, tmp_path / "out.mkv").steps
+            for s in build_steps(job, plan, ManualRuleSet(), APP, tmp_path / "out.mkv").steps
             if s.id == "video" or s.id.startswith("video.")
         ]
 
@@ -229,7 +229,7 @@ def test_editing_burn_inputs_invalidates_video_and_preview(tmp_path, two_pass, f
 def test_vobsub_extract_records_both_files(tmp_path):
     from test_pipeline import APP
 
-    job = JobSpec(inputs=JobInputs(tmp_path / "source.mkv"), profile="manual")
+    job = JobSpec(inputs=JobInputs(tmp_path / "source.mkv"), rule_set="manual")
     track = sub(F.VOBSUB)
     extract = next(s for s in index_steps(job, APP, None, track) if s.id == "burn.extract")
     assert extract.outputs == (job.work_dir / "burn.10.idx", job.work_dir / "burn.10.sub")

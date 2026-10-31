@@ -1,4 +1,4 @@
-"""VideoForge: rule-based encode and mux job queue; each group's rules live in a profile."""
+"""VideoForge: rule-based encode and mux job queue; each group's rules live in a rule set."""
 
 
 def version() -> str:

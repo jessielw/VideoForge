@@ -24,7 +24,7 @@ def seed(client, tmp_path):
     settings = {
         "tools": {"x264": "custom-x264", "qaac": "custom-qaac"},
         "roots": [str(tmp_path)],
-        "profile": "manual",
+        "rule_set": "manual",
         "parallel_audio": 4,
         "delete_work_dir": True,
         "index_waits_for_disk": False,
@@ -122,7 +122,7 @@ def test_a_version_3_backup_has_no_quality_score_setting(tmp_path):
     with make_client(tmp_path) as client:
         seed(client, tmp_path)
         old = export(client)
-        assert old["version"] == 4 and old["settings"]["sample_quality"] is True
+        assert old["version"] == 5 and old["settings"]["sample_quality"] is True
         old["version"] = 3
         with pytest.raises(ValueError, match="missing or unknown fields"):
             read_configuration(old)  # version 3 had no sample_quality
@@ -130,6 +130,20 @@ def test_a_version_3_backup_has_no_quality_score_setting(tmp_path):
         assert read_configuration(old)["settings"]["sample_quality"] is False
         assert client.post("/api/configuration/import", json=old).json()["config"]["sample_quality"] is False
         assert client.app.state.queue.sample_quality is False
+
+
+def test_a_version_4_backup_names_the_rule_set_profile(tmp_path):
+    with make_client(tmp_path) as client:
+        seed(client, tmp_path)
+        old = export(client)
+        old["version"] = 4
+        for section in ("application", "settings"):
+            old[section] = {("profile" if k == "rule_set" else k): v for k, v in old[section].items()}
+        read = read_configuration(old)
+        assert read["application"]["rule_set"] == export(client)["application"]["rule_set"]
+        assert read["settings"]["rule_set"] == export(client)["settings"]["rule_set"]
+        assert "profile" not in read["settings"]
+        assert client.post("/api/configuration/import", json=old).status_code == 200
 
 
 def test_restore_empty_libraries_preserves_jobs_and_queue_bookkeeping(tmp_path):
@@ -155,7 +169,7 @@ def test_restore_empty_libraries_preserves_jobs_and_queue_bookkeeping(tmp_path):
     "location,value",
     [
         (("version",), True),
-        (("version",), 5),
+        (("version",), 6),
         (("subs_default",), {"rules": [], "others": "everything"}),
         (("settings", "parallel_audio"), True),
         (("settings", "parallel_audio"), 99),
@@ -192,18 +206,18 @@ def test_invalid_backup_is_rejected_without_partial_changes(tmp_path, location, 
         assert export(client) == before
 
 
-def test_missing_profiles_and_folders_are_previewed_and_can_be_restored(tmp_path):
+def test_missing_rule_sets_and_folders_are_previewed_and_can_be_restored(tmp_path):
     with make_client(tmp_path) as client:
         doc = export(client)
-        doc["settings"]["profile"] = "not-installed"
+        doc["settings"]["rule_set"] = "not-installed"
         doc["settings"]["roots"] = [str(tmp_path / "not-mounted")]
         result = client.post("/api/configuration/preview", json=doc)
         assert result.status_code == 200, result.text
         assert any("not-installed" in warning for warning in result.json()["warnings"])
         assert any("not-mounted" in warning for warning in result.json()["warnings"])
         assert client.post("/api/configuration/import", json=doc).status_code == 200
-        assert client.get("/api/config").json()["profile"] == "manual"
-        assert export(client)["settings"]["profile"] == "not-installed"
+        assert client.get("/api/config").json()["rule_set"] == "manual"
+        assert export(client)["settings"]["rule_set"] == "not-installed"
 
 
 def test_legacy_grouped_presets_and_deleted_defaults_export_cleanly(tmp_path):
@@ -243,15 +257,15 @@ def test_storage_rolls_back_libraries_and_settings_on_failure():
     store = Store(":memory:")
     try:
         store.save_preset("encoder", "original", {"crf": 18})
-        store.set_setting("profile", "manual")
+        store.set_setting("rule_set", "manual")
         store._db.execute(
             "CREATE TRIGGER reject_restore BEFORE INSERT ON settings WHEN NEW.key = 'fail' "
             "BEGIN SELECT RAISE(ABORT, 'forced failure'); END"
         )
         with pytest.raises(sqlite3.IntegrityError):
-            store.restore_configuration({"profile": "other", "fail": True}, {"encoder": {"new": {"crf": 22}}})
+            store.restore_configuration({"rule_set": "other", "fail": True}, {"encoder": {"new": {"crf": 22}}})
         assert store.presets("encoder") == {"original": {"crf": 18}}
-        assert store.get_setting("profile") == "manual"
+        assert store.get_setting("rule_set") == "manual"
     finally:
         store.close()
 

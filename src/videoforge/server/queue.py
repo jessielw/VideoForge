@@ -79,8 +79,8 @@ from videoforge.core.pipeline.sample import PERCENTS, finish, prepare_steps, sam
 from videoforge.core.pipeline.share import Sharing
 from videoforge.core.pipeline.steps import ProgressFn, StepProgress, run_steps
 from videoforge.core.plan_io import to_json
-from videoforge.core.profile import Profile
 from videoforge.core.record import JsonLines, RunRecorder, event
+from videoforge.core.rule_set import RuleSet
 from videoforge.core.template import Template, apply_audio, apply_subs, template_choice
 from videoforge.core.tools import versions as tool_versions
 from videoforge.core.video.script import ffms2_index
@@ -247,7 +247,7 @@ class JobQueue:
     def __init__(
         self,
         app: AppConfig,
-        profiles: Callable[[str], Profile],
+        rule_sets: Callable[[str], RuleSet],
         store: Store,
         events: EventHub,
         services: Services | None = None,
@@ -256,7 +256,7 @@ class JobQueue:
         bus: EventBus | None = None,
         records_dir: Path | None = None,
     ) -> None:
-        self.app, self.profiles, self.store, self.events = app, profiles, store, events
+        self.app, self.rule_sets, self.store, self.events = app, rule_sets, store, events
         self.services = services or Services()
         self.queue_events = queue_events  # every job's events in one stream (core/record.py)
         self.records_dir = records_dir  # where a deleted work folder's records go (app.delete_work_dir)
@@ -325,8 +325,8 @@ class JobQueue:
     def _queue_changed(self) -> None:
         self.events.publish("queue", **self.queue_state())
 
-    def profile(self, e: Entry) -> Profile:
-        return self.profiles(e.spec.profile)
+    def rule_set(self, e: Entry) -> RuleSet:
+        return self.rule_sets(e.spec.rule_set)
 
     def _attach(self, e: Entry) -> None:
         """Under the lock: e shares its source's lock with the other jobs on the source."""
@@ -374,7 +374,7 @@ class JobQueue:
     def add(
         self,
         found: Iterable[JobInputs],
-        profile_id: str,
+        rule_set_id: str,
         *,
         original_language: str | None = None,
         output_dir: Path | None = None,
@@ -384,12 +384,12 @@ class JobQueue:
         replace_existing: Iterable[str] = (),
         subs_default: TemplateSubs | None = None,
     ) -> tuple[list[Entry], list[str]]:
-        """One job per matched source, starting from the profile's video and mux defaults, or the template,
+        """One job per matched source, starting from the rule set's video and mux defaults, or the template,
         then the given settings; subs_default (Settings' subtitle rules) for a job its template sets none for
-        (unless the profile picks tracks by its own rules).
+        (unless the rule set picks tracks by its own rules).
         A source already in the queue is kept unless its exact job ID is explicitly replaced.
         Returns (new jobs, names skipped because they are busy)."""
-        profile = self.profiles(profile_id)
+        rule_set = self.rule_sets(rule_set_id)
         replacements = set(replace_existing)
         added, skipped = [], []
         with self._lock:
@@ -402,19 +402,19 @@ class JobQueue:
                     if not self.remove([existing.id]):
                         skipped.append(existing.spec.name)
                         continue
-                v, enc = profile.video_defaults()
+                v, enc = rule_set.video_defaults()
                 spec = JobSpec(
                     inputs=inputs,
-                    profile=profile_id,
+                    rule_set=rule_set_id,
                     overrides=Overrides(original_language=original_language),
                     video=v,
                     encoder=enc,
-                    mux=profile.mux_defaults(),
+                    mux=rule_set.mux_defaults(),
                     output_dir=output_dir,
                 )
                 if template is not None:
                     template.apply(spec)
-                if spec.subs_template is None and subs_default is not None and not profile.picks_tracks:
+                if spec.subs_template is None and subs_default is not None and not rule_set.picks_tracks:
                     spec.subs_template = _copy(subs_default)
                 if video:
                     spec.video = _copy(video)
@@ -511,15 +511,15 @@ class JobQueue:
 
     def _apply_tracks(self, e: Entry) -> bool:
         """Under the lock: a template's pending audio and subtitles become the job's overrides once its
-        tracks are known. A profile without a track editor chooses tracks by its own rules, so there
+        tracks are known. A rule set without a track editor chooses tracks by its own rules, so there
         they're dropped."""
         s = e.spec
         if (s.audio_template is None and s.subs_template is None) or e.probed is None:
             return False
-        if self.profile(e).track_editor:
+        if self.rule_set(e).track_editor:
             if s.audio_template is not None:
                 if s.audio_template.mode is AudioMatch.RULES and s.overrides.original_language is None:
-                    self._replan(e)  # rules can ask for the original language: pin the profile's guess first
+                    self._replan(e)  # rules can ask for the original language: pin the rule set's guess first
                 audio = e.probed.source.audio
                 s.overrides = apply_audio(s.overrides, s.audio_template, audio, s.overrides.original_language)
                 s.audio_from_template = template_choice(s.overrides, [track_key(t) for t in audio])
@@ -583,10 +583,10 @@ class JobQueue:
         if v is not None and e.spec.video.fit_resize(v.width, v.height, v.sar):
             self._save(e)
         try:
-            e.plan = plan_spec(e.spec, e.probed, self.profile(e), self.app.tools)
+            e.plan = plan_spec(e.spec, e.probed, self.rule_set(e), self.app.tools)
             if e.spec.overrides.original_language is None:  # pin the guess so it survives edits
                 e.spec.overrides.original_language = e.plan.original_language
-        except Exception as ex:  # a profile bug shouldn't take the queue down
+        except Exception as ex:  # a rule set bug shouldn't take the queue down
             e.plan, e.probe_error = None, f"Planning failed: {type(ex).__name__}: {ex}"
         self._refresh_outputs([e])
 
@@ -601,8 +601,8 @@ class JobQueue:
             if e.plan is None:
                 continue
             try:
-                path = job_output(e.spec, e.plan, self.profile(e))
-            except Exception as ex:  # a profile's naming bug shows when the job runs
+                path = job_output(e.spec, e.plan, self.rule_set(e))
+            except Exception as ex:  # a rule set's naming bug shows when the job runs
                 logger.debug("%s: no output path (%s)", e.spec.name, ex)
                 continue
             if path is not None:
@@ -669,7 +669,7 @@ class JobQueue:
         overrides: Overrides | None = None,
         output_dir: Path | None | _Unchanged = _Unchanged.VALUE,
         qpf: bool | None = None,
-        profile: str | None = None,
+        rule_set: str | None = None,
         inputs: JobInputs | None = None,
         mux: MuxSettings | None = None,
         container: str | None = None,
@@ -699,9 +699,9 @@ class JobQueue:
                 if not reprobe and e.probed is not None:
                     ext, issues = external_tracks(e.probed.source, inputs.subtitles)
                     e.probed = replace(e.probed, external_subs=ext, issues=issues)
-            if profile is not None and profile != s.profile:
-                self.profiles(profile)  # unknown -> KeyError
-                s.profile = profile
+            if rule_set is not None and rule_set != s.rule_set:
+                self.rule_sets(rule_set)  # unknown -> KeyError
+                s.rule_set = rule_set
             if template is not None:
                 template.apply(s)
             if video is not None:
@@ -851,7 +851,7 @@ class JobQueue:
         if e.plan is None or e.running:
             return []
         try:
-            return reuse_offers(e.spec, e.plan, self.profile(e), self.app, e.state.steps)
+            return reuse_offers(e.spec, e.plan, self.rule_set(e), self.app, e.state.steps)
         except (ToolError, OSError, ValueError) as ex:
             logger.warning("%s: no reuse offers (%s)", e.spec.name, ex)
             return []
@@ -1005,8 +1005,8 @@ class JobQueue:
         recorder = RunRecorder(
             e.spec,
             e.plan,
-            self.profile(e),
-            job_output(e.spec, e.plan, self.profile(e)),
+            self.rule_set(e),
+            job_output(e.spec, e.plan, self.rule_set(e)),
             queue_events=self.queue_events,
             versions=self._versions,
         )
@@ -1054,7 +1054,7 @@ class JobQueue:
             result = self.services.run(
                 e.spec,
                 e.plan,
-                self.profile(e),
+                self.rule_set(e),
                 self.app,
                 state=e.state,
                 log=log,
@@ -1451,7 +1451,7 @@ class JobQueue:
             with self._lock:
                 if e.plan is None:
                     raise ToolError("The job has no plan")
-                spec, plan, container = e.spec, e.plan, e.spec.container(self.profile(e))
+                spec, plan, container = e.spec, e.plan, e.spec.container(self.rule_set(e))
                 cancel, quality = self._index_cancel, self.sample_quality
             if cancel is None:
                 raise RuntimeError("index lane: no cancel event")

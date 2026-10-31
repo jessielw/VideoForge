@@ -66,9 +66,9 @@ async function fixture(page: Page, options: { installed?: boolean; enabled?: boo
     roots: [],
     roots_custom: false,
     default_roots: [],
-    profile: 'manual',
-    profile_default: 'manual',
-    profiles: [],
+    rule_set: 'manual',
+    rule_set_default: 'manual',
+    rule_sets: [],
     restart: [],
     index_waits_for_disk: true,
     sample_quality: false,
@@ -134,7 +134,7 @@ async function fixture(page: Page, options: { installed?: boolean; enabled?: boo
     }
     const responses: Record<string, unknown> = {
       '/api/jobs': [],
-      '/api/profiles': [],
+      '/api/rule-sets': [],
       '/api/health': { ok: true, version: 'test' },
       '/api/presets': { video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] },
       '/api/filter-presets': [],

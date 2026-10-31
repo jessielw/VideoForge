@@ -54,7 +54,7 @@ from videoforge.core.video.settings import Crop, Encoder, EncoderSettings, Sourc
 from videoforge.core.workdir import finished_files
 
 if TYPE_CHECKING:
-    from videoforge.core.profile import Profile
+    from videoforge.core.rule_set import RuleSet
 
 
 @dataclass(slots=True)
@@ -64,18 +64,18 @@ class JobSteps:
     encoded_audio: dict[int, Path] = field(default_factory=dict)  # plan.audio position -> file
 
 
-def output_path(spec: JobSpec, plan: Plan, profile: Profile, out_dir: Path) -> Path:
-    """The job's output in out_dir: its own name if it has one, else the profile's, with the job's label
+def output_path(spec: JobSpec, plan: Plan, rule_set: RuleSet, out_dir: Path) -> Path:
+    """The job's output in out_dir: its own name if it has one, else the rule set's, with the job's label
     (if any) after it: `<name>.<label>.mkv`."""
-    stem = (spec.output_name or profile.output_stem(plan)) + (f".{spec.label}" if spec.label else "")
-    return out_dir / (stem + MUXERS[spec.container(profile)].extension)
+    stem = (spec.output_name or rule_set.output_stem(plan)) + (f".{spec.label}" if spec.label else "")
+    return out_dir / (stem + MUXERS[spec.container(rule_set)].extension)
 
 
-def job_output(spec: JobSpec, plan: Plan, profile: Profile) -> Path | None:
+def job_output(spec: JobSpec, plan: Plan, rule_set: RuleSet) -> Path | None:
     """The file a job writes; None without an output folder."""
     if spec.output_dir is None:
         return None
-    return output_path(spec, plan, profile, spec.output_dir)
+    return output_path(spec, plan, rule_set, spec.output_dir)
 
 
 def mp4_chapters_step(plan: Plan, work: Path) -> Step | None:
@@ -562,7 +562,7 @@ def video_steps(
 def build_steps(
     spec: JobSpec,
     plan: Plan,
-    profile: Profile,
+    rule_set: RuleSet,
     app: AppConfig,
     output: Path,
     *,
@@ -571,7 +571,7 @@ def build_steps(
     if plan.source.path is None:
         raise ToolError("The plan has no source file")
     work, home = spec.work_dir, spec.job_dir
-    settings = profile.audio_settings()
+    settings = rule_set.audio_settings()
     encoded: dict[int, Path] = {}
     audio: list[Step] = []
     for pos, a in enumerate(plan.audio):
@@ -613,7 +613,7 @@ def build_steps(
             encode = replace(encode, inputs=(src, found))
             encode = replace(encode, refresh=partial(measured, encode))
         audio.append(encode)
-    container = spec.container(profile)
+    container = spec.container(rule_set)
     steps = video_steps(spec, plan, app, container, encoded) if spec.encodes_video else []
     video = plan.source.video
     timestamps = work / vfr.TIMESTAMPS if vfr.carries(video, container) and video is not None else None

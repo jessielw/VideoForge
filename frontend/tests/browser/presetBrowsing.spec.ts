@@ -8,7 +8,7 @@ import type {
   EncoderSettings,
   JobDetail,
   Presets,
-  Profile,
+  RuleSet,
   Template,
 } from '../../src/lib/types.ts'
 
@@ -57,7 +57,7 @@ async function fixture(page: Page, empty = false) {
       others: 'keep',
     },
   }
-  const profile: Profile = {
+  const ruleSet: RuleSet = {
     id: 'manual',
     name: 'Manual',
     default: true,
@@ -113,7 +113,7 @@ async function fixture(page: Page, empty = false) {
     name: 'Preset browsing',
     label: '',
     source: 'D:/Show.mkv',
-    profile: 'manual',
+    rule_set: 'manual',
     status: 'ready',
     progress: null,
     issue: '',
@@ -159,7 +159,7 @@ async function fixture(page: Page, empty = false) {
       subs: [],
       burn: null,
       issues: [],
-      profile: 'manual',
+      rule_set: 'manual',
     },
     output_name: null,
     color_args: null,
@@ -169,7 +169,7 @@ async function fixture(page: Page, empty = false) {
     tracks: { video: null, audio: [source], subs: [], has_chapters: false, count: 1 },
     spec: {
       id: 'presets',
-      profile: 'manual',
+      rule_set: 'manual',
       inputs: { source: 'D:/Show.mkv', encode: null, subtitles: [], chapters: null, encode_state: '', audio: [] },
       video: template.video,
       encoder: video,
@@ -223,9 +223,9 @@ async function fixture(page: Page, empty = false) {
     roots: [],
     roots_custom: false,
     default_roots: [],
-    profile: 'manual',
-    profile_default: 'manual',
-    profiles: [profile],
+    rule_set: 'manual',
+    rule_set_default: 'manual',
+    rule_sets: [ruleSet],
     restart: [],
     index_waits_for_disk: true,
     sample_quality: false,
@@ -253,7 +253,7 @@ async function fixture(page: Page, empty = false) {
     const responses: Record<string, unknown> = {
       '/api/jobs': [job],
       '/api/jobs/presets': job,
-      '/api/profiles': [profile],
+      '/api/rule-sets': [ruleSet],
       '/api/presets': presets,
       '/api/health': { ok: true, version: 'test' },
       '/api/filter-presets': [],

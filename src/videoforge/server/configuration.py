@@ -15,7 +15,7 @@ from videoforge.server.routes.presets import KINDS
 from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
 
 FORMAT = "videoforge.configuration"
-VERSION = 4  # 3: subs_default; 4: settings.sample_quality
+VERSION = 5  # 3: subs_default; 4: settings.sample_quality; 5: profile renamed rule_set
 MAX_BYTES = 20 * 1024 * 1024
 BASE_KEY = "configuration_base"
 SETTING_KEYS = tuple(f.name for f in fields(SavedSettings))
@@ -27,6 +27,13 @@ FOLDER_KEYS = ("output_dir", "last_dir")
 def _object(value: Any, keys: set[str], path: str) -> None:
     if not isinstance(value, dict) or set(value) != keys:
         raise ValueError(f"{path}: missing or unknown fields; check the VideoForge version")
+
+
+def _rule_set(value: Any) -> Any:
+    """A version 4 or older section: its `profile` is the rule set's id."""
+    if not isinstance(value, dict) or "profile" not in value:
+        return value
+    return {("rule_set" if k == "profile" else k): v for k, v in value.items()}
 
 
 def _name(value: Any, path: str, *, limit: int = MAX_NAME) -> str:
@@ -42,6 +49,8 @@ def read_configuration(doc: Any) -> dict[str, Any]:
         raise ValueError(f"Unsupported configuration version; this app supports version {VERSION}")
     keys = {"format", "version", "application", "settings", "folders", "presets", "template_defaults"}
     _object(doc, keys | {"subs_default"} if doc["version"] >= 3 else keys, "Configuration")
+    if doc["version"] < 5:
+        doc = doc | {"application": _rule_set(doc["application"]), "settings": _rule_set(doc["settings"])}
     # JSON-native values only, including plugin-owned settings; reject NaN/Infinity anywhere.
     json.dumps(doc, allow_nan=False)
     _object(doc["application"], {f.name for f in fields(AppConfig)}, "Application settings")

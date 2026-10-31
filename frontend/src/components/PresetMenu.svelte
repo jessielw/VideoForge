@@ -1,5 +1,5 @@
 <script lang="ts" generics="K extends PresetKind">
-  // Presets for a job's video processing or encoder: the profile's defaults (built in) and the
+  // Presets for a job's video processing or encoder: the rule set's defaults (built in) and the
   // user's own. Click one to load it; save the current settings under a name; delete your own.
   // The button names the preset the current settings match, if any.
   import { api } from '../lib/api'
@@ -15,14 +15,14 @@
 
   let {
     kind,
-    profile,
+    ruleSet,
     current,
     apply,
     disabled = false,
     align = 'left',
   }: {
     kind: K
-    profile: string
+    ruleSet: string
     current: PresetData<K>
     apply: (data: PresetData<K>) => void | Promise<void>
     disabled?: boolean
@@ -34,7 +34,7 @@
   let error = $state('')
   let busy = $state(false)
 
-  const choices = $derived(app.presetChoices(kind, profile))
+  const choices = $derived(app.presetChoices(kind, ruleSet))
   const userNames = $derived(new Set(app.presets[kind].map((p) => p.name)))
   const matched = $derived(choices.find((c) => same(c.data, current))?.name ?? null)
 
@@ -108,7 +108,7 @@
               >{#if c.name === matched}<CheckIcon class="size-3.5 text-primary" />{/if}</span
             >
             <span class="truncate">{c.name}</span>
-            {#if c.builtin}<span class="ml-auto shrink-0 text-xs text-muted-foreground">profile</span>{/if}
+            {#if c.builtin}<span class="ml-auto shrink-0 text-xs text-muted-foreground">rule set</span>{/if}
           </button>
           {#if !c.builtin}
             <Tip text="Delete {c.name}">

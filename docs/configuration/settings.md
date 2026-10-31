@@ -1,6 +1,6 @@
 # Settings and configuration files
 
-Use **Settings** for tool paths, the default profile, folder browser roots, indexing behavior, the test encode's [quality score](../usage/encoders.md#quality-score), parallel audio, priorities, cleanup, notifications, actions, and plugin switches. Changes save immediately to the application database.
+Use **Settings** for tool paths, the default rule set, folder browser roots, indexing behavior, the test encode's [quality score](../usage/encoders.md#quality-score), parallel audio, priorities, cleanup, notifications, actions, and plugin switches. Changes save immediately to the application database.
 
 Use **Settings → Encoder presets** to manage audio and video encoder libraries without opening a job or template. Both managers support folders, editing, duplication, import, and export, including the open draft's unsaved settings. Saving a library preset leaves existing jobs and templates as they are.
 
@@ -24,7 +24,7 @@ The command-line `plan`, `run`, and `validate` commands load file configuration;
 Use TOML literal strings for Windows paths so backslashes do not need escaping:
 
 ```toml
-profile = "manual"
+rule_set = "manual"
 
 [tools]
 mkvmerge = 'D:\Tools\MKVToolNix\mkvmerge.exe'

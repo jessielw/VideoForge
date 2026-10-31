@@ -17,27 +17,27 @@ from videoforge.core.workdir import FINISHED_NAME, finished_files, note_finished
 
 
 @pytest.mark.parametrize("keep", [False, True])
-def test_changed_output_is_neither_offered_nor_reused(profile, tmp_path, keep):
+def test_changed_output_is_neither_offered_nor_reused(rule_set, tmp_path, keep):
     plan = make_plan(tmp_path)
     job = video_job(plan, tmp_path)
     state = JobState()
-    run(job, plan, profile, state)
+    run(job, plan, rule_set, state)
     job.video_output.write_bytes(b"an interrupted replacement")
-    assert "video" not in offers(job, plan, profile, state)
+    assert "video" not in offers(job, plan, rule_set, state)
     if keep:
         state.keep = ["video"]  # even a choice made before the file changed
-    assert "x264" in run(job, plan, profile, state)
+    assert "x264" in run(job, plan, rule_set, state)
 
 
-def test_another_jobs_completed_output_is_not_current(profile, tmp_path):
+def test_another_jobs_completed_output_is_not_current(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     job = video_job(plan, tmp_path)
     state = JobState()
-    run(job, plan, profile, state)
+    run(job, plan, rule_set, state)
     job.video_output.write_bytes(b"another job's completed encode")
     note_finished(job.job_dir, "video", "other-settings", [job.video_output], 1)
-    assert not offers(job, plan, profile, state)["video"].current
-    assert "x264" in run(job, plan, profile, state)
+    assert not offers(job, plan, rule_set, state)["video"].current
+    assert "x264" in run(job, plan, rule_set, state)
 
 
 @pytest.mark.parametrize("changed_field", ["size", "mtime"])
@@ -60,25 +60,25 @@ def test_output_identity_survives_serialization(tmp_path, changed_field):
     assert not restored.outputs_match([output])
 
 
-def run(job, plan, profile, state):
+def run(job, plan, rule_set, state):
     runner = FakeRunner()
-    result = run_job(job, plan, profile, APP, state=state, runner=runner, prober=lambda *_: simulate_output(plan))
+    result = run_job(job, plan, rule_set, APP, state=state, runner=runner, prober=lambda *_: simulate_output(plan))
     assert result.status is JobStatus.DONE, result.error
     return tools_called(runner)
 
 
-def offers(job, plan, profile, state):
-    return {o.id: o for o in reuse_offers(job, plan, profile, APP, state.steps)}
+def offers(job, plan, rule_set, state):
+    return {o.id: o for o in reuse_offers(job, plan, rule_set, APP, state.steps)}
 
 
-def test_offers_by_section_and_whether_settings_match(profile, tmp_path):
+def test_offers_by_section_and_whether_settings_match(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     job = video_job(plan, tmp_path)
     state = JobState()
-    assert offers(job, plan, profile, state) == {}  # nothing made yet
-    run(job, plan, profile, state)
+    assert offers(job, plan, rule_set, state) == {}  # nothing made yet
+    run(job, plan, rule_set, state)
 
-    found = offers(job, plan, profile, state)
+    found = offers(job, plan, rule_set, state)
     assert list(found) == ["video", "audio.1", "audio.2"]
     assert all(o.current for o in found.values())
     assert found["video"].file == job.video_output and found["video"].label == "Video (x264)"
@@ -86,44 +86,44 @@ def test_offers_by_section_and_whether_settings_match(profile, tmp_path):
     assert found["video"].finished is not None
 
     job.video.crop = Crop(0, 140, 0, 140)  # new settings: the video is still offered, as made with others
-    found = offers(job, plan, profile, state)
+    found = offers(job, plan, rule_set, state)
     assert not found["video"].current and found["audio.1"].current
 
 
-def test_keep_reuses_a_video_made_with_other_settings(profile, tmp_path):
+def test_keep_reuses_a_video_made_with_other_settings(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     job = video_job(plan, tmp_path)
     state = JobState()
-    run(job, plan, profile, state)
+    run(job, plan, rule_set, state)
     (job.work_dir / "Show.S01E01.mkv.ffindex").write_bytes(b"index")  # what the real one leaves
     job.video.crop = Crop(0, 140, 0, 140)
 
     state.keep = ["video"]
     # the script is written again (and read for its frame rate); no encode, the same mux
-    assert run(job, plan, profile, state) == ["vspipe"]
+    assert run(job, plan, rule_set, state) == ["vspipe"]
     assert state.keep == []  # used up
-    assert offers(job, plan, profile, state)["video"].current  # adopted: today's settings now
+    assert offers(job, plan, rule_set, state)["video"].current  # adopted: today's settings now
 
     job.video.crop = Crop(0, 138, 0, 138)  # not kept: made again, as always
-    assert run(job, plan, profile, state) == ["vspipe", "x264", "mkvmerge"]
+    assert run(job, plan, rule_set, state) == ["vspipe", "x264", "mkvmerge"]
 
 
-def test_a_new_job_on_the_source_finds_the_finished_files(profile, tmp_path):
+def test_a_new_job_on_the_source_finds_the_finished_files(rule_set, tmp_path):
     from videoforge.core.job import OutputPolicy
 
     plan = make_plan(tmp_path)
     job = video_job(plan, tmp_path)
-    run(job, plan, profile, JobState())
+    run(job, plan, rule_set, JobState())
 
     fresh = JobState()  # e.g. removed and added again, or another label: no records of its own
-    found = offers(job, plan, profile, fresh)
+    found = offers(job, plan, rule_set, fresh)
     assert set(found) == {"video", "audio.1", "audio.2"} and all(o.current for o in found.values())
     fresh.keep = [s for o in found.values() for s in o.steps]
     job.output_policy = OutputPolicy.REPLACE  # replacing a different job's final output is explicit
-    assert "x264" not in run(job, plan, profile, fresh)
+    assert "x264" not in run(job, plan, rule_set, fresh)
 
     job.video_output.write_bytes(b"something else")  # changed since: not offered to a job without a record
-    assert "video" not in offers(job, plan, profile, JobState())
+    assert "video" not in offers(job, plan, rule_set, JobState())
 
 
 def test_finished_files_note(tmp_path):
@@ -153,22 +153,22 @@ def variant(job, plan, label, **changes):
     return other, other_plan
 
 
-def run_logged(job, plan, profile, state):
+def run_logged(job, plan, rule_set, state):
     runner, lines = FakeRunner(), []
     result = run_job(
-        job, plan, profile, APP, state=state, runner=runner, log=lines.append, prober=lambda *_: simulate_output(plan)
+        job, plan, rule_set, APP, state=state, runner=runner, log=lines.append, prober=lambda *_: simulate_output(plan)
     )
     assert result.status is JobStatus.DONE, result.error
     return tools_called(runner), lines
 
 
-def test_jobs_on_one_source_keep_their_own_folders_and_link_identical_encodes(profile, tmp_path):
+def test_jobs_on_one_source_keep_their_own_folders_and_link_identical_encodes(rule_set, tmp_path):
     """dubbed and subbed differ only in the mux: subbed links dubbed's video and audio encodes into its own folder
     (no encode); 720p resizes, so its video is made again in its own folder and dubbed's is left as it was."""
     plan = make_plan(tmp_path)
     dubbed, dubbed_plan = variant(video_job(plan, tmp_path), plan, "dubbed")
     dubbed_state = JobState()
-    tools, _ = run_logged(dubbed, dubbed_plan, profile, dubbed_state)
+    tools, _ = run_logged(dubbed, dubbed_plan, rule_set, dubbed_state)
     assert "x264" in tools and dubbed.job_dir == tmp_path / "Show.S01E01.mkv_tmp" / "dubbed"
     assert dubbed.video_output.parent == dubbed.job_dir and (dubbed.job_dir / "video.vpy").is_file()
     (dubbed.work_dir / "Show.S01E01.mkv.ffindex").write_bytes(
@@ -177,7 +177,7 @@ def test_jobs_on_one_source_keep_their_own_folders_and_link_identical_encodes(pr
 
     subbed, subbed_plan = variant(dubbed, dubbed_plan, "subbed")
     state = JobState()
-    tools, lines = run_logged(subbed, subbed_plan, profile, state)
+    tools, lines = run_logged(subbed, subbed_plan, rule_set, state)
     assert tools == ["python", "mkvmerge"]  # the indexer keeps the source's index; every encode is linked
     assert any("Video (x264): made by the job in dubbed/, reused" in line for line in lines)
     assert os.path.samefile(subbed.video_output, dubbed.video_output)
@@ -185,28 +185,28 @@ def test_jobs_on_one_source_keep_their_own_folders_and_link_identical_encodes(pr
     assert {"video", "audio.1", "audio.2"} <= set(state.steps)
     linked = finished_files(subbed.job_dir)[subbed.video_output.name]
     assert linked.portable and linked.portable == finished_files(dubbed.job_dir)[dubbed.video_output.name].portable
-    assert run_logged(subbed, subbed_plan, profile, state)[0] == []  # its own records now: nothing to do
+    assert run_logged(subbed, subbed_plan, rule_set, state)[0] == []  # its own records now: nothing to do
 
     small, small_plan = variant(dubbed, dubbed_plan, "720p")
     small.video.crop = Crop(0, 140, 0, 140)
-    tools, _ = run_logged(small, small_plan, profile, JobState())
+    tools, _ = run_logged(small, small_plan, rule_set, JobState())
     assert "x264" in tools and "qaac64" not in tools  # the audio is the same: linked
     assert not os.path.samefile(small.video_output, dubbed.video_output)
-    assert run_logged(dubbed, dubbed_plan, profile, dubbed_state)[0] == []  # dubbed's files are intact
+    assert run_logged(dubbed, dubbed_plan, rule_set, dubbed_state)[0] == []  # dubbed's files are intact
 
 
-def test_a_section_made_again_is_not_taken_from_another_job(profile, tmp_path):
+def test_a_section_made_again_is_not_taken_from_another_job(rule_set, tmp_path):
     plan = make_plan(tmp_path)
     dubbed, dubbed_plan = variant(video_job(plan, tmp_path), plan, "dubbed")
-    run_logged(dubbed, dubbed_plan, profile, JobState())
+    run_logged(dubbed, dubbed_plan, rule_set, JobState())
     subbed, subbed_plan = variant(dubbed, dubbed_plan, "subbed")
 
-    found = {o.id: o for o in reuse_offers(subbed, subbed_plan, profile, APP, {})}
+    found = {o.id: o for o in reuse_offers(subbed, subbed_plan, rule_set, APP, {})}
     assert found["video"].origin == "dubbed" and found["video"].current
     assert found["video"].file == dubbed.video_output
 
     state = JobState(redo=["video"])
-    tools, _ = run_logged(subbed, subbed_plan, profile, state)
+    tools, _ = run_logged(subbed, subbed_plan, rule_set, state)
     assert "x264" in tools and "qaac64" not in tools and state.redo == []
     assert not os.path.samefile(subbed.video_output, dubbed.video_output)
 

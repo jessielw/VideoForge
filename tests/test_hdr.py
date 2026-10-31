@@ -64,7 +64,7 @@ def test_hdr10plus_only_and_none():
 
 
 def test_profile_without_the_long_name():
-    """Only the codec string: the profile, no compatibility id."""
+    """Only the codec string: the rule set, no compatibility id."""
     mi = SimpleNamespace(hdr_format="Dolby Vision", hdr_format_profile="dvhe.05", hdr_format_settings="BL+RPU")
     assert from_mediainfo(mi) == VideoHdr(dv_profile=5, dv_layers="BL+RPU")
     assert VideoHdr(7, 6, dv_el="FEL").dv_name == "7.6 FEL"

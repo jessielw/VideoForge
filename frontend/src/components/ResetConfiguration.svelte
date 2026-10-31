@@ -33,7 +33,7 @@
       if (newJobs)
         drafts.write('new-jobs', {
           ...newJobs,
-          profile: '',
+          ruleSet: '',
           templateName: null,
           encoder: null,
           container: '',
@@ -46,11 +46,11 @@
         duration: 15_000,
       })
       await Promise.all([
-        api.profiles().then((profiles) => {
-          app.profiles = profiles
+        api.ruleSets().then((ruleSets) => {
+          app.ruleSets = ruleSets
         }),
         app.loadEncoders(),
-      ]).catch(() => toast.error('Reset done. Reload the page to refresh available profiles.'))
+      ]).catch(() => toast.error('Reset done. Reload the page to refresh available rule sets.'))
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {
@@ -104,7 +104,7 @@
         <Checkbox bind:checked={scopes.settings} disabled={busy} />
         <span
           >Settings<span class="block text-xs text-muted-foreground"
-            >Tool paths, folder choices, default profile, notifications, actions, plugin settings, and default subtitle
+            >Tool paths, folder choices, default rule set, notifications, actions, plugin settings, and default subtitle
             rules. Tools then need to be found on PATH or set again.</span
           ></span
         >

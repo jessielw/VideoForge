@@ -154,9 +154,9 @@ def test_malformed_and_oversized_files(tmp_path):
 
 def test_imported_built_in_defaults_get_a_distinct_name(tmp_path):
     with make_client(tmp_path) as client:
-        profile = client.get("/api/profiles").json()[0]
-        name = f"{profile['name']} defaults"
-        doc = bundle({"name": name, "data": profile["defaults"]["template"]})
+        rule_set = client.get("/api/rule-sets").json()[0]
+        name = f"{rule_set['name']} defaults"
+        doc = bundle({"name": name, "data": rule_set["defaults"]["template"]})
         assert client.post("/api/presets/templates/preview?keep_both=true", json=doc).json()["names"] == [f"{name} (2)"]
         assert client.post("/api/presets/templates/import?keep_both=true", json=doc).json()["names"] == [f"{name} (2)"]
 

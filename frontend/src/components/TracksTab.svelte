@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Audio or subtitle choices (one kind per tab): what the profile's rules picked, and per-job overrides
-  // (audio tracks and order, subtitle use / language / the profile's flags). Every change
+  // Audio or subtitle choices (one kind per tab): what the rule set's rules picked, and per-job overrides
+  // (audio tracks and order, subtitle use / language / the rule set's flags). Every change
   // replans on the server; the output columns always show what the rules now produce.
   import { emptyOverride, isEmpty } from '../lib/format'
   import { app } from '../lib/state.svelte'
@@ -31,7 +31,7 @@
   const plan = $derived(job.plan)
   const tracks = $derived(job.tracks)
   const flags = $derived(
-    app.profiles.find((p) => p.id === job.profile)?.track_properties.filter((t) => t.kind === 'sub') ?? [],
+    app.ruleSets.find((p) => p.id === job.rule_set)?.track_properties.filter((t) => t.kind === 'sub') ?? [],
   )
 
   function copy(): Overrides {

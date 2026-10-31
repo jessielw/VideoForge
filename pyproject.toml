@@ -31,10 +31,10 @@ Documentation = "https://jessielw.github.io/VideoForge/"
 Source = "https://github.com/jessielw/VideoForge"
 Issues = "https://github.com/jessielw/VideoForge/issues"
 
-# Profiles (the rules a job is planned with). A group's profile is its own
+# Rule sets (the rules a job is planned with). A group's rule set is its own
 # package that adds an entry to this group.
-[project.entry-points."videoforge.profiles"]
-manual = "videoforge.profiles.manual:ManualProfile"
+[project.entry-points."videoforge.rule_sets"]
+manual = "videoforge.rule_sets.manual:ManualRuleSet"
 
 [project.optional-dependencies]
 desktop = [

@@ -83,9 +83,9 @@ def test_missing_fields_use_defaults():
 
 
 def test_v1_file_is_upgraded(tmp_path):
-    """v1: forced/sdh/dub were SubOverride fields under overrides.subs, and profile could be missing."""
+    """v1: forced/sdh/dub were SubOverride fields under overrides.subs, and rule set could be missing."""
     data = plan_to_dict(aot_plan())
-    del data["profile"]
+    del data["rule_set"]
     data["overrides"] = {
         "original_language": "ja",
         "audio_track_ids": [1, 2],
@@ -94,7 +94,7 @@ def test_v1_file_is_upgraded(tmp_path):
     out = tmp_path / "plan.json"
     out.write_text(json.dumps({"version": 1, "plans": [data]}), encoding="utf-8")
     (plan,) = load_plans(out)
-    assert plan.profile == ""  # v1 had no profile; the caller picks the default
+    assert plan.rule_set == ""  # v1 had no rule set; the caller picks the default
     assert plan.overrides.tracks == {"id:11": TrackOverride(language="fr-CA", flags={"forced": False, "dub": True})}
     assert plan.overrides.audio_track_ids == [1, 2]
 

@@ -252,7 +252,7 @@ def test_several_presets_delete_at_once(tmp_path):
         presets = client.post("/api/presets/delete", json={"kind": "template", "names": names}).json()
         assert (
             presets["template"] == [] and presets["template_defaults"] == {}
-        )  # the default goes back to the profile's
+        )  # the default goes back to the rule set's
         encoder = presets["encoder"][0]["name"]
         assert client.post("/api/presets/delete", json={"kind": "encoder", "names": [encoder]}).json()["encoder"] == []
         assert client.post("/api/presets/delete", json={"kind": "nope", "names": []}).status_code == 404

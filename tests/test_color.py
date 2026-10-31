@@ -150,7 +150,7 @@ def test_effective_hdr_range_matches_encoder_default():
 
 
 @pytest.mark.parametrize("container", ["mkv", "mp4"])
-def test_pipeline_mux_uses_effective_color(tmp_path, profile, container):
+def test_pipeline_mux_uses_effective_color(tmp_path, rule_set, container):
     from test_pipeline import APP, make_plan, video_job
 
     from videoforge.core.execute.mux import MuxSettings
@@ -162,7 +162,7 @@ def test_pipeline_mux_uses_effective_color(tmp_path, profile, container):
     plan.source.video.color = VideoColor("bt709", "bt709", "bt709", "limited")
     plan.encode_path = job.video_output
     job.mux = MuxSettings(container=container)
-    mux = build_steps(job, plan, profile, APP, tmp_path / f"out.{container}").steps[-1].argvs[0]
+    mux = build_steps(job, plan, rule_set, APP, tmp_path / f"out.{container}").steps[-1].argvs[0]
     if container == "mkv":
         assert mux[mux.index("--colour-primaries") + 1] == "0:9"
         assert mux[mux.index("--colour-range") + 1] == "0:2"

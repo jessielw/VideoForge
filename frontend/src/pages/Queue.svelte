@@ -490,11 +490,11 @@
     })
   }
 
-  // A template (by name) for the whole batch, from the first job's profile's choices.
+  // A template (by name) for the whole batch, from the first job's rule set's choices.
   let batchTemplate = $state('')
-  const batchTemplates = $derived(batchSource ? app.presetChoices('template', batchSource.profile) : [])
+  const batchTemplates = $derived(batchSource ? app.presetChoices('template', batchSource.rule_set) : [])
   const picked = $derived(batchTemplates.find((c) => c.name === batchTemplate) ?? batchTemplates[0])
-  const batchContainers = $derived(app.profiles.find((p) => p.id === batchSource?.profile)?.containers ?? [])
+  const batchContainers = $derived(app.ruleSets.find((p) => p.id === batchSource?.rule_set)?.containers ?? [])
 
   async function applyTemplate() {
     if (!picked) return
@@ -1096,7 +1096,7 @@
               </Card.Root>
             {/if}
             <Card.Root class="p-4">
-              <EncoderPanel profile={batchSource.profile} value={batchSource.spec.encoder} onchange={applyEncoder} />
+              <EncoderPanel ruleSet={batchSource.rule_set} value={batchSource.spec.encoder} onchange={applyEncoder} />
             </Card.Root>
             <Card.Root class="flex-row items-center gap-3 p-4">
               <span class="text-sm">

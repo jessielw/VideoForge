@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import type { JobDetail, Overrides, Profile, SubTrack } from '../../src/lib/types.ts'
+import type { JobDetail, Overrides, RuleSet, SubTrack } from '../../src/lib/types.ts'
 
 const sub = (id: number, language: string, title: string, flags: Partial<SubTrack> = {}): SubTrack => ({
   key: `id:${id}`,
@@ -58,7 +58,7 @@ async function fixture(page: Page) {
     name: 'Subtitle names',
     label: '',
     source: 'D:/Show.mkv',
-    profile: 'manual',
+    rule_set: 'manual',
     status: 'ready',
     progress: null,
     issue: '',
@@ -95,7 +95,7 @@ async function fixture(page: Page) {
       })),
       burn: null,
       issues: [],
-      profile: 'manual',
+      rule_set: 'manual',
     },
     output_name: null,
     color_args: null,
@@ -105,7 +105,7 @@ async function fixture(page: Page) {
     tracks: { video: null, audio: [], subs, has_chapters: false, count: 4 },
     spec: {
       id: 'names',
-      profile: 'manual',
+      rule_set: 'manual',
       inputs: { source: 'D:/Show.mkv', encode: null, subtitles: [], chapters: null, encode_state: '', audio: [] },
       video,
       encoder,
@@ -140,7 +140,7 @@ async function fixture(page: Page) {
       label: '',
     },
   }
-  const profile: Profile = {
+  const ruleSet: RuleSet = {
     id: 'manual',
     name: 'Manual',
     default: true,
@@ -166,7 +166,7 @@ async function fixture(page: Page) {
     const responses: Record<string, unknown> = {
       '/api/jobs': [job],
       '/api/jobs/names': job,
-      '/api/profiles': [profile],
+      '/api/rule-sets': [ruleSet],
       '/api/presets': { video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] },
       '/api/health': { ok: true, version: 'test' },
       '/api/filter-presets': [],

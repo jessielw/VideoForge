@@ -396,7 +396,7 @@ def mp4box_command(
 
 @dataclass(slots=True)
 class MuxSettings:
-    """A job's muxer: container ("" = the profile's), extra arguments and MKV PGS compression."""
+    """A job's muxer: container ("" = the rule set's), extra arguments and MKV PGS compression."""
 
     container: str = ""
     extra: str = ""

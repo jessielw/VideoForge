@@ -299,7 +299,7 @@ plugin = Plugin("Example", setup=setup)
 def test_old_backups_upgrade_and_management_is_not_transferable(tmp_path):
     with make_client(tmp_path) as client:
         bundle = client.get("/api/configuration/export").json()
-        assert bundle["version"] == 4
+        assert bundle["version"] == 5
         bundle["version"] = 1
         del bundle["settings"]["plugin_settings"], bundle["settings"]["sample_quality"], bundle["subs_default"]
         response = client.post("/api/configuration/import", json=bundle)
@@ -332,7 +332,7 @@ plugin = Plugin("Example", version="1.0", on_job_started=event, on_index_finishe
     with make_client(tmp_path) as client:
         assert client.post("/api/plugins/import?revision=absent", content=raw).status_code == 200
     with make_client(tmp_path) as client:
-        spec = JobSpec(id="one", profile="manual", inputs=JobInputs(source=tmp_path / "source.mkv"))
+        spec = JobSpec(id="one", rule_set="manual", inputs=JobInputs(source=tmp_path / "source.mkv"))
         for event in (
             JobStarted(spec, None),
             IndexFinished(spec),
@@ -450,7 +450,7 @@ def test_each_plugin_gets_independent_snapshots_and_slow_handlers_do_not_block(t
     def observe(event, _ctx):
         seen.append(event.spec.label)
 
-    spec = JobSpec(id="one", profile="manual", inputs=JobInputs(source=tmp_path / "source.mkv"))
+    spec = JobSpec(id="one", rule_set="manual", inputs=JobInputs(source=tmp_path / "source.mkv"))
     report = PluginReport(
         loaded=(
             LoadedPlugin("slow", Plugin("Slow", on_job_started=mutate), ""),
@@ -489,7 +489,7 @@ def test_four_slots_order_callback_failure_and_failed_setup(tmp_path):
         )
     )
     host = PluginHost(report, bus, data_dir=tmp_path)
-    spec = JobSpec(id="one", profile="manual", inputs=JobInputs(source=tmp_path / "source.mkv"))
+    spec = JobSpec(id="one", rule_set="manual", inputs=JobInputs(source=tmp_path / "source.mkv"))
     for event in (
         JobStarted(spec, None),
         IndexFinished(spec),

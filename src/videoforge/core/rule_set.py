@@ -1,9 +1,9 @@
-"""Profiles: one group's rules on top of the shared engine.
+"""Rule sets: one group's rules on top of the shared engine.
 
-The engine finds, probes, encodes, muxes and runs jobs. A profile decides what
+The engine finds, probes, encodes, muxes and runs jobs. A rule set decides what
 goes into the output: which tracks, copy or encode, titles, flags, the container,
 whether external subtitles are taken, and how the finished file is checked.
-Implementations live in videoforge.profiles (the core never imports them).
+Implementations live in videoforge.rule_sets (the core never imports them).
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from videoforge.core.models import AudioTrack, Issue, Overrides, Plan, SourceInf
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
 
 
-class Profile(ABC):
+class RuleSet(ABC):
     id: ClassVar[str]
     name: ClassVar[str]
     container: ClassVar[str] = "mkv"  # a key of core.execute.mux.MUXERS
@@ -31,9 +31,9 @@ class Profile(ABC):
     track_properties: ClassVar[tuple[TrackProperty, ...]] = ()
     # True: the plan follows the user's track order (Overrides.order), titles and per-track audio
     # encodes (TrackOverride.action/bitrate_kbps/layout), so the UI offers the full track editor.
-    # TrackOverride.exclude False keeps a track the profile's own choice leaves out.
+    # TrackOverride.exclude False keeps a track the rule set's own choice leaves out.
     track_editor: ClassVar[bool] = False
-    # True: the profile picks the output tracks by its own rules (e.g. a group's spec), so Settings'
+    # True: the rule set picks the output tracks by its own rules (e.g. a group's spec), so Settings'
     # default subtitle rules leave its new jobs alone; a template's rules, picked for the job, still apply.
     picks_tracks: ClassVar[bool] = False
 
@@ -62,7 +62,7 @@ class Profile(ABC):
         return []
 
     def detected_flags(self, track: AudioTrack | SubTrack) -> dict[str, bool]:
-        """track_properties values as the profile reads them before overrides (the GUI's starting values)."""
+        """track_properties values as the rule set reads them before overrides (the GUI's starting values)."""
         return {}
 
     def output_stem(self, plan: Plan) -> str:
