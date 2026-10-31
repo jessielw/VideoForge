@@ -142,7 +142,8 @@
     {job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}
   </div>
 {:else}
-  <fieldset disabled={!editable} class="space-y-6">
+  <!-- min-w-0: a fieldset is as wide as its widest content by default, so a long title ran past the panel. -->
+  <fieldset disabled={!editable} class="min-w-0 space-y-6">
     <div class="flex flex-wrap items-center gap-3">
       <label class="flex items-center gap-2 text-sm text-muted-foreground">
         Original language
@@ -186,8 +187,8 @@
                 >
                 <td>{audioLabel(t)}</td>
                 <td>{t.language}</td>
-                <td class="max-w-48 truncate" title={t.title}>{t.title}</td>
-                <td>
+                <td class="wrap-anywhere">{t.title}</td>
+                <td class="wrap-anywhere">
                   {#if out}
                     {out.pos + 1}. {out.a.title}
                     <span class="text-xs text-muted-foreground"
@@ -240,7 +241,7 @@
                     onCheckedChange={(v) => editTrack(t.key, (o) => (o.exclude = v ? null : true))}
                   />
                 </td>
-                <td class="max-w-56 truncate" title={t.external_path ?? t.title}>
+                <td class="wrap-anywhere" title={t.external_path ?? undefined}>
                   {t.external_path ? basename(t.external_path) : `#${t.id}${t.title ? ` · ${t.title}` : ''}`}
                 </td>
                 <td>{t.format}</td>
@@ -265,7 +266,7 @@
                     />
                   </td>
                 {/each}
-                <td>
+                <td class="wrap-anywhere">
                   {#if out}
                     {out.pos + 1}. {out.s.title}
                     <span class="text-xs text-muted-foreground">

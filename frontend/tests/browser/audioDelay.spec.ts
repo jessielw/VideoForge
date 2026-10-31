@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import type { AudioTrack, JobDetail, Overrides, Profile } from '../../src/lib/types.ts'
 
-async function fixture(page: Page, delay: number, correction = 0) {
+async function fixture(page: Page, delay: number, correction = 0, title = '', trackEditor = true) {
   const errors: string[] = []
   const saves: Overrides[] = []
   page.on('pageerror', (error) => errors.push(error.message))
@@ -12,7 +12,7 @@ async function fixture(page: Page, delay: number, correction = 0) {
     codec: 'eac3',
     layout: '2.0',
     language: 'en',
-    title: '',
+    title,
     default: true,
     forced: false,
     hearing_impaired: false,
@@ -157,7 +157,7 @@ async function fixture(page: Page, delay: number, correction = 0) {
     container: 'mkv',
     containers: [{ id: 'mkv', label: 'MKV', extension: '.mkv', tool: 'mkvmerge' }],
     external_subtitles: true,
-    track_editor: true,
+    track_editor: trackEditor,
     track_properties: [],
     defaults: {
       video: job.spec.video,
@@ -239,3 +239,18 @@ test('existing saved corrections retain their timing and can return to the detec
   await expect(delayInput).toHaveValue('24')
   expect(errors).toEqual([])
 })
+
+for (const trackEditor of [true, false]) {
+  test(`a long track title wraps instead of widening the ${trackEditor ? 'track editor' : 'tracks tab'}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 720 })
+    const title = `${'Commentary with the director and cast '.repeat(8)}${'x'.repeat(200)}`
+    const { errors } = await fixture(page, 0, 0, title, trackEditor)
+    const text = page.getByText(title).first()
+    await expect(text).toBeVisible()
+    const bounds = await text.boundingBox()
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1024)
+    expect(errors).toEqual([])
+  })
+}

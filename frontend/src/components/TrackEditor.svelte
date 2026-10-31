@@ -532,7 +532,7 @@
         >{pos === undefined ? '–' : pos + 1}</span
       >
       <div class="min-w-0 flex-1">
-        <div class="truncate text-sm {off ? 'text-muted-foreground line-through' : ''}" title={t.title}>
+        <div class="text-sm wrap-anywhere {off ? 'text-muted-foreground line-through' : ''}">
           <span class="font-medium">{sourceLabel(t)}</span>
           <span class="text-muted-foreground">· {t.language}{t.title ? ` · ${t.title}` : ''}</span>
         </div>
@@ -788,7 +788,8 @@
     {job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}
   </div>
 {:else}
-  <fieldset disabled={!editable} class="max-w-5xl space-y-4">
+  <!-- min-w-0: a fieldset is as wide as its widest content by default, so a long title ran past the panel. -->
+  <fieldset disabled={!editable} class="max-w-5xl min-w-0 space-y-4">
     <div class="flex flex-wrap items-center gap-3">
       <label class="flex items-center gap-2 text-sm text-muted-foreground">
         Original language
