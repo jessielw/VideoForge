@@ -39,6 +39,16 @@
 
   const navCollapsed = $derived(layout.navCollapsed || layout.small)
   const running = $derived(app.jobs.find((j) => j.status === 'running'))
+
+  // The tab's title follows the running job, so a background tab shows how far the queue is.
+  $effect(() => {
+    if (!running) {
+      document.title = 'VideoForge'
+      return
+    }
+    const pct = running.progress ? `${Math.floor(running.progress.overall * 100)}% · ` : ''
+    document.title = `${app.queue.paused ? 'Paused · ' : ''}${pct}${running.name} · VideoForge`
+  })
 </script>
 
 <ModeWatcher defaultMode="system" modeStorageKey="videoforge.mode" />

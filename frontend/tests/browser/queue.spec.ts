@@ -195,6 +195,31 @@ test('deep links reveal jobs beyond page one; shrinking a live result clamps its
   expect(fixture.errors).toEqual([])
 })
 
+test('the tab title follows the running job', async ({ page }) => {
+  const fixture = await queueFixture(page, 3, ['ready'])
+  await expect(page).toHaveTitle('VideoForge')
+  fixture.jobs[1].status = 'running'
+  fixture.jobs[1].progress = {
+    step: 'Encode video (x265)',
+    index: 2,
+    total: 5,
+    fraction: 0.5,
+    overall: 0.426,
+    reused: false,
+    fps: 24,
+    eta: 600,
+    elapsed: 900,
+    left: 1200,
+  }
+  fixture.refresh()
+  await expect(page).toHaveTitle('42% · Episode 00001 · VideoForge')
+  fixture.jobs[1].status = 'done'
+  fixture.jobs[1].progress = null
+  fixture.refresh()
+  await expect(page).toHaveTitle('VideoForge')
+  expect(fixture.errors).toEqual([])
+})
+
 test('a test encode shows its quality score only when it has one', async ({ page }, testInfo) => {
   const result: NonNullable<JobDetail['sample']> = {
     percent: 5,
