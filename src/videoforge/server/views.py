@@ -8,6 +8,7 @@ from typing import Any
 
 from videoforge.core.job import JobStatus, track_defaults
 from videoforge.core.models import AudioTrack, Issue, Severity, SubTrack, track_key, with_copies
+from videoforge.core.pipeline import crfsearch
 from videoforge.core.pipeline.build import indexed, output_path
 from videoforge.core.pipeline.sample import MKV, read_result, sample_dir, sample_key
 from videoforge.core.plan_io import to_json
@@ -73,6 +74,8 @@ def summary(e: Entry) -> dict[str, Any]:
         "index_held": e.index_held,  # waiting in the lane while an encode reads its disk
         "sample_waiting": e.sample_percent is not None and not e.sampling,  # in the lane for a test encode
         "sample_error": e.sample_error,
+        "searching": e.search is not None,  # the lane's test encode is a CRF search
+        "search_error": e.search_error,
         "audio": [f"{a.title} ({a.language})" for a in e.plan.audio] if e.plan else [],
         "subs": len(e.plan.subs) if e.plan else 0,
     }
@@ -90,6 +93,7 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     out["color_args"] = None  # the source's colour flags for this encoder (added unless source_color is off)
     out["target"] = None  # where a 2-pass target size goes, and the bitrate it leaves the video
     out["sample"] = None  # the last test encode (core/pipeline/sample.py)
+    out["search"] = None  # the last CRF search, or the one running (core/pipeline/crfsearch.py)
     # What the Video tab can compare the script's frames with: the encoded output (a done run's) or the sample.
     out["compare"] = {"encode": encode_compare(e) is not None, "sample": False}
     if e.plan is not None:
@@ -114,6 +118,8 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
                 "file": str(sample_dir(e.spec) / MKV),
             }
             out["compare"]["sample"] = True
+        if e.spec.encodes_video and (found := crfsearch.read_result(e.spec)) is not None:
+            out["search"] = found.to_json() | {"current": found.key == crfsearch.search_key(e.spec, e.plan)}
     if e.probed is not None:
         src = e.probed.source
         tracks = [*src.audio, *e.probed.external_audio, *src.subs, *e.probed.external_subs]

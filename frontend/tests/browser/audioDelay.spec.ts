@@ -49,6 +49,8 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
     index_held: false,
     sample_waiting: false,
     sample_error: '',
+    searching: false,
+    search_error: '',
     audio: [],
     subs: 0,
     issues: [],
@@ -88,6 +90,7 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
     color_args: null,
     target: null,
     sample: null,
+    search: null,
     compare: { encode: false, sample: false },
     tracks: { video: null, audio: [track], subs: [], has_chapters: false, count: 1 },
     spec: {

@@ -11,6 +11,7 @@
   import type { CommandStep, JobDetail } from '../lib/types'
   import EncoderPanel from './EncoderPanel.svelte'
   import SampleCard from './SampleCard.svelte'
+  import CrfSearchCard from './CrfSearchCard.svelte'
   import { videoView } from '../lib/videoView.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
@@ -274,6 +275,11 @@
                   Object.assign(v, { compare: 'sample', shows: 'out', panel: 'settings' })
                   tab = 'video'
                 }}
+              />
+              <CrfSearchCard
+                {job}
+                {editable}
+                onapply={(crf) => job && save({ encoder: { ...job.spec.encoder, crf } })}
               />
             {/if}
             <span class="section-label">Commands this job runs</span>

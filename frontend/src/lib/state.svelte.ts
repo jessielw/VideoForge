@@ -214,24 +214,25 @@ class AppState {
 
   async refreshJobs(): Promise<void> {
     const before = new Map(this.jobs.map((j) => [j.id, j.status]))
+    const searched = new Set(this.jobs.filter((j) => j.searching).map((j) => j.id))
     this.jobs = await api.jobs()
     keepVideoViews(this.jobs.map((j) => j.id))
     for (const j of this.jobs) {
       if (before.get(j.id) === 'running' && j.status !== 'running') this.#finished(j)
       if (before.get(j.id) === 'indexing' && j.status !== 'indexing' && j.index_error)
         toast.error(`${j.name}: indexing failed`, { description: j.index_error })
-      if (before.get(j.id) === 'sampling' && j.status !== 'sampling') this.#sampled(j)
+      if (before.get(j.id) === 'sampling' && j.status !== 'sampling') this.#sampled(j, searched.has(j.id))
     }
   }
 
-  // A toast when a test encode ends: its result is on the job's Encoder tab.
-  #sampled(job: JobSummary): void {
+  // A toast when a test encode or a CRF search ends: its result is on the job's Encoder tab.
+  #sampled(job: JobSummary, search = false): void {
     const open = { label: 'Open', onClick: () => (location.hash = `#/queue/${encodeURIComponent(job.id)}`) }
-    if (this.#samplesStopped.delete(job.id)) toast.info(`${job.name}: test encode stopped`)
-    else if (job.sample_error)
-      toast.error(`${job.name}: test encode failed`, { description: job.sample_error, action: open })
-    else
-      toast.success(`${job.name}: test encode done`, { description: 'Its result is on the Encoder tab.', action: open })
+    const what = search ? 'CRF search' : 'test encode'
+    const error = search ? job.search_error : job.sample_error
+    if (this.#samplesStopped.delete(job.id)) toast.info(`${job.name}: ${what} stopped`)
+    else if (error) toast.error(`${job.name}: ${what} failed`, { description: error, action: open })
+    else toast.success(`${job.name}: ${what} done`, { description: 'Its result is on the Encoder tab.', action: open })
   }
 
   // A toast when a run ends: done, or failed / invalid / cancelled with its first issue.

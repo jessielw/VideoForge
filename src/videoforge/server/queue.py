@@ -72,12 +72,13 @@ from videoforge.core.models import (
     track_key,
 )
 from videoforge.core.notify import Sender, send as notify_send
+from videoforge.core.pipeline import crfsearch
 from videoforge.core.pipeline.build import auto_crop, index_steps, job_output
 from videoforge.core.pipeline.reuse import ReuseOffer, reuse_offers
 from videoforge.core.pipeline.run import missing_inputs, run_job
 from videoforge.core.pipeline.sample import PERCENTS, finish, prepare_steps, sample_steps
 from videoforge.core.pipeline.share import Sharing
-from videoforge.core.pipeline.steps import ProgressFn, StepProgress, run_steps
+from videoforge.core.pipeline.steps import ProgressFn, Step, StepProgress, run_steps
 from videoforge.core.plan_io import to_json
 from videoforge.core.record import JsonLines, RunRecorder, event
 from videoforge.core.rule_set import RuleSet
@@ -161,6 +162,8 @@ class Entry:
     sample_percent: int | None = None  # in the lane for a test encode of this much of the video
     sampling: bool = False  # the lane runs its test encode (indexed by now: the preview opens)
     sample_error: str = ""
+    search: crfsearch.Target | None = None  # the lane's sample is a CRF search for it (core/pipeline/crfsearch.py)
+    search_error: str = ""
     # Held by whatever may build the source's index: the index lane, auto-crop, and a preview request
     # for a clip the preview worker doesn't hold yet. Two processes never index one source at once.
     # Every job on the source shares it (JobQueue._attach): they share the work folder.
@@ -1237,21 +1240,28 @@ class JobQueue:
         self._queue_changed()
         return taken
 
-    def sample(self, job_id: str, percent: int) -> bool:
+    def sample(self, job_id: str, percent: int, search: crfsearch.Target | None = None) -> bool:
         """A test encode of the job (core/pipeline/sample.py): first in the index lane, which indexes it if it
         has to, then encodes percent of the video. The job is locked meanwhile, but its preview opens once it's
-        indexed (one waiting in the lane moves up). False for a job that reuses an encode, has no plan yet, or is
-        queued, running or being indexed."""
+        indexed (one waiting in the lane moves up). With search, a CRF search for that target instead
+        (core/pipeline/crfsearch.py; ValueError for a job that doesn't encode at a CRF). False for a job that
+        reuses an encode, has no plan yet, or is queued, running or being indexed."""
         if percent not in PERCENTS:
             raise ValueError(f"percent: one of {', '.join(map(str, PERCENTS))}")
         with self._lock:
             e = self.get(job_id)
+            if search is not None:
+                crfsearch.check(e.spec)
             if e.plan is None or e.probe_error:
                 return False
-            e.sample_percent, e.sample_error = percent, ""
+            e.sample_percent, e.search = percent, search
+            if search is None:
+                e.sample_error = ""
+            else:
+                e.search_error = ""
             if self.index([job_id], first=True):
                 return True
-            e.sample_percent = None
+            e.sample_percent = e.search = None
             return False
 
     def set_sample_quality(self, on: bool) -> None:
@@ -1268,7 +1278,7 @@ class JobQueue:
             dropped = [e for e in self.entries() if e.index_queued and (wanted is None or e.id in wanted)]
             for e in dropped:
                 e.index_queued = e.index_now = e.index_held = False
-                e.sample_percent = None
+                e.sample_percent = e.search = None
             current = next((e for e in self.entries() if e.indexing or e.sampling), None)
             if current is not None and (wanted is None or current.id in wanted) and self._index_cancel is not None:
                 self._index_cancel.cancel()
@@ -1425,12 +1435,15 @@ class JobQueue:
                 e.indexing, e.sampling, e.progress = False, True, None
             self._changed(e)
             self._queue_changed()
-            self._sample(e, percent, log, progress, on_record)
+            if e.search is not None:
+                self._search(e, percent, e.search, log, progress, on_record)
+            else:
+                self._sample(e, percent, log, progress, on_record)
         if log_file is not None:
             log_file.close()
         with self._lock:
             e.indexing, e.progress, e.index_error = False, None, "" if error == "Cancelled" else error
-            e.sampling, e.sample_percent = False, None
+            e.sampling, e.sample_percent, e.search = False, None, None
             e.crop_pending = False
             self._index_cancel = None
             self._save(e)
@@ -1485,6 +1498,65 @@ class JobQueue:
         self._queue_event("sample.finished", e, error=error or None)
         with self._lock:
             e.sample_error = "" if error == "Cancelled" else error
+
+    def _search(
+        self,
+        e: Entry,
+        percent: int,
+        target: crfsearch.Target,
+        log: Callable[[str], None],
+        progress: ProgressFn,
+        on_record: Callable,
+    ) -> None:
+        """The lane's CRF search of an indexed job: the script's info, then the tries (each a sample with its
+        quality score, their records the job's, so a CRF tried before is reused). The result goes to
+        search.json, after every try too; a failure to e.search_error."""
+        error = ""
+        self._queue_event("search.started", e, percent=percent, metric=target.metric.value, target=target.value)
+        log(f"### {_variant(e)}: CRF search for {target}, {percent}% ({datetime.now().isoformat(timespec='seconds')})")
+        try:
+            with self._lock:
+                if e.plan is None:
+                    raise ToolError("The job has no plan")
+                spec, plan, container = e.spec, e.plan, e.spec.container(self.rule_set(e))
+                cancel = self._index_cancel
+            if cancel is None:
+                raise RuntimeError("index lane: no cancel event")
+            run = partial(
+                run_steps,
+                records=e.state.steps,
+                log=log,
+                cancel=cancel,
+                on_record=on_record,
+                runner=self.services.runner,
+            )
+            run(prepare_steps(spec, plan, self.app), progress=progress)
+
+            def run_try(steps: list[Step], n: int) -> None:
+                def tried(p: StepProgress) -> None:  # the tries share the bar, MAX_TRIES at most
+                    label = f"CRF search, try {n + 1}: {p.step.label}"
+                    overall = (n + p.overall) / crfsearch.MAX_TRIES
+                    progress(replace(p, step=replace(p.step, label=label), overall=overall, eta=None))
+
+                run(steps, progress=tried)
+                self._changed(e)  # the try shows on the job
+
+            result = crfsearch.search(spec, plan, self.app, container, percent, target, e.state.steps, run_try, log)
+            if result.crf is None:
+                log(f"CRF search: no CRF tried reaches {target} (the lowest: {min(t.crf for t in result.tries)})")
+            else:
+                log(f"CRF search: CRF {result.crf} is the highest that reaches {target}")
+        except Cancelled:
+            error = "Cancelled"
+        except (ToolError, OSError, ValueError) as ex:
+            error = str(ex)
+        except Exception as ex:  # a bug must not stop the lane
+            logger.exception("%s: CRF search raised", e.spec.name)
+            error = f"{type(ex).__name__}: {ex}"
+        log(f"{e.spec.name}: CRF search " + (f"failed ({error})" if error else "done"))
+        self._queue_event("search.finished", e, error=error or None)
+        with self._lock:
+            e.search_error = "" if error == "Cancelled" else error
 
     def _versions(self, names: Sequence[str]) -> dict[str, str]:
         return self.services.versions(self.app.tools, names) if self.services.versions else {}

@@ -210,6 +210,8 @@ Each line of a `.videoforge.jsonl` (and of the queue-wide `events.jsonl`) is one
 | `index.finished` | `name`, `error` (null when it worked; `"Cancelled"` when stopped) |
 | `sample.started` | `name`, `percent` (queue-wide stream only: a test encode in the index lane) |
 | `sample.finished` | `name`, `error` (null when it worked; `"Cancelled"` when stopped). The result is `sample/sample.json` in the job's folder |
+| `search.started` | `name`, `percent`, `metric` (`ssimulacra2`, `ssimulacra2_p5`, `xpsnr`), `target` (queue-wide stream only: a CRF search in the index lane) |
+| `search.finished` | `name`, `error` (null when it worked; `"Cancelled"` when stopped). The result is `sample/search/search.json` in the job's folder |
 | `action.finished` | `action` (its name), `type` (`command`, `move`, `copy`, `webhook`), `error` (null when it worked), `output` (after a move: the new path), `seconds`; `job` is null for the queue's actions (queue-wide stream only; docs/actions.md) |
 
 Lines are flushed one at a time, so `tail -f` (or reading new lines as they appear) follows a run live. A reader should skip events it doesn't know: new ones may be added within a version.

@@ -111,6 +111,8 @@ async function fixture(page: Page) {
     index_held: false,
     sample_waiting: false,
     sample_error: '',
+    searching: false,
+    search_error: '',
     audio: [],
     subs: 1,
     issues: [],
@@ -163,6 +165,7 @@ async function fixture(page: Page) {
     color_args: null,
     target: null,
     sample: null,
+    search: null,
     compare: { encode: false, sample: false },
     tracks: { video: null, audio: [audio], subs, has_chapters: false, count: 3 },
     spec: {

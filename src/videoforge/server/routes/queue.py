@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Request
 
 from videoforge.core.execute.control import Priority
+from videoforge.core.pipeline import crfsearch
 from videoforge.core.pipeline.sample import DEFAULT_PERCENT
 from videoforge.server.queue import JobQueue
 
@@ -152,6 +153,23 @@ def sample(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]
     q = queue_of(request)
     try:
         taken = q.sample(str(body.get("id")), int(body.get("percent", DEFAULT_PERCENT)))
+    except KeyError:
+        raise HTTPException(404, f"No job {body.get('id')}") from None
+    except (TypeError, ValueError) as ex:
+        raise HTTPException(422, str(ex)) from None
+    return {**q.queue_state(), "taken": taken}
+
+
+@router.post("/search")
+def search(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """A CRF search of job `id` (core/pipeline/crfsearch.py): its test encode at `percent` (1, 2, 5 or 10) at
+    several CRFs, for the highest whose `metric` (ssimulacra2, ssimulacra2_p5 or xpsnr) reaches `target`, first in
+    the index lane (Index stop cancels it). The queue's state, plus `taken` as for /sample; 422 for a job that
+    doesn't encode at a CRF."""
+    q = queue_of(request)
+    try:
+        goal = crfsearch.Target(crfsearch.Metric(str(body.get("metric"))), float(body.get("target", "")))
+        taken = q.sample(str(body.get("id")), int(body.get("percent", DEFAULT_PERCENT)), goal)
     except KeyError:
         raise HTTPException(404, f"No job {body.get('id')}") from None
     except (TypeError, ValueError) as ex:

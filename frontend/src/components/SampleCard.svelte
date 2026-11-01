@@ -24,8 +24,9 @@
   let starting = $state(false)
   const live = $derived(app.jobs.find((j) => j.id === job.id)) // live status and progress
   const status = $derived(live?.status ?? job.status)
-  const sampling = $derived(status === 'sampling')
-  const waiting = $derived(!!live?.sample_waiting)
+  const search = $derived(!!live?.searching) // the lane's sample is a CRF search (CrfSearchCard shows it)
+  const sampling = $derived(status === 'sampling' && !search)
+  const waiting = $derived(!!live?.sample_waiting && !search)
   const error = $derived(live?.sample_error ?? job.sample_error)
   const s = $derived(job.sample)
   const twoPass = $derived(job.spec.encoder.rate_control === '2pass')

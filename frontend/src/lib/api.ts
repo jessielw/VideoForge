@@ -41,6 +41,7 @@ import type {
   ToolCheck,
   ScriptCheck,
   ScriptParts,
+  SearchMetric,
   Template,
   TemplateBundle,
   VideoSettings,
@@ -302,6 +303,9 @@ export const api = {
   stopIndex: (ids?: string[]) => post<QueueState>('/api/queue/index/stop', ids ? { ids } : {}),
   // A test encode of percent of the job's video, first in the index lane (stopIndex cancels it)
   sample: (id: string, percent: number) => post<QueueState & { taken: boolean }>('/api/queue/sample', { id, percent }),
+  // A CRF search on that test encode: the highest CRF whose metric reaches target
+  search: (id: string, percent: number, metric: SearchMetric, target: number) =>
+    post<QueueState & { taken: boolean }>('/api/queue/search', { id, percent, metric, target }),
 
   clipInfo: (id: string, stage: PreviewStage) => get<ClipInfo>(`/api/jobs/${id}/video/info?stage=${stage}`),
   frameUrl: (id: string, n: number, stage: PreviewStage, version: number, fmt: 'jpeg' | 'png' = 'jpeg') =>

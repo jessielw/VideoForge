@@ -77,6 +77,16 @@ With **Score its quality** on, a test encode ends by comparing every sample fram
 
 It decodes both clips once more, so the test encode takes longer (SSIMULACRA2 is the slow part). The score is kept with the sample (`sample/sample.quality.json`) and reused while the encode is; with the setting off, nothing is measured or shown.
 
+## CRF search
+
+**CRF search**, under the test encode, finds the highest CRF whose quality still reaches a target: pick **SSIMULACRA2** (the frames' mean), **SSIMULACRA2, worst 5%** or **XPSNR**, the score to reach and how much of the video to sample (2% by default), then **Search**. It needs the encoder's rate control at CRF.
+
+Each try is a test encode at one CRF with its [quality score](#quality-score) (whatever Settings says). The first is the job's CRF. A try that reaches the target is followed by one 4 CRF higher (6 for VP8, VP9 and SVT-AV1), one that falls short by one lower, until a pass and a failure above it bracket the answer; then the next try is where a straight line between their scores meets the target. It stops when they are one CRF apart, at either end of the encoder's range, or after 8 tries. The answer is the highest CRF that passed.
+
+Each try shows as it ends: its CRF, bitrate, the whole video's size at that bitrate, and its scores. **Use CRF N** sets the job's CRF to the answer; the result stays current after that, and shows "settings changed since" once the script or another encoder setting changes. The search runs in the index lane like the test encode (**Stop** cancels it, keeping the tries so far). The tries are kept in `sample/search/crf-<n>/`, so searching again, for another target too, reuses each CRF already encoded at the same settings.
+
+A short sample scores differently from the whole video, and the scores compare with the encoder's input, not the source, so treat the CRF found as a starting point and check the encode by eye ([Compare](video.md#compare-encoded-frames)).
+
 ## Options and extra arguments
 
 Structured options and extra arguments are applied after generated defaults. Overrides can change the color metadata carried by the encoded stream and container. Inspect the generated command when using advanced flags.

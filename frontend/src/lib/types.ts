@@ -166,6 +166,8 @@ export interface JobSummary {
   index_held: boolean // waiting in the index lane while an encode reads its disk
   sample_waiting: boolean // in the index lane for a test encode
   sample_error: string // the last test encode failed: why
+  searching: boolean // the index lane's test encode for the job is a CRF search
+  search_error: string // the last CRF search failed: why
   audio: string[]
   subs: number
 }
@@ -423,6 +425,7 @@ export interface JobDetail extends JobSummary {
   color_args: string[] | null // the source's colour flags for this encoder (null until probed)
   target: SizeBudget | null // where a 2-pass target size goes (null without one, or until planned)
   sample: SampleResult | null // the last test encode (core/pipeline/sample.py)
+  search: SearchResult | null // the last CRF search, or the one running (core/pipeline/crfsearch.py)
   compare: { encode: boolean; sample: boolean } // what the Video tab can compare the script's frames with
 }
 
@@ -451,6 +454,38 @@ export interface SampleResult {
 }
 
 export const SAMPLE_PERCENTS = [1, 2, 5, 10] as const
+
+// What a CRF search's tries are scored by (core/video/metrics.py)
+export type SearchMetric = 'ssimulacra2' | 'ssimulacra2_p5' | 'xpsnr'
+
+// One CRF a search encoded the sample at, and its scores
+export interface SearchTry {
+  crf: number
+  bytes: number
+  seconds: number
+  kbps: number | null
+  estimate_mb: number | null // the whole video's at kbps, decimal MB
+  ssimulacra2: number
+  ssimulacra2_p5: number
+  xpsnr: number | null
+}
+
+// A CRF search: the test encode at several CRFs, for the highest whose metric reaches target (POST /api/queue/search)
+export interface SearchResult {
+  percent: number
+  metric: SearchMetric
+  target: number
+  start: number // the job's CRF when it began
+  encoder: string
+  frames: number // the sample's
+  total_frames: number
+  started: string // ISO time
+  tries: SearchTry[] // in the order tried
+  done: boolean // false while it runs, or after it failed or was stopped
+  crf: number | null // the highest CRF that reached the target; null when none did
+  exact: boolean // the CRF above it was tried and fell short
+  current: boolean // the job's script and encoder settings, but its CRF, are as they were
+}
 
 // The preview's clips: the crop view and the output; to compare encoder input and output, the output and the
 // encode a done run wrote, or a test encode's script and its encode (numbered by the sample's frames).

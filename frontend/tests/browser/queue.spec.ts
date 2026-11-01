@@ -7,6 +7,7 @@ async function queueFixture(
   count = 10_000,
   statuses: Status[] = ['ready', 'done'],
   sample: JobDetail['sample'] = null,
+  search: JobDetail['search'] = null,
 ) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
@@ -28,6 +29,8 @@ async function queueFixture(
     index_held: false,
     sample_waiting: false,
     sample_error: '',
+    searching: false,
+    search_error: '',
     audio: [],
     subs: 0,
   }))
@@ -41,6 +44,7 @@ async function queueFixture(
     color_args: null,
     target: null,
     sample,
+    search,
     compare: { encode: false, sample: !!sample },
     spec: {
       id: job.id,
@@ -82,7 +86,7 @@ async function queueFixture(
       label: '',
     },
   })
-  const calls: { path: string; body: { ids?: string[] } }[] = []
+  const calls: { path: string; body: { ids?: string[]; [key: string]: unknown } }[] = []
   let socket: WebSocketRoute
   await page.routeWebSocket('**/api/events', (ws) => {
     socket = ws
@@ -229,6 +233,53 @@ test('a test encode shows its quality score only when it has one', async ({ page
   await expect(card).toContainText('4,000 kb/s')
   await expect(card).not.toContainText('Quality')
   await expect(card).not.toContainText('SSIMULACRA2')
+  expect(fixture.errors).toEqual([])
+})
+
+test('a CRF search lists its tries, marks the CRF found and puts it on the job', async ({ page }, testInfo) => {
+  const t = (crf: number, ssimulacra2: number) => ({
+    crf,
+    bytes: 300_000,
+    seconds: 12,
+    kbps: 4000 - crf * 100,
+    estimate_mb: 50,
+    ssimulacra2,
+    ssimulacra2_p5: ssimulacra2 - 8,
+    xpsnr: 44,
+  })
+  const search: NonNullable<JobDetail['search']> = {
+    percent: 2,
+    metric: 'ssimulacra2',
+    target: 80,
+    start: 18,
+    encoder: 'x265',
+    frames: 144,
+    total_frames: 2400,
+    started: '2026-10-30T12:00:00',
+    tries: [t(18, 82.1), t(22, 78), t(20, 80.6), t(21, 79.4)],
+    done: true,
+    crf: 20,
+    exact: true,
+    current: true,
+  }
+  const fixture = await queueFixture(page, 1, ['ready'], null, search)
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  const card = page.getByRole('region', { name: 'CRF search', exact: true })
+  await expect(card).toContainText('CRF 20 is the highest that reaches SSIMULACRA2 80.')
+  const rows = card.locator('tbody tr')
+  await expect(rows).toHaveCount(4)
+  await expect(rows.first()).toContainText('18 ✓')
+  await expect(rows.nth(1)).toContainText('2,000 kb/s')
+  await card.screenshot({ path: testInfo.outputPath('crf-search.png') })
+
+  await card.getByRole('button', { name: 'Use CRF 20' }).click()
+  await expect
+    .poll(() => fixture.calls.find((c) => c.path === '/api/jobs/job-0')?.body)
+    .toMatchObject({
+      encoder: { crf: 20 },
+    })
+
   expect(fixture.errors).toEqual([])
 })
 

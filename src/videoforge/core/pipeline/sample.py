@@ -123,24 +123,48 @@ def prepare_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
     return [info_step(spec, app, job_script(spec, plan.source.video, plan.burn))]
 
 
+@dataclass(frozen=True, slots=True)
+class Place:
+    """Where a sample's files go and what its steps are called: the test encode's (place()), or a CRF search
+    try's (pipeline/crfsearch.py: the tries share one script)."""
+
+    home: Path  # the encode, its MKV and its scores
+    script: Path
+    script_id: str  # the script step's id
+    prefix: str  # the others': <prefix>.video, <prefix>.mux, <prefix>.quality
+
+
+def place(spec: JobSpec) -> Place:
+    home = sample_dir(spec)
+    return Place(home, home / SCRIPT, "sample.script", "sample")
+
+
 def sample_steps(
-    spec: JobSpec, plan: Plan, app: AppConfig, container: str, percent: int, quality: bool = False
+    spec: JobSpec,
+    plan: Plan,
+    app: AppConfig,
+    container: str,
+    percent: int,
+    quality: bool = False,
+    where: Place | None = None,
 ) -> list[Step]:
     """The sample's script, encode and MKV, then with quality its scores against the script; the script info
-    step (prepare_steps) has run."""
+    step (prepare_steps) has run. where: the test encode's place by default."""
     found = info.read(spec.job_dir / info.SCRIPT_INFO)
     if found is None:
         raise ValueError("The script's frames aren't known: its info step hasn't run")
-    v, home = plan.source.video, sample_dir(spec)
+    where = where or place(spec)
+    v, home = plan.source.video, where.home
     source_fps = frame_rate(v.default_duration_ns) if v is not None and v.default_duration_ns else None
     sel = selection(found, percent, source_fps)
     text = script_text(job_script(spec, v, plan.burn), sel)
-    script, mkv = home / SCRIPT, home / MKV
+    script, mkv = where.script, home / MKV
     enc = one_pass(spec.encoder, plan, container, found)
     out = home / output_name(enc)
 
     def write_script(_log: LogFn) -> None:
-        home.mkdir(parents=True, exist_ok=True)
+        for folder in (home, script.parent):
+            folder.mkdir(parents=True, exist_ok=True)
         script.write_text(text, encoding="utf-8")
 
     argv = encoder_command(
@@ -160,7 +184,7 @@ def sample_steps(
         mux += ["--default-duration", f"0:{fps}p"]
     steps = [
         Step(
-            "sample.script",
+            where.script_id,
             "Write the test encode's script",
             call=write_script,
             outputs=(script,),
@@ -168,7 +192,7 @@ def sample_steps(
             weight=0.01,
         ),
         Step(
-            "sample.video",
+            f"{where.prefix}.video",
             f"Test encode ({enc.encoder.label}, {percent}%)",
             argvs=(tuple(vspipe_command(app.tools.vspipe, script)), tuple(argv)),
             outputs=(out,),
@@ -177,7 +201,7 @@ def sample_steps(
             weight=60,
         ),
         Step(
-            "sample.mux",
+            f"{where.prefix}.mux",
             "Test encode into an MKV (mkvmerge)",
             argvs=((*mux, str(out)),),
             outputs=(mkv,),
@@ -191,7 +215,7 @@ def sample_steps(
         scores = home / QUALITY
         steps.append(
             Step(
-                "sample.quality",
+                f"{where.prefix}.quality",
                 "Test encode quality (SSIMULACRA2, XPSNR)",
                 argvs=((sys.executable, "-m", "videoforge.core.video.metrics", str(script), str(mkv), str(scores)),),
                 outputs=(scores,),
