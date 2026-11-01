@@ -222,6 +222,27 @@ test('the tab title follows the running job', async ({ page }) => {
   expect(fixture.errors).toEqual([])
 })
 
+test('? opens the keyboard shortcuts, but not while typing', async ({ page }, testInfo) => {
+  const fixture = await queueFixture(page, 3, ['ready'])
+  const sheet = page.getByRole('dialog', { name: 'Keyboard shortcuts' })
+  await page.getByRole('searchbox').press('?')
+  await expect(page.getByRole('searchbox')).toHaveValue('?')
+  await expect(sheet).toBeHidden()
+  await page.getByRole('searchbox').fill('')
+  await page.locator('[data-job="job-0"]').press('?')
+  await expect(sheet).toBeVisible()
+  await expect(sheet.getByRole('region', { name: 'Frame preview (click it first)' })).toContainText(
+    'Save the frame as a PNG',
+  )
+  expect((await new AxeBuilder({ page }).include('[role="dialog"]').analyze()).violations).toEqual([])
+  await sheet.screenshot({ path: testInfo.outputPath('shortcuts.png') })
+  await page.keyboard.press('Escape')
+  await expect(sheet).toBeHidden()
+  await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
+  await expect(sheet).toBeVisible()
+  expect(fixture.errors).toEqual([])
+})
+
 test('a done job says what its run made', async ({ page }) => {
   const made = { output_bytes: 4.5 * 1024 ** 3, source_bytes: 18 * 1024 ** 3, seconds: 5025, reused: 2, kbps: 6120 }
   const fixture = await queueFixture(page, 1, ['done'], null, null, made)

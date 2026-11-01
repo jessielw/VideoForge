@@ -12,6 +12,7 @@
   import { Button } from '$lib/components/ui/button'
   import { Toaster } from '$lib/components/ui/sonner'
   import * as Tooltip from '$lib/components/ui/tooltip'
+  import KeyboardShortcuts from './components/KeyboardShortcuts.svelte'
   import ThemeToggle from './components/ThemeToggle.svelte'
   import Tip from './components/Tip.svelte'
   import { installDrops } from './lib/dropPaths.svelte'
@@ -110,6 +111,7 @@
       </div>
 
       <div class="mt-auto flex flex-col gap-0.5 px-2 pb-1 {navCollapsed ? 'items-center' : ''}">
+        <KeyboardShortcuts compact={navCollapsed} />
         <ThemeToggle compact={navCollapsed} />
         <Tip side="right" class="grid max-sm:hidden" text={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}>
           <Button
