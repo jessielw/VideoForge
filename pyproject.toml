@@ -19,7 +19,7 @@ dependencies = [
     "pymediainfo>=7.0.1",
     "rich>=15.0.0",
     "uvicorn[standard]>=0.54.0",
-    "vapoursynth>=81",
+    "vapoursynth>=82",
 ]
 
 [project.scripts]

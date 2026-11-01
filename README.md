@@ -61,7 +61,7 @@ VideoForge bundles a set of plugins and filter scripts, listed in [vsplugins/man
 | Misc | MiscFilters (`misc`), Deblock (`deblock`), AddGrain (`grain`), SubText (`sub`) |
 | Python | havsfunc (r33), mvsfunc, awsmfunc, vsutil, vs-rekt, adjust, dfttest2 |
 
-All run on the CPU (no GPU filters yet). VapourSynth R81 only loads API 4 plugins, so older ones (TDeintMod, EEDI2, CTMF, DFTTest, neo_f3kdb, RemapFrames, nnedi3) are left out: dfttest2, vszip's Deband and RFS, and znedi3 stand in. Plugins of your own go in `tools/vs-plugins/` (`/tools/vs-plugins` in Docker).
+All run on the CPU (no GPU filters yet). VapourSynth R82 only loads API 4 plugins, so older ones (TDeintMod, EEDI2, CTMF, DFTTest, neo_f3kdb, RemapFrames, nnedi3) are left out: dfttest2, vszip's Deband and RFS, and znedi3 stand in. Plugins of your own go in `tools/vs-plugins/` (`/tools/vs-plugins` in Docker).
 
 ## Portable build (Windows)
 

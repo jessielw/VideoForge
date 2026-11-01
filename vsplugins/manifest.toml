@@ -1,6 +1,6 @@
 # The VapourSynth plugins VideoForge bundles: the Docker image builds them from these sources
 # (vsplugins/Dockerfile, vsplugins/build.py) and scripts/fetch_plugins.py downloads their Windows builds.
-# All are API 4 (VapourSynth R81 no longer loads API 3 plugins, which ruled out TDeintMod, EEDI2, CTMF,
+# All are API 4 (VapourSynth R82 no longer loads API 3 plugins, which ruled out TDeintMod, EEDI2, CTMF,
 # DFTTest, neo_f3kdb, RemapFrames and dubhater's nnedi3: dfttest2, vszip's Deband/RFS and znedi3 stand in).
 #
 # [[plugin]]
@@ -300,9 +300,9 @@ repo = "https://github.com/vapoursynth/vs-miscfilters-obsolete"
 ref = "R2"
 license = "LGPL-2.1"
 build = "cc"
-# It includes VapourSynth's own filtershared.h (not in the wheel): R81's.
+# It includes VapourSynth's own filtershared.h (not in the wheel): R82's.
 before = [
-    "curl -fsSL -o src/filtershared.h https://raw.githubusercontent.com/vapoursynth/vapoursynth/R81/src/core/filtershared.h && echo '032e81547aa261e06c8110a4d40ef034dffb7d3d2af38893ee4de41cf3b079b2  src/filtershared.h' | sha256sum -c -",
+    "curl -fsSL -o src/filtershared.h https://raw.githubusercontent.com/vapoursynth/vapoursynth/R82/src/core/filtershared.h && echo '032e81547aa261e06c8110a4d40ef034dffb7d3d2af38893ee4de41cf3b079b2  src/filtershared.h' | sha256sum -c -",
 ]
 sources = ["src/miscfilters.cpp"]
 options = ["-DVS_USE_LATEST_API"]
@@ -358,7 +358,7 @@ name = "havsfunc"
 url = "https://raw.githubusercontent.com/HomeOfVapourSynthEvolution/havsfunc/r33/havsfunc.py"
 sha256 = "4da2839544b1ce9382db670b069dc358228251d147dad91f740a860840e04924"
 license = "GPL-3.0"
-# VapourSynth R81 takes a Python keyword's trailing underscore (lambda_), no longer a leading one (_lambda).
+# VapourSynth R82 takes a Python keyword's trailing underscore (lambda_), no longer a leading one (_lambda).
 replace = { "_lambda=" = "lambda_=", "_global=" = "global_=" }
 
 [[script]]

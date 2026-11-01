@@ -16,7 +16,7 @@ The portable build does not include all external media tools. See [Tools and Vap
 4. Disable the last added filter or correct the custom script, then check preview again.
 5. If using BestSource, allow its first full-source decode to finish.
 
-VapourSynth R81 needs API 4 plugins. An older API 3 plugin cannot be fixed by changing its path. Use the supported replacement listed in the [bundled plugins](../configuration/tools.md#bundled-vapoursynth-plugins).
+VapourSynth R82 needs API 4 plugins. An older API 3 plugin cannot be fixed by changing its path. Use the supported replacement listed in the [bundled plugins](../configuration/tools.md#bundled-vapoursynth-plugins).
 
 ## Dropped files do not fill the path
 

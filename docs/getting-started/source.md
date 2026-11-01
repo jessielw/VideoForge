@@ -37,7 +37,7 @@ You can attempt a source installation with tools and plugins you install or comp
 
 Use one architecture for Python, VapourSynth and its native plugins: ARM64 on Apple Silicon or Linux ARM64, or x86_64 for an Intel setup. Plugins must also target the host OS and VapourSynth API 4. A Windows DLL or Linux `.so` cannot substitute for a macOS plugin. External tools must run on the host; mixing architectures requires a separately configured and tested translation environment.
 
-VapourSynth R81 publishes Python wheels for macOS 13+ on Intel and Apple Silicon, and for Linux ARM64 ([release files](https://pypi.org/project/VapourSynth/81/#files)). After the manual installation above, configure the checkout's Python and check its runtime:
+VapourSynth R82 publishes Python wheels for macOS 13+ on Intel and Apple Silicon, and for Linux ARM64 ([release files](https://pypi.org/project/VapourSynth/82/#files)). After the manual installation above, configure the checkout's Python and check its runtime:
 
 ```sh
 uv run python -m vapoursynth config
