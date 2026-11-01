@@ -2,6 +2,9 @@
 
 A template saves a job setup without its source file. It can include video processing, encoder settings, container, AutoQPF, crop policy, and optional audio and subtitle selections.
 
+![The Templates page](../assets/screenshots/templates.png#only-light)
+![The Templates page](../assets/screenshots/templates-dark.png#only-dark)
+
 Template drafts survive navigation and refresh in the same browser tab. Leaving an edited template, switching rule sets, or starting another template offers **Save**, **Discard**, or **Stay**.
 
 ## Create and apply

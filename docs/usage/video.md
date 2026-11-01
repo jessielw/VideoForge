@@ -2,6 +2,9 @@
 
 The **Video** tab edits the VapourSynth processing used by both preview and encoding. Index the source first, then inspect several frames before running the job.
 
+![The Video tab with frame preview, crop and filters](../assets/screenshots/video.png#only-light)
+![The Video tab with frame preview, crop and filters](../assets/screenshots/video-dark.png#only-dark)
+
 ## Source filters
 
 | Filter | VapourSynth namespace | Notes |

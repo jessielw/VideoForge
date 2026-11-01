@@ -4,7 +4,10 @@ Use a short source and a separate output folder for the first run. Confirm that 
 
 ## 1. Add the source
 
-Open **New jobs**, add an MKV, MP4, or M2TS / TS file, and choose the template to start from. You can also add external subtitles, chapters, or an existing video encode to reuse. Add the job, review the import summary, and choose **Open queue** to open its editor. Partial imports retain the input draft and explain which existing jobs were kept or files were unmatched.
+Open **New jobs**, add an MKV, MP4, or M2TS / TS file, and choose the template to start from. You can also add external subtitles, chapters, or an existing video encode to reuse. Add the job, review the import summary, and choose **Open queue** to open its editor. Partial imports retain the input draft and explain which existing jobs were kept or files were unmatched. In a browser, paste paths into the fields (Explorer: Ctrl+Shift+C, then Ctrl+V); the [desktop window](windows.md#window-tray-and-console) also takes dropped files.
+
+![The New jobs page with three matched episodes](../assets/screenshots/new-jobs.png#only-light)
+![The New jobs page with three matched episodes](../assets/screenshots/new-jobs-dark.png#only-dark)
 
 ## 2. Index and inspect video
 
