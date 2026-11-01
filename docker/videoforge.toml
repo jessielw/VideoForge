@@ -39,6 +39,10 @@ parallel_audio = 2
 # Delete a job's work folder (<source>_tmp: the index, the encodes, the log) once the job is done;
 # its job records and log are copied to <data folder>/records first. The Settings page can change it.
 delete_work_dir = false
+# Free space (GB) a job's work folder and output folder each need on their disk before its run starts,
+# as StaxRip's Minimum Disk Space: with less, the run fails at once (before hours of encoding fill the disk)
+# and the queue goes on to the next job. 0 turns the check off.
+min_free_gb = 20
 # Process priority: idle, below_normal, normal, above_normal or high, as a nice value (raising one back
 # needs CAP_SYS_NICE). The video encode (the encoder and the vspipe feeding it), and every other tool.
 encoder_priority = "below_normal"

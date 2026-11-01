@@ -49,6 +49,7 @@ For Docker, use container paths. A local configuration file can be mounted at `/
 [pipeline]
 parallel_audio = 2
 delete_work_dir = false
+min_free_gb = 20
 encoder_priority = "below_normal"
 tool_priority = "normal"
 ```
@@ -57,6 +58,7 @@ tool_priority = "normal"
 | --- | --- |
 | `parallel_audio` | Number of audio encodes alongside a job's video; `0` runs audio encodes one by one. The UI accepts 0–8. |
 | `delete_work_dir` | Remove a successfully completed job's work folder after preserving its records and log |
+| `min_free_gb` | Free space, in GB, the disks of a job's work folder and output folder each need when its run starts. With less, the run fails before its first step and the queue goes on. `0` turns the check off. |
 | `encoder_priority` | Default priority for the video encoder and its `vspipe` |
 | `tool_priority` | Default priority for the other tools |
 

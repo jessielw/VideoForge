@@ -37,7 +37,7 @@ from typing import Any
 import uuid
 
 from videoforge.core.config import AppConfig, Tools
-from videoforge.core.disks import disks
+from videoforge.core.disks import disks, low_space
 from videoforge.core.events import EventBus, IndexFinished, JobFinished, JobStarted, QueueFinished
 from videoforge.core.execute import process
 from videoforge.core.execute.control import Priority
@@ -1055,19 +1055,26 @@ class JobQueue:
         log(f"### {_variant(e)} ({datetime.now().isoformat(timespec='seconds')})")
         self._wait_for_siblings(e, log)
         try:
-            result = self.services.run(
-                e.spec,
-                e.plan,
-                self.rule_set(e),
-                self.app,
-                state=e.state,
-                log=log,
-                cancel=self._cancel,
-                progress=progress,
-                on_record=on_record,
-                on_step=on_step,
-                step_log=step_log,
-            )
+            if short := low_space([e.spec.work_dir, *filter(None, [e.spec.output_dir])], self.app.min_free_gb):
+                # Before any step: a run that would fill the disk hours in fails now (and the next job is tried).
+                log(short)
+                e.state.run = []
+                result = JobResult(e.plan, JobStatus.FAILED, error=short)
+                e.state.status, e.state.error = result.status, result.error
+            else:
+                result = self.services.run(
+                    e.spec,
+                    e.plan,
+                    self.rule_set(e),
+                    self.app,
+                    state=e.state,
+                    log=log,
+                    cancel=self._cancel,
+                    progress=progress,
+                    on_record=on_record,
+                    on_step=on_step,
+                    step_log=step_log,
+                )
         except Exception as ex:  # a bug must not kill the queue
             logger.exception("%s: the run raised", e.spec.name)
             result = JobResult(e.plan, JobStatus.FAILED, error=f"{type(ex).__name__}: {ex}")

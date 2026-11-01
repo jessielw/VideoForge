@@ -47,6 +47,10 @@ Check the [required folder layout](../getting-started/docker.md#add-dee-or-qaac)
 
 Read its planning issues. Common causes include missing inputs, unsupported track/container combinations, impossible audio layouts, unavailable tools, and HDR settings that the selected encoder cannot satisfy. Correct the indicated setting before retrying.
 
+## A job fails at once with "Only N GB free"
+
+Before a run's first step, VideoForge checks the free space on the disks of the job's work folder (next to the source) and its output folder. Under `[pipeline] min_free_gb` (20 GB by default), the run fails rather than filling the disk partway through an encode. Free some space, or point the output elsewhere, then run it again. Set `min_free_gb = 0` in `videoforge.local.toml` to turn the check off.
+
 ## Output exists but the job is invalid
 
 Muxing finished, but validation found a blocking difference from the plan. Read the output issues and preserve the `.videoforge.json` record plus `videoforge.log` when investigating. Do not treat file existence alone as a successful run.

@@ -51,6 +51,7 @@ APP = AppConfig(
         vs_plugins=str(PROJECT_ROOT / "tools" / "vs-plugins"),
     ),
     rule_set="manual",
+    min_free_gb=0,  # the runs are faked: the test machine's free space doesn't matter (test_low_disk_*)
 )
 
 
@@ -361,6 +362,25 @@ def test_a_done_job_shows_what_its_run_made_after_a_restart_and_a_move(tmp_path)
     (tmp_path / "out" / "Show.S01E01.mkv").unlink()  # as a move action leaves it: the summary was taken at the end
     with make_client(tmp_path) as client:
         assert wait_for(client, job, "done")["made"]["output_bytes"] == 3000
+
+
+def test_low_disk_fails_the_run_before_any_step_and_the_queue_goes_on(tmp_path, monkeypatch):
+    from videoforge.server import queue as queue_module
+
+    make_files(tmp_path, "S01E01", "S01E02")
+    run = FakeRun()
+    monkeypatch.setattr(queue_module, "low_space", lambda folders, gb: "Only 1.0 GB free" if gb else "")
+    with make_client(tmp_path, run=run) as client:
+        client.app.state.queue.app = replace(client.app.state.queue.app, min_free_gb=20)
+        ids = add(client, tmp_path)
+        for i in ids:
+            wait_for(client, i, "ready", "warn")
+        client.post("/api/queue/start", json={"ids": ids})
+        for i in ids:
+            job = wait_for(client, i, "failed")
+            assert job["issues"][0]["message"] == "Only 1.0 GB free"
+        assert run.runs == []
+        assert "Only 1.0 GB free" in client.get(f"/api/jobs/{ids[0]}/log").json()["lines"]
 
 
 def test_audio_sync_reaches_the_plan_and_the_mux(tmp_path):

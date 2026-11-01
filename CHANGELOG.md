@@ -10,6 +10,8 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 
 ### Added
 
+- A run checks for free space before its first step, as StaxRip's Minimum Disk Space does: with less than `[pipeline] min_free_gb` (20 GB by default; 0 turns it off) on the disk of the job's work folder or output folder, it fails at once (`Only 12.3 GB free on the disk of ...`) instead of filling the disk hours into an encode, and the queue goes on to the next job.
+
 - A done job's header says what its last run made: `Made 4.5 GB · 25.0% of the source · 6,120 kb/s · took 1:23:45 (2 reused)`. It's taken as the run ends (the job's `made`), so it stays after a move action or a deleted work folder.
 
 - The browser tab's title follows the running job (`42% · Show S01E01 · VideoForge`, `Paused · ` in front while paused), so a background tab shows how far the queue is.

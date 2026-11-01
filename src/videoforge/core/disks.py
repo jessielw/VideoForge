@@ -1,5 +1,5 @@
 """Which physical disk a path is on, so two jobs don't read one disk at once (the index lane waits
-for an encode on the same disk).
+for an encode on the same disk), and whether the folders a run writes have room (low_space).
 
 Windows: the volume's disk numbers (IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS), so two partitions of one
 drive count as one; a network path counts by its server. Elsewhere: the file system's device
@@ -9,9 +9,40 @@ volume.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from functools import lru_cache
 import os
 from pathlib import Path
+import shutil
+
+GB = 1024**3
+
+
+def low_space(folders: Iterable[Path], minimum_gb: float) -> str:
+    """Why a run shouldn't start: a folder it writes (they needn't exist yet) is on a volume with less than
+    minimum_gb free, as StaxRip's Minimum Disk Space warns before it encodes. "" when each has room, when
+    minimum_gb is 0, or when a volume's space can't be read."""
+    if minimum_gb <= 0:
+        return ""
+    seen: set[int] = set()
+    for folder in folders:
+        p = Path(folder)
+        while not p.exists() and p.parent != p:
+            p = p.parent
+        try:
+            dev = p.stat().st_dev
+            if dev in seen:
+                continue
+            seen.add(dev)
+            free = shutil.disk_usage(p).free
+        except OSError:
+            continue
+        if free < minimum_gb * GB:
+            return (
+                f"Only {free / GB:.1f} GB free on the disk of {folder}, under the {minimum_gb:g} GB minimum "
+                "([pipeline] min_free_gb in videoforge.toml; 0 turns the check off): free some space first"
+            )
+    return ""
 
 
 def disks(path: Path | str) -> frozenset[str]:
