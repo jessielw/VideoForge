@@ -10,6 +10,8 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 
 ### Added
 
+- A done job's header says what its last run made: `Made 4.5 GB · 25.0% of the source · 6,120 kb/s · took 1:23:45 (2 reused)`. It's taken as the run ends (the job's `made`), so it stays after a move action or a deleted work folder.
+
 - The browser tab's title follows the running job (`42% · Show S01E01 · VideoForge`, `Paused · ` in front while paused), so a background tab shows how far the queue is.
 
 - **CRF search** on the Encoder tab (ab-av1's crf-search, on the test encode's blocks): the highest CRF whose quality still reaches a target, SSIMULACRA2 (the mean, or the worst 5%) or XPSNR. It encodes the sample at the job's CRF, then steps up or down until one CRF passes and a higher one fails, then narrows between them by their scores, up to 8 tries. Each try shows as it ends (CRF, bitrate, whole video's size, scores); **Use CRF N** puts the one found on the job, and the result stays current then (it's out of date once anything else changes). It runs in the index lane like the test encode (Stop cancels it); every try is kept in `sample/search/crf-<n>/`, so a search for another target reuses the CRFs already encoded. `POST /api/queue/search`; `search.started` / `search.finished` events.

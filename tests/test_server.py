@@ -334,6 +334,35 @@ def test_two_jobs_writing_one_file_block_and_an_existing_file_warns(tmp_path):
         assert client.get(f"/api/jobs/{one}").json()["issues"] == []
 
 
+class WritesOutput(FakeRun):
+    """FakeRun that also writes its output file (3000 bytes)."""
+
+    def __call__(self, spec, plan, *args, **kwargs):
+        result = super().__call__(spec, plan, *args, **kwargs)
+        result.output.parent.mkdir(parents=True, exist_ok=True)
+        result.output.write_bytes(b"x" * 3000)
+        return result
+
+
+def test_a_done_job_shows_what_its_run_made_after_a_restart_and_a_move(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path, run=WritesOutput()) as client:
+        [job] = add(client, tmp_path)
+        assert wait_for(client, job, "ready", "warn")["made"] is None
+        client.post("/api/queue/start", json={"ids": [job]})
+        made = wait_for(client, job, "done")["made"]
+        assert {k: v for k, v in made.items() if k != "seconds"} == {
+            "output_bytes": 3000,
+            "source_bytes": 1,
+            "reused": 0,
+            "kbps": None,  # the faked probe gives no duration
+        }
+        assert made["seconds"] >= 0
+    (tmp_path / "out" / "Show.S01E01.mkv").unlink()  # as a move action leaves it: the summary was taken at the end
+    with make_client(tmp_path) as client:
+        assert wait_for(client, job, "done")["made"]["output_bytes"] == 3000
+
+
 def test_audio_sync_reaches_the_plan_and_the_mux(tmp_path):
     make_files(tmp_path)
     with make_client(tmp_path) as client:

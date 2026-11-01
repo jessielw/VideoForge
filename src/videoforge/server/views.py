@@ -36,6 +36,19 @@ def encode_compare(e: Entry) -> Path | None:
     return out if out.is_file() else None
 
 
+def made(e: Entry) -> dict[str, Any] | None:
+    """What the last run that wrote the output made, for a done job's summary: its size against the
+    source's, the run's time and the output's overall bitrate; None until a run wrote it."""
+    m = e.state.made
+    if m is None or e.state.status not in (JobStatus.DONE, JobStatus.INVALID):
+        return None
+    video = e.plan.source.video if e.plan else None
+    ms = 0.0
+    if video is not None:
+        ms = video.duration_ms or (video.frames * (video.default_duration_ns or 0) / 1e6)
+    return to_json(m) | {"kbps": round(m.output_bytes * 8 / ms) if ms else None}
+
+
 def issues(e: Entry) -> list[Issue]:
     out: list[Issue] = []
     if e.probe_error:
@@ -87,6 +100,7 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     out["spec"] = to_json(e.spec)
     out["issues"] = [to_json(i) for i in issues(e)]
     out["steps"] = to_json(e.state.steps)
+    out["made"] = made(e)  # the last run that wrote the output: sizes, time, bitrate
     out["plan"] = None
     out["output_name"] = None
     out["tracks"] = None

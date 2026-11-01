@@ -77,6 +77,7 @@ async function fixture(page: Page) {
     subs: 3,
     issues: [],
     steps: {},
+    made: null,
     plan: {
       encode_path: null,
       resolution: '1080p',

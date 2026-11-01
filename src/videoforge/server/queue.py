@@ -50,6 +50,7 @@ from videoforge.core.job import (
     JobState,
     JobStatus,
     OutputPolicy,
+    RunMade,
     StepRecord,
     StepRun,
     StepStatus,
@@ -1071,6 +1072,8 @@ class JobQueue:
             logger.exception("%s: the run raised", e.spec.name)
             result = JobResult(e.plan, JobStatus.FAILED, error=f"{type(ex).__name__}: {ex}")
             e.state.status, e.state.error = result.status, result.error
+        if result.status in (JobStatus.DONE, JobStatus.INVALID) and result.output is not None:
+            e.state.made = _made(e, result.output, _now() - started)
         if record := recorder.finished(result, e.state):
             log(f"Job record: {record}")
         if result.status is JobStatus.DONE:
@@ -1615,6 +1618,22 @@ def step_json(run: StepRun, *, with_tail: bool = True) -> dict[str, Any]:
     if not with_tail:
         data.pop("tail")
     return data
+
+
+def _made(e: Entry, output: Path, seconds: float) -> RunMade | None:
+    """What a run that wrote its output made, for the job's summary; None when the file can't be read."""
+
+    def size(path: Path) -> int | None:
+        try:
+            return path.stat().st_size
+        except OSError:
+            return None
+
+    made = size(output)
+    if made is None:
+        return None
+    reused = sum(r.status is StepStatus.REUSED for r in e.state.run)
+    return RunMade(made, size(e.spec.inputs.source), round(seconds, 1), reused)
 
 
 def _variant(e: Entry) -> str:

@@ -73,6 +73,8 @@ Intermediate files and `finished-steps.json` live in the job's folder in the sou
 | Skipped | The job was skipped by planning or its existing-output policy | Review planning issues and the Output tab |
 | Cancelled | The run was interrupted | Rerun and review reuse choices |
 
+A done (or invalid) job's header says what its last run made: the output's size, that as a share of the source, its overall bitrate, how long the run took and how many steps it reused. It's taken as the run ends, so it stays after an action moves the file or the work folder is deleted.
+
 Use the job's **Log** tab for one job, or the **Log** page for all jobs. For persistent paths and cleanup, see [Storage and backups](../configuration/storage.md).
 
 Opening the Log tab during a run restores its history and live steps. Reconnecting refreshes job details and log snapshots. Initial connection failures retry automatically; **Retry now** retries immediately, including the required catalogs.

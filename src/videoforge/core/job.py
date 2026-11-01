@@ -212,6 +212,16 @@ class StepRun:
 
 
 @dataclass(slots=True)
+class RunMade:
+    """What the last run that wrote the output made, taken as it ended (an action may move the file)."""
+
+    output_bytes: int
+    source_bytes: int | None = None
+    seconds: float = 0.0  # the run's wall time
+    reused: int = 0  # steps it took from an earlier run
+
+
+@dataclass(slots=True)
 class JobState:
     steps: dict[str, StepRecord] = field(default_factory=dict)
     run: list[StepRun] = field(default_factory=list)  # the last run's steps, in order
@@ -221,6 +231,7 @@ class JobState:
     error: str = ""
     keep: list[str] = field(default_factory=list)  # steps the user chose to reuse on the next run (run_steps' keep)
     redo: list[str] = field(default_factory=list)  # ... and to make again: not taken from another job (run_steps' redo)
+    made: RunMade | None = None  # the last run that wrote the output (done or invalid)
 
 
 def planned_encode(spec: JobSpec, source: SourceInfo) -> SourceInfo:

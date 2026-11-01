@@ -50,6 +50,7 @@ async function phoneFixture(page: Page) {
     ...job,
     issues: [],
     steps: {},
+    made: null,
     plan: null,
     tracks: null,
     output_name: null,

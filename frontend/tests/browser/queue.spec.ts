@@ -8,6 +8,7 @@ async function queueFixture(
   statuses: Status[] = ['ready', 'done'],
   sample: JobDetail['sample'] = null,
   search: JobDetail['search'] = null,
+  made: JobDetail['made'] = null,
 ) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
@@ -38,6 +39,7 @@ async function queueFixture(
     ...job,
     issues: [],
     steps: {},
+    made,
     plan: null,
     tracks: null,
     output_name: null,
@@ -217,6 +219,16 @@ test('the tab title follows the running job', async ({ page }) => {
   fixture.jobs[1].progress = null
   fixture.refresh()
   await expect(page).toHaveTitle('VideoForge')
+  expect(fixture.errors).toEqual([])
+})
+
+test('a done job says what its run made', async ({ page }) => {
+  const made = { output_bytes: 4.5 * 1024 ** 3, source_bytes: 18 * 1024 ** 3, seconds: 5025, reused: 2, kbps: 6120 }
+  const fixture = await queueFixture(page, 1, ['done'], null, null, made)
+  await page.goto('/#/queue/job-0')
+  await expect(page.getByText('Made 4.5 GB', { exact: false })).toContainText(
+    '25.0% of the source · 6,120 kb/s · took 1:23:45 (2 reused)',
+  )
   expect(fixture.errors).toEqual([])
 })
 

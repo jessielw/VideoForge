@@ -415,10 +415,20 @@ export interface StepRecord {
   seconds: number
 }
 
+// What the last run that wrote the output made, taken as it ended (JobState.made)
+export interface RunMade {
+  output_bytes: number
+  source_bytes: number | null
+  seconds: number // the run's wall time
+  reused: number // steps it took from an earlier run
+  kbps: number | null // the output's overall bitrate (null without the source's duration)
+}
+
 export interface JobDetail extends JobSummary {
   spec: JobSpec
   issues: Issue[]
   steps: Record<string, StepRecord>
+  made: RunMade | null // null until a run wrote the output, and while the job isn't done or invalid
   plan: Plan | null
   tracks: Tracks | null
   output_name: string | null // the file the run will write (null until planned)

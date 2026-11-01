@@ -4,7 +4,7 @@
   // Queue (top left, and the tick on its queue row) locks the job for the run: the queue runs it.
   import { api, type SpecChanges } from '../lib/api'
   import { saves } from '../lib/saves'
-  import { basename, duration, SEVERITY_TONE, STATUS_LABEL, STATUS_TONE } from '../lib/format'
+  import { basename, bytes, duration, percent, SEVERITY_TONE, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { queueable } from '../lib/queueView'
   import { app } from '../lib/state.svelte'
   import { layout } from '../lib/layout.svelte'
@@ -210,6 +210,19 @@
             {#if p.elapsed != null}· {duration(p.elapsed)} elapsed{/if}
             {#if p.left != null}<Tip text="A guess from the job's pace so far">· job ~{duration(p.left)} left</Tip>{/if}
           </span>
+        </div>
+      {/if}
+      {#if job.made && (job.status === 'done' || job.status === 'invalid')}
+        {@const m = job.made}
+        <div class="text-xs text-muted-foreground tabular-nums">
+          Made {bytes(m.output_bytes)}
+          {#if m.source_bytes}·
+            <Tip text="The source is {bytes(m.source_bytes)}"
+              >{percent(m.output_bytes / m.source_bytes)} of the source</Tip
+            >{/if}
+          {#if m.kbps != null}· {m.kbps.toLocaleString()} kb/s{/if}
+          · took {duration(m.seconds)}
+          {#if m.reused}<Tip text="Steps taken from an earlier run, not made again">({m.reused} reused)</Tip>{/if}
         </div>
       {/if}
       {#if problems.length}
