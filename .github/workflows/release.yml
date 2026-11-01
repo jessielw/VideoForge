@@ -48,8 +48,11 @@ jobs:
         shell: bash
         run: |
           version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-          # The version itself, or the version with a suffix (0.1.0-beta, 0.1.0-test).
-          if [[ "$GITHUB_REF_NAME" != "$version" && "$GITHUB_REF_NAME" != "$version"-* ]]; then
+          # Tags stay semver (0.1.0-beta.2) for the Docker tags; pyproject.toml holds PEP 440's spelling (0.1.0b2), as uv writes it.
+          tag=$GITHUB_REF_NAME
+          tag=${tag/-alpha./a}; tag=${tag/-beta./b}; tag=${tag/-rc./rc}
+          # The version itself, or the version with a suffix (0.1.0-test, 0.1.0b2-test).
+          if [[ "$tag" != "$version" && "$tag" != "$version"-* ]]; then
             echo "::error::tag $GITHUB_REF_NAME isn't pyproject.toml's version $version (or $version-<suffix>)"
             exit 1
           fi
