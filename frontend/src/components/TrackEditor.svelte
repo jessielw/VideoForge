@@ -7,7 +7,7 @@
   // Files can be added to the job here and removed again, and an audio track can be used more
   // than once ("Add a track from…": a copy with its own encode, title and flags).
   import type { InputChanges } from '../lib/api'
-  import { audioFormat, emptyOverride, isEmpty, shownOptions, subtitleName } from '../lib/format'
+  import { audioFormat, emptyOverride, isEmpty, languageName, shownOptions, subtitleName } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type {
     AudioAction,
@@ -534,7 +534,11 @@
       <div class="min-w-0 flex-1">
         <div class="text-sm wrap-anywhere {off ? 'text-muted-foreground line-through' : ''}">
           <span class="font-medium">{sourceLabel(t)}</span>
-          <span class="text-muted-foreground">· {t.language}{t.title ? ` · ${t.title}` : ''}</span>
+          <span class="text-muted-foreground"
+            >· {isAudio(t) ? t.language : `${languageName(t.language)} · ${t.language}`}{t.title
+              ? ` · ${t.title}`
+              : ''}</span
+          >
         </div>
         {#if details(t).length}
           <div class="flex flex-wrap gap-x-3 text-xs text-muted-foreground tabular-nums" data-details>
