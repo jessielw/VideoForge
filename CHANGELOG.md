@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- The Audio tab and track details show an audio track's commercial name (`DTS-HD MA` where it showed `DTS`; `Dolby TrueHD with Dolby Atmos`), as MediaInfo gives it. A track without one shows its raw format, as before; a job probed earlier gets it once it's probed again.
+
+- The track list names a subtitle's language beside its code: `#18 SRT · Spanish (Latin America) · es-419`.
+
+### Changed
+
+- The Dolby Vision enhancement layer, RPU and HDR10+ extraction steps show progress (ffmpeg's frame count against the source's), where their bar sat at 0% until the step ended and indexing looked hung.
+
+- The progress figures say what they count. The bar, the tab title (`job 4% · ...`) and the queue entry are the whole job's, each step weighted (a pass 1 at 0.6% is a few percent of the job); the main panel adds `· job N%` after the step's own, and the queue entry shows the step's percent beside its name.
+
 ## [0.1.0-beta.14] - 2026-10-31
 
 The first beta: an encode and mux job queue in the browser, for one user: on Windows (portable zip or from source), or in Docker on Linux.
