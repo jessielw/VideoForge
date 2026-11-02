@@ -128,12 +128,13 @@ def from_mediainfo(track: Any) -> VideoHdr:
 
 
 def video_stream_argv(
-    ffmpeg: str, source: Path, *, start_s: float = 0, seconds: float = 0, stream: int = 0
+    ffmpeg: str, source: Path, *, start_s: float = 0, seconds: float = 0, stream: int = 0, stats: bool = False
 ) -> list[str]:
     """ffmpeg writing one of the source's video streams (the first; VideoHdr.dv_stream for its RPU and
     enhancement layer) as raw HEVC (Annex B) to stdout, as dovi_tool and hdr10plus_tool read it (StaxRip's
-    command); start_s / seconds take a part of it."""
-    argv = [ffmpeg, "-hide_banner", "-loglevel", "error", "-analyzeduration", "100M", "-probesize", "50M"]
+    command); start_s / seconds take a part of it. stats: ffmpeg prints its "frame=" progress lines too."""
+    argv = [ffmpeg, "-hide_banner", "-loglevel", "error", *(["-stats"] if stats else [])]
+    argv += ["-analyzeduration", "100M", "-probesize", "50M"]
     argv += ["-ss", f"{start_s:g}"] if start_s else []
     argv += ["-i", str(source)]
     argv += ["-t", f"{seconds:g}"] if seconds else []
@@ -382,7 +383,7 @@ def _hdr10plus_issues(video: VideoInfo, settings: EncoderSettings, tools: Tools 
 def hdr10plus_argvs(tools: Tools, source: Path, out: Path) -> tuple[tuple[str, ...], ...]:
     """The source's HDR10+ metadata into a JSON file: ffmpeg | hdr10plus_tool extract."""
     extract = (tools.hdr10plus_tool, "extract", "-o", str(out), "-")
-    return (tuple(video_stream_argv(tools.ffmpeg, source)), extract)
+    return (tuple(video_stream_argv(tools.ffmpeg, source, stats=True)), extract)
 
 
 def script_frames(vspipe: str, script: Path) -> int:
@@ -420,7 +421,7 @@ def rpu_argvs(tools: Tools, source: Path, out: Path, stream: int = 0) -> tuple[t
     """The source's Dolby Vision RPU into a file: ffmpeg | dovi_tool extract-rpu (as it is: mode 0), from the
     video stream holding it (VideoHdr.dv_stream)."""
     extract = (tools.dovi_tool, "-m", "0", "extract-rpu", "-", "-o", str(out))
-    return (tuple(video_stream_argv(tools.ffmpeg, source, stream=stream)), extract)
+    return (tuple(video_stream_argv(tools.ffmpeg, source, stream=stream, stats=True)), extract)
 
 
 def rpu_frames(dovi_tool: str, rpu: Path) -> int:
@@ -442,9 +443,9 @@ def el_argvs(tools: Tools, source: Path, out: Path, stream: int = 0) -> tuple[tu
     """A profile 7 source's enhancement layer into a raw HEVC file: ffmpeg | dovi_tool demux --el-only. A stream
     of its own (VideoHdr.dv_stream: a UHD Blu-ray M2TS's) is the layer already: ffmpeg copies it out."""
     if stream:
-        return ((*video_stream_argv(tools.ffmpeg, source, stream=stream)[:-1], "-y", str(out)),)
+        return ((*video_stream_argv(tools.ffmpeg, source, stream=stream, stats=True)[:-1], "-y", str(out)),)
     demux = (tools.dovi_tool, "demux", "--el-only", "-", "-e", str(out))
-    return (tuple(video_stream_argv(tools.ffmpeg, source)), demux)
+    return (tuple(video_stream_argv(tools.ffmpeg, source, stats=True)), demux)
 
 
 def el_mkv_argv(mkvmerge: str, hevc: Path, out: Path, default_duration_ns: int) -> tuple[str, ...]:

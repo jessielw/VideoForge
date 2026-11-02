@@ -232,6 +232,7 @@ def index_steps(
                 outputs=(hevc,),
                 inputs=(source,),
                 weight=1,
+                frames=video.frames or None,
             ),
             Step(
                 "dovi.el_mkv",
@@ -312,6 +313,7 @@ def index_steps(
                 outputs=(rpu,),
                 inputs=(source,),
                 weight=1,
+                frames=video.frames or None if video is not None else None,
             )
         )
     return steps
@@ -418,6 +420,7 @@ def video_steps(
                 outputs=(meta,),
                 inputs=(source,),
                 weight=1,
+                frames=(v.frames or None) if v is not None else None,
             ),
             Step(
                 "hdr10plus.check",

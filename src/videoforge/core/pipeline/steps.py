@@ -63,6 +63,7 @@ class Step:
     # The step as it stands when its turn comes: a command built from an earlier step's output (a FEL encode's
     # HDR10 values come from the RPU the job extracts first). run_steps calls it before the reuse check.
     refresh: Callable[[], Step] | None = None
+    frames: int | None = None  # the frames it reads, when known: a tool that prints a count (ffmpeg's) gets a bar
 
     @property
     def written(self) -> tuple[Path, ...]:
@@ -104,9 +105,10 @@ class StepProgress:
 ProgressFn = Callable[[StepProgress], None]
 
 
-def line_progress(line: str) -> float | None:
-    """Fraction done from one tool output line: encoders, vspipe, mkvmerge, qaac."""
-    frac = encoder_progress(line)
+def line_progress(line: str, frames: int | None = None) -> float | None:
+    """Fraction done from one tool output line: encoders, vspipe, mkvmerge, qaac. frames: the step's total, for
+    a tool that counts frames without saying a percent (ffmpeg)."""
+    frac = encoder_progress(line, frames)
     if frac is None and (m := _MKV_PROGRESS.search(line) or _INDEX_PROGRESS.search(line)):
         frac = int(m.group(1)) / 100
     return frac
@@ -239,7 +241,7 @@ def run_steps(
 
                 def tool_log(line: str) -> None:
                     nonlocal last, latest
-                    frac = line_progress(line)
+                    frac = line_progress(line, step.frames)
                     if frac is not None:
                         latest = frac
                     mark = None
