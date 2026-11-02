@@ -1724,7 +1724,7 @@ wheels = [
 
 [[package]]
 name = "videoforge"
-version = "0.1.0b14"
+version = "0.1.0b15"
 source = { editable = "." }
 dependencies = [
     { name = "apprise" },
