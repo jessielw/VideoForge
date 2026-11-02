@@ -947,7 +947,7 @@
                   {percent(job.progress.overall)}
                 </div>
                 <div class="flex gap-2 text-xs text-muted-foreground">
-                  <span class="truncate">{job.progress.step}</span>
+                  <span class="truncate">{job.progress.step} · {percent(job.progress.fraction)}</span>
                   <Tip
                     class="ml-auto shrink-0 tabular-nums"
                     text="Encoder speed · time since the run started · the job's time left (a guess from its pace so far)"

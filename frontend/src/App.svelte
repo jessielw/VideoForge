@@ -47,7 +47,7 @@
       document.title = 'VideoForge'
       return
     }
-    const pct = running.progress ? `${Math.floor(running.progress.overall * 100)}% · ` : ''
+    const pct = running.progress ? `job ${Math.floor(running.progress.overall * 100)}% · ` : ''
     document.title = `${app.queue.paused ? 'Paused · ' : ''}${pct}${running.name} · VideoForge`
   })
 </script>
