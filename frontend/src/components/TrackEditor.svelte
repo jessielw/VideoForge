@@ -7,7 +7,7 @@
   // Files can be added to the job here and removed again, and an audio track can be used more
   // than once ("Add a track from…": a copy with its own encode, title and flags).
   import type { InputChanges } from '../lib/api'
-  import { emptyOverride, isEmpty, shownOptions, subtitleName } from '../lib/format'
+  import { audioFormat, emptyOverride, isEmpty, shownOptions, subtitleName } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type {
     AudioAction,
@@ -388,7 +388,7 @@
   // --- the source at a glance ---
   function sourceLabel(t: Track): string {
     if (isAudio(t)) {
-      const fmt = t.format_name || CODEC[t.codec] || t.codec
+      const fmt = t.commercial_name ? audioFormat(t) : t.format_name || CODEC[t.codec] || t.codec
       const where = t.external_path ? `${basename(t.external_path)}${t.index ? ` #${t.index + 1}` : ''}:` : `#${t.id}`
       return `${where} ${fmt}${t.atmos ? ' Atmos' : t.dtsx ? ' DTS:X' : ''} ${t.layout}`
     }

@@ -286,6 +286,7 @@ def probe(path: Path, mkvmerge: str, ffprobe: str = "") -> SourceInfo:
                     bitrate_kbps=round(bit_rate / 1000) if isinstance(bit_rate, int) else None,
                     delay_ms=_delay(pid, mi_video) if delay is None else delay,
                     format_name=getattr(mi, "format", "") or track.get("codec", ""),
+                    commercial_name=str(getattr(mi, "commercial_name", None) or ""),
                     sample_rate=_int(getattr(mi, "sampling_rate", None)) or props.get("audio_sampling_frequency"),
                     bit_depth=(_int(getattr(mi, "bit_depth", None)) or props.get("audio_bits_per_sample"))
                     if lossless

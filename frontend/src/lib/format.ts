@@ -204,6 +204,20 @@ export function languageName(tag: string): string {
   }
 }
 
+const SHORT_COMMERCIAL: [RegExp, string][] = [
+  [/^DTS-HD Master Audio$/i, 'DTS-HD MA'],
+  [/^DTS-HD High Resolution(?: Audio)?$/i, 'DTS-HD HRA'],
+  [/^Dolby Digital Plus/i, 'DD+'],
+  [/^Dolby Digital$/i, 'DD'],
+]
+/** An audio track's format as it is sold: MediaInfo's commercial name ("DTS-HD MA", "Dolby TrueHD with Dolby Atmos"),
+ * else its raw format ("DTS"), else the codec. */
+export function audioFormat(t: { commercial_name?: string; format_name: string; codec: string }): string {
+  const c = t.commercial_name?.trim()
+  if (!c) return t.format_name || t.codec
+  return SHORT_COMMERCIAL.find(([re]) => re.test(c))?.[1] ?? c
+}
+
 /** A subtitle's title from its language and flags: "English", "English (Forced)", "Spanish (Latin America) (SDH)".
  * The same names as the server's (core/template.py sub_title), which templates use. */
 export function subtitleName(

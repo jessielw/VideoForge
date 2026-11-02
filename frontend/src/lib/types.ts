@@ -303,6 +303,7 @@ export interface AudioTrack {
   bitrate_kbps: number | null
   delay_ms: number
   format_name: string
+  commercial_name?: string // what the format is sold as ("DTS-HD Master Audio")
   detected: Record<string, boolean>
   external_path?: string | null // an added audio file (id and index are that file's)
   sample_rate: number | null // Hz

@@ -90,6 +90,7 @@ class AudioTrack:
     bitrate_kbps: int | None = None
     delay_ms: int = 0  # relative to video
     format_name: str = ""  # raw MediaInfo format, for display
+    commercial_name: str = ""  # MediaInfo's commercial name ("DTS-HD Master Audio"): what the format is sold as
     external_path: Path | None = None  # an added audio file (id and index are then that file's)
     sample_rate: int | None = None  # Hz
     bit_depth: int | None = None  # lossless formats only (a lossy decoder's depth means nothing)

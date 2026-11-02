@@ -112,6 +112,7 @@ def parse_mediainfo_text(text: str, name: str | None = None) -> SourceInfo:
                     bitrate_kbps=_kbps(f.get("Bit rate")),
                     delay_ms=_delay_ms(f.get("Delay relative to video")),
                     format_name=f.get("Format", ""),
+                    commercial_name=f.get("Commercial name", ""),
                 )
             )
         elif kind == "Text":

@@ -2,7 +2,7 @@
   // Audio or subtitle choices (one kind per tab): what the rule set's rules picked, and per-job overrides
   // (audio tracks and order, subtitle use / language / the rule set's flags). Every change
   // replans on the server; the output columns always show what the rules now produce.
-  import { emptyOverride, isEmpty } from '../lib/format'
+  import { audioFormat, emptyOverride, isEmpty } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type { AudioTrack, JobDetail, Overrides, SubTrack, TrackOverride } from '../lib/types'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
@@ -135,7 +135,7 @@
   }
 
   function audioLabel(t: AudioTrack) {
-    return `#${t.id} ${t.format_name || t.codec}${t.atmos ? ' Atmos' : t.dtsx ? ' DTS:X' : ''} ${t.layout}`
+    return `#${t.id} ${audioFormat(t)}${t.atmos ? ' Atmos' : t.dtsx ? ' DTS:X' : ''} ${t.layout}`
   }
 </script>
 
