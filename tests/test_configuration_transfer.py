@@ -102,7 +102,10 @@ def test_export_preview_restore_and_restart_preserve_entire_configuration(tmp_pa
         assert client.app.state.config.plugins == original["application"]["plugins"]
         assert client.app.state.config.matching.encode_suffixes == ("_custom", "")
         assert client.get("/api/config").json()["restart"] == []
-        assert client.get("/api/settings").json() == original["folders"]
+        saved = client.get("/api/settings").json()
+        assert {k: saved[k] for k in original["folders"]} == original[
+            "folders"
+        ]  # the output folders list isn't exported
 
 
 def test_a_version_2_backup_has_no_default_subtitle_rules(tmp_path):

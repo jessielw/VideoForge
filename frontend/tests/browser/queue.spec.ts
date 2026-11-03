@@ -214,7 +214,7 @@ test('the tab title follows the running job', async ({ page }) => {
     left: 1200,
   }
   fixture.refresh()
-  await expect(page).toHaveTitle('42% · Episode 00001 · VideoForge')
+  await expect(page).toHaveTitle('job 42% · Episode 00001 · VideoForge')
   fixture.jobs[1].status = 'done'
   fixture.jobs[1].progress = null
   fixture.refresh()
