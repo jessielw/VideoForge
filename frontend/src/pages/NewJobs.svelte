@@ -7,6 +7,7 @@
   import * as Card from '$lib/components/ui/card'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
+  import OutputFolderMenu from '../components/OutputFolderMenu.svelte'
   import PathSlot from '../components/PathSlot.svelte'
   import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
   import { api } from '../lib/api'
@@ -107,7 +108,8 @@
   onMount(async () => {
     if (!ruleSet) ruleSet = app.defaultRuleSet?.id ?? ''
     const s = await api.settings().catch(() => null)
-    if (s?.output_dir && !output.length) output = [s.output_dir]
+    const first = s?.output_default || s?.output_dir
+    if (first && !output.length) output = [first]
   })
 
   $effect(() => {
@@ -338,7 +340,9 @@
       bind:paths={chapters}
       extensions={['.txt', '.xml']}
     />
-    <PathSlot label="Output folder" hint="Where the muxed releases go" bind:paths={output} mode="folder" />
+    <PathSlot label="Output folder" hint="Where the muxed releases go" bind:paths={output} mode="folder">
+      {#snippet actions()}<OutputFolderMenu onpick={(path) => (output = [path])} />{/snippet}
+    </PathSlot>
   </Card.Root>
 
   <Card.Root class="min-h-48 flex-1 shrink-0 gap-0 py-0">

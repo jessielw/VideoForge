@@ -47,6 +47,14 @@ import type {
   VideoSettings,
 } from './types'
 
+export type OutputFolder = { path: string; pinned: boolean }
+export type Settings = {
+  output_dir: string
+  last_dir: string
+  output_folders: OutputFolder[]
+  output_default: string
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -223,8 +231,8 @@ export const api = {
     get<{ dashes: string; options: { name: string; help: string }[] }>(`/api/config/video-options/${encoder}`),
   encoders: () => get<AudioEncodeInfo[]>('/api/config/encoders'),
   checkTool: (name: string, path: string) => post<ToolCheck>('/api/config/tools/check', { name, path }),
-  settings: () => get<{ output_dir: string; last_dir: string }>('/api/settings'),
-  saveSettings: (s: { output_dir?: string; last_dir?: string }) => request('PUT', '/api/settings', s),
+  settings: () => get<Settings>('/api/settings'),
+  saveSettings: (s: Partial<Settings>) => request<Settings>('PUT', '/api/settings', s),
 
   shutdown: () => post<{ ok: boolean }>('/api/shutdown'),
 

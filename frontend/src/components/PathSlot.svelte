@@ -3,6 +3,7 @@
   // dropped on it (in the window) or their paths pasted into it.
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
   import XIcon from '@lucide/svelte/icons/x'
+  import type { Snippet } from 'svelte'
   import { Button } from '$lib/components/ui/button'
   import { drops, pathDrop } from '../lib/dropPaths.svelte'
   import { basename } from '../lib/format'
@@ -15,7 +16,15 @@
     paths = $bindable([]),
     extensions = [],
     mode = 'files',
-  }: { label: string; hint: string; paths?: string[]; extensions?: string[]; mode?: 'files' | 'folder' } = $props()
+    actions,
+  }: {
+    label: string
+    hint: string
+    paths?: string[]
+    extensions?: string[]
+    mode?: 'files' | 'folder'
+    actions?: Snippet
+  } = $props()
 
   let browsing = $state(false)
 
@@ -67,7 +76,10 @@
       {/each}
     </div>
   </Tip>
-  <Button variant="outline" onclick={() => (browsing = true)}><FolderOpenIcon />Browse…</Button>
+  <div class="flex gap-2">
+    <Button variant="outline" onclick={() => (browsing = true)}><FolderOpenIcon />Browse…</Button>
+    {@render actions?.()}
+  </div>
 </div>
 
 {#if browsing}

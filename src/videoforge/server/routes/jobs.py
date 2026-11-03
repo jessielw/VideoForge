@@ -17,6 +17,7 @@ from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template import Template
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.core.workdir import work_dir_size
+from videoforge.server import output_folders
 from videoforge.server.queue import LOG_LINES, Busy, JobQueue
 from videoforge.server.routes.presets import default_template, subs_default
 from videoforge.server.views import detail, summary
@@ -80,7 +81,12 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         raise HTTPException(422, "No source matched")
     out_dir = Path(body["output_dir"]) if body.get("output_dir") else None
     if out_dir is not None:
-        request.app.state.store.set_setting("output_dir", str(out_dir))
+        store = request.app.state.store
+        store.set_setting("output_dir", str(out_dir))
+        store.set_setting(
+            output_folders.KEY,
+            output_folders.remember(output_folders.clean(store.get_setting(output_folders.KEY, [])), str(out_dir)),
+        )
     added, skipped = q.add(
         result.jobs,
         body.get("rule_set") or request.app.state.default_rule_set,

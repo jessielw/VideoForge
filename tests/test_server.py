@@ -2098,3 +2098,49 @@ def test_a_done_job_keeps_the_work_folder_a_variant_uses(tmp_path):
         assert (tmp_path / "src" / "Show.S01E01.mkv_tmp" / "main" / "video.264").is_file()
         lines = client.get(f"/api/jobs/{one}/log").json()["lines"]
         assert "Work folder kept: Show.S01E01.mkv (v2) uses it too" in lines
+
+
+def test_output_folders(tmp_path):
+    """New jobs remembers the folders used (newest first), keeps pinned ones, and the default must stay pinned."""
+    with make_client(tmp_path) as client:
+        s = client.get("/api/settings").json()
+        assert s["output_folders"] == [] and s["output_default"] == ""
+
+        put = client.put(
+            "/api/settings",
+            json={
+                "output_folders": [
+                    {"path": "/out/1080p", "pinned": True},
+                    {"path": "/OUT/1080P", "pinned": False},  # a duplicate by case
+                    {"path": "/out/2160p", "pinned": True},
+                    {"path": "", "pinned": True},
+                    "junk",
+                ],
+                "output_default": "/out/2160p",
+            },
+        ).json()
+        assert [f["path"] for f in put["output_folders"]] == ["/out/1080p", "/out/2160p"]
+        assert put["output_default"] == "/out/2160p"
+
+        # Unpinning the default drops it.
+        unpinned = client.put(
+            "/api/settings",
+            json={"output_folders": [{"path": "/out/1080p", "pinned": True}, {"path": "/out/2160p"}]},
+        ).json()
+        assert unpinned["output_default"] == ""
+
+        assert client.put("/api/settings", json={"output_folders": "x"}).status_code == 422
+        assert client.put("/api/settings", json={"output_default": 3}).status_code == 422
+
+
+def test_output_folders_remember():
+    from videoforge.server.output_folders import MAX_RECENT, clean, remember
+
+    folders = clean([{"path": "P", "pinned": True}])
+    for i in range(MAX_RECENT + 3):
+        folders = remember(folders, f"R{i}")
+    recent = [f["path"] for f in folders if not f["pinned"]]
+    assert len(recent) == MAX_RECENT and recent[0] == f"R{MAX_RECENT + 2}"
+    assert remember(folders, "p") == folders  # a pinned folder stays where it is
+    again = remember(folders, recent[-1].lower())
+    assert [f["path"] for f in again if not f["pinned"]][0].lower() == recent[-1].lower()

@@ -10,6 +10,7 @@
   import { layout } from '../lib/layout.svelte'
   import type { CommandStep, JobDetail } from '../lib/types'
   import EncoderPanel from './EncoderPanel.svelte'
+  import OutputFolderMenu from './OutputFolderMenu.svelte'
   import SampleCard from './SampleCard.svelte'
   import CrfSearchCard from './CrfSearchCard.svelte'
   import { videoView } from '../lib/videoView.svelte'
@@ -346,6 +347,7 @@
               <Button variant="outline" disabled={!editable} onclick={() => (browsing = 'output')}
                 ><FolderOpenIcon />Browse…</Button
               >
+              <OutputFolderMenu disabled={!editable} onpick={(path) => save({ output_dir: path })} />
             </div>
             <span class="text-muted-foreground">Output name</span>
             <Tip

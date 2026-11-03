@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Saved output folders**: a **Saved** menu beside the output folder (New jobs, and a job's Output tab) lists the folders you've added jobs to, newest first (the last 10), and the ones you pinned. Pin a folder to keep it, star a pinned one to make it the default that pre-fills New jobs (otherwise it's the last folder used), or forget one. A filter box shows once there are more than 8. The list is saved on this machine, in neither templates nor configuration exports.
+
 ## [0.1.0-beta.15] - 2026-11-02
 
 ### Added

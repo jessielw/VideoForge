@@ -18,6 +18,7 @@ from videoforge.core.execute.mux import MUXERS
 from videoforge.core.plan_io import to_json
 from videoforge.core.template import Template
 from videoforge.core.video.filters import PRESETS
+from videoforge.server import output_folders
 from videoforge.server.events import EventHub
 
 router = APIRouter(prefix="/api")
@@ -237,7 +238,15 @@ def filter_presets() -> list[dict[str, Any]]:
 @router.get("/settings")
 def get_settings(request: Request) -> dict[str, Any]:
     store = request.app.state.store
-    return {"output_dir": store.get_setting("output_dir", ""), "last_dir": store.get_setting("last_dir", "")}
+    folders = output_folders.clean(store.get_setting(output_folders.KEY, []))
+    default = store.get_setting(output_folders.DEFAULT_KEY, "")
+    return {
+        "output_dir": store.get_setting("output_dir", ""),
+        "last_dir": store.get_setting("last_dir", ""),
+        "output_folders": folders,
+        # The default only counts while it is still a pinned folder.
+        "output_default": default if any(f["pinned"] and f["path"] == default for f in folders) else "",
+    }
 
 
 @router.put("/settings")
@@ -246,6 +255,15 @@ def put_settings(request: Request, body: dict[str, Any] = Body(...)) -> dict[str
     for key in ("output_dir", "last_dir"):
         if key in body:
             store.set_setting(key, body[key])
+    if output_folders.KEY in body:
+        try:
+            store.set_setting(output_folders.KEY, output_folders.clean(body[output_folders.KEY]))
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+    if output_folders.DEFAULT_KEY in body:
+        if not isinstance(body[output_folders.DEFAULT_KEY], str):
+            raise HTTPException(422, "output_default: expected a folder path or empty")
+        store.set_setting(output_folders.DEFAULT_KEY, body[output_folders.DEFAULT_KEY])
     return get_settings(request)
 
 
