@@ -239,6 +239,41 @@ def _env_list(name: str) -> list[str]:
 _ENV_BOOL = {"1": True, "true": True, "yes": True, "on": True, "0": False, "false": False, "no": False, "off": False}
 
 
+def _serve_tray(args: argparse.Namespace, settings, url: str) -> int:
+    """The tray: one per data folder (a second launch opens the first one's page), on the next free port when
+    the default is taken by something else."""
+    import time
+
+    from videoforge import applog
+    from videoforge.instance import InstanceLock, find_free_port
+    from videoforge.server.app import create_app
+    from videoforge.tray import run_tray
+
+    lock = InstanceLock(settings.data_dir / "videoforge.lock")
+    if not lock.acquire():
+        # The other one may still be starting: give it a few seconds to answer before giving up.
+        for _ in range(20):
+            if _bring_up_running(url, open_browser=True):
+                return 0
+            time.sleep(0.5)
+        console.print("VideoForge is already running (starting up); open it from its tray icon")
+        return 0
+    port = find_free_port(args.host, args.port)
+    if port != args.port:
+        settings.port = port
+        url = url.rsplit(":", 1)[0] + f":{port}"
+    applog.setup(settings.data_dir)
+    if port != args.port:
+        import logging
+
+        logging.getLogger("videoforge").info("Port %d is taken; using %d", args.port, port)
+    console.print(f"VideoForge on [bold]{url}[/], in the tray (Open there for the page; Quit or Ctrl+C here to stop)")
+    try:
+        return run_tray(create_app(settings), args.host, port, url, open_browser=not args.no_browser)
+    finally:
+        lock.release()
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import threading
     import webbrowser
@@ -266,16 +301,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
     url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"  # noqa: S104 (a comparison)
     if _bring_up_running(url, open_browser=args.tray or not args.no_browser):
         return 0
+    if args.tray:
+        return _serve_tray(args, settings, url)
     from videoforge import applog
 
     applog.setup(settings.data_dir)
-    if args.tray:
-        from videoforge.tray import run_tray
-
-        console.print(
-            f"VideoForge on [bold]{url}[/], in the tray (Open there for the page; Quit or Ctrl+C here to stop)"
-        )
-        return run_tray(create_app(settings), args.host, args.port, url, open_browser=not args.no_browser)
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, (url,)).start()
     everywhere = ", listening on all addresses" if args.host in ("0.0.0.0", "::") else ""  # noqa: S104 (a comparison)

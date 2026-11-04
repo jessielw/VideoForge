@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- The tray runs one VideoForge per data folder (a second launch, even during the first's startup, opens its page) and, when its port is taken by another program, uses the next free one.
 - Uncaught errors and native crashes are written to the app log (and a `.crash` file beside it) instead of vanishing in the windowed build.
 
 ## [0.1.0-beta.16] - 2026-11-02

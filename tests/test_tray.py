@@ -21,3 +21,27 @@ def test_shutdown_route(tmp_path):
         stopped = []
         client.app.state.shutdown = lambda: stopped.append(True)
         assert client.post("/api/shutdown").json() == {"ok": True} and stopped == [True]
+
+
+def test_instance_lock_is_exclusive_until_released(tmp_path):
+    from videoforge.instance import InstanceLock
+
+    first, second = InstanceLock(tmp_path / "videoforge.lock"), InstanceLock(tmp_path / "videoforge.lock")
+    assert first.acquire()
+    assert not second.acquire()  # another holds it
+    first.release()
+    assert second.acquire()  # released (as the OS does when a process ends)
+    second.release()
+
+
+def test_find_free_port_skips_a_taken_one():
+    import socket
+
+    from videoforge.instance import find_free_port
+
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        port = taken.getsockname()[1]
+        taken.listen()
+        assert find_free_port("127.0.0.1", port) != port
+    assert find_free_port("127.0.0.1", port) == port  # free again
