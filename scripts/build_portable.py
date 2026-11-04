@@ -4,7 +4,7 @@
 
 The folder holds a standalone Python (the python-build-standalone build uv installs) with VideoForge and its
 locked dependencies installed in it, the built frontend, videoforge.toml, the free tools, and VideoForge.exe,
-which runs `python -m videoforge serve --window` with VIDEOFORGE_ROOT set to the folder. A real Python is the
+which runs `python -m videoforge serve --tray` with VIDEOFORGE_ROOT set to the folder. A real Python is the
 point: vspipe embeds it, and the preview worker is `python -m`. Unpacked anywhere, it runs from there. The
 VapourSynth plugins and filter scripts of vsplugins/manifest.toml come with it (scripts/fetch_plugins.py), and
 the tools in scripts/tools.toml (scripts/fetch_tools.py). The bundled runtime must pass the media
@@ -93,7 +93,7 @@ def launcher(python: Path, folder: Path, work: Path) -> None:
     if not CSC.is_file():
         sys.exit(f"csc.exe wasn't found at {CSC} (.NET Framework 4, part of Windows)")
     icon = work / "videoforge.ico"
-    run(python, "-c", f"from videoforge.desktop import app_icon; app_icon().save(r'{icon}', sizes=[(16, 16), "
+    run(python, "-c", f"from videoforge.tray import app_icon; app_icon().save(r'{icon}', sizes=[(16, 16), "
         "(32, 32), (48, 48), (256, 256)])")  # fmt: skip
     run(CSC, "/nologo", "/optimize", "/target:winexe", f"/win32icon:{icon}", f"/out:{folder / 'VideoForge.exe'}",
         ROOT / "scripts" / "launcher" / "VideoForge.cs")  # fmt: skip

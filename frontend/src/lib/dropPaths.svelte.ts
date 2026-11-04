@@ -1,35 +1,15 @@
-// Dropped or pasted file paths for path fields. A page in a normal browser never learns where a
-// dropped file lives; in `videoforge serve --window` pywebview does and hands the paths to
-// `window.videoforgeDropped` (src/videoforge/desktop.py). Pasting paths (Explorer: Copy as path)
-// works everywhere. Every field takes paths through the `pathDrop` action.
+// Pasted file paths for path fields. A page in a browser never learns where a dropped file lives, so
+// paths come from the clipboard (Explorer: select, Ctrl+Shift+C = Copy as path) and a drop only explains that.
+// Every field takes paths through the `pathDrop` action.
 import type { Action } from 'svelte/action'
 import { toast } from 'svelte-sonner'
 import { api } from './api'
 import { basename } from './format'
 
-declare global {
-  interface Window {
-    videoforgeDesktop?: boolean
-    videoforgeDropped?: (paths: string[]) => void
-  }
-}
-
-export const drops = $state({ desktop: false })
-
-// The field a drop landed on, waiting for the window's paths.
-let pending: ((paths: string[]) => void) | null = null
-
 const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files')
 
 export function installDrops() {
-  drops.desktop = !!window.videoforgeDesktop
-  window.addEventListener('videoforge:desktop', () => (drops.desktop = true))
-  window.videoforgeDropped = (paths) => {
-    const take = pending
-    pending = null
-    if (take && paths.length) take(paths)
-  }
-  // Outside a field a dropped file must not replace the app with the file.
+// Outside a field a dropped file must not replace the app with the file.
   const block = (e: DragEvent) => {
     if (!hasFiles(e) || e.defaultPrevented) return
     e.preventDefault()
@@ -101,7 +81,7 @@ export interface PathDropOptions {
 // Shown on a field while files are dragged over it.
 const OVER = ['ring-2', 'ring-primary/70', 'bg-primary/5']
 
-/** Makes an element take dropped files (in the window) and pasted paths. It becomes focusable for pasting;
+/** Makes an element take pasted paths (and explain, when files are dropped on it, why they aren't taken). It becomes focusable for pasting;
  * a paste into a text box inside it is left alone. */
 export const pathDrop: Action<HTMLElement, PathDropOptions> = (node, initial) => {
   let opts = initial
@@ -128,18 +108,13 @@ export const pathDrop: Action<HTMLElement, PathDropOptions> = (node, initial) =>
   const leave = (e: DragEvent) => {
     if (hasFiles(e) && depth > 0 && --depth === 0) clear()
   }
-  // Not stopped: the window's own drop handler on the document reads the paths.
   const drop = (e: DragEvent) => {
     if (!hasFiles(e) || opts.disabled) return
     e.preventDefault()
     clear()
-    if (drops.desktop) pending = take
-    else
-      toast.info('A browser keeps dropped files’ paths to itself', {
-        description:
-          'Paste the paths instead (Explorer: select, Ctrl+Shift+C, then Ctrl+V here), use Browse…, ' +
-          'or start VideoForge with `videoforge serve --window` to drop files.',
-      })
+    toast.info('A browser keeps dropped files’ paths to itself', {
+      description: 'Paste the paths instead: in Explorer select the files, press Ctrl+Shift+C, then Ctrl+V here. Or use Browse…',
+    })
   }
   const paste = (e: ClipboardEvent) => {
     if (opts.disabled) return

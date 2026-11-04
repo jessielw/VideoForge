@@ -5,7 +5,7 @@
   import XIcon from '@lucide/svelte/icons/x'
   import type { Snippet } from 'svelte'
   import { Button } from '$lib/components/ui/button'
-  import { drops, pathDrop } from '../lib/dropPaths.svelte'
+  import { pathDrop } from '../lib/dropPaths.svelte'
   import { basename } from '../lib/format'
   import FileBrowser from './FileBrowser.svelte'
   import Tip from './Tip.svelte'
@@ -46,7 +46,7 @@
   <div class="col-span-2 pt-1.5 text-sm text-muted-foreground @min-[40rem]/import:col-span-1">{label}</div>
   <Tip
     class="grid min-w-0"
-    text={drops.desktop ? 'Drop files here, or paste paths' : 'Paste paths here (Explorer: Copy as path)'}
+    text="Paste paths here (Explorer: select, Ctrl+Shift+C, then Ctrl+V)"
   >
     <div
       class="flex min-h-8 min-w-0 flex-wrap gap-1.5 rounded-lg border border-input px-2 py-1 outline-none focus-visible:border-ring

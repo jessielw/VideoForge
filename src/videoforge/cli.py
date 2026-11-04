@@ -209,7 +209,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def _bring_up_running(url: str, open_browser: bool) -> bool:
-    """When VideoForge already answers at `url`, show its window (or open the browser) instead of starting again."""
+    """When VideoForge already answers at `url`, open its page (if asked) instead of starting again."""
     import json
     import urllib.request
     import webbrowser
@@ -220,14 +220,9 @@ def _bring_up_running(url: str, open_browser: bool) -> bool:
                 return False
     except (OSError, ValueError):
         return False
-    try:
-        show = urllib.request.Request(url + "/api/window/show", data=b"", method="POST")  # noqa: S310 (http)
-        urllib.request.urlopen(show, timeout=5)  # noqa: S310
-        console.print("VideoForge is already running: its window is up")
-    except OSError:  # it runs in the browser
-        console.print(f"VideoForge is already running on [bold]{url}[/]")
-        if open_browser:
-            webbrowser.open(url)
+    console.print(f"VideoForge is already running on [bold]{url}[/]")
+    if open_browser:
+        webbrowser.open(url)
     return True
 
 
@@ -269,22 +264,18 @@ def cmd_serve(args: argparse.Namespace) -> int:
     if args.data_dir:
         settings.data_dir = args.data_dir
     url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"  # noqa: S104 (a comparison)
-    if _bring_up_running(url, open_browser=args.window or not args.no_browser):
+    if _bring_up_running(url, open_browser=args.tray or not args.no_browser):
         return 0
     from videoforge import applog
 
     applog.setup(settings.data_dir)
-    if args.window:
-        from videoforge.desktop import run_window
+    if args.tray:
+        from videoforge.tray import run_tray
 
         console.print(
-            f"VideoForge on [bold]{url}[/], in its own window (closing it keeps VideoForge in the tray;"
-            " Quit there or Ctrl+C here to stop)"
+            f"VideoForge on [bold]{url}[/], in the tray (Open there for the page; Quit or Ctrl+C here to stop)"
         )
-        # The window keeps its cache across starts: a page address of its own per build never finds an old one.
-        index = settings.frontend_dir / "index.html"
-        page = f"{url}/?build={index.stat().st_mtime_ns}" if index.is_file() else url
-        return run_window(create_app(settings), args.host, args.port, page, settings.data_dir)
+        return run_tray(create_app(settings), args.host, args.port, url, open_browser=not args.no_browser)
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, (url,)).start()
     everywhere = ", listening on all addresses" if args.host in ("0.0.0.0", "::") else ""  # noqa: S104 (a comparison)
@@ -369,10 +360,9 @@ def main(argv: list[str] | None = None) -> int:
         help="allow plugin ZIP installation, removal and configuration (default: VIDEOFORGE_PLUGIN_MANAGEMENT, else loopback bindings only)",
     )
     p.add_argument(
-        "--window",
+        "--tray",
         action="store_true",
-        help="open the app in its own window (dropped files fill path fields; closing it keeps VideoForge in the "
-        "tray); needs the desktop extra",
+        help="run from a tray icon (Open for the page, Quit to stop) and open the page; needs the desktop extra",
     )
     p.add_argument(
         "--data-dir",

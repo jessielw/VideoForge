@@ -39,7 +39,6 @@ manual = "videoforge.rule_sets.manual:ManualRuleSet"
 [project.optional-dependencies]
 desktop = [
     "pystray>=0.19.5",
-    "pywebview>=6.2.1",
 ]
 # Python filter scripts for VapourSynth scripts (the Docker image and the portable build have them). The
 # single-file ones (havsfunc, mvsfunc) and the plugins come from vsplugins/manifest.toml.

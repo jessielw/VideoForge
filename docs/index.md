@@ -6,7 +6,7 @@ description: A browser-based encode and mux queue for Windows and Docker, powere
 
 **Turn a source file or a season of episodes into an encode and mux queue.**
 
-VideoForge combines VapourSynth processing, video and audio encoding, subtitle selection, and MKV or MP4 output in one local application. Set up each job in your browser, or use the Windows desktop window. Jobs survive restarts, and completed encodes can be reused.
+VideoForge combines VapourSynth processing, video and audio encoding, subtitle selection, and MKV or MP4 output in one local application. Set up each job in your browser; on Windows it can run from a tray icon. Jobs survive restarts, and completed encodes can be reused.
 
 [Get started](getting-started/index.md){ .md-button .md-button--primary } [Create your first job](getting-started/first-job.md){ .md-button }
 

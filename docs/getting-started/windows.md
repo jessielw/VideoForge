@@ -20,9 +20,11 @@ The release builder runs indexing, preview, video/audio encoding and MKV/MP4 mux
 .\runtime\python.exe scripts\verify_toolchain.py --smoke
 ```
 
-## Window, tray, and console
+## Tray and console
 
-The desktop window accepts files dropped from Explorer onto path fields. Closing the window leaves VideoForge running in the tray, including its active encodes. Choose **Quit** from the tray icon to stop it. Starting VideoForge again brings the running window forward.
+VideoForge.exe starts VideoForge in the tray and opens the page in your default browser. Closing the tab leaves it running, including its active encodes. Choose **Open VideoForge** from the tray icon to open the page again, or **Quit** to stop it. Starting VideoForge again opens the running instance's page.
+
+A browser does not reveal a dropped file's path. In Explorer select the files, press **Ctrl+Shift+C** (Copy as path), then **Ctrl+V** in a path field.
 
 For a console session, open a terminal in the extracted folder:
 

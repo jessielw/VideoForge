@@ -6,13 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- VideoForge no longer has its own desktop window. `serve --tray` (VideoForge.exe) puts an icon in the tray and opens the page in your default browser; Open VideoForge opens it again and Quit stops it. Dropping a file onto a path field now explains how to paste instead (Explorer: Ctrl+Shift+C, then Ctrl+V). `--window` is gone, and with it pywebview, the .NET bridge it needed and the WebView2 requirement.
+- Preview log now shows a repeated line once instead of once per frame to prevent spamming the logger.
+
+### Fixed
+
+- The desktop window could fail to open, silently, on a Windows machine where the extracted DLLs were marked as downloaded from the internet (.NET refused to load them). The window is gone, and so is that failure.
+
 ### Added
 
 - Uncaught errors and native crashes are written to the app log (and a `.crash` file beside it) instead of vanishing in the windowed build.
-
-### Changed
-
-- Preview log now shows a repeated line once instead of once per frame to prevent spamming the logger.
 
 ## [0.1.0-beta.16] - 2026-11-02
 

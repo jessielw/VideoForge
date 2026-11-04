@@ -20,12 +20,7 @@ VapourSynth R82 needs API 4 plugins. An older API 3 plugin cannot be fixed by ch
 
 ## Dropped files do not fill the path
 
-Browsers do not reveal a dropped file's full local path. Use the desktop window, or copy the path in Explorer with **Ctrl+Shift+C** and paste it into the field. From source, desktop mode is:
-
-```sh
-uv sync --extra desktop
-uv run videoforge serve --window
-```
+Browsers do not reveal a dropped file's full local path. In Explorer select the files, press **Ctrl+Shift+C** (Copy as path), then click the path field and press **Ctrl+V**. Quotes and several lines are fine. You can also use **Browse…**.
 
 ## Docker cannot see a file or write a work folder
 

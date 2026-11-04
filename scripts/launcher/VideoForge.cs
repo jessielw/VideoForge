@@ -1,4 +1,4 @@
-// VideoForge.exe, the portable build's launcher: runs its own Python on `videoforge serve --window`
+// VideoForge.exe, the portable build's launcher: runs its own Python on `videoforge serve --tray`
 // (or on the arguments given), with VIDEOFORGE_ROOT set to its folder so videoforge.toml, tools/ and
 // the frontend are found there. Built by scripts/build_portable.py with the csc.exe Windows ships.
 using System;
@@ -20,7 +20,7 @@ static class Launcher
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
-        string[] command = args.Length > 0 ? args : new[] { "serve", "--window" };
+        string[] command = args.Length > 0 ? args : new[] { "serve", "--tray" };
         var info = new ProcessStartInfo(python)
         {
             Arguments = "-m videoforge " + string.Join(" ", command.Select(Quote)),

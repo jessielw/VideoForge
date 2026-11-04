@@ -43,7 +43,7 @@ def main() -> int:
         run(python, ROOT / "scripts" / "verify_toolchain.py", "--smoke")
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         ap.exit(1, f"Windows setup failed: {error}\n")
-    print("Setup verified. Start VideoForge: uv run videoforge serve --window")
+    print("Setup verified. Start VideoForge: uv run videoforge serve --tray")
     return 0
 
 

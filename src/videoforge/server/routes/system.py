@@ -177,22 +177,12 @@ def _under(path: Path, root: Path) -> bool:
 
 @router.post("/shutdown")
 def shutdown(request: Request, tasks: BackgroundTasks) -> dict[str, Any]:
-    """Stop VideoForge (a running job is cancelled). How depends on how it runs: `serve` and the window
+    """Stop VideoForge (a running job is cancelled). How depends on how it runs: `serve` and the tray
     each set `app.state.shutdown`. It runs once this reply has gone out."""
     stop = getattr(request.app.state, "shutdown", None)
     if stop is None:
         raise HTTPException(404, "This server can't be stopped from the page")
     tasks.add_task(stop)
-    return {"ok": True}
-
-
-@router.post("/window/show")
-def show_window(request: Request) -> dict[str, Any]:
-    """Bring up the app's window (`serve --window`), e.g. when it is started a second time."""
-    show = getattr(request.app.state, "show_window", None)
-    if show is None:
-        raise HTTPException(404, "No window: this server runs in the browser")
-    show()
     return {"ok": True}
 
 

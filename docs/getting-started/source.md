@@ -15,7 +15,7 @@ VapourSynth and `vspipe` come with the Python dependency; MediaInfo comes with `
 uv run python scripts/setup_windows.py
 ```
 
-This installs the desktop and filter extras, fetches pinned tools and companion libraries, builds the frontend, and verifies indexing, preview decoding, video/audio encoding and MKV/MP4 muxing. Repeat runs reuse checksummed downloads and repair missing tool files. Use `--skip-frontend` to retain an existing build. Only DEE and Apple's CoreAudioToolbox remain user supplied for their optional encoders.
+This installs the tray and filter extras, fetches pinned tools and companion libraries, builds the frontend, and verifies indexing, preview decoding, video/audio encoding and MKV/MP4 muxing. Repeat runs reuse checksummed downloads and repair missing tool files. Use `--skip-frontend` to retain an existing build. Only DEE and Apple's CoreAudioToolbox remain user supplied for their optional encoders.
 
 For individual components or an inventory, see [Tools](../configuration/tools.md). The native provisioners support Windows x64. For Linux amd64, use the [Docker image](docker.md), or supply compatible Linux tools and plugins yourself. Linux ARM64 and macOS source setups are self-managed and have not been validated end to end; see [macOS and ARM64](#macos-and-arm64) below. Packaged support and multi-platform Docker images are deferred.
 
@@ -102,14 +102,14 @@ uv run videoforge serve
 
 This opens [http://127.0.0.1:8765](http://127.0.0.1:8765). Open **Settings**, check the tool paths, and follow [Your first job](first-job.md).
 
-## Run in a desktop window
+## Run from the tray
 
 ```sh
 uv sync --extra desktop
-uv run videoforge serve --window
+uv run videoforge serve --tray
 ```
 
-The desktop window supports dropping local files onto path fields. On Windows it uses Edge WebView2. Closing it keeps the application in the tray; choose **Quit** there, or press **Ctrl+C** in the terminal, to stop it. Starting it again brings up the existing instance.
+This puts an icon in the tray and opens the page in your default browser. Choose **Open VideoForge** there to open it again, or **Quit** to stop; **Ctrl+C** in the terminal also stops it. Closing the browser tab leaves VideoForge running, including its active encodes. Starting it again opens the running instance's page.
 
 A browser does not reveal the full paths of dropped files. In the browser, paste a path instead: in Explorer use **Ctrl+Shift+C**, then **Ctrl+V** in the path field.
 

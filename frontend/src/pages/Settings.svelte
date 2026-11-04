@@ -33,7 +33,6 @@
   import { api } from '../lib/api'
   import { configDraft } from '../lib/configDraft'
   import { saves } from '../lib/saves'
-  import { drops } from '../lib/dropPaths.svelte'
   import { PRIORITY_LABEL } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type {
@@ -825,8 +824,7 @@
           <PowerIcon />Shut down…
         </Button>
         <span class="text-muted-foreground">
-          Stops the server{drops.desktop ? ' and closes this window' : ''}; start it again with
-          <code class="text-xs">videoforge serve{drops.desktop ? ' --window' : ''}</code>.
+          Stops the server; start it again with <code class="text-xs">videoforge serve</code> (or VideoForge.exe).
         </span>
       </div>
     </section>

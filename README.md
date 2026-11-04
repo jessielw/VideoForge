@@ -45,7 +45,7 @@ Needs Python 3.12+, [uv](https://docs.astral.sh/uv/), Git and Node.js. On Window
 git clone https://github.com/jessielw/VideoForge
 cd VideoForge
 uv run python scripts/setup_windows.py   # Python extras, free tools and plugins, the frontend
-uv run videoforge serve --window
+uv run videoforge serve --tray
 ```
 
 On Linux, use Docker, or provide the tools and plugins yourself and point VideoForge at them. macOS and Linux ARM64 are experimental, self-managed source setups ([guide](https://jessielw.github.io/VideoForge/getting-started/source/#macos-and-arm64)).
@@ -58,7 +58,7 @@ cd frontend && npm install && npm run build && cd ..
 uv run videoforge serve          # http://127.0.0.1:8765
 ```
 
-`--window` opens VideoForge in its own window (`uv sync --extra desktop`), which lets you drop files from Explorer onto path fields. In a browser, paste paths instead.
+`--tray` runs VideoForge from a tray icon (Open for the page, Quit to stop; `uv sync --extra desktop`). A browser never reveals a dropped file's path, so paste paths instead: in Explorer select the files, press **Ctrl+Shift+C**, then **Ctrl+V** in the path field.
 
 ## Your first job
 

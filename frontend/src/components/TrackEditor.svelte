@@ -25,7 +25,7 @@
   import AudioPresetMenu from './AudioPresetMenu.svelte'
   import { applyAudioPreset, audioEncodeLayouts, audioPresetSettings } from '../lib/audioPresets'
   import { selectSubtitles } from '../lib/subtitleSelection'
-  import { drops, pathDrop } from '../lib/dropPaths.svelte'
+  import { pathDrop } from '../lib/dropPaths.svelte'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import AudioLinesIcon from '@lucide/svelte/icons/audio-lines'
@@ -871,7 +871,7 @@
           >{rows.filter((t) => !isOff(t)).length} of {rows.length} in the output</span
         >
         <span class="ml-auto text-xs text-muted-foreground"
-          >Drag a track by its handle to reorder; {drops.desktop ? 'drop' : 'paste'} files here to add them; every change
+          >Drag a track by its handle to reorder; paste file paths here to add them; every change
           saves.</span
         >
       </div>

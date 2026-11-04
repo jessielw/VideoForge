@@ -11,7 +11,7 @@ uv run python scripts/fetch_tools.py --only x265
 uv run python scripts/verify_toolchain.py --smoke
 ```
 
-The complete setup installs locked desktop/filter dependencies and builds the frontend. The component fetchers are also usable independently. `fetch_tools.py --tools <folder>` changes the tool destination; `fetch_plugins.py --plugins <folder>` changes the plugin destination. Pass `--runtime-dir <python-folder>` to the tool fetcher to place the pinned Microsoft runtime beside Python hosts too.
+The complete setup installs locked tray/filter dependencies and builds the frontend. The component fetchers are also usable independently. `fetch_tools.py --tools <folder>` changes the tool destination; `fetch_plugins.py --plugins <folder>` changes the plugin destination. Pass `--runtime-dir <python-folder>` to the tool fetcher to place the pinned Microsoft runtime beside Python hosts too.
 
 The provisioner replaces only manifest-selected files, preserves unrelated files, caches downloads under `build/plugin-cache/`, and checks each download's SHA-256 even on a cache hit. Installed-file hashes under `tools/.videoforge/` allow repeat runs to skip complete packages and repair damaged or incomplete ones. `tools/THIRD_PARTY.md` records the inventory and source/build links; keep the upstream notices too.
 
@@ -32,4 +32,4 @@ The Windows CI job provisions real tools and plugins. Smoke checks remove develo
 
 DEE and Apple's CoreAudioToolbox are user supplied. Verification checks the DeeZy and qaac frontends start, but does not claim their licensed encoding paths work without those components. HDR metadata tools are checked for startup; the x265 capability check requires HDR10+ and Dolby Vision CLI options. The generated fixtures do not establish correctness for every HDR/Atmos source or custom filter script.
 
-The desktop shell uses Windows Edge WebView2, which is separate from the media toolchain. Windows 10+ is required by the selected tool builds; WebView2 must be available to use the desktop window.
+The page runs in your default browser, so nothing else is needed. Windows 10+ is required by the selected tool builds.
