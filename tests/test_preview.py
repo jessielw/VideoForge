@@ -140,3 +140,17 @@ def test_close_ends_the_worker():
     p.close()
     proc.wait(timeout=10)
     assert proc.poll() is not None
+
+
+def test_collapse_repeats_shows_a_run_once_with_its_count():
+    from videoforge.core.video.preview import collapse_repeats
+
+    lines = ["a", "a", "a", "b", "a", "a"]
+    assert list(collapse_repeats(lines)) == [
+        "a",
+        "a (repeated 2 more times)",
+        "b",
+        "a",
+        "a (repeated 1 more time)",
+    ]
+    assert list(collapse_repeats([])) == []

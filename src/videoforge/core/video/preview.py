@@ -16,6 +16,7 @@ idle minutes, which hands all of it back. The next request starts a new worker (
 from __future__ import annotations
 
 from collections import OrderedDict, deque
+from collections.abc import Iterable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeout
 from dataclasses import asdict
 import json
@@ -70,6 +71,22 @@ def _read(stream: IO[bytes], n: int) -> bytes | None:
             return None
         buf += chunk
     return buf
+
+
+def collapse_repeats(lines: Iterable[str]) -> Iterator[str]:
+    """The lines with a run of identical ones shown once, then "(repeated N more times)" when the run ends.
+    A plugin that prints the same note for every frame would otherwise fill the log."""
+    last, extra = None, 0
+    for line in lines:
+        if line == last:
+            extra += 1
+            continue
+        if extra:
+            yield f"{last} (repeated {extra} more time{'s' if extra > 1 else ''})"
+        last, extra = line, 0
+        yield line
+    if extra:
+        yield f"{last} (repeated {extra} more time{'s' if extra > 1 else ''})"
 
 
 def _recv(stream: IO[bytes]) -> tuple[dict[str, Any], bytes] | None:
@@ -232,11 +249,15 @@ class _Worker:
             log.error("The preview process stopped (exit code %d). Its last output:\n%s", code, "\n".join(self._stderr))
 
     def _read_stderr(self) -> None:
-        for raw in self.proc.stderr:  # type: ignore[union-attr]
-            line = raw.decode("utf-8", "replace").rstrip()
-            if line:
-                self._stderr.append(line)
-                log.info("preview: %s", line)
+        def lines() -> Iterator[str]:
+            for raw in self.proc.stderr:  # type: ignore[union-attr]
+                line = raw.decode("utf-8", "replace").rstrip()
+                if line:
+                    self._stderr.append(line)
+                    yield line
+
+        for message in collapse_repeats(lines()):
+            log.info("preview: %s", message)
 
     def _fail(self, message: str) -> None:
         with self._lock:
