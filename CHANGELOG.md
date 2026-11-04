@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Uncaught errors and native crashes are written to the app log (and a `.crash` file beside it) instead of vanishing in the windowed build.
+
 ### Changed
 
 - Preview log now shows a repeated line once instead of once per frame to prevent spamming the logger.

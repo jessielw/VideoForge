@@ -79,3 +79,25 @@ def test_a_console_that_cant_encode_gets_escapes():
     handler.emit(logging.LogRecord("videoforge", logging.INFO, __file__, 1, "Fallout 日本語", None, None))
     stream.flush()
     assert raw.getvalue().decode("cp1252").strip() == "Fallout \\u65e5\\u672c\\u8a9e"
+
+
+def test_an_uncaught_exception_reaches_the_log_and_a_clean_exit_leaves_no_crash_file(tmp_path: Path):
+    import sys
+    import threading
+
+    hooks = sys.excepthook, threading.excepthook
+    try:
+        path = applog.setup(tmp_path, console=False)
+        assert path is not None
+        try:
+            raise RuntimeError("boom in the window")
+        except RuntimeError:
+            sys.excepthook(*sys.exc_info())  # type: ignore[arg-type]
+        assert path.with_suffix(".crash").is_file()  # faulthandler's file, while running
+        applog.shutdown()
+        text = path.read_text(encoding="utf-8")
+        assert "CRITICAL" in text and "Uncaught exception" in text and "boom in the window" in text
+        assert not path.with_suffix(".crash").exists()  # nothing crashed: no report left behind
+    finally:
+        applog.shutdown()
+        sys.excepthook, threading.excepthook = hooks

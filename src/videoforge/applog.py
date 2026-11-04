@@ -16,12 +16,14 @@ from __future__ import annotations
 
 import atexit
 from datetime import datetime
+import faulthandler
 import logging
 import logging.handlers
 from pathlib import Path
 import platform
 import queue
 import sys
+import threading
 from typing import TextIO
 
 from videoforge import version
@@ -34,6 +36,7 @@ LOGGERS = ("videoforge", "uvicorn")  # uvicorn.error and .access propagate to "u
 
 _listener: logging.handlers.QueueListener | None = None
 _handler: logging.Handler | None = None
+_crash_file: TextIO | None = None
 
 
 class _ConsoleHandler(logging.StreamHandler):
@@ -105,6 +108,7 @@ def setup(data_dir: Path | None, *, console: bool = True, level: int = logging.I
             logger.propagate = False  # a root handler (e.g. pytest's) doesn't print it twice
     atexit.register(shutdown)
     log = logging.getLogger("videoforge")
+    _watch_crashes(path)
     log.info("VideoForge v%s (Python %s, %s)", version(), platform.python_version(), platform.platform())
     if path is not None:
         log.info("Log file: %s", path)
@@ -113,9 +117,36 @@ def setup(data_dir: Path | None, *, console: bool = True, level: int = logging.I
     return path
 
 
+def _watch_crashes(log_path: Path | None) -> None:
+    """A windowed build (pythonw) shows no traceback and no native crash: send an uncaught exception, in any
+    thread, to the log, and a native crash's stack (faulthandler) to `<log file>.crash` (the same name, .crash) beside it."""
+    global _crash_file
+    log = logging.getLogger("videoforge")
+
+    def main_hook(kind: type[BaseException], value: BaseException, tb: object) -> None:
+        log.critical("Uncaught exception", exc_info=(kind, value, tb))  # type: ignore[arg-type]
+
+    def thread_hook(args: threading.ExceptHookArgs) -> None:
+        if args.exc_type is not SystemExit and args.exc_value is not None:
+            name = args.thread.name if args.thread else "?"
+            log.critical(
+                "Uncaught exception in thread %s", name, exc_info=(args.exc_type, args.exc_value, args.exc_traceback)
+            )
+
+    sys.excepthook = main_hook
+    threading.excepthook = thread_hook
+    if log_path is None:
+        return
+    try:
+        _crash_file = open(log_path.with_suffix(".crash"), "w", encoding="utf-8")
+        faulthandler.enable(_crash_file, all_threads=True)
+    except (OSError, RuntimeError):
+        _crash_file = None
+
+
 def shutdown() -> None:
     """Flush and stop (at exit, or before a new setup)."""
-    global _listener, _handler
+    global _listener, _handler, _crash_file
     if _handler is not None:
         for name in LOGGERS:
             logging.getLogger(name).removeHandler(_handler)
@@ -125,3 +156,14 @@ def shutdown() -> None:
         for h in _listener.handlers:
             h.close()
     _listener = _handler = None
+    if _crash_file is not None:  # a clean exit leaves no crash report behind
+        try:
+            faulthandler.disable()
+            name = Path(_crash_file.name)
+            empty = _crash_file.tell() == 0
+            _crash_file.close()
+            if empty:
+                name.unlink(missing_ok=True)
+        except (OSError, ValueError):
+            pass
+        _crash_file = None
