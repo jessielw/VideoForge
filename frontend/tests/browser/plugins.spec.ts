@@ -344,3 +344,24 @@ test('presets a plugin ships: an edited one is kept and reset needs a second cli
   })
   expect(errors).toEqual([])
 })
+
+test('presets a plugin ships: Restore all brings back every deleted one', async ({ page }) => {
+  const managed: ManagedPreset[] = ['a', 'b', 'c'].map((key) => ({
+    plugin: 'example',
+    kind: 'template',
+    group: [],
+    retired: false,
+    key,
+    name: `Example ${key}`,
+    label: `Example ${key}`,
+    state: 'removed',
+    update_available: false,
+  }))
+  const { calls, errors } = await fixture(page, { installed: true, managed })
+  const section = page.getByRole('heading', { name: 'Plugin presets' }).locator('..')
+  await section.getByRole('button', { name: 'Restore all deleted (3)' }).click()
+  await expect
+    .poll(() => calls.filter((c) => c.path.endsWith('/reset')).map((c) => c.body))
+    .toEqual(['a', 'b', 'c'].map((key) => ({ plugin: 'example', kind: 'template', key })))
+  expect(errors).toEqual([])
+})

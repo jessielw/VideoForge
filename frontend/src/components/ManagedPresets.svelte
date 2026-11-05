@@ -34,7 +34,13 @@
   const plugins = $derived(
     [...new Set(managed?.presets.map((p) => p.plugin) ?? [])].map((plugin) => {
       const all = managed!.presets.filter((p) => p.plugin === plugin)
-      return { plugin, total: all.length, attention: all.filter(needsAttention) }
+      const attention = all.filter(needsAttention)
+      return {
+        plugin,
+        total: all.length,
+        attention,
+        removed: attention.filter((p) => p.state === 'removed' && !p.retired),
+      }
     }),
   )
 
@@ -42,6 +48,21 @@
     if (p.state === 'removed') return 'Deleted by you'
     if (p.state === 'edited') return p.update_available ? 'Edited · newer version available' : 'Edited'
     return 'No longer shipped by the plugin'
+  }
+
+  async function restoreAll(plugin: string, removed: ManagedPreset[]) {
+    busy = true
+    try {
+      let result
+      for (const p of removed) result = await api.resetManagedPreset({ plugin, kind: p.kind, key: p.key })
+      if (result) app.presets = result.presets
+      toast.success(`${removed.length} presets are back as ${plugin} ships them`)
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e)
+    } finally {
+      await refresh()
+      busy = false
+    }
   }
 
   async function reset(p: ManagedPreset) {
@@ -72,15 +93,25 @@
       the plugin ships it.
     </p>
     <div class="divide-y rounded-md border">
-      {#each plugins as { plugin, total, attention } (plugin)}
+      {#each plugins as { plugin, total, attention, removed } (plugin)}
         <div class="space-y-2 px-4 py-3 text-sm">
-          <p>
-            <span class="font-medium">{plugin}</span>
-            <span class="text-muted-foreground">
-              · {total} preset{total === 1 ? '' : 's'}{attention.length
-                ? `, ${attention.length} to look at`
-                : ', all as shipped'}
+          <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span class="min-w-0 flex-1">
+              <span class="font-medium">{plugin}</span>
+              <span class="text-muted-foreground">
+                · {total} preset{total === 1 ? '' : 's'}{attention.length
+                  ? `, ${attention.length} to look at`
+                  : ', all as shipped'}
+              </span>
             </span>
+            {#if removed.length > 1}
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || disabled}
+                onclick={() => restoreAll(plugin, removed)}>Restore all deleted ({removed.length})</Button
+              >
+            {/if}
           </p>
           {#each attention as p (id(p))}
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
