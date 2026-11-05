@@ -28,7 +28,7 @@ Each option except `--no-browser` and `--tray` also reads a variable: `VIDEOFORG
 
 The server has no login. Changing the host to `0.0.0.0` makes it listen beyond loopback; provide your own access control if remote users can reach it.
 
-Requests must use `localhost`, `127.0.0.1`, `::1`, the concrete listening address, or an explicit `--allow-host`. Wildcard listening addresses do not allow arbitrary Host headers. Browser mutations and WebSockets must be same-origin, or use an explicit `--allow-origin`. Originless CLI/desktop requests remain supported. These checks do not add authentication.
+Requests must use an IP address (`127.0.0.1`, a LAN address and so on, which cannot be DNS-rebound), `localhost`, or an explicit `--allow-host` hostname. Wildcard listening addresses do not allow arbitrary Host headers. Browser mutations and WebSockets must be same-origin, or use an explicit `--allow-origin`. Originless CLI/desktop requests remain supported. These checks do not add authentication.
 
 Vite's default proxy preserves Host, so `http://localhost:5173` works without extra flags. For an authenticated reverse proxy, allow its public hostname and, if it rewrites Host or terminates TLS, its browser origin:
 

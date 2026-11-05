@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from urllib.parse import urlsplit
 
 from starlette.datastructures import Headers
@@ -21,6 +22,15 @@ def origin(value: str) -> tuple[str, str, int] | None:
         return None
 
 
+def _is_ip(host: str) -> bool:
+    """An IP literal can't be DNS-rebound, so opening the page by address (LAN, Docker) needs no allow-list entry."""
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
+
+
 class BrowserBoundary:
     def __init__(self, app: ASGIApp, *, hosts: list[str], origins: list[str]) -> None:
         self.app = app
@@ -38,7 +48,7 @@ class BrowserBoundary:
         scheme = "https" if scope.get("scheme") in {"https", "wss"} else "http"
         target = origin(f"{scheme}://{headers.get('host', '')}")
         status, reason = 0, ""
-        if len(headers.getlist("host")) != 1 or target is None or target[1] not in self.hosts:
+        if len(headers.getlist("host")) != 1 or target is None or not (target[1] in self.hosts or _is_ip(target[1])):
             status, reason = 400, "Host is not allowed; configure --allow-host for this address"
         elif scope["type"] == "websocket" or scope.get("method") not in {"GET", "HEAD", "OPTIONS"}:
             sent_origin = headers.get("origin")
