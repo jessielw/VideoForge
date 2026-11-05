@@ -29,6 +29,7 @@ from videoforge.core.video import vs as vsx
 from videoforge.core.video.preview import Preview
 from videoforge.plugins.loader import PluginHost, load_plugins
 from videoforge.plugins.manager import PluginManager
+from videoforge.server import managed_presets
 from videoforge.server.boundary import BrowserBoundary
 from videoforge.server.events import EventHub
 from videoforge.server.queue import JobQueue, Services
@@ -109,6 +110,9 @@ def create_app(
         report=lambda kind, **fields: queue_events.write(event(kind, **fields)),
     )
     bus.subscribe(actions.on_event, JobFinished, QueueFinished, name="actions")
+    packs, pack_problems = managed_presets.load_packs(settings.plugins_dir, saved.disabled_plugins)
+    defaults_names = tuple(f"{job_queue.rule_sets(pid).name} defaults" for pid in ids)  # a built-in template's name
+    store.use_packs(packs, {"template": defaults_names, "video": defaults_names})
     plugin_report = load_plugins(settings.plugins_dir, saved.disabled_plugins)
     plugin_settings = plugin_manager.effective_settings(base.plugins, saved.plugin_settings)
     plugins = PluginHost(
@@ -154,6 +158,7 @@ def create_app(
     app.state.actions = actions
     app.state.plugins = plugins
     app.state.plugin_manager = plugin_manager
+    app.state.preset_pack_problems = pack_problems  # plugin packs that couldn't be read
     app.state.plugin_settings_at_start = saved.plugin_settings
     app.state.plugin_base_at_start = base.plugins
     app.state.plugins_off_at_start = frozenset(saved.disabled_plugins)

@@ -116,9 +116,23 @@ def read_package(raw: bytes) -> Package:
             files = {p[len(prefix) :]: data for p, data in files.items()}
             if f"{manifest.module}.py" not in files and f"{manifest.module}/__init__.py" not in files:
                 raise PluginError(f"No module {manifest.module!r} in the ZIP")
+            if manifest.presets:
+                _check_pack(manifest, files)
             return Package(manifest, files)
     except (zipfile.BadZipFile, UnicodeError, OSError, RuntimeError, NotImplementedError, EOFError, zlib.error) as ex:
         raise PluginError(f"Invalid plugin ZIP: {ex}") from None
+
+
+def _check_pack(manifest: Manifest, files: dict[str, bytes]) -> None:
+    """The preset pack the manifest names is in the ZIP and valid: a broken one would only fail at the next start."""
+    from videoforge.server.managed_presets import read_pack  # the server imports this module
+
+    if manifest.presets not in files:
+        raise PluginError(f"No preset pack {manifest.presets!r} in the ZIP")
+    try:
+        read_pack(manifest.id, json.loads(files[manifest.presets]))
+    except (ValueError, RecursionError) as ex:
+        raise PluginError(f"Invalid preset pack {manifest.presets}: {ex}") from None
 
 
 def _plain_directory(path: Path, parent: Path) -> None:

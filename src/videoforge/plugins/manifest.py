@@ -16,6 +16,16 @@ class PluginError(ValueError):
     pass
 
 
+def valid_pack_path(value: str) -> bool:
+    """A relative path with forward slashes, no `..`, no drive, ending in .json."""
+    parts = value.split("/")
+    return (
+        value.casefold().endswith(".json")
+        and all(p and p not in {".", ".."} and not any(c in p for c in '\\:<>"|?*') for p in parts)
+        and not value.startswith("/")
+    )
+
+
 def safe_id(value: str) -> str:
     if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}", value) or value.casefold() in RESERVED:
         raise PluginError("Plugin id must be 1–64 letters, digits, underscores or hyphens, and a valid folder name")
@@ -53,6 +63,7 @@ class Manifest:
     version: str = ""
     description: str = ""
     rule_set: str = ""  # the RuleSet class in `module`: this package adds a rule set, not an event plugin
+    presets: str = ""  # a preset pack (server/preset_pack.py) in the package: kept up to date as this plugin updates
     api_version: int = 1
     settings: tuple[Setting, ...] = field(default_factory=tuple)
 
@@ -89,6 +100,10 @@ def parse_manifest(text: str, *, package: bool = False) -> Manifest:
     if not isinstance(rule_set, str) or (rule_set and not rule_set.isidentifier()):
         raise PluginError(f"{MANIFEST}: `rule_set` must be the name of a RuleSet class")
     values["rule_set"] = rule_set
+    presets = data.get("presets", "")
+    if not isinstance(presets, str) or (presets and not valid_pack_path(presets)):
+        raise PluginError(f"{MANIFEST}: `presets` must be a relative .json path in the plugin, like presets/pack.json")
+    values["presets"] = presets
     for key in ("name", "version", "description"):
         value = data.get(key, "")
         if not isinstance(value, str) or (package and key != "description" and not value.strip()):

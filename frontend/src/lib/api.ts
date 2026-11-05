@@ -28,6 +28,7 @@ import type {
   PresetKind,
   Presets,
   PresetPack,
+  ManagedPresets,
   PresetPackPreview,
   PreviewStage,
   ImportAction,
@@ -183,6 +184,9 @@ export const api = {
     request<PluginInventory>('PUT', '/api/plugins/settings', { id, values, reset }),
   exportConfiguration: () => get<ConfigurationBundle>('/api/configuration/export'),
   exportPresetPack: (bundle: PresetPack) => post<PresetPack>('/api/preset-packs/export', bundle),
+  managedPresets: () => get<ManagedPresets>('/api/preset-packs/managed'),
+  resetManagedPreset: (preset: { plugin: string; kind: PresetKind; key: string }) =>
+    post<{ name: string; presets: Presets }>('/api/preset-packs/managed/reset', preset),
   previewPresetPack: (bundle: unknown, keepBoth = false) =>
     post<PresetPackPreview>(`/api/preset-packs/preview${keep(keepBoth)}`, bundle),
   importPresetPack: (bundle: PresetPack, keepBoth = false) =>

@@ -22,6 +22,7 @@ from uuid import uuid4
 
 from videoforge.core.job import JobSpec, JobState
 from videoforge.core.plan_io import from_json, to_json
+from videoforge.server import managed_presets
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
@@ -43,6 +44,7 @@ PROFILE_TABLES = (
     "CREATE TABLE IF NOT EXISTS presets ("
     " profile TEXT NOT NULL, kind TEXT NOT NULL, name TEXT NOT NULL, data TEXT NOT NULL,"
     " PRIMARY KEY (profile, kind, name))",
+    managed_presets.TABLE,
 )
 ACTIVE = "profile"  # app_settings: the active profile's id
 GLOBAL_KEYS = ("index_lane",)  # settings the queue keeps for every profile (queue.LANE_SETTING)
@@ -79,6 +81,8 @@ class Store:
         row = self._db.execute("SELECT value FROM app_settings WHERE key = ?", (ACTIVE,)).fetchone()
         self._profile = json.loads(row[0]) if row and json.loads(row[0]) in ids else ids[0]
         self._lock = threading.Lock()
+        self._packs: list[managed_presets.Pack] = []
+        self._reserved: dict[str, tuple[str, ...]] = {}
 
     def _migrate(self) -> None:
         """Settings and presets saved before profiles (0.1.0-beta.11) become the first profile's."""
@@ -160,10 +164,17 @@ class Store:
                     self._db.execute(
                         "INSERT INTO presets SELECT ?, kind, name, data FROM presets WHERE profile = ?", (pid, copy_of)
                     )
+                    self._db.execute(
+                        "INSERT INTO managed_presets SELECT ?, plugin, kind, key, name, shipped, available, retired"
+                        " FROM managed_presets WHERE profile = ?",
+                        (pid, copy_of),
+                    )
                 self._db.execute("COMMIT")
             except Exception:
                 self._db.execute("ROLLBACK")
                 raise
+            if copy_of is None:
+                managed_presets.sync(self._db, pid, self._packs, self._reserved)  # a fresh install has the plugins' too
         return pid
 
     def rename_profile(self, pid: str, name: str) -> None:
@@ -183,6 +194,7 @@ class Store:
             try:
                 self._db.execute("DELETE FROM settings WHERE profile = ?", (pid,))
                 self._db.execute("DELETE FROM presets WHERE profile = ?", (pid,))
+                self._db.execute("DELETE FROM managed_presets WHERE profile = ?", (pid,))
                 self._db.execute("DELETE FROM profiles WHERE id = ?", (pid,))
                 self._db.execute("COMMIT")
             except Exception:
@@ -315,6 +327,33 @@ class Store:
             except Exception:
                 self._db.execute("ROLLBACK")
                 raise
+
+    # --- presets a plugin ships (server/managed_presets.py) ------------------------------------
+
+    def use_packs(self, packs: list[managed_presets.Pack], reserved: dict[str, tuple[str, ...]]) -> list[dict]:
+        """Keep every profile's presets in line with the installed plugins' packs; what changed."""
+        with self._lock:
+            self._packs, self._reserved = packs, reserved
+            ids = [i for (i,) in self._db.execute("SELECT id FROM profiles ORDER BY position")]
+            return [
+                {"profile": pid, **change}
+                for pid in ids
+                for change in managed_presets.sync(self._db, pid, packs, reserved)
+            ]
+
+    def managed_presets(self) -> list[dict]:
+        """The active profile's managed presets and where each stands."""
+        with self._lock:
+            return managed_presets.status(self._db, self._profile)
+
+    def reset_managed(self, plugin: str, kind: str, key: str) -> str:
+        """Put one managed preset back as its plugin ships it; its name. KeyError: no such preset."""
+        with self._lock:
+            for pack in self._packs:
+                for e in pack.entries:
+                    if (e.plugin, e.kind, e.key) == (plugin, kind, key):
+                        return managed_presets.reset(self._db, self._profile, e, self._reserved.get(kind, ()))
+        raise KeyError(key)
 
     def preset_counts(self) -> dict[str, dict[str, int]]:
         """How many presets of each kind every profile has (a kind it has none of is left out)."""

@@ -648,6 +648,22 @@ export interface PresetPack {
     audio: { label: string; group: string[]; data: AudioPresetSettings }[]
   }
 }
+// A preset a plugin ships (server/managed_presets.py): where it stands against the plugin's version.
+export interface ManagedPreset {
+  plugin: string
+  kind: PresetKind
+  key: string
+  name: string // storage identity
+  label: string // what to show
+  group: string[]
+  state: 'current' | 'edited' | 'removed'
+  retired: boolean // the plugin no longer ships it
+  update_available: boolean // the plugin has a newer version, and this one was edited so it was kept
+}
+export interface ManagedPresets {
+  presets: ManagedPreset[]
+  problems: string[] // plugin packs that couldn't be read
+}
 export interface PresetPackPreview {
   bundle: PresetPack
   names: Record<PresetKind, string[]>

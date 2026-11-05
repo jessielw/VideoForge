@@ -11,6 +11,7 @@
   import ResetConfiguration from '../components/ResetConfiguration.svelte'
   import ProfileManager from '../components/ProfileManager.svelte'
   import PluginManager from '../components/PluginManager.svelte'
+  import ManagedPresets from '../components/ManagedPresets.svelte'
   import AudioPresetMenu from '../components/AudioPresetMenu.svelte'
   import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
   import TemplateSubsEditor from '../components/TemplateSubsEditor.svelte'
@@ -374,6 +375,7 @@
         }}
       />
       <PresetPackTransfer disabled={pending > 0 || !!saveError} />
+      <ManagedPresets disabled={pending > 0 || !!saveError} refreshKey={pluginRefresh} />
       <section class="col-span-full min-w-0 space-y-3">
         <div class="flex items-center gap-3">
           <h2 class="font-medium">Tools</h2>

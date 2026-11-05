@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 from videoforge.core.template_io import MAX_NAME
 from videoforge.server.preset_pack import MAX_BYTES, read_preset_pack
@@ -34,6 +35,30 @@ def _names(request: Request, bundle: dict[str, Any], *, preview: bool = False) -
         keep_both=presets.keep_both(request),
     )
     return {"names": names, "actions": actions}
+
+
+class ManagedRef(BaseModel):
+    plugin: str
+    kind: str
+    key: str
+
+
+@router.get("/managed")
+def managed_presets(request: Request) -> dict[str, Any]:
+    """The presets plugins ship, in the active profile: each one's state (current, edited, removed), whether
+    its plugin has a newer version of it, and any plugin pack that couldn't be read."""
+    state = request.app.state
+    return {"presets": state.store.managed_presets(), "problems": state.preset_pack_problems}
+
+
+@router.post("/managed/reset")
+def reset_managed_preset(ref: ManagedRef, request: Request) -> dict[str, Any]:
+    """Put a managed preset back as its plugin ships it (discarding edits, or restoring a removed one)."""
+    try:
+        name = request.app.state.store.reset_managed(ref.plugin, ref.kind, ref.key)
+    except KeyError:
+        raise HTTPException(404, "No such preset in an installed plugin") from None
+    return {"name": name, "presets": presets._all(request)}
 
 
 @router.post("/export")

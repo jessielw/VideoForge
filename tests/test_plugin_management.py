@@ -502,3 +502,18 @@ def test_four_slots_order_callback_failure_and_failed_setup(tmp_path):
     host.close()
     assert seen == ["JobStarted", "IndexFinished", "JobFinished", "QueueFinished"]
     assert "broken" in host.setup_failed and "JobStarted" in host.failures["four"]
+
+
+def test_zip_with_presets_needs_a_valid_pack():
+    from test_managed_presets import doc
+
+    module = f"vf_test_{uuid.uuid4().hex}"
+    manifest = (
+        f'id = "p"\nmodule = "{module}"\nname = "P"\nversion = "1"\napi_version = 1\npresets = "presets/pack.json"\n'
+    )
+    base = {MANIFEST: manifest, f"{module}.py": "plugin = None\n"}
+    assert read_package(zip_files({**base, "presets/pack.json": json.dumps(doc())})).manifest.presets
+    with pytest.raises(PluginError, match="No preset pack"):
+        read_package(zip_files(base))
+    with pytest.raises(PluginError, match="Invalid preset pack"):
+        read_package(zip_files({**base, "presets/pack.json": "{}"}))

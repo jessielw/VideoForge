@@ -82,6 +82,37 @@ api_version = 1
 
 It is installed like any plugin and appears in the rule set list after the restart. Put pure-Python dependencies in `vendor/`. The built-in `manual` rule set keeps its id, a rule set in the plugins folder wins over an installed package with the same id, and switching it off under Settings → Plugins removes it from the list on the next start.
 
+## Ship presets with a plugin
+
+A plugin can carry templates and encoder, audio and video presets, so one update brings the rule set and the presets written for it. Add a [preset pack](usage/templates.md) to the package and name it in the manifest:
+
+```toml
+presets = "presets/pack.json"     # relative to the plugin, forward slashes, .json
+```
+
+The pack is the ordinary preset pack format with one addition: **every entry has a `key`**, its identity for as long as the plugin exists (lowercase letters, digits, `.`, `_`, `-`; up to 64; unique within its library). Rename or move a preset freely; never reuse a key for something else.
+
+```json
+{"format": "videoforge.presets", "version": 1, "presets": {
+  "template": [{"key": "remux-1080p", "name": "Remux 1080p", "data": {}}],
+  "video": [], "audio": [],
+  "encoder": [{"key": "x265-uhd", "label": "UHD", "group": ["Mine"], "data": {}}]}}
+```
+
+At every start, and when a profile is created, each profile is brought in line with the packs of the plugins installed. A shipped preset is *managed*: VideoForge remembers its key and what it looked like as shipped.
+
+| Situation | What happens |
+| --- | --- |
+| New key | The preset is added. A name already in use gets a numbered copy. |
+| Not edited, pack changed | Updated in place (a default template stays the default). |
+| Edited by the user | Left alone. The preset is marked "update available". |
+| Deleted by the user | Stays deleted. |
+| Key gone from the pack | Kept, marked retired. |
+
+The user can put a managed preset back as shipped (`POST /api/preset-packs/managed/reset`, `{"plugin", "kind", "key"}`), which discards edits or restores a deleted one. `GET /api/preset-packs/managed` lists each managed preset's state (`current`, `edited` or `removed`), `update_available`, `retired`, and any pack that couldn't be read. The installer rejects a ZIP whose pack is missing or invalid.
+
+A template or video preset is stored under its name, so a template renamed by the user counts as deleted and a new one is the user's own. A later version of the plugin that changes a managed preset's name keeps the name the profile has. Encoder and audio presets are stored under an id, so renaming one is an edit.
+
 ## Declare settings
 
 Add fields to the manifest to create a form under **Details and settings → Configure**:
