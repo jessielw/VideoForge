@@ -178,6 +178,10 @@ def sync(
 
     db.execute("BEGIN")
     try:
+        if not db.execute("SELECT 1 FROM presets WHERE profile = ? LIMIT 1", (profile,)).fetchone():
+            # No preset of any kind: a library reset or replaced by an older build (or another install's
+            # database), not someone deleting them one by one. Ship the packs again.
+            forget_missing(db, profile)
         for pack in packs:
             known = {
                 (kind, key): (name, shipped, available)

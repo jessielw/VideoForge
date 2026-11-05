@@ -212,3 +212,11 @@ def test_a_settings_only_reset_keeps_a_deleted_preset_deleted(store):
     store.delete_preset("template", "Acme remux")
     store.reset_configuration(("rule_set",), ())
     assert "Acme remux" not in templates(store)
+
+
+def test_a_library_emptied_by_an_older_build_gets_the_presets_back(store):
+    store.use_packs([pack()], {})
+    store._db.execute("DELETE FROM presets")  # what a reset did before it forgot the managed rows
+    store.use_packs([pack()], {})
+    assert list(templates(store)) == ["Acme remux"]
+    assert len(store.presets("encoder")) == 1
