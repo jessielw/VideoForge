@@ -291,7 +291,12 @@ test('event logger controls work when privacy filters block its name in request 
 })
 
 test('presets a plugin ships: an edited one is kept and reset needs a second click', async ({ page }) => {
-  const shipped = { plugin: 'example', kind: 'template', group: [], retired: false } as const
+  const shipped = {
+    plugin: 'example',
+    kind: 'template',
+    group: [] as string[],
+    retired: false,
+  } as const
   const managed: ManagedPreset[] = [
     {
       ...shipped,
