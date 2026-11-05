@@ -79,6 +79,24 @@
     return { mode: 'position', slots, rules: [], others: 'keep' }
   }
   const matched = $derived(choices.find((c) => same(c.data, current))?.name ?? null)
+  // No exact match (a crop-fitted resize or filter chain, an encoder preset on top): the template whose
+  // muxer settings and AutoQPF the job has, with a note on the encoder.
+  // (the container is left out: a template that sets none gets the rule set's on the job)
+  const base = (t: Template) =>
+    t.mux.extra === current.mux.extra && !t.mux.pgs_zlib === !current.mux.pgs_zlib && t.qpf === current.qpf
+  // (several can fit: the one with the job's encoder, then the first)
+  const near = $derived.by(() => {
+    if (matched) return null
+    const fits = choices.filter((c) => base(c.data))
+    return fits.find((c) => same(c.data.encoder, current.encoder)) ?? fits[0] ?? null
+  })
+  const label = $derived(
+    matched
+      ? `Template: ${matched}`
+      : near
+        ? `Template: ${near.name}${same(near.data.encoder, current.encoder) ? '' : ' + own encoder'}`
+        : 'Template: custom',
+  )
   const crop = $derived(spec.video.crop)
   const cropText = (c: Template['video']['crop']) => `${c.left}/${c.top}/${c.right}/${c.bottom}`
 
@@ -139,7 +157,7 @@
     <Popover.Trigger {disabled}>
       {#snippet child({ props })}
         <Button {...props} variant="outline" size="sm" class="max-w-64">
-          <span class="truncate">{matched ? `Template: ${matched}` : 'Template'}</span><ChevronDownIcon />
+          <span class="truncate">{label}</span><ChevronDownIcon />
         </Button>
       {/snippet}
     </Popover.Trigger>

@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- A job's Template button names the template the job's muxer settings and AutoQPF match, even after an encoder preset or a detected crop changed it: `Template: <name> + own encoder`, or `Template: custom` when none fits. It used to say `Template` unless every setting matched exactly.
+
 ## [0.1.0-beta.17] - 2026-11-04
 
 ### Changed
