@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- External subtitles named with a full language name (`English.srt`, `english force.srt`) now get their language (and forced flag) from the file name instead of showing as unknown.
 - A track's Audio preset button no longer says `Copy` beside an encode the rule set chose. It shows the planned encode, channels and bitrate (your own changes still win).
 
 ## [0.1.0-beta.17] - 2026-11-04

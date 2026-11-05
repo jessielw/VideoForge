@@ -26,7 +26,7 @@ from videoforge.core.models import EncodeState, JobInputs, SubFormat, SubTrack
 
 _EPISODE_RE = re.compile(r"(?i)\bS(\d{1,2})E(\d{1,3})\b")
 _TRACK_NO_RE = re.compile(r"(?i)_track(\d+)_")
-_TAG_ALIASES = {"forced": "forced", "sdh": "sdh", "hi": "sdh", "cc": "sdh", "dub": "dub", "dubtitle": "dub"}
+_TAG_ALIASES = {"forced": "forced", "force": "forced","sdh": "sdh", "hi": "sdh", "cc": "sdh", "dub": "dub", "dubtitle": "dub"}
 # Filename words skipped while looking for the language token from the end.
 _NOISE_WORDS = {"synced", "sync", "full", "default", "srt", "subs", "sub", "cleaned", "ocr", "fixed"}
 
@@ -258,6 +258,9 @@ def _language_from_name(stem: str) -> str | None:
         low = token.lower()
         if low in _TAG_ALIASES or low in _NOISE_WORDS:
             continue
+        named = lang.from_name(low)
+        if named:
+            return named
         code = lang.normalize(low)
         known = len(low) in (2, 3) and lang.display_name(code) != code
         if known or "-" in token and lang.normalize(token) != "und":

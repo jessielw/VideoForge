@@ -167,6 +167,11 @@ def from_mediainfo_name(value: str | None) -> str:
     return normalize(code)
 
 
+def from_name(word: str) -> str | None:
+    """A full English language name ("English", "castilian") as a tag, else None."""
+    return _NAME_TO_2.get(word.strip().lower())
+
+
 def variant_from_title(base: str, title: str) -> str | None:
     """Guess a family variant from a track title. Returns None if no hint matches."""
     if base not in FAMILY_VARIANTS or not title:
