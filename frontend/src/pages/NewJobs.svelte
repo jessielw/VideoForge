@@ -1,7 +1,9 @@
 <script lang="ts">
   // New jobs: rule set + language, input slots, output folder, live match preview, Add to queue.
   import { onDestroy, onMount, untrack } from 'svelte'
+  import FileUpIcon from '@lucide/svelte/icons/file-up'
   import PlusIcon from '@lucide/svelte/icons/plus'
+  import { toast } from 'svelte-sonner'
   import { Button } from '$lib/components/ui/button'
   import { Checkbox } from '$lib/components/ui/checkbox'
   import * as Card from '$lib/components/ui/card'
@@ -150,6 +152,28 @@
       matches.invalidate()
     }
   })
+
+  // Jobs saved earlier (videoforge-job.json in a job's work folder) opened as they were, like a project file.
+  let jobFiles = $state<string[]>([])
+  let opening = $state(false)
+  async function openJobFiles() {
+    if (opening || !jobFiles.length) return
+    opening = true
+    try {
+      const { added, skipped } = await api.importJobs($state.snapshot(jobFiles))
+      for (const s of skipped) toast.warning(`Not opened: ${s.path}`, { description: s.reason })
+      if (added.length) {
+        toast.success(added.length === 1 ? 'Job opened' : `Opened ${added.length} jobs`)
+        jobFiles = []
+        await app.refreshJobs()
+        router.go('queue', added[0])
+      }
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e)
+    } finally {
+      opening = false
+    }
+  }
 
   async function add() {
     if (adding || matching || !result?.jobs.length || settledKey !== inputKey) return
@@ -342,6 +366,16 @@
     />
     <PathSlot label="Output folder" hint="Where the muxed releases go" bind:paths={output} mode="folder">
       {#snippet actions()}<OutputFolderMenu onpick={(path) => (output = [path])} />{/snippet}
+    </PathSlot>
+    <PathSlot
+      label="Job files"
+      hint="Open jobs exactly as they were: videoforge-job.json, in a job's folder inside the source's _tmp folder"
+      bind:paths={jobFiles}
+      extensions={['.json']}
+    >
+      {#snippet actions()}
+        <Button disabled={!jobFiles.length || opening} onclick={openJobFiles}><FileUpIcon />Open</Button>
+      {/snippet}
     </PathSlot>
   </Card.Root>
 

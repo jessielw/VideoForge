@@ -63,7 +63,7 @@ A 2-pass encode can be stopped between its passes. **Pause after pass 1** in the
 
 ## Job files
 
-Every job's whole setup (source, tracks, video and encoder settings, mux and output options) is saved as `videoforge-job.json` in the job's folder in the source's `_tmp` folder when it runs. **Save job file** writes it for the selected jobs at any time. **Add jobs from job files** takes the file, a job's folder, or a source's `_tmp` folder (every job in it) and adds each job exactly as it was saved: no template or profile default is applied. A job whose source already has a job with that label is left out. The work folder is where it was, so the run reuses the steps it already finished.
+Every job's whole setup (source, tracks, video and encoder settings, mux and output options) is saved as `videoforge-job.json` in the job's folder in the source's `_tmp` folder when it runs. **Save job file** writes it for the selected jobs at any time. **Add jobs from job files** (Queue toolbar) takes the file, a job's folder, or a source's `_tmp` folder (every job in it) and adds each job exactly as it was saved: no template or profile default is applied. The New jobs page has a **Job files** row too: Browse to a `videoforge-job.json`, then **Open**. A job whose source already has a job with that label is left out. The work folder is where it was, so the run reuses the steps it already finished.
 
 ## Reuse completed work
 
