@@ -115,6 +115,17 @@ def resume(request: Request) -> dict[str, Any]:
     return q.queue_state()
 
 
+@router.post("/pause-after-pass1")
+def pause_after_pass1(request: Request, body: dict[str, Any] | None = Body(None)) -> dict[str, Any]:  # noqa: B008
+    """Stop the given jobs (default: the running one) once their video's pass 1 is done, or (`on` false) take
+    that back. The job ends `paused`: close the app, and Run it later to go on with pass 2. Jobs that don't
+    encode in 2 passes are left out; the ids set are `set`."""
+    q = queue_of(request)
+    body = body or {}
+    done = q.pause_after_pass1(body.get("ids"), bool(body.get("on", True)))
+    return {**q.queue_state(), "set": done}
+
+
 @router.post("/priority")
 def priority(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     """`priority` (a Priority, or null for the Settings') for the running job's and the index lane's tools, for

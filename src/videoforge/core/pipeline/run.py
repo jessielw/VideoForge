@@ -21,7 +21,7 @@ from videoforge.core.job import JobResult, JobSpec, JobState, JobStatus, OutputP
 from videoforge.core.models import JobInputs, Plan, Severity, SourceInfo
 from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.pipeline.share import Sharing
-from videoforge.core.pipeline.steps import ProgressFn, Runner, run_steps
+from videoforge.core.pipeline.steps import Held, ProgressFn, Runner, run_steps
 from videoforge.core.probe import probe
 from videoforge.core.tools import tool_issues
 from videoforge.core.video import hdr, info
@@ -30,6 +30,8 @@ if TYPE_CHECKING:
     from videoforge.core.rule_set import RuleSet
 
 Prober = Callable[[Path, str], SourceInfo]
+
+PASS1 = "video.pass1"  # the step JobState.pause_after_pass1 stops after (a 2-pass encode's first)
 
 
 class _InvalidOutput(Exception):
@@ -210,12 +212,16 @@ def _run(
             keep=keep,
             share=Sharing(spec.work_dir, spec.job_dir),
             redo=redo,
+            hold=lambda step: state.pause_after_pass1 and step.id == PASS1,
         )
         if validate.status is StepStatus.PENDING:  # the final file itself was reused
             validate_output(output)
         return result(JobStatus.DONE, output=output, issues=issues)
     except _InvalidOutput:
         return result(JobStatus.INVALID, output=rejected or output, issues=issues, error=validate.error)
+    except Held:
+        state.pause_after_pass1 = False  # the next run goes on with pass 2
+        return result(JobStatus.PAUSED)
     except Cancelled:
         return result(JobStatus.CANCELLED, error="Cancelled")
     except (ToolError, OSError, ValueError) as e:

@@ -156,6 +156,57 @@ def test_partial_and_zero_imports_explain_kept_jobs(tmp_path):
         assert len(again["kept"]) == 2
 
 
+def test_a_job_is_added_again_from_its_file_exactly_as_it_was(tmp_path):
+    from videoforge.core import job_file
+
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        client.patch(f"/api/jobs/{job}", json={"label": "dubbed", "output_name": "Custom Name"})
+        saved = client.post("/api/jobs/save-files", json={"ids": [job]}).json()["saved"]
+        path = Path(saved[job])
+        assert (
+            path.name == job_file.FILE_NAME
+            and path.parent.name == "dubbed"
+            and path.parent.parent.name.endswith("_tmp")
+        )
+        before = client.get(f"/api/jobs/{job}").json()["spec"]
+
+        client.post("/api/jobs/reorder", json={"ids": [job]})
+        same = client.post("/api/jobs/import", json={"paths": [str(path.parent.parent)]}).json()
+        assert same["added"] == [] and "already in the queue" in same["skipped"][0]["reason"]
+
+        client.delete(f"/api/jobs/{job}")
+        for given in (path, path.parent, path.parent.parent):  # the file, its job folder, the source's work folder
+            result = client.post("/api/jobs/import", json={"paths": [str(given)]}).json()
+            assert len(result["added"]) == 1 and result["skipped"] == []
+            new = result["added"][0]
+            spec = client.get(f"/api/jobs/{new}").json()["spec"]
+            assert new != job and spec == {**before, "id": new}
+            client.delete(f"/api/jobs/{new}")
+        bad = client.post("/api/jobs/import", json={"paths": [str(tmp_path / "nowhere"), str(tmp_path)]}).json()
+        assert bad["added"] == [] and len(bad["skipped"]) == 2
+
+
+def test_pause_after_pass_1_is_set_for_two_pass_jobs_only(tmp_path):
+    from videoforge.core.plan_io import to_json
+    from videoforge.core.video.settings import EncoderSettings, RateControl
+
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        one = client.post("/api/queue/pause-after-pass1", json={"ids": [job]}).json()
+        assert one["set"] == []  # not a 2-pass encode
+        two = EncoderSettings(rate_control=RateControl.TWO_PASS, bitrate_kbps=9000)
+        client.patch(f"/api/jobs/{job}", json={"encoder": to_json(two)})
+        assert client.post("/api/queue/pause-after-pass1", json={"ids": [job]}).json()["set"] == [job]
+        assert client.get("/api/jobs").json()[0]["pause_after_pass1"] is True
+        assert client.post("/api/queue/pause-after-pass1", json={"ids": [job], "on": False}).json()["set"] == [job]
+        assert client.get("/api/jobs").json()[0]["pause_after_pass1"] is False
+
+
 def test_output_directory_can_be_cleared_but_omission_keeps_it(tmp_path):
     make_files(tmp_path)
     with make_client(tmp_path) as client:

@@ -290,6 +290,10 @@ export const api = {
     ),
   restore: (ids: string[]) => post<{ restored: string[] }>('/api/jobs/restore', { ids }),
   duplicate: (ids: string[]) => post<{ added: string[] }>('/api/jobs/duplicate', { ids }),
+  // a job's file in its folder in the source's work folder; a path is a job file, a job folder or a <source>_tmp folder
+  saveJobFiles: (ids: string[]) => post<{ saved: Record<string, string> }>('/api/jobs/save-files', { ids }),
+  importJobs: (paths: string[]) =>
+    post<{ added: string[]; skipped: { path: string; reason: string }[] }>('/api/jobs/import', { paths }),
   reorder: (ids: string[]) => post<{ ids: string[] }>('/api/jobs/reorder', { ids }),
   reprobe: (ids: string[]) => post('/api/jobs/reprobe', { ids }),
   log: (id: string) => get<{ lines: string[] }>(`/api/jobs/${id}/log`),
@@ -308,6 +312,9 @@ export const api = {
   stop: () => post<QueueState>('/api/queue/stop'),
   cancel: () => post<QueueState>('/api/queue/cancel'),
   pause: () => post<QueueState>('/api/queue/pause'),
+  // stop the jobs (default: the running one) once the video's pass 1 is done, or take that back; set: the ones it applied to
+  pauseAfterPass1: (on: boolean, ids?: string[]) =>
+    post<QueueState & { set: string[] }>('/api/queue/pause-after-pass1', { on, ...(ids ? { ids } : {}) }),
   resume: () => post<QueueState>('/api/queue/resume'),
   // the running job's and the index lane's tools, for the rest of their run; null = the Settings'
   priority: (priority: Priority | null) => post<QueueState>('/api/queue/priority', { priority }),

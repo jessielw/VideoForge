@@ -289,6 +289,28 @@ def duplicate_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[s
     return {"added": [e.id for e in queue_of(request).duplicate(body.get("ids") or [])]}
 
 
+@router.post("/jobs/save-files")
+def save_job_files(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """{ids}: write each job's file (core/job_file.py) into its folder in the source's work folder, as the job is
+    now (a run writes it too, when it starts). Returns {saved: {id: path}}."""
+    q = queue_of(request)
+    saved = {}
+    for job_id in dict.fromkeys(body.get("ids") or []):
+        if (path := q.save_job_file(_entry(q, job_id))) is not None:
+            saved[job_id] = str(path)
+    return {"saved": saved}
+
+
+@router.post("/jobs/import")
+def import_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """{paths}: add the jobs saved in job files, exactly as they were. A path is a job file, a job's folder, or a
+    source's work folder (`<source>_tmp`: every job in it). Returns {added: [ids], skipped: [{path, reason}]}."""
+    added, skipped = queue_of(request).import_jobs(_paths(body, "paths"))
+    if not added and not skipped:
+        raise HTTPException(422, "No path given")
+    return {"added": [e.id for e in added], "skipped": skipped}
+
+
 @router.post("/jobs/restore")
 def restore_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     return {"restored": queue_of(request).restore(body.get("ids") or [])}

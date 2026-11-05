@@ -36,6 +36,7 @@ import threading
 from typing import Any
 import uuid
 
+from videoforge.core import job_file
 from videoforge.core.config import AppConfig, Tools
 from videoforge.core.disks import disks, low_space
 from videoforge.core.events import EventBus, IndexFinished, JobFinished, JobStarted, QueueFinished
@@ -133,6 +134,7 @@ class JobView(StrEnum):
     FAILED = "failed"
     SKIPPED = "skipped"
     CANCELLED = "cancelled"
+    PAUSED = "paused"  # stopped after pass 1 on purpose; Run goes on with pass 2
 
 
 class Busy(RuntimeError):
@@ -434,6 +436,59 @@ class JobQueue:
                 self.events.publish("job.added", id=e.id)
         self.probe([e.id for e in added])
         return added, skipped
+
+    def save_job_file(self, e: Entry) -> Path | None:
+        """The job's file (core/job_file.py) in its folder in the work folder, as the job is now; None when it
+        can't be written (never fatal)."""
+        try:
+            return job_file.write(e.spec)
+        except OSError as ex:
+            logger.warning("%s: job file not written (%s)", e.spec.name, ex)
+            return None
+
+    def import_jobs(self, paths: Iterable[Path]) -> tuple[list[Entry], list[dict[str, str]]]:
+        """Add the jobs saved in job files (a file, a job folder, or a source's work folder: every job in it),
+        exactly as they were: their own settings, no template or default applied, a new id. A job whose source
+        already has a job with that label is left out. Returns (new jobs, [{path, reason}] for the ones not added)."""
+        added: list[Entry] = []
+        left: list[dict[str, str]] = []
+        for given in paths:
+            try:
+                files = job_file.find(given)
+            except OSError as ex:
+                left.append({"path": str(given), "reason": f"Not found ({ex.strerror or ex})"})
+                continue
+            if not files:
+                left.append({"path": str(given), "reason": f"No {job_file.FILE_NAME} in it"})
+            for file in files:
+                try:
+                    spec = job_file.read(file)
+                    self.rule_sets(spec.rule_set)  # a rule set this install doesn't have
+                except (ValueError, OSError, KeyError, LookupError) as ex:
+                    left.append({"path": str(file), "reason": str(ex)})
+                    continue
+                with self._lock:
+                    twin = next(
+                        (
+                            o
+                            for o in self._entries.values()
+                            if _same_file(o.spec.inputs.source) == _same_file(spec.inputs.source)
+                            and o.spec.label.lower() == spec.label.lower()
+                        ),
+                        None,
+                    )
+                    if twin is not None:
+                        left.append({"path": str(file), "reason": f"{twin.spec.name} is already in the queue"})
+                        continue
+                    e = Entry(spec, JobState())
+                    self._attach(e)
+                    self._entries[e.id] = e
+                    self._order.append(e.id)
+                    self._save(e)
+                added.append(e)
+                self.events.publish("job.added", id=e.id)
+        self.probe([e.id for e in added])
+        return added, left
 
     def _find_source(self, source: Path) -> Entry | None:
         key = str(source.resolve()).lower()
@@ -894,6 +949,23 @@ class JobQueue:
                 self._worker.start()
         self._queue_changed()
 
+    def pause_after_pass1(self, ids: Iterable[str] | None, on: bool) -> list[str]:
+        """Ask the given jobs (default: the running one) to stop once the video's pass 1 is done (status paused,
+        the app can be closed; Run goes on with pass 2), or take the request back. Only a 2-pass encode has a
+        pass 1: the others are left out. Returns the jobs it set."""
+        changed = []
+        with self._lock:
+            targets = [e for e in self.entries() if (e.running if ids is None else e.id in set(ids))]
+            for e in targets:
+                if not (e.spec.encodes_video and e.spec.encoder.passes == 2) or e.state.pause_after_pass1 == on:
+                    continue
+                e.state.pause_after_pass1 = on
+                self._save(e)
+                changed.append(e)
+        for e in changed:
+            self._changed(e)
+        return [e.id for e in changed]
+
     def stop_after_current(self) -> None:
         self._stop_after_current = True
         self._queue_changed()
@@ -1006,6 +1078,7 @@ class JobQueue:
             self.services.release_preview([f"{e.id}:encode"])  # the compare's clip holds the output open
         log_file = _open_log(e)
         logger.info("Job %s started (%s)", e.spec.name, e.id)
+        self.save_job_file(e)
         recorder = RunRecorder(
             e.spec,
             e.plan,
@@ -1109,7 +1182,10 @@ class JobQueue:
             self._refresh_outputs([e])  # its output is its own now; jobs it held back may run
         self._changed(e)
         self._index_wake.set()  # a job held back for this one's disk may go
-        if not self._closing:  # a shutdown's cancel isn't news: the job resumes on the next start
+        if result.status is JobStatus.PAUSED:
+            log(f"{e.spec.name}: paused after pass 1; run it again to go on with pass 2")
+        # A shutdown's cancel isn't news (the job resumes on the next start), nor is a pause (no output, not an end).
+        if not self._closing and result.status is not JobStatus.PAUSED:
             self.bus.emit(JobFinished(_copy(e.spec), result, _now() - started, record))
         return result.status
 

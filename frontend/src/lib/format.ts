@@ -35,6 +35,7 @@ export const STATUS_LABEL: Record<Status, string> = {
   failed: 'Failed',
   skipped: 'Skipped',
   cancelled: 'Cancelled',
+  paused: 'Paused after pass 1',
 }
 
 /** Tailwind text colour per job status. */
@@ -55,6 +56,7 @@ export const STATUS_TONE: Record<Status, string> = {
   failed: 'text-destructive',
   skipped: 'text-warning',
   cancelled: 'text-warning',
+  paused: 'text-info',
 }
 
 export const SEVERITY_TONE: Record<Severity, string> = {

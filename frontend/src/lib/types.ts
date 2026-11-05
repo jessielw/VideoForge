@@ -17,6 +17,7 @@ export type Status =
   | 'failed'
   | 'skipped'
   | 'cancelled'
+  | 'paused' // stopped after pass 1 on purpose: Run goes on with pass 2
 
 export interface Crop {
   left: number
@@ -155,6 +156,7 @@ export interface JobSummary {
   source: string
   rule_set: string
   status: Status
+  pause_after_pass1: boolean // stop once the video's pass 1 is done (a 2-pass encode)
   progress: Progress | null
   issue: string
   output: string | null

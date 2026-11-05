@@ -157,6 +157,7 @@ _STATUS_STYLE = {
     "failed": "[bold red]FAILED[/]",
     "skipped": "[yellow]SKIPPED[/]",
     "cancelled": "[yellow]CANCELLED[/]",
+    "paused": "[yellow]PAUSED[/]",
 }
 
 
