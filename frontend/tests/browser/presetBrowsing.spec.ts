@@ -255,6 +255,7 @@ async function fixture(page: Page, empty = false) {
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname
     const responses: Record<string, unknown> = {
+      '/api/preset-packs/managed': { presets: [], problems: [] },
       '/api/jobs': [job],
       '/api/jobs/presets': job,
       '/api/rule-sets': [ruleSet],

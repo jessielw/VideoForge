@@ -110,6 +110,7 @@ test('Settings: profiles are created, renamed, switched to and deleted', async (
       return route.fulfill({ json: reply })
     }
     const responses: Record<string, unknown> = {
+      '/api/preset-packs/managed': { presets: [], problems: [] },
       '/api/jobs': [],
       '/api/rule-sets': [ruleSet],
       '/api/presets': presets,

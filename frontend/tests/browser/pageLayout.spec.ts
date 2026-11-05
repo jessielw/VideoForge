@@ -96,6 +96,7 @@ async function layoutFixture(page: Page) {
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname
     const responses: Record<string, unknown> = {
+      '/api/preset-packs/managed': { presets: [], problems: [] },
       '/api/jobs': [],
       '/api/rule-sets': [ruleSet],
       '/api/health': { ok: true, version: 'test' },

@@ -177,6 +177,7 @@ async function fixture(page: Page) {
       await route.fulfill({ json: { config, presets, warnings: [], ...profiles, profile } })
     } else {
       const responses: Record<string, unknown> = {
+        '/api/preset-packs/managed': { presets: [], problems: [] },
         '/api/jobs': [],
         '/api/rule-sets': [ruleSet],
         '/api/presets': presets,

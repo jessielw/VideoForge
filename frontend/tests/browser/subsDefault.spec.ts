@@ -93,6 +93,7 @@ test('Settings: default subtitle rules save as they change, naming included, and
       return route.fulfill({ json: presets })
     }
     const responses: Record<string, unknown> = {
+      '/api/preset-packs/managed': { presets: [], problems: [] },
       '/api/jobs': [],
       '/api/rule-sets': [ruleSet],
       '/api/presets': presets,

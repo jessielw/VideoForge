@@ -1,8 +1,11 @@
 import { test, expect, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import type { ConfigState, ManagedPlugin, PluginInventory } from '../../src/lib/types.ts'
+import type { ConfigState, ManagedPlugin, ManagedPreset, PluginInventory } from '../../src/lib/types.ts'
 
-async function fixture(page: Page, options: { installed?: boolean; enabled?: boolean; id?: string } = {}) {
+async function fixture(
+  page: Page,
+  options: { installed?: boolean; enabled?: boolean; id?: string; managed?: ManagedPreset[] } = {},
+) {
   const errors: string[] = []
   const calls: { path: string; body: unknown }[] = []
   page.on('pageerror', (error) => errors.push(error.message))
@@ -54,6 +57,7 @@ async function fixture(page: Page, options: { installed?: boolean; enabled?: boo
     events: ['JobFinished', 'QueueFinished'],
     error: null,
   }
+  const managed: ManagedPreset[] = options.managed ?? []
   const inventory: PluginInventory = {
     folder: 'plugins',
     items: options.installed ? [plugin] : [],
@@ -95,6 +99,19 @@ async function fixture(page: Page, options: { installed?: boolean; enabled?: boo
     const request = route.request()
     const url = new URL(request.url()),
       path = url.pathname
+    if (path === '/api/preset-packs/managed/reset' && request.method() === 'POST') {
+      const body = request.postDataJSON()
+      calls.push({ path, body })
+      const found = managed.find((m) => m.key === body.key)!
+      Object.assign(found, { state: 'current', update_available: false })
+      await route.fulfill({
+        json: {
+          name: found.name,
+          presets: { video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] },
+        },
+      })
+      return
+    }
     if (path === '/api/plugins/preview') {
       expect(request.headers()['content-type']).toBe('application/zip')
       await route.fulfill({
@@ -133,6 +150,7 @@ async function fixture(page: Page, options: { installed?: boolean; enabled?: boo
       return
     }
     const responses: Record<string, unknown> = {
+      '/api/preset-packs/managed': { presets: managed, problems: [] },
       '/api/jobs': [],
       '/api/rule-sets': [],
       '/api/health': { ok: true, version: 'test' },
@@ -269,5 +287,55 @@ test('event logger controls work when privacy filters block its name in request 
   })
   expect(blocked).toEqual([])
   await expect(manager.getByRole('alert')).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test('presets a plugin ships: an edited one is kept and reset needs a second click', async ({ page }) => {
+  const shipped = { plugin: 'example', kind: 'template', group: [], retired: false } as const
+  const managed: ManagedPreset[] = [
+    {
+      ...shipped,
+      key: 'remux',
+      name: 'Example remux',
+      label: 'Example remux',
+      state: 'edited',
+      update_available: true,
+    },
+    {
+      ...shipped,
+      key: 'extra',
+      name: 'Example extra',
+      label: 'Example extra',
+      state: 'removed',
+      update_available: false,
+    },
+    {
+      ...shipped,
+      key: 'plain',
+      name: 'Example plain',
+      label: 'Example plain',
+      state: 'current',
+      update_available: false,
+    },
+  ]
+  const { calls, errors } = await fixture(page, { installed: true, managed })
+  const section = page.getByRole('heading', { name: 'Plugin presets' }).locator('..')
+  await expect(section).toContainText('3 presets, 2 to look at')
+  await expect(section).toContainText('Example remux')
+  await expect(section).toContainText('Edited · newer version available')
+  await expect(section).not.toContainText('Example plain') // as shipped: nothing to do
+  await section.getByRole('button', { name: 'Restore' }).click() // a deleted one needs no confirmation
+  expect(calls.at(-1)).toEqual({
+    path: '/api/preset-packs/managed/reset',
+    body: { plugin: 'example', kind: 'template', key: 'extra' },
+  })
+  await section.getByRole('button', { name: 'Reset' }).click()
+  expect(calls.filter((c) => c.path.endsWith('/reset'))).toHaveLength(1) // the first click only asks
+  await section.getByRole('button', { name: 'Discard my edits?' }).click()
+  await expect(section).toContainText('3 presets, all as shipped')
+  expect(calls.at(-1)).toEqual({
+    path: '/api/preset-packs/managed/reset',
+    body: { plugin: 'example', kind: 'template', key: 'remux' },
+  })
   expect(errors).toEqual([])
 })
