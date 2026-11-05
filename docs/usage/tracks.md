@@ -2,8 +2,7 @@
 
 The built-in **manual** rule set starts with source tracks in source order, copied with their titles, languages, and flags. Use the job's **Audio** and **Subtitles** tabs to change the output.
 
-![The Audio tab](../assets/screenshots/audio.png#only-light)
-![The Audio tab](../assets/screenshots/audio-dark.png#only-dark)
+![The Audio tab](../assets/screenshots/audio.png#only-light) ![The Audio tab](../assets/screenshots/audio-dark.png#only-dark)
 
 ## Select and arrange tracks
 

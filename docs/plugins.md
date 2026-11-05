@@ -93,13 +93,21 @@ presets = "presets/pack.json"     # relative to the plugin, forward slashes, .js
 The pack is the ordinary preset pack format with one addition: **every entry has a `key`**, its identity for as long as the plugin exists (lowercase letters, digits, `.`, `_`, `-`; up to 64; unique within its library). Rename or move a preset freely; never reuse a key for something else.
 
 ```json
-{"format": "videoforge.presets", "version": 1, "presets": {
-  "template": [{"key": "remux-1080p", "name": "Remux 1080p", "data": {}}],
-  "video": [], "audio": [],
-  "encoder": [{"key": "x265-uhd", "label": "UHD", "group": ["Mine"], "data": {}}]}}
+{
+  "format": "videoforge.presets",
+  "version": 1,
+  "presets": {
+    "template": [{ "key": "remux-1080p", "name": "Remux 1080p", "data": {} }],
+    "video": [],
+    "audio": [],
+    "encoder": [
+      { "key": "x265-uhd", "label": "UHD", "group": ["Mine"], "data": {} }
+    ]
+  }
+}
 ```
 
-At every start, and when a profile is created, each profile is brought in line with the packs of the plugins installed. A shipped preset is *managed*: VideoForge remembers its key and what it looked like as shipped.
+At every start, and when a profile is created, each profile is brought in line with the packs of the plugins installed. A shipped preset is _managed_: VideoForge remembers its key and what it looked like as shipped.
 
 | Situation | What happens |
 | --- | --- |

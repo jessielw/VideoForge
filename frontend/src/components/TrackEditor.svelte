@@ -883,8 +883,7 @@
           >{rows.filter((t) => !isOff(t)).length} of {rows.length} in the output</span
         >
         <span class="ml-auto text-xs text-muted-foreground"
-          >Drag a track by its handle to reorder; paste file paths here to add them; every change
-          saves.</span
+          >Drag a track by its handle to reorder; paste file paths here to add them; every change saves.</span
         >
       </div>
       {#if kind === 'sub'}
