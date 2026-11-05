@@ -323,10 +323,12 @@ class Store:
                 self._db.executemany(
                     "INSERT OR REPLACE INTO settings (profile, key, value) VALUES (?, ?, ?)", setting_rows
                 )
+                managed_presets.forget_missing(self._db, p)
                 self._db.execute("COMMIT")
             except Exception:
                 self._db.execute("ROLLBACK")
                 raise
+            managed_presets.sync(self._db, p, self._packs, self._reserved)  # what the replacement left out
 
     # --- presets a plugin ships (server/managed_presets.py) ------------------------------------
 
@@ -374,10 +376,13 @@ class Store:
                 self._db.executemany(
                     "DELETE FROM presets WHERE profile = ? AND kind = ?", [(p, kind) for kind in kinds]
                 )
+                if kinds:
+                    managed_presets.forget_missing(self._db, p)
                 self._db.execute("COMMIT")
             except Exception:
                 self._db.execute("ROLLBACK")
                 raise
+            managed_presets.sync(self._db, p, self._packs, self._reserved)  # a reset library has the plugins' too
 
     def presets(self, kind: str) -> dict[str, Any]:
         with self._lock:

@@ -195,3 +195,20 @@ def test_the_app_syncs_at_start_and_exposes_the_state(tmp_path):
         assert state["remux"] == "current"
         missing = client.post("/api/preset-packs/managed/reset", json={"plugin": "x", "kind": "template", "key": "y"})
         assert missing.status_code == 404
+
+
+def test_a_reset_or_replaced_library_gets_the_plugins_presets_back(store):
+    store.use_packs([pack()], {})
+    store.reset_configuration((), ("template", "video", "encoder", "audio"))
+    assert list(templates(store)) == ["Acme remux"]
+    assert len(store.presets("encoder")) == 1
+    store.restore_configuration({}, {"template": {}, "encoder": {}})
+    assert list(templates(store)) == ["Acme remux"]
+    assert len(store.presets("encoder")) == 1
+
+
+def test_a_settings_only_reset_keeps_a_deleted_preset_deleted(store):
+    store.use_packs([pack()], {})
+    store.delete_preset("template", "Acme remux")
+    store.reset_configuration(("rule_set",), ())
+    assert "Acme remux" not in templates(store)
