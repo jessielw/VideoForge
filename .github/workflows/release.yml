@@ -137,6 +137,6 @@ jobs:
           name: VideoForge ${{ env.TAG }}
           body_path: notes.md
           draft: true
-          prerelease: ${{ startsWith(env.TAG, '0.') }}
+          prerelease: ${{ contains(env.TAG, '-') }}
           files: artifacts/*
           fail_on_unmatched_files: true
