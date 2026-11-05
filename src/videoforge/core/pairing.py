@@ -26,7 +26,15 @@ from videoforge.core.models import EncodeState, JobInputs, SubFormat, SubTrack
 
 _EPISODE_RE = re.compile(r"(?i)\bS(\d{1,2})E(\d{1,3})\b")
 _TRACK_NO_RE = re.compile(r"(?i)_track(\d+)_")
-_TAG_ALIASES = {"forced": "forced", "force": "forced","sdh": "sdh", "hi": "sdh", "cc": "sdh", "dub": "dub", "dubtitle": "dub"}
+_TAG_ALIASES = {
+    "forced": "forced",
+    "force": "forced",
+    "sdh": "sdh",
+    "hi": "sdh",
+    "cc": "sdh",
+    "dub": "dub",
+    "dubtitle": "dub",
+}
 # Filename words skipped while looking for the language token from the end.
 _NOISE_WORDS = {"synced", "sync", "full", "default", "srt", "subs", "sub", "cleaned", "ocr", "fixed"}
 
