@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - A job's Template button names the template the job's muxer settings and AutoQPF match, even after an encoder preset or a detected crop changed it: `Template: <name> + own encoder`, or `Template: custom` when none fits. It used to say `Template` unless every setting matched exactly.
 
+### Fixed
+
+- A track's Audio preset button no longer says `Copy` beside an encode the rule set chose. It shows the planned encode, channels and bitrate (your own changes still win).
+
 ## [0.1.0-beta.17] - 2026-11-04
 
 ### Changed

@@ -324,6 +324,18 @@
   const channels = (layout: string) => layout.split('.').reduce((n, x) => n + +x, 0)
   const autoAction = (t: AudioTrack): AudioAction => t.auto?.action ?? 'copy'
   const actionOf = (t: AudioTrack): AudioAction => ovOf(t)?.action ?? autoAction(t)
+  // What the output actually gets: the user's override, else what the rule set planned (an encode the
+  // rules picked has no override, but the preset menu must still show it, not "Copy").
+  const effectiveAudio = (o: TrackOverride | undefined, planned: PlannedAudio | undefined) =>
+    o?.action || !planned || planned.action === 'copy'
+      ? o
+      : {
+          ...o,
+          action: planned.action as AudioAction,
+          layout: o?.layout ?? planned.out_layout,
+          bitrate_kbps: o?.bitrate_kbps ?? planned.bitrate_kbps,
+          options: { ...planned.options, ...o?.options },
+        }
   const canAtmos = (t: AudioTrack) => t.atmos && t.codec === 'truehd'
   // The encodes come from the server; one whose tools are missing can't be picked (one already
   // picked stays, and blocks the job). Atmos is offered for TrueHD Atmos sources only.
@@ -657,7 +669,7 @@
         {@const delayMark = mark(t, (o) => o?.sync_ms)}
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-3 py-2 text-sm">
           <AudioPresetMenu
-            current={audioPresetSettings(ov)}
+            current={audioPresetSettings(effectiveAudio(ov, planned))}
             source={t}
             disabled={!editable}
             apply={(preset) => editTrack(t, (value) => Object.assign(value, applyAudioPreset(value, preset)))}

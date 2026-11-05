@@ -78,6 +78,18 @@
     }))
     return { mode: 'position', slots, rules: [], others: 'keep' }
   }
+  // The job's settings match a template when all but the crop and tracks do (per source, or rules).
+  function canon(v: unknown): string {
+    return JSON.stringify(v, (key, val) =>
+      key === 'crop' || key === 'crop_mode' || key === 'audio' || key === 'subs'
+        ? undefined
+        : val && typeof val === 'object' && !Array.isArray(val)
+          ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b)))
+          : val,
+    )
+  }
+  const same = (a: unknown, b: unknown) => canon(a) === canon(b)
+
   const matched = $derived(choices.find((c) => same(c.data, current))?.name ?? null)
   // No exact match (a crop-fitted resize or filter chain, an encoder preset on top): the template whose
   // muxer settings and AutoQPF the job has, with a note on the encoder.
@@ -99,18 +111,6 @@
   )
   const crop = $derived(spec.video.crop)
   const cropText = (c: Template['video']['crop']) => `${c.left}/${c.top}/${c.right}/${c.bottom}`
-
-  // The job's settings match a template when all but the crop and tracks do (per source, or rules).
-  function canon(v: unknown): string {
-    return JSON.stringify(v, (key, val) =>
-      key === 'crop' || key === 'crop_mode' || key === 'audio' || key === 'subs'
-        ? undefined
-        : val && typeof val === 'object' && !Array.isArray(val)
-          ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b)))
-          : val,
-    )
-  }
-  const same = (a: unknown, b: unknown) => canon(a) === canon(b)
 
   function cropNote(t: Template): string {
     return t.crop_mode === 'auto' ? 'auto crop' : t.crop_mode === 'fixed' ? `crop ${cropText(t.video.crop)}` : ''
