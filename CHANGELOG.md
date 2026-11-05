@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Deleting a template now asks first: **Delete** turns into **Confirm?** for a few seconds, and a second click deletes it.
 - The page opens by any IP address (a LAN address, a Docker host) without `VIDEOFORGE_ALLOW_HOST`; IP addresses can't be DNS-rebound. Hostnames still need `VIDEOFORGE_ALLOW_HOST` / `--allow-host`.
 
 ## [0.1.1] - 2026-11-05
