@@ -241,9 +241,7 @@ def forget_missing(db: sqlite3.Connection, profile: str) -> None:
     (not deleted one by one): the next sync ships them again instead of reading the gap as a user's delete."""
     for kind, name in db.execute("SELECT kind, name FROM managed_presets WHERE profile = ?", (profile,)).fetchall():
         if _stored(db, profile, kind, name) is None:
-            db.execute(
-                "DELETE FROM managed_presets WHERE profile = ? AND kind = ? AND name = ?", (profile, kind, name)
-            )
+            db.execute("DELETE FROM managed_presets WHERE profile = ? AND kind = ? AND name = ?", (profile, kind, name))
 
 
 def status(db: sqlite3.Connection, profile: str) -> list[dict[str, Any]]:
