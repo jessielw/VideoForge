@@ -113,9 +113,18 @@ PRESETS: list[FilterPreset] = [
     *_variants(
         C.RESTORATION,
         "EdgeFixer",
-        "clip = core.edgefixer.Continuity(clip, left={}, top={}, right={}, bottom={})",
+        "clip = core.edgefixer.Continuity(clip, left={}, top={}, right={}, bottom={}, radius=0)",
         {"1 px": "1", "2 px": "2", "Empty": "0"},
-        "Fix dirty lines at the frame's edges (after the crop)",
+        "Fix dirty lines at the frame's edges, using the next good row or column as the reference (continuity mode)",
+    ),
+    *_variants(
+        C.RESTORATION,
+        "EdgeFixer Reference",
+        "clip = core.edgefixer.Reference(clip, core.std.BoxBlur(clip, hradius=1, vpasses=0), left={}, right={}, radius=0)\n"
+        "clip = core.edgefixer.Reference(clip, core.std.BoxBlur(clip, vradius=1, hpasses=0), top={}, bottom={}, radius=0)"
+        "  # the blur follows the edges being fixed",
+        {"1 px": "1", "2 px": "2", "Empty": "0"},
+        "Fix dirty lines at the frame's edges against a blurred copy of the picture (reference mode)",
     ),
     *_variants(
         C.RESTORATION,

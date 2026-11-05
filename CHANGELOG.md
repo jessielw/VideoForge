@@ -11,6 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Pause after pass 1: on a 2-pass encode, the Queue's **Pause after pass 1** stops the running job once pass 1 is done. The job shows as Paused and keeps what it finished, so VideoForge can be closed; Run it later to go on with pass 2.
 - Job files: a job's whole setup is saved as `videoforge-job.json` in its folder in the source's `_tmp` folder when it runs (or with **Save job file**). **Add jobs from job files** puts jobs back exactly as they were, from a file, a job folder, or a whole `_tmp` folder.
 
+- EdgeFixer Reference filter preset (1 px, 2 px, Empty) beside the existing continuity-mode EdgeFixer: it fixes edges against a blurred copy, blurring along the axis being fixed.
+
 ### Changed
 
 - Deleting a template now asks first: **Delete** turns into **Confirm?** for a few seconds, and a second click deletes it.
