@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- A rule set can be installed as a plugin ZIP (Settings → Plugins → Install ZIP…), for portable and Docker installs that can't add Python packages. Its `videoforge-plugin.toml` names the class with `rule_set = "ClassName"`; `vendor/` holds pure-Python dependencies. It appears in the rule set list after a restart.
+
 ### Changed
 
 - A job's Template button names the template the job's muxer settings and AutoQPF match, even after an encoder preset or a detected crop changed it: `Template: <name> + own encoder`, or `Template: custom` when none fits. It used to say `Template` unless every setting matched exactly.

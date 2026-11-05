@@ -109,6 +109,9 @@ def load_plugins(folder: Path | None, disabled: Collection[str] = ()) -> PluginR
         except PluginError as ex:
             failures.append(PluginFailure(str(root), str(ex)))
             continue
+        if m.rule_set:  # a rule set (videoforge.rule_sets reads these); its id still counts as taken
+            taken.add(m.id.casefold())
+            continue
         add(m.id, str(root), lambda m=m, root=root: _load_folder(root, m))
 
     for ep in sorted(metadata.entry_points(group=ENTRY_POINT_GROUP), key=lambda e: e.name):

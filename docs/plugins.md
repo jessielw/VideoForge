@@ -67,6 +67,21 @@ If two plugins have the same id, the one in the plugins folder wins. The other f
 
 IDs are compared without letter case. ZIP plugin ids use 1–64 ASCII letters, digits, underscores or hyphens, beginning with a letter or digit, and must be valid Windows folder names. Replacements must preserve the exact id. Older folder manifests containing only `id` and `module` remain supported.
 
+## A rule set as a plugin
+
+A rule set (the code that picks a job's tracks and checks its output) is normally an installed Python package with a `videoforge.rule_sets` entry point. Where packages can't be added (the portable build, Docker), ship it as a plugin ZIP instead. Name the `RuleSet` class in the manifest; there is no `Plugin` object and no `object` key:
+
+```toml
+id = "mygroup"
+module = "videoforge_mygroup"     # the folder's module or package
+rule_set = "MyGroupRuleSet"       # the RuleSet class in it
+name = "My group"
+version = "1.0"
+api_version = 1
+```
+
+It is installed like any plugin and appears in the rule set list after the restart. Put pure-Python dependencies in `vendor/`. The built-in `manual` rule set keeps its id, a rule set in the plugins folder wins over an installed package with the same id, and switching it off under Settings → Plugins removes it from the list on the next start.
+
 ## Declare settings
 
 Add fields to the manifest to create a form under **Details and settings → Configure**:

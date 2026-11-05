@@ -59,11 +59,10 @@ def create_app(
     services: Services | None = None,
     setup_vapoursynth: bool = True,
 ) -> FastAPI:
-    from videoforge.rule_sets import default_rule_set_id, get_rule_set, rule_set_ids as registered
+    from videoforge.rule_sets import default_rule_set_id, get_rule_set, rule_set_ids as registered, use_folder
 
     settings = settings or ServerSettings()
     base = app_config or load_app_config()  # videoforge.toml (+ .local); the Settings page layers over it
-    ids = rule_set_ids or registered()
     services = services or Services()
 
     store = Store(settings.db_path)
@@ -71,6 +70,10 @@ def create_app(
     if restored_base := store.get_setting("configuration_base"):
         base = from_json(AppConfig, restored_base)
     saved = SavedSettings.load(store)
+    plugin_manager = PluginManager(settings.data_dir)
+    plugin_manager.apply_pending()  # before the rule sets: a ZIP can bring one
+    use_folder(settings.plugins_dir, saved.disabled_plugins)
+    ids = rule_set_ids or registered()
     default = default_rule_set_id(saved.rule_set or base.rule_set, ids)
     cfg = saved.app_config(base, default)
     default_roots = list(settings.roots)
@@ -106,8 +109,6 @@ def create_app(
         report=lambda kind, **fields: queue_events.write(event(kind, **fields)),
     )
     bus.subscribe(actions.on_event, JobFinished, QueueFinished, name="actions")
-    plugin_manager = PluginManager(settings.data_dir)
-    plugin_manager.apply_pending()
     plugin_report = load_plugins(settings.plugins_dir, saved.disabled_plugins)
     plugin_settings = plugin_manager.effective_settings(base.plugins, saved.plugin_settings)
     plugins = PluginHost(

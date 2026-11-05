@@ -52,6 +52,7 @@ class Manifest:
     name: str = ""
     version: str = ""
     description: str = ""
+    rule_set: str = ""  # the RuleSet class in `module`: this package adds a rule set, not an event plugin
     api_version: int = 1
     settings: tuple[Setting, ...] = field(default_factory=tuple)
 
@@ -84,6 +85,10 @@ def parse_manifest(text: str, *, package: bool = False) -> Manifest:
         raise PluginError(f"{MANIFEST}: `module` must be a top-level module or package name (no dots)")
     if not values["object"].isidentifier():
         raise PluginError(f"{MANIFEST}: `object` must be a Python name")
+    rule_set = data.get("rule_set", "")
+    if not isinstance(rule_set, str) or (rule_set and not rule_set.isidentifier()):
+        raise PluginError(f"{MANIFEST}: `rule_set` must be the name of a RuleSet class")
+    values["rule_set"] = rule_set
     for key in ("name", "version", "description"):
         value = data.get(key, "")
         if not isinstance(value, str) or (package and key != "description" and not value.strip()):

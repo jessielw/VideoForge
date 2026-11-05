@@ -425,8 +425,21 @@ class PluginManager:
                         "pending": None,
                     },
                 )
+            from videoforge.rule_sets import folder_failures, registry
+
+            rule_sets, rule_set_errors = registry(), folder_failures()
             for pid, item in entries.items():
                 active = loaded.get(pid)
+                if any(m.id == pid and m.rule_set for _, m in installed.values()):
+                    item.update(
+                        enabled=pid not in disabled,
+                        running=pid in rule_sets and pid not in disabled,
+                        running_version=None,
+                        events=[],
+                        error=rule_set_errors.get(pid),
+                        kind="rule_set",
+                    )
+                    continue
                 item.update(
                     enabled=pid not in disabled,
                     running=active is not None and pid not in host.setup_failed,
