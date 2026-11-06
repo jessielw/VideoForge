@@ -128,7 +128,11 @@
                       variant={confirming === id(p) ? 'destructive' : 'outline'}
                       disabled={busy || disabled}
                       onclick={() => reset(p)}
-                      >{confirming === id(p) ? 'Discard my edits?' : p.state === 'removed' ? 'Restore' : 'Reset'}</Button
+                      >{confirming === id(p)
+                        ? 'Discard my edits?'
+                        : p.state === 'removed'
+                          ? 'Restore'
+                          : 'Reset'}</Button
                     >
                   {/if}
                 </div>

@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - EdgeFixer Reference filter preset (1 px, 2 px, Empty) beside the existing continuity-mode EdgeFixer: it fixes edges against a blurred copy, blurring along the axis being fixed.
 
+- Settings → Appearance: pick a colour palette (Gold, Indigo, Ocean, Forest, Ember, Rose, Slate), a custom accent colour, UI density (Compact, Default, Comfortable), corner roundness, and a pure-black dark mode, beside the light / dark / system mode. Remembered in the browser.
+
 ### Changed
 
 - Deleting a template now asks first: **Delete** turns into **Confirm?** for a few seconds, and a second click deletes it.

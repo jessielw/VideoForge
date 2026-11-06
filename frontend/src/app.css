@@ -110,7 +110,7 @@
     @apply bg-background text-foreground;
     margin: 0;
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: 0.875rem;
   }
 }
 
@@ -123,4 +123,260 @@
    Firefox beside it, where the value is left-aligned anyway). */
 input[type='number']::-webkit-inner-spin-button {
   margin-left: 0.5rem;
+}
+
+/* Palettes picked in Settings > Appearance (lib/appearance.ts keeps the matching swatches).
+   Gold, the default, is the :root / .dark block above; each of these overrides its surfaces and
+   accent. The status colours (success / warning / info / destructive) stay the same in all. */
+
+:root[data-theme='indigo'] {
+  --background: #eef1f8;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: #e6eaf4;
+  --secondary-foreground: #0f172a;
+  --muted: #e6eaf4;
+  --muted-foreground: #5b6478;
+  --accent: #e6eaf4;
+  --accent-foreground: #0f172a;
+  --border: #d5dbea;
+  --input: #cbd3e6;
+  --ring: #4f46e5;
+}
+
+:root.dark[data-theme='indigo'] {
+  --background: #0f1220;
+  --foreground: #e2e8f0;
+  --card: #171b2e;
+  --card-foreground: #e2e8f0;
+  --popover: #171b2e;
+  --popover-foreground: #e2e8f0;
+  --primary: #818cf8;
+  --primary-foreground: #0f1220;
+  --secondary: #20253b;
+  --secondary-foreground: #e2e8f0;
+  --muted: #20253b;
+  --muted-foreground: #9aa3b8;
+  --accent: #20253b;
+  --accent-foreground: #e2e8f0;
+  --border: #2a3050;
+  --input: #343b5e;
+  --ring: #818cf8;
+}
+
+:root[data-theme='ocean'] {
+  --background: #edf5fa;
+  --foreground: #0c1a26;
+  --card: #ffffff;
+  --card-foreground: #0c1a26;
+  --popover: #ffffff;
+  --popover-foreground: #0c1a26;
+  --primary: #0369a1;
+  --primary-foreground: #ffffff;
+  --secondary: #e2eef6;
+  --secondary-foreground: #0c1a26;
+  --muted: #e2eef6;
+  --muted-foreground: #566a7a;
+  --accent: #e2eef6;
+  --accent-foreground: #0c1a26;
+  --border: #d0e0ec;
+  --input: #c3d6e5;
+  --ring: #0369a1;
+}
+
+:root.dark[data-theme='ocean'] {
+  --background: #0a1520;
+  --foreground: #e0eef7;
+  --card: #112030;
+  --card-foreground: #e0eef7;
+  --popover: #112030;
+  --popover-foreground: #e0eef7;
+  --primary: #38bdf8;
+  --primary-foreground: #0a1520;
+  --secondary: #182c40;
+  --secondary-foreground: #e0eef7;
+  --muted: #182c40;
+  --muted-foreground: #8fa8bb;
+  --accent: #182c40;
+  --accent-foreground: #e0eef7;
+  --border: #1f3850;
+  --input: #2a4762;
+  --ring: #38bdf8;
+}
+
+:root[data-theme='forest'] {
+  --background: #eff5ef;
+  --foreground: #14231a;
+  --card: #ffffff;
+  --card-foreground: #14231a;
+  --popover: #ffffff;
+  --popover-foreground: #14231a;
+  --primary: #15803d;
+  --primary-foreground: #ffffff;
+  --secondary: #e4eee5;
+  --secondary-foreground: #14231a;
+  --muted: #e4eee5;
+  --muted-foreground: #5a6e5f;
+  --accent: #e4eee5;
+  --accent-foreground: #14231a;
+  --border: #d3e0d5;
+  --input: #c5d5c8;
+  --ring: #15803d;
+}
+
+:root.dark[data-theme='forest'] {
+  --background: #0d1510;
+  --foreground: #dfeee3;
+  --card: #142019;
+  --card-foreground: #dfeee3;
+  --popover: #142019;
+  --popover-foreground: #dfeee3;
+  --primary: #4ade80;
+  --primary-foreground: #0d1510;
+  --secondary: #1b2d22;
+  --secondary-foreground: #dfeee3;
+  --muted: #1b2d22;
+  --muted-foreground: #94ab9a;
+  --accent: #1b2d22;
+  --accent-foreground: #dfeee3;
+  --border: #24382b;
+  --input: #2f4838;
+  --ring: #4ade80;
+}
+
+:root[data-theme='ember'] {
+  --background: #fbf3ec;
+  --foreground: #26160e;
+  --card: #ffffff;
+  --card-foreground: #26160e;
+  --popover: #ffffff;
+  --popover-foreground: #26160e;
+  --primary: #c2410c;
+  --primary-foreground: #ffffff;
+  --secondary: #f5e8dc;
+  --secondary-foreground: #26160e;
+  --muted: #f5e8dc;
+  --muted-foreground: #7a6355;
+  --accent: #f5e8dc;
+  --accent-foreground: #26160e;
+  --border: #ecdacb;
+  --input: #e2cdbb;
+  --ring: #c2410c;
+}
+
+:root.dark[data-theme='ember'] {
+  --background: #1a110d;
+  --foreground: #f3e6dc;
+  --card: #241812;
+  --card-foreground: #f3e6dc;
+  --popover: #241812;
+  --popover-foreground: #f3e6dc;
+  --primary: #fb923c;
+  --primary-foreground: #1a110d;
+  --secondary: #2f2018;
+  --secondary-foreground: #f3e6dc;
+  --muted: #2f2018;
+  --muted-foreground: #b49d8d;
+  --accent: #2f2018;
+  --accent-foreground: #f3e6dc;
+  --border: #3a2a20;
+  --input: #4a362a;
+  --ring: #fb923c;
+}
+
+:root[data-theme='rose'] {
+  --background: #fbf0f3;
+  --foreground: #2a1219;
+  --card: #ffffff;
+  --card-foreground: #2a1219;
+  --popover: #ffffff;
+  --popover-foreground: #2a1219;
+  --primary: #be123c;
+  --primary-foreground: #ffffff;
+  --secondary: #f6e4e9;
+  --secondary-foreground: #2a1219;
+  --muted: #f6e4e9;
+  --muted-foreground: #7d5f69;
+  --accent: #f6e4e9;
+  --accent-foreground: #2a1219;
+  --border: #ecd3da;
+  --input: #e2c4cd;
+  --ring: #be123c;
+}
+
+:root.dark[data-theme='rose'] {
+  --background: #1a0f13;
+  --foreground: #f6e3e8;
+  --card: #241519;
+  --card-foreground: #f6e3e8;
+  --popover: #241519;
+  --popover-foreground: #f6e3e8;
+  --primary: #fb7185;
+  --primary-foreground: #1a0f13;
+  --secondary: #301c22;
+  --secondary-foreground: #f6e3e8;
+  --muted: #301c22;
+  --muted-foreground: #b99aa4;
+  --accent: #301c22;
+  --accent-foreground: #f6e3e8;
+  --border: #3d252c;
+  --input: #4d3039;
+  --ring: #fb7185;
+}
+
+:root[data-theme='slate'] {
+  --background: #eef1f5;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #334155;
+  --primary-foreground: #ffffff;
+  --secondary: #e3e8ee;
+  --secondary-foreground: #0f172a;
+  --muted: #e3e8ee;
+  --muted-foreground: #5b6472;
+  --accent: #e3e8ee;
+  --accent-foreground: #0f172a;
+  --border: #d3d9e1;
+  --input: #c6cdd8;
+  --ring: #334155;
+}
+
+:root.dark[data-theme='slate'] {
+  --background: #0f1217;
+  --foreground: #e2e8f0;
+  --card: #171b22;
+  --card-foreground: #e2e8f0;
+  --popover: #171b22;
+  --popover-foreground: #e2e8f0;
+  --primary: #cbd5e1;
+  --primary-foreground: #0f172a;
+  --secondary: #1f242d;
+  --secondary-foreground: #e2e8f0;
+  --muted: #1f242d;
+  --muted-foreground: #94a0b0;
+  --accent: #1f242d;
+  --accent-foreground: #e2e8f0;
+  --border: #2a303b;
+  --input: #353d4a;
+  --ring: #cbd5e1;
+}
+
+/* Darker dark mode (Settings > Appearance > Pure black): near-black surfaces whatever the palette. */
+:root.dark[data-oled] {
+  --background: #000000;
+  --card: #080808;
+  --popover: #0c0c0c;
+  --secondary: #141414;
+  --muted: #141414;
+  --accent: #141414;
+  --border: #222222;
+  --input: #2a2a2a;
 }

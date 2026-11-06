@@ -5,6 +5,7 @@
   // Each change saves at once and is used by
   // new jobs and runs; Reset goes back to the server's configuration defaults.
   import { onMount } from 'svelte'
+  import AppearanceSettings from '../components/AppearanceSettings.svelte'
   import FileBrowser from '../components/FileBrowser.svelte'
   import ConfigurationTransfer from '../components/ConfigurationTransfer.svelte'
   import PresetPackTransfer from '../components/PresetPackTransfer.svelte'
@@ -339,6 +340,8 @@
         checkAll()
       }}
     />
+
+    <AppearanceSettings />
 
     <section class="col-span-full space-y-3">
       <h2 class="font-medium">Encoder presets</h2>

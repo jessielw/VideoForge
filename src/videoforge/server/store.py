@@ -491,7 +491,7 @@ class Store:
                     if match is None and (*scope, base) not in replaced:
                         # an earlier import may have numbered this one ("Name (2)"): identical content still matches
                         want = {"label": base, "group": group, "settings": data} if grouped else data
-                        for (*s, lbl), (nm, old) in saved.items():
+                        for (*s, lbl), (_nm, old) in saved.items():
                             if tuple(s) != scope or not re.fullmatch(re.escape(base) + r" \(\d+\)", str(lbl)):
                                 continue
                             cmp = {**old, "label": base} if grouped else old
