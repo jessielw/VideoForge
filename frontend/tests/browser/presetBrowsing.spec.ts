@@ -121,6 +121,7 @@ async function fixture(page: Page, empty = false) {
     encoder: 'x264',
     crop: null,
     custom_script: false,
+    pause_after_pass1: false,
     indexed: false,
     index_error: '',
     index_held: false,
