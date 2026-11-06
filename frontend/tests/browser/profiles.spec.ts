@@ -129,7 +129,9 @@ test('Settings: profiles are created, renamed, switched to and deleted', async (
   const section = page.getByRole('region', { name: 'Profiles' })
   const audio = page.getByRole('spinbutton').first()
   await expect(section.getByRole('listitem')).toHaveText([/^Default\s*\(active\)\s*Rename…\s*$/])
+  await page.getByRole('button', { name: 'Encoding', exact: true }).click()
   await expect(audio).toHaveValue('4')
+  await page.getByRole('button', { name: 'General', exact: true }).click()
 
   await section.getByRole('button', { name: 'New profile…' }).click()
   let dialog = page.getByRole('dialog')
@@ -144,7 +146,9 @@ test('Settings: profiles are created, renamed, switched to and deleted', async (
 
   await section.getByRole('listitem').nth(1).getByRole('button', { name: 'Switch' }).click()
   await expect(section.getByRole('listitem').nth(1)).toHaveText(/^Anime\s*\(active\)/)
+  await page.getByRole('button', { name: 'Encoding', exact: true }).click()
   await expect(audio).toHaveValue('2') // the new profile's settings are in use
+  await page.getByRole('button', { name: 'General', exact: true }).click()
   // the active one can't be deleted; the other one can
   await expect(section.getByRole('listitem').nth(1).getByRole('button', { name: 'Delete…' })).toHaveCount(0)
 

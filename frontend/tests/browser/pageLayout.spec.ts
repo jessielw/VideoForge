@@ -157,6 +157,7 @@ for (const route of ['templates', 'settings']) {
     await page.setViewportSize({ width: 1920, height: 1000 })
     const errors = await layoutFixture(page)
     await page.goto(`/#/${route}`)
+    if (route === 'settings') await page.getByRole('button', { name: 'Tools', exact: true }).click()
     const content =
       route === 'templates'
         ? page.locator('fieldset').first()
@@ -165,10 +166,11 @@ for (const route of ['templates', 'settings']) {
     const bounds = await content.boundingBox()
     expect(bounds!.x + bounds!.width).toBeGreaterThan(1920 - 40)
     if (route === 'settings') {
+      await page.getByRole('button', { name: 'Encoding', exact: true }).click()
       const indexing = await page.getByRole('heading', { name: 'Batch indexing', exact: true }).boundingBox()
-      const audio = await page.getByRole('heading', { name: 'Audio encodes', exact: true }).boundingBox()
-      expect(Math.abs(indexing!.y - audio!.y)).toBeLessThan(2)
-      expect(audio!.x).toBeGreaterThan(1000)
+      const ruleSet = await page.getByRole('heading', { name: 'Rule set', exact: true }).boundingBox()
+      expect(Math.abs(indexing!.y - ruleSet!.y)).toBeLessThan(2)
+      expect(indexing!.x).toBeGreaterThan(1000)
     }
     await page.screenshot({ path: testInfo.outputPath(`${route}-wide.png`) })
     expect(errors).toEqual([])

@@ -305,10 +305,40 @@
       stopping = false
     }
   }
+
+  // The sections are grouped into tabs; the last one open is remembered.
+  const TABS = [
+    { id: 'general', label: 'General' },
+    { id: 'tools', label: 'Tools' },
+    { id: 'encoding', label: 'Encoding' },
+    { id: 'presets', label: 'Presets' },
+    { id: 'automation', label: 'Automation' },
+    { id: 'plugins', label: 'Plugins' },
+    { id: 'backup', label: 'Backup & reset' },
+  ] as const
+  type TabId = (typeof TABS)[number]['id']
+  const TAB_KEY = 'videoforge.settingsTab'
+  function readTab(): TabId {
+    try {
+      const saved = localStorage.getItem(TAB_KEY)
+      return TABS.find((t) => t.id === saved)?.id ?? 'general'
+    } catch {
+      return 'general' // storage blocked
+    }
+  }
+  let tab = $state<TabId>(readTab())
+  function openTab(id: TabId) {
+    tab = id
+    try {
+      localStorage.setItem(TAB_KEY, id)
+    } catch {
+      /* storage blocked */
+    }
+  }
 </script>
 
 <div class="@container/settings h-full overflow-auto p-6">
-  <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8 @min-[80rem]/settings:grid-cols-2">
+  <div class="flex min-w-0 flex-col gap-6">
     <header class="col-span-full flex flex-wrap items-center gap-3">
       <h1 class="text-xl font-semibold">Settings</h1>
       <span class="text-sm text-muted-foreground">Saved as you go; used by new jobs and runs.</span>
@@ -331,508 +361,584 @@
       <div class="col-span-full rounded-md border border-warning/50 bg-warning/10 p-3 text-sm text-warning">{note}</div>
     {/each}
 
-    <ProfileManager
-      disabled={pending > 0 || !!saveError}
-      onswitched={(value) => {
-        config = value
-        pluginRefresh++
-        checks = {}
-        checkAll()
-      }}
-    />
-
-    <AppearanceSettings />
-
-    <section class="col-span-full space-y-3">
-      <h2 class="font-medium">Encoder presets</h2>
-      <p class="text-sm text-muted-foreground">
-        Create, edit, organize, import, and export presets without opening a job or template.
-      </p>
-      <div class="flex flex-wrap gap-2">
-        {#if app.defaultRuleSet}
-          <EncoderPresetMenu
-            ruleSet={app.defaultRuleSet.id}
-            current={app.defaultRuleSet.defaults.encoder}
-            apply={() => {}}
-            manageOnly
-          />
-        {/if}
-        <AudioPresetMenu
-          current={{ action: 'copy', layout: null, bitrate_kbps: null, options: {} }}
-          apply={() => {}}
-          manageOnly
-        />
-      </div>
-    </section>
-
-    {#if !config}
-      <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
-    {:else}
-      <ConfigurationTransfer
-        disabled={pending > 0 || !!saveError}
-        onimported={(value) => {
-          config = value
-          pluginRefresh++
-          checks = {}
-          checkAll()
-        }}
-      />
-      <PresetPackTransfer disabled={pending > 0 || !!saveError} />
-      <ManagedPresets disabled={pending > 0 || !!saveError} refreshKey={pluginRefresh} />
-      <section class="col-span-full min-w-0 space-y-3">
-        <div class="flex items-center gap-3">
-          <h2 class="font-medium">Tools</h2>
-          <span class="text-xs text-muted-foreground">A bare name (e.g. ffmpeg) is looked up on PATH.</span>
-          <Button variant="outline" class="ml-auto" onclick={checkAll} disabled={Object.values(checking).some(Boolean)}>
-            <RefreshCwIcon />Check again
-          </Button>
-        </div>
-        <div class="divide-y divide-border/60 rounded-xl border bg-card">
-          {#each config.tools as t (t.name)}
-            {@const c = checks[t.name]}
-            {@const look = c ? LOOK[c.status] : null}
-            <div class="grid grid-cols-[12rem_1fr] gap-x-4 gap-y-1.5 px-4 py-3">
-              <div>
-                <div class="text-sm font-medium">{t.label}</div>
-                <div class="text-xs text-muted-foreground">{t.purpose}</div>
-              </div>
-              <div class="flex min-w-0 items-center gap-2">
-                <Input
-                  class="min-w-0 flex-1 font-mono text-xs {t.custom ? 'border-primary/60' : ''}"
-                  value={t.custom ?? t.default}
-                  placeholder={t.default || 'not set'}
-                  aria-label="{t.label} path"
-                  onchange={(e) => setTool(t, e.currentTarget.value)}
-                />
-                <Button variant="outline" onclick={() => (browse = { kind: 'tool', tool: t })}
-                  ><FolderOpenIcon />Browse…</Button
-                >
-                <Tip text="Back to the default: {t.default || '(none)'}">
-                  <Button variant="ghost" size="sm" disabled={!t.custom} onclick={() => setTool(t, '')}>Reset</Button>
-                </Tip>
-              </div>
-              <div></div>
-              <div class="flex min-w-0 items-center gap-2 text-xs">
-                {#if checking[t.name]}
-                  <span class="text-muted-foreground">checking…</span>
-                {:else if c && look}
-                  <span class="flex shrink-0 items-center gap-1 {look.tone}"
-                    ><look.icon class="size-3.5" />{look.text}</span
-                  >
-                  {#if c.version}<Tip class="block truncate" text={c.version}>{c.version}</Tip>{/if}
-                  {#if c.detail}<Tip class="block truncate text-muted-foreground" text={c.detail}>{c.detail}</Tip>{/if}
-                  {#if c.found && c.found !== t.path}<Tip class="block truncate text-muted-foreground" text={c.found}
-                      >· {c.found}</Tip
-                    >{/if}
-                {/if}
-              </div>
-            </div>
-          {/each}
-        </div>
-        <p class="text-xs text-muted-foreground">
-          Dolby Encoding Engine and qaac's CoreAudioToolbox can't be shipped with VideoForge: install them and point at
-          them here. DDP needs DeeZy + DEE (+ truehdd for Atmos); AAC needs ffmpeg + qaac.
-        </p>
-      </section>
-
-      <section class="space-y-3">
-        <div class="flex items-center gap-3">
-          <h2 class="font-medium">Folder browser</h2>
-          <span class="text-xs text-muted-foreground">
-            {config.roots_custom
-              ? 'Only these folders (and what is under them) can be browsed.'
-              : 'Every drive can be browsed.'}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            class="ml-auto"
-            disabled={!config.roots_custom}
-            onclick={() => setRoots(null)}
+    <div class="flex min-w-0 flex-col gap-6 @min-[48rem]/settings:flex-row">
+      <nav
+        class="flex gap-1 overflow-x-auto @min-[48rem]/settings:w-44 @min-[48rem]/settings:shrink-0 @min-[48rem]/settings:flex-col"
+        aria-label="Settings sections"
+      >
+        {#each TABS as t (t.id)}
+          <button
+            type="button"
+            class="shrink-0 rounded-md px-3 py-1.5 text-left text-sm whitespace-nowrap hover:bg-muted/60 {tab === t.id
+              ? 'bg-muted font-medium'
+              : 'text-muted-foreground'}"
+            aria-current={tab === t.id ? 'page' : undefined}
+            onclick={() => openTab(t.id)}>{t.label}</button
           >
-            Reset to every drive
-          </Button>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          {#each config.roots as r (r)}
-            <span class="flex items-center gap-1 rounded-md bg-muted px-2 py-1 font-mono text-xs">
-              {r}
-              {#if config.roots_custom}
-                <button
-                  class="text-muted-foreground hover:text-destructive"
-                  aria-label="Remove {r}"
-                  onclick={() => setRoots(config!.roots.filter((x) => x !== r))}><XIcon class="size-3" /></button
-                >
-              {/if}
-            </span>
-          {/each}
-        </div>
-        <div class="flex gap-2">
-          <Input
-            class="w-96 font-mono text-xs"
-            placeholder="D:\Media"
-            bind:value={newRoot}
-            onkeydown={(e) => e.key === 'Enter' && addRoot(newRoot)}
-          />
-          <Button variant="outline" onclick={() => addRoot(newRoot)} disabled={!newRoot.trim()}>Add folder</Button>
-          <Button variant="outline" onclick={() => (browse = { kind: 'root' })}><FolderOpenIcon />Browse…</Button>
-        </div>
-      </section>
-
-      <section class="space-y-3">
-        <h2 class="font-medium">Rule set</h2>
-        <label class="flex items-center gap-3 text-sm">
-          <span class="text-muted-foreground">New jobs start with</span>
-          <NativeSelect value={config.rule_set} onchange={(e) => setRuleSet(e.currentTarget.value)}>
-            {#each config.rule_sets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-          </NativeSelect>
-          <span class="text-xs text-muted-foreground">Default: {config.rule_set_default}</span>
-        </label>
-      </section>
-
-      <section class="space-y-3">
-        <h2 class="font-medium">Batch indexing</h2>
-        <label class="flex items-start gap-3 text-sm">
-          <Checkbox
-            class="mt-0.5"
-            checked={config.index_waits_for_disk}
-            onCheckedChange={(v) => change({ index_waits_for_disk: v })}
-          />
-          <span>
-            Wait while an encode reads the same disk
-            <span class="block text-xs text-muted-foreground">
-              A job in the index lane whose source is on the disk the running encode reads waits for it to finish; jobs
-              on other disks go first. Index now on a job never waits.
-            </span>
-          </span>
-        </label>
-      </section>
-
-      <section class="space-y-3">
-        <h2 class="font-medium">Audio encodes</h2>
-        <label class="flex items-start gap-3 text-sm">
-          <Input
-            type="number"
-            min="0"
-            max="8"
-            class="w-20"
-            value={config.parallel_audio}
-            onchange={(e) => setParallelAudio(e.currentTarget)}
-          />
-          <span>
-            At once, beside the video encode
-            <span class="block text-xs text-muted-foreground">
-              A job's audio encodes start once its source is indexed and run while the video encodes; the mux waits for
-              them. 0 encodes them one by one, before the video. Default: {config.parallel_audio_default}
-            </span>
-          </span>
-        </label>
-      </section>
-
-      <section class="space-y-3">
-        <h2 class="font-medium">Process priority</h2>
-        {#each [{ key: 'encoder_priority', label: 'Video encode', hint: 'the encoder (x264, x265, ffmpeg for VP8 / VP9, SvtAv1EncApp) and the vspipe feeding it' }, { key: 'tool_priority', label: 'Other tools', hint: 'audio encodes, the mux, indexing' }] as const as row (row.key)}
-          <label class="flex items-center gap-3 text-sm">
-            <span class="w-28 shrink-0 text-muted-foreground">{row.label}</span>
-            <NativeSelect
-              class="shrink-0"
-              value={config[row.key]}
-              onchange={(e) => {
-                const v = e.currentTarget.value as Priority
-                change({ [row.key]: v === config?.[`${row.key}_default`] ? null : v })
-              }}
-            >
-              {#each config.priorities as p (p)}<option value={p}>{PRIORITY_LABEL[p]}</option>{/each}
-            </NativeSelect>
-            <span class="text-xs text-muted-foreground">
-              {row.hint}. Default: {PRIORITY_LABEL[config[`${row.key}_default`]]}
-            </span>
-          </label>
         {/each}
-        <p class="text-xs text-muted-foreground">
-          For jobs started from now on; the Queue's toolbar changes the running one's. On Linux it's a nice value, and
-          raising one back needs CAP_SYS_NICE.
-        </p>
-      </section>
+      </nav>
 
-      <section class="space-y-3">
-        <h2 class="font-medium">Work folders</h2>
-        <label class="flex items-start gap-3 text-sm">
-          <Checkbox
-            class="mt-0.5"
-            checked={config.delete_work_dir}
-            onCheckedChange={(v) => change({ delete_work_dir: v === config?.delete_work_dir_default ? null : v })}
-          />
-          <span>
-            Delete a job's work folder once it's done
-            <span class="block text-xs text-muted-foreground">
-              The <code>&lt;source&gt;_tmp</code> folder next to the source (index, encodes, log) is deleted after the
-              job succeeds; its job records and log are copied to {config.records_dir} first (the newest 100 kept). A job
-              that fails or is cancelled keeps it, to resume from. Default:
-              {config.delete_work_dir_default ? 'on' : 'off'}
-            </span>
-          </span>
-        </label>
-      </section>
-
-      <section class="space-y-3">
-        <h2 class="font-medium">Test encode</h2>
-        <label class="flex items-start gap-3 text-sm">
-          <Checkbox
-            class="mt-0.5"
-            checked={config.sample_quality}
-            onCheckedChange={(v) => change({ sample_quality: v })}
-          />
-          <span>
-            Score its quality
-            <span class="block text-xs text-muted-foreground">
-              After a test encode, compare every frame with the encoder's input (SSIMULACRA2 and XPSNR, vszip) and show
-              the scores beside its bitrate. It decodes both once more, so the test encode takes longer.
-            </span>
-          </span>
-        </label>
-      </section>
-
-      <section class="col-span-full min-w-0 space-y-3" aria-label="Default subtitles">
-        <h2 class="font-medium">Default subtitles</h2>
-        {#if !defaultRuleSet?.track_editor || defaultRuleSet.picks_tracks}
-          <p class="text-xs text-muted-foreground">
-            {defaultRuleSet?.name}'s rules choose its jobs' subtitles; these apply to other rule sets' jobs.
-          </p>
-        {/if}
-        <TemplateSubsEditor
-          value={subsDefault}
-          flags={subFlags}
-          toggleLabel="Choose every new job's subtitles by rules"
-          offNote="Off: new jobs keep every subtitle track, unless their template sets subtitle rules."
-          appliedNote="New jobs get these rules unless their template sets its own; jobs already in the queue keep theirs."
-          onchange={setSubsDefault}
-        />
-      </section>
-
-      <!-- the events a notification or an action wants (skip: ones it can't have) -->
-      {#snippet eventChoices(
-        events: NotificationEvent[],
-        onchange: (events: NotificationEvent[]) => void,
-        skip: NotificationEvent[] = [],
-      )}
-        <div class="flex flex-wrap gap-x-4 gap-y-1.5">
-          {#each config!.notification_events.filter((ev) => !skip.includes(ev.id)) as ev (ev.id)}
-            <label class="flex items-center gap-1.5 text-xs">
-              <Checkbox
-                checked={events.includes(ev.id)}
-                onCheckedChange={(v) => onchange(toggleEvent(events, ev.id, v))}
-              />
-              {ev.label}
-            </label>
-          {/each}
-        </div>
-      {/snippet}
-
-      <section class="col-span-full min-w-0 space-y-3">
-        <div class="flex items-center gap-3">
-          <h2 class="font-medium">Notifications</h2>
-          <span class="text-xs text-muted-foreground">
-            Tell Discord, Telegram, ntfy, Pushover, email or
-            <a
-              class="underline hover:text-foreground"
-              href="https://github.com/caronc/apprise/wiki"
-              target="_blank"
-              rel="noreferrer">any service Apprise supports</a
-            > when jobs end.
-          </span>
-        </div>
-        <div class="divide-y divide-border/60 rounded-xl border bg-card">
-          {#each config.notifications as d, i (i)}
-            <div class="space-y-2 px-4 py-3 {d.enabled ? '' : 'opacity-60'}">
-              <div class="flex min-w-0 items-center gap-2">
-                <Tip text={d.enabled ? 'On' : 'Off: nothing is sent here'}>
-                  <Checkbox
-                    checked={d.enabled}
-                    aria-label="Send to {d.name}"
-                    onCheckedChange={(v) => editNotification(i, { enabled: v })}
-                  />
-                </Tip>
-                <Input
-                  class="w-40 text-sm"
-                  value={d.name}
-                  aria-label="Name"
-                  onchange={(e) => editNotification(i, { name: e.currentTarget.value })}
-                />
-                <Input
-                  class="min-w-0 flex-1 font-mono text-xs"
-                  value={d.url}
-                  aria-label="{d.name} Apprise URL"
-                  onchange={(e) => editNotification(i, { url: e.currentTarget.value })}
-                />
-                <Button variant="outline" disabled={testing[i]} onclick={() => testNotification(String(i), d.url)}>
-                  <SendIcon />{testing[i] ? 'Sending…' : 'Test'}
-                </Button>
-                <Button variant="ghost" size="icon" aria-label="Remove {d.name}" onclick={() => removeNotification(i)}>
-                  <XIcon />
-                </Button>
-              </div>
-              {@render eventChoices(d.events, (events) => editNotification(i, { events }))}
-            </div>
-          {/each}
-          <div class="space-y-2 px-4 py-3">
-            <div class="flex min-w-0 items-center gap-2">
-              <Input class="w-40 text-sm" placeholder="Name (optional)" bind:value={draft.name} />
-              <Input
-                class="min-w-0 flex-1 font-mono text-xs"
-                placeholder="discord://webhook_id/webhook_token"
-                bind:value={draft.url}
-                onkeydown={(e) => e.key === 'Enter' && addNotification()}
-              />
-              <Button
-                variant="outline"
-                disabled={!draft.url.trim() || testing.draft}
-                onclick={() => testNotification('draft', draft.url)}
-              >
-                <SendIcon />{testing.draft ? 'Sending…' : 'Test'}
-              </Button>
-              <Button onclick={addNotification} disabled={!draft.url.trim()}><PlusIcon />Add</Button>
-            </div>
-            {@render eventChoices(draft.events, (events) => (draft.events = events))}
-          </div>
-        </div>
-      </section>
-
-      <section class="col-span-full min-w-0 space-y-3">
-        <div class="flex items-center gap-3">
-          <h2 class="font-medium">Actions</h2>
-          <span class="text-xs text-muted-foreground">
-            After a job ends or the queue finishes: move or copy the output, run a command, or call a webhook. A job's
-            actions run in this order; after a move, the ones below it see the new path.
-          </span>
-        </div>
-        {#if !config.allow_commands}
-          <p class="text-xs text-warning">
-            Command actions are disabled by the current server configuration (the page has no login, so only if no one
-            else can reach it).
-          </p>
-        {/if}
-        {#snippet actionRow(a: ActionSetting, set: (changes: Partial<ActionSetting>) => void, index: number | 'draft')}
-          <div class="flex min-w-0 items-center gap-2">
-            {#if index !== 'draft'}
-              <Tip text={a.enabled ? 'On' : 'Off: it never runs'}>
-                <Checkbox checked={a.enabled} aria-label="Run {a.name}" onCheckedChange={(v) => set({ enabled: v })} />
-              </Tip>
-            {/if}
-            <Input
-              class="w-40 text-sm"
-              value={a.name}
-              placeholder="Name (optional)"
-              aria-label="Name"
-              onchange={(e) => set({ name: e.currentTarget.value })}
-            />
-            <NativeSelect
-              value={a.kind}
-              aria-label="Kind"
-              onchange={(e) => set(withKind(a, e.currentTarget.value as ActionKind))}
-            >
-              {#each config!.action_kinds as k (k.id)}<option value={k.id}>{k.label}</option>{/each}
-            </NativeSelect>
-            <Input
-              class="min-w-0 flex-1 font-mono text-xs"
-              value={a.target}
-              placeholder={TARGET_HINT[a.kind]}
-              aria-label="{a.name || 'Action'} target"
-              oninput={(e) => index === 'draft' && set({ target: e.currentTarget.value })}
-              onchange={(e) => index !== 'draft' && set({ target: e.currentTarget.value })}
-              onkeydown={(e) => index === 'draft' && e.key === 'Enter' && addAction()}
-            />
-            {#if isFileKind(a.kind)}
-              <Button variant="outline" onclick={() => (browse = { kind: 'action', index })}
-                ><FolderOpenIcon />Browse…</Button
-              >
-            {/if}
-            {#if index === 'draft'}
-              <Button onclick={addAction} disabled={!a.target.trim()}><PlusIcon />Add</Button>
-            {:else}
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Move {a.name} up"
-                disabled={index === 0}
-                onclick={() => moveActionUp(index)}
-              >
-                <ArrowUpIcon />
-              </Button>
-              <Button variant="ghost" size="icon" aria-label="Remove {a.name}" onclick={() => removeAction(index)}
-                ><XIcon /></Button
-              >
-            {/if}
-          </div>
-          <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-            {@render eventChoices(a.events, (events) => set({ events }), isFileKind(a.kind) ? ['queue_finished'] : [])}
-            {#if isFileKind(a.kind)}
+      <div class="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8 @min-[90rem]/settings:grid-cols-2">
+        <!-- the events a notification or an action wants (skip: ones it can't have) -->
+        {#snippet eventChoices(
+          events: NotificationEvent[],
+          onchange: (events: NotificationEvent[]) => void,
+          skip: NotificationEvent[] = [],
+        )}
+          <div class="flex flex-wrap gap-x-4 gap-y-1.5">
+            {#each config!.notification_events.filter((ev) => !skip.includes(ev.id)) as ev (ev.id)}
               <label class="flex items-center gap-1.5 text-xs">
-                <Checkbox checked={a.overwrite} onCheckedChange={(v) => set({ overwrite: v })} />
-                Replace a file already there
+                <Checkbox
+                  checked={events.includes(ev.id)}
+                  onCheckedChange={(v) => onchange(toggleEvent(events, ev.id, v))}
+                />
+                {ev.label}
               </label>
-            {/if}
+            {/each}
           </div>
         {/snippet}
-        <div class="divide-y divide-border/60 rounded-xl border bg-card">
-          {#each config.actions as a, i (i)}
-            <div class="space-y-2 px-4 py-3 {a.enabled ? '' : 'opacity-60'}">
-              {@render actionRow(a, (changes) => editAction(i, changes), i)}
+        {#if tab === 'general'}
+          <ProfileManager
+            disabled={pending > 0 || !!saveError}
+            onswitched={(value) => {
+              config = value
+              pluginRefresh++
+              checks = {}
+              checkAll()
+            }}
+          />
+
+          <AppearanceSettings />
+
+          <section class="col-span-full min-w-0 space-y-3">
+            <h2 class="font-medium">VideoForge</h2>
+            <div class="flex flex-wrap items-center gap-3 text-sm">
+              <Button
+                variant="outline"
+                class="text-destructive hover:text-destructive"
+                onclick={() => (confirmStop = true)}
+              >
+                <PowerIcon />Shut down…
+              </Button>
+              <span class="text-muted-foreground">
+                Stops the server; start it again with <code class="text-xs">videoforge serve</code> (or VideoForge.exe).
+              </span>
             </div>
-          {/each}
-          <div class="space-y-2 px-4 py-3">
-            {@render actionRow(actionDraft, (changes) => (actionDraft = { ...actionDraft, ...changes }), 'draft')}
-          </div>
-        </div>
-        <details class="text-xs text-muted-foreground">
-          <summary class="cursor-pointer select-none">Tokens for commands and folders</summary>
-          <div class="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5">
-            <div class="col-span-2 font-medium text-foreground">After a job</div>
-            {#each Object.entries(config.action_tokens.job) as [token, what] (token)}
-              <code>{`{${token}}`}</code><span>{what}</span>
-            {/each}
-            <div class="col-span-2 mt-2 font-medium text-foreground">When the queue finishes</div>
-            {#each Object.entries(config.action_tokens.queue) as [token, what] (token)}
-              <code>{`{${token}}`}</code><span>{what}</span>
-            {/each}
-            <p class="col-span-2 mt-2">
-              A command's arguments are split before the tokens go in, so a path with spaces stays one argument and no
-              shell reads it. For pipes or redirection, run the shell yourself (<code>cmd /c …</code>). Write
-              <code>{'{{'}</code>
-              and <code>{'}}'}</code> for a literal brace. A webhook POSTs the event as JSON.
+          </section>
+        {:else if tab === 'tools'}
+          {#if config}
+            <section class="col-span-full min-w-0 space-y-3">
+              <div class="flex items-center gap-3">
+                <h2 class="font-medium">Tools</h2>
+                <span class="text-xs text-muted-foreground">A bare name (e.g. ffmpeg) is looked up on PATH.</span>
+                <Button
+                  variant="outline"
+                  class="ml-auto"
+                  onclick={checkAll}
+                  disabled={Object.values(checking).some(Boolean)}
+                >
+                  <RefreshCwIcon />Check again
+                </Button>
+              </div>
+              <div class="divide-y divide-border/60 rounded-xl border bg-card">
+                {#each config.tools as t (t.name)}
+                  {@const c = checks[t.name]}
+                  {@const look = c ? LOOK[c.status] : null}
+                  <div class="grid grid-cols-[12rem_1fr] gap-x-4 gap-y-1.5 px-4 py-3">
+                    <div>
+                      <div class="text-sm font-medium">{t.label}</div>
+                      <div class="text-xs text-muted-foreground">{t.purpose}</div>
+                    </div>
+                    <div class="flex min-w-0 items-center gap-2">
+                      <Input
+                        class="min-w-0 flex-1 font-mono text-xs {t.custom ? 'border-primary/60' : ''}"
+                        value={t.custom ?? t.default}
+                        placeholder={t.default || 'not set'}
+                        aria-label="{t.label} path"
+                        onchange={(e) => setTool(t, e.currentTarget.value)}
+                      />
+                      <Button variant="outline" onclick={() => (browse = { kind: 'tool', tool: t })}
+                        ><FolderOpenIcon />Browse…</Button
+                      >
+                      <Tip text="Back to the default: {t.default || '(none)'}">
+                        <Button variant="ghost" size="sm" disabled={!t.custom} onclick={() => setTool(t, '')}
+                          >Reset</Button
+                        >
+                      </Tip>
+                    </div>
+                    <div></div>
+                    <div class="flex min-w-0 items-center gap-2 text-xs">
+                      {#if checking[t.name]}
+                        <span class="text-muted-foreground">checking…</span>
+                      {:else if c && look}
+                        <span class="flex shrink-0 items-center gap-1 {look.tone}"
+                          ><look.icon class="size-3.5" />{look.text}</span
+                        >
+                        {#if c.version}<Tip class="block truncate" text={c.version}>{c.version}</Tip>{/if}
+                        {#if c.detail}<Tip class="block truncate text-muted-foreground" text={c.detail}>{c.detail}</Tip
+                          >{/if}
+                        {#if c.found && c.found !== t.path}<Tip
+                            class="block truncate text-muted-foreground"
+                            text={c.found}>· {c.found}</Tip
+                          >{/if}
+                      {/if}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+              <p class="text-xs text-muted-foreground">
+                Dolby Encoding Engine and qaac's CoreAudioToolbox can't be shipped with VideoForge: install them and
+                point at them here. DDP needs DeeZy + DEE (+ truehdd for Atmos); AAC needs ffmpeg + qaac.
+              </p>
+            </section>
+
+            <section class="space-y-3">
+              <div class="flex items-center gap-3">
+                <h2 class="font-medium">Folder browser</h2>
+                <span class="text-xs text-muted-foreground">
+                  {config.roots_custom
+                    ? 'Only these folders (and what is under them) can be browsed.'
+                    : 'Every drive can be browsed.'}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="ml-auto"
+                  disabled={!config.roots_custom}
+                  onclick={() => setRoots(null)}
+                >
+                  Reset to every drive
+                </Button>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                {#each config.roots as r (r)}
+                  <span class="flex items-center gap-1 rounded-md bg-muted px-2 py-1 font-mono text-xs">
+                    {r}
+                    {#if config.roots_custom}
+                      <button
+                        class="text-muted-foreground hover:text-destructive"
+                        aria-label="Remove {r}"
+                        onclick={() => setRoots(config!.roots.filter((x) => x !== r))}><XIcon class="size-3" /></button
+                      >
+                    {/if}
+                  </span>
+                {/each}
+              </div>
+              <div class="flex gap-2">
+                <Input
+                  class="w-96 font-mono text-xs"
+                  placeholder="D:\Media"
+                  bind:value={newRoot}
+                  onkeydown={(e) => e.key === 'Enter' && addRoot(newRoot)}
+                />
+                <Button variant="outline" onclick={() => addRoot(newRoot)} disabled={!newRoot.trim()}>Add folder</Button
+                >
+                <Button variant="outline" onclick={() => (browse = { kind: 'root' })}><FolderOpenIcon />Browse…</Button>
+              </div>
+            </section>
+          {:else}
+            <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
+          {/if}
+        {:else if tab === 'encoding'}
+          {#if config}
+            <section class="space-y-3">
+              <h2 class="font-medium">Rule set</h2>
+              <label class="flex items-center gap-3 text-sm">
+                <span class="text-muted-foreground">New jobs start with</span>
+                <NativeSelect value={config.rule_set} onchange={(e) => setRuleSet(e.currentTarget.value)}>
+                  {#each config.rule_sets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+                </NativeSelect>
+                <span class="text-xs text-muted-foreground">Default: {config.rule_set_default}</span>
+              </label>
+            </section>
+
+            <section class="space-y-3">
+              <h2 class="font-medium">Batch indexing</h2>
+              <label class="flex items-start gap-3 text-sm">
+                <Checkbox
+                  class="mt-0.5"
+                  checked={config.index_waits_for_disk}
+                  onCheckedChange={(v) => change({ index_waits_for_disk: v })}
+                />
+                <span>
+                  Wait while an encode reads the same disk
+                  <span class="block text-xs text-muted-foreground">
+                    A job in the index lane whose source is on the disk the running encode reads waits for it to finish;
+                    jobs on other disks go first. Index now on a job never waits.
+                  </span>
+                </span>
+              </label>
+            </section>
+
+            <section class="space-y-3">
+              <h2 class="font-medium">Audio encodes</h2>
+              <label class="flex items-start gap-3 text-sm">
+                <Input
+                  type="number"
+                  min="0"
+                  max="8"
+                  class="w-20"
+                  value={config.parallel_audio}
+                  onchange={(e) => setParallelAudio(e.currentTarget)}
+                />
+                <span>
+                  At once, beside the video encode
+                  <span class="block text-xs text-muted-foreground">
+                    A job's audio encodes start once its source is indexed and run while the video encodes; the mux
+                    waits for them. 0 encodes them one by one, before the video. Default: {config.parallel_audio_default}
+                  </span>
+                </span>
+              </label>
+            </section>
+
+            <section class="space-y-3">
+              <h2 class="font-medium">Process priority</h2>
+              {#each [{ key: 'encoder_priority', label: 'Video encode', hint: 'the encoder (x264, x265, ffmpeg for VP8 / VP9, SvtAv1EncApp) and the vspipe feeding it' }, { key: 'tool_priority', label: 'Other tools', hint: 'audio encodes, the mux, indexing' }] as const as row (row.key)}
+                <label class="flex items-center gap-3 text-sm">
+                  <span class="w-28 shrink-0 text-muted-foreground">{row.label}</span>
+                  <NativeSelect
+                    class="shrink-0"
+                    value={config[row.key]}
+                    onchange={(e) => {
+                      const v = e.currentTarget.value as Priority
+                      change({ [row.key]: v === config?.[`${row.key}_default`] ? null : v })
+                    }}
+                  >
+                    {#each config.priorities as p (p)}<option value={p}>{PRIORITY_LABEL[p]}</option>{/each}
+                  </NativeSelect>
+                  <span class="text-xs text-muted-foreground">
+                    {row.hint}. Default: {PRIORITY_LABEL[config[`${row.key}_default`]]}
+                  </span>
+                </label>
+              {/each}
+              <p class="text-xs text-muted-foreground">
+                For jobs started from now on; the Queue's toolbar changes the running one's. On Linux it's a nice value,
+                and raising one back needs CAP_SYS_NICE.
+              </p>
+            </section>
+
+            <section class="space-y-3">
+              <h2 class="font-medium">Work folders</h2>
+              <label class="flex items-start gap-3 text-sm">
+                <Checkbox
+                  class="mt-0.5"
+                  checked={config.delete_work_dir}
+                  onCheckedChange={(v) => change({ delete_work_dir: v === config?.delete_work_dir_default ? null : v })}
+                />
+                <span>
+                  Delete a job's work folder once it's done
+                  <span class="block text-xs text-muted-foreground">
+                    The <code>&lt;source&gt;_tmp</code> folder next to the source (index, encodes, log) is deleted after
+                    the job succeeds; its job records and log are copied to {config.records_dir} first (the newest 100 kept).
+                    A job that fails or is cancelled keeps it, to resume from. Default:
+                    {config.delete_work_dir_default ? 'on' : 'off'}
+                  </span>
+                </span>
+              </label>
+            </section>
+
+            <section class="space-y-3">
+              <h2 class="font-medium">Test encode</h2>
+              <label class="flex items-start gap-3 text-sm">
+                <Checkbox
+                  class="mt-0.5"
+                  checked={config.sample_quality}
+                  onCheckedChange={(v) => change({ sample_quality: v })}
+                />
+                <span>
+                  Score its quality
+                  <span class="block text-xs text-muted-foreground">
+                    After a test encode, compare every frame with the encoder's input (SSIMULACRA2 and XPSNR, vszip) and
+                    show the scores beside its bitrate. It decodes both once more, so the test encode takes longer.
+                  </span>
+                </span>
+              </label>
+            </section>
+
+            <section class="col-span-full min-w-0 space-y-3" aria-label="Default subtitles">
+              <h2 class="font-medium">Default subtitles</h2>
+              {#if !defaultRuleSet?.track_editor || defaultRuleSet.picks_tracks}
+                <p class="text-xs text-muted-foreground">
+                  {defaultRuleSet?.name}'s rules choose its jobs' subtitles; these apply to other rule sets' jobs.
+                </p>
+              {/if}
+              <TemplateSubsEditor
+                value={subsDefault}
+                flags={subFlags}
+                toggleLabel="Choose every new job's subtitles by rules"
+                offNote="Off: new jobs keep every subtitle track, unless their template sets subtitle rules."
+                appliedNote="New jobs get these rules unless their template sets its own; jobs already in the queue keep theirs."
+                onchange={setSubsDefault}
+              />
+            </section>
+          {:else}
+            <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
+          {/if}
+        {:else if tab === 'presets'}
+          <section class="col-span-full space-y-3">
+            <h2 class="font-medium">Encoder presets</h2>
+            <p class="text-sm text-muted-foreground">
+              Create, edit, organize, import, and export presets without opening a job or template.
             </p>
-          </div>
-        </details>
-      </section>
+            <div class="flex flex-wrap gap-2">
+              {#if app.defaultRuleSet}
+                <EncoderPresetMenu
+                  ruleSet={app.defaultRuleSet.id}
+                  current={app.defaultRuleSet.defaults.encoder}
+                  apply={() => {}}
+                  manageOnly
+                />
+              {/if}
+              <AudioPresetMenu
+                current={{ action: 'copy', layout: null, bitrate_kbps: null, options: {} }}
+                apply={() => {}}
+                manageOnly
+              />
+            </div>
+          </section>
+          {#if config}
+            <ManagedPresets disabled={pending > 0 || !!saveError} refreshKey={pluginRefresh} />
+          {/if}
+        {:else if tab === 'automation'}
+          {#if config}
+            <section class="col-span-full min-w-0 space-y-3">
+              <div class="flex items-center gap-3">
+                <h2 class="font-medium">Notifications</h2>
+                <span class="text-xs text-muted-foreground">
+                  Tell Discord, Telegram, ntfy, Pushover, email or
+                  <a
+                    class="underline hover:text-foreground"
+                    href="https://github.com/caronc/apprise/wiki"
+                    target="_blank"
+                    rel="noreferrer">any service Apprise supports</a
+                  > when jobs end.
+                </span>
+              </div>
+              <div class="divide-y divide-border/60 rounded-xl border bg-card">
+                {#each config.notifications as d, i (i)}
+                  <div class="space-y-2 px-4 py-3 {d.enabled ? '' : 'opacity-60'}">
+                    <div class="flex min-w-0 items-center gap-2">
+                      <Tip text={d.enabled ? 'On' : 'Off: nothing is sent here'}>
+                        <Checkbox
+                          checked={d.enabled}
+                          aria-label="Send to {d.name}"
+                          onCheckedChange={(v) => editNotification(i, { enabled: v })}
+                        />
+                      </Tip>
+                      <Input
+                        class="w-40 text-sm"
+                        value={d.name}
+                        aria-label="Name"
+                        onchange={(e) => editNotification(i, { name: e.currentTarget.value })}
+                      />
+                      <Input
+                        class="min-w-0 flex-1 font-mono text-xs"
+                        value={d.url}
+                        aria-label="{d.name} Apprise URL"
+                        onchange={(e) => editNotification(i, { url: e.currentTarget.value })}
+                      />
+                      <Button
+                        variant="outline"
+                        disabled={testing[i]}
+                        onclick={() => testNotification(String(i), d.url)}
+                      >
+                        <SendIcon />{testing[i] ? 'Sending…' : 'Test'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Remove {d.name}"
+                        onclick={() => removeNotification(i)}
+                      >
+                        <XIcon />
+                      </Button>
+                    </div>
+                    {@render eventChoices(d.events, (events) => editNotification(i, { events }))}
+                  </div>
+                {/each}
+                <div class="space-y-2 px-4 py-3">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <Input class="w-40 text-sm" placeholder="Name (optional)" bind:value={draft.name} />
+                    <Input
+                      class="min-w-0 flex-1 font-mono text-xs"
+                      placeholder="discord://webhook_id/webhook_token"
+                      bind:value={draft.url}
+                      onkeydown={(e) => e.key === 'Enter' && addNotification()}
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={!draft.url.trim() || testing.draft}
+                      onclick={() => testNotification('draft', draft.url)}
+                    >
+                      <SendIcon />{testing.draft ? 'Sending…' : 'Test'}
+                    </Button>
+                    <Button onclick={addNotification} disabled={!draft.url.trim()}><PlusIcon />Add</Button>
+                  </div>
+                  {@render eventChoices(draft.events, (events) => (draft.events = events))}
+                </div>
+              </div>
+            </section>
 
-      <PluginManager
-        refreshKey={pluginRefresh}
-        onupdated={(value) => {
-          config = value
-        }}
-      />
-      <ResetConfiguration
-        disabled={pending > 0 || !!saveError || app.queue.running}
-        onreset={(value) => {
-          config = value
-          pluginRefresh++
-          checks = {}
-          checkAll()
-        }}
-      />
-    {/if}
-
-    <section class="col-span-full min-w-0 space-y-3">
-      <h2 class="font-medium">VideoForge</h2>
-      <div class="flex flex-wrap items-center gap-3 text-sm">
-        <Button variant="outline" class="text-destructive hover:text-destructive" onclick={() => (confirmStop = true)}>
-          <PowerIcon />Shut down…
-        </Button>
-        <span class="text-muted-foreground">
-          Stops the server; start it again with <code class="text-xs">videoforge serve</code> (or VideoForge.exe).
-        </span>
+            <section class="col-span-full min-w-0 space-y-3">
+              <div class="flex items-center gap-3">
+                <h2 class="font-medium">Actions</h2>
+                <span class="text-xs text-muted-foreground">
+                  After a job ends or the queue finishes: move or copy the output, run a command, or call a webhook. A
+                  job's actions run in this order; after a move, the ones below it see the new path.
+                </span>
+              </div>
+              {#if !config.allow_commands}
+                <p class="text-xs text-warning">
+                  Command actions are disabled by the current server configuration (the page has no login, so only if no
+                  one else can reach it).
+                </p>
+              {/if}
+              {#snippet actionRow(
+                a: ActionSetting,
+                set: (changes: Partial<ActionSetting>) => void,
+                index: number | 'draft',
+              )}
+                <div class="flex min-w-0 items-center gap-2">
+                  {#if index !== 'draft'}
+                    <Tip text={a.enabled ? 'On' : 'Off: it never runs'}>
+                      <Checkbox
+                        checked={a.enabled}
+                        aria-label="Run {a.name}"
+                        onCheckedChange={(v) => set({ enabled: v })}
+                      />
+                    </Tip>
+                  {/if}
+                  <Input
+                    class="w-40 text-sm"
+                    value={a.name}
+                    placeholder="Name (optional)"
+                    aria-label="Name"
+                    onchange={(e) => set({ name: e.currentTarget.value })}
+                  />
+                  <NativeSelect
+                    value={a.kind}
+                    aria-label="Kind"
+                    onchange={(e) => set(withKind(a, e.currentTarget.value as ActionKind))}
+                  >
+                    {#each config!.action_kinds as k (k.id)}<option value={k.id}>{k.label}</option>{/each}
+                  </NativeSelect>
+                  <Input
+                    class="min-w-0 flex-1 font-mono text-xs"
+                    value={a.target}
+                    placeholder={TARGET_HINT[a.kind]}
+                    aria-label="{a.name || 'Action'} target"
+                    oninput={(e) => index === 'draft' && set({ target: e.currentTarget.value })}
+                    onchange={(e) => index !== 'draft' && set({ target: e.currentTarget.value })}
+                    onkeydown={(e) => index === 'draft' && e.key === 'Enter' && addAction()}
+                  />
+                  {#if isFileKind(a.kind)}
+                    <Button variant="outline" onclick={() => (browse = { kind: 'action', index })}
+                      ><FolderOpenIcon />Browse…</Button
+                    >
+                  {/if}
+                  {#if index === 'draft'}
+                    <Button onclick={addAction} disabled={!a.target.trim()}><PlusIcon />Add</Button>
+                  {:else}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Move {a.name} up"
+                      disabled={index === 0}
+                      onclick={() => moveActionUp(index)}
+                    >
+                      <ArrowUpIcon />
+                    </Button>
+                    <Button variant="ghost" size="icon" aria-label="Remove {a.name}" onclick={() => removeAction(index)}
+                      ><XIcon /></Button
+                    >
+                  {/if}
+                </div>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                  {@render eventChoices(
+                    a.events,
+                    (events) => set({ events }),
+                    isFileKind(a.kind) ? ['queue_finished'] : [],
+                  )}
+                  {#if isFileKind(a.kind)}
+                    <label class="flex items-center gap-1.5 text-xs">
+                      <Checkbox checked={a.overwrite} onCheckedChange={(v) => set({ overwrite: v })} />
+                      Replace a file already there
+                    </label>
+                  {/if}
+                </div>
+              {/snippet}
+              <div class="divide-y divide-border/60 rounded-xl border bg-card">
+                {#each config.actions as a, i (i)}
+                  <div class="space-y-2 px-4 py-3 {a.enabled ? '' : 'opacity-60'}">
+                    {@render actionRow(a, (changes) => editAction(i, changes), i)}
+                  </div>
+                {/each}
+                <div class="space-y-2 px-4 py-3">
+                  {@render actionRow(actionDraft, (changes) => (actionDraft = { ...actionDraft, ...changes }), 'draft')}
+                </div>
+              </div>
+              <details class="text-xs text-muted-foreground">
+                <summary class="cursor-pointer select-none">Tokens for commands and folders</summary>
+                <div class="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5">
+                  <div class="col-span-2 font-medium text-foreground">After a job</div>
+                  {#each Object.entries(config.action_tokens.job) as [token, what] (token)}
+                    <code>{`{${token}}`}</code><span>{what}</span>
+                  {/each}
+                  <div class="col-span-2 mt-2 font-medium text-foreground">When the queue finishes</div>
+                  {#each Object.entries(config.action_tokens.queue) as [token, what] (token)}
+                    <code>{`{${token}}`}</code><span>{what}</span>
+                  {/each}
+                  <p class="col-span-2 mt-2">
+                    A command's arguments are split before the tokens go in, so a path with spaces stays one argument
+                    and no shell reads it. For pipes or redirection, run the shell yourself (<code>cmd /c …</code>).
+                    Write
+                    <code>{'{{'}</code>
+                    and <code>{'}}'}</code> for a literal brace. A webhook POSTs the event as JSON.
+                  </p>
+                </div>
+              </details>
+            </section>
+          {:else}
+            <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
+          {/if}
+        {:else if tab === 'plugins'}
+          {#if config}
+            <PluginManager
+              refreshKey={pluginRefresh}
+              onupdated={(value) => {
+                config = value
+              }}
+            />
+          {:else}
+            <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
+          {/if}
+        {:else if tab === 'backup'}
+          {#if config}
+            <ConfigurationTransfer
+              disabled={pending > 0 || !!saveError}
+              onimported={(value) => {
+                config = value
+                pluginRefresh++
+                checks = {}
+                checkAll()
+              }}
+            />
+            <PresetPackTransfer disabled={pending > 0 || !!saveError} />
+            <ResetConfiguration
+              disabled={pending > 0 || !!saveError || app.queue.running}
+              onreset={(value) => {
+                config = value
+                pluginRefresh++
+                checks = {}
+                checkAll()
+              }}
+            />
+          {:else}
+            <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
+          {/if}
+        {/if}
       </div>
-    </section>
+    </div>
   </div>
 </div>
 

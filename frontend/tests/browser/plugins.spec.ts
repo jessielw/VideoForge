@@ -167,6 +167,7 @@ async function fixture(
     await route.fulfill({ json: responses[path] })
   })
   await page.goto('/#/settings')
+  await page.getByRole('button', { name: 'Plugins', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Install ZIP' })).toBeVisible()
   return { plugin, inventory, config, calls, errors }
 }
@@ -324,6 +325,7 @@ test('presets a plugin ships: an edited one is kept and reset needs a second cli
     },
   ]
   const { calls, errors } = await fixture(page, { installed: true, managed })
+  await page.getByRole('button', { name: 'Presets', exact: true }).click()
   const section = page.getByRole('heading', { name: 'Plugin presets' }).locator('..')
   await expect(section).toContainText('3 presets, 2 to look at')
   await expect(section).toContainText('Example remux')
@@ -358,6 +360,7 @@ test('presets a plugin ships: Restore all brings back every deleted one', async 
     update_available: false,
   }))
   const { calls, errors } = await fixture(page, { installed: true, managed })
+  await page.getByRole('button', { name: 'Presets', exact: true }).click()
   const section = page.getByRole('heading', { name: 'Plugin presets' }).locator('..')
   await section.getByRole('button', { name: 'Restore all deleted (3)' }).click()
   await expect
