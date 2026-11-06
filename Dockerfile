@@ -115,11 +115,12 @@ FROM ${PYTHON_IMAGE} AS app
 # The Debian libraries the plugins image's binaries link to are listed in it.
 COPY --from=plugins /opt/vf/runtime-packages.txt /tmp/runtime-packages.txt
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends mkvtoolnix opus-tools tini gosu tzdata $(cat /tmp/runtime-packages.txt) \
+    && apt-get install -y --no-install-recommends mkvtoolnix opus-tools libmediainfo0v5 tini gosu tzdata $(cat /tmp/runtime-packages.txt) \
     && rm -rf /var/lib/apt/lists/* /tmp/runtime-packages.txt
 COPY --from=plugins /opt/vf /opt/vf
 RUN echo /opt/vf/lib > /etc/ld.so.conf.d/vf.conf && ldconfig
 COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
+# DeeZy carries its own libmediainfo, built against the system's libcurl-gnutls, tinyxml2 and libzen: libmediainfo0v5 brings them
 COPY --from=downloads /out/deezy-bin /usr/local/bin/deezy
 COPY --from=downloads /out/truehdd-bin /usr/local/bin/truehdd
 COPY --from=x265 /x265 /usr/local/bin/x265
