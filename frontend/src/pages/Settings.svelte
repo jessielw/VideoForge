@@ -967,6 +967,7 @@
     title={browse.kind === 'tool' ? browse.tool.label : browse.kind === 'action' ? 'The folder' : 'Add a folder'}
     mode={browse.kind !== 'tool' || browse.tool.folder ? 'folder' : 'files'}
     programs={browse.kind === 'tool' && !browse.tool.folder}
+    orFolder={browse.kind === 'tool' && browse.tool.name === 'dee'}
     start={browse.kind === 'tool' ? startFolder(browse.tool) : ''}
     onpick={(paths) => {
       const b = browse

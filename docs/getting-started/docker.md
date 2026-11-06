@@ -52,6 +52,8 @@ These files are not included in the image. Restart the container after adding th
 | --- | --- |
 | DEE, Linux | `/tools/dee/dee`, with its license beside it |
 | DEE, Windows through Wine | `/tools/wine/dee/dee.exe`, with its license beside it |
+| DEE, split encoders, Linux | `/tools/dee/dee_ddp_encoder` and the other `dee_*_encoder` files |
+| DEE, split encoders, Windows through Wine | `/tools/wine/dee/dee_ddp_encoder.exe` and the other `dee_*_encoder.exe` files |
 | qaac through Wine | `/tools/wine/qaac/qaac64.exe`, with the `QTfiles64` folder beside it |
 | Extra VapourSynth plugins | `/tools/vs-plugins/*.so` |
 

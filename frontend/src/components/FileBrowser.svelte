@@ -1,7 +1,8 @@
 <script lang="ts">
   // Browses the server's file system (the browser can't hand us real paths).
   // mode "files": tick files and/or folders; mode "folder": choose one folder.
-  // programs: list only programs (the server decides what one is on its OS), and one has to be ticked.
+  // programs: list only programs (the server decides what one is on its OS), and one has to be ticked,
+  // unless orFolder: then the folder you're in will do (DEE's split encoders are a folder of programs).
   // Folders can be made here, and deleted (one with anything in it only once that is ticked).
   import { onMount } from 'svelte'
   import { api } from '../lib/api'
@@ -24,6 +25,7 @@
     mode = 'files',
     extensions = [],
     programs = false,
+    orFolder = false,
     start = '',
     onpick,
     onclose,
@@ -32,6 +34,7 @@
     mode?: 'files' | 'folder'
     extensions?: string[]
     programs?: boolean
+    orFolder?: boolean
     start?: string
     onpick: (paths: string[]) => void
     onclose: () => void
@@ -241,15 +244,17 @@
           {picked.length
             ? `${picked.length} selected`
             : programs
-              ? 'Tick the program'
+              ? orFolder
+                ? 'Tick the program, or use this folder if it holds the split encoders'
+                : 'Tick the program'
               : 'Nothing ticked: the current folder is used'}
         {:else}
           Choose the folder you're in
         {/if}
       </span>
       <Button variant="outline" class="ml-auto" onclick={onclose}>Cancel</Button>
-      <Button disabled={programs && !picked.length} onclick={confirm}
-        >{mode === 'folder' ? 'Use this folder' : 'Add'}</Button
+      <Button disabled={programs && !orFolder && !picked.length} onclick={confirm}
+        >{mode === 'folder' || (orFolder && !picked.length) ? 'Use this folder' : 'Add'}</Button
       >
     </footer>
   </Dialog.Content>

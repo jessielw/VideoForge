@@ -67,7 +67,8 @@ fi
 
 # Your tools in /tools, found on PATH by the image's config (dee = "dee", qaac = "qaac"): a launcher each in a
 # folder of this container's own, only for what's there, so a missing tool shows as missing.
-#   dee:  /tools/dee/dee (the Linux build), else /tools/wine/dee/dee.exe (the Windows build, under Wine)
+#   dee:  /tools/dee/dee (the Linux build), else /tools/wine/dee/dee.exe (the Windows build, under Wine);
+#         or the split encoders (dee_ddp_encoder, ...): /tools/dee/ (Linux), else /tools/wine/dee/ (Windows, under Wine)
 #   qaac: /tools/wine/qaac/qaac64.exe (with its QTfiles64 folder), under Wine
 bin="/tmp/videoforge-bin-$(id -u)"
 rm -rf "$bin"
@@ -81,6 +82,19 @@ if [ -f /tools/dee/dee ]; then
     [ -x /tools/dee/dee ] || echo "videoforge: /tools/dee/dee can't run: chmod +x /tools/dee/* (on the host)" >&2
 elif [ -f /tools/wine/dee/dee.exe ]; then
     launcher dee "/opt/wine/bin/wine-run /tools/wine/dee/dee.exe"
+elif [ -f /tools/dee/dee_ddp_encoder ]; then
+    # split encoders, Linux build: a folder of them, which VideoForge finds by dee_ddp_encoder on PATH
+    PATH="/tools/dee:$PATH"
+    [ -x /tools/dee/dee_ddp_encoder ] || echo "videoforge: /tools/dee can't run: chmod +x /tools/dee/* (on the host)" >&2
+elif [ -f /tools/wine/dee/dee_ddp_encoder.exe ]; then
+    # split encoders, Windows build: DeeZy wants extensionless names, so a folder of launchers, one per .exe
+    mkdir -p "$bin/dee-split"
+    for exe in /tools/wine/dee/dee_*.exe; do
+        name="$(basename "$exe" .exe)"
+        printf '#!/bin/sh\nexec /opt/wine/bin/wine-run "%s" "$@"\n' "$exe" >"$bin/dee-split/$name"
+        chmod 0755 "$bin/dee-split/$name"
+    done
+    PATH="$bin/dee-split:$PATH"
 fi
 if [ -f /tools/wine/qaac/qaac64.exe ]; then
     launcher qaac "/opt/wine/bin/wine-run /tools/wine/qaac/qaac64.exe"

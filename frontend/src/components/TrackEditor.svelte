@@ -335,6 +335,7 @@
           layout: o?.layout ?? planned.out_layout,
           bitrate_kbps: o?.bitrate_kbps ?? planned.bitrate_kbps,
           options: { ...planned.options, ...o?.options },
+          title: o?.title ?? planned.title,
         }
   const canAtmos = (t: AudioTrack) => t.atmos && t.codec === 'truehd'
   // The encodes come from the server; one whose tools are missing can't be picked (one already

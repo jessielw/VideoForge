@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-11-06
+
+### Added
+
+- Split DEE encoders (`dee_ddp_encoder`, `dee_ddpjoc_encoder`, ...) from newer DEE releases and Dolby Media Encoder, for DeeZy 1.4.0. Set **DEE** to the folder of encoders, or to one of them; a bare `dee` finds them on `PATH`. A single `dee` program still works and is preferred.
+- DeeZy 1.4.2 in the Docker image and the Windows portable build (1.3.15 can't take the split encoders).
+- Docker: split encoders go in `/tools/dee/` (Linux) or `/tools/wine/dee/` (Windows `.exe` files, run through Wine).
+- The split encoders can't make Blu-ray DDP, 7.1 DDP or Blu-ray Atmos: a plan using them is blocked with a message, and a dialnorm setting is left out (DEE measures the level) with a warning.
+
+### Fixed
+
+- A track a rule set plans to encode now shows its saved or plugin audio preset in the Audio tab's preset menu, not a built-in with the same settings. The planned title is part of the match, and a saved or plugin preset wins a tie with a built-in.
+
 ## [0.1.2] - 2026-11-05
 
 ### Added

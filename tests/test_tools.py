@@ -9,6 +9,7 @@ from conftest import audio, plan_for, source, sub
 
 from videoforge.core import tools
 from videoforge.core.config import AppConfig, Tools, with_tools
+from videoforge.core.dee import split_folder
 from videoforge.core.models import AudioAction, AudioCodec as C, Severity, SubFormat
 from videoforge.core.tools import (
     TOOL_NAMES,
@@ -200,3 +201,48 @@ def test_with_tools_layers_paths_and_brings_mkvpropedit(tmp_path):
     cfg = with_tools(base, {"ffmpeg": "ff/ffmpeg.exe"}, tmp_path)
     assert cfg.tools.ffprobe == str(tmp_path / "ff" / "ffprobe.exe")  # ffmpeg's comes along
     assert with_tools(base, {"ffmpeg": "ff/ffmpeg.exe", "ffprobe": "fp"}, tmp_path).tools.ffprobe == "fp"
+
+
+def test_dee_split_encoders_folder_is_found_and_asked_for_a_version(tmp_path, monkeypatch):
+    marker = tmp_path / "dee_ddp_encoder.exe"
+    marker.write_bytes(b"")
+    calls = []
+
+    def runner(argv, _timeout):
+        calls.append(argv[0])
+        return "dee_ddp_encoder Version 6.0.0\n"
+
+    c = check(INFO["dee"], str(tmp_path), runner=runner)
+    assert (c.status, c.found, calls) == (ToolStatus.OK, str(tmp_path), [str(marker)])
+
+    # a bare "dee" with only the split encoders on PATH resolves to their folder
+    marker.chmod(0o755)  # PATH lookup wants an executable file on POSIX
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert split_folder("dee") == str(tmp_path)
+    for name in ("dee", "dee.exe"):  # PATHEXT finds the .exe on Windows, the bare name on POSIX
+        single = tmp_path / name
+        single.write_bytes(b"")
+        single.chmod(0o755)
+    assert split_folder("dee") == ""  # a single dee wins
+
+
+def test_dee_split_encoder_file_means_its_folder(tmp_path):
+    exe = tmp_path / "dee_ddp_encoder.exe"
+    exe.write_bytes(b"")
+    assert split_folder(str(exe)) == str(tmp_path)
+
+
+def test_split_dee_blocks_bluray_and_warns_on_dialnorm(tmp_path):
+    from types import SimpleNamespace as NS
+
+    from videoforge.core.tools import _split_dee_issues
+
+    (tmp_path / "dee_ddp_encoder.exe").write_bytes(b"")
+    bd = NS(action=AudioAction.DDP, options={"ddp_mode": "bluray", "dialnorm": "-27"}, out_layout=NS(channels=8))
+    plan = NS(audio=[bd])
+    issues = _split_dee_issues(plan, NS(dee=str(tmp_path)))
+    assert [i.severity for i in issues] == [Severity.BLOCK, Severity.WARN]
+    single = tmp_path / "single"
+    single.mkdir()
+    (single / "dee.exe").write_bytes(b"")
+    assert _split_dee_issues(plan, NS(dee=str(single / "dee.exe"))) == []

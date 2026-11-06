@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 
+from videoforge.core import dee
 from videoforge.core.config import Tools
 from videoforge.core.execute.audio import ENCODES
 from videoforge.core.execute.mux import MUXERS
@@ -169,6 +170,43 @@ def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]
                     f"{ENCODES[action].label} needs {', '.join(missing[action])}: set it in Settings",
                 )
             )
+    issues += _split_dee_issues(plan, tools)
+    return issues
+
+
+def _split_dee_issues(plan: Plan, tools: Tools) -> list[Issue]:
+    """What the split DEE encoders (dee_ddp_encoder, ...) can't do, which DeeZy refuses: no Blu-ray DDP / Atmos or
+    DDP 7.1 (BLOCK), and no dialnorm (WARN: it is left out, and DEE measures it)."""
+    if not dee.split_folder(tools.dee):
+        return []
+    issues = []
+    for a in plan.audio:
+        if a.action not in (AudioAction.DDP, AudioAction.ATMOS):
+            continue
+        bluray = (
+            a.action is AudioAction.DDP and (a.options.get("ddp_mode") == "bluray" or a.out_layout.channels > 6)
+        ) or (a.action is AudioAction.ATMOS and a.options.get("atmos_mode") == "bluray")
+        if bluray:
+            issues.append(
+                Issue(
+                    Severity.BLOCK,
+                    "tools.dee_split",
+                    f"{ENCODES[a.action].label}: Blu-ray and 7.1 DDP need the single dee program; the split DEE "
+                    "encoders can't make them",
+                )
+            )
+    if any(
+        a.options.get("dialnorm", "0") not in ("", "0")
+        for a in plan.audio
+        if a.action in (AudioAction.DDP, AudioAction.ATMOS)
+    ):
+        issues.append(
+            Issue(
+                Severity.WARN,
+                "tools.dee_split",
+                "The split DEE encoders have no dialnorm option: it is left out and DEE measures the level",
+            )
+        )
     return issues
 
 
@@ -205,7 +243,7 @@ def locate(path: str) -> str:
         return ""
     if Path(path).is_file():
         return path
-    return shutil.which(path) or ""
+    return shutil.which(path) or dee.split_folder(path)
 
 
 _SOURCE_FILTERS = {"bestsource": "BestSource", "lsmashsource": "L-SMASH", "vslsmashsource": "L-SMASH", "ffms2": "FFMS2"}
@@ -268,7 +306,7 @@ def check(info: ToolInfo, path: str, *, runner: Runner = _run, timeout: float = 
     output, error = "", ""
     for args in info.args:
         try:
-            output = runner([found, *args], timeout)
+            output = runner([dee.program(found), *args], timeout)
         except (OSError, subprocess.SubprocessError) as e:
             error = f"{type(e).__name__}: {e}"
             if isinstance(e, PermissionError) and os.name != "nt":
