@@ -14,6 +14,7 @@
   import Trash2Icon from '@lucide/svelte/icons/trash-2'
   import ListChecksIcon from '@lucide/svelte/icons/list-checks'
   import { Button } from '$lib/components/ui/button'
+  import ConfirmButton from '../components/ConfirmButton.svelte'
   import * as Card from '$lib/components/ui/card'
   import * as Dialog from '$lib/components/ui/dialog'
   import { Checkbox } from '$lib/components/ui/checkbox'
@@ -452,7 +453,9 @@
               ><CopyIcon />{readOnly ? 'Duplicate to change it' : 'Duplicate'}</Button
             >
             {#if opened.name}
-              <Button variant="ghost" class="hover:text-destructive" onclick={remove}><Trash2Icon />Delete</Button>
+              {#key opened.name}
+                <ConfirmButton class="hover:text-destructive" onconfirm={remove}><Trash2Icon />Delete</ConfirmButton>
+              {/key}
             {/if}
           </div>
         </header>

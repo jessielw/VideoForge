@@ -121,6 +121,7 @@ async function fixture(page: Page, empty = false) {
     encoder: 'x264',
     crop: null,
     custom_script: false,
+    pause_after_pass1: false,
     indexed: false,
     index_error: '',
     index_held: false,
@@ -385,6 +386,7 @@ for (const { title, target, other, label, codec } of variants) {
   test(`${title}: Settings library uses the same top-level organization`, async ({ page }) => {
     const errors = await fixture(page)
     await page.goto('/#/settings')
+    await page.getByRole('button', { name: 'Presets', exact: true }).click()
     await page
       .getByRole('button', {
         name: title === 'Audio' ? 'Manage audio presets' : 'Manage video encoder presets',

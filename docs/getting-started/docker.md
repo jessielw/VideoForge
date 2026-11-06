@@ -63,7 +63,7 @@ VideoForge has **no login**. The Compose example binds the published port to the
 
 On Unraid, add a port mapping for container port **8765**. Without a published port, the application cannot be reached outside the container. Restrict access to that published port or use an authenticated proxy.
 
-To open the page at a LAN address or proxy hostname, set `VIDEOFORGE_ALLOW_HOST` to that hostname or IP, without the port. Otherwise the page answers _Host is not allowed_. If the proxy changes Host or terminates TLS, also set `VIDEOFORGE_ALLOW_ORIGIN=https://<public-hostname>` (include a nonstandard port when used). Binding to `0.0.0.0` alone does not permit arbitrary browser hosts.
+Opening the page by IP address (such as `http://192.168.1.50:8765`) works without any setting. To open it by a hostname or proxy name, set `VIDEOFORGE_ALLOW_HOST` to that name, without the port. Otherwise the page answers _Host is not allowed_. If the proxy changes Host or terminates TLS, also set `VIDEOFORGE_ALLOW_ORIGIN=https://<public-hostname>` (include a nonstandard port when used). Binding to `0.0.0.0` alone does not permit arbitrary browser hosts.
 
 Command actions are disabled in the Docker configuration. Their opt-in setting is documented under [Actions](../actions.md#commands).
 

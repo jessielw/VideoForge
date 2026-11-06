@@ -2,8 +2,7 @@
 
 The **Encoder** tab controls the video encoder, rate control, preset, bit depth, structured options, and additional arguments. It also shows source color and HDR information for the job.
 
-![The Encoder tab](../assets/screenshots/encoder.png#only-light)
-![The Encoder tab](../assets/screenshots/encoder-dark.png#only-dark)
+![The Encoder tab](../assets/screenshots/encoder.png#only-light) ![The Encoder tab](../assets/screenshots/encoder-dark.png#only-dark)
 
 ## Encoder choices
 

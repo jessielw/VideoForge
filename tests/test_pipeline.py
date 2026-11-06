@@ -425,6 +425,29 @@ def test_video_steps_two_pass(rule_set, tmp_path):
     assert tools_called(third) == ["vspipe", "vspipe", "x264", "x264", "mkvmerge"]
 
 
+def test_a_job_pauses_after_pass_1_and_goes_on_with_pass_2(rule_set, tmp_path):
+    plan = make_plan(tmp_path)
+    job = JobSpec(
+        inputs=JobInputs(plan.source.path, subtitles=plan.inputs.subtitles),
+        rule_set="manual",
+        encoder=EncoderSettings(rate_control=RateControl.TWO_PASS, bitrate_kbps=9000),
+        qpf=False,
+        output_dir=tmp_path / "out",
+    )
+    plan.encode_path = job.video_output
+    state = JobState(pause_after_pass1=True)
+    runner = FakeRunner()
+    result = run_job(job, plan, rule_set, APP, state=state, runner=runner, prober=lambda *_: simulate_output(plan))
+    assert result.status is JobStatus.PAUSED and not result.error and result.output is None
+    assert not state.pause_after_pass1 and "video.pass1" in state.steps and "video.pass2" not in state.steps
+    assert not (tmp_path / "out" / "Show.S01E01.mkv").exists()
+
+    again = FakeRunner()
+    result = run_job(job, plan, rule_set, APP, state=state, runner=again, prober=lambda *_: simulate_output(plan))
+    assert result.status is JobStatus.DONE, result.error
+    assert tools_called(again).count("x264") == 1  # pass 2 only: pass 1 was reused
+
+
 def test_the_encode_is_timed_by_the_scripts_frame_rate(rule_set, tmp_path):
     """An IVTC of a 29.97 source: the mux and AutoQPF take the script's 23.976 (vspipe --info), not the source's."""
     plan = make_plan(tmp_path)
@@ -1525,6 +1548,28 @@ def test_progress_carries_the_jobs_work_outside_the_step(tmp_path: Path):
     run_steps(steps, {}, log=lambda _line: None, runner=runner, progress=events.append)
     halves = [(e.index, e.rest) for e in events if e.fraction == 0.5]
     assert halves == [(0, 0.6), (1, 0.0)]  # pass 1 halfway: pass 2's 0.6 is still to do; pass 2: nothing after it
+
+
+def test_a_hold_after_pass_1_stops_there_and_the_next_run_does_pass_2_only(tmp_path: Path):
+    from videoforge.core.pipeline.steps import Held, Step, run_steps
+
+    first, second = tmp_path / "pass1", tmp_path / "video.264"
+    ran: list[str] = []
+
+    def runner(argvs, log, cancel):
+        ran.append(argvs[0][0])
+        (first if argvs[0][0] == "pass1" else second).write_text("x", encoding="utf-8")
+
+    steps = [
+        Step("video.pass1", "Pass 1", argvs=(("pass1",),), outputs=(first,), weight=40),
+        Step("video.pass2", "Pass 2", argvs=(("pass2",),), outputs=(second,), weight=60),
+    ]
+    records: dict = {}
+    with pytest.raises(Held):
+        run_steps(steps, records, log=lambda _l: None, runner=runner, hold=lambda s: s.id == "video.pass1")
+    assert ran == ["pass1"] and list(records) == ["video.pass1"]  # recorded before it stopped
+    run_steps(steps, records, log=lambda _l: None, runner=runner)
+    assert ran == ["pass1", "pass2"]  # pass 1 reused
 
 
 def test_work_dir_is_next_to_the_source_and_separate_from_staxrip(tmp_path: Path):

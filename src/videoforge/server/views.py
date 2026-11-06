@@ -74,6 +74,7 @@ def summary(e: Entry) -> dict[str, Any]:
         "source": str(s.inputs.source),
         "rule_set": s.rule_set,
         "status": e.status.value,
+        "pause_after_pass1": e.state.pause_after_pass1,
         "progress": e.progress,
         "issue": first.message if first else "",
         "output": str(e.state.output) if e.state.output else None,

@@ -4,6 +4,7 @@
   import EncoderPanel from '../components/EncoderPanel.svelte'
   import { tick, onDestroy } from 'svelte'
   import { Input } from '$lib/components/ui/input'
+  import { Textarea } from '$lib/components/ui/textarea'
   import { matchingJobs, queuePage, queueRange, queueable, QUEUE_PAGE_SIZE } from '../lib/queueView'
   import { saves } from '../lib/saves'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
@@ -14,6 +15,8 @@
   import DatabaseCheckIcon from '@lucide/svelte/icons/database-check'
   import DatabaseXIcon from '@lucide/svelte/icons/database-x'
   import DatabaseZapIcon from '@lucide/svelte/icons/database-zap'
+  import FileDownIcon from '@lucide/svelte/icons/file-down'
+  import FileUpIcon from '@lucide/svelte/icons/file-up'
   import GaugeIcon from '@lucide/svelte/icons/gauge'
   import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
   import ListChecksIcon from '@lucide/svelte/icons/list-checks'
@@ -350,6 +353,54 @@
     })
   }
 
+  // Stop the running job once its video's pass 1 is done (status paused: VideoForge can be closed, and Run goes on
+  // with pass 2), or take that back.
+  const pausing = $derived(app.jobs.find((j) => j.id === app.queue.current)?.pause_after_pass1 ?? false)
+  async function pauseAfterPass1() {
+    await act(async () => {
+      const { set } = await api.pauseAfterPass1(!pausing)
+      if (!set.length) toast.info('Only a 2-pass encode has a pass 1 to stop after')
+      await app.refreshJobs()
+    })
+  }
+
+  // A job's file (its whole setup) goes into its folder in the work folder when it runs; this writes it now.
+  async function saveJobFiles() {
+    await act(async () => {
+      await saves.flush()
+      const { saved } = await api.saveJobFiles([...selected])
+      const files = Object.values(saved)
+      toast.success(files.length === 1 ? 'Job file saved' : `Saved ${files.length} job files`, {
+        description: files[0],
+      })
+    })
+  }
+
+  // Jobs added again from job files, exactly as they were (a job file, a job's folder or a <source>_tmp folder).
+  let importOpen = $state(false)
+  let importText = $state('')
+  let importing = $state(false)
+  async function importJobs() {
+    const paths = importText
+      .split('\n')
+      .map((p) => p.trim().replace(/^"(.*)"$/, '$1'))
+      .filter(Boolean)
+    if (!paths.length) return
+    importing = true
+    await act(async () => {
+      const { added, skipped } = await api.importJobs(paths)
+      await app.refreshJobs()
+      if (added.length) select(added)
+      if (added.length) toast.success(added.length === 1 ? 'Job added' : `Added ${added.length} jobs`)
+      for (const s of skipped) toast.warning(`Not added: ${s.path}`, { description: s.reason })
+      if (added.length && !skipped.length) {
+        importOpen = false
+        importText = ''
+      }
+    })
+    importing = false
+  }
+
   // workDirs: their <source>_tmp folders go too (one another job in the queue shares is kept)
   let removal = $state<Awaited<ReturnType<typeof api.removalPreview>> | null>(null)
   let removing = $state(false)
@@ -669,6 +720,17 @@
           <Tip text="Cancel the running job">
             <Button variant="outline" onclick={() => act(api.cancel)}><SquareIcon />Cancel</Button>
           </Tip>
+          {#if app.queue.current}
+            <Tip
+              text={pausing
+                ? 'Stopping after pass 1: click to take that back'
+                : 'Stop the running job once its video pass 1 is done. It keeps what it finished, so VideoForge can be closed, and Run goes on with pass 2'}
+            >
+              <Button variant={pausing ? 'default' : 'outline'} onclick={pauseAfterPass1}>
+                <PauseIcon />{pausing ? 'Pausing after pass 1' : 'Pause after pass 1'}
+              </Button>
+            </Tip>
+          {/if}
         {:else}
           <Tip
             text={startJobs.length
@@ -788,6 +850,22 @@
             onclick={duplicate}
             aria-label="Duplicate selected jobs"><CopyPlusIcon /></Button
           >
+        </Tip>
+        <Tip
+          text="Save job file: each selected job's whole setup in its work folder (a run does this too), to add it again later"
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!selected.length}
+            onclick={saveJobFiles}
+            aria-label="Save job files of the selected jobs"><FileDownIcon /></Button
+          >
+        </Tip>
+        <Tip text="Add jobs from job files, exactly as they were">
+          <Button variant="ghost" size="icon" onclick={() => (importOpen = true)} aria-label="Add jobs from job files">
+            <FileUpIcon />
+          </Button>
         </Tip>
         <Tip text="Probe again">
           <Button
@@ -1115,6 +1193,23 @@
 </div>
 
 <ReuseDialog bind:open={reuseOpen} jobs={reuseJobs} onstart={startReusing} />
+
+<Dialog.Root bind:open={importOpen}>
+  <Dialog.Content>
+    <Dialog.Header>
+      <Dialog.Title>Add jobs from job files</Dialog.Title>
+      <Dialog.Description>
+        One path per line: a <code>videoforge-job.json</code>, a job's folder, or a source's <code>_tmp</code> folder (every
+        job in it). Each job comes back exactly as it was saved, and its run reuses the files it finished.
+      </Dialog.Description>
+    </Dialog.Header>
+    <Textarea bind:value={importText} rows={5} placeholder="D:\Videos\Show.S01E01.mkv_tmp" class="font-mono text-sm" />
+    <Dialog.Footer>
+      <Button variant="outline" onclick={() => (importOpen = false)}>Close</Button>
+      <Button disabled={importing || !importText.trim()} onclick={importJobs}>Add jobs</Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
 
 <Dialog.Root
   open={removal !== null}

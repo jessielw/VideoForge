@@ -54,6 +54,7 @@ class JobStatus(StrEnum):
     FAILED = "failed"  # a tool failed or an input is missing
     SKIPPED = "skipped"  # the plan is blocked
     CANCELLED = "cancelled"
+    PAUSED = "paused"  # stopped on purpose after the video's pass 1; the next run goes on with pass 2
 
 
 class OutputPolicy(StrEnum):
@@ -232,6 +233,7 @@ class JobState:
     keep: list[str] = field(default_factory=list)  # steps the user chose to reuse on the next run (run_steps' keep)
     redo: list[str] = field(default_factory=list)  # ... and to make again: not taken from another job (run_steps' redo)
     made: RunMade | None = None  # the last run that wrote the output (done or invalid)
+    pause_after_pass1: bool = False  # stop (JobStatus.PAUSED) once the video's pass 1 is done; cleared when it does
 
 
 def planned_encode(spec: JobSpec, source: SourceInfo) -> SourceInfo:

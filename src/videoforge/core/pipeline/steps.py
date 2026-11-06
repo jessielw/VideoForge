@@ -46,6 +46,14 @@ _INDEX_PROGRESS = re.compile(r"index (?:file|progress) (\d+)%")
 _THIN_PROGRESS = re.compile(r"(?:index (?:file|progress)|(?:^|\] )Progress:)\s*(\d+)%")
 
 
+class Held(Exception):
+    """run_steps' hold asked to stop after a step: it finished (and is recorded), the run goes on later."""
+
+    def __init__(self, step_id: str) -> None:
+        super().__init__(step_id)
+        self.step_id = step_id
+
+
 @dataclass(frozen=True, slots=True)
 class Step:
     id: str  # unique in a job: "index", "video.pass1", "audio.2", "mux"
@@ -150,6 +158,7 @@ def run_steps(
     keep: Collection[str] = (),
     share: Sharing | None = None,
     redo: Collection[str] = (),
+    hold: Callable[[Step], bool] | None = None,
 ) -> None:
     """Run the steps in order. records: the job's last finished steps, updated in place.
     runs: one StepRun per step (default: fresh ones), updated as each step starts, ends or fails;
@@ -161,7 +170,9 @@ def run_steps(
     one at a time. keep: step ids the user chose to reuse whatever their fingerprint (their outputs must be
     there); they get a record with today's fingerprint. share: the job's folders, to note finished files in
     and to take another job's identical ones from (but not for the steps in redo: the user chose to make them
-    again). Raises ToolError (a step failed or didn't write its outputs) or Cancelled."""
+    again). hold: asked after each foreground step that ran or was reused; True raises Held (the run stops there,
+    its finished steps recorded, the others cancelled). Raises ToolError (a step failed or didn't write its
+    outputs), Cancelled or Held."""
     steps = list(steps)  # refresh() replaces a step
     total_weight = sum(s.weight for s in steps) or 1.0
     runs = runs if runs is not None else [s.to_run() for s in steps]
@@ -356,15 +367,16 @@ def run_steps(
                 continue
             for j in reads:
                 pending.pop(j).result()  # raises what stopped it
-            if reused(i):
-                continue
-            if stop.cancelled:
-                raise process.Cancelled()
-            lead = i
-            try:
-                execute(i)
-            finally:
-                lead = None
+            if not reused(i):
+                if stop.cancelled:
+                    raise process.Cancelled()
+                lead = i
+                try:
+                    execute(i)
+                finally:
+                    lead = None
+            if hold is not None and hold(steps[i]):
+                raise Held(steps[i].id)
         for j in list(pending):
             pending.pop(j).result()
     except BaseException as e:

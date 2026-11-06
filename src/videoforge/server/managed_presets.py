@@ -23,6 +23,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
+import re
 import sqlite3
 from typing import Any
 from uuid import uuid4
@@ -140,6 +141,20 @@ def _taken(db: sqlite3.Connection, profile: str, e: Shipped, reserved: tuple[str
     return taken
 
 
+def _identical(db: sqlite3.Connection, profile: str, e: Shipped) -> str | None:
+    """The stored name of a preset that already equals this shipped one, if any."""
+    grouped = e.kind in GROUPED
+    want = digest({**e.record, "label": e.name} if grouped else e.record)
+    for name, raw in db.execute("SELECT name, data FROM presets WHERE profile = ? AND kind = ?", (profile, e.kind)):
+        record = json.loads(raw)
+        label = record.get("label") if grouped else name
+        if not isinstance(label, str) or not re.fullmatch(re.escape(e.name) + r"( \(\d+\))?", label):
+            continue
+        if digest({**record, "label": e.name} if grouped else record) == want:
+            return name
+    return None
+
+
 def _numbered(base: str, used: Any) -> str:
     label, i = base, 2
     while used(label):
@@ -152,6 +167,9 @@ def _numbered(base: str, used: Any) -> str:
 def _add(db: sqlite3.Connection, profile: str, e: Shipped, reserved: tuple[str, ...]) -> tuple[str, str]:
     """Store a shipped preset under a free name: (that name, 'new' or 'copy')."""
     taken = _taken(db, profile, e, reserved)
+    twin = _identical(db, profile, e)
+    if twin is not None:  # already saved exactly as shipped: adopt it instead of numbering a copy
+        return twin, "new"
     if e.kind in GROUPED:
         parent = e.data["encoder" if e.kind == "encoder" else "action"]
         label = _numbered(e.name, lambda x: (parent, e.group, x) in taken)

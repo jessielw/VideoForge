@@ -44,10 +44,7 @@
   class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 @min-[40rem]/import:grid-cols-[8rem_minmax(0,1fr)_auto]"
 >
   <div class="col-span-2 pt-1.5 text-sm text-muted-foreground @min-[40rem]/import:col-span-1">{label}</div>
-  <Tip
-    class="grid min-w-0"
-    text="Paste paths here (Explorer: select, Ctrl+Shift+C, then Ctrl+V)"
-  >
+  <Tip class="grid min-w-0" text="Paste paths here (Explorer: select, Ctrl+Shift+C, then Ctrl+V)">
     <div
       class="flex min-h-8 min-w-0 flex-wrap gap-1.5 rounded-lg border border-input px-2 py-1 outline-none focus-visible:border-ring
       focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"

@@ -47,6 +47,8 @@ def test_foreign_origins_cannot_control_or_subscribe(origin):
         {"Host": "localhost:5173", "Origin": "http://localhost:5173"},
         {"Host": "[::1]:8765", "Origin": "http://[::1]:8765"},
         {"Host": "video.example", "Origin": "http://video.example"},
+        {"Host": "192.168.1.5:8765", "Origin": "http://192.168.1.5:8765"},
+        {"Host": "[fd00::5]:8765", "Origin": "http://[fd00::5]:8765"},
     ],
 )
 def test_local_cli_desktop_dev_and_configured_proxy_access(headers):

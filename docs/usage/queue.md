@@ -57,6 +57,14 @@ Stopping the queue after the current job leaves the remaining jobs queued. Cance
 
 Untick a queued job, or use **Unqueue** on selected queued jobs, to unlock their settings without removing the jobs or files. This does not cancel a running job.
 
+## Pause after pass 1
+
+A 2-pass encode can be stopped between its passes. **Pause after pass 1** in the Queue toolbar (while the job runs, or click it again to take it back) lets pass 1 finish, then ends the run as **Paused**. Nothing is cancelled and the finished steps stay recorded, so you can close VideoForge. Run the job again, even after a restart, and it reuses pass 1 and goes on with pass 2. Audio encodes still running beside the video when the job pauses are stopped and made again on the next run. A job that is not a 2-pass encode has no pass 1 to stop after.
+
+## Job files
+
+Every job's whole setup (source, tracks, video and encoder settings, mux and output options) is saved as `videoforge-job.json` in the job's folder in the source's `_tmp` folder when it runs. **Save job file** writes it for the selected jobs at any time. **Add jobs from job files** (Queue toolbar) takes the file, a job's folder, or a source's `_tmp` folder (every job in it) and adds each job exactly as it was saved: no template or profile default is applied. The New jobs page has a **Job files** row too: Browse to a `videoforge-job.json`, then **Open**. A job whose source already has a job with that label is left out. The work folder is where it was, so the run reuses the steps it already finished.
+
 ## Reuse completed work
 
 Before rerunning a job, **Start queue** and **Run selected** show the available completed video and audio encodes. Choose which to reuse and which to create again. Reuse depends on the saved step fingerprint and the finished output files; changed inputs or settings can invalidate it.

@@ -195,8 +195,16 @@ async function fixture(page: Page) {
     }
   })
   await page.goto('/#/settings')
+  await page.getByRole('button', { name: 'Backup & reset', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Configuration backup', exact: true })).toBeVisible()
   return { bundle, imported, errors, exportedPacks, importedPacks }
+}
+
+async function expectParallelAudio(page: Page, value: string) {
+  // the audio-encodes setting lives on the Encoding tab; come back to Backup afterwards
+  await page.getByRole('button', { name: 'Encoding', exact: true }).click()
+  await expect(page.getByRole('spinbutton')).toHaveValue(value)
+  await page.getByRole('button', { name: 'Backup & reset', exact: true }).click()
 }
 
 test('exports the whole configuration from Settings with an empty queue', async ({ page }) => {
@@ -211,6 +219,7 @@ test('exports the whole configuration from Settings with an empty queue', async 
 
 test('audio and video encoder libraries open from Settings with an empty queue', async ({ page }, testInfo) => {
   const { errors } = await fixture(page)
+  await page.getByRole('button', { name: 'Presets', exact: true }).click()
   for (const [button, title] of [
     ['Manage audio presets', 'Audio presets'],
     ['Manage video encoder presets', 'Encoder presets'],
@@ -273,7 +282,7 @@ test('previews all libraries and requires confirmation to replace the active pro
   await button.click()
   await expect(dialog).not.toBeVisible()
   expect(imported).toEqual([{ bundle, query: { profile: 'default', switch: 'false' } }])
-  await expect(page.getByRole('spinbutton')).toHaveValue('4')
+  await expectParallelAudio(page, '4')
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('videoforge.draft.templates')!))).toEqual({
     version: 1,
     value: null,
@@ -314,7 +323,7 @@ test('invalid files and cancelled imports leave settings untouched', async ({ pa
   await dialog.getByRole('checkbox', { name: /Replace Default's configuration/ }).check()
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
   expect(imported).toEqual([])
-  await expect(page.getByRole('spinbutton')).toHaveValue('2')
+  await expectParallelAudio(page, '2')
   expect(errors).toEqual([])
 })
 
@@ -333,7 +342,7 @@ test('imports into a new profile named after the backup, and switches to it only
   await expect(dialog).not.toBeVisible()
   expect(imported).toEqual([{ bundle, query: { new: 'backup', switch: 'false' } }])
   await expect(page.getByText('Configuration imported into backup', { exact: true })).toBeVisible()
-  await expect(page.getByRole('spinbutton')).toHaveValue('2') // the active profile's, as before
+  await expectParallelAudio(page, '2') // the active profile's, as before
 
   // A backup names its profile; a name already in use gets a number
   await page.getByRole('button', { name: 'Import configuration…', exact: true }).click()
@@ -345,7 +354,7 @@ test('imports into a new profile named after the backup, and switches to it only
   await dialog.getByRole('button', { name: 'Import configuration', exact: true }).click()
   await expect(dialog).not.toBeVisible()
   expect(imported[1].query).toEqual({ new: 'Restored', switch: 'true' })
-  await expect(page.getByRole('spinbutton')).toHaveValue('4') // switched: its settings
+  await expectParallelAudio(page, '4') // switched: its settings
   expect(errors).toEqual([])
 })
 
@@ -387,7 +396,7 @@ test('imports selected presets additively and preserves local app settings', asy
   expect(importedPacks).toEqual([
     { ...pack, presets: { template: [], video: [], encoder: [], audio: pack.presets.audio } },
   ])
-  await expect(page.getByRole('spinbutton')).toHaveValue('2')
+  await expectParallelAudio(page, '2')
   await page.getByRole('button', { name: 'Export presets…', exact: true }).click()
   await expect(
     page

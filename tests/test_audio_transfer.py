@@ -29,7 +29,10 @@ def test_audio_round_trip_conflicts_and_restart(tmp_path):
         assert preview == {"bundle": doc, "names": ["Surround", "Surround"], "actions": ["new", "new"]}
         assert client.get("/api/presets").json()["audio"] == []
         first = client.post("/api/presets/audio/import?keep_both=true", json=doc).json()
-        second = client.post("/api/presets/audio/import?keep_both=true", json=doc).json()
+        same = client.post("/api/presets/audio/import?keep_both=true", json=doc).json()
+        assert same["actions"] == ["unchanged", "unchanged"] and len(same["presets"]["audio"]) == 2
+        changed = bundle(entry(group=["Home cinema"], options={"dialnorm": "-31"}), entry(title=None, bitrate_kbps=448))
+        second = client.post("/api/presets/audio/import?keep_both=true", json=changed).json()
         assert second["names"] == ["Surround (2)", "Surround (2)"]
         assert len(second["presets"]["audio"]) == 4
         for original in first["presets"]["audio"]:

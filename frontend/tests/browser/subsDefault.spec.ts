@@ -109,6 +109,7 @@ test('Settings: default subtitle rules save as they change, naming included, and
     await route.fulfill({ json: responses[path] })
   })
   await page.goto('/#/settings')
+  await page.getByRole('button', { name: 'Encoding', exact: true }).click()
   const section = page.getByRole('region', { name: 'Default subtitles' })
   await expect(section).toContainText('new jobs keep every subtitle track')
 

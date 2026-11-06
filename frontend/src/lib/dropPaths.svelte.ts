@@ -9,7 +9,7 @@ import { basename } from './format'
 const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files')
 
 export function installDrops() {
-// Outside a field a dropped file must not replace the app with the file.
+  // Outside a field a dropped file must not replace the app with the file.
   const block = (e: DragEvent) => {
     if (!hasFiles(e) || e.defaultPrevented) return
     e.preventDefault()
@@ -113,7 +113,8 @@ export const pathDrop: Action<HTMLElement, PathDropOptions> = (node, initial) =>
     e.preventDefault()
     clear()
     toast.info('A browser keeps dropped files’ paths to itself', {
-      description: 'Paste the paths instead: in Explorer select the files, press Ctrl+Shift+C, then Ctrl+V here. Or use Browse…',
+      description:
+        'Paste the paths instead: in Explorer select the files, press Ctrl+Shift+C, then Ctrl+V here. Or use Browse…',
     })
   }
   const paste = (e: ClipboardEvent) => {

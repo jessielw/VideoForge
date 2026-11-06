@@ -262,6 +262,10 @@ def test_test_encode_runs_in_the_index_lane(tmp_path):
         runner.gate.clear()
         client.post("/api/queue/sample", json={"id": job, "percent": 5})
         wait_for(client, job, "sampling")
+        for _ in range(500):  # stop only once the encode is running, not while it is still queued behind the lane
+            if runner.calls[-1] == "encode":
+                break
+            time.sleep(0.01)
         client.post("/api/queue/index/stop", json={"ids": [job]})
         stopped = wait_for(client, job, "ready", "warn")
         assert not stopped["sample_error"] and runner.calls[-1] == "encode"
