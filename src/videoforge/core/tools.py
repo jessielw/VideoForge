@@ -183,9 +183,9 @@ def _split_dee_issues(plan: Plan, tools: Tools) -> list[Issue]:
     for a in plan.audio:
         if a.action not in (AudioAction.DDP, AudioAction.ATMOS):
             continue
-        bluray = (a.action is AudioAction.DDP and (a.options.get("ddp_mode") == "bluray" or a.out_layout.channels > 6)) or (
-            a.action is AudioAction.ATMOS and a.options.get("atmos_mode") == "bluray"
-        )
+        bluray = (
+            a.action is AudioAction.DDP and (a.options.get("ddp_mode") == "bluray" or a.out_layout.channels > 6)
+        ) or (a.action is AudioAction.ATMOS and a.options.get("atmos_mode") == "bluray")
         if bluray:
             issues.append(
                 Issue(
@@ -195,7 +195,11 @@ def _split_dee_issues(plan: Plan, tools: Tools) -> list[Issue]:
                     "encoders can't make them",
                 )
             )
-    if any(a.options.get("dialnorm", "0") not in ("", "0") for a in plan.audio if a.action in (AudioAction.DDP, AudioAction.ATMOS)):
+    if any(
+        a.options.get("dialnorm", "0") not in ("", "0")
+        for a in plan.audio
+        if a.action in (AudioAction.DDP, AudioAction.ATMOS)
+    ):
         issues.append(
             Issue(
                 Severity.WARN,

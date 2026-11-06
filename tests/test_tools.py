@@ -9,8 +9,8 @@ from conftest import audio, plan_for, source, sub
 
 from videoforge.core import tools
 from videoforge.core.config import AppConfig, Tools, with_tools
-from videoforge.core.models import AudioAction, AudioCodec as C, Severity, SubFormat
 from videoforge.core.dee import split_folder
+from videoforge.core.models import AudioAction, AudioCodec as C, Severity, SubFormat
 from videoforge.core.tools import (
     TOOL_NAMES,
     TOOLS,
