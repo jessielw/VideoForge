@@ -54,6 +54,8 @@ def test_share_selected_libraries_without_private_configuration_and_import_on_an
         assert all(secret in raw for secret in ("PLUGIN_SECRET", "NOTIFICATION_SECRET", "ACTION_SECRET"))
         doc = portable(configuration)
         doc["presets"]["audio"][0]["data"]["title"] = "Bob"
+        doc["presets"]["encoder"][0]["data"]["crf"] = 21  # identical presets are not re-imported
+        doc["presets"]["template"][0]["data"]["qpf"] = True
         # Export only the reusable settings, not this group's complete library.
         doc["presets"]["video"] = []
         response = sender.post("/api/preset-packs/export", json=doc)
@@ -97,6 +99,7 @@ def test_conflicts_reallocated_after_preview_and_scoped_to_encoder_and_folder(tm
     with make_client(tmp_path) as client:
         seed(client, tmp_path)
         doc = portable(export(client))
+        doc["presets"]["encoder"][0]["data"]["crf"] = 21
         encoder = doc["presets"]["encoder"][0]
         doc["presets"]["encoder"] += [
             copy.deepcopy(encoder) | {"group": ["Other"]},
@@ -107,7 +110,8 @@ def test_conflicts_reallocated_after_preview_and_scoped_to_encoder_and_folder(tm
         assert preview["names"]["encoder"] == ["Film (2)", "Film", "Film"]
         assert preview["names"]["template"] == ["Manual defaults (2)"]
         client.post(
-            "/api/presets/encoder", json={"label": "Film (2)", "group": encoder["group"], "data": encoder["data"]}
+            "/api/presets/encoder",
+            json={"label": "Film (2)", "group": encoder["group"], "data": encoder["data"] | {"crf": 30}},
         )
         result = client.post("/api/preset-packs/import?keep_both=true", json=doc)
         assert result.status_code == 200, result.text
@@ -164,6 +168,14 @@ def test_empty_malformed_and_oversized_packs_are_rejected(tmp_path):
         assert client.post("/api/preset-packs/import", content=b" " * (MAX_BYTES + 1)).status_code == 413
 
 
+def vary(libraries, i):
+    """The same pack with settings that differ per call, so each import is a distinct preset."""
+    out = copy.deepcopy(libraries)
+    out["template"][0]["data"]["tag"] = i
+    out["audio"][0]["data"]["bitrate_kbps"] = 100 + i
+    return out
+
+
 def test_multiple_libraries_are_atomic_and_concurrent_imports_keep_both_copies():
     store = Store(":memory:")
     libraries = {
@@ -172,7 +184,7 @@ def test_multiple_libraries_are_atomic_and_concurrent_imports_keep_both_copies()
     }
     try:
         with ThreadPoolExecutor(max_workers=4) as pool:
-            results = list(pool.map(lambda _: store.import_preset_pack(libraries, max_name=80), range(8)))
+            results = list(pool.map(lambda i: store.import_preset_pack(vary(libraries, i), max_name=80), range(8)))
         assert len({names["template"][0] for names, _ in results}) == 8
         assert len(store.presets("template")) == len(store.presets("audio")) == 8
         before = store.configuration_snapshot((), ("template", "audio"))
@@ -222,6 +234,11 @@ def test_keep_both_imports_a_numbered_copy_of_each(tmp_path):
     with make_client(tmp_path) as client:
         seed(client, tmp_path)
         doc = portable(export(client))
+        same = client.post("/api/preset-packs/import?keep_both=true", json=doc).json()
+        assert same["actions"]["encoder"] == ["unchanged"]  # identical: no copy
+        assert len(client.get("/api/presets").json()["encoder"]) == 1
+        doc["presets"]["template"][0]["data"]["qpf"] = True
+        doc["presets"]["encoder"][0]["data"]["crf"] = 21
         result = client.post("/api/preset-packs/import?keep_both=true", json=doc).json()
         assert result["names"]["template"] == ["Feature (2)"] and result["actions"]["encoder"] == ["copy"]
         assert len(client.get("/api/presets").json()["encoder"]) == 2

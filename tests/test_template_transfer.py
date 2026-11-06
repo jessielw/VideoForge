@@ -176,7 +176,7 @@ def test_concurrent_imports_keep_every_copy_and_failed_batch_rolls_back():
     try:
 
         def add(_):
-            return store.import_presets("template", [entry()], max_name=MAX_NAME)[0][0]
+            return store.import_presets("template", [entry(qpf=bool(_ % 2), tag=_)], max_name=MAX_NAME)[0][0]
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             names = list(pool.map(add, range(8)))

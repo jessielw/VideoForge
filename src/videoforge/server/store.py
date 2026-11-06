@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 from pathlib import Path
+import re
 import sqlite3
 import threading
 from typing import Any
@@ -486,11 +487,28 @@ class Store:
                     group = entry.get("group", [])
                     scope = (data[parent], tuple(group)) if grouped else ()
                     match = saved.get((*scope, base))
-                    if not keep_both and match is not None and (*scope, base) not in replaced:
-                        replaced.add((*scope, base))
+                    same = False
+                    if match is None and (*scope, base) not in replaced:
+                        # an earlier import may have numbered this one ("Name (2)"): identical content still matches
+                        want = {"label": base, "group": group, "settings": data} if grouped else data
+                        for (*s, lbl), (nm, old) in saved.items():
+                            if tuple(s) != scope or not re.fullmatch(re.escape(base) + r" \(\d+\)", str(lbl)):
+                                continue
+                            cmp = {**old, "label": base} if grouped else old
+                            if json.dumps(cmp, sort_keys=True) == json.dumps(want, sort_keys=True):
+                                names[kind].append(str(lbl))
+                                actions[kind].append("unchanged")
+                                match = "skip"
+                                break
+                        if match == "skip":
+                            continue
+                    if match is not None and (*scope, base) not in replaced:
                         name, old = match
                         record = {**old, "label": base, "group": group, "settings": data} if grouped else data
                         same = json.dumps(record, sort_keys=True) == json.dumps(old, sort_keys=True)
+                    # an identical preset is never worth a numbered copy, whatever keep_both says
+                    if match is not None and (*scope, base) not in replaced and (same or not keep_both):
+                        replaced.add((*scope, base))
                         if not same:
                             updates.append((json.dumps(record), self._profile, kind, name))
                         names[kind].append(base)

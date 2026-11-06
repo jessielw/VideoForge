@@ -141,7 +141,7 @@ def test_concurrent_imports_are_additive_and_failed_imports_are_atomic():
     try:
 
         def add(_):
-            return store.import_encoder_presets([entry()], max_name=MAX_NAME)[0][0]
+            return store.import_encoder_presets([entry(crf=10 + _)], max_name=MAX_NAME)[0][0]
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             labels = list(pool.map(add, range(8)))

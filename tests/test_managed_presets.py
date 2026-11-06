@@ -109,6 +109,26 @@ def test_a_name_the_user_already_has_gets_a_numbered_copy(store):
     assert "Acme remux (2)" in templates(store)
 
 
+def test_an_identical_preset_the_user_already_has_is_adopted_not_copied(store):
+    d = doc()
+    store.save_preset("template", "Acme remux", d["presets"]["template"][0]["data"])
+    store.import_encoder_presets(
+        [{"label": "UHD", "group": ["Acme"], "data": d["presets"]["encoder"][0]["data"]}], max_name=80
+    )
+    assert sorted(c["action"] for c in store.use_packs([pack(d)], {})) == ["new", "new"]
+    assert list(templates(store)) == ["Acme remux"]
+    assert len(store.presets("encoder")) == 1
+    assert {m["name"] for m in store.managed_presets() if m["kind"] == "template"} == {"Acme remux"}
+
+
+def test_an_identical_numbered_copy_is_adopted_too(store):
+    d = doc()
+    store.save_preset("template", "Acme remux (2)", d["presets"]["template"][0]["data"])
+    store.use_packs([pack(d)], {})
+    assert list(templates(store)) == ["Acme remux (2)"]
+    assert template_row(store)["name"] == "Acme remux (2)"
+
+
 def test_a_reserved_name_is_not_taken(store):
     store.use_packs([pack()], {"template": ("Acme remux",)})
     assert list(templates(store)) == ["Acme remux (2)"]
