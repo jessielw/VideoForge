@@ -113,24 +113,28 @@
               >
             {/if}
           </p>
-          {#each attention as p (id(p))}
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-              <span class="min-w-0 flex-1">
-                <span class="text-muted-foreground">{kinds[p.kind]} ·</span>
-                {[...p.group, p.label].join(' / ')}
-                <span class="text-muted-foreground">— {describe(p)}</span>
-              </span>
-              {#if p.state !== 'current' && !p.retired}
-                <Button
-                  size="sm"
-                  variant={confirming === id(p) ? 'destructive' : 'outline'}
-                  disabled={busy || disabled}
-                  onclick={() => reset(p)}
-                  >{confirming === id(p) ? 'Discard my edits?' : p.state === 'removed' ? 'Restore' : 'Reset'}</Button
-                >
-              {/if}
+          {#if attention.length}
+            <div class="max-h-64 space-y-2 overflow-y-auto pr-1">
+              {#each attention as p (id(p))}
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  <span class="min-w-0 flex-1">
+                    <span class="text-muted-foreground">{kinds[p.kind]} ·</span>
+                    {[...p.group, p.label].join(' / ')}
+                    <span class="text-muted-foreground">— {describe(p)}</span>
+                  </span>
+                  {#if p.state !== 'current' && !p.retired}
+                    <Button
+                      size="sm"
+                      variant={confirming === id(p) ? 'destructive' : 'outline'}
+                      disabled={busy || disabled}
+                      onclick={() => reset(p)}
+                      >{confirming === id(p) ? 'Discard my edits?' : p.state === 'removed' ? 'Restore' : 'Reset'}</Button
+                    >
+                  {/if}
+                </div>
+              {/each}
             </div>
-          {/each}
+          {/if}
         </div>
       {/each}
     </div>
