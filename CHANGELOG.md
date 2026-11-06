@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Docker: `compose.yaml` sets `PUID` / `PGID` instead of `user:`. Started as root first, the container makes `/tools` readable and DEE's Linux programs executable itself, so the host no longer needs `chmod`. If you use `user: "1000:1000"`, switch to `PUID` / `PGID`.
+- Docker: if DEE's Linux programs still can't be made executable (a read-only mount), they are run from a copy of `/tools/dee` made at start.
+- Tools that can't start say why in plain words (a Windows program without Wine, files that can't be read or run, with the fix).
+
+### Fixed
+
+- A path to a Windows `.exe` (`qaac64.exe`, `dee.exe`) now runs through Wine in the Docker image, instead of failing with `Exec format error`.
+
 ## [0.1.3] - 2026-11-06
 
 ### Added

@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
+import errno
 from enum import StrEnum
 import functools
 import importlib.util
@@ -295,6 +296,22 @@ def _plugins(path: str) -> ToolCheck:
     return ToolCheck(info.name, info.label, info.purpose, path, shown, status, detail=detail)
 
 
+def _friendly_error(e: BaseException, found: str) -> str:
+    """Plain words for the OS errors a tool that can't start gives on Linux; "" for anything else."""
+    if os.name == "nt" or not isinstance(e, OSError):
+        return ""
+    if e.errno == errno.ENOEXEC:
+        if found.lower().endswith(".exe"):
+            return "This is a Windows program and can't run here directly: it needs Wine (the Docker image has it)"
+        return "Not a program this system can run (wrong build for this CPU or system?)"
+    if e.errno == errno.EACCES:
+        return (
+            "This file or the programs next to it can't be read or run: make them readable and executable "
+            "(chmod -R a+rX), or in Docker set PUID and PGID so VideoForge fixes it at start"
+        )
+    return ""
+
+
 def check(info: ToolInfo, path: str, *, runner: Runner = _run, timeout: float = 8.0) -> ToolCheck:
     if info.folder:
         return _plugins(path)
@@ -309,8 +326,7 @@ def check(info: ToolInfo, path: str, *, runner: Runner = _run, timeout: float = 
             output = runner([dee.program(found), *args], timeout)
         except (OSError, subprocess.SubprocessError) as e:
             error = f"{type(e).__name__}: {e}"
-            if isinstance(e, PermissionError) and os.name != "nt":
-                error = f"Not executable (chmod +x it, and the programs next to it): {error}"
+            error = _friendly_error(e, found) or error
             continue
         if line := version_line(output):
             return ToolCheck(*base, found, ToolStatus.OK, version=line)

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
+import hashlib
 import importlib.util
 import os
 from pathlib import Path
 import shutil
 import sys
 import sysconfig
+import tempfile
 import tomllib
 
 from videoforge.core.execute.control import Priority
@@ -74,10 +76,29 @@ _SIBLINGS = {"mkvpropedit": "mkvmerge", "mkvextract": "mkvmerge", "ffprobe": "ff
 _BUNDLED_FALLBACKS = {"tools/ffmpeg/bin/ffmpeg.exe": "ffmpeg", "tools/GPAC/mp4box.exe": "MP4Box"}
 
 
+WINE_RUN = "/opt/wine/bin/wine-run"  # the Docker image's Wine launcher
+
+
+def _wine_launcher(exe: Path) -> str:
+    """A Windows .exe can't be executed on Linux: a small script that runs it through Wine stands in for it, so
+    a path to the .exe just works (the Docker image has wine-run; elsewhere the .exe is left as it is)."""
+    if sys.platform == "win32" or exe.suffix.lower() != ".exe" or not Path(WINE_RUN).is_file():
+        return str(exe)
+    folder = Path(tempfile.gettempdir()) / f"videoforge-wine-{os.getuid()}"
+    folder.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha1(str(exe).encode()).hexdigest()[:8]
+    launcher = folder / f"{exe.stem}-{digest}"
+    script = f'#!/bin/sh\nexec {WINE_RUN} "{exe}" "$@"\n'
+    if not launcher.is_file() or launcher.read_text() != script:
+        launcher.write_text(script)
+        launcher.chmod(0o755)
+    return str(launcher)
+
+
 def _resolve_tool(value: str, base: Path) -> str:
     candidate = base / value
     if candidate.exists():
-        return str(candidate)
+        return _wine_launcher(candidate) if candidate.is_file() else str(candidate)
     found = shutil.which(_BUNDLED_FALLBACKS.get(value.replace("\\", "/"), value))
     return found or value
 

@@ -77,7 +77,7 @@ def test_a_folder_or_a_file_that_cant_run_says_why(tmp_path):
 
     c = check(INFO["dee"], str(exe), runner=denied)
     assert c.status is ToolStatus.BROKEN and "Permission denied" in c.detail
-    assert ("chmod +x" in c.detail) is (sys.platform != "win32")
+    assert ("chmod" in c.detail) is (sys.platform != "win32")
 
 
 def test_a_real_program_on_path():
@@ -246,3 +246,14 @@ def test_split_dee_blocks_bluray_and_warns_on_dialnorm(tmp_path):
     single.mkdir()
     (single / "dee.exe").write_bytes(b"")
     assert _split_dee_issues(plan, NS(dee=str(single / "dee.exe"))) == []
+
+
+def test_friendly_errors_for_tools_that_cannot_start(monkeypatch):
+    import errno
+
+    from videoforge.core import tools
+
+    monkeypatch.setattr(tools.os, "name", "posix")
+    assert "Wine" in tools._friendly_error(OSError(errno.ENOEXEC, "x"), "/tools/wine/qaac/qaac64.exe")
+    assert "PUID" in tools._friendly_error(PermissionError(errno.EACCES, "x"), "/tools/dee/dee")
+    assert tools._friendly_error(OSError(errno.ENOENT, "x"), "/x") == ""
