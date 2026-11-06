@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import http.client
 import io
 from pathlib import Path, PureWindowsPath
 import subprocess
 import tempfile
+import time
 import urllib.request
 import zipfile
 
@@ -35,14 +37,30 @@ def relative_path(name: str) -> str:
     return path.as_posix()
 
 
+def fetch(url: str, attempts: int = 5) -> bytes:
+    """GET with retries; CI runners hit transient timeouts and resets."""
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=120) as response:  # noqa: S310 - pinned https manifests
+                return response.read()
+        except (OSError, http.client.HTTPException) as error:
+            # 4xx other than 408/429 will not improve with retries.
+            code = getattr(error, "code", None)
+            if attempt == attempts or (code is not None and 400 <= code < 500 and code not in (408, 429)):
+                raise
+            delay = 2**attempt
+            print(f"  retry {attempt}/{attempts - 1} in {delay}s: {error}", flush=True)
+            time.sleep(delay)
+    raise AssertionError("unreachable")
+
+
 def download(url: str, sha256: str) -> bytes:
     cached = CACHE / sha256
     if cached.is_file():
         data = cached.read_bytes()
     else:
         print(f"  {url}", flush=True)
-        with urllib.request.urlopen(url, timeout=120) as response:  # noqa: S310 - pinned https manifests
-            data = response.read()
+        data = fetch(url)
     digest = hashlib.sha256(data).hexdigest()
     if digest != sha256:
         raise ValueError(f"{url}: sha256 {digest}, expected {sha256}; remove corrupt cache file {cached}")
