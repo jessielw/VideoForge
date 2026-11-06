@@ -107,7 +107,9 @@ def _run(
     missing = missing_inputs(spec)
     if missing:
         return JobResult(plan, JobStatus.FAILED, error="Missing input: " + ", ".join(str(p) for p in missing))
-    if no_tools := tool_issues(plan, app.tools, spec.container(rule_set)):  # a plan made before a tool went missing
+    # a plan made before a tool went missing (warnings, like the split DEE encoders' left-out dialnorm, don't stop it)
+    no_tools = [i for i in tool_issues(plan, app.tools, spec.container(rule_set)) if i.severity is Severity.BLOCK]
+    if no_tools:
         return JobResult(plan, JobStatus.FAILED, error="; ".join(i.message for i in no_tools))
     if spec.output_dir is None:
         return JobResult(plan, JobStatus.FAILED, error="No output folder set")
