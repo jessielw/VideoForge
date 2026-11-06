@@ -13,6 +13,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Docker: split encoders go in `/tools/dee/` (Linux) or `/tools/wine/dee/` (Windows `.exe` files, run through Wine).
 - The split encoders can't make Blu-ray DDP, 7.1 DDP or Blu-ray Atmos: a plan using them is blocked with a message, and a dialnorm setting is left out (DEE measures the level) with a warning.
 
+### Fixed
+
+- A track a rule set plans to encode now shows its saved or plugin audio preset in the Audio tab's preset menu, not a built-in with the same settings. The planned title is part of the match, and a saved or plugin preset wins a tie with a built-in.
+
 ## [0.1.2] - 2026-11-05
 
 ### Added

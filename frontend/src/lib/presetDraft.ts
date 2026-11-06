@@ -54,7 +54,8 @@ export function matchingPreset<T>(
 ): PresetChoice<T> | undefined {
   const signature = canonical(data)
   const matches = choices.filter((choice) => canonical(choice.data) === signature)
-  return matches.find((choice) => presetKey(choice) === selected) ?? matches[0]
+  // a saved or plugin preset wins a tie with a built-in that has the same settings
+  return matches.find((choice) => presetKey(choice) === selected) ?? matches.find((c) => !c.builtin) ?? matches[0]
 }
 
 export function saveDestination<T>(draft: PresetDraft<T>, choices: PresetChoice<T>[], parentOf: (data: T) => string) {
