@@ -25,6 +25,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 import sys
 
+from videoforge.core import dee
 from videoforge.core.arguments import split_args
 from videoforge.core.config import Tools
 from videoforge.core.models import AudioAction, AudioCodec, Layout, PlannedAudio
@@ -597,7 +598,7 @@ def _deezy(
         "--ffmpeg",
         tools.ffmpeg,
         "--dee",
-        tools.dee,
+        dee.split_folder(tools.dee) or tools.dee,  # DeeZy takes a split set as its folder
         "--truehdd",
         tools.truehdd,
     )
@@ -617,7 +618,9 @@ def _deezy(
     ):
         if value := _opt(planned, key):
             chosen += (f"{flag}={value}",)
-    if (dialnorm := _opt(planned, "dialnorm", settings)) not in ("", "0"):
+    # the split encoders have no dialnorm option and DeeZy refuses it; tool_issues warns that it is ignored
+    split = bool(dee.split_folder(tools.dee))
+    if not split and (dialnorm := _opt(planned, "dialnorm", settings)) not in ("", "0"):
         chosen += (f"--custom-dialnorm={dialnorm}",)
     if _opt(planned, "bed_conform") == "on":
         chosen += ("--bed-conform",)
