@@ -216,9 +216,13 @@ def test_dee_split_encoders_folder_is_found_and_asked_for_a_version(tmp_path, mo
     assert (c.status, c.found, calls) == (ToolStatus.OK, str(tmp_path), [str(marker)])
 
     # a bare "dee" with only the split encoders on PATH resolves to their folder
+    marker.chmod(0o755)  # PATH lookup wants an executable file on POSIX
     monkeypatch.setenv("PATH", str(tmp_path))
     assert split_folder("dee") == str(tmp_path)
-    (tmp_path / "dee.exe").write_bytes(b"")
+    for name in ("dee", "dee.exe"):  # PATHEXT finds the .exe on Windows, the bare name on POSIX
+        single = tmp_path / name
+        single.write_bytes(b"")
+        single.chmod(0o755)
     assert split_folder("dee") == ""  # a single dee wins
 
 

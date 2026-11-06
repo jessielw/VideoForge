@@ -65,6 +65,7 @@ def test_deezy_gets_source_delay(action):
 @pytest.mark.parametrize("deep", [False, True])
 def test_deezy_temp_dir_is_left_to_deezy_when_too_deep_for_dee(deep, monkeypatch):
     monkeypatch.setattr("sys.platform", "win32")
+    monkeypatch.setattr("videoforge.core.dee.shutil.which", lambda _name: None)  # shutil.which needs a real Windows
     work = Path("C:/") / ("x" * 150 if deep else "work")
     p = planned(C.TRUEHD, "7.1", A.DDP, "5.1", 640)
     (argv,) = audio_command(p, 1, SRC, work, AudioSettings(), TOOLS).argvs
