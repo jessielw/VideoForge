@@ -8,8 +8,6 @@ index → VapourSynth (crop, resize, filters) → x264 / x265 / VP8 / VP9 / SVT-
 
 [Documentation](https://jessielw.github.io/VideoForge/) · [Getting started](https://jessielw.github.io/VideoForge/getting-started/) · [Releases](https://github.com/jessielw/VideoForge/releases) · [Changelog](CHANGELOG.md)
 
-> **Status:** 0.1.0 early beta. It works end to end, but expect changes.
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/video-dark.png">
   <img src="docs/assets/screenshots/video.png" alt="The Video tab: frame preview, crop and the filter chain">

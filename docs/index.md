@@ -10,10 +10,6 @@ VideoForge combines VapourSynth processing, video and audio encoding, subtitle s
 
 [Get started](getting-started/index.md){ .md-button .md-button--primary } [Create your first job](getting-started/first-job.md){ .md-button }
 
-<!-- prettier-ignore -->
-!!! note "Beta software"
-    VideoForge is currently **0.1.0 beta**. Expect changes. Read the [changelog](reference/changelog.md) before updating.
-
 ![The Video tab with frame preview, crop and filters](assets/screenshots/video.png#only-light) ![The Video tab with frame preview, crop and filters](assets/screenshots/video-dark.png#only-dark)
 
 ## Choose your starting point
