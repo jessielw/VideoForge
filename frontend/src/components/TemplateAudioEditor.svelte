@@ -70,6 +70,7 @@
     { label: 'AAC', codecs: ['aac'] },
     { label: 'Opus', codecs: ['opus'] },
     { label: 'MP3', codecs: ['mp3'] },
+    { label: 'Vorbis', codecs: ['vorbis'] },
   ]
   const MIN_CHANNELS = [
     { n: 2, label: '2.0' },

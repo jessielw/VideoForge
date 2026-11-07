@@ -538,7 +538,7 @@ class Mp4Box:
                         "encode it or use MKV",
                     )
                 )
-            elif a.out_codec in (AudioCodec.LPCM, AudioCodec.OTHER):
+            elif a.out_codec in (AudioCodec.LPCM, AudioCodec.VORBIS, AudioCodec.OTHER):
                 issues.append(
                     Issue(
                         Severity.BLOCK,

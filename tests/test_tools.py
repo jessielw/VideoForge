@@ -149,6 +149,7 @@ def test_encodes_need_their_tools(tmp_path):
         AudioAction.AC3: [],
         AudioAction.EAC3: [],
         AudioAction.MP3: [],
+        AudioAction.VORBIS: [],
     }  # a fake ffmpeg can't be asked for its encoders
 
     plan = plan_for(source([audio(C.FLAC, "2.0", index=0), audio(C.TRUEHD, "5.1", index=1)]), source(name="E.mkv"))

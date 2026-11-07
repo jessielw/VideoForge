@@ -322,6 +322,7 @@
     flac: 'FLAC',
     opus: 'Opus',
     mp3: 'MP3',
+    vorbis: 'Vorbis',
   }
   const channels = (layout: string) => layout.split('.').reduce((n, x) => n + +x, 0)
   const autoAction = (t: AudioTrack): AudioAction => t.auto?.action ?? 'copy'

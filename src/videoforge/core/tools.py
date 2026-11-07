@@ -54,7 +54,7 @@ TOOLS: tuple[ToolInfo, ...] = (
     ToolInfo(
         "ffmpeg",
         "ffmpeg",
-        "Decodes audio for the other encoders; its own FLAC, Opus, AAC, AC-3, E-AC-3, MP3",
+        "Decodes audio for the other encoders; its own FLAC, Opus, AAC, AC-3, E-AC-3, MP3, Vorbis",
         (("-version",),),
     ),
     ToolInfo(

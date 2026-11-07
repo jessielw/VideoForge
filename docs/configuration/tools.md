@@ -17,7 +17,7 @@ On macOS or Linux ARM64, supply native tools and plugins and override the Window
 | SvtAv1EncApp (SVT-AV1) | `tools/SvtAv1EncApp/SvtAv1EncApp.exe` | AV1 encodes ([Patman86's builds](https://github.com/Patman86/SVT-AV1-Mods-by-Patman/releases), as StaxRip ships, or [SVT-AV1](https://gitlab.com/AOMediaCodec/SVT-AV1)'s own) |
 | VapourSynth plugins | `tools/vs-plugins/` | source filters (FFMS2, the default; L-SMASH; BestSource) and any filters your scripts use: see [VapourSynth plugins](#bundled-vapoursynth-plugins) |
 | [MP4Box](https://gpac.io/) (GPAC) | `tools/GPAC/mp4box.exe` | MP4 output |
-| ffmpeg | `tools/ffmpeg/bin/ffmpeg.exe` | FLAC / Opus / AAC / AC-3 / E-AC-3 / MP3 encodes, and decoding for the other audio encoders |
+| ffmpeg | `tools/ffmpeg/bin/ffmpeg.exe` | FLAC / Opus / AAC / AC-3 / E-AC-3 / MP3 / Vorbis encodes, and decoding for the other audio encoders |
 | ffprobe | next to ffmpeg | an MP4 / TS source's timing (track starts, frame rate); without it, MediaInfo's |
 | [DeeZy](https://github.com/jessielw/DeeZy) + Dolby Encoding Engine | `tools/DeeZy/deezy.exe`, `tools/DEE/dee.exe` | DDP / DDP Atmos |
 | truehdd | `tools/truehdd/truehdd.exe` | DDP Atmos from TrueHD Atmos |

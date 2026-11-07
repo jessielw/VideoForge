@@ -182,7 +182,7 @@ export interface Issue {
   message: string
 }
 
-export type AudioAction = 'copy' | 'ddp' | 'atmos' | 'aac' | 'flac' | 'opus' | 'opusenc' | 'aac_ffmpeg' | 'ac3' | 'eac3' | 'mp3'
+export type AudioAction = 'copy' | 'ddp' | 'atmos' | 'aac' | 'flac' | 'opus' | 'opusenc' | 'aac_ffmpeg' | 'ac3' | 'eac3' | 'mp3' | 'vorbis'
 
 // One audio encode as the server describes it (core.execute.audio.ENCODES).
 export interface AudioEncodeInfo {
@@ -687,7 +687,7 @@ export interface AudioSlot {
   extra: TrackOverride[]
 }
 export type AudioCodec =
-  'aac' | 'ac3' | 'eac3' | 'truehd' | 'dts' | 'dts_hd_ma' | 'dts_hd_hra' | 'lpcm' | 'flac' | 'opus' | 'mp3' | 'other'
+  'aac' | 'ac3' | 'eac3' | 'truehd' | 'dts' | 'dts_hd_ma' | 'dts_hd_hra' | 'lpcm' | 'flac' | 'opus' | 'mp3' | 'vorbis' | 'other'
 export interface AudioRule {
   languages: string[]
   original: boolean | null // in the job's original language

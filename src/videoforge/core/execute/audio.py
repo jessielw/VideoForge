@@ -1,7 +1,7 @@
 """Audio encodes: what each one makes (ENCODES) and the command for a planned track.
 
 DeeZy makes DDP and DDP Atmos, ffmpeg | qaac makes AAC, ffmpeg | opusenc makes Opus,
-and ffmpeg's own encoders make FLAC, Opus, AAC, AC-3, E-AC-3 and MP3. ENCODES is the one list
+and ffmpeg's own encoders make FLAC, Opus, AAC, AC-3, E-AC-3, MP3 and Vorbis. ENCODES is the one list
 the planner, the tool checks and the UI read: a new encode is an AudioAction, an entry
 here and its command. Each encode's options are per-track settings; a rule set's
 AudioSettings can change some of their defaults (option_defaults).
@@ -445,6 +445,18 @@ ENCODES: dict[AudioAction, AudioEncode] = {
             default_max=Layout(2, 0),
             options=(*_NORMALIZE, _extra("ffmpeg", "-joint_stereo 0")),
         ),
+        AudioEncode(
+            AudioAction.VORBIS,
+            "Vorbis",
+            AudioCodec.VORBIS,
+            ".ogg",
+            _ANY,
+            ("ffmpeg",),
+            ffmpeg_encoder="libvorbis",
+            bitrates={1: 96, 2: 160, 6: 384, 8: 512},
+            bitrate_range=(32, 1024),
+            options=(*_NORMALIZE, _EXTRA),
+        ),
     )
 }
 
@@ -796,6 +808,7 @@ _FFMPEG_ARGS = {
         "ac3",
     ),
     AudioAction.MP3: lambda p: ("-c:a", "libmp3lame", "-b:a", f"{p.bitrate_kbps}k", "-f", "mp3"),
+    AudioAction.VORBIS: lambda p: ("-c:a", "libvorbis", "-b:a", f"{p.bitrate_kbps}k", "-f", "ogg"),
     AudioAction.EAC3: lambda p: (
         "-c:a",
         "eac3",

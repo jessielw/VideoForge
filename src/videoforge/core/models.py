@@ -36,6 +36,7 @@ class AudioCodec(StrEnum):
     FLAC = "flac"
     OPUS = "opus"
     MP3 = "mp3"
+    VORBIS = "vorbis"
     OTHER = "other"
 
     @property
@@ -265,6 +266,7 @@ class AudioAction(StrEnum):
     AC3 = "ac3"
     EAC3 = "eac3"
     MP3 = "mp3"
+    VORBIS = "vorbis"
 
 
 @dataclass(slots=True)

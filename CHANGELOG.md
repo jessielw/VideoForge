@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Audio: MP3 encode (ffmpeg's `libmp3lame`) for mono and stereo; MP3 tracks are recognised, and `.mp3` files can be added as external audio.
+- Audio: Vorbis encode (ffmpeg's `libvorbis`, `.ogg`) up to 7.1; Vorbis tracks are recognised. MP4 output blocks Vorbis, so use MKV.
 - Docker: the container's log says what it found in `/tools` (`videoforge: qaac: found (Wine)`, `dee: not in /tools`).
 - Docker: Wine's files are set up in the background at start when a Windows tool is in `/tools`, so the first qaac or DEE run isn't the slow one.
 - Docker: DEE and qaac in `/tools` are found with nothing set in Settings, including ones added after the container started.
