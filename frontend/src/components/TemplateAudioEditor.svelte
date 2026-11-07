@@ -69,6 +69,7 @@
     { label: 'AC-3', codecs: ['ac3'] },
     { label: 'AAC', codecs: ['aac'] },
     { label: 'Opus', codecs: ['opus'] },
+    { label: 'MP3', codecs: ['mp3'] },
   ]
   const MIN_CHANNELS = [
     { n: 2, label: '2.0' },

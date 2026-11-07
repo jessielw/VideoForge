@@ -16,7 +16,7 @@ index → VapourSynth (crop, resize, filters) → x264 / x265 / VP8 / VP9 / SVT-
 ## Features
 
 - **Video:** frame preview with zoom and a crop overlay, auto crop, resize, a CPU filter chain, and a generated VapourSynth script you can edit. Encode with x264, x265, VP8, VP9 or SVT-AV1, in 1 or 2 passes, with test encodes and CRF search.
-- **Audio and subtitles:** keep, drop, reorder, retitle and flag tracks. Copy or encode each audio track (FLAC, Opus, AAC, AC-3, E-AC-3, DDP and Atmos), and make several outputs from one track.
+- **Audio and subtitles:** keep, drop, reorder, retitle and flag tracks. Copy or encode each audio track (FLAC, Opus, AAC, AC-3, E-AC-3, MP3, DDP and Atmos), and make several outputs from one track.
 - **Output:** MKV or MP4, chapters, AutoQPF, and a validation pass before the file is published.
 - **Queue:** batch import, background batch indexing, pause and resume, and per-step reuse: finished steps are skipped on a rerun. Jobs survive restarts.
 - **Templates:** save a whole setup and apply it to every episode. Audio and subtitles can be picked by position or by rules (language, codec, channels, forced / SDH / commentary).

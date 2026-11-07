@@ -310,6 +310,7 @@ AUDIO_EXTENSIONS = (
     ".mka",
     ".opus",
     ".ogg",
+    ".mp3",
 )
 _DELAY_RE = re.compile(r"\bdelay\s*(-?\d+)\s*ms\b", re.IGNORECASE)
 
