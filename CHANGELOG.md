@@ -6,11 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Docker: the container's log says what it found in `/tools` (`videoforge: qaac: found (Wine)`, `dee: not in /tools`).
+- Docker: Wine's files are set up in the background at start when a Windows tool is in `/tools`, so the first qaac or DEE run isn't the slow one.
+- Docker: DEE and qaac in `/tools` are found with nothing set in Settings, including ones added after the container started.
+
 ### Changed
 
 - Docker: `compose.yaml` sets `PUID` / `PGID` instead of `user:`. Started as root first, the container makes `/tools` readable and DEE's Linux programs executable itself, so the host no longer needs `chmod`. If you use `user: "1000:1000"`, switch to `PUID` / `PGID`.
 - Docker: if DEE's Linux programs still can't be made executable (a read-only mount), they are run from a copy of `/tools/dee` made at start.
 - Tools that can't start say why in plain words (a Windows program without Wine, files that can't be read or run, with the fix).
+- Settings shows the `.exe` path you gave for a Windows tool, not the Wine launcher VideoForge runs in its place.
+- Docker docs: no host `chmod` step, `PUID` / `PGID` in the Compose example.
 
 ### Fixed
 

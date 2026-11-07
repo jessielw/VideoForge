@@ -36,3 +36,25 @@ def test_exe_path_runs_through_wine_on_linux(tmp_path, monkeypatch):
     assert str(exe) in open(out).read()
     monkeypatch.setattr(sys, "platform", "win32")
     assert config._resolve_tool(str(exe), tmp_path) == str(exe)
+
+
+def test_wine_launcher_shows_the_exe_and_tools_folder_is_found(tmp_path, monkeypatch):
+    import sys
+
+    from videoforge.core import config
+
+    exe = tmp_path / "tools" / "qaac64.exe"
+    exe.parent.mkdir()
+    exe.write_bytes(b"MZ")
+    wine = tmp_path / "wine-run"
+    wine.write_text("#!/bin/sh\n")
+    monkeypatch.setattr(config, "WINE_RUN", str(wine))
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(config.os, "getuid", lambda: 1000, raising=False)
+    monkeypatch.setattr(config.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(config.shutil, "which", lambda name: None)
+    monkeypatch.setattr(config, "_TOOLS_FOLDER", {"qaac": (str(exe),)})
+    launcher = config._resolve_tool("qaac", tmp_path)  # not on PATH: found in the tools folder
+    assert launcher != "qaac"
+    assert config.wine_target(launcher) == str(exe)
+    assert config.wine_target(str(exe)) == ""

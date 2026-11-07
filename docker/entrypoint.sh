@@ -121,4 +121,25 @@ if [ -d /tools ] && [ -n "$(find /tools ! -readable -print -quit 2>/dev/null)" ]
 fi
 PATH="$bin:$PATH"
 export PATH
+
+# What was found, in the container's log (docker logs): one line per tool.
+report() {
+    echo "videoforge: $1: $2"
+}
+if [ -x "$bin/dee" ]; then
+    case "$dee_dir" in /tmp/*) report dee "found, run from a copy ($dee_dir): /tools is read-only" ;; *) report dee found ;; esac
+elif [ -d "$bin/dee-split" ] || [ -f "$dee_dir/dee_ddp_encoder" ]; then
+    report dee "found (split encoders)"
+else
+    report dee "not in /tools (optional: /tools/dee/dee or /tools/wine/dee/dee.exe)"
+fi
+if [ -x "$bin/qaac" ]; then
+    report qaac "found (Wine)"
+else
+    report qaac "not in /tools (optional: /tools/wine/qaac/qaac64.exe)"
+fi
+# Set up Wine's files now, in the background, so the first qaac or DEE run isn't the slow one.
+if [ -x "$bin/qaac" ] || { [ -x "$bin/dee" ] && grep -q wine-run "$bin/dee"; } || [ -d "$bin/dee-split" ]; then
+    /opt/wine/bin/wine-run --init >/dev/null 2>&1 &
+fi
 exec "$@"

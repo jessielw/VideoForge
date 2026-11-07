@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+import dataclasses
 from dataclasses import asdict, dataclass
 import errno
 from enum import StrEnum
@@ -21,7 +22,7 @@ import shutil
 import subprocess
 
 from videoforge.core import dee
-from videoforge.core.config import Tools
+from videoforge.core.config import Tools, wine_target
 from videoforge.core.execute.audio import ENCODES
 from videoforge.core.execute.mux import MUXERS
 from videoforge.core.models import AudioAction, Issue, Plan, Severity, SubFormat
@@ -313,6 +314,14 @@ def _friendly_error(e: BaseException, found: str) -> str:
 
 
 def check(info: ToolInfo, path: str, *, runner: Runner = _run, timeout: float = 8.0) -> ToolCheck:
+    """One tool's check, showing the Windows .exe it was given rather than the Wine launcher standing in for it."""
+    result = _check(info, path, runner=runner, timeout=timeout)
+    return dataclasses.replace(
+        result, path=wine_target(result.path) or result.path, found=wine_target(result.found) or result.found
+    )
+
+
+def _check(info: ToolInfo, path: str, *, runner: Runner, timeout: float) -> ToolCheck:
     if info.folder:
         return _plugins(path)
     found = locate(path)

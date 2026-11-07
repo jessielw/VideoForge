@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import os
 from pathlib import Path
+import re
 import shutil
 import sys
 import sysconfig
@@ -95,11 +96,34 @@ def _wine_launcher(exe: Path) -> str:
     return str(launcher)
 
 
+def wine_target(path: str) -> str:
+    """The .exe a launcher made by _wine_launcher runs, so Settings can show the path that was typed; "" for
+    any other file."""
+    p = Path(path)
+    if not p.parent.name.startswith("videoforge-wine-"):
+        return ""
+    try:
+        match = re.search(r'^exec \S+ "(.+)" "\$@"$', p.read_text(), re.MULTILINE)
+    except OSError:
+        return ""
+    return match.group(1) if match else ""
+
+
+# Where the Docker image's /tools folder keeps a tool, for one that isn't on PATH (added after the container
+# started, so it has no launcher yet).
+_TOOLS_FOLDER = {
+    "dee": ("/tools/dee/dee", "/tools/wine/dee/dee.exe"),
+    "qaac": ("/tools/wine/qaac/qaac64.exe",),
+}
+
+
 def _resolve_tool(value: str, base: Path) -> str:
     candidate = base / value
     if candidate.exists():
         return _wine_launcher(candidate) if candidate.is_file() else str(candidate)
     found = shutil.which(_BUNDLED_FALLBACKS.get(value.replace("\\", "/"), value))
+    if not found and sys.platform != "win32":
+        found = next((_wine_launcher(Path(p)) for p in _TOOLS_FOLDER.get(value, ()) if Path(p).is_file()), None)
     return found or value
 
 
