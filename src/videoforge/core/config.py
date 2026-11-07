@@ -87,7 +87,7 @@ def _wine_launcher(exe: Path) -> str:
         return str(exe)
     folder = Path(tempfile.gettempdir()) / f"videoforge-wine-{os.getuid()}"
     folder.mkdir(parents=True, exist_ok=True)
-    digest = hashlib.sha1(str(exe).encode()).hexdigest()[:8]
+    digest = hashlib.sha1(str(exe).encode(), usedforsecurity=False).hexdigest()[:8]
     launcher = folder / f"{exe.stem}-{digest}"
     script = f'#!/bin/sh\nexec {WINE_RUN} "{exe}" "$@"\n'
     if not launcher.is_file() or launcher.read_text() != script:
