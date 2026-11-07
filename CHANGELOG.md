@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Tools that can't start say why in plain words (a Windows program without Wine, files that can't be read or run, with the fix).
 - Settings shows the `.exe` path you gave for a Windows tool, not the Wine launcher VideoForge runs in its place.
 - Docker docs: no host `chmod` step, `PUID` / `PGID` in the Compose example.
+- Update fastapi to latest version.
 
 ### Fixed
 
