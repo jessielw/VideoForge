@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- DeeZy 1.5.0 in the Docker image and the Windows portable build. With split DEE encoders, dialnorm, Blu-ray DDP and Blu-ray Atmos now work, and 7.1 DDP is made with the Blu-ray encoder. New DDP options for split DEE: loudness target, peak limit and user data (left out with a warning on a single `dee`; a loudness target can't be combined with a dialnorm or Blu-ray DDP).
 - Audio: MP3 encode (ffmpeg's `libmp3lame`) for mono and stereo; MP3 tracks are recognised, and `.mp3` files can be added as external audio.
 - Audio: Vorbis encode (ffmpeg's `libvorbis`, `.ogg`) up to 7.1; Vorbis tracks are recognised. MP4 output blocks Vorbis, so use MKV.
 - Docker: the container's log says what it found in `/tools` (`videoforge: qaac: found (Wine)`, `dee: not in /tools`).

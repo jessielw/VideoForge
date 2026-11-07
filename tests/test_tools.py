@@ -234,20 +234,24 @@ def test_dee_split_encoder_file_means_its_folder(tmp_path):
     assert split_folder(str(exe)) == str(tmp_path)
 
 
-def test_split_dee_blocks_bluray_and_warns_on_dialnorm(tmp_path):
+def test_dee_issues_gate_split_only_options(tmp_path):
     from types import SimpleNamespace as NS
 
-    from videoforge.core.tools import _split_dee_issues
+    from videoforge.core.tools import _dee_issues
 
     (tmp_path / "dee_ddp_encoder.exe").write_bytes(b"")
-    bd = NS(action=AudioAction.DDP, options={"ddp_mode": "bluray", "dialnorm": "-27"}, out_layout=NS(channels=8))
-    plan = NS(audio=[bd])
-    issues = _split_dee_issues(plan, NS(dee=str(tmp_path)))
-    assert [i.severity for i in issues] == [Severity.BLOCK, Severity.WARN]
     single = tmp_path / "single"
     single.mkdir()
     (single / "dee.exe").write_bytes(b"")
-    assert _split_dee_issues(plan, NS(dee=str(single / "dee.exe"))) == []
+    loud = NS(action=AudioAction.DDP, options={"loudness_target": "-24"}, out_layout=NS(channels=6))
+    assert _dee_issues(NS(audio=[loud]), NS(dee=str(tmp_path))) == []
+    assert [i.severity for i in _dee_issues(NS(audio=[loud]), NS(dee=str(single / "dee.exe")))] == [Severity.WARN]
+    bad = NS(
+        action=AudioAction.DDP,
+        options={"loudness_target": "-24", "dialnorm": "-27", "ddp_mode": "bluray"},
+        out_layout=NS(channels=8),
+    )
+    assert [i.severity for i in _dee_issues(NS(audio=[bad]), NS(dee=str(tmp_path)))] == [Severity.BLOCK] * 2
 
 
 def test_friendly_errors_for_tools_that_cannot_start(monkeypatch):

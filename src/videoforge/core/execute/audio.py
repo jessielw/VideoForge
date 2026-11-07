@@ -91,6 +91,25 @@ _DEEZY = (
     EncodeOption("drc_rf", "DRC RF mode", "", choices=_DRC, help="Dynamic range compression"),
     EncodeOption("dialnorm", "Dialogue level (dialnorm)", "0", int_range=(-31, 0), help="0 lets DEE measure it"),
 )
+# DeeZy 1.5 options only the split DEE encoders have (the single dee refuses them); tools._split_dee_issues says so
+SPLIT_ONLY_OPTIONS = {"loudness_target": "--loudness-target", "peak_limit": "--peak-limit", "user_data": "--user-data"}
+_DDP_SPLIT = (
+    EncodeOption(
+        "loudness_target",
+        "Loudness target (LKFS)",
+        "",
+        int_range=(-31, -8),
+        help="Split DEE only: measures and corrects loudness; not with a dialnorm or Blu-ray DDP",
+    ),
+    EncodeOption(
+        "peak_limit",
+        "Peak limit (dBTP)",
+        "",
+        num_range=(-12, -0.1),
+        help="Split DEE only: with a loudness target",
+    ),
+    EncodeOption("user_data", "User data", "", int_range=(-1, 65535), help="Split DEE only; -1 leaves it out"),
+)
 _DIALNORM = EncodeOption(
     "dialnorm",
     "Dialogue level (dialnorm)",
@@ -245,6 +264,7 @@ ENCODES: dict[AudioAction, AudioEncode] = {
                     help="Blu-ray requires 7.1 output; auto bitrate is 1280 kb/s",
                 ),
                 *_DEEZY,
+                *_DDP_SPLIT,
                 EncodeOption(
                     "stereo_downmix",
                     "Stereo downmix",
@@ -631,7 +651,9 @@ def _deezy(
     if planned.action is AudioAction.ATMOS:
         mode = ("encode", "atmos", f"--atmos-mode={_opt(planned, 'atmos_mode', settings)}")
     else:
-        encoder = "ddp-bluray" if _opt(planned, "ddp_mode") == "bluray" else "ddp"
+        # the split tools can't make online DD+ 7.1 (they'd output 5.1), so 7.1 goes to the Blu-ray encoder there
+        split_71 = bool(dee.split_folder(tools.dee)) and planned.out_layout.channels > 6
+        encoder = "ddp-bluray" if _opt(planned, "ddp_mode") == "bluray" or split_71 else "ddp"
         mode = ("encode", encoder, f"--channels={planned.out_layout.channels}")
         if planned.upmix_50:
             mode += ("--upmix-50-to-51",)
@@ -644,10 +666,15 @@ def _deezy(
     ):
         if value := _opt(planned, key):
             chosen += (f"{flag}={value}",)
-    # the split encoders have no dialnorm option and DeeZy refuses it; tool_issues warns that it is ignored
     split = bool(dee.split_folder(tools.dee))
-    if not split and (dialnorm := _opt(planned, "dialnorm", settings)) not in ("", "0"):
+    if (dialnorm := _opt(planned, "dialnorm", settings)) not in ("", "0"):
         chosen += (f"--custom-dialnorm={dialnorm}",)
+    if split and planned.action is AudioAction.DDP:
+        for key, flag in SPLIT_ONLY_OPTIONS.items():  # the single dee refuses these; tool_issues warns there
+            if key != "user_data" and mode[1] == "ddp-bluray":
+                continue  # loudness correction isn't allowed on ddp-bluray
+            if value := _opt(planned, key, settings):
+                chosen += (f"{flag}={value}",)
     if _opt(planned, "bed_conform") == "on":
         chosen += ("--bed-conform",)
     return (tools.deezy, *mode, *common, *chosen, *settings.deezy_extra_args, *_extra_args(planned), str(source))

@@ -11,8 +11,8 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 import dataclasses
 from dataclasses import asdict, dataclass
-import errno
 from enum import StrEnum
+import errno
 import functools
 import importlib.util
 import os
@@ -23,7 +23,7 @@ import subprocess
 
 from videoforge.core import dee
 from videoforge.core.config import Tools, wine_target
-from videoforge.core.execute.audio import ENCODES
+from videoforge.core.execute.audio import ENCODES, SPLIT_ONLY_OPTIONS
 from videoforge.core.execute.mux import MUXERS
 from videoforge.core.models import AudioAction, Issue, Plan, Severity, SubFormat
 
@@ -172,43 +172,37 @@ def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]
                     f"{ENCODES[action].label} needs {', '.join(missing[action])}: set it in Settings",
                 )
             )
-    issues += _split_dee_issues(plan, tools)
+    issues += _dee_issues(plan, tools)
     return issues
 
 
-def _split_dee_issues(plan: Plan, tools: Tools) -> list[Issue]:
-    """What the split DEE encoders (dee_ddp_encoder, ...) can't do, which DeeZy refuses: no Blu-ray DDP / Atmos or
-    DDP 7.1 (BLOCK), and no dialnorm (WARN: it is left out, and DEE measures it)."""
-    if not dee.split_folder(tools.dee):
-        return []
+def _dee_issues(plan: Plan, tools: Tools) -> list[Issue]:
+    """DeeZy 1.5 options that depend on the DEE layout: loudness target, peak limit and user data need the split
+    encoders (WARN on the single dee: they are left out); a loudness target can't be combined with a dialnorm or
+    Blu-ray DDP, which DeeZy refuses (BLOCK)."""
+    split = bool(dee.split_folder(tools.dee))
     issues = []
     for a in plan.audio:
-        if a.action not in (AudioAction.DDP, AudioAction.ATMOS):
+        if a.action is not AudioAction.DDP:
             continue
-        bluray = (
-            a.action is AudioAction.DDP and (a.options.get("ddp_mode") == "bluray" or a.out_layout.channels > 6)
-        ) or (a.action is AudioAction.ATMOS and a.options.get("atmos_mode") == "bluray")
-        if bluray:
+        used = [k for k in SPLIT_ONLY_OPTIONS if a.options.get(k)]
+        if used and not split:
             issues.append(
                 Issue(
-                    Severity.BLOCK,
+                    Severity.WARN,
                     "tools.dee_split",
-                    f"{ENCODES[a.action].label}: Blu-ray and 7.1 DDP need the single dee program; the split DEE "
-                    "encoders can't make them",
+                    f"{ENCODES[a.action].label}: {', '.join(used)} need the split DEE encoders and are left out",
                 )
             )
-    if any(
-        a.options.get("dialnorm", "0") not in ("", "0")
-        for a in plan.audio
-        if a.action in (AudioAction.DDP, AudioAction.ATMOS)
-    ):
-        issues.append(
-            Issue(
-                Severity.WARN,
-                "tools.dee_split",
-                "The split DEE encoders have no dialnorm option: it is left out and DEE measures the level",
-            )
-        )
+        if split and a.options.get("loudness_target"):
+            if a.options.get("dialnorm", "0") not in ("", "0"):
+                issues.append(
+                    Issue(Severity.BLOCK, "tools.dee_split", "A loudness target can't be combined with a dialnorm")
+                )
+            if a.options.get("ddp_mode") == "bluray" or a.out_layout.channels > 6:
+                issues.append(
+                    Issue(Severity.BLOCK, "tools.dee_split", "A loudness target isn't available for Blu-ray DDP / 7.1")
+                )
     return issues
 
 
