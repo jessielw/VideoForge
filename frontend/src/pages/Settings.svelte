@@ -251,8 +251,11 @@
     move: 'D:\\Library\\{label}',
     copy: 'D:\\Library',
     webhook: 'https://example.com/hook',
+    shutdown: 'Seconds to wait first (60)',
+    sleep: 'Seconds to wait first (60)',
   }
   const isFileKind = (k: ActionKind) => k === 'move' || k === 'copy'
+  const isPowerKind = (k: ActionKind) => k === 'shutdown' || k === 'sleep'
 
   function setActions(list: ActionSetting[]): Promise<boolean> {
     return change({ actions: list })
@@ -260,6 +263,7 @@
 
   // A move or copy runs after a job only: switching to one drops the queue's event.
   function withKind(a: ActionSetting, kind: ActionKind): ActionSetting {
+    if (isPowerKind(kind)) return { ...a, kind, target: a.target || '60', events: ['queue_finished'] }
     const events = isFileKind(kind) ? a.events.filter((e) => e !== 'queue_finished') : a.events
     return { ...a, kind, events: events.length ? events : ['job_done'] }
   }
@@ -854,11 +858,21 @@
                   {/if}
                 </div>
                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                  {@render eventChoices(
-                    a.events,
-                    (events) => set({ events }),
-                    isFileKind(a.kind) ? ['queue_finished'] : [],
-                  )}
+                  {#if isPowerKind(a.kind)}
+                    <label class="flex items-center gap-1.5 text-xs">
+                      <Checkbox checked disabled />
+                      Queue finished
+                    </label>
+                    <span class="text-xs text-muted-foreground">
+                      Only when the queue ran out of jobs (not when stopped). Put it last.
+                    </span>
+                  {:else}
+                    {@render eventChoices(
+                      a.events,
+                      (events) => set({ events }),
+                      isFileKind(a.kind) ? ['queue_finished'] : [],
+                    )}
+                  {/if}
                   {#if isFileKind(a.kind)}
                     <label class="flex items-center gap-1.5 text-xs">
                       <Checkbox checked={a.overwrite} onCheckedChange={(v) => set({ overwrite: v })} />

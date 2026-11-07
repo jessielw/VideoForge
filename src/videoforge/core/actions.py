@@ -12,6 +12,8 @@ An action is a kind, a target and the events it runs on (the notifications' even
   never sees half a file. An existing file is left alone (the action fails) unless `overwrite` is on.
   After a move, the actions that follow see the new path as `{output}`.
 - **webhook**: POST the event as JSON to a URL (docs/actions.md has the body).
+- **shutdown** / **sleep**: power the machine off or to sleep when the queue has finished (not when it was
+  stopped with jobs left). The target is the seconds to wait first (default 60). Allowed only where commands are.
 
 A job's actions run in the order they are listed, one at a time on a thread of their own, so a slow one
 never holds up the queue. Each one's outcome goes in the job's log and the app log, and as an
@@ -31,6 +33,7 @@ import shlex
 import shutil
 import string
 import subprocess
+import sys
 import time
 from typing import Any
 
@@ -52,6 +55,8 @@ class ActionKind(StrEnum):
     MOVE = "move"
     COPY = "copy"
     WEBHOOK = "webhook"
+    SHUTDOWN = "shutdown"
+    SLEEP = "sleep"
 
 
 ACTION_LABELS: dict[ActionKind, str] = {
@@ -59,9 +64,14 @@ ACTION_LABELS: dict[ActionKind, str] = {
     ActionKind.MOVE: "Move the output",
     ActionKind.COPY: "Copy the output",
     ActionKind.WEBHOOK: "Send a webhook",
+    ActionKind.SHUTDOWN: "Shut down the computer",
+    ActionKind.SLEEP: "Put the computer to sleep",
 }
 DEFAULT_EVENTS = frozenset({Event.JOB_DONE})
 _FILE_KINDS = frozenset({ActionKind.MOVE, ActionKind.COPY})
+_POWER_KINDS = frozenset({ActionKind.SHUTDOWN, ActionKind.SLEEP})
+POWER_DELAY = 60  # seconds a shutdown / sleep waits (time to cancel it)
+_MAX_POWER_DELAY = 3600
 _JOB_EVENTS = frozenset({Event.JOB_DONE, Event.JOB_FAILED, Event.JOB_CANCELLED})
 
 # {token}: what it stands for. Job tokens are empty when the job has no such thing (no output yet).
@@ -107,6 +117,8 @@ class Action:
         except ValueError:
             raise ValueError(f"Unknown action kind: {data.get('kind')!r}") from None
         target = str(data.get("target") or "").strip()
+        if kind in _POWER_KINDS and not target:
+            target = str(POWER_DELAY)
         if not target:
             raise ValueError(
                 {
@@ -123,7 +135,12 @@ class Action:
             raise ValueError(f"Unknown action event: {ex}") from None
         if kind in _FILE_KINDS and Event.QUEUE_FINISHED in chosen:
             raise ValueError(f"{ACTION_LABELS[kind]} runs after a job, not when the queue finishes")
-        if kind is ActionKind.WEBHOOK:
+        if kind in _POWER_KINDS:
+            if chosen != {Event.QUEUE_FINISHED}:
+                raise ValueError(f"{ACTION_LABELS[kind]} runs only when the queue finishes")
+            if not target.isdigit() or int(target) > _MAX_POWER_DELAY:
+                raise ValueError(f"The wait is a number of seconds, 0 to {_MAX_POWER_DELAY}")
+        elif kind is ActionKind.WEBHOOK:
             if not target.lower().startswith(("http://", "https://")):
                 raise ValueError("A webhook URL starts with http:// or https://")
         else:
@@ -132,6 +149,10 @@ class Action:
                 raise ValueError("A command action needs a command")
         name = str(data.get("name") or "").strip() or ACTION_LABELS[kind]
         return cls(name, kind, target, bool(data.get("enabled", True)), chosen, bool(data.get("overwrite", False)))
+
+    @property
+    def delay(self) -> int:
+        return int(self.target) if self.target.isdigit() else POWER_DELAY
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -176,6 +197,21 @@ def _check_tokens(text: str, events: frozenset[Event]) -> None:
             raise ValueError("An empty {} isn't a token (write {{ and }} for a literal brace)")
         if f not in known:
             raise ValueError(f"Unknown token {{{f}}}" + hint)
+
+
+def power_command(kind: ActionKind, delay: int, platform: str | None = None) -> list[str]:
+    """The system's own command for a shutdown / sleep (the shutdown ones carry the wait; sleep waits first)."""
+    if platform is None:
+        platform = "windows" if os.name == "nt" else sys.platform
+    if kind is ActionKind.SHUTDOWN:
+        if platform == "windows":
+            return ["shutdown", "/s", "/t", str(delay)]
+        return ["shutdown", "-h", f"+{-(-delay // 60)}" if delay else "now"]
+    if platform == "windows":
+        return ["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"]
+    if platform == "darwin":
+        return ["pmset", "sleepnow"]
+    return ["systemctl", "suspend"]
 
 
 def split_command(command: str) -> list[str]:
@@ -358,6 +394,7 @@ class ActionRunner:
     run: Callable[[list[str]], Outcome] = run_command
     post: Callable[[str, dict[str, Any]], str | None] = post_json
     retry_wait: float = _RETRY_WAIT
+    sleep: Callable[[float], None] = time.sleep
 
     def __post_init__(self) -> None:
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="actions")
@@ -397,6 +434,14 @@ class ActionRunner:
     ) -> Outcome:
         if action.kind is ActionKind.WEBHOOK:
             return self._post(action.target, webhook_body(event, tokens))
+        if action.kind in _POWER_KINDS:
+            if not self.allow_commands:
+                return Outcome("Commands are off: set `commands = true` under [actions] in videoforge.toml")
+            if isinstance(event, QueueFinished) and event.left:
+                return Outcome(detail="skipped: the queue stopped with jobs still queued")
+            if action.kind is ActionKind.SLEEP and action.delay:
+                self.sleep(action.delay)
+            return self.run(power_command(action.kind, action.delay))
         if action.kind is ActionKind.COMMAND:
             if not self.allow_commands:
                 return Outcome("Commands are off: set `commands = true` under [actions] in videoforge.toml")
