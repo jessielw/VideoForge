@@ -76,7 +76,8 @@ def test_a_folder_or_a_file_that_cant_run_says_why(tmp_path):
         raise PermissionError(13, "Permission denied")
 
     c = check(INFO["dee"], str(exe), runner=denied)
-    assert c.status is ToolStatus.BROKEN and "Permission denied" in c.detail
+    assert c.status is ToolStatus.BROKEN
+    assert ("Permission denied" in c.detail) is (sys.platform == "win32")  # elsewhere it's put in plain words
     assert ("chmod" in c.detail) is (sys.platform != "win32")
 
 
