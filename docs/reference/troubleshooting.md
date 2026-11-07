@@ -36,7 +36,7 @@ The server only answers the addresses it is told about. IP addresses are always 
 
 ## DEE or qaac is unavailable in Docker
 
-Check the [required folder layout](../getting-started/docker.md#add-dee-or-qaac) and restart the container after adding the tools. DEE needs its license beside it. Linux DEE needs executable permission. Windows qaac needs its `QTfiles64` folder and is run through Wine.
+Check the [required folder layout](../getting-started/docker.md#add-dee-or-qaac) and restart the container after adding the tools. DEE needs its license beside it. Linux DEE needs executable permission (`chmod -R a+rX /tools` on the host; the container warns in its log if files are unreadable). A path to a Windows `.exe` is run through Wine automatically. Windows qaac needs its `QTfiles64` folder and is run through Wine.
 
 ## A job is blocked or skipped
 

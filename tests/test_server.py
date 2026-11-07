@@ -709,7 +709,7 @@ def test_actions_and_plugins(tmp_path):
     with make_client(tmp_path, run=WritingRun()) as client:
         state = client.get("/api/config").json()
         assert state["actions"] == [] and state["allow_commands"] is False
-        assert {k["id"] for k in state["action_kinds"]} == {"command", "move", "copy", "webhook"}
+        assert {k["id"] for k in state["action_kinds"]} == {"command", "move", "copy", "webhook", "shutdown", "sleep"}
         assert [p["id"] for p in state["plugins"]["loaded"]] == ["spy"]
         assert state["plugins"]["folder"] == str(tmp_path / "data" / "plugins")
 

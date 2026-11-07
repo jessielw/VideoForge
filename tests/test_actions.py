@@ -14,6 +14,7 @@ from videoforge.core.actions import (
     ActionRunner,
     Outcome,
     place_file,
+    power_command,
     split_command,
     webhook_body,
 )
@@ -161,3 +162,44 @@ def test_webhook_body(tmp_path):
     assert body["event"] == "job_failed" and body["job"]["error"] == "x264 died" and body["job"]["output"] is None
     assert body["job"]["label"] == "dub" and body["job"]["seconds"] == 65.0
     assert ActionKind("webhook") is ActionKind.WEBHOOK
+
+
+def test_power_actions_are_checked_when_saved():
+    a = action(kind="shutdown", target="", events=["queue_finished"])
+    assert a.target == "60" and a.delay == 60
+    for bad in (
+        dict(kind="sleep", target="30", events=["job_done"]),
+        dict(kind="sleep", target="30", events=["queue_finished", "job_done"]),
+        dict(kind="shutdown", target="soon", events=["queue_finished"]),
+        dict(kind="shutdown", target="99999", events=["queue_finished"]),
+    ):
+        with pytest.raises(ValueError):
+            action(**bad)
+
+
+def test_power_commands():
+    assert power_command(ActionKind.SHUTDOWN, 90, "windows") == ["shutdown", "/s", "/t", "90"]
+    assert power_command(ActionKind.SHUTDOWN, 90, "linux") == ["shutdown", "-h", "+2"]
+    assert power_command(ActionKind.SHUTDOWN, 0, "linux") == ["shutdown", "-h", "now"]
+    assert power_command(ActionKind.SLEEP, 5, "darwin") == ["pmset", "sleepnow"]
+    assert power_command(ActionKind.SLEEP, 5, "linux") == ["systemctl", "suspend"]
+
+
+def test_power_runs_only_when_the_queue_finished_and_commands_are_on():
+    ran, waited = [], []
+
+    def run(argv):
+        ran.append(argv)
+        return Outcome(detail="exit code 0")
+
+    acts = [action(kind="sleep", target="7", events=["queue_finished"])]
+    off = ActionRunner(acts, allow_commands=False, run=run, sleep=waited.append)
+    off.on_event(QueueFinished((JobStatus.DONE,), 5.0, 0))
+    off.wait()
+    on = ActionRunner(acts, allow_commands=True, run=run, sleep=waited.append)
+    on.on_event(QueueFinished((JobStatus.DONE,), 5.0, 2))  # stopped, jobs left
+    on.wait()
+    assert ran == [] and waited == []
+    on.on_event(QueueFinished((JobStatus.DONE,), 5.0, 0))
+    on.wait()
+    assert len(ran) == 1 and waited == [7]

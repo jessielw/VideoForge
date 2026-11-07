@@ -182,7 +182,7 @@ export interface Issue {
   message: string
 }
 
-export type AudioAction = 'copy' | 'ddp' | 'atmos' | 'aac' | 'flac' | 'opus' | 'opusenc' | 'aac_ffmpeg' | 'ac3' | 'eac3'
+export type AudioAction = 'copy' | 'ddp' | 'atmos' | 'aac' | 'flac' | 'opus' | 'opusenc' | 'aac_ffmpeg' | 'ac3' | 'eac3' | 'mp3' | 'vorbis'
 
 // One audio encode as the server describes it (core.execute.audio.ENCODES).
 export interface AudioEncodeInfo {
@@ -687,7 +687,7 @@ export interface AudioSlot {
   extra: TrackOverride[]
 }
 export type AudioCodec =
-  'aac' | 'ac3' | 'eac3' | 'truehd' | 'dts' | 'dts_hd_ma' | 'dts_hd_hra' | 'lpcm' | 'flac' | 'opus' | 'other'
+  'aac' | 'ac3' | 'eac3' | 'truehd' | 'dts' | 'dts_hd_ma' | 'dts_hd_hra' | 'lpcm' | 'flac' | 'opus' | 'mp3' | 'vorbis' | 'other'
 export interface AudioRule {
   languages: string[]
   original: boolean | null // in the job's original language
@@ -848,7 +848,7 @@ export interface ConfigState {
   plugins: PluginsState
 }
 
-export type ActionKind = 'command' | 'move' | 'copy' | 'webhook'
+export type ActionKind = 'command' | 'move' | 'copy' | 'webhook' | 'shutdown' | 'sleep'
 
 // What runs after a job ends or the queue finishes: target is the command line, the folder or the URL.
 export interface ActionSetting {

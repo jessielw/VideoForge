@@ -28,7 +28,7 @@ A rule set with its own rules can also offer the full editor. Its rules then pic
 | DDP / DDP Atmos | DeeZy and Dolby Encoding Engine; truehdd for the TrueHD Atmos workflow |
 | AAC through qaac | qaac and its required Apple components; ffmpeg for decoding |
 | Opus through opusenc | opus-tools; ffmpeg for decoding |
-| FLAC, Opus, AAC, AC-3, E-AC-3 through ffmpeg | ffmpeg |
+| FLAC, Opus, AAC, AC-3, E-AC-3, MP3, Vorbis through ffmpeg | ffmpeg |
 
 The editor exposes each encoder's supported layouts and bitrates. An Atmos encode requires a suitable TrueHD Atmos source. Manually chosen settings that cannot be satisfied block the plan.
 

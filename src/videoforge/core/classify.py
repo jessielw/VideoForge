@@ -86,6 +86,10 @@ def parse_audio_format(
         return AudioFormat(AudioCodec.FLAC, False, False)
     if head == "OPUS":
         return AudioFormat(AudioCodec.OPUS, False, False)
+    if head == "MPEG" and "AUDIO" in fmt.upper():
+        return AudioFormat(AudioCodec.MP3, False, False)
+    if head == "VORBIS":
+        return AudioFormat(AudioCodec.VORBIS, False, False)
     return AudioFormat(AudioCodec.OTHER, atmos, False)
 
 

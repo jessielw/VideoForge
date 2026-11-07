@@ -76,8 +76,9 @@ def test_a_folder_or_a_file_that_cant_run_says_why(tmp_path):
         raise PermissionError(13, "Permission denied")
 
     c = check(INFO["dee"], str(exe), runner=denied)
-    assert c.status is ToolStatus.BROKEN and "Permission denied" in c.detail
-    assert ("chmod +x" in c.detail) is (sys.platform != "win32")
+    assert c.status is ToolStatus.BROKEN
+    assert ("Permission denied" in c.detail) is (sys.platform == "win32")  # elsewhere it's put in plain words
+    assert ("chmod" in c.detail) is (sys.platform != "win32")
 
 
 def test_a_real_program_on_path():
@@ -148,6 +149,8 @@ def test_encodes_need_their_tools(tmp_path):
         AudioAction.AAC_FFMPEG: [],
         AudioAction.AC3: [],
         AudioAction.EAC3: [],
+        AudioAction.MP3: [],
+        AudioAction.VORBIS: [],
     }  # a fake ffmpeg can't be asked for its encoders
 
     plan = plan_for(source([audio(C.FLAC, "2.0", index=0), audio(C.TRUEHD, "5.1", index=1)]), source(name="E.mkv"))
@@ -232,17 +235,32 @@ def test_dee_split_encoder_file_means_its_folder(tmp_path):
     assert split_folder(str(exe)) == str(tmp_path)
 
 
-def test_split_dee_blocks_bluray_and_warns_on_dialnorm(tmp_path):
+def test_dee_issues_gate_split_only_options(tmp_path):
     from types import SimpleNamespace as NS
 
-    from videoforge.core.tools import _split_dee_issues
+    from videoforge.core.tools import _dee_issues
 
     (tmp_path / "dee_ddp_encoder.exe").write_bytes(b"")
-    bd = NS(action=AudioAction.DDP, options={"ddp_mode": "bluray", "dialnorm": "-27"}, out_layout=NS(channels=8))
-    plan = NS(audio=[bd])
-    issues = _split_dee_issues(plan, NS(dee=str(tmp_path)))
-    assert [i.severity for i in issues] == [Severity.BLOCK, Severity.WARN]
     single = tmp_path / "single"
     single.mkdir()
     (single / "dee.exe").write_bytes(b"")
-    assert _split_dee_issues(plan, NS(dee=str(single / "dee.exe"))) == []
+    loud = NS(action=AudioAction.DDP, options={"loudness_target": "-24"}, out_layout=NS(channels=6))
+    assert _dee_issues(NS(audio=[loud]), NS(dee=str(tmp_path))) == []
+    assert [i.severity for i in _dee_issues(NS(audio=[loud]), NS(dee=str(single / "dee.exe")))] == [Severity.WARN]
+    bad = NS(
+        action=AudioAction.DDP,
+        options={"loudness_target": "-24", "dialnorm": "-27", "ddp_mode": "bluray"},
+        out_layout=NS(channels=8),
+    )
+    assert [i.severity for i in _dee_issues(NS(audio=[bad]), NS(dee=str(tmp_path)))] == [Severity.BLOCK] * 2
+
+
+def test_friendly_errors_for_tools_that_cannot_start(monkeypatch):
+    import errno
+
+    from videoforge.core import tools
+
+    monkeypatch.setattr(tools.os, "name", "posix")
+    assert "Wine" in tools._friendly_error(OSError(errno.ENOEXEC, "x"), "/tools/wine/qaac/qaac64.exe")
+    assert "PUID" in tools._friendly_error(PermissionError(errno.EACCES, "x"), "/tools/dee/dee")
+    assert tools._friendly_error(OSError(errno.ENOENT, "x"), "/x") == ""

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
+import hashlib
 import importlib.util
 import os
 from pathlib import Path
+import re
 import shutil
 import sys
 import sysconfig
+import tempfile
 import tomllib
 
 from videoforge.core.execute.control import Priority
@@ -74,11 +77,53 @@ _SIBLINGS = {"mkvpropedit": "mkvmerge", "mkvextract": "mkvmerge", "ffprobe": "ff
 _BUNDLED_FALLBACKS = {"tools/ffmpeg/bin/ffmpeg.exe": "ffmpeg", "tools/GPAC/mp4box.exe": "MP4Box"}
 
 
+WINE_RUN = "/opt/wine/bin/wine-run"  # the Docker image's Wine launcher
+
+
+def _wine_launcher(exe: Path) -> str:
+    """A Windows .exe can't be executed on Linux: a small script that runs it through Wine stands in for it, so
+    a path to the .exe just works (the Docker image has wine-run; elsewhere the .exe is left as it is)."""
+    if sys.platform == "win32" or exe.suffix.lower() != ".exe" or not Path(WINE_RUN).is_file():
+        return str(exe)
+    folder = Path(tempfile.gettempdir()) / f"videoforge-wine-{os.getuid()}"
+    folder.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha1(str(exe).encode(), usedforsecurity=False).hexdigest()[:8]
+    launcher = folder / f"{exe.stem}-{digest}"
+    script = f'#!/bin/sh\nexec {WINE_RUN} "{exe}" "$@"\n'
+    if not launcher.is_file() or launcher.read_text() != script:
+        launcher.write_text(script)
+        launcher.chmod(0o755)
+    return str(launcher)
+
+
+def wine_target(path: str) -> str:
+    """The .exe a launcher made by _wine_launcher runs, so Settings can show the path that was typed; "" for
+    any other file."""
+    p = Path(path)
+    if not p.parent.name.startswith("videoforge-wine-"):
+        return ""
+    try:
+        match = re.search(r'^exec \S+ "(.+)" "\$@"$', p.read_text(), re.MULTILINE)
+    except OSError:
+        return ""
+    return match.group(1) if match else ""
+
+
+# Where the Docker image's /tools folder keeps a tool, for one that isn't on PATH (added after the container
+# started, so it has no launcher yet).
+_TOOLS_FOLDER = {
+    "dee": ("/tools/dee/dee", "/tools/wine/dee/dee.exe"),
+    "qaac": ("/tools/wine/qaac/qaac64.exe",),
+}
+
+
 def _resolve_tool(value: str, base: Path) -> str:
     candidate = base / value
     if candidate.exists():
-        return str(candidate)
+        return _wine_launcher(candidate) if candidate.is_file() else str(candidate)
     found = shutil.which(_BUNDLED_FALLBACKS.get(value.replace("\\", "/"), value))
+    if not found and sys.platform != "win32":
+        found = next((_wine_launcher(Path(p)) for p in _TOOLS_FOLDER.get(value, ()) if Path(p).is_file()), None)
     return found or value
 
 

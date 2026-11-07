@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-11-07
+
+### Added
+
+- DeeZy 1.5.0 in the Docker image and the Windows portable build. With split DEE encoders, dialnorm, Blu-ray DDP and Blu-ray Atmos now work, and 7.1 DDP is made with the Blu-ray encoder. New DDP options for split DEE: loudness target, peak limit and user data (left out with a warning on a single `dee`; a loudness target can't be combined with a dialnorm or Blu-ray DDP).
+- Audio: MP3 encode (ffmpeg's `libmp3lame`) for mono and stereo; MP3 tracks are recognised, and `.mp3` files can be added as external audio.
+- Audio: Vorbis encode (ffmpeg's `libvorbis`, `.ogg`) up to 7.1; Vorbis tracks are recognised. MP4 output blocks Vorbis, so use MKV.
+- Docker: the container's log says what it found in `/tools` (`videoforge: qaac: found (Wine)`, `dee: not in /tools`).
+- Docker: Wine's files are set up in the background at start when a Windows tool is in `/tools`, so the first qaac or DEE run isn't the slow one.
+- Docker: DEE and qaac in `/tools` are found with nothing set in Settings, including ones added after the container started.
+
+### Changed
+
+- Docker: `compose.yaml` sets `PUID` / `PGID` instead of `user:`. Started as root first, the container makes `/tools` readable and DEE's Linux programs executable itself, so the host no longer needs `chmod`. If you use `user: "1000:1000"`, switch to `PUID` / `PGID`.
+- Docker: if DEE's Linux programs still can't be made executable (a read-only mount), they are run from a copy of `/tools/dee` made at start.
+- Tools that can't start say why in plain words (a Windows program without Wine, files that can't be read or run, with the fix).
+- Settings shows the `.exe` path you gave for a Windows tool, not the Wine launcher VideoForge runs in its place.
+- Docker docs: no host `chmod` step, `PUID` / `PGID` in the Compose example.
+- Update fastapi to latest version.
+
+### Fixed
+
+- A path to a Windows `.exe` (`qaac64.exe`, `dee.exe`) now runs through Wine in the Docker image, instead of failing with `Exec format error`.
+
 ## [0.1.3] - 2026-11-06
 
 ### Added

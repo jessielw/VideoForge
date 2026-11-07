@@ -24,7 +24,9 @@ services:
   videoforge:
     image: ghcr.io/jessielw/videoforge:latest
     container_name: videoforge
-    user: "1000:1000"
+    environment:
+      - PUID=1000
+      - PGID=1000
     ports:
       - "127.0.0.1:8765:8765"
     volumes:
@@ -57,7 +59,9 @@ These files are not included in the image. Restart the container after adding th
 | qaac through Wine | `/tools/wine/qaac/qaac64.exe`, with the `QTfiles64` folder beside it |
 | Extra VapourSynth plugins | `/tools/vs-plugins/*.so` |
 
-Linux DEE files need executable permission. If a copy over SMB or Unraid's New Permissions removed it, run `chmod +x tools/dee/*` in the host folder containing your Compose file.
+Nothing needs setting in **Settings**: DEE and qaac are found in these folders. A path to a Windows `.exe` also works, and is run through Wine.
+
+You don't need to `chmod` anything on the host. With `PUID` / `PGID` set (the Compose example does), the container starts as root, makes `/tools` readable, makes DEE's Linux programs executable, then runs as that user. On a read-only `/tools` mount it runs DEE from a copy made at start. The container's log says what it found (`docker logs videoforge`). Without `PUID` / `PGID` (`user:` or `--user`) it can't change permissions: make the files readable and executable on the host (`chmod -R a+rX tools`).
 
 ## Network access
 
@@ -83,7 +87,7 @@ Command actions are disabled in the Docker configuration. Their opt-in setting i
 
 The image already sets `VIDEOFORGE_HOST=0.0.0.0` and `VIDEOFORGE_DATA_DIR=/data`. Each `serve` option has a matching variable; a command-line option wins over its variable, and `--allow-host` / `--allow-origin` add to the variable's list. See [Serve options](../reference/cli.md#serve).
 
-`PUID` / `PGID` are an alternative to `user:` (`docker run --user`). With them, the container hands `/data` to that user on start, so a queue made while it ran as root stays usable. Media mounts and `/tools` keep their ownership. An invalid `PUID`, `PGID`, `UMASK` or `TZ` stops the container with a message in its log.
+`PUID` / `PGID` are an alternative to `user:` (`docker run --user`). With them, the container hands `/data` to that user on start, so a queue made while it ran as root stays usable, and makes `/tools` readable. Media mounts keep their ownership. An invalid `PUID`, `PGID`, `UMASK` or `TZ` stops the container with a message in its log.
 
 ### Unraid
 

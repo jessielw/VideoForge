@@ -35,6 +35,8 @@ class AudioCodec(StrEnum):
     LPCM = "lpcm"
     FLAC = "flac"
     OPUS = "opus"
+    MP3 = "mp3"
+    VORBIS = "vorbis"
     OTHER = "other"
 
     @property
@@ -263,6 +265,8 @@ class AudioAction(StrEnum):
     AAC_FFMPEG = "aac_ffmpeg"
     AC3 = "ac3"
     EAC3 = "eac3"
+    MP3 = "mp3"
+    VORBIS = "vorbis"
 
 
 @dataclass(slots=True)

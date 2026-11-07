@@ -9,7 +9,7 @@
 
 ARG PYTHON_IMAGE=python:3.12-slim-trixie
 ARG PLUGINS_IMAGE=ghcr.io/jessielw/videoforge-plugins:latest
-ARG DEEZY_VERSION=1.4.2
+ARG DEEZY_VERSION=1.5.0
 # x265 from source: Patman's mod (the Windows build's, scripts/tools.toml), at its release tag; Debian's is built
 # without HDR10+ (--dhdr10-info)
 ARG X265_VERSION=4.3+22+73

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Runs a Windows program under Wine: wine-run EXE [ARGS...]. Paths pass as they are: Wine maps / to Z:, so the
 # current folder is on Z: and a "/media/..." path reads as the same path on drive Z:.
+# "wine-run --init" only makes the prefix (the entrypoint does it at start, so the first real run is quick).
 # Wine refuses a prefix someone else owns, so each user id gets its own: a copy of the image's template.
 set -euo pipefail
 exe="$1"
@@ -19,4 +20,5 @@ if [ ! -f "$WINEPREFIX/system.reg" ]; then
         fi
     ) 9>"$WINEPREFIX.lock"
 fi
+[ "$exe" = --init ] && exit 0
 exec /usr/lib/wine/wine64 "$exe" "$@"

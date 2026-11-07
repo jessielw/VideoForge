@@ -4,8 +4,9 @@ services:
     image: ghcr.io/jessielw/videoforge:latest
     # build: .
     container_name: videoforge
-    user: "1000:1000" # who owns the files it writes; any id works (or drop it and set PUID / PGID below)
-    # environment:
+    environment:
+      - PUID=1000 # who owns the files it writes (any id); starting as root first lets it make /tools readable for you
+      - PGID=1000
     #   - TZ=America/New_York
     #   - VIDEOFORGE_ALLOW_HOST=192.168.1.50  # the address you open it at, if not this machine
     #   - UMASK=002

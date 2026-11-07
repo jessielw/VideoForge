@@ -16,6 +16,8 @@ Settings → Actions: what VideoForge does after a job ends or the queue finishe
 | Move the output | a folder | Moves the job's output into it. The actions after it see the new path. |
 | Copy the output | a folder | Copies the output into it. |
 | Send a webhook | an `http(s)://` URL | POSTs the event as JSON (below); retried twice. |
+| Shut down the computer | seconds to wait (default 60) | Powers off when the queue finishes. |
+| Put the computer to sleep | seconds to wait (default 60) | Sleeps when the queue finishes. |
 
 A job's actions run in the order they're listed, one after another, on a thread of their own, so the queue never waits for them. One that fails doesn't stop the next. Each outcome goes to:
 
@@ -52,6 +54,12 @@ commands = true
 ```
 
 The web page has no login: anyone who can reach it could add a command. The shipped `videoforge.toml` turns commands on (VideoForge listens on this machine only); the Docker image's turns them off. Turn them on there in a `videoforge.local.toml` only if no one else can reach it.
+
+## Shut down and sleep
+
+Both run only when the queue finishes with nothing left (a queue stopped with jobs still queued does nothing), and only where commands are allowed (above). Put them last in the list: the sleep action waits out its delay on the actions thread, so actions after it would be held up.
+
+Shut down uses the system's own `shutdown` with the delay, so you can cancel it in time (`shutdown /a` on Windows, `shutdown -c` on Linux). Sleep waits the delay, then suspends (`pmset sleepnow` on macOS, `systemctl suspend` on Linux). On Windows, sleep goes to hibernate instead when hibernation is on (`powercfg /h off` turns it off). In Docker these act on the container, not the host.
 
 ## Move and copy
 

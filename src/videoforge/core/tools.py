@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+import dataclasses
 from dataclasses import asdict, dataclass
 from enum import StrEnum
+import errno
 import functools
 import importlib.util
 import os
@@ -20,8 +22,8 @@ import shutil
 import subprocess
 
 from videoforge.core import dee
-from videoforge.core.config import Tools
-from videoforge.core.execute.audio import ENCODES
+from videoforge.core.config import Tools, wine_target
+from videoforge.core.execute.audio import ENCODES, SPLIT_ONLY_OPTIONS
 from videoforge.core.execute.mux import MUXERS
 from videoforge.core.models import AudioAction, Issue, Plan, Severity, SubFormat
 
@@ -52,7 +54,7 @@ TOOLS: tuple[ToolInfo, ...] = (
     ToolInfo(
         "ffmpeg",
         "ffmpeg",
-        "Decodes audio for the other encoders; its own FLAC, Opus, AAC, AC-3, E-AC-3",
+        "Decodes audio for the other encoders; its own FLAC, Opus, AAC, AC-3, E-AC-3, MP3, Vorbis",
         (("-version",),),
     ),
     ToolInfo(
@@ -170,43 +172,37 @@ def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]
                     f"{ENCODES[action].label} needs {', '.join(missing[action])}: set it in Settings",
                 )
             )
-    issues += _split_dee_issues(plan, tools)
+    issues += _dee_issues(plan, tools)
     return issues
 
 
-def _split_dee_issues(plan: Plan, tools: Tools) -> list[Issue]:
-    """What the split DEE encoders (dee_ddp_encoder, ...) can't do, which DeeZy refuses: no Blu-ray DDP / Atmos or
-    DDP 7.1 (BLOCK), and no dialnorm (WARN: it is left out, and DEE measures it)."""
-    if not dee.split_folder(tools.dee):
-        return []
+def _dee_issues(plan: Plan, tools: Tools) -> list[Issue]:
+    """DeeZy 1.5 options that depend on the DEE layout: loudness target, peak limit and user data need the split
+    encoders (WARN on the single dee: they are left out); a loudness target can't be combined with a dialnorm or
+    Blu-ray DDP, which DeeZy refuses (BLOCK)."""
+    split = bool(dee.split_folder(tools.dee))
     issues = []
     for a in plan.audio:
-        if a.action not in (AudioAction.DDP, AudioAction.ATMOS):
+        if a.action is not AudioAction.DDP:
             continue
-        bluray = (
-            a.action is AudioAction.DDP and (a.options.get("ddp_mode") == "bluray" or a.out_layout.channels > 6)
-        ) or (a.action is AudioAction.ATMOS and a.options.get("atmos_mode") == "bluray")
-        if bluray:
+        used = [k for k in SPLIT_ONLY_OPTIONS if a.options.get(k)]
+        if used and not split:
             issues.append(
                 Issue(
-                    Severity.BLOCK,
+                    Severity.WARN,
                     "tools.dee_split",
-                    f"{ENCODES[a.action].label}: Blu-ray and 7.1 DDP need the single dee program; the split DEE "
-                    "encoders can't make them",
+                    f"{ENCODES[a.action].label}: {', '.join(used)} need the split DEE encoders and are left out",
                 )
             )
-    if any(
-        a.options.get("dialnorm", "0") not in ("", "0")
-        for a in plan.audio
-        if a.action in (AudioAction.DDP, AudioAction.ATMOS)
-    ):
-        issues.append(
-            Issue(
-                Severity.WARN,
-                "tools.dee_split",
-                "The split DEE encoders have no dialnorm option: it is left out and DEE measures the level",
-            )
-        )
+        if split and a.options.get("loudness_target"):
+            if a.options.get("dialnorm", "0") not in ("", "0"):
+                issues.append(
+                    Issue(Severity.BLOCK, "tools.dee_split", "A loudness target can't be combined with a dialnorm")
+                )
+            if a.options.get("ddp_mode") == "bluray" or a.out_layout.channels > 6:
+                issues.append(
+                    Issue(Severity.BLOCK, "tools.dee_split", "A loudness target isn't available for Blu-ray DDP / 7.1")
+                )
     return issues
 
 
@@ -295,7 +291,31 @@ def _plugins(path: str) -> ToolCheck:
     return ToolCheck(info.name, info.label, info.purpose, path, shown, status, detail=detail)
 
 
+def _friendly_error(e: BaseException, found: str) -> str:
+    """Plain words for the OS errors a tool that can't start gives on Linux; "" for anything else."""
+    if os.name == "nt" or not isinstance(e, OSError):
+        return ""
+    if e.errno == errno.ENOEXEC:
+        if found.lower().endswith(".exe"):
+            return "This is a Windows program and can't run here directly: it needs Wine (the Docker image has it)"
+        return "Not a program this system can run (wrong build for this CPU or system?)"
+    if e.errno == errno.EACCES:
+        return (
+            "This file or the programs next to it can't be read or run: make them readable and executable "
+            "(chmod -R a+rX), or in Docker set PUID and PGID so VideoForge fixes it at start"
+        )
+    return ""
+
+
 def check(info: ToolInfo, path: str, *, runner: Runner = _run, timeout: float = 8.0) -> ToolCheck:
+    """One tool's check, showing the Windows .exe it was given rather than the Wine launcher standing in for it."""
+    result = _check(info, path, runner=runner, timeout=timeout)
+    return dataclasses.replace(
+        result, path=wine_target(result.path) or result.path, found=wine_target(result.found) or result.found
+    )
+
+
+def _check(info: ToolInfo, path: str, *, runner: Runner, timeout: float) -> ToolCheck:
     if info.folder:
         return _plugins(path)
     found = locate(path)
@@ -309,8 +329,7 @@ def check(info: ToolInfo, path: str, *, runner: Runner = _run, timeout: float = 
             output = runner([dee.program(found), *args], timeout)
         except (OSError, subprocess.SubprocessError) as e:
             error = f"{type(e).__name__}: {e}"
-            if isinstance(e, PermissionError) and os.name != "nt":
-                error = f"Not executable (chmod +x it, and the programs next to it): {error}"
+            error = _friendly_error(e, found) or error
             continue
         if line := version_line(output):
             return ToolCheck(*base, found, ToolStatus.OK, version=line)
