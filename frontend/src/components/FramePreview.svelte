@@ -1,6 +1,6 @@
 <script lang="ts">
   // A job's frames from the server (VapourSynth, lossless PNG): zoom (fit .. 800%, Ctrl+wheel and
-  // double-click zoom at the pointer), drag to pan with a minimap, an edge-detect view for spotting
+  // double-click zoom at the pointer), drag to pan with a minimap, a boost view (dark levels stretched) for spotting
   // borders, the crop lines, and frame stepping (←/→ 1, Shift 10, PgUp/PgDn 1 s, Home/End).
   // The scrub bar is a native range (bits-ui's slider walks an array of every frame on each move): a
   // drag loads the frame where it rests a moment, and the one it's let go on.
@@ -16,10 +16,10 @@
   // can be scrolled into view clear of the scrollbars and told apart from the background.
   // A new frame replaces the old one only once it has decoded, so zoom, scroll and the picture
   // stay put while it loads (a spinner shows over it when a load takes a moment); a failed load
-  // keeps the last frame under an error banner. Zoom, edges and scroll are bindable so the caller
+  // keeps the last frame under an error banner. Zoom, boost and scroll are bindable so the caller
   // can bring a view back as it was left.
   // Save (S) downloads the shown frame's PNG as the server rendered it: full size, lossless, without the
-  // edges view, the crop lines or the matte (the crop view's has its margins on).
+  // boost view, the crop lines or the matte (the crop view's has its margins on).
   // `sar` is the frame's pixel shape (width / height): an anamorphic frame is shown widened (or narrowed)
   // to the shape it plays at, zoom counting the frame's rows; the crop lines and the pointer follow. The
   // AR toggle shows the stored pixels instead (one screen pixel per frame pixel both ways at 100%).
@@ -53,7 +53,7 @@
     crop = null,
     frame = $bindable(0),
     zoom = $bindable(0),
-    edges = $bindable(false),
+    boost = $bindable(false),
     scroll = $bindable({ left: 0, top: 0 }),
     notice = null,
     sar = 1,
@@ -72,7 +72,7 @@
     crop?: Crop | null
     frame?: number
     zoom?: number // percent; 0 = fit
-    edges?: boolean
+    boost?: boolean
     scroll?: { left: number; top: number }
     notice?: { text: string; tone: 'muted' | 'bad' } | null
     sar?: number // the frame's pixel aspect ratio (width / height of one pixel)
@@ -99,7 +99,7 @@
   let cropView = $state(false) // the shown frame has its crop margins on (the lines can be drawn on it)
   let nat = $state({ w: 0, h: 0 }) // the shown frame's size: the overlay is laid on what is shown
   let dpr = $state(window.devicePixelRatio || 1)
-  let edgeSrc = $state<string | null>(null)
+  let boostSrc = $state<string | null>(null)
   let viewport = $state<HTMLDivElement>()
   let panning = $state(false)
   let showMap = $state(false)
@@ -162,7 +162,7 @@
     pictType = f.pict
     cropView = f.cropView
     error = ''
-    if (edges) makeEdges()
+    if (boost) makeBoost()
   }
 
   async function load(n: number, st: PreviewStage, v: number) {
@@ -267,7 +267,7 @@
     e.preventDefault()
   }
 
-  // Back to the scroll position the view was left at (zoom and edges come back through their props).
+  // Back to the scroll position the view was left at (zoom and boost come back through their props).
   let restored = false
   $effect(() => {
     const v = viewport
@@ -574,8 +574,8 @@
     mapTimer = setTimeout(() => (showMap = false), 900)
   }
 
-  // --- edge detection (Sobel), to see where the picture really ends ---
-  function makeEdges() {
+  // --- boost: stretch the dark levels, to see dirty border rows against black ---
+  function makeBoost() {
     if (!src) return
     const img = new Image()
     img.onload = () => {
@@ -585,28 +585,18 @@
       const ctx = canvas.getContext('2d')!
       ctx.drawImage(img, 0, 0)
       const { data } = ctx.getImageData(0, 0, img.width, img.height)
-      const w = img.width
-      const h = img.height
-      const gray = new Float32Array(w * h)
-      for (let i = 0; i < w * h; i++) gray[i] = data[i * 4] * 0.299 + data[i * 4 + 1] * 0.587 + data[i * 4 + 2] * 0.114
-      const out = ctx.createImageData(w, h)
-      for (let y = 1; y < h - 1; y++) {
-        for (let x = 1; x < w - 1; x++) {
-          const i = y * w + x
-          const gx =
-            -gray[i - w - 1] + gray[i - w + 1] - 2 * gray[i - 1] + 2 * gray[i + 1] - gray[i + w - 1] + gray[i + w + 1]
-          const gy =
-            -gray[i - w - 1] - 2 * gray[i - w] - gray[i - w + 1] + gray[i + w - 1] + 2 * gray[i + w] + gray[i + w + 1]
-          const v = 255 - Math.min(255, Math.sqrt(gx * gx + gy * gy) * 2)
-          out.data[i * 4] = out.data[i * 4 + 1] = out.data[i * 4 + 2] = v
-          out.data[i * 4 + 3] = 255
-        }
+      // Each channel x6, clipped: values 0..42 spread over the whole range, so a row of 3 or 8 against
+      // black reads as a clear line. Colour is kept, so a tinted border row shows its tint.
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = Math.min(255, data[i] * 6)
+        data[i + 1] = Math.min(255, data[i + 1] * 6)
+        data[i + 2] = Math.min(255, data[i + 2] * 6)
       }
-      ctx.putImageData(out, 0, 0)
+      ctx.putImageData(new ImageData(data, img.width, img.height), 0, 0)
       canvas.toBlob((b) => {
         if (!b) return
-        if (edgeSrc) URL.revokeObjectURL(edgeSrc)
-        edgeSrc = URL.createObjectURL(b)
+        if (boostSrc) URL.revokeObjectURL(boostSrc)
+        boostSrc = URL.createObjectURL(b)
       })
     }
     img.src = src
@@ -622,12 +612,12 @@
     link.remove()
   }
 
-  function toggleEdges() {
-    edges = !edges
-    if (edges) makeEdges()
+  function toggleBoost() {
+    boost = !boost
+    if (boost) makeBoost()
   }
 
-  const shown = $derived(edges && edgeSrc ? edgeSrc : src)
+  const shown = $derived(boost && boostSrc ? boostSrc : src)
   const outW = $derived(crop ? W - crop.left - crop.right : W)
   const outH = $derived(crop ? H - crop.top - crop.bottom : H)
   // The crop stage's frame came back without its margins: a filter after the crop changes the frame.
@@ -648,13 +638,13 @@
         <Button variant="ghost" size="icon" onclick={() => zoomBy(1)} aria-label="Zoom in"><ZoomInIcon /></Button>
       </Tip>
     </div>
-    <Tip text="Show edges, to judge borders">
+    <Tip text="Stretch dark levels, to expose dirty borders">
       <Toggle
-        pressed={edges}
-        onPressedChange={toggleEdges}
+        pressed={boost}
+        onPressedChange={toggleBoost}
         class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
       >
-        Edges
+        Boost
       </Toggle>
     </Tip>
     <Tip text="Background around the frame: {matte} (click to change)">

@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The preview's **Edges** toggle is now **Boost**: it multiplies each channel by 6 (clipped), so a dirty border row a few levels off black stands out. It replaces the Sobel edge view, which lit up every edge in the picture and hid faint border rows.
 - New jobs: encodes, subtitles and chapters sit under **More inputs**, which opens by itself once used. The page's **Job files** row is gone; use **Add jobs from job files** on the Queue page.
 - The built-in rule set makes the first audio track the default when the source has none (a default cleared by hand stays cleared).
 - EdgeFixer Reference's comment now says which blur each pair of sides uses.

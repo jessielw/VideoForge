@@ -598,7 +598,7 @@
           (n) => (compare === 'sample' ? (vv.sampleFrame = n) : (vv.frame = n))
         }
         bind:zoom={vv.zoom}
-        bind:edges={vv.edges}
+        bind:boost={vv.boost}
         bind:scroll={vv.scroll}
         notice={compareNotice}
         sar={previewShape(job.spec.video, source, 'output')}
@@ -627,7 +627,7 @@
         crop={stage === 'crop' ? video.crop : null}
         bind:frame={vv.frame}
         bind:zoom={vv.zoom}
-        bind:edges={vv.edges}
+        bind:boost={vv.boost}
         bind:scroll={vv.scroll}
         {notice}
         sar={shape}
