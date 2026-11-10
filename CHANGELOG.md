@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- Settings: "Index and auto-crop new jobs" (on by default). A new job is put in the index lane and its crop detected as soon as it is probed; a template with a fixed crop keeps it and a crop set by hand wins.
+- Settings: "Index new jobs" and "Auto-crop new jobs" (both on by default). A new job is put in the index lane as soon as it is probed, and its crop is detected after the index; a template with a fixed crop keeps it and a crop set by hand wins.
 - Track editor: the Default flag shows what the rule set plans (a rule set that picks the default subtitle itself shows it), so it can be changed by hand.
 
 ### Changed

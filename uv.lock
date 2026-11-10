@@ -41,7 +41,7 @@ wheels = [
 
 [[package]]
 name = "apprise"
-version = "2.0.1"
+version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -53,9 +53,9 @@ dependencies = [
     { name = "tzdata", marker = "sys_platform == 'win32'" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1b/8d/61c02aeb9b7644d915106252b8fc42e5f3b3765343c9fe3bef5489e903a4/apprise-2.0.1.tar.gz", hash = "sha256:8cae8ae5877b9cfd1dddffc17ac1e50f780ab6bdf948f95215e2466ef7230565", size = 3353898, upload-time = "2026-10-03T19:44:56.142Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a4/92/461f16f50118a99953aed66d5c1c5dc462261bd6cca15862f2eae7b5fcf5/apprise-2.2.0.tar.gz", hash = "sha256:711382b7c366e575276863da72f5473e34db1735a9980f6df464b337a8003ebc", size = 3623620, upload-time = "2026-11-08T03:41:16.767Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/db/0e/b0ca7dde275f100ecc199dba362a8f1783c906393ab0d3f2c148d8500ddc/apprise-2.0.1-py3-none-any.whl", hash = "sha256:2a9b0f4fc906227f70998ea4462184dd605e796d3932e6e7ce0fe0f134048610", size = 2456127, upload-time = "2026-10-03T19:44:53.265Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/7e/e6cbdd70d475bf9da24b6ca7b738a6772c83a91e8c1fe63ae1b4efb1879f/apprise-2.2.0-py3-none-any.whl", hash = "sha256:deac7647c02463f5398f3f5dbba965031a1507adf1b4348ccf5e53e8f0528f51", size = 2680368, upload-time = "2026-11-08T03:41:14.589Z" },
 ]
 
 [[package]]
@@ -661,16 +661,16 @@ wheels = [
 
 [[package]]
 name = "niquests"
-version = "3.21.2"
+version = "3.21.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "charset-normalizer" },
     { name = "urllib3-future" },
     { name = "wassima", marker = "sys_platform != 'emscripten'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1c/2a/e368ec88a02c6bfc56c031ba6da9dd8099ad998fb818c28b687bee74c91a/niquests-3.21.2.tar.gz", hash = "sha256:586d6b9475c9018a42f19f1e4688077b8158101cbf40673c63d2c1a096cc7665", size = 1094494, upload-time = "2026-09-23T06:23:46.681Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/e1/e73e2cdb3374e7b442d708de6f87555f00faa4fdb3e347d5ae6df66d472a/niquests-3.21.3.tar.gz", hash = "sha256:6fd476cd2612da6690df6162bb4f314970695bc32ccb68033208d390bb1ac679", size = 1103048, upload-time = "2026-11-09T07:05:00.389Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/65/51/eb07449eb9e7ecae4350b5a40bfcb002d6d26d58cf2cfd2f928ae7c2f559/niquests-3.21.2-py3-none-any.whl", hash = "sha256:73e52614a712ee2f4d410bdd29789ca6a4ed031f8961410156e395d42b091208", size = 229060, upload-time = "2026-09-23T06:23:44.056Z" },
+    { url = "https://files.pythonhosted.org/packages/54/72/4a0ba16f82c2d66854480079f5d6eee25be14025e171a2c25566d0c82db2/niquests-3.21.3-py3-none-any.whl", hash = "sha256:fce4988339389965418ab4ef94f7f246dba648cbeffa90cca33f801b882d3d7a", size = 229403, upload-time = "2026-11-09T07:04:58.352Z" },
 ]
 
 [[package]]
@@ -1599,12 +1599,12 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "adjust", marker = "extra == 'filters'", specifier = ">=0.1.0" },
-    { name = "apprise", specifier = ">=1.9.0" },
+    { name = "apprise", specifier = ">=2.2.0" },
     { name = "autoqpf", specifier = ">=0.2.5" },
     { name = "awsmfunc", marker = "extra == 'filters'", specifier = ">=1.3.5" },
     { name = "dfttest2", marker = "extra == 'filters'", specifier = ">=11.0.0" },
     { name = "fastapi", specifier = ">=0.162.4" },
-    { name = "niquests", specifier = ">=3.21.2" },
+    { name = "niquests", specifier = ">=3.21.3" },
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "pillow", specifier = ">=13.0.0" },
     { name = "pymediainfo", specifier = ">=7.0.1" },

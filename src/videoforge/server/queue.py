@@ -158,6 +158,7 @@ class Entry:
     running: bool = False
     index_queued: bool = False
     indexing: bool = False
+    index_on_probe: bool = False  # a new job: the index lane takes it once it is probed (auto_index)
     crop_pending: bool = False  # the lane detects the crop after indexing (a template's auto crop)
     index_now: bool = False  # asked for by itself (Index now): doesn't wait for an encode on its disk
     index_held: bool = False  # waiting in the lane while an encode reads its disk
@@ -287,7 +288,8 @@ class JobQueue:
         self._index_wake = threading.Event()
         self.index_waits_for_disk = True  # the lane holds a job back while an encode reads its disk
         self.sample_quality = False  # a test encode measures its quality (SSIMULACRA2, XPSNR) after it
-        self.auto_prepare = True  # a new job is indexed and auto-cropped once probed (a template's fixed crop stays)
+        self.auto_index = True  # a new job goes in the index lane once probed
+        self.auto_crop = True  # ... and its crop is detected (after the index; a template's fixed crop stays)
 
     # --- state ---------------------------------------------------------------------
 
@@ -421,7 +423,7 @@ class JobQueue:
                 )
                 if template is not None:
                     template.apply(spec)
-                if self.auto_prepare and not video and spec.encodes_video and (template is None or template.crop_mode is not CropMode.FIXED):
+                if self.auto_crop and not video and spec.encodes_video and (template is None or template.crop_mode is not CropMode.FIXED):
                     spec.autocrop = True
                 if spec.subs_template is None and subs_default is not None and not rule_set.picks_tracks:
                     spec.subs_template = _copy(subs_default)
@@ -429,7 +431,7 @@ class JobQueue:
                     spec.video = _copy(video)
                 if encoder:
                     spec.encoder = _copy(encoder)
-                e = Entry(spec, JobState())
+                e = Entry(spec, JobState(), index_on_probe=self.auto_index and not video and spec.encodes_video)
                 with self._lock:
                     self._attach(e)
                     self._entries[e.id] = e
@@ -568,6 +570,9 @@ class JobQueue:
                 self._replan(e)
                 if self._claim_crop(e):
                     self.index([e.id])  # under the lock: the job never shows ready in between
+                elif e.index_on_probe:
+                    self.index([e.id])
+                e.index_on_probe = False
         self._changed(e)
         self._index_wake.set()
 

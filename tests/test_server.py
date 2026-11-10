@@ -2203,14 +2203,22 @@ def test_output_folders_remember():
     assert [f["path"] for f in again if not f["pinned"]][0].lower() == recent[-1].lower()
 
 
-def test_auto_prepare_indexes_and_crops_new_jobs_once_probed(tmp_path):
-    make_files(tmp_path, "S01E01")
+def test_auto_index_and_auto_crop_are_separate_options(tmp_path):
     indexer = FakeIndexer()
     with make_client(tmp_path, detect_crop=lambda spec: Crop(0, 20, 0, 22), runner=indexer) as client:
-        assert client.get("/api/config").json()["auto_prepare"] is False  # the tests' default; the app's is on
-        job = wait_for(client, add(client, tmp_path)[0], "ready", "warn", "blocked")
+        config = client.get("/api/config").json()
+        assert config["auto_index"] is False and config["auto_crop"] is False  # the tests' default; the app's is on
+
+        def added(name):
+            make_files(tmp_path, name)
+            ids = add(client, tmp_path)
+            return wait_for(client, ids[-1], "ready", "warn", "blocked")
+
+        job = added("S01E01")
         assert not job["indexed"] and job["spec"]["video"]["crop"]["top"] == 0
-        assert client.put("/api/config", json={"auto_prepare": True}).json()["auto_prepare"] is True
-        make_files(tmp_path, "S01E02")
-        second = wait_for(client, add(client, tmp_path)[-1], "ready", "warn", "blocked")
-        assert second["indexed"] and second["spec"]["video"]["crop"] == {"left": 0, "top": 20, "right": 0, "bottom": 22}
+        assert client.put("/api/config", json={"auto_index": True}).json()["auto_index"] is True
+        job = added("S01E02")
+        assert job["indexed"] and job["spec"]["video"]["crop"]["top"] == 0  # indexed, not cropped
+        assert client.put("/api/config", json={"auto_index": False, "auto_crop": True}).json()["auto_crop"] is True
+        job = added("S01E03")
+        assert job["indexed"] and job["spec"]["video"]["crop"] == {"left": 0, "top": 20, "right": 0, "bottom": 22}
