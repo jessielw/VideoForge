@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The built-in rule set makes the first audio track the default when the source has none (a default cleared by hand stays cleared).
 - EdgeFixer Reference's comment now says which blur each pair of sides uses.
 - Configuration exports are version 7 (they carry the new setting); older backups import as before.
+- Updated apprise, fastapi, and niquests.
 
 ## [0.1.4] - 2026-11-07
 
