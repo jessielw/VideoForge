@@ -68,6 +68,8 @@ def _state(request: Request) -> dict[str, Any]:
         "restart": [RESTART_FOR[n] for n in sorted(s.restart_for)],
         "index_waits_for_disk": saved.index_waits_for_disk,
         "sample_quality": saved.sample_quality,
+        "auto_index": saved.auto_index,
+        "auto_crop": saved.auto_crop,
         "parallel_audio": s.config.parallel_audio,
         "parallel_audio_default": s.base_config.parallel_audio,
         "delete_work_dir": s.config.delete_work_dir,
@@ -100,6 +102,7 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     """Change any of: tools ({name: path, or "" / null for the default}), roots (a list, or null
     for every drive), rule_set (an id, or null for videoforge.toml's), index_waits_for_disk (bool),
     sample_quality (bool: a test encode measures its SSIMULACRA2 and XPSNR),
+    auto_index (bool: new jobs are indexed once probed), auto_crop (bool: and their crop detected),
     parallel_audio (audio encodes at once beside the video, 0 to MAX_PARALLEL_AUDIO; null for videoforge.toml's),
     delete_work_dir (bool: delete a done job's work folder; null for videoforge.toml's),
     encoder_priority / tool_priority (a Priority; null for videoforge.toml's),
@@ -129,6 +132,8 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
             raise HTTPException(422, f"No rule set {rule_set!r} is installed")
     waits = bool(body["index_waits_for_disk"]) if "index_waits_for_disk" in body else saved.index_waits_for_disk
     quality = bool(body["sample_quality"]) if "sample_quality" in body else saved.sample_quality
+    index = bool(body["auto_index"]) if "auto_index" in body else saved.auto_index
+    crop = bool(body["auto_crop"]) if "auto_crop" in body else saved.auto_crop
     parallel = saved.parallel_audio
     if "parallel_audio" in body:
         parallel = body["parallel_audio"]
@@ -177,6 +182,8 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         delete_work,
         plugin_settings=saved.plugin_settings,
         sample_quality=quality,
+        auto_index=index,
+        auto_crop=crop,
         **priorities,
     )
     new.save(s.store)
@@ -191,6 +198,8 @@ def apply_settings(request: Request, new: SavedSettings) -> None:
     s.saved = new
     s.queue.set_index_waits_for_disk(new.index_waits_for_disk)
     s.queue.set_sample_quality(new.sample_quality)
+    s.queue.auto_index = new.auto_index
+    s.queue.auto_crop = new.auto_crop
     s.notifier.destinations = new.notifications
     s.actions.actions = new.actions
     s.actions.allow_commands = s.base_config.allow_commands

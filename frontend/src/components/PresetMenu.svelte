@@ -87,7 +87,7 @@
     <Popover.Trigger {disabled}>
       {#snippet child({ props })}
         <Button {...props} variant="outline" class="max-w-full">
-          <span class="truncate">{matched ? `Preset: ${matched}` : 'Presets'}</span><ChevronDownIcon />
+          <span class="truncate">{matched ? `${kind === 'video' ? 'Video preset' : 'Preset'}: ${matched}` : 'Presets'}</span><ChevronDownIcon />
         </Button>
       {/snippet}
     </Popover.Trigger>

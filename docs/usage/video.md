@@ -35,7 +35,7 @@ All bundled filters run on the CPU. Each filter still needs its compatible plugi
 - **Test encode:** the [test encode](encoders.md#test-encode)'s frames against the script's frames it encoded. The sample's blocks are back to back, so its frame numbers are its own; the overlay says which frame of the script each one is.
 - **Encode:** a done job's output file against the script's output.
 
-**Input** and **Encoded** (or **C**) flip between the two at the same frame, zoom and scroll; the other side's frame is loaded beside each one, so a flip shows at once. Edges, zoom and Save work on either side. The encode opens through FFMS2, which indexes it the first time (its index goes in the job's folder). A rerun of the job or of the test encode frees the files the compare holds open.
+**Input** and **Encoded** (or **C**) flip between the two at the same frame, zoom and scroll; the other side's frame is loaded beside each one, so a flip shows at once. Boost, zoom and Save work on either side. The encode opens through FFMS2, which indexes it the first time (its index goes in the job's folder). A rerun of the job or of the test encode frees the files the compare holds open.
 
 ## Interlaced sources
 

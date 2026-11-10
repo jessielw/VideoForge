@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-11-10
+
+### Added
+
+- Settings: "Index new jobs" and "Auto-crop new jobs" (both on by default). A new job is put in the index lane as soon as it is probed, and its crop is detected after the index; a template with a fixed crop keeps it and a crop set by hand wins.
+- New jobs: paste file paths anywhere in the app (Explorer: Ctrl+Shift+C, then Ctrl+V) and they land on New jobs, matched and ready.
+- New jobs: a bar at the bottom says what **Add** will do (job count, template, index and crop, output folder) and, once added, offers **Open queue** and **Add more** without scrolling.
+- New jobs: **Index** and **Auto-crop** for the batch, starting from the Settings values. `POST /api/jobs` takes `auto_index` and `auto_crop` for the same.
+- Track editor: the Default flag shows what the rule set plans (a rule set that picks the default subtitle itself shows it), so it can be changed by hand.
+- Video tab: drag the divider between the preview and the side panel to resize it (arrow keys too); Settings and Script share one width, which is remembered.
+- Video tab, Script: **Copy** puts the whole script (generated head and tail included) on the clipboard, and **Save** writes it as a `.vpy` file to open in vsedit.
+
+### Changed
+
+- The preview's **Edges** toggle is now **Boost**: it multiplies each channel by 6 (clipped), so a dirty border row a few levels off black stands out. It replaces the Sobel edge view, which lit up every edge in the picture and hid faint border rows.
+- New jobs: encodes, subtitles and chapters sit under **More inputs**, which opens by itself once used. The page's **Job files** row is gone; use **Add jobs from job files** on the Queue page.
+- The built-in rule set makes the first audio track the default when the source has none (a default cleared by hand stays cleared).
+- EdgeFixer Reference's comment now says which blur each pair of sides uses.
+- Configuration exports are version 7 (they carry the new setting); older backups import as before.
+- Updated apprise, fastapi, and niquests.
+- Video tab: **Expand** moved into the side panel's tab row, giving the preview the empty header row's height.
+- Video tab: the preset button reads "Video preset: ..." so it isn't mistaken for the job template; the Script panel's run summary stays in a stable grid, and the Settings panel keeps room for its scrollbar.
+
 ## [0.1.4] - 2026-11-07
 
 ### Added

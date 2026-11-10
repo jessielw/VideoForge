@@ -1,4 +1,4 @@
-// Where the video editor was left, per job: the side panel, the crop lines, frame, zoom, scroll, edge view, the
+// Where the video editor was left, per job: the side panel, the crop lines, frame, zoom, scroll, boost view, the
 // script editor's text (unsaved edits too) and the compare. Switching tabs, jobs or pages comes back to it;
 // it goes when the job leaves the queue (or the page reloads).
 import type { ScriptCheck, ScriptParts } from './types'
@@ -8,7 +8,7 @@ export type VideoView = {
   cropView: boolean // with Settings: the preview shows the crop lines (the output with its margins back on)
   frame: number
   zoom: number // percent; 0 = fit
-  edges: boolean
+  boost: boolean
   scroll: { left: number; top: number }
   parts: ScriptParts | null
   body: string
@@ -30,7 +30,7 @@ export function videoView(jobId: string): VideoView {
       cropView: true,
       frame: 0,
       zoom: 0,
-      edges: false,
+      boost: false,
       scroll: { left: 0, top: 0 },
       parts: null,
       body: '',

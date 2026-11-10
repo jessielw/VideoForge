@@ -230,6 +230,10 @@ class ManualRuleSet(RuleSet):
                     **flags,
                 )
             )
+        if audio and not any(a.default for a in audio):
+            # no default audio on the mux: the first track plays unless the user cleared every default by hand
+            if not any("default" in (overrides.tracks.get(track_key(a.source)) or TrackOverride()).flags for a in audio):
+                audio[0].default = True
         subs: list[PlannedSub] = []
         for t in sub_tracks:
             language, title, flags = _settings(t, overrides.tracks.get(track_key(t)))

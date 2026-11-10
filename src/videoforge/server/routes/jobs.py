@@ -73,6 +73,13 @@ def match(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     }
 
 
+def _optional_bool(body: dict[str, Any], key: str) -> bool | None:
+    value = body.get(key)
+    if value is not None and not isinstance(value, bool):
+        raise HTTPException(422, f"{key} must be true or false")
+    return value
+
+
 @router.post("/jobs")
 def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     q = queue_of(request)
@@ -97,6 +104,8 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         template=_template(body) or _default_template(request, body),
         replace_existing=body.get("replace_existing") or [],
         subs_default=subs_default(request.app.state.store),
+        auto_index=_optional_bool(body, "auto_index"),
+        auto_crop=_optional_bool(body, "auto_crop"),
     )
     left = result.unmatched
     added_sources = {e.spec.inputs.source for e in added}

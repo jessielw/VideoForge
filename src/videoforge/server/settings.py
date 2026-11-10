@@ -85,6 +85,8 @@ class SavedSettings:
     tool_priority: Priority | None = None  # every other tool's; None = videoforge.toml's
     plugin_settings: dict[str, dict] = field(default_factory=dict)
     sample_quality: bool = False  # a test encode measures its quality (SSIMULACRA2, XPSNR) after it
+    auto_index: bool = True  # a new job is put in the index lane as soon as it's probed
+    auto_crop: bool = True  # ... and its crop detected (which indexes it first)
 
     @classmethod
     def load(cls, store) -> SavedSettings:
@@ -103,6 +105,8 @@ class SavedSettings:
             _priority(store.get_setting("tool_priority")),
             store.get_setting("plugin_settings") or {},
             bool(store.get_setting("sample_quality", False)),
+            auto_index=bool(store.get_setting("auto_index", True)),
+            auto_crop=bool(store.get_setting("auto_crop", True)),
         )
 
     def save(self, store) -> None:

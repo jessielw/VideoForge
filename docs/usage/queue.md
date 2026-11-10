@@ -45,6 +45,8 @@ A job queued while the queue runs is picked up in its turn, in queue order. Queu
 
 Use **Index** on the Queue toolbar to index selected jobs, or all jobs if none are selected. Indexing creates the source index and working script without starting an encode. A job's preview opens only after its source is indexed; opening an editor never starts a full-source read by itself.
 
+By default a new job is indexed as soon as it is probed (**Settings → Index new jobs**), and its crop is detected after the index (**Auto-crop new jobs**, which indexes the job even with the first option off). Turn them off to index only when you ask. A template with a fixed crop keeps its crop, and a crop you set by hand always wins.
+
 Indexing can run while another job encodes. By default, a source on the same physical disk that the encode is reading waits, and sources on other disks go first. **Settings** controls this disk wait.
 
 BestSource's first index decodes the whole video and can take substantially longer than FFMS2. Check the job log before assuming an index is stuck.
@@ -63,7 +65,7 @@ A 2-pass encode can be stopped between its passes. **Pause after pass 1** in the
 
 ## Job files
 
-Every job's whole setup (source, tracks, video and encoder settings, mux and output options) is saved as `videoforge-job.json` in the job's folder in the source's `_tmp` folder when it runs. **Save job file** writes it for the selected jobs at any time. **Add jobs from job files** (Queue toolbar) takes the file, a job's folder, or a source's `_tmp` folder (every job in it) and adds each job exactly as it was saved: no template or profile default is applied. The New jobs page has a **Job files** row too: Browse to a `videoforge-job.json`, then **Open**. A job whose source already has a job with that label is left out. The work folder is where it was, so the run reuses the steps it already finished.
+Every job's whole setup (source, tracks, video and encoder settings, mux and output options) is saved as `videoforge-job.json` in the job's folder in the source's `_tmp` folder when it runs. **Save job file** writes it for the selected jobs at any time. **Add jobs from job files** (Queue toolbar) takes the file, a job's folder, or a source's `_tmp` folder (every job in it) and adds each job exactly as it was saved: no template or profile default is applied. A job whose source already has a job with that label is left out. The work folder is where it was, so the run reuses the steps it already finished.
 
 ## Reuse completed work
 

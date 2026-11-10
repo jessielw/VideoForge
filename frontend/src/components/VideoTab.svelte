@@ -37,6 +37,8 @@
   } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
+  import CopyIcon from '@lucide/svelte/icons/copy'
+  import DownloadIcon from '@lucide/svelte/icons/download'
   import CropIcon from '@lucide/svelte/icons/crop'
   import DatabaseZapIcon from '@lucide/svelte/icons/database-zap'
   import SquareIcon from '@lucide/svelte/icons/square'
@@ -269,6 +271,74 @@
     untrack(() => stale && refreshPreview())
   })
 
+  // The side panel's width: one for Settings and Script, dragged by the splitter and remembered.
+  const PANEL_MIN = 288
+  let panelW = $state(readPanelW())
+  let dragging = $state(false)
+  function readPanelW(): number {
+    try {
+      const n = Number(localStorage.getItem('videoforge.videoPanelW'))
+      return n >= PANEL_MIN ? n : 384
+    } catch {
+      return 384
+    }
+  }
+  function clampPanel(w: number, total: number): number {
+    return Math.round(Math.min(Math.max(w, PANEL_MIN), Math.max(PANEL_MIN, total * 0.7)))
+  }
+  function splitDown(e: PointerEvent) {
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    dragging = true
+  }
+  function splitMove(e: PointerEvent) {
+    if (!dragging) return
+    const box = (e.currentTarget as HTMLElement).parentElement!.getBoundingClientRect()
+    panelW = clampPanel(box.right - e.clientX, box.width)
+  }
+  function splitUp() {
+    if (!dragging) return
+    dragging = false
+    try {
+      localStorage.setItem('videoforge.videoPanelW', String(panelW))
+    } catch {
+      // storage blocked: the width lasts until reload
+    }
+  }
+  function splitKey(e: KeyboardEvent) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    panelW = clampPanel(
+      panelW + (e.key === 'ArrowLeft' ? 24 : -24),
+      (e.currentTarget as HTMLElement).parentElement!.getBoundingClientRect().width,
+    )
+    try {
+      localStorage.setItem('videoforge.videoPanelW', String(panelW))
+    } catch {
+      // storage blocked
+    }
+  }
+
+  // The whole script (generated head + body + tail) as one text, for vsedit or a bug report.
+  const fullScript = () => (vv.parts ? [...vv.parts.head, ...vv.body.split('\n'), ...vv.parts.tail].join('\n') : '')
+  function saveScript() {
+    const url = URL.createObjectURL(new Blob([fullScript() + '\n'], { type: 'text/x-python' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(job.output_name ?? 'script').replace(/\.[^.]+$/, '')}.vpy`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  async function copyScript() {
+    const text = fullScript()
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success('Script copied', { description: `${text.split('\n').length} lines` })
+    } catch {
+      toast.error('Could not copy the script')
+    }
+  }
+
   function readAuto(): boolean {
     try {
       return localStorage.getItem('videoforge.autoRefresh') !== '0'
@@ -453,25 +523,19 @@
 
 <!-- A phone stacks the frame over the side panel, and the page scrolls. -->
 <div
-  class="flex min-h-0 gap-4 max-sm:flex-col {layout.videoExpanded
+  class="flex min-h-0 gap-2 max-sm:flex-col {dragging ? 'select-none' : ''} {layout.videoExpanded
     ? 'fixed inset-0 z-40 bg-background p-4 max-sm:overflow-y-auto max-sm:p-2'
     : 'h-full max-sm:h-auto'}"
 >
   <div class="flex min-w-0 flex-1 flex-col gap-2 max-sm:h-[60vh] max-sm:flex-none">
-    <div class="flex h-9 items-center gap-2">
-      {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
-      {#if infoError && !scripting}<Tip class="block truncate text-xs text-destructive" text={infoError}
-          >{infoError}</Tip
-        >{/if}
-      <Tip
-        class="ml-auto"
-        text={layout.videoExpanded ? 'Back to the page (Esc)' : 'Fill the window with the video editor'}
-      >
-        <Button variant="ghost" onclick={() => (layout.videoExpanded = !layout.videoExpanded)}>
-          {#if layout.videoExpanded}<MinimizeIcon />Restore{:else}<MaximizeIcon />Expand{/if}
-        </Button>
-      </Tip>
-    </div>
+    {#if saving || (infoError && !scripting)}
+      <div class="flex items-center gap-2">
+        {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
+        {#if infoError && !scripting}<Tip class="block truncate text-xs text-destructive" text={infoError}
+            >{infoError}</Tip
+          >{/if}
+      </div>
+    {/if}
     {#if !ready}
       <div
         class="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border p-6 text-center"
@@ -534,7 +598,7 @@
           (n) => (compare === 'sample' ? (vv.sampleFrame = n) : (vv.frame = n))
         }
         bind:zoom={vv.zoom}
-        bind:edges={vv.edges}
+        bind:boost={vv.boost}
         bind:scroll={vv.scroll}
         notice={compareNotice}
         sar={previewShape(job.spec.video, source, 'output')}
@@ -563,7 +627,7 @@
         crop={stage === 'crop' ? video.crop : null}
         bind:frame={vv.frame}
         bind:zoom={vv.zoom}
-        bind:edges={vv.edges}
+        bind:boost={vv.boost}
         bind:scroll={vv.scroll}
         {notice}
         sar={shape}
@@ -621,15 +685,43 @@
     {/if}
   </div>
 
+  <!-- Drag to resize the side panel (arrow keys too). -->
   <div
-    class="flex shrink-0 flex-col gap-2 max-sm:min-h-[60vh] max-sm:w-full {vv.panel === 'script' ? 'w-[45%]' : 'w-72'}"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="Resize the side panel"
+    tabindex="0"
+    class="group flex w-2 shrink-0 cursor-col-resize touch-none justify-center max-sm:hidden"
+    onpointerdown={splitDown}
+    onpointermove={splitMove}
+    onpointerup={splitUp}
+    onpointercancel={splitUp}
+    onkeydown={splitKey}
   >
-    <Tabs.Root value={vv.panel} onValueChange={(v) => (v === 'script' ? openScript() : (vv.panel = 'settings'))}>
-      <Tabs.List aria-label="Side panel">
-        <Tabs.Trigger value="settings" class="px-3">Settings</Tabs.Trigger>
-        <Tabs.Trigger value="script" class="px-3">Script</Tabs.Trigger>
-      </Tabs.List>
-    </Tabs.Root>
+    <div
+      class="h-full w-px bg-border transition-colors group-hover:bg-primary group-focus-visible:bg-primary {dragging
+        ? 'bg-primary'
+        : ''}"
+    ></div>
+  </div>
+
+  <div class="flex shrink-0 flex-col gap-2 max-sm:min-h-[60vh] max-sm:w-full!" style="width:{panelW}px">
+    <div class="flex items-center justify-between gap-2">
+      <Tabs.Root value={vv.panel} onValueChange={(v) => (v === 'script' ? openScript() : (vv.panel = 'settings'))}>
+        <Tabs.List aria-label="Side panel">
+          <Tabs.Trigger value="settings" class="px-3">Settings</Tabs.Trigger>
+          <Tabs.Trigger value="script" class="px-3">Script</Tabs.Trigger>
+        </Tabs.List>
+      </Tabs.Root>
+      <Tip
+        class="shrink-0"
+        text={layout.videoExpanded ? 'Back to the page (Esc)' : 'Fill the window with the video editor'}
+      >
+        <Button variant="ghost" onclick={() => (layout.videoExpanded = !layout.videoExpanded)}>
+          {#if layout.videoExpanded}<MinimizeIcon />Restore{:else}<MaximizeIcon />Expand{/if}
+        </Button>
+      </Tip>
+    </div>
     {#if vv.panel === 'script'}
       <section class="flex min-h-0 flex-1 flex-col gap-2">
         <div class="flex items-center gap-2">
@@ -640,15 +732,21 @@
               <PlayIcon />{running ? 'Running…' : dirty && editable ? 'Save & run' : 'Run'}
             </Button>
           </Tip>
+          <Tip text="Copy the whole script (generated head and tail included) to paste into vsedit">
+            <Button variant="outline" onclick={copyScript} disabled={!vv.parts}><CopyIcon />Copy</Button>
+          </Tip>
+          <Tip text="Save the whole script as a .vpy file to open in vsedit">
+            <Button variant="outline" onclick={saveScript} disabled={!vv.parts}><DownloadIcon />Save</Button>
+          </Tip>
           {#if vv.parts?.custom}
             <Tip text="Drop the custom body: crop, resize and filters make the script again">
               <Button variant="outline" onclick={useGenerated} disabled={!editable || running}>Back to generated</Button
               >
             </Tip>
           {/if}
-          <span class="ml-auto text-xs text-muted-foreground">
+          <span class="ml-auto min-w-0 truncate text-xs text-muted-foreground">
             {#if !editable}read-only while {job.status}{:else if dirty}edited, not saved{:else if vv.parts?.custom}custom
-              body{:else}generated from crop, resize and filters (editing makes it custom){/if}
+              body{:else}generated (editing makes it custom){/if}
           </span>
         </div>
         {#if vv.parts}
@@ -673,19 +771,21 @@
               : ''}{vv.checked.error}</pre>
         {:else if vv.checked?.ok}
           {@const i = vv.checked.info}
-          <div class="flex shrink-0 flex-wrap gap-x-4 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs">
+          <div
+            class="grid shrink-0 grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-4 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs"
+          >
             <span class="text-success"><CheckIcon class="mr-1 inline size-3.5 align-[-2px]" />Runs</span>
             <span><span class="text-muted-foreground">Frames</span> {i.frames}</span>
             <span><span class="text-muted-foreground">Size</span> {i.width}×{i.height}</span>
             <span><span class="text-muted-foreground">Format</span> {i.format}</span>
             <span><span class="text-muted-foreground">FPS</span> {+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span>
             <span><span class="text-muted-foreground">Length</span> {clipLength(i.frames, i.fps_num, i.fps_den)}</span>
-            {#if i.length_warning}<span class="basis-full text-warning">{i.length_warning}</span>{/if}
+            {#if i.length_warning}<span class="col-span-full text-warning">{i.length_warning}</span>{/if}
           </div>
         {/if}
       </section>
     {:else}
-      <aside class="min-h-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto pr-1">
+      <aside class="min-h-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto pr-3 [scrollbar-gutter:stable]">
         <PresetMenu
           kind="video"
           ruleSet={job.rule_set}

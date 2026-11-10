@@ -314,7 +314,8 @@ def track_defaults(spec: JobSpec, probed: ProbedInputs, rule_set: RuleSet) -> di
             "action": a.action.value,
             "layout": str(a.out_layout),
             "bitrate_kbps": a.bitrate_kbps,
+            "default": a.default,
         }
     for s in plan.subs:
-        out[track_key(s.source)] = {"kept": True, "title": s.title, "language": s.language}
+        out[track_key(s.source)] = {"kept": True, "title": s.title, "language": s.language, "default": s.default}
     return out

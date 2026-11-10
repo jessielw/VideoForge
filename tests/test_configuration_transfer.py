@@ -117,7 +117,7 @@ def test_a_version_2_backup_has_no_default_subtitle_rules(tmp_path):
         with pytest.raises(ValueError, match="missing or unknown fields"):
             read_configuration(old)  # version 2 had no subs_default
         del old["subs_default"]
-        del old["settings"]["sample_quality"]
+        del old["settings"]["sample_quality"], old["settings"]["auto_index"], old["settings"]["auto_crop"]
         assert read_configuration(old)["subs_default"] is None
         assert client.post("/api/configuration/import", json=old).json()["presets"]["subs_default"] is None
 
@@ -126,12 +126,12 @@ def test_a_version_3_backup_has_no_quality_score_setting(tmp_path):
     with make_client(tmp_path) as client:
         seed(client, tmp_path)
         old = export(client)
-        assert old["version"] == 6 and old["settings"]["sample_quality"] is True
+        assert old["version"] == 7 and old["settings"]["sample_quality"] is True
         old["version"] = 3
         del old["profile"]  # version 6
         with pytest.raises(ValueError, match="missing or unknown fields"):
             read_configuration(old)  # version 3 had no sample_quality
-        del old["settings"]["sample_quality"]
+        del old["settings"]["sample_quality"], old["settings"]["auto_index"], old["settings"]["auto_crop"]
         assert read_configuration(old)["settings"]["sample_quality"] is False
         assert client.post("/api/configuration/import", json=old).json()["config"]["sample_quality"] is False
         assert client.app.state.queue.sample_quality is False
@@ -142,6 +142,7 @@ def test_a_version_4_backup_names_the_rule_set_profile(tmp_path):
         seed(client, tmp_path)
         old = export(client)
         old["version"] = 4
+        del old["settings"]["auto_index"], old["settings"]["auto_crop"]  # version 7
         del old["profile"]  # version 6
         for section in ("application", "settings"):
             old[section] = {("profile" if k == "rule_set" else k): v for k, v in old[section].items()}
@@ -157,6 +158,7 @@ def test_a_version_5_backup_has_no_profile_name(tmp_path):
         old = export(client)
         assert old["profile"] == FIRST_PROFILE
         old["version"] = 5
+        del old["settings"]["auto_index"], old["settings"]["auto_crop"]  # version 7
         with pytest.raises(ValueError, match="missing or unknown fields"):
             read_configuration(old)
         del old["profile"]
@@ -187,7 +189,7 @@ def test_restore_empty_libraries_preserves_jobs_and_queue_bookkeeping(tmp_path):
     "location,value",
     [
         (("version",), True),
-        (("version",), 7),
+        (("version",), 8),
         (("profile",), ""),
         (("profile",), "x" * 81),
         (("subs_default",), {"rules": [], "others": "everything"}),

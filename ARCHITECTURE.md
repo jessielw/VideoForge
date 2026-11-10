@@ -180,7 +180,7 @@ index ─► script info ─► qpf/chapters ─┬► video (vspipe | x264/x265
 
 ## Frontend
 
-Pages: New jobs | Queue (job list + job editor tabs: Video, Encoder, Audio, Subtitles, Output, Log) | Templates | Log | Settings. The frame preview (zoom, pan, crop overlay, auto-crop), the folder browser and the encoder option panels are ported from the user's video-forge React app. Live updates come over one WebSocket. The video editor's view (preview/output/script, frame, zoom, scroll, edges, unsaved script text) is kept per job in memory (`src/lib/videoView.svelte.ts`) until the job leaves the queue.
+Pages: New jobs | Queue (job list + job editor tabs: Video, Encoder, Audio, Subtitles, Output, Log) | Templates | Log | Settings. The frame preview (zoom, pan, crop overlay, auto-crop), the folder browser and the encoder option panels are ported from the user's video-forge React app. Live updates come over one WebSocket. The video editor's view (preview/output/script, frame, zoom, scroll, boost, unsaved script text) is kept per job in memory (`src/lib/videoView.svelte.ts`) until the job leaves the queue.
 
 File paths: a page in a browser never learns a dropped file's path, so paths come from the clipboard. Every path field uses `pathDrop` (`src/lib/dropPaths.svelte.ts`): pasted paths (one per line, quotes and file:// URIs undone; Explorer: Ctrl+Shift+C, then Ctrl+V), checked by `POST /api/fs/kinds` (file, folder, missing, outside the roots) against the field's rule. A drop shows a hint on how to paste instead. Fields: New jobs slots, the track editor's list (Audio/Subtitles), Output folder and Chapters on the Output tab.
 

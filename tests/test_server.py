@@ -1531,7 +1531,12 @@ def test_tracks_carry_the_rule_sets_own_choice(tmp_path):
         overrides = job["spec"]["overrides"] | {"tracks": {sub["key"]: {"exclude": True, "title": "Mine"}}}
         job = client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides}).json()
         assert sub["key"] not in [f"id:{s['source']['id']}" for s in job["plan"]["subs"]]
-        assert job["tracks"]["subs"][0]["auto"] == {"kept": True, "title": sub["title"], "language": sub["language"]}
+        assert job["tracks"]["subs"][0]["auto"] == {
+            "kept": True,
+            "title": sub["title"],
+            "language": sub["language"],
+            "default": False,
+        }
         audio = job["tracks"]["audio"][0]
         assert audio["auto"] | {"title": None} == {
             "kept": True,
@@ -1540,6 +1545,7 @@ def test_tracks_carry_the_rule_sets_own_choice(tmp_path):
             "action": "copy",
             "layout": audio["layout"],
             "bitrate_kbps": None,
+            "default": True,  # the first audio track when the source has none
         }
 
 
@@ -2195,3 +2201,44 @@ def test_output_folders_remember():
     assert remember(folders, "p") == folders  # a pinned folder stays where it is
     again = remember(folders, recent[-1].lower())
     assert [f["path"] for f in again if not f["pinned"]][0].lower() == recent[-1].lower()
+
+
+def test_a_batch_overrides_auto_index_and_auto_crop(tmp_path):
+    indexer = FakeIndexer()
+    with make_client(tmp_path, detect_crop=lambda spec: Crop(0, 20, 0, 22), runner=indexer) as client:
+        assert client.get("/api/config").json()["auto_index"] is False  # the setting stays off throughout
+
+        def added(name, **extra):
+            make_files(tmp_path, name)
+            ids = add(client, tmp_path, **extra)
+            return wait_for(client, ids[-1], "ready", "warn", "blocked")
+
+        job = added("S01E01", auto_index=True)
+        assert job["indexed"] and job["spec"]["video"]["crop"]["top"] == 0
+        job = added("S01E02", auto_index=True, auto_crop=True)
+        assert job["indexed"] and job["spec"]["video"]["crop"]["top"] == 20
+        job = added("S01E03")  # absent: the setting (off)
+        assert not job["indexed"] and job["spec"]["video"]["crop"]["top"] == 0
+        r = client.post("/api/jobs", json={"sources": [str(tmp_path / "src")], "rule_set": "manual", "auto_crop": "yes"})
+        assert r.status_code == 422
+
+
+def test_auto_index_and_auto_crop_are_separate_options(tmp_path):
+    indexer = FakeIndexer()
+    with make_client(tmp_path, detect_crop=lambda spec: Crop(0, 20, 0, 22), runner=indexer) as client:
+        config = client.get("/api/config").json()
+        assert config["auto_index"] is False and config["auto_crop"] is False  # the tests' default; the app's is on
+
+        def added(name):
+            make_files(tmp_path, name)
+            ids = add(client, tmp_path)
+            return wait_for(client, ids[-1], "ready", "warn", "blocked")
+
+        job = added("S01E01")
+        assert not job["indexed"] and job["spec"]["video"]["crop"]["top"] == 0
+        assert client.put("/api/config", json={"auto_index": True}).json()["auto_index"] is True
+        job = added("S01E02")
+        assert job["indexed"] and job["spec"]["video"]["crop"]["top"] == 0  # indexed, not cropped
+        assert client.put("/api/config", json={"auto_index": False, "auto_crop": True}).json()["auto_crop"] is True
+        job = added("S01E03")
+        assert job["indexed"] and job["spec"]["video"]["crop"] == {"left": 0, "top": 20, "right": 0, "bottom": 22}
