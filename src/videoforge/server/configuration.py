@@ -16,12 +16,12 @@ from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
 from videoforge.server.store import MAX_PROFILE_NAME
 
 FORMAT = "videoforge.configuration"
-VERSION = 6  # 3: subs_default; 4: settings.sample_quality; 5: profile renamed rule_set; 6: profile (its name)
+VERSION = 7  # 3: subs_default; 4: settings.sample_quality; 5: profile renamed rule_set; 6: profile (its name); 7: settings.auto_prepare
 MAX_BYTES = 20 * 1024 * 1024
 BASE_KEY = "configuration_base"
 SETTING_KEYS = tuple(f.name for f in fields(SavedSettings))
 # Saved settings added since version 1: the version each came in, and its value in an older backup
-SETTINGS_SINCE = {"plugin_settings": (2, {}), "sample_quality": (4, False)}
+SETTINGS_SINCE = {"plugin_settings": (2, {}), "sample_quality": (4, False), "auto_prepare": (7, True)}
 FOLDER_KEYS = ("output_dir", "last_dir")
 
 

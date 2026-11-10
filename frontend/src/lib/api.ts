@@ -220,6 +220,7 @@ export const api = {
     rule_set?: string | null
     index_waits_for_disk?: boolean
     sample_quality?: boolean
+    auto_prepare?: boolean
     parallel_audio?: number | null
     delete_work_dir?: boolean | null
     encoder_priority?: Priority | null

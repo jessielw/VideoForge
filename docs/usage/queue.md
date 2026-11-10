@@ -45,6 +45,8 @@ A job queued while the queue runs is picked up in its turn, in queue order. Queu
 
 Use **Index** on the Queue toolbar to index selected jobs, or all jobs if none are selected. Indexing creates the source index and working script without starting an encode. A job's preview opens only after its source is indexed; opening an editor never starts a full-source read by itself.
 
+By default **Settings → Index and auto-crop new jobs** does this for you: a new job joins the index lane as soon as it is probed and its crop is detected after the index. Turn it off to index only when you ask. A template with a fixed crop keeps its crop, and a crop you set by hand always wins.
+
 Indexing can run while another job encodes. By default, a source on the same physical disk that the encode is reading waits, and sources on other disks go first. **Settings** controls this disk wait.
 
 BestSource's first index decodes the whole video and can take substantially longer than FFMS2. Check the job log before assuming an index is stuck.

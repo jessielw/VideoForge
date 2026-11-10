@@ -142,3 +142,20 @@ def simulate_output(plan: Plan, name: str = "Movie.2020.1080p.BluRay.x264.mkv") 
     ]
     video = plan.source.video
     return SourceInfo(path=None, name=name, video=video, audio=out_audio, subs=out_subs, has_chapters=True)
+
+
+@pytest.fixture(autouse=True)
+def _no_auto_prepare(monkeypatch):
+    """Jobs sit idle after a probe in the tests (the real default indexes and crops them); a test that wants
+    the behaviour saves auto_prepare through the config API."""
+    from videoforge.server.settings import SavedSettings
+
+    load = SavedSettings.load.__func__
+
+    def patched(cls, store):
+        saved = load(cls, store)
+        if store.get_setting("auto_prepare") is None:
+            saved.auto_prepare = False
+        return saved
+
+    monkeypatch.setattr(SavedSettings, "load", classmethod(patched))

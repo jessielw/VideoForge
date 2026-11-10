@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-11-10
+
+### Added
+
+- Settings: "Index and auto-crop new jobs" (on by default). A new job is put in the index lane and its crop detected as soon as it is probed; a template with a fixed crop keeps it and a crop set by hand wins.
+- Track editor: the Default flag shows what the rule set plans (a rule set that picks the default subtitle itself shows it), so it can be changed by hand.
+
+### Changed
+
+- The built-in rule set makes the first audio track the default when the source has none (a default cleared by hand stays cleared).
+- EdgeFixer Reference's comment now says which blur each pair of sides uses.
+- Configuration exports are version 7 (they carry the new setting); older backups import as before.
+
 ## [0.1.4] - 2026-11-07
 
 ### Added

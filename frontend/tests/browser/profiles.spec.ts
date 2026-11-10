@@ -56,6 +56,7 @@ test('Settings: profiles are created, renamed, switched to and deleted', async (
     restart: [],
     index_waits_for_disk: true,
     sample_quality: false,
+    auto_prepare: true,
     parallel_audio,
     parallel_audio_default: 2,
     delete_work_dir: false,

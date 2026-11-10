@@ -84,7 +84,7 @@ from videoforge.core.pipeline.steps import ProgressFn, Step, StepProgress, run_s
 from videoforge.core.plan_io import to_json
 from videoforge.core.record import JsonLines, RunRecorder, event
 from videoforge.core.rule_set import RuleSet
-from videoforge.core.template import Template, apply_audio, apply_subs, template_choice
+from videoforge.core.template import CropMode, Template, apply_audio, apply_subs, template_choice
 from videoforge.core.tools import versions as tool_versions
 from videoforge.core.video.script import ffms2_index
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
@@ -287,6 +287,7 @@ class JobQueue:
         self._index_wake = threading.Event()
         self.index_waits_for_disk = True  # the lane holds a job back while an encode reads its disk
         self.sample_quality = False  # a test encode measures its quality (SSIMULACRA2, XPSNR) after it
+        self.auto_prepare = True  # a new job is indexed and auto-cropped once probed (a template's fixed crop stays)
 
     # --- state ---------------------------------------------------------------------
 
@@ -420,6 +421,8 @@ class JobQueue:
                 )
                 if template is not None:
                     template.apply(spec)
+                if self.auto_prepare and not video and spec.encodes_video and (template is None or template.crop_mode is not CropMode.FIXED):
+                    spec.autocrop = True
                 if spec.subs_template is None and subs_default is not None and not rule_set.picks_tracks:
                     spec.subs_template = _copy(subs_default)
                 if video:

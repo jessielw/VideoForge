@@ -276,12 +276,14 @@
     hand: 'underline decoration-warning decoration-dotted underline-offset-2',
   }
 
-  const flagOn = (t: Track, key: string) => ovOf(t)?.flags[key] ?? t.detected[key] ?? false
+  // The flag with no hand edit: Default is whatever the rule set plans (it picks one itself), the rest what it reads.
+  const flagBase = (t: Track, key: string) => (key === 'default' ? t.auto?.default : undefined) ?? t.detected[key] ?? false
+  const flagOn = (t: Track, key: string) => ovOf(t)?.flags[key] ?? flagBase(t, key)
   const flagMark = (t: Track, key: string) => mark(t, (ov) => ov?.flags[key])
   function toggleFlag(t: Track, key: string) {
     const on = !flagOn(t, key)
     editTrack(t, (ov) => {
-      if (on === (t.detected[key] ?? false)) delete ov.flags[key]
+      if (on === flagBase(t, key)) delete ov.flags[key]
       else ov.flags[key] = on
     })
   }

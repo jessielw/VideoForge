@@ -561,6 +561,20 @@
               <label class="flex items-start gap-3 text-sm">
                 <Checkbox
                   class="mt-0.5"
+                  checked={config.auto_prepare}
+                  onCheckedChange={(v) => change({ auto_prepare: v })}
+                />
+                <span>
+                  Index and auto-crop new jobs
+                  <span class="block text-xs text-muted-foreground">
+                    A job is put in the index lane and its crop detected as soon as it is probed. A template with a
+                    fixed crop keeps it; a crop set by hand always wins.
+                  </span>
+                </span>
+              </label>
+              <label class="flex items-start gap-3 text-sm">
+                <Checkbox
+                  class="mt-0.5"
                   checked={config.index_waits_for_disk}
                   onCheckedChange={(v) => change({ index_waits_for_disk: v })}
                 />

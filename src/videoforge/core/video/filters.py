@@ -122,7 +122,7 @@ PRESETS: list[FilterPreset] = [
         "EdgeFixer Reference",
         "clip = core.edgefixer.Reference(clip, core.std.BoxBlur(clip, hradius=1, vpasses=0), left={}, right={}, radius=0)\n"
         "clip = core.edgefixer.Reference(clip, core.std.BoxBlur(clip, vradius=1, hpasses=0), top={}, bottom={}, radius=0)"
-        "  # the blur follows the edges being fixed",
+        "  # left/right use a horizontal blur, top/bottom a vertical one (as StaxRip's edge_fixer_reference)",
         {"1 px": "1", "2 px": "2", "Empty": "0"},
         "Fix dirty lines at the frame's edges against a blurred copy of the picture (reference mode)",
     ),

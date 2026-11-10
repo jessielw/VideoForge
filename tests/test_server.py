@@ -1531,7 +1531,12 @@ def test_tracks_carry_the_rule_sets_own_choice(tmp_path):
         overrides = job["spec"]["overrides"] | {"tracks": {sub["key"]: {"exclude": True, "title": "Mine"}}}
         job = client.patch(f"/api/jobs/{job_id}", json={"overrides": overrides}).json()
         assert sub["key"] not in [f"id:{s['source']['id']}" for s in job["plan"]["subs"]]
-        assert job["tracks"]["subs"][0]["auto"] == {"kept": True, "title": sub["title"], "language": sub["language"]}
+        assert job["tracks"]["subs"][0]["auto"] == {
+            "kept": True,
+            "title": sub["title"],
+            "language": sub["language"],
+            "default": False,
+        }
         audio = job["tracks"]["audio"][0]
         assert audio["auto"] | {"title": None} == {
             "kept": True,
@@ -1540,6 +1545,7 @@ def test_tracks_carry_the_rule_sets_own_choice(tmp_path):
             "action": "copy",
             "layout": audio["layout"],
             "bitrate_kbps": None,
+            "default": True,  # the first audio track when the source has none
         }
 
 
@@ -2195,3 +2201,16 @@ def test_output_folders_remember():
     assert remember(folders, "p") == folders  # a pinned folder stays where it is
     again = remember(folders, recent[-1].lower())
     assert [f["path"] for f in again if not f["pinned"]][0].lower() == recent[-1].lower()
+
+
+def test_auto_prepare_indexes_and_crops_new_jobs_once_probed(tmp_path):
+    make_files(tmp_path, "S01E01")
+    indexer = FakeIndexer()
+    with make_client(tmp_path, detect_crop=lambda spec: Crop(0, 20, 0, 22), runner=indexer) as client:
+        assert client.get("/api/config").json()["auto_prepare"] is False  # the tests' default; the app's is on
+        job = wait_for(client, add(client, tmp_path)[0], "ready", "warn", "blocked")
+        assert not job["indexed"] and job["spec"]["video"]["crop"]["top"] == 0
+        assert client.put("/api/config", json={"auto_prepare": True}).json()["auto_prepare"] is True
+        make_files(tmp_path, "S01E02")
+        second = wait_for(client, add(client, tmp_path)[-1], "ready", "warn", "blocked")
+        assert second["indexed"] and second["spec"]["video"]["crop"] == {"left": 0, "top": 20, "right": 0, "bottom": 22}
