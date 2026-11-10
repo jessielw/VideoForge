@@ -37,6 +37,7 @@
   } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
+  import CopyIcon from '@lucide/svelte/icons/copy'
   import CropIcon from '@lucide/svelte/icons/crop'
   import DatabaseZapIcon from '@lucide/svelte/icons/database-zap'
   import SquareIcon from '@lucide/svelte/icons/square'
@@ -269,6 +270,66 @@
     untrack(() => stale && refreshPreview())
   })
 
+  // The side panel's width: one for Settings and Script, dragged by the splitter and remembered.
+  const PANEL_MIN = 288
+  let panelW = $state(readPanelW())
+  let dragging = $state(false)
+  function readPanelW(): number {
+    try {
+      const n = Number(localStorage.getItem('videoforge.videoPanelW'))
+      return n >= PANEL_MIN ? n : 384
+    } catch {
+      return 384
+    }
+  }
+  function clampPanel(w: number, total: number): number {
+    return Math.round(Math.min(Math.max(w, PANEL_MIN), Math.max(PANEL_MIN, total * 0.7)))
+  }
+  function splitDown(e: PointerEvent) {
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    dragging = true
+  }
+  function splitMove(e: PointerEvent) {
+    if (!dragging) return
+    const box = (e.currentTarget as HTMLElement).parentElement!.getBoundingClientRect()
+    panelW = clampPanel(box.right - e.clientX, box.width)
+  }
+  function splitUp() {
+    if (!dragging) return
+    dragging = false
+    try {
+      localStorage.setItem('videoforge.videoPanelW', String(panelW))
+    } catch {
+      // storage blocked: the width lasts until reload
+    }
+  }
+  function splitKey(e: KeyboardEvent) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    panelW = clampPanel(
+      panelW + (e.key === 'ArrowLeft' ? 24 : -24),
+      (e.currentTarget as HTMLElement).parentElement!.getBoundingClientRect().width,
+    )
+    try {
+      localStorage.setItem('videoforge.videoPanelW', String(panelW))
+    } catch {
+      // storage blocked
+    }
+  }
+
+  // The whole script (generated head + body + tail) as one text, for vsedit or a bug report.
+  async function copyScript() {
+    if (!vv.parts) return
+    const text = [...vv.parts.head, ...vv.body.split('\n'), ...vv.parts.tail].join('\n')
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success('Script copied', { description: `${text.split('\n').length} lines` })
+    } catch {
+      toast.error('Could not copy the script')
+    }
+  }
+
   function readAuto(): boolean {
     try {
       return localStorage.getItem('videoforge.autoRefresh') !== '0'
@@ -453,7 +514,7 @@
 
 <!-- A phone stacks the frame over the side panel, and the page scrolls. -->
 <div
-  class="flex min-h-0 gap-4 max-sm:flex-col {layout.videoExpanded
+  class="flex min-h-0 gap-2 max-sm:flex-col {dragging ? 'select-none' : ''} {layout.videoExpanded
     ? 'fixed inset-0 z-40 bg-background p-4 max-sm:overflow-y-auto max-sm:p-2'
     : 'h-full max-sm:h-auto'}"
 >
@@ -621,9 +682,27 @@
     {/if}
   </div>
 
+  <!-- Drag to resize the side panel (arrow keys too). -->
   <div
-    class="flex shrink-0 flex-col gap-2 max-sm:min-h-[60vh] max-sm:w-full {vv.panel === 'script' ? 'w-[45%]' : 'w-72'}"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="Resize the side panel"
+    tabindex="0"
+    class="group flex w-2 shrink-0 cursor-col-resize touch-none justify-center max-sm:hidden"
+    onpointerdown={splitDown}
+    onpointermove={splitMove}
+    onpointerup={splitUp}
+    onpointercancel={splitUp}
+    onkeydown={splitKey}
   >
+    <div
+      class="h-full w-px bg-border transition-colors group-hover:bg-primary group-focus-visible:bg-primary {dragging
+        ? 'bg-primary'
+        : ''}"
+    ></div>
+  </div>
+
+  <div class="flex shrink-0 flex-col gap-2 max-sm:min-h-[60vh] max-sm:w-full!" style="width:{panelW}px">
     <Tabs.Root value={vv.panel} onValueChange={(v) => (v === 'script' ? openScript() : (vv.panel = 'settings'))}>
       <Tabs.List aria-label="Side panel">
         <Tabs.Trigger value="settings" class="px-3">Settings</Tabs.Trigger>
@@ -640,15 +719,18 @@
               <PlayIcon />{running ? 'Running…' : dirty && editable ? 'Save & run' : 'Run'}
             </Button>
           </Tip>
+          <Tip text="Copy the whole script (generated head and tail included) to paste into vsedit">
+            <Button variant="outline" onclick={copyScript} disabled={!vv.parts}><CopyIcon />Copy</Button>
+          </Tip>
           {#if vv.parts?.custom}
             <Tip text="Drop the custom body: crop, resize and filters make the script again">
               <Button variant="outline" onclick={useGenerated} disabled={!editable || running}>Back to generated</Button
               >
             </Tip>
           {/if}
-          <span class="ml-auto text-xs text-muted-foreground">
+          <span class="ml-auto min-w-0 truncate text-xs text-muted-foreground">
             {#if !editable}read-only while {job.status}{:else if dirty}edited, not saved{:else if vv.parts?.custom}custom
-              body{:else}generated from crop, resize and filters (editing makes it custom){/if}
+              body{:else}generated (editing makes it custom){/if}
           </span>
         </div>
         {#if vv.parts}
@@ -685,7 +767,7 @@
         {/if}
       </section>
     {:else}
-      <aside class="min-h-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto pr-1">
+      <aside class="min-h-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto pr-3 [scrollbar-gutter:stable]">
         <PresetMenu
           kind="video"
           ruleSet={job.rule_set}
