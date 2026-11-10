@@ -428,7 +428,12 @@ class JobQueue:
                 )
                 if template is not None:
                     template.apply(spec)
-                if crop_new and not video and spec.encodes_video and (template is None or template.crop_mode is not CropMode.FIXED):
+                if (
+                    crop_new
+                    and not video
+                    and spec.encodes_video
+                    and (template is None or template.crop_mode is not CropMode.FIXED)
+                ):
                     spec.autocrop = True
                 if spec.subs_template is None and subs_default is not None and not rule_set.picks_tracks:
                     spec.subs_template = _copy(subs_default)

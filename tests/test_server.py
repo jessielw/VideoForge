@@ -2219,7 +2219,9 @@ def test_a_batch_overrides_auto_index_and_auto_crop(tmp_path):
         assert job["indexed"] and job["spec"]["video"]["crop"]["top"] == 20
         job = added("S01E03")  # absent: the setting (off)
         assert not job["indexed"] and job["spec"]["video"]["crop"]["top"] == 0
-        r = client.post("/api/jobs", json={"sources": [str(tmp_path / "src")], "rule_set": "manual", "auto_crop": "yes"})
+        r = client.post(
+            "/api/jobs", json={"sources": [str(tmp_path / "src")], "rule_set": "manual", "auto_crop": "yes"}
+        )
         assert r.status_code == 422
 
 

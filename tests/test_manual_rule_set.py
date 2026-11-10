@@ -308,5 +308,7 @@ def test_first_audio_track_is_default_when_the_source_has_none():
     # the source's own default stays; a hand-cleared default is respected
     kept = plan_for(source([audio(C.AC3, "5.1", index=0), audio(C.AC3, "2.0", index=1, default=True)], []))
     assert [a.default for a in kept.audio] == [False, True]
-    cleared = plan_for(source(tracks, []), overrides=Overrides(tracks={"id:1": TrackOverride(flags={"default": False})}))
+    cleared = plan_for(
+        source(tracks, []), overrides=Overrides(tracks={"id:1": TrackOverride(flags={"default": False})})
+    )
     assert [a.default for a in cleared.audio] == [False, False]
