@@ -771,14 +771,16 @@
               : ''}{vv.checked.error}</pre>
         {:else if vv.checked?.ok}
           {@const i = vv.checked.info}
-          <div class="flex shrink-0 flex-wrap gap-x-4 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs">
+          <div
+            class="grid shrink-0 grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-4 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs"
+          >
             <span class="text-success"><CheckIcon class="mr-1 inline size-3.5 align-[-2px]" />Runs</span>
             <span><span class="text-muted-foreground">Frames</span> {i.frames}</span>
             <span><span class="text-muted-foreground">Size</span> {i.width}×{i.height}</span>
             <span><span class="text-muted-foreground">Format</span> {i.format}</span>
             <span><span class="text-muted-foreground">FPS</span> {+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span>
             <span><span class="text-muted-foreground">Length</span> {clipLength(i.frames, i.fps_num, i.fps_den)}</span>
-            {#if i.length_warning}<span class="basis-full text-warning">{i.length_warning}</span>{/if}
+            {#if i.length_warning}<span class="col-span-full text-warning">{i.length_warning}</span>{/if}
           </div>
         {/if}
       </section>
