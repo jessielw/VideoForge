@@ -38,6 +38,7 @@
   import FramePreview from './FramePreview.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import CopyIcon from '@lucide/svelte/icons/copy'
+  import DownloadIcon from '@lucide/svelte/icons/download'
   import CropIcon from '@lucide/svelte/icons/crop'
   import DatabaseZapIcon from '@lucide/svelte/icons/database-zap'
   import SquareIcon from '@lucide/svelte/icons/square'
@@ -319,9 +320,17 @@
   }
 
   // The whole script (generated head + body + tail) as one text, for vsedit or a bug report.
+  const fullScript = () => (vv.parts ? [...vv.parts.head, ...vv.body.split('\n'), ...vv.parts.tail].join('\n') : '')
+  function saveScript() {
+    const url = URL.createObjectURL(new Blob([fullScript() + '\n'], { type: 'text/x-python' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(job.output_name ?? 'script').replace(/\.[^.]+$/, '')}.vpy`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
   async function copyScript() {
-    if (!vv.parts) return
-    const text = [...vv.parts.head, ...vv.body.split('\n'), ...vv.parts.tail].join('\n')
+    const text = fullScript()
     try {
       await navigator.clipboard.writeText(text)
       toast.success('Script copied', { description: `${text.split('\n').length} lines` })
@@ -725,6 +734,9 @@
           </Tip>
           <Tip text="Copy the whole script (generated head and tail included) to paste into vsedit">
             <Button variant="outline" onclick={copyScript} disabled={!vv.parts}><CopyIcon />Copy</Button>
+          </Tip>
+          <Tip text="Save the whole script as a .vpy file to open in vsedit">
+            <Button variant="outline" onclick={saveScript} disabled={!vv.parts}><DownloadIcon />Save</Button>
           </Tip>
           {#if vv.parts?.custom}
             <Tip text="Drop the custom body: crop, resize and filters make the script again">
