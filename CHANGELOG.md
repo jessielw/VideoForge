@@ -9,10 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Settings: "Index new jobs" and "Auto-crop new jobs" (both on by default). A new job is put in the index lane as soon as it is probed, and its crop is detected after the index; a template with a fixed crop keeps it and a crop set by hand wins.
+- New jobs: paste file paths anywhere in the app (Explorer: Ctrl+Shift+C, then Ctrl+V) and they land on New jobs, matched and ready.
+- New jobs: a bar at the bottom says what **Add** will do (job count, template, index and crop, output folder) and, once added, offers **Open queue** and **Add more** without scrolling.
+- New jobs: **Index** and **Auto-crop** for the batch, starting from the Settings values. `POST /api/jobs` takes `auto_index` and `auto_crop` for the same.
 - Track editor: the Default flag shows what the rule set plans (a rule set that picks the default subtitle itself shows it), so it can be changed by hand.
 
 ### Changed
 
+- New jobs: encodes, subtitles and chapters sit under **More inputs**, which opens by itself once used. The page's **Job files** row is gone; use **Add jobs from job files** on the Queue page.
 - The built-in rule set makes the first audio track the default when the source has none (a default cleared by hand stays cleared).
 - EdgeFixer Reference's comment now says which blur each pair of sides uses.
 - Configuration exports are version 7 (they carry the new setting); older backups import as before.

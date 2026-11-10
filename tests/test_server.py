@@ -2203,6 +2203,26 @@ def test_output_folders_remember():
     assert [f["path"] for f in again if not f["pinned"]][0].lower() == recent[-1].lower()
 
 
+def test_a_batch_overrides_auto_index_and_auto_crop(tmp_path):
+    indexer = FakeIndexer()
+    with make_client(tmp_path, detect_crop=lambda spec: Crop(0, 20, 0, 22), runner=indexer) as client:
+        assert client.get("/api/config").json()["auto_index"] is False  # the setting stays off throughout
+
+        def added(name, **extra):
+            make_files(tmp_path, name)
+            ids = add(client, tmp_path, **extra)
+            return wait_for(client, ids[-1], "ready", "warn", "blocked")
+
+        job = added("S01E01", auto_index=True)
+        assert job["indexed"] and job["spec"]["video"]["crop"]["top"] == 0
+        job = added("S01E02", auto_index=True, auto_crop=True)
+        assert job["indexed"] and job["spec"]["video"]["crop"]["top"] == 20
+        job = added("S01E03")  # absent: the setting (off)
+        assert not job["indexed"] and job["spec"]["video"]["crop"]["top"] == 0
+        r = client.post("/api/jobs", json={"sources": [str(tmp_path / "src")], "rule_set": "manual", "auto_crop": "yes"})
+        assert r.status_code == 422
+
+
 def test_auto_index_and_auto_crop_are_separate_options(tmp_path):
     indexer = FakeIndexer()
     with make_client(tmp_path, detect_crop=lambda spec: Crop(0, 20, 0, 22), runner=indexer) as client:

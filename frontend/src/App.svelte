@@ -15,6 +15,7 @@
   import KeyboardShortcuts from './components/KeyboardShortcuts.svelte'
   import ThemeToggle from './components/ThemeToggle.svelte'
   import Tip from './components/Tip.svelte'
+  import { onWindowPaste } from './lib/incoming.svelte'
   import { installDrops } from './lib/dropPaths.svelte'
   import { router, type Page } from './lib/router.svelte'
   import { layout } from './lib/layout.svelte'
@@ -52,6 +53,7 @@
   })
 </script>
 
+<svelte:window onpaste={onWindowPaste} />
 <ModeWatcher defaultMode="system" modeStorageKey="videoforge.mode" />
 <Toaster richColors closeButton position="bottom-right" />
 
@@ -126,7 +128,9 @@
         </Tip>
       </div>
       {#if navCollapsed}
-        <div class="flex flex-col items-center gap-1 border-t py-3 text-xs">
+        <div
+          class="flex h-(--bar-h) shrink-0 flex-col items-center justify-center gap-1 overflow-hidden border-t text-xs"
+        >
           {#if running}
             <Tip
               side="right"
@@ -142,7 +146,7 @@
           >
         </div>
       {:else}
-        <div class="space-y-1 border-t p-3 text-xs text-muted-foreground">
+        <div class="h-(--bar-h) shrink-0 space-y-1 overflow-y-auto border-t px-3 py-1.5 text-xs text-muted-foreground">
           {#if running}
             <Tip class="block truncate text-info" text={running.name}>▶ {running.name}</Tip>
             {#if running.progress}

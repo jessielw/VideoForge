@@ -261,6 +261,9 @@ export const api = {
       video?: Partial<VideoSettings>
       encoder?: EncoderSettings
       template?: Template
+      /** this batch only; left out, Settings' value applies */
+      auto_index?: boolean
+      auto_crop?: boolean
     },
   ) =>
     post<{

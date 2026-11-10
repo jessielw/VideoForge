@@ -392,13 +392,18 @@ class JobQueue:
         template: Template | None = None,
         replace_existing: Iterable[str] = (),
         subs_default: TemplateSubs | None = None,
+        auto_index: bool | None = None,
+        auto_crop: bool | None = None,
     ) -> tuple[list[Entry], list[str]]:
         """One job per matched source, starting from the rule set's video and mux defaults, or the template,
         then the given settings; subs_default (Settings' subtitle rules) for a job its template sets none for
         (unless the rule set picks tracks by its own rules).
         A source already in the queue is kept unless its exact job ID is explicitly replaced.
+        auto_index / auto_crop override Settings' for this batch (None: the setting).
         Returns (new jobs, names skipped because they are busy)."""
         rule_set = self.rule_sets(rule_set_id)
+        index_new = self.auto_index if auto_index is None else auto_index
+        crop_new = self.auto_crop if auto_crop is None else auto_crop
         replacements = set(replace_existing)
         added, skipped = [], []
         with self._lock:
@@ -423,7 +428,7 @@ class JobQueue:
                 )
                 if template is not None:
                     template.apply(spec)
-                if self.auto_crop and not video and spec.encodes_video and (template is None or template.crop_mode is not CropMode.FIXED):
+                if crop_new and not video and spec.encodes_video and (template is None or template.crop_mode is not CropMode.FIXED):
                     spec.autocrop = True
                 if spec.subs_template is None and subs_default is not None and not rule_set.picks_tracks:
                     spec.subs_template = _copy(subs_default)
@@ -431,7 +436,7 @@ class JobQueue:
                     spec.video = _copy(video)
                 if encoder:
                     spec.encoder = _copy(encoder)
-                e = Entry(spec, JobState(), index_on_probe=self.auto_index and not video and spec.encodes_video)
+                e = Entry(spec, JobState(), index_on_probe=index_new and not video and spec.encodes_video)
                 with self._lock:
                     self._attach(e)
                     self._entries[e.id] = e
