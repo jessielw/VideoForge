@@ -519,20 +519,14 @@
     : 'h-full max-sm:h-auto'}"
 >
   <div class="flex min-w-0 flex-1 flex-col gap-2 max-sm:h-[60vh] max-sm:flex-none">
-    <div class="flex h-9 items-center gap-2">
-      {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
-      {#if infoError && !scripting}<Tip class="block truncate text-xs text-destructive" text={infoError}
-          >{infoError}</Tip
-        >{/if}
-      <Tip
-        class="ml-auto"
-        text={layout.videoExpanded ? 'Back to the page (Esc)' : 'Fill the window with the video editor'}
-      >
-        <Button variant="ghost" onclick={() => (layout.videoExpanded = !layout.videoExpanded)}>
-          {#if layout.videoExpanded}<MinimizeIcon />Restore{:else}<MaximizeIcon />Expand{/if}
-        </Button>
-      </Tip>
-    </div>
+    {#if saving || (infoError && !scripting)}
+      <div class="flex items-center gap-2">
+        {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
+        {#if infoError && !scripting}<Tip class="block truncate text-xs text-destructive" text={infoError}
+            >{infoError}</Tip
+          >{/if}
+      </div>
+    {/if}
     {#if !ready}
       <div
         class="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border p-6 text-center"
@@ -703,12 +697,22 @@
   </div>
 
   <div class="flex shrink-0 flex-col gap-2 max-sm:min-h-[60vh] max-sm:w-full!" style="width:{panelW}px">
-    <Tabs.Root value={vv.panel} onValueChange={(v) => (v === 'script' ? openScript() : (vv.panel = 'settings'))}>
-      <Tabs.List aria-label="Side panel">
-        <Tabs.Trigger value="settings" class="px-3">Settings</Tabs.Trigger>
-        <Tabs.Trigger value="script" class="px-3">Script</Tabs.Trigger>
-      </Tabs.List>
-    </Tabs.Root>
+    <div class="flex items-center justify-between gap-2">
+      <Tabs.Root value={vv.panel} onValueChange={(v) => (v === 'script' ? openScript() : (vv.panel = 'settings'))}>
+        <Tabs.List aria-label="Side panel">
+          <Tabs.Trigger value="settings" class="px-3">Settings</Tabs.Trigger>
+          <Tabs.Trigger value="script" class="px-3">Script</Tabs.Trigger>
+        </Tabs.List>
+      </Tabs.Root>
+      <Tip
+        class="shrink-0"
+        text={layout.videoExpanded ? 'Back to the page (Esc)' : 'Fill the window with the video editor'}
+      >
+        <Button variant="ghost" onclick={() => (layout.videoExpanded = !layout.videoExpanded)}>
+          {#if layout.videoExpanded}<MinimizeIcon />Restore{:else}<MaximizeIcon />Expand{/if}
+        </Button>
+      </Tip>
+    </div>
     {#if vv.panel === 'script'}
       <section class="flex min-h-0 flex-1 flex-col gap-2">
         <div class="flex items-center gap-2">
