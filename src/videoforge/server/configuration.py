@@ -16,7 +16,7 @@ from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
 from videoforge.server.store import MAX_PROFILE_NAME
 
 FORMAT = "videoforge.configuration"
-VERSION = 7  # 3: subs_default; 4: settings.sample_quality; 5: profile renamed rule_set; 6: profile (its name); 7: settings.auto_index and auto_crop
+VERSION = 8  # 3: subs_default; 4: settings.sample_quality; 5: profile renamed rule_set; 6: profile (its name); 7: settings.auto_index and auto_crop; 8: settings.index_during_video
 MAX_BYTES = 20 * 1024 * 1024
 BASE_KEY = "configuration_base"
 SETTING_KEYS = tuple(f.name for f in fields(SavedSettings))
@@ -26,6 +26,7 @@ SETTINGS_SINCE = {
     "sample_quality": (4, False),
     "auto_index": (7, True),
     "auto_crop": (7, True),
+    "index_during_video": (8, True),
 }
 FOLDER_KEYS = ("output_dir", "last_dir")
 

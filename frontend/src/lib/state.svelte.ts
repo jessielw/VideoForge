@@ -50,6 +50,7 @@ class AppState {
     indexing: null,
     sampling: null,
     index_queued: 0,
+    index_held: 0,
   })
   ruleSets = $state<RuleSet[]>([])
   profiles = $state<ProfileList>({ profiles: [], active: '' })

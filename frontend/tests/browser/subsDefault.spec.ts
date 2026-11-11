@@ -55,6 +55,7 @@ test('Settings: default subtitle rules save as they change, naming included, and
     rule_sets: [ruleSet],
     restart: [],
     index_waits_for_disk: true,
+    index_during_video: true,
     sample_quality: false,
     auto_index: true,
     auto_crop: true,

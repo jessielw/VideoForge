@@ -8,7 +8,7 @@
    the accent is VideoForge's warm gold. success / warning / info are VideoForge's own (job states). */
 :root {
   /* the nav's status block and New jobs' bottom bar share this height, so their top lines meet */
-  --bar-h: 4rem;
+  --bar-h: 5rem;
   color-scheme: light;
   --radius: 0.5rem;
   --background: #f5f5f4;

@@ -572,11 +572,7 @@
                 </span>
               </label>
               <label class="flex items-start gap-3 text-sm">
-                <Checkbox
-                  class="mt-0.5"
-                  checked={config.auto_crop}
-                  onCheckedChange={(v) => change({ auto_crop: v })}
-                />
+                <Checkbox class="mt-0.5" checked={config.auto_crop} onCheckedChange={(v) => change({ auto_crop: v })} />
                 <span>
                   Auto-crop new jobs
                   <span class="block text-xs text-muted-foreground">
@@ -596,6 +592,21 @@
                   <span class="block text-xs text-muted-foreground">
                     A job in the index lane whose source is on the disk the running encode reads waits for it to finish;
                     jobs on other disks go first. Index now on a job never waits.
+                  </span>
+                </span>
+              </label>
+              <label class="ml-7 flex items-start gap-3 text-sm">
+                <Checkbox
+                  class="mt-0.5"
+                  checked={config.index_during_video}
+                  disabled={!config.index_waits_for_disk}
+                  onCheckedChange={(v) => change({ index_during_video: v })}
+                />
+                <span class={config.index_waits_for_disk ? '' : 'opacity-60'}>
+                  Index anyway while it only encodes video
+                  <span class="block text-xs text-muted-foreground">
+                    The video encode reads the source slowly, so an index beside it costs little. The wait still holds
+                    while the job extracts, encodes audio, indexes or muxes.
                   </span>
                 </span>
               </label>

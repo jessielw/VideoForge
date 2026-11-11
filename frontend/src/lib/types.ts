@@ -747,6 +747,7 @@ export interface QueueState {
   indexing: string | null // the job the index lane is on
   sampling: string | null // the job whose test encode the index lane runs
   index_queued: number
+  index_held: number // of index_queued, the ones waiting while an encode reads their disk
 }
 
 // A finished file a start could reuse (POST /api/queue/reuse), by section of the job.
@@ -829,6 +830,7 @@ export interface ConfigState {
   rule_sets: { id: string; name: string }[]
   restart: string[]
   index_waits_for_disk: boolean // batch indexing holds a job back while an encode reads its disk
+  index_during_video: boolean // ... but not while the encode only encodes video
   sample_quality: boolean // a test encode measures its quality (SSIMULACRA2, XPSNR) after it
   auto_index: boolean // a new job goes in the index lane once probed
   auto_crop: boolean // ... and its crop is detected (after the index)

@@ -67,6 +67,7 @@ async function layoutFixture(page: Page) {
     rule_sets: [ruleSet],
     restart: [],
     index_waits_for_disk: true,
+    index_during_video: true,
     sample_quality: false,
     auto_index: true,
     auto_crop: true,

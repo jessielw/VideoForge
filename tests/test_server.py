@@ -27,7 +27,7 @@ from videoforge.core.events import JobFinished
 from videoforge.core.execute.control import Priority
 from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import Cancelled, ToolError
-from videoforge.core.job import JobResult, JobSpec, JobStatus, StepRecord, StepStatus, planned_encode
+from videoforge.core.job import JobResult, JobSpec, JobStatus, StepRecord, StepRun, StepStatus, planned_encode
 from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioCodec as C, SubFormat as F, VideoInfo
 from videoforge.core.pipeline.steps import Step, StepProgress
@@ -78,9 +78,10 @@ def fake_probe(spec: JobSpec, _app=None) -> ProbedInputs:
 class FakeRun:
     """Logs, reports progress, records a step, and finishes DONE (or waits to be cancelled)."""
 
-    def __init__(self, block: bool = False):
+    def __init__(self, block: bool = False, beside: str = ""):
         self.runs: list[str] = []
         self.block = block
+        self.beside = beside  # a step running beside the video (e.g. "audio.1"), until the run ends
 
     def __call__(self, spec, plan, rule_set, app, *, state, log, cancel, progress, on_record, on_step, step_log):
         self.runs.append(spec.name)
@@ -89,6 +90,8 @@ class FakeRun:
         state.run = [run]
         on_step(run)
         run.status = StepStatus.RUNNING
+        if self.beside:
+            state.run.insert(0, StepRun(self.beside, self.beside, status=StepStatus.RUNNING))
         on_step(run)
         log("== 1/1 Video (x264)")
         run.log("[x264] [ 50.0%] 1/2 frames")  # as run_steps keeps a step's tail
@@ -1713,6 +1716,7 @@ def test_index_lane_stop(tmp_path):
             "indexing": None,
             "sampling": None,
             "index_queued": 0,
+            "index_held": 0,
         }
 
 
@@ -1799,7 +1803,7 @@ def test_index_lane_waits_for_an_encode_on_its_disk(tmp_path, monkeypatch):
     make_files(tmp_path, "S01E01", "S01E02", "S01E03", "S01E04")
     monkeypatch.setattr("videoforge.server.queue.disks", lambda p: frozenset({"y" if "S01E03" in str(p) else "x"}))
     indexer = FakeIndexer()
-    with make_client(tmp_path, run=FakeRun(block=True), runner=indexer) as client:
+    with make_client(tmp_path, run=FakeRun(block=True, beside="audio.1"), runner=indexer) as client:
         ids = add(client, tmp_path)
         for i in ids:
             wait_for(client, i, "ready", "warn")
@@ -1829,6 +1833,129 @@ def test_index_lane_waits_for_an_encode_on_its_disk(tmp_path, monkeypatch):
         client.post("/api/queue/cancel")
         indexer.wait(4)
         assert not wait_for(client, ids[1], "ready", "warn")["index_held"]
+
+
+def test_a_batch_with_the_running_source_indexes_the_rest(tmp_path, monkeypatch):
+    """A batch that takes in the encoding job's source skips that one (busy) and indexes the others meanwhile:
+    one on another disk at once, one on the encode's disk once the encode ends."""
+    make_files(tmp_path, "S01E01")
+    monkeypatch.setattr("videoforge.server.queue.disks", lambda p: frozenset({"y" if "S01E03" in str(p) else "x"}))
+    indexer = FakeIndexer()
+    with make_client(tmp_path, run=FakeRun(block=True, beside="audio.1"), runner=indexer) as client:
+        (first,) = add(client, tmp_path)
+        wait_for(client, first, "ready", "warn")
+        client.post("/api/queue/start", json={"ids": [first]})
+        wait_for(client, first, "running")
+
+        make_files(tmp_path, "S01E02", "S01E03")
+        r = client.post(
+            "/api/jobs",
+            json={"sources": [str(tmp_path / "src")], "rule_set": "manual", "auto_index": True, "auto_crop": True},
+        )
+        assert r.status_code == 200, r.text
+        new = r.json()["added"]
+        assert len(new) == 2 and first not in new
+        e2, e3 = sorted(new, key=lambda i: client.get(f"/api/jobs/{i}").json()["spec"]["inputs"]["source"])
+        indexer.wait(1)
+        assert "S01E03" in indexer.calls[0][-1]  # another disk: indexed while the encode runs
+        assert wait_for(client, e3, "ready", "warn", "blocked")["indexed"]
+        time.sleep(0.3)
+        held = client.get(f"/api/jobs/{e2}").json()
+        assert held["status"] == "index-queued" and held["index_held"] and len(indexer.calls) == 1
+        lane = client.get("/api/queue").json()
+        assert lane["indexing"] is None and lane["index_queued"] == lane["index_held"] == 1  # it only waits
+
+        client.post("/api/queue/cancel")
+        indexer.wait(2)
+        assert wait_for(client, e2, "ready", "warn", "blocked")["indexed"]
+        assert not any("S01E01" in " ".join(c) for c in indexer.calls)  # the running job was never indexed
+
+
+class PhasedRun(FakeRun):
+    """An encode whose audio runs beside the video until `audio_done` is set, then only the video."""
+
+    def __init__(self):
+        super().__init__(block=True)
+        self.audio_done = threading.Event()
+
+    def __call__(self, spec, plan, rule_set, app, *, state, log, cancel, progress, on_step, **rest):
+        audio = StepRun("audio.1", "Encode audio 1", status=StepStatus.RUNNING)
+
+        def video_phase(run):
+            if run.status is StepStatus.RUNNING and audio not in state.run:  # (before the lane hears of the video)
+                state.run.insert(0, audio)
+                threading.Thread(target=finish_audio, daemon=True).start()
+            on_step(run)
+
+        def finish_audio():
+            self.audio_done.wait()
+            audio.status = StepStatus.DONE
+            on_step(audio)
+
+        return super().__call__(
+            spec,
+            plan,
+            rule_set,
+            app,
+            state=state,
+            log=log,
+            cancel=cancel,
+            progress=progress,
+            on_step=video_phase,
+            **rest,
+        )
+
+
+def test_video_only_needs_the_steps_before_the_video_finished():
+    from types import SimpleNamespace
+
+    from videoforge.server.queue import _video_only
+
+    S = StepStatus
+
+    def phase(*runs):
+        return _video_only(SimpleNamespace(state=SimpleNamespace(run=[StepRun(i, i, status=s) for i, s in runs])))
+
+    assert phase(("index", S.DONE), ("audio.1", S.REUSED), ("video", S.RUNNING), ("mux", S.PENDING))
+    assert phase(("video.pass1", S.DONE), ("video.pass2", S.RUNNING))
+    assert not phase(("audio.1", S.PENDING), ("video", S.RUNNING))  # its thread hasn't started it yet
+    assert not phase(("audio.1", S.RUNNING), ("video", S.RUNNING))
+    assert not phase(("index", S.RUNNING), ("video", S.PENDING))
+    assert not phase(("video", S.DONE), ("mux", S.RUNNING))
+    assert not phase()
+
+
+def test_index_lane_goes_beside_an_encode_that_only_encodes_video(tmp_path, monkeypatch):
+    """index_during_video (the default): a job on the encode's disk waits while the encode also encodes audio, and
+    goes once only the video is left. Turned off, it waits for the whole encode."""
+    make_files(tmp_path, "S01E01", "S01E02", "S01E03")
+    monkeypatch.setattr("videoforge.server.queue.disks", lambda p: frozenset({"x"}))
+    indexer = FakeIndexer()
+    run = PhasedRun()
+    with make_client(tmp_path, run=run, runner=indexer) as client:
+        assert client.get("/api/config").json()["index_during_video"] is True
+        ids = add(client, tmp_path)
+        for i in ids:
+            wait_for(client, i, "ready", "warn")
+        client.post("/api/queue/start", json={"ids": [ids[0]]})
+        wait_for(client, ids[0], "running")
+        client.post("/api/queue/index", json={"ids": [ids[1]]})
+        wait_for(client, ids[1], "index-queued")
+        time.sleep(0.3)
+        assert client.get(f"/api/jobs/{ids[1]}").json()["index_held"] and indexer.calls == []  # audio: it waits
+
+        run.audio_done.set()
+        indexer.wait(1)  # only the video now: it goes
+        assert wait_for(client, ids[1], "ready", "warn")["indexed"]
+
+        assert client.put("/api/config", json={"index_during_video": False}).json()["index_during_video"] is False
+        client.post("/api/queue/index", json={"ids": [ids[2]]})
+        wait_for(client, ids[2], "index-queued")
+        time.sleep(0.3)
+        assert client.get(f"/api/jobs/{ids[2]}").json()["index_held"] and len(indexer.calls) == 1
+        client.post("/api/queue/cancel")
+        indexer.wait(2)
+        assert wait_for(client, ids[2], "ready", "warn")["indexed"]
 
 
 def test_folder_browser(tmp_path):

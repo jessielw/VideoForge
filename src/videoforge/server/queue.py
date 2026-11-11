@@ -108,6 +108,22 @@ def _same_file(path: Path | None) -> str:
     return os.path.normcase(os.path.abspath(path)) if path is not None else ""
 
 
+VIDEO_STEPS = frozenset({"video", "video.pass1", "video.pass2"})  # pipeline/build.py's video encodes
+DONE_STEPS = frozenset({StepStatus.DONE, StepStatus.REUSED})
+
+
+def _video_only(e: Entry) -> bool:
+    """The run is in its video encode and nothing else: no audio encode beside it, no demux, index or mux. The
+    steps before the video (the audio encodes among them, which start on their own threads) are all finished."""
+    runs = list(e.state.run)
+    at = next((n for n, r in enumerate(runs) if r.id in VIDEO_STEPS and r.status is StepStatus.RUNNING), None)
+    return (
+        at is not None
+        and all(r.status in DONE_STEPS for r in runs[:at])
+        and not any(r.status is StepStatus.RUNNING and r.id not in VIDEO_STEPS for r in runs[at:])
+    )
+
+
 def _exists(path: Path) -> bool:
     try:
         return path.exists()
@@ -287,6 +303,7 @@ class JobQueue:
         self._index_cancel: CancelToken | None = None
         self._index_wake = threading.Event()
         self.index_waits_for_disk = True  # the lane holds a job back while an encode reads its disk
+        self.index_during_video = True  # ... but not while the encode only encodes video (a slow, light read)
         self.sample_quality = False  # a test encode measures its quality (SSIMULACRA2, XPSNR) after it
         self.auto_index = True  # a new job goes in the index lane once probed
         self.auto_crop = True  # ... and its crop is detected (after the index; a template's fixed crop stays)
@@ -317,6 +334,7 @@ class JobQueue:
             "indexing": next((e.id for e in self.entries() if e.indexing), None),
             "sampling": next((e.id for e in self.entries() if e.sampling), None),
             "index_queued": sum(e.index_queued for e in self.entries()),
+            "index_held": sum(e.index_queued and e.index_held for e in self.entries()),  # of those, waiting for a disk
         }
 
     def _save(self, e: Entry) -> None:
@@ -1123,6 +1141,8 @@ class JobQueue:
             if run.status is StepStatus.RUNNING:
                 e.step_lines[run.id] = deque(maxlen=STEP_LINES)
             if run.status is not StepStatus.PENDING:
+                self._index_wake.set()  # a job held back for this one's disk may go (only the video left)
+            if run.status is not StepStatus.PENDING:
                 self._save(e)
             index = next((i for i, r in enumerate(e.state.run) if r is run), -1)
             recorder.step(run, index, len(e.state.run))
@@ -1371,8 +1391,10 @@ class JobQueue:
     def set_sample_quality(self, on: bool) -> None:
         self.sample_quality = on  # the next test encode's
 
-    def set_index_waits_for_disk(self, on: bool) -> None:
+    def set_index_waits_for_disk(self, on: bool, during_video: bool | None = None) -> None:
         self.index_waits_for_disk = on
+        if during_video is not None:
+            self.index_during_video = during_video
         self._index_wake.set()  # jobs held back go now (or wait from now)
 
     def stop_indexing(self, ids: Iterable[str] | None = None) -> None:
@@ -1405,6 +1427,8 @@ class JobQueue:
     def _encode_disks(self) -> frozenset[str]:
         """Under the lock: the disks the encode queue reads now, or is about to (between two jobs)."""
         e = next((x for x in self.entries() if x.running), None)
+        if e is not None and self.index_during_video and _video_only(e):
+            return frozenset()  # the encoder reads the source at its own pace: an index beside it costs little
         if e is None and self._active and not self._stop_after_current:
             e = self._next()
         if e is None:
@@ -1420,8 +1444,9 @@ class JobQueue:
 
     def _take_index(self) -> tuple[Entry | None, bool, list[Entry]]:
         """(the next job to index, whether any are left, jobs held back or let go). A job still probing
-        waits; so does one on a disk an encode reads (`index_waits_for_disk`) unless it was asked for by
-        itself, and a job on another disk goes ahead of it. One whose source another job is running waits
+        waits; so does one on a disk an encode reads (`index_waits_for_disk`; not while the encode only
+        encodes video, `index_during_video`) unless it was asked for by itself, and a job on another disk goes
+        ahead of it. One whose source another job is running waits
         in any case."""
         with self._lock:
             waiting = [
@@ -1458,6 +1483,8 @@ class JobQueue:
             for c in changed:
                 if c is not e:
                     self._changed(c)
+            if changed and e is None:
+                self._queue_changed()  # the held count changed
             if e is not None:
                 self._changed(e)
                 self._queue_changed()

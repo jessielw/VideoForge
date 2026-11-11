@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-11-11
+
+### Added
+
+- Settings: "Index anyway while it only encodes video" (on by default, under "Wait while an encode reads the same disk"). A job in the index lane on the encode's disk no longer waits for the whole encode: it goes once the running job is only encoding video, and still waits while that job extracts, encodes audio, indexes, or muxes. `PUT /api/config` takes `index_during_video` for the same.
+- The queue state (`GET /api/queue`) reports `index_held`: how many jobs in the index lane are waiting for an encode's disk.
+
+### Changed
+
+- Configuration exports are version 8 (they carry the new setting); older backups import with it on.
+
+### Fixed
+
+- Lower bar hiding connected status in bottom
+- The sidebar said "Indexing N jobs" when the jobs were only waiting for an encode's disk; it now shows those as "N to index after the encode", apart from the ones being indexed.
+
 ## [0.1.5] - 2026-11-10
 
 ### Added

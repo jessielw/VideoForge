@@ -67,6 +67,7 @@ def _state(request: Request) -> dict[str, Any]:
         "rule_sets": [{"id": pid, "name": rule_sets(pid).name} for pid in ids],
         "restart": [RESTART_FOR[n] for n in sorted(s.restart_for)],
         "index_waits_for_disk": saved.index_waits_for_disk,
+        "index_during_video": saved.index_during_video,
         "sample_quality": saved.sample_quality,
         "auto_index": saved.auto_index,
         "auto_crop": saved.auto_crop,
@@ -101,6 +102,7 @@ def get_config(request: Request) -> dict[str, Any]:
 def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     """Change any of: tools ({name: path, or "" / null for the default}), roots (a list, or null
     for every drive), rule_set (an id, or null for videoforge.toml's), index_waits_for_disk (bool),
+    index_during_video (bool: with index_waits_for_disk, a job still goes while the encode only encodes video),
     sample_quality (bool: a test encode measures its SSIMULACRA2 and XPSNR),
     auto_index (bool: new jobs are indexed once probed), auto_crop (bool: and their crop detected),
     parallel_audio (audio encodes at once beside the video, 0 to MAX_PARALLEL_AUDIO; null for videoforge.toml's),
@@ -131,6 +133,7 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         if rule_set is not None and rule_set not in s.rule_set_ids:
             raise HTTPException(422, f"No rule set {rule_set!r} is installed")
     waits = bool(body["index_waits_for_disk"]) if "index_waits_for_disk" in body else saved.index_waits_for_disk
+    during_video = bool(body["index_during_video"]) if "index_during_video" in body else saved.index_during_video
     quality = bool(body["sample_quality"]) if "sample_quality" in body else saved.sample_quality
     index = bool(body["auto_index"]) if "auto_index" in body else saved.auto_index
     crop = bool(body["auto_crop"]) if "auto_crop" in body else saved.auto_crop
@@ -184,6 +187,7 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         sample_quality=quality,
         auto_index=index,
         auto_crop=crop,
+        index_during_video=during_video,
         **priorities,
     )
     new.save(s.store)
@@ -196,7 +200,7 @@ def apply_settings(request: Request, new: SavedSettings) -> None:
     s = request.app.state
     before = s.config.tools
     s.saved = new
-    s.queue.set_index_waits_for_disk(new.index_waits_for_disk)
+    s.queue.set_index_waits_for_disk(new.index_waits_for_disk, new.index_during_video)
     s.queue.set_sample_quality(new.sample_quality)
     s.queue.auto_index = new.auto_index
     s.queue.auto_crop = new.auto_crop

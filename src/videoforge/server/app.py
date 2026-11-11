@@ -100,6 +100,7 @@ def create_app(
         records_dir=settings.records_dir,
     )
     job_queue.index_waits_for_disk = saved.index_waits_for_disk
+    job_queue.index_during_video = saved.index_during_video
     job_queue.sample_quality = saved.sample_quality
     job_queue.auto_index = saved.auto_index
     job_queue.auto_crop = saved.auto_crop
