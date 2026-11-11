@@ -331,6 +331,8 @@ export interface SubTrack {
   original: boolean
   element_count: number | null
   external_path: string | null
+  // a file extracted from the source ("_trackN_"): the source track's id whose title and flags it took
+  title_from?: number | null
   detected: Record<string, boolean>
   auto?: TrackAuto
 }

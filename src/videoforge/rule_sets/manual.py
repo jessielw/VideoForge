@@ -276,7 +276,7 @@ class ManualRuleSet(RuleSet):
     def validate_output(self, plan: Plan, output: SourceInfo) -> list[Issue]:
         return output_matches_plan(plan, output)
 
-    def detected_flags(self, track: AudioTrack | SubTrack) -> dict[str, bool]:
+    def detected_flags(self, track: AudioTrack | SubTrack, original_language: str | None = None) -> dict[str, bool]:
         kind = TrackKind.AUDIO if isinstance(track, AudioTrack) else TrackKind.SUB
         return {k: getattr(track, k) for k in _KIND_FLAGS[kind]}
 

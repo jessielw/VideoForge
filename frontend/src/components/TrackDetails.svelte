@@ -25,7 +25,12 @@
     const common: [string, string][] = [
       ['Source', t.external_path ? `${t.external_path}${t.index ? ` (track ${t.index + 1})` : ''}` : `Track #${t.id}`],
       ['Language', t.language],
-      ['Title', t.title || '—'],
+      [
+        'Title',
+        t.title && 'title_from' in t && t.title_from != null
+          ? `${t.title} (inferred from input track #${t.title_from})`
+          : t.title || '—',
+      ],
     ]
     if ('codec' in t)
       return [
