@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-11-11
+
+### Added
+
+- Track editor: a subtitle file extracted from the source (gMKVExtract `_trackN_`) that takes its title from that input track now says so: "(title inferred from input track #N)" beside the title, and in the track details. Tracks report it as `title_from` (the input track's id).
+
+### Changed
+
+- Rule sets: `detected_flags` also gets the plan's original language, for flags that depend on it (a dub's subtitle).
+
 ## [0.1.6] - 2026-11-11
 
 ### Added

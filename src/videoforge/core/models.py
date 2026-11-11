@@ -129,6 +129,9 @@ class SubTrack:
     number: int | None = None  # the container's track number (MKV: mkvmerge id + 1, gMKVExtract "trackN")
     external_path: Path | None = None
     extracted_from: int | None = None  # source track number an external file was extracted from
+    # an external file matched to a source track (extracted_from): that track's mkvmerge id, whose title and
+    # forced/SDH flags it took (inferred, the file itself has none)
+    title_from: int | None = None
     delay_ms: int = 0  # its start's offset to the video's, outside Matroska (ffprobe's): an MP4's, for the mux
     # Classification hints from the external filename ({stem}.en.forced.srt etc.)
     tags: frozenset[str] = frozenset()
