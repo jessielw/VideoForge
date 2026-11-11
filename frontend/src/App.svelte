@@ -159,8 +159,17 @@
             <div>{app.queue.queued ? `${app.queue.queued} queued` : 'Idle'}</div>
           {/if}
           {#if app.queue.indexing || app.queue.index_queued}
-            {@const left = (app.queue.indexing ? 1 : 0) + app.queue.index_queued}
-            <div class="truncate text-info">Indexing {left} job{left > 1 ? 's' : ''}</div>
+            {@const held = app.queue.index_held ?? 0}
+            {@const left = (app.queue.indexing ? 1 : 0) + app.queue.index_queued - held}
+            {#if left}<div class="truncate text-info">Indexing {left} job{left > 1 ? 's' : ''}</div>{/if}
+            {#if held}
+              <Tip
+                class="block truncate text-muted-foreground"
+                text="An encode is reading their disk (Settings, Batch indexing)"
+              >
+                {held} to index after the encode
+              </Tip>
+            {/if}
           {/if}
           {#if app.queue.sampling}<div class="truncate text-info">Test encode</div>{/if}
           <div class={app.connected ? 'text-success' : 'text-destructive'}>

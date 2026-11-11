@@ -87,6 +87,7 @@ class SavedSettings:
     sample_quality: bool = False  # a test encode measures its quality (SSIMULACRA2, XPSNR) after it
     auto_index: bool = True  # a new job is put in the index lane as soon as it's probed
     auto_crop: bool = True  # ... and its crop detected (which indexes it first)
+    index_during_video: bool = True  # index_waits_for_disk lets a job go while the encode is only encoding video
 
     @classmethod
     def load(cls, store) -> SavedSettings:
@@ -107,6 +108,7 @@ class SavedSettings:
             bool(store.get_setting("sample_quality", False)),
             auto_index=bool(store.get_setting("auto_index", True)),
             auto_crop=bool(store.get_setting("auto_crop", True)),
+            index_during_video=bool(store.get_setting("index_during_video", True)),
         )
 
     def save(self, store) -> None:

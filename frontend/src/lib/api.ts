@@ -219,6 +219,7 @@ export const api = {
     roots?: string[] | null
     rule_set?: string | null
     index_waits_for_disk?: boolean
+    index_during_video?: boolean
     sample_quality?: boolean
     auto_index?: boolean
     auto_crop?: boolean
