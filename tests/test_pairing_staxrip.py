@@ -89,6 +89,14 @@ def test_extracted_srt_inherits_source_track_traits(tmp_path):
     (track,), issues = external_tracks(info, [path])
     assert not issues
     assert track.forced and track.title == "English (ASS Foreign)" and track.element_count == 30
+    assert track.title_from == foreign.id  # marked inferred: the editor says where the title came from
+
+
+def test_unmatched_external_title_is_not_inferred(tmp_path):
+    path = tmp_path / EXTRACT
+    path.write_text("", encoding="utf-8")
+    (track,), _ = external_tracks(source(subs=[sub(F.PGS, "en", "English", index=0)]), [path])
+    assert track.title == "" and track.title_from is None
 
 
 def test_subtitle_and_chapter_folders_match_by_episode(tmp_path):

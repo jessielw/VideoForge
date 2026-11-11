@@ -61,8 +61,9 @@ class RuleSet(ABC):
         """Checks on any finished release, including ones this tool didn't make (`videoforge validate`)."""
         return []
 
-    def detected_flags(self, track: AudioTrack | SubTrack) -> dict[str, bool]:
-        """track_properties values as the rule set reads them before overrides (the GUI's starting values)."""
+    def detected_flags(self, track: AudioTrack | SubTrack, original_language: str | None = None) -> dict[str, bool]:
+        """track_properties values as the rule set reads them before overrides (the GUI's starting values).
+        original_language is the plan's (None before one is made), for flags that depend on it (a dub)."""
         return {}
 
     def output_stem(self, plan: Plan) -> str:

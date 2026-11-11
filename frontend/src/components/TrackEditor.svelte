@@ -557,6 +557,13 @@
               ? ` · ${t.title}`
               : ''}</span
           >
+          {#if !isAudio(t) && t.title && t.title_from != null}
+            <Tip
+              text="The file has no title of its own: its name (_trackN_) matches input track #{t.title_from}, so it took that track's title and Forced/SDH flags"
+            >
+              <span class="text-xs text-muted-foreground italic">(title inferred from input track #{t.title_from})</span>
+            </Tip>
+          {/if}
         </div>
         {#if details(t).length}
           <div class="flex flex-wrap gap-x-3 text-xs text-muted-foreground tabular-nums" data-details>

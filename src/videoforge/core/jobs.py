@@ -93,6 +93,7 @@ def external_tracks(source: SourceInfo, paths: list[Path]) -> tuple[list[SubTrac
             track = replace(
                 track,
                 title=origin.title,
+                title_from=origin.id,
                 forced=track.forced or origin.forced,
                 hearing_impaired=track.hearing_impaired or origin.hearing_impaired,
             )
