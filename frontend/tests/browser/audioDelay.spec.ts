@@ -46,6 +46,7 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
     custom_script: false,
     pause_after_pass1: false,
     indexed: false,
+    source_facts: null,
     index_error: '',
     index_held: false,
     sample_waiting: false,

@@ -195,3 +195,23 @@ def test_mkvmerge_lines_up_an_mp4s_copied_tracks_by_their_delay(tmp_path):
     src.container, src.video.start_ms = "MPEG transport stream", 12
     argv = mux_command(plan, {}, Path("out.mkv.partial"), "mkvmerge", (".h264",))
     assert syncs(argv) == ["1:-12", "2:-12", "2:-12"]
+
+
+def test_mediainfo_report_parses_once_until_the_file_changes(tmp_path, monkeypatch):
+    calls: list[str] = []
+
+    def parse(path, output=None, full=True):
+        calls.append(path)
+        assert (output, full) == ("text", False)
+        return f"General\r\nFile size : {Path(path).stat().st_size}\r\n"
+
+    monkeypatch.setattr(probe_mod.MediaInfo, "parse", parse)
+    probe_mod._report.cache_clear()
+    f = tmp_path / "a.mkv"
+    f.write_bytes(b"x")
+    assert probe_mod.mediainfo_report(f) == "General\nFile size : 1"  # one newline style, no trailing blank
+    probe_mod.mediainfo_report(f)
+    assert len(calls) == 1
+    f.write_bytes(b"xy")
+    assert probe_mod.mediainfo_report(f) == "General\nFile size : 2"
+    assert len(calls) == 2

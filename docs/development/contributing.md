@@ -2,6 +2,15 @@
 
 Start with a [source checkout](../getting-started/source.md). The backend is Python / FastAPI; the frontend is Svelte 5, Vite, and TypeScript. Read the [architecture](architecture.md) before changing planning, execution, or saved job data.
 
+## Branches
+
+Branch from `dev` and open pull requests against `dev`. `main` holds tagged releases; changes reach it from `dev` when a release is cut.
+
+```sh
+git fetch origin
+git switch -c my-change origin/dev
+```
+
 ## Development servers
 
 Start the backend in one terminal:

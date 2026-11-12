@@ -37,6 +37,7 @@
   import { saves } from '../lib/saves'
   import { PRIORITY_LABEL } from '../lib/format'
   import { app } from '../lib/state.svelte'
+  import { browserNotify } from '../lib/browserNotify.svelte'
   import type {
     ActionKind,
     ActionSetting,
@@ -755,6 +756,26 @@
                     rel="noreferrer">any service Apprise supports</a
                   > when jobs end.
                 </span>
+              </div>
+              <div class="space-y-1 rounded-xl border bg-card px-4 py-3">
+                <label class="flex items-center gap-2 text-sm has-disabled:opacity-60">
+                  <Checkbox
+                    checked={browserNotify.on}
+                    disabled={!browserNotify.supported || browserNotify.permission === 'denied'}
+                    onCheckedChange={(v) => browserNotify.set(v)}
+                  />
+                  Desktop notification from this browser when the queue finishes
+                </label>
+                <p class="pl-6 text-xs text-muted-foreground">
+                  {#if !browserNotify.supported}
+                    Browsers allow these on https or localhost only; this page is on plain http.
+                  {:else if browserNotify.permission === 'denied'}
+                    This browser blocks notifications from VideoForge: allow them in its site settings.
+                  {:else}
+                    Only while VideoForge isn't the tab in front; in front, each job's own toast says it. Just this
+                    browser.
+                  {/if}
+                </p>
               </div>
               <div class="divide-y divide-border/60 rounded-xl border bg-card">
                 {#each config.notifications as d, i (i)}

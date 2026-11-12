@@ -7,7 +7,15 @@
   // Files can be added to the job here and removed again, and an audio track can be used more
   // than once ("Add a track from…": a copy with its own encode, title and flags).
   import type { InputChanges } from '../lib/api'
-  import { audioFormat, emptyOverride, isEmpty, languageName, shownOptions, subtitleName } from '../lib/format'
+  import {
+    audioFormat,
+    emptyOverride,
+    isEmpty,
+    languageName,
+    shownOptions,
+    subtitleName,
+    withImmersive,
+  } from '../lib/format'
   import { app } from '../lib/state.svelte'
   import type {
     AudioAction,
@@ -169,6 +177,10 @@
       !t.copy &&
       !overrides.audio_track_ids.includes(t.id))
   const outPos = (t: Track) => (isAudio(t) ? plannedAudio.get(t.key)?.pos : plannedSubs.get(t.key))
+  // A rule set with no Default to set by hand picks it itself (e.g. the first track): the plan's shows read-only.
+  const setsDefault = $derived(properties.some((p) => p.key === 'default'))
+  const plannedDefault = (t: Track) =>
+    isAudio(t) ? !!plannedAudio.get(t.key)?.a.default : !!plan?.subs[plannedSubs.get(t.key) ?? -1]?.default
   // The track as the rule set has it with no hand edit (a rule set with its own rules, e.g. a group's,
   // titles, encodes and picks tracks itself): shown until changed, and changing back saves no override.
   const autoKept = (t: Track) => t.auto?.kept ?? true
@@ -277,7 +289,8 @@
   }
 
   // The flag with no hand edit: Default is whatever the rule set plans (it picks one itself), the rest what it reads.
-  const flagBase = (t: Track, key: string) => (key === 'default' ? t.auto?.default : undefined) ?? t.detected[key] ?? false
+  const flagBase = (t: Track, key: string) =>
+    (key === 'default' ? t.auto?.default : undefined) ?? t.detected[key] ?? false
   const flagOn = (t: Track, key: string) => ovOf(t)?.flags[key] ?? flagBase(t, key)
   const flagMark = (t: Track, key: string) => mark(t, (ov) => ov?.flags[key])
   function toggleFlag(t: Track, key: string) {
@@ -408,7 +421,7 @@
     if (isAudio(t)) {
       const fmt = t.commercial_name ? audioFormat(t) : t.format_name || CODEC[t.codec] || t.codec
       const where = t.external_path ? `${basename(t.external_path)}${t.index ? ` #${t.index + 1}` : ''}:` : `#${t.id}`
-      return `${where} ${fmt}${t.atmos ? ' Atmos' : t.dtsx ? ' DTS:X' : ''} ${t.layout}`
+      return `${where} ${withImmersive(fmt, t)} ${t.layout}`
     }
     return t.external_path
       ? `${basename(t.external_path)} (${t.format.toUpperCase()})`
@@ -561,7 +574,8 @@
             <Tip
               text="The file has no title of its own: its name (_trackN_) matches input track #{t.title_from}, so it took that track's title and Forced/SDH flags"
             >
-              <span class="text-xs text-muted-foreground italic">(title inferred from input track #{t.title_from})</span>
+              <span class="text-xs text-muted-foreground italic">(title inferred from input track #{t.title_from})</span
+              >
             </Tip>
           {/if}
         </div>
@@ -670,6 +684,15 @@
               >
             </Tip>
           {/each}
+          {#if !setsDefault && plannedDefault(t)}
+            <Tip text="Default in the output: the rule set picks it, so it isn't set here">
+              <Badge
+                variant="outline"
+                class="h-6 rounded-full border-dashed border-primary/50 px-2 text-xs font-normal text-primary"
+                aria-label="Default (set by the rule set)">Default</Badge
+              >
+            </Tip>
+          {/if}
         </div>
       </div>
       {#if isAudio(t)}

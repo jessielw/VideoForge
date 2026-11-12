@@ -305,6 +305,9 @@ def test_add_inspect_and_edit(tmp_path):
         assert len(ids) == 2
         job = wait_for(client, ids[0], "ready", "warn")
         assert job["encoder"] == "x264 crf 18"  # the manual rule set's default encode
+        # The queue row's facts about the source: the fake probe's 1080p SDR, length not known.
+        facts = {"resolution": job["plan"]["resolution"], "duration_ms": None, "hdr": [], "interlaced": False}
+        assert job["source_facts"] == facts
         assert job["spec"]["encoder"]["preset"] == "slow"
         assert [a["action"] for a in job["plan"]["audio"]] == ["copy", "copy"]
         assert Path(job["plan"]["encode_path"]).parts[-3:] == ("Show.S01E01.mkv_tmp", "main", "video.264")
@@ -545,6 +548,10 @@ def test_queue_runs_jobs_and_streams_events(tmp_path):
             while not ((ev := ws.receive_json())["type"] == "queue" and ev["queued"] == 0 and ev["current"] is None):
                 pass
             assert ev["running"] is False
+            # Then what it ran, for the page's toast and desktop notification.
+            while (ev := ws.receive_json())["type"] != "queue.finished":
+                pass
+            assert ev["statuses"] == ["done", "done"] and ev["left"] == 0 and ev["seconds"] >= 0
         for i in ids:
             job = wait_for(client, i, "done")
             assert job["steps"]["video"]["fingerprint"] == "abc"
@@ -1986,7 +1993,7 @@ def test_folder_browser(tmp_path):
         kinds = client.post("/api/fs/kinds", json={"paths": paths}).json()
         assert [k["kind"] for k in kinds] == ["folder", "file", "missing", "outside", "missing"]
 
-        # New folders, and deleting them: one with things in it only when asked to.
+        # New folders, and deleting them: only an empty one, whatever the request asks.
         made = client.post("/api/fs/mkdir", json={"path": str(tmp_path), "name": " out "}).json()["path"]
         assert made == str(tmp_path / "out") and (tmp_path / "out").is_dir()
         assert client.post("/api/fs/mkdir", json={"path": str(tmp_path), "name": "out"}).status_code == 409
@@ -1995,14 +2002,18 @@ def test_folder_browser(tmp_path):
         assert client.post("/api/fs/mkdir", json={"path": outside, "name": "x"}).status_code == 403
         (tmp_path / "out" / "sub").mkdir()
         (tmp_path / "out" / "sub" / "a.mkv").write_bytes(b"12345")
-        (tmp_path / "out" / "b.txt").write_bytes(b"123")
-        assert client.get("/api/fs/contents", params={"path": made}).json() == {"files": 2, "dirs": 1, "bytes": 8}
-        assert client.post("/api/fs/rmdir", json={"path": made}).status_code == 409
+        assert client.get("/api/fs/contents", params={"path": made}).status_code == 404  # removed
+        for body in ({"path": made}, {"path": made, "recursive": True}):
+            r = client.post("/api/fs/rmdir", json=body)
+            assert r.status_code == 409
+            assert (
+                r.json()["detail"]
+                == "out has files in it, so VideoForge won't delete it. To delete it, use your file manager."
+            )
         assert (tmp_path / "out" / "sub" / "a.mkv").exists()
-        assert client.post("/api/fs/rmdir", json={"path": made, "recursive": True}).status_code == 200
-        assert not (tmp_path / "out").exists()
         (tmp_path / "empty").mkdir()
         assert client.post("/api/fs/rmdir", json={"path": str(tmp_path / "empty")}).status_code == 200
+        assert not (tmp_path / "empty").exists()
         # Never a browsable root (or what holds one), never outside them.
         assert client.post("/api/fs/rmdir", json={"path": str(tmp_path), "recursive": True}).status_code == 403
         assert client.post("/api/fs/rmdir", json={"path": outside, "recursive": True}).status_code == 403
@@ -2371,3 +2382,34 @@ def test_auto_index_and_auto_crop_are_separate_options(tmp_path):
         assert client.put("/api/config", json={"auto_index": False, "auto_crop": True}).json()["auto_crop"] is True
         job = added("S01E03")
         assert job["indexed"] and job["spec"]["video"]["crop"] == {"left": 0, "top": 20, "right": 0, "bottom": 22}
+
+
+def test_mediainfo_reports_on_the_jobs_own_files_only(tmp_path, monkeypatch):
+    from videoforge.server.routes import jobs as job_routes
+
+    monkeypatch.setattr(job_routes, "mediainfo_report", lambda path: f"General\nComplete name : {path.name}")
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        [job_id] = add(client, tmp_path)
+        source = str(tmp_path / "src" / "Show.S01E01.mkv")
+        subs = str(tmp_path / "src" / "Show.S01E01.en.srt")
+
+        report = client.get(f"/api/jobs/{job_id}/mediainfo").json()  # no path: the source
+        assert report == {"path": source, "text": "General\nComplete name : Show.S01E01.mkv"}
+        assert client.get(f"/api/jobs/{job_id}/mediainfo", params={"path": subs}).json()["path"] == subs
+        # Only the job's inputs: not any file the server can see.
+        stranger = tmp_path / "other.mkv"
+        stranger.write_bytes(b"x")
+        assert client.get(f"/api/jobs/{job_id}/mediainfo", params={"path": str(stranger)}).status_code == 404
+        assert client.get("/api/jobs/nope/mediainfo").status_code == 404
+
+        # The output a run made is one of its files too.
+        client.post("/api/queue/start", json={"ids": [job_id]})
+        output = wait_for(client, job_id, "done")["output"]
+        Path(output).parent.mkdir(parents=True, exist_ok=True)
+        Path(output).write_bytes(b"x")
+        assert client.get(f"/api/jobs/{job_id}/mediainfo", params={"path": output}).json()["path"] == output
+
+        Path(source).unlink()
+        gone = client.get(f"/api/jobs/{job_id}/mediainfo")
+        assert gone.status_code == 404 and "Can't find" in gone.json()["detail"]

@@ -220,6 +220,14 @@ export function audioFormat(t: { commercial_name?: string; format_name: string; 
   return SHORT_COMMERCIAL.find(([re]) => re.test(c))?.[1] ?? c
 }
 
+/** `fmt` with " Atmos" / " DTS:X" added when the track carries it and `fmt` does not already say so
+ * (MediaInfo's commercial name "Dolby TrueHD with Dolby Atmos" already does). */
+export function withImmersive(fmt: string, t: { atmos?: boolean; dtsx?: boolean }): string {
+  if (t.atmos && !/atmos/i.test(fmt)) return `${fmt} Atmos`
+  if (!t.atmos && t.dtsx && !/dts:?x/i.test(fmt)) return `${fmt} DTS:X`
+  return fmt
+}
+
 /** A subtitle's title from its language and flags: "English", "English (Forced)", "Spanish (Latin America) (SDH)".
  * The same names as the server's (core/template.py sub_title), which templates use. */
 export function subtitleName(

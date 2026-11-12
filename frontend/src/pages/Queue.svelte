@@ -41,7 +41,7 @@
   import ReuseDialog from '../components/ReuseDialog.svelte'
   import Tip from '../components/Tip.svelte'
   import { api } from '../lib/api'
-  import { bytes, percent, PRIORITY_LABEL, progressTimes, STATUS_LABEL, STATUS_TONE } from '../lib/format'
+  import { bytes, duration, percent, PRIORITY_LABEL, progressTimes, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { router } from '../lib/router.svelte'
   import { layout } from '../lib/layout.svelte'
   import { app } from '../lib/state.svelte'
@@ -1003,6 +1003,31 @@
                   <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
                 {/if}
               </div>
+              {#if job.source_facts}
+                {@const f = job.source_facts}
+                <div class="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-muted-foreground">
+                  <span class="shrink-0"
+                    >{f.resolution}{f.duration_ms ? ` · ${duration(f.duration_ms / 1000)}` : ''}{f.interlaced
+                      ? ' · interlaced'
+                      : ''}</span
+                  >
+                  {#each f.hdr as name (name)}
+                    <Tip
+                      class="shrink-0"
+                      text={name.endsWith('?')
+                        ? 'Dolby Vision profile 7: set dovi_tool (Settings, Tools) to read whether its enhancement layer is FEL or MEL; it decides the encode'
+                        : 'The source is ' + name}
+                    >
+                      <Badge
+                        variant="outline"
+                        class="px-1 py-0 text-[10px] font-normal {name.startsWith('DV')
+                          ? 'border-info/40 text-info'
+                          : ''} {name.endsWith('?') ? 'border-warning/40 text-warning' : ''}">{name}</Badge
+                      >
+                    </Tip>
+                  {/each}
+                </div>
+              {/if}
               <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                 <span>{job.encoder}</span>
                 {#if job.custom_script}

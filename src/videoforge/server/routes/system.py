@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
 import os
 from pathlib import Path
 import re
-import shutil
-import stat
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -120,29 +117,10 @@ def make_dir(request: Request, path: str = Body(...), name: str = Body(...)) -> 
     return {"path": str(folder)}
 
 
-@router.get("/fs/contents")
-def dir_contents(request: Request, path: str) -> dict[str, int]:
-    """What deleting a folder would take with it: its files and subfolders (all the way down), and their size."""
-    folder = _browsable(request, path)
-    if not folder.is_dir():
-        raise HTTPException(404, f"No folder {path}")
-    files = dirs = size = 0
-    for here, subdirs, names in os.walk(folder, onerror=lambda _: None):
-        dirs += len(subdirs)
-        # Links and junctions to folders are deleted, not what they point at: don't count into them.
-        subdirs[:] = [d for d in subdirs if not (os.path.islink(p := os.path.join(here, d)) or os.path.isjunction(p))]
-        for n in names:
-            files += 1
-            try:
-                size += os.lstat(os.path.join(here, n)).st_size
-            except OSError:
-                pass
-    return {"files": files, "dirs": dirs, "bytes": size}
-
-
 @router.post("/fs/rmdir")
-def remove_dir(request: Request, path: str = Body(...), recursive: bool = Body(False)) -> dict[str, str]:
-    """Delete a folder; one with anything in it only when `recursive`. Never a browsable root or a drive."""
+def remove_dir(request: Request, path: str = Body(..., embed=True)) -> dict[str, str]:
+    """Delete an empty folder (the picker's undo for a "New folder" made by mistake). Never one with anything
+    in it, a browsable root or a drive: other file work belongs in a file manager."""
     folder = _browsable(request, path)
     roots = request.app.state.settings.roots
     if folder.parent == folder or any(_under(r, folder) for r in roots):
@@ -152,21 +130,15 @@ def remove_dir(request: Request, path: str = Body(...), recursive: bool = Body(F
     if not folder.is_dir():
         raise HTTPException(404, f"No folder {path}")
     try:
-        if recursive:
-            shutil.rmtree(folder, onexc=_clear_read_only)
-        else:
-            folder.rmdir()
+        folder.rmdir()
     except OSError as ex:
-        if not recursive and any(folder.iterdir()):
-            raise HTTPException(409, f"{folder.name} isn't empty") from None
+        if any(folder.iterdir()):
+            raise HTTPException(
+                409,
+                f"{folder.name} has files in it, so VideoForge won't delete it. To delete it, use your file manager.",
+            ) from None
         raise HTTPException(403, str(ex)) from None
     return {"path": str(folder)}
-
-
-def _clear_read_only(func: Callable[[str], object], path: str, _: BaseException) -> None:
-    # Windows won't delete a read-only file; clear the flag and try once more.
-    os.chmod(path, stat.S_IWRITE)
-    func(path)
 
 
 def _under(path: Path, root: Path) -> bool:

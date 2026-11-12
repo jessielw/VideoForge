@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-11-12
+
+### Security
+
+- The folder picker now offers Delete only on folders you made in it while it's open, and only while they're empty. Before, it could permanently delete any folder on a browsable drive, along with everything in it. The server enforces the same limit: it refuses to delete a folder that has files in it.
+
+### Added
+
+- x264 / x265 encodes warn (`video.color_retag`) when the encoder options or extra arguments set `--colorprim`, `--transfer`, `--colormatrix` or `--range` to something other than the source's. The flags only label the picture, so unless the script converts it a player shows the wrong colours: a BT.2020 SDR UHD tagged BT.709 plays oversaturated. Remove the flags to keep the source's colour.
+- A UHD source that doesn't describe its colour gets a note (`video.color_untagged`) when the encoder options don't set it either: the encode is untagged there and a player has to guess.
+- Track editor: when a rule set picks the Default track itself and offers no Default pill (e.g. the first audio track), the track it marks shows a read-only "Default" label.
+- Job editor: a MediaInfo button shows MediaInfo's text report of the source, or of the job's encode, added audio or subtitle files, with a Copy button. The report is read when asked (a spinner shows while it loads) and kept until the file changes. API: `GET /api/jobs/{id}/mediainfo?path=`, limited to the job's own files. Once a run has made the output, it's in the list too.
+- Queue rows show the source at a glance: its size, length, interlacing and HDR formats (`DV 7.6 FEL`, `HDR10+`, `HDR10`, `HLG`). A profile 7 source whose enhancement layer couldn't be read (dovi_tool not set) shows `FEL/MEL?`. API: `source_facts` on each job.
+- Settings, Automation: a desktop notification from this browser when the queue finishes, while VideoForge isn't the tab in front ("Queue finished: 3 jobs: 2 done, 1 failed · took 1:05:12"). Browsers allow it on https or localhost only. The server sends a `queue.finished` event over the page's WebSocket.
+
+### Changed
+
+- Updated fastapi.
+
+### Fixed
+
+- A plugin rule set built for 0.1.6 or earlier (`detected_flags(track)`, without `original_language`) no longer breaks the job page with a 500: it's called with the track alone.
+- Audio track labels no longer repeat Atmos or DTS:X when the format's commercial name already says it ("Dolby TrueHD with Dolby Atmos 7.1", not "… Dolby Atmos Atmos 7.1"), in the Tracks tab, the track editor and the track details.
+
+### Removed
+
+- `GET /api/fs/contents`. It only counted a folder's files for the old delete dialog.
+- The `recursive` option of `POST /api/fs/rmdir`. The endpoint now deletes empty folders only.
+
 ## [0.1.7] - 2026-11-11
 
 ### Added
@@ -353,4 +382,16 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 - **Bundled VapourSynth plugins.** Source filters (BestSource, L-SMASH-Works, FFMS2, d2vsource) and common filters (EdgeFixer, FillBorders, MVTools, znedi3, dfttest2, BM3D, zsmooth, vszip, fmtconv, descale, ...) plus havsfunc, mvsfunc and awsmfunc, from one list (`vsplugins/manifest.toml`): built from source in the Docker image, downloaded (pinned, checked) for the portable build or a source install (`scripts/fetch_plugins.py`).
 - **Profiles.** The built-in `manual` profile; other profiles (a release group's rules) install as separate packages under the `videoforge.profiles` entry point group.
 
+[Unreleased]: https://github.com/jessielw/VideoForge/compare/0.1.7...HEAD
+[0.1.7]: https://github.com/jessielw/VideoForge/releases/tag/0.1.7
+[0.1.6]: https://github.com/jessielw/VideoForge/releases/tag/0.1.6
+[0.1.5]: https://github.com/jessielw/VideoForge/releases/tag/0.1.5
+[0.1.4]: https://github.com/jessielw/VideoForge/releases/tag/0.1.4
+[0.1.3]: https://github.com/jessielw/VideoForge/releases/tag/0.1.3
+[0.1.2]: https://github.com/jessielw/VideoForge/releases/tag/0.1.2
+[0.1.1]: https://github.com/jessielw/VideoForge/releases/tag/0.1.1
 [0.1.0]: https://github.com/jessielw/VideoForge/releases/tag/0.1.0
+[0.1.0-beta.17]: https://github.com/jessielw/VideoForge/releases/tag/0.1.0-beta.17
+[0.1.0-beta.16]: https://github.com/jessielw/VideoForge/releases/tag/0.1.0-beta.16
+[0.1.0-beta.15]: https://github.com/jessielw/VideoForge/releases/tag/0.1.0-beta.15
+[0.1.0-beta.14]: https://github.com/jessielw/VideoForge/releases/tag/0.1.0-beta.14

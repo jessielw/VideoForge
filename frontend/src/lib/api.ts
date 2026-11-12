@@ -7,7 +7,6 @@ import type {
   AudioPresetSettings,
   ClipInfo,
   CommandStep,
-  DirContents,
   ConfigState,
   ConfigurationBundle,
   ConfigurationPreview,
@@ -250,8 +249,7 @@ export const api = {
     ),
   pathKinds: (paths: string[]) => post<PathKind[]>('/api/fs/kinds', { paths }),
   makeDir: (path: string, name: string) => post<{ path: string }>('/api/fs/mkdir', { path, name }),
-  dirContents: (path: string) => get<DirContents>(`/api/fs/contents?path=${encodeURIComponent(path)}`),
-  removeDir: (path: string, recursive = false) => post<{ path: string }>('/api/fs/rmdir', { path, recursive }),
+  removeDir: (path: string) => post<{ path: string }>('/api/fs/rmdir', { path }), // empty folders only
 
   match: (slots: InputSlots) => post<MatchResult>('/api/match', slots),
   addJobs: (
@@ -304,6 +302,9 @@ export const api = {
   reprobe: (ids: string[]) => post('/api/jobs/reprobe', { ids }),
   log: (id: string) => get<{ lines: string[] }>(`/api/jobs/${id}/log`),
   commands: (id: string) => get<CommandStep[]>(`/api/jobs/${id}/commands`),
+  // MediaInfo's text report of one of the job's files (no path: the source); parsed on request
+  mediainfo: (id: string, path?: string) =>
+    get<{ path: string; text: string }>(`/api/jobs/${id}/mediainfo${path ? `?${new URLSearchParams({ path })}` : ''}`),
   steps: (id: string) => get<StepOutput[]>(`/api/jobs/${id}/steps`),
   logSnapshot: (id: string) =>
     get<{ seq: number; steps: StepOutput[]; lines: string[] }>(`/api/jobs/${id}/log-snapshot`),

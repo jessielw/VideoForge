@@ -14,6 +14,7 @@ A TS's video start (``VideoInfo.start_ms``) is its offset to the earliest stream
 from __future__ import annotations
 
 from fractions import Fraction
+from functools import lru_cache
 import json
 from pathlib import Path
 import subprocess
@@ -78,6 +79,17 @@ def ffprobe_streams(path: Path, ffprobe: str) -> list[dict[str, Any]]:
     except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
         return []
     return streams if isinstance(streams, list) else []
+
+
+def mediainfo_report(path: Path) -> str:
+    """MediaInfo's text report of a file, as its own CLI prints it. Cached while the file is unchanged."""
+    stat = path.stat()
+    return _report(str(path), stat.st_size, stat.st_mtime_ns)
+
+
+@lru_cache(maxsize=32)
+def _report(path: str, _size: int, _mtime_ns: int) -> str:
+    return str(MediaInfo.parse(path, output="text", full=False)).replace("\r\n", "\n").strip()
 
 
 def _by_number(streams: list[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:

@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from videoforge.core.config import PROJECT_ROOT
-from videoforge.core.models import VideoColor, VideoInfo
+from videoforge.core.models import Severity, VideoColor, VideoInfo
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video import crop as autocrop, vs as vsx
 from videoforge.core.video.encoders import (
@@ -306,6 +306,42 @@ def test_svtav1_command(tmp_path):
     assert sdr[sdr.index("--chroma-sample-position") + 1] == "1" and sdr[sdr.index("--color-range") + 1] == "1"
     assert "--mastering-display" not in sdr and "--content-light" not in sdr
     assert "--color-range" not in encoder_command("SvtAv1EncApp", s, output=Path("v.ivf"), color=VideoColor("bt709"))
+
+
+def test_color_retag_issues():
+    """x264 / x265 options that label the picture as another colour than the source's warn (a BT.2020 SDR UHD tagged
+    BT.709 shows oversaturated); the source's own values, H.273 numbers, and x264's range names don't."""
+    sdr2020 = VideoInfo(3840, 2160, color=VideoColor("bt2020", "bt2020-10", "bt2020nc", "limited", 2))
+    forced = {"colorprim": "bt709", "transfer": "bt709", "colormatrix": "bt709", "range": "limited"}
+    x265 = EncoderSettings(Encoder.X265, depth=10, options=forced)
+    (issue,) = encoder_issues(x265, sdr2020)
+    assert issue.code == "video.color_retag" and issue.severity is Severity.WARN
+    assert "--colorprim bt709 (the source is bt2020)" in issue.message and "--range" not in issue.message
+    assert encoder_issues(replace(x265, options={"range": "limited"}), sdr2020) == []
+    same = {"colorprim": "9", "transfer": "bt2020-10", "colormatrix": "BT2020NC"}
+    assert encoder_issues(replace(x265, options=same), sdr2020) == []  # numbers and case: the same colour
+    bt709 = VideoInfo(1920, 1080, color=VideoColor("bt709", "bt709", "bt709", "limited"))
+    x264 = EncoderSettings(Encoder.X264, options={"colorprim": "bt709", "transfer": "bt709", "colormatrix": "bt709"})
+    assert encoder_issues(x264, bt709) == []
+    assert [i.code for i in encoder_issues(x264, sdr2020)] == ["video.color_retag"]  # a 1080p made from the UHD
+    assert [i.code for i in encoder_issues(replace(x264, options={}, extra="--range pc"), bt709)] == [
+        "video.color_retag"
+    ]
+    assert encoder_issues(replace(x264, options={}, extra="--range tv"), bt709) == []
+    # the extra arguments win over the options, as on the command line
+    assert (
+        encoder_issues(replace(x264, extra="--colorprim bt2020 --transfer bt2020-10 --colormatrix bt2020nc"), sdr2020)
+        == []
+    )
+    # a UHD source with no colour description: the encode is untagged unless the options set it
+    bare = VideoInfo(3840, 2160, color=VideoColor())
+    (info,) = encoder_issues(EncoderSettings(Encoder.X265), bare)
+    assert info.code == "video.color_untagged" and info.severity is Severity.INFO
+    assert encoder_issues(replace(x265, options=same), bare) == []
+    assert encoder_issues(EncoderSettings(Encoder.X265, source_color=False), bare) == []
+    # below UHD a player guesses the encode's colour as it did the source's
+    assert encoder_issues(EncoderSettings(Encoder.X264), VideoInfo(720, 480, color=VideoColor())) == []
+    assert encoder_issues(EncoderSettings(Encoder.X265), None) == []
 
 
 def test_svtav1_issues():

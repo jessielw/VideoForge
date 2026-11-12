@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -302,3 +303,25 @@ def test_starter_presets():
         argv = encoder_command(s.encoder.value, s, output=Path("v"))
         assert s.depth == 10 and s.preset in argv
     assert starters()[0].settings is not starters()[0].settings  # fresh copies
+
+
+@pytest.mark.parametrize(
+    ("dv", "hdr10plus", "transfer", "expected"),
+    [
+        (VideoHdr(), False, "bt709", []),
+        (VideoHdr(), False, "smpte2084", ["HDR10"]),
+        (VideoHdr(), False, "arib-std-b67", ["HLG"]),
+        (VideoHdr(), True, "smpte2084", ["HDR10+"]),
+        (VideoHdr(7, 6, 6, "BL+EL+RPU", "FEL"), False, "smpte2084", ["DV 7.6 FEL", "HDR10"]),
+        (VideoHdr(7, 6, 6, "BL+EL+RPU", "MEL"), True, "smpte2084", ["DV 7.6 MEL", "HDR10+"]),
+        # no dovi_tool: the enhancement layer wasn't read, and it decides the encode
+        (VideoHdr(7, 6, 6, "BL+EL+RPU"), False, "smpte2084", ["DV 7.6 FEL/MEL?", "HDR10"]),
+        (VideoHdr(8, 1, 6, "BL+RPU"), False, "smpte2084", ["DV 8.1", "HDR10"]),
+        (VideoHdr(5, None, 6, "BL+RPU"), False, "smpte2084", ["DV 5"]),  # its base layer isn't HDR10
+    ],
+)
+def test_formats_names_the_sources_hdr(dv, hdr10plus, transfer, expected):
+    video = VideoInfo(3840, 2160, hdr=replace(dv, hdr10plus=hdr10plus))
+    video.color.transfer = transfer
+    assert hdr.formats(video) == expected
+    assert hdr.formats(None) == []

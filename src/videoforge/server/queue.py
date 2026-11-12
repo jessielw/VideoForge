@@ -1097,7 +1097,10 @@ class JobQueue:
             self._queue_changed()
             if ran and not self._closing:
                 left = sum(e.queued for e in self.entries()) if self._stop_after_current else 0
-                self.bus.emit(QueueFinished(tuple(ran), _now() - started, left))
+                seconds = _now() - started
+                self.bus.emit(QueueFinished(tuple(ran), seconds, left))
+                # The page's toast, and its desktop notification while it isn't in front.
+                self.events.publish("queue.finished", statuses=[s.value for s in ran], seconds=seconds, left=left)
 
     def _run(self, e: Entry) -> JobStatus:
         if e.plan is None:

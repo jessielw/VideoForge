@@ -172,6 +172,8 @@ export interface JobSummary {
   search_error: string // the last CRF search failed: why
   audio: string[]
   subs: number
+  // the source at a glance (null before the probe); hdr: "DV 7.6 FEL", "HDR10+", "HDR10", "HLG"
+  source_facts: { resolution: string; duration_ms: number | null; hdr: string[]; interlaced: boolean } | null
 }
 
 export type Severity = 'info' | 'warn' | 'block'
@@ -182,7 +184,8 @@ export interface Issue {
   message: string
 }
 
-export type AudioAction = 'copy' | 'ddp' | 'atmos' | 'aac' | 'flac' | 'opus' | 'opusenc' | 'aac_ffmpeg' | 'ac3' | 'eac3' | 'mp3' | 'vorbis'
+export type AudioAction =
+  'copy' | 'ddp' | 'atmos' | 'aac' | 'flac' | 'opus' | 'opusenc' | 'aac_ffmpeg' | 'ac3' | 'eac3' | 'mp3' | 'vorbis'
 
 // One audio encode as the server describes it (core.execute.audio.ENCODES).
 export interface AudioEncodeInfo {
@@ -690,7 +693,19 @@ export interface AudioSlot {
   extra: TrackOverride[]
 }
 export type AudioCodec =
-  'aac' | 'ac3' | 'eac3' | 'truehd' | 'dts' | 'dts_hd_ma' | 'dts_hd_hra' | 'lpcm' | 'flac' | 'opus' | 'mp3' | 'vorbis' | 'other'
+  | 'aac'
+  | 'ac3'
+  | 'eac3'
+  | 'truehd'
+  | 'dts'
+  | 'dts_hd_ma'
+  | 'dts_hd_hra'
+  | 'lpcm'
+  | 'flac'
+  | 'opus'
+  | 'mp3'
+  | 'vorbis'
+  | 'other'
 export interface AudioRule {
   languages: string[]
   original: boolean | null // in the job's original language
@@ -791,13 +806,6 @@ export interface DirListing {
   parent: string | null
   dirs: { name: string; path: string }[]
   files: { name: string; path: string; size: number; mtime: number }[]
-}
-
-// What deleting a folder takes with it: everything inside, all the way down.
-export interface DirContents {
-  files: number
-  dirs: number
-  bytes: number
 }
 
 export interface PathKind {
