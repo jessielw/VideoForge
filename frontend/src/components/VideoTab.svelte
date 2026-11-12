@@ -274,6 +274,7 @@
   // The side panel's width: one for Settings and Script, dragged by the splitter and remembered.
   const PANEL_MIN = 288
   let panelW = $state(readPanelW())
+  let rowW = $state(0) // the row the splitter sits in: bounds the panel (clampPanel), and the splitter's aria-valuemax
   let dragging = $state(false)
   function readPanelW(): number {
     try {
@@ -523,6 +524,7 @@
 
 <!-- A phone stacks the frame over the side panel, and the page scrolls. -->
 <div
+  bind:clientWidth={rowW}
   class="flex min-h-0 gap-2 max-sm:flex-col {dragging ? 'select-none' : ''} {layout.videoExpanded
     ? 'fixed inset-0 z-40 bg-background p-4 max-sm:overflow-y-auto max-sm:p-2'
     : 'h-full max-sm:h-auto'}"
@@ -685,11 +687,17 @@
     {/if}
   </div>
 
-  <!-- Drag to resize the side panel (arrow keys too). -->
+  <!-- Drag to resize the side panel (arrow keys too). A focusable separator is a widget in ARIA (the window
+       splitter pattern), which Svelte's a11y check doesn't know: it reports its width in pixels. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <div
     role="separator"
     aria-orientation="vertical"
     aria-label="Resize the side panel"
+    aria-valuenow={panelW}
+    aria-valuemin={PANEL_MIN}
+    aria-valuemax={Math.max(PANEL_MIN, Math.round(rowW * 0.7))}
+    aria-valuetext="{panelW} pixels wide"
     tabindex="0"
     class="group flex w-2 shrink-0 cursor-col-resize touch-none justify-center max-sm:hidden"
     onpointerdown={splitDown}
