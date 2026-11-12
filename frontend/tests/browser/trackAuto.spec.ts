@@ -252,7 +252,11 @@ test("the editor shows the rule set's picks and saves only what differs from the
   await title.press('Enter')
   await expect.poll(() => saves.at(-1)?.tracks['id:2']).toBeUndefined()
 
+  // no Default property: the plan's Default shows read-only, and only on the track it marks
+  await expect(rows.nth(0).getByLabel('Default (set by the rule set)')).toHaveCount(0)
   await page.getByRole('tab', { name: 'Audio', exact: true }).click()
+  await expect(page.getByRole('listitem').nth(0).getByLabel('Default (set by the rule set)')).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Default/ })).toHaveCount(0) // nothing to press
   const action = page.getByRole('combobox', { name: 'Copy or encode' })
   await expect(action).toHaveValue('ddp')
   await action.selectOption('copy')

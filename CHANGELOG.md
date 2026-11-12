@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - x264 / x265 encodes warn (`video.color_retag`) when the encoder options or extra arguments set `--colorprim`, `--transfer`, `--colormatrix` or `--range` to something other than the source's. The flags only label the picture, so unless the script converts it a player shows the wrong colours: a BT.2020 SDR UHD tagged BT.709 plays oversaturated. Remove the flags to keep the source's colour.
 - A UHD source that doesn't describe its colour gets a note (`video.color_untagged`) when the encoder options don't set it either: the encode is untagged there and a player has to guess.
+- Track editor: when a rule set picks the Default track itself and offers no Default pill (e.g. the first audio track), the track it marks shows a read-only "Default" label.
 
 ## [0.1.7] - 2026-11-11
 
