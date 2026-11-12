@@ -369,4 +369,16 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 - **Bundled VapourSynth plugins.** Source filters (BestSource, L-SMASH-Works, FFMS2, d2vsource) and common filters (EdgeFixer, FillBorders, MVTools, znedi3, dfttest2, BM3D, zsmooth, vszip, fmtconv, descale, ...) plus havsfunc, mvsfunc and awsmfunc, from one list (`vsplugins/manifest.toml`): built from source in the Docker image, downloaded (pinned, checked) for the portable build or a source install (`scripts/fetch_plugins.py`).
 - **Profiles.** The built-in `manual` profile; other profiles (a release group's rules) install as separate packages under the `videoforge.profiles` entry point group.
 
+[Unreleased]: https://github.com/jessielw/VideoForge/compare/0.1.7...HEAD
+[0.1.7]: https://github.com/jessielw/VideoForge/releases/tag/0.1.7
+[0.1.6]: https://github.com/jessielw/VideoForge/releases/tag/0.1.6
+[0.1.5]: https://github.com/jessielw/VideoForge/releases/tag/0.1.5
+[0.1.4]: https://github.com/jessielw/VideoForge/releases/tag/0.1.4
+[0.1.3]: https://github.com/jessielw/VideoForge/releases/tag/0.1.3
+[0.1.2]: https://github.com/jessielw/VideoForge/releases/tag/0.1.2
+[0.1.1]: https://github.com/jessielw/VideoForge/releases/tag/0.1.1
 [0.1.0]: https://github.com/jessielw/VideoForge/releases/tag/0.1.0
+[0.1.0-beta.17]: https://github.com/jessielw/VideoForge/releases/tag/0.1.0-beta.17
+[0.1.0-beta.16]: https://github.com/jessielw/VideoForge/releases/tag/0.1.0-beta.16
+[0.1.0-beta.15]: https://github.com/jessielw/VideoForge/releases/tag/0.1.0-beta.15
+[0.1.0-beta.14]: https://github.com/jessielw/VideoForge/releases/tag/0.1.0-beta.14
