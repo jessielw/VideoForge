@@ -808,13 +808,6 @@ export interface DirListing {
   files: { name: string; path: string; size: number; mtime: number }[]
 }
 
-// What deleting a folder takes with it: everything inside, all the way down.
-export interface DirContents {
-  files: number
-  dirs: number
-  bytes: number
-}
-
 export interface PathKind {
   path: string
   kind: 'file' | 'folder' | 'missing' | 'outside'

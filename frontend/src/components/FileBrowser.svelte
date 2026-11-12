@@ -3,11 +3,12 @@
   // mode "files": tick files and/or folders; mode "folder": choose one folder.
   // programs: list only programs (the server decides what one is on its OS), and one has to be ticked,
   // unless orFolder: then the folder you're in will do (DEE's split encoders are a folder of programs).
-  // Folders can be made here, and deleted (one with anything in it only once that is ticked).
+  // Folders can be made here, and one made here deleted again while it's empty: the undo for a mistake.
+  // Other file work belongs in a file manager (the server only deletes empty folders).
   import { onMount } from 'svelte'
   import { api } from '../lib/api'
   import { bytes } from '../lib/format'
-  import type { DirContents, DirListing } from '../lib/types'
+  import type { DirListing } from '../lib/types'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import FileIcon from '@lucide/svelte/icons/file'
   import FolderIcon from '@lucide/svelte/icons/folder'
@@ -46,8 +47,8 @@
   let error = $state('')
   let picked = $state<string[]>([])
   let newName = $state<string | null>(null) // the new folder's name while one is being made
-  let deleting = $state<{ name: string; path: string; contents: DirContents } | null>(null)
-  let deleteAll = $state(false)
+  let made = $state<string[]>([]) // folders made here: only these offer Delete
+  let deleting = $state<{ name: string; path: string } | null>(null)
   let busy = $state(false)
 
   const message = (e: unknown) => String(e instanceof Error ? e.message : e)
@@ -67,10 +68,11 @@
     if (!listing || !newName?.trim()) return
     busy = true
     try {
-      const made = await api.makeDir(listing.path, newName)
+      const dir = await api.makeDir(listing.path, newName)
+      made = [...made, dir.path]
       newName = null
       // Picking a folder: go into the new one, ready to use; picking files: it shows in the list.
-      await open(mode === 'folder' ? made.path : listing.path)
+      await open(mode === 'folder' ? dir.path : listing.path)
     } catch (e) {
       error = message(e)
     } finally {
@@ -78,24 +80,14 @@
     }
   }
 
-  async function askDelete(d: { name: string; path: string }) {
-    error = ''
-    try {
-      deleting = { ...d, contents: await api.dirContents(d.path) }
-      deleteAll = false
-    } catch (e) {
-      error = message(e)
-    }
-  }
-
   async function removeDir() {
     if (!deleting || !listing) return
-    const { path, contents } = deleting
+    const { path } = deleting
     busy = true
     try {
-      await api.removeDir(path, contents.files + contents.dirs > 0)
-      // Ticked things in it (ticked before going up) went with it.
-      picked = picked.filter((p) => p !== path && !p.startsWith(path + '/') && !p.startsWith(path + '\\'))
+      await api.removeDir(path)
+      picked = picked.filter((p) => p !== path)
+      made = made.filter((p) => p !== path)
       deleting = null
       await open(listing.path)
     } catch (e) {
@@ -207,17 +199,19 @@
             <button class="flex flex-1 items-center gap-2 text-left" onclick={() => open(d.path)}>
               <FolderIcon class="size-4 text-primary" />{d.name}
             </button>
-            <Tip text="Delete {d.name}">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                class="opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
-                onclick={() => askDelete(d)}
-                aria-label="Delete {d.name}"
-              >
-                <Trash2Icon />
-              </Button>
-            </Tip>
+            {#if made.includes(d.path)}
+              <Tip text="Delete {d.name}">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  class="opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+                  onclick={() => ((error = ''), (deleting = d))}
+                  aria-label="Delete {d.name}"
+                >
+                  <Trash2Icon />
+                </Button>
+              </Tip>
+            {/if}
           </div>
         {/each}
         {#if mode === 'files'}
@@ -261,35 +255,17 @@
 </Dialog.Root>
 
 {#if deleting}
-  {@const { name, path, contents } = deleting}
-  {@const full = contents.files + contents.dirs > 0}
+  {@const { name, path } = deleting}
   <Dialog.Root open onOpenChange={(o) => !o && (deleting = null)}>
     <Dialog.Content class="sm:max-w-md">
       <Dialog.Header>
         <Dialog.Title>Delete {name}?</Dialog.Title>
         <Dialog.Description class="font-mono text-xs break-all">{path}</Dialog.Description>
       </Dialog.Header>
-      {#if full}
-        <div class="space-y-3 text-sm">
-          <p class="text-destructive">
-            It holds {contents.files} file{contents.files === 1 ? '' : 's'} and {contents.dirs} folder{contents.dirs ===
-            1
-              ? ''
-              : 's'}
-            ({bytes(contents.bytes)}). They're deleted with it for good, not moved to the recycle bin.
-          </p>
-          <label class="flex items-center gap-2">
-            <Checkbox bind:checked={deleteAll} />Delete it and everything in it
-          </label>
-        </div>
-      {:else}
-        <p class="text-sm text-muted-foreground">It's empty.</p>
-      {/if}
+      <p class="text-sm text-muted-foreground">It's empty, so no files are deleted.</p>
       <Dialog.Footer>
         <Button variant="outline" onclick={() => (deleting = null)}>Cancel</Button>
-        <Button variant="destructive" disabled={busy || (full && !deleteAll)} onclick={removeDir}
-          ><Trash2Icon />Delete</Button
-        >
+        <Button variant="destructive" disabled={busy} onclick={removeDir}><Trash2Icon />Delete</Button>
       </Dialog.Footer>
     </Dialog.Content>
   </Dialog.Root>

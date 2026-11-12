@@ -96,10 +96,26 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
     existing_id: null,
     existing_status: null,
   })
+  const folders = ['D:/Media/Old'] // what the folder picker lists in D:/Media
+  const removed: Record<string, unknown>[] = []
   await page.routeWebSocket('**/api/events', () => {})
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname
     const request = route.request()
+    if (path === '/api/fs/list')
+      return route.fulfill({
+        json: { path: 'D:/Media', parent: 'D:/', dirs: folders.map((p) => ({ name: p.slice(9), path: p })), files: [] },
+      })
+    if (path === '/api/fs/mkdir') {
+      const made = `D:/Media/${request.postDataJSON().name}`
+      folders.push(made)
+      return route.fulfill({ json: { path: made } })
+    }
+    if (path === '/api/fs/rmdir') {
+      removed.push(request.postDataJSON())
+      folders.splice(folders.indexOf(request.postDataJSON().path), 1)
+      return route.fulfill({ json: { path: request.postDataJSON().path } })
+    }
     if (path === '/api/fs/kinds')
       return route.fulfill({
         json: (request.postDataJSON().paths as string[]).map((p) => ({ path: p, kind: 'file' })),
@@ -123,12 +139,13 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
       '/api/config': config,
       '/api/config/tools': [],
       '/api/settings': { output_dir: 'D:/Output', last_dir: '' },
+      '/api/fs/roots': ['D:/'],
     }
     if (!(path in responses)) throw new Error(`Unexpected request: ${path}`)
     await route.fulfill({ json: responses[path] })
   })
   await page.goto('/#/queue')
-  return { errors, sources }
+  return { errors, sources, removed }
 }
 
 async function paste(page: Page, text: string) {
@@ -179,5 +196,28 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
   await bar.getByRole('button', { name: /Add 1 job to queue/ }).click()
   await bar.getByRole('button', { name: 'Open queue' }).click()
   await expect(page).toHaveURL(/#\/queue/)
+  expect(errors).toEqual([])
+})
+
+test('the folder picker offers Delete only on a folder made in it, and asks to delete only an empty one', async ({
+  page,
+}) => {
+  const { errors, removed } = await fixture(page, [])
+  await page.goto('/#/new')
+  await page.getByRole('button', { name: 'Browse…' }).first().click()
+  const picker = page.getByRole('dialog', { name: 'Sources' })
+  await expect(picker.getByRole('button', { name: 'Old', exact: true })).toBeVisible()
+  await expect(picker.getByRole('button', { name: 'Delete Old' })).toHaveCount(0) // not made here
+
+  await picker.getByRole('button', { name: 'New folder' }).click()
+  await picker.getByRole('textbox', { name: 'New folder name' }).fill('Oops')
+  await picker.getByRole('button', { name: 'Create' }).click()
+  await picker.getByRole('button', { name: 'Delete Oops' }).click()
+
+  const confirm = page.getByRole('dialog', { name: 'Delete Oops?' })
+  await expect(confirm).toContainText("It's empty, so no files are deleted.")
+  await confirm.getByRole('button', { name: 'Delete', exact: true }).click()
+  await expect(picker.getByRole('button', { name: 'Oops', exact: true })).toHaveCount(0)
+  expect(removed).toEqual([{ path: 'D:/Media/Oops' }])
   expect(errors).toEqual([])
 })

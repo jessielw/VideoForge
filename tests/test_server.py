@@ -1993,7 +1993,7 @@ def test_folder_browser(tmp_path):
         kinds = client.post("/api/fs/kinds", json={"paths": paths}).json()
         assert [k["kind"] for k in kinds] == ["folder", "file", "missing", "outside", "missing"]
 
-        # New folders, and deleting them: one with things in it only when asked to.
+        # New folders, and deleting them: only an empty one, whatever the request asks.
         made = client.post("/api/fs/mkdir", json={"path": str(tmp_path), "name": " out "}).json()["path"]
         assert made == str(tmp_path / "out") and (tmp_path / "out").is_dir()
         assert client.post("/api/fs/mkdir", json={"path": str(tmp_path), "name": "out"}).status_code == 409
@@ -2002,14 +2002,18 @@ def test_folder_browser(tmp_path):
         assert client.post("/api/fs/mkdir", json={"path": outside, "name": "x"}).status_code == 403
         (tmp_path / "out" / "sub").mkdir()
         (tmp_path / "out" / "sub" / "a.mkv").write_bytes(b"12345")
-        (tmp_path / "out" / "b.txt").write_bytes(b"123")
-        assert client.get("/api/fs/contents", params={"path": made}).json() == {"files": 2, "dirs": 1, "bytes": 8}
-        assert client.post("/api/fs/rmdir", json={"path": made}).status_code == 409
+        assert client.get("/api/fs/contents", params={"path": made}).status_code == 404  # removed
+        for body in ({"path": made}, {"path": made, "recursive": True}):
+            r = client.post("/api/fs/rmdir", json=body)
+            assert r.status_code == 409
+            assert (
+                r.json()["detail"]
+                == "out has files in it, so VideoForge won't delete it. To delete it, use your file manager."
+            )
         assert (tmp_path / "out" / "sub" / "a.mkv").exists()
-        assert client.post("/api/fs/rmdir", json={"path": made, "recursive": True}).status_code == 200
-        assert not (tmp_path / "out").exists()
         (tmp_path / "empty").mkdir()
         assert client.post("/api/fs/rmdir", json={"path": str(tmp_path / "empty")}).status_code == 200
+        assert not (tmp_path / "empty").exists()
         # Never a browsable root (or what holds one), never outside them.
         assert client.post("/api/fs/rmdir", json={"path": str(tmp_path), "recursive": True}).status_code == 403
         assert client.post("/api/fs/rmdir", json={"path": outside, "recursive": True}).status_code == 403
