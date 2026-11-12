@@ -7,7 +7,6 @@ import type {
   AudioPresetSettings,
   ClipInfo,
   CommandStep,
-  DirContents,
   ConfigState,
   ConfigurationBundle,
   ConfigurationPreview,
@@ -250,8 +249,7 @@ export const api = {
     ),
   pathKinds: (paths: string[]) => post<PathKind[]>('/api/fs/kinds', { paths }),
   makeDir: (path: string, name: string) => post<{ path: string }>('/api/fs/mkdir', { path, name }),
-  dirContents: (path: string) => get<DirContents>(`/api/fs/contents?path=${encodeURIComponent(path)}`),
-  removeDir: (path: string, recursive = false) => post<{ path: string }>('/api/fs/rmdir', { path, recursive }),
+  removeDir: (path: string) => post<{ path: string }>('/api/fs/rmdir', { path }), // empty folders only
 
   match: (slots: InputSlots) => post<MatchResult>('/api/match', slots),
   addJobs: (
