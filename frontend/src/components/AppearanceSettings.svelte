@@ -75,11 +75,13 @@
           type="button"
           role="radio"
           aria-checked={on}
+          aria-labelledby="palette-{p.id}"
+          aria-describedby="palette-{p.id}-help"
           class={choice(on)}
           onclick={() => (appearance.palette = p.id)}
         >
           <div class="flex items-start justify-between gap-2">
-            <span class="font-medium">{p.label}</span>
+            <span id="palette-{p.id}" class="font-medium">{p.label}</span>
             {#if on}
               <span
                 class="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
@@ -88,7 +90,7 @@
               </span>
             {/if}
           </div>
-          <p class="mt-1 text-xs text-muted-foreground">{p.description}</p>
+          <p id="palette-{p.id}-help" class="mt-1 text-xs text-muted-foreground">{p.description}</p>
           <!-- A tiny mock of the app: page, card, accent button. -->
           <div
             class="mt-3 flex items-center gap-2 rounded-md p-2 ring-1 ring-border"
@@ -144,10 +146,16 @@
   </div>
 
   <label class="flex items-start gap-3">
-    <Checkbox checked={appearance.oled} onCheckedChange={(v) => (appearance.oled = v === true)} class="mt-0.5" />
+    <Checkbox
+      checked={appearance.oled}
+      onCheckedChange={(v) => (appearance.oled = v === true)}
+      class="mt-0.5"
+      aria-labelledby="oled"
+      aria-describedby="oled-help"
+    />
     <span>
-      <span class="block">Pure black dark mode</span>
-      <span class="block text-sm text-muted-foreground">
+      <span id="oled" class="block">Pure black dark mode</span>
+      <span id="oled-help" class="block text-sm text-muted-foreground">
         Near-black surfaces for OLED screens. Only shows in dark mode{dark ? '' : ' (you are in light mode now)'}.
       </span>
     </span>

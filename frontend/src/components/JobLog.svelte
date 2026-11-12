@@ -168,7 +168,11 @@
   </div>
 
   {#if view === 'full'}
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex (a scrolling region: keyboard users scroll it once focused) -->
     <pre
+      tabindex="0"
+      role="region"
+      aria-label="Job log"
       class="min-h-0 flex-1 overflow-auto rounded-lg border bg-card p-3 font-mono text-xs leading-relaxed max-sm:p-2 max-sm:wrap-anywhere max-sm:whitespace-pre-wrap"
       use:follow={fullLines.length}>{fullLines.join('\n') || 'No output yet.'}</pre>
   {:else if !steps.length}
@@ -234,7 +238,11 @@
                     The last lines only (the full output is in the work folder's videoforge.log).
                   </p>
                 {/if}
+                <!-- svelte-ignore a11y_no_noninteractive_tabindex (a scrolling region: keyboard users scroll it once focused) -->
                 <pre
+                  tabindex="0"
+                  role="region"
+                  aria-label="{s.label} output"
                   class="max-h-96 overflow-auto rounded-lg border bg-background p-2 font-mono text-[11px] leading-relaxed max-sm:wrap-anywhere max-sm:whitespace-pre-wrap"
                   use:follow={lines.length}>{shown.join('\n')}</pre>
               {:else if s.status !== 'pending'}

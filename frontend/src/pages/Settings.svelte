@@ -563,20 +563,28 @@
                 <Checkbox
                   class="mt-0.5"
                   checked={config.auto_index}
+                  aria-labelledby="auto-index"
+                  aria-describedby="auto-index-help"
                   onCheckedChange={(v) => change({ auto_index: v })}
                 />
                 <span>
-                  Index new jobs
-                  <span class="block text-xs text-muted-foreground">
+                  <span id="auto-index">Index new jobs</span>
+                  <span id="auto-index-help" class="block text-xs text-muted-foreground">
                     A job is put in the index lane as soon as it is probed, so its preview is ready when you open it.
                   </span>
                 </span>
               </label>
               <label class="flex items-start gap-3 text-sm">
-                <Checkbox class="mt-0.5" checked={config.auto_crop} onCheckedChange={(v) => change({ auto_crop: v })} />
+                <Checkbox
+                  class="mt-0.5"
+                  checked={config.auto_crop}
+                  aria-labelledby="auto-crop"
+                  aria-describedby="auto-crop-help"
+                  onCheckedChange={(v) => change({ auto_crop: v })}
+                />
                 <span>
-                  Auto-crop new jobs
-                  <span class="block text-xs text-muted-foreground">
+                  <span id="auto-crop">Auto-crop new jobs</span>
+                  <span id="auto-crop-help" class="block text-xs text-muted-foreground">
                     The crop is detected after the job is indexed (it indexes the job even with the option above off). A
                     template with a fixed crop keeps it; a crop set by hand always wins.
                   </span>
@@ -586,11 +594,13 @@
                 <Checkbox
                   class="mt-0.5"
                   checked={config.index_waits_for_disk}
+                  aria-labelledby="index-waits"
+                  aria-describedby="index-waits-help"
                   onCheckedChange={(v) => change({ index_waits_for_disk: v })}
                 />
                 <span>
-                  Wait while an encode reads the same disk
-                  <span class="block text-xs text-muted-foreground">
+                  <span id="index-waits">Wait while an encode reads the same disk</span>
+                  <span id="index-waits-help" class="block text-xs text-muted-foreground">
                     A job in the index lane whose source is on the disk the running encode reads waits for it to finish;
                     jobs on other disks go first. Index now on a job never waits.
                   </span>
@@ -600,12 +610,14 @@
                 <Checkbox
                   class="mt-0.5"
                   checked={config.index_during_video}
+                  aria-labelledby="index-during-video"
+                  aria-describedby="index-during-video-help"
                   disabled={!config.index_waits_for_disk}
                   onCheckedChange={(v) => change({ index_during_video: v })}
                 />
                 <span class={config.index_waits_for_disk ? '' : 'opacity-60'}>
-                  Index anyway while it only encodes video
-                  <span class="block text-xs text-muted-foreground">
+                  <span id="index-during-video">Index anyway while it only encodes video</span>
+                  <span id="index-during-video-help" class="block text-xs text-muted-foreground">
                     The video encode reads the source slowly, so an index beside it costs little. The wait still holds
                     while the job extracts, encodes audio, indexes or muxes.
                   </span>
@@ -622,11 +634,13 @@
                   max="8"
                   class="w-20"
                   value={config.parallel_audio}
+                  aria-labelledby="parallel-audio"
+                  aria-describedby="parallel-audio-help"
                   onchange={(e) => setParallelAudio(e.currentTarget)}
                 />
                 <span>
-                  At once, beside the video encode
-                  <span class="block text-xs text-muted-foreground">
+                  <span id="parallel-audio">At once, beside the video encode</span>
+                  <span id="parallel-audio-help" class="block text-xs text-muted-foreground">
                     A job's audio encodes start once its source is indexed and run while the video encodes; the mux
                     waits for them. 0 encodes them one by one, before the video. Default: {config.parallel_audio_default}
                   </span>
@@ -666,11 +680,13 @@
                 <Checkbox
                   class="mt-0.5"
                   checked={config.delete_work_dir}
+                  aria-labelledby="delete-work-dir"
+                  aria-describedby="delete-work-dir-help"
                   onCheckedChange={(v) => change({ delete_work_dir: v === config?.delete_work_dir_default ? null : v })}
                 />
                 <span>
-                  Delete a job's work folder once it's done
-                  <span class="block text-xs text-muted-foreground">
+                  <span id="delete-work-dir">Delete a job's work folder once it's done</span>
+                  <span id="delete-work-dir-help" class="block text-xs text-muted-foreground">
                     The <code>&lt;source&gt;_tmp</code> folder next to the source (index, encodes, log) is deleted after
                     the job succeeds; its job records and log are copied to {config.records_dir} first (the newest 100 kept).
                     A job that fails or is cancelled keeps it, to resume from. Default:
@@ -686,11 +702,13 @@
                 <Checkbox
                   class="mt-0.5"
                   checked={config.sample_quality}
+                  aria-labelledby="sample-quality"
+                  aria-describedby="sample-quality-help"
                   onCheckedChange={(v) => change({ sample_quality: v })}
                 />
                 <span>
-                  Score its quality
-                  <span class="block text-xs text-muted-foreground">
+                  <span id="sample-quality">Score its quality</span>
+                  <span id="sample-quality-help" class="block text-xs text-muted-foreground">
                     After a test encode, compare every frame with the encoder's input (SSIMULACRA2 and XPSNR, vszip) and
                     show the scores beside its bitrate. It decodes both once more, so the test encode takes longer.
                   </span>
