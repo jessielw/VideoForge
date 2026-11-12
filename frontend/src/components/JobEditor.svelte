@@ -16,6 +16,7 @@
   import { videoView } from '../lib/videoView.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
+  import InfoIcon from '@lucide/svelte/icons/info'
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
   import { toast } from 'svelte-sonner'
   import { Badge } from '$lib/components/ui/badge'
@@ -32,6 +33,7 @@
   import TrackEditor from './TrackEditor.svelte'
   import TracksTab from './TracksTab.svelte'
   import JobLog from './JobLog.svelte'
+  import MediaInfoDialog from './MediaInfoDialog.svelte'
   import VideoTab from './VideoTab.svelte'
 
   let { jobId }: { jobId: string } = $props()
@@ -43,6 +45,7 @@
   let commands = $state<CommandStep[]>([])
   let showInfo = $state(false)
   let browsing = $state<'output' | 'chapters' | null>(null)
+  let mediainfo = $state(false)
 
   // Saves: each change applies to `job.spec` at once, so the next edit builds on it, and goes
   // out after the one before. Replies (and refetches) that land while saves are still pending
@@ -197,6 +200,9 @@
           disabled={!editable}
           apply={(template) => save({ template })}
         />
+        <Tip class="shrink-0" text="MediaInfo of the source and the job's other files">
+          <Button variant="outline" size="sm" onclick={() => (mediainfo = true)}><InfoIcon />MediaInfo</Button>
+        </Tip>
       </div>
       {#if live?.progress && ['running', 'indexing', 'sampling'].includes(live.status)}
         {@const p = live.progress}
@@ -525,6 +531,8 @@
     </div>
   </Tabs.Root>
 {/if}
+
+{#if job}<MediaInfoDialog bind:open={mediainfo} {job} />{/if}
 
 {#if browsing === 'output' && job}
   <FileBrowser

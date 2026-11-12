@@ -2371,3 +2371,27 @@ def test_auto_index_and_auto_crop_are_separate_options(tmp_path):
         assert client.put("/api/config", json={"auto_index": False, "auto_crop": True}).json()["auto_crop"] is True
         job = added("S01E03")
         assert job["indexed"] and job["spec"]["video"]["crop"] == {"left": 0, "top": 20, "right": 0, "bottom": 22}
+
+
+def test_mediainfo_reports_on_the_jobs_own_files_only(tmp_path, monkeypatch):
+    from videoforge.server.routes import jobs as job_routes
+
+    monkeypatch.setattr(job_routes, "mediainfo_report", lambda path: f"General\nComplete name : {path.name}")
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        [job_id] = add(client, tmp_path)
+        source = str(tmp_path / "src" / "Show.S01E01.mkv")
+        subs = str(tmp_path / "src" / "Show.S01E01.en.srt")
+
+        report = client.get(f"/api/jobs/{job_id}/mediainfo").json()  # no path: the source
+        assert report == {"path": source, "text": "General\nComplete name : Show.S01E01.mkv"}
+        assert client.get(f"/api/jobs/{job_id}/mediainfo", params={"path": subs}).json()["path"] == subs
+        # Only the job's inputs: not any file the server can see.
+        stranger = tmp_path / "other.mkv"
+        stranger.write_bytes(b"x")
+        assert client.get(f"/api/jobs/{job_id}/mediainfo", params={"path": str(stranger)}).status_code == 404
+        assert client.get("/api/jobs/nope/mediainfo").status_code == 404
+
+        Path(source).unlink()
+        gone = client.get(f"/api/jobs/{job_id}/mediainfo")
+        assert gone.status_code == 404 and "Can't find" in gone.json()["detail"]

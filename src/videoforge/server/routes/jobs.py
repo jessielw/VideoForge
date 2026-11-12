@@ -14,6 +14,7 @@ from videoforge.core.models import JobInputs, Overrides
 from videoforge.core.pairing import AUDIO_EXTENSIONS, SUB_FORMATS, match_files, slot_files
 from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.plan_io import from_json, to_json
+from videoforge.core.probe import mediainfo_report
 from videoforge.core.template import Template
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.core.workdir import work_dir_size
@@ -369,6 +370,26 @@ def job_commands(request: Request, job_id: str) -> list[dict[str, Any]]:
     except (ToolError, ValueError) as ex:
         raise HTTPException(422, str(ex)) from None
     return [{"id": s.id, "label": s.label, "command": s.command_line or "(runs in VideoForge)"} for s in built.steps]
+
+
+def _media_files(inputs: JobInputs) -> list[Path]:
+    """The job's files MediaInfo can report on: the source, its encode, added audio and subtitle files."""
+    return [inputs.source, *([inputs.encode] if inputs.encode else []), *inputs.audio, *inputs.subtitles]
+
+
+@router.get("/jobs/{job_id}/mediainfo")
+def job_mediainfo(request: Request, job_id: str, path: str | None = None) -> dict[str, Any]:
+    """MediaInfo's text report of one of the job's files (the source when no path is given)."""
+    files = _media_files(_entry(queue_of(request), job_id).spec.inputs)
+    target = files[0] if path is None else next((f for f in files if str(f) == path), None)
+    if target is None:
+        raise HTTPException(404, "Not one of this job's files")
+    if not target.is_file():
+        raise HTTPException(404, f"Can't find {target}")
+    try:
+        return {"path": str(target), "text": mediainfo_report(target)}
+    except Exception as ex:  # pymediainfo raises plain errors (no library, unreadable file)
+        raise HTTPException(422, f"MediaInfo couldn't read {target.name}: {ex}") from None
 
 
 @router.get("/jobs/{job_id}/log")

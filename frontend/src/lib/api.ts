@@ -304,6 +304,9 @@ export const api = {
   reprobe: (ids: string[]) => post('/api/jobs/reprobe', { ids }),
   log: (id: string) => get<{ lines: string[] }>(`/api/jobs/${id}/log`),
   commands: (id: string) => get<CommandStep[]>(`/api/jobs/${id}/commands`),
+  // MediaInfo's text report of one of the job's files (no path: the source); parsed on request
+  mediainfo: (id: string, path?: string) =>
+    get<{ path: string; text: string }>(`/api/jobs/${id}/mediainfo${path ? `?${new URLSearchParams({ path })}` : ''}`),
   steps: (id: string) => get<StepOutput[]>(`/api/jobs/${id}/steps`),
   logSnapshot: (id: string) =>
     get<{ seq: number; steps: StepOutput[]; lines: string[] }>(`/api/jobs/${id}/log-snapshot`),
