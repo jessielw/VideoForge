@@ -91,7 +91,7 @@ A short sample scores differently from the whole video, and the scores compare w
 
 ## Options and extra arguments
 
-Structured options and extra arguments are applied after generated defaults. Overrides can change the color metadata carried by the encoded stream and container. Inspect the generated command when using advanced flags.
+Structured options and extra arguments are applied after generated defaults. Their color flags are the exception: the source's color wins over them unless **Override the source's colour** is on (see [HDR10 and color](#hdr10-and-color)). Inspect the generated command when using advanced flags.
 
 The option name field suggests the names the configured encoder lists in its own help (x264 and x265 `--fullhelp`, SvtAv1EncApp `--help`, ffmpeg's libvpx and codec options) and shows what each one does. A name the encoder doesn't list, in the options or the extra arguments, shows a warning with the nearest listed name, and the job gets an `video.option_unknown` warning before it runs. It is a warning only: some builds take options their help leaves out. Short flags (`-p`) aren't checked.
 
@@ -108,6 +108,10 @@ Backslashes remain literal except before a double quote. Use `\"` for a literal 
 ## HDR10 and color
 
 VideoForge reads source color information and supplies encoder flags because the VapourSynth Y4M pipe does not carry that information. It also supplies container color tags for IVF-based encoders. Source tags do not replace the need for correct color processing in a custom script.
+
+The source's values win over the same flags in the options and extra arguments, as StaxRip's **Import VUI metadata** does: a `--colorprim bt709` in a preset is left out of the command for a BT.2020 source, so the encode isn't mislabeled (a BT.2020 picture tagged BT.709 plays oversaturated). A flag for a value the source doesn't have still applies, and the chroma location is always the options'. The job notes a flag it left out (`video.color_source`).
+
+Turn on **Override the source's colour** (under **Colour from the source**) when the source's tags are wrong, or the script converts the colour: the options' and extra arguments' flags then win, and the job notes them (`video.color_override`). Unticking **Colour from the source** leaves the source's tags out altogether. A UHD source with no color description, and no flags in the options to fill it in, gets a note too (`video.color_untagged`).
 
 ## HDR10+ and Dolby Vision
 

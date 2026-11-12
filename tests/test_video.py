@@ -308,31 +308,44 @@ def test_svtav1_command(tmp_path):
     assert "--color-range" not in encoder_command("SvtAv1EncApp", s, output=Path("v.ivf"), color=VideoColor("bt709"))
 
 
-def test_color_retag_issues():
-    """x264 / x265 options that label the picture as another colour than the source's warn (a BT.2020 SDR UHD tagged
-    BT.709 shows oversaturated); the source's own values, H.273 numbers, and x264's range names don't."""
+def test_color_issues():
+    """Colour flags in the options or extra arguments that differ from the source's: the source's are used (as
+    StaxRip's "Import VUI metadata"), noted; with color_override (or the source's colour off) the job's tag the
+    encode, noted as that. The source's own values, H.273 numbers, ffmpeg's names and the range's spellings are no
+    difference."""
     sdr2020 = VideoInfo(3840, 2160, color=VideoColor("bt2020", "bt2020-10", "bt2020nc", "limited", 2))
     forced = {"colorprim": "bt709", "transfer": "bt709", "colormatrix": "bt709", "range": "limited"}
     x265 = EncoderSettings(Encoder.X265, depth=10, options=forced)
     (issue,) = encoder_issues(x265, sdr2020)
-    assert issue.code == "video.color_retag" and issue.severity is Severity.WARN
-    assert "--colorprim bt709 (the source is bt2020)" in issue.message and "--range" not in issue.message
+    assert issue.code == "video.color_source" and issue.severity is Severity.INFO
+    assert "--colorprim bt709 (the source's: bt2020)" in issue.message and "--range" not in issue.message
+    (issue,) = encoder_issues(replace(x265, color_override=True), sdr2020)
+    assert issue.code == "video.color_override" and "Override the source's colour is on" in issue.message
+    (issue,) = encoder_issues(replace(x265, source_color=False), sdr2020)
+    assert issue.code == "video.color_override" and "the source's colour is off" in issue.message
     assert encoder_issues(replace(x265, options={"range": "limited"}), sdr2020) == []
     same = {"colorprim": "9", "transfer": "bt2020-10", "colormatrix": "BT2020NC"}
     assert encoder_issues(replace(x265, options=same), sdr2020) == []  # numbers and case: the same colour
     bt709 = VideoInfo(1920, 1080, color=VideoColor("bt709", "bt709", "bt709", "limited"))
     x264 = EncoderSettings(Encoder.X264, options={"colorprim": "bt709", "transfer": "bt709", "colormatrix": "bt709"})
     assert encoder_issues(x264, bt709) == []
-    assert [i.code for i in encoder_issues(x264, sdr2020)] == ["video.color_retag"]  # a 1080p made from the UHD
-    assert [i.code for i in encoder_issues(replace(x264, options={}, extra="--range pc"), bt709)] == [
-        "video.color_retag"
+    assert [i.code for i in encoder_issues(x264, sdr2020)] == ["video.color_source"]  # a 1080p made from the UHD
+    assert [i.code for i in encoder_issues(replace(x264, options={}, extra="--range=pc"), bt709)] == [
+        "video.color_source"
     ]
     assert encoder_issues(replace(x264, options={}, extra="--range tv"), bt709) == []
-    # the extra arguments win over the options, as on the command line
+    # the extra arguments come after the options, as on the command line
     assert (
         encoder_issues(replace(x264, extra="--colorprim bt2020 --transfer bt2020-10 --colormatrix bt2020nc"), sdr2020)
         == []
     )
+    # every encoder: ffmpeg's names and SVT-AV1's numbers
+    vp9 = EncoderSettings(Encoder.VP9, preset="4", extra="-color_trc:v gamma22 -color_primaries:a bt709")
+    gamma = VideoInfo(1920, 1080, color=VideoColor("bt709", "bt470m", "bt709", "limited"))
+    assert encoder_issues(vp9, gamma) == []
+    svt = EncoderSettings(Encoder.SVTAV1, crf=30, preset="4", depth=10, options={"color-primaries": "1"})
+    assert [i.code for i in encoder_issues(svt, sdr2020)] == ["video.color_source"]
+    assert encoder_issues(replace(svt, options={"color-primaries": "bt2020"}), sdr2020) == []
     # a UHD source with no colour description: the encode is untagged unless the options set it
     bare = VideoInfo(3840, 2160, color=VideoColor())
     (info,) = encoder_issues(EncoderSettings(Encoder.X265), bare)
@@ -758,8 +771,9 @@ def test_vspipe_into_libvpx_and_mux(clip_file, tmp_path, encoder, override):
     script = tmp_path / "video.vpy"
     script.write_text(build_script(VideoSettings(), clip_file, tmp_path, depth=depth), encoding="utf-8")
     enc = EncoderSettings(encoder=encoder, preset="8", crf=40, depth=depth)
-    if override:
+    if override:  # the job's flags win only with color_override
         enc.extra = "-color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range pc"
+        enc.color_override = True
     out = tmp_path / output_name(enc)
     color = VideoColor("bt2020", "smpte2084", "bt2020nc", "limited")
     lines: list[str] = []
@@ -820,6 +834,7 @@ def test_vspipe_into_svtav1_and_mux(clip_file, tmp_path, override):
             '--content-light 500,100 --mastering-display "G(0.265,0.69)B(0.15,0.06)R(0.68,0.32)'
             'WP(0.3127,0.329)L(2000,0.005)"'
         )
+        enc.color_override = True  # the job's flags win only with it
     out = tmp_path / output_name(enc)
     color = VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", 2, P3_1000, 1000, 400)
     lines: list[str] = []

@@ -119,6 +119,7 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
         options: {},
         extra: '',
         source_color: true,
+        color_override: false,
         hdr10plus: false,
         dolby_vision: false,
       },

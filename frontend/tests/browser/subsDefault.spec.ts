@@ -25,6 +25,7 @@ test('Settings: default subtitle rules save as they change, naming included, and
       options: {},
       extra: '',
       source_color: true,
+      color_override: false,
       hdr10plus: false,
       dolby_vision: false,
     },

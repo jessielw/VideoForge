@@ -25,6 +25,7 @@ test('Settings: profiles are created, renamed, switched to and deleted', async (
       options: {},
       extra: '',
       source_color: true,
+      color_override: false,
       hdr10plus: false,
       dolby_vision: false,
     },

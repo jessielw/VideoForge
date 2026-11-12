@@ -21,7 +21,7 @@ import re
 
 from videoforge.core.arguments import split_args
 from videoforge.core.models import Issue, Severity, VideoColor, VideoInfo
-from videoforge.core.video.color import MATRIX_CODE, PRIMARIES_CODE, TRANSFER_CODE, color_args, hdr10
+from videoforge.core.video.color import color_args, color_choices, drop_source_flags, hdr10, untagged
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
 
 EXTENSIONS = {
@@ -180,7 +180,8 @@ def encoder_command(
     encode's pixel aspect ratio (vspipe's y4m carries none), written when it isn't square; color is the
     source's colour description (color.color_args); hdr10plus an x265 encode's HDR10+ metadata and dolby_vision
     its RPU, written as dv_profile (8.1, or 5: hdr.dv_profile); with that RPU or HDR10, the VBV (HRD) is filled from --level-idc (level_vbv), as
-    StaxRip does. A --sar or colour flag in the options or extra arguments comes after them, and wins. VP8 / VP9
+    StaxRip does. A --sar in the options or extra arguments comes after it, and wins; a colour flag for a value the
+    source has is dropped from them unless settings.color_override (color.source_wins). VP8 / VP9
     (ffmpeg_command) and SVT-AV1 (svtav1_command) take keyframes (qpfile_frames) instead of the qpfile, and no
     sar."""
     if settings.encoder is Encoder.SVTAV1:
@@ -229,13 +230,13 @@ def encoder_command(
         argv += ["--dolby-vision-profile", dv_profile, "--dolby-vision-rpu", str(dolby_vision)]
     if x265 and (dolby_vision is not None or hdr10(color, settings)):
         argv += level_vbv(settings) or []
-    argv += _options(settings.options)
+    argv += drop_source_flags(_options(settings.options), color, settings)
     if pass_number and stats is not None and (analysis := analysis_file(settings, stats)) is not None:
         argv += ["--analysis-reuse-file", str(analysis)]
     if qpfile is not None:
         argv += ["--qpfile", str(qpfile)]
     if settings.extra.strip():
-        argv += split_args(settings.extra)
+        argv += drop_source_flags(split_args(settings.extra), color, settings)
     argv += ["--output", str(output), "-"]
     return argv
 
@@ -273,9 +274,9 @@ def ffmpeg_command(
     if keyframes and not first:
         argv += ["-force_key_frames", "expr:" + "+".join(f"eq(n,{n})" for n in keyframes)]
     argv += _options(VP9_DEFAULTS if settings.encoder is Encoder.VP9 else {}, "-")
-    argv += _options(settings.options, "-")
+    argv += drop_source_flags(_options(settings.options, "-"), color, settings)
     if settings.extra.strip():
-        argv += split_args(settings.extra)
+        argv += drop_source_flags(split_args(settings.extra), color, settings)
     argv += ["-an", "-f", "null" if first else "ivf", str(output)]
     return argv
 
@@ -314,67 +315,51 @@ def svtav1_command(
     if keyframes and forces_keyframes(settings):
         argv += ["--force-key-frames", ",".join(f"{n}f" for n in keyframes)]
     argv += ["--progress", "2"]
-    argv += _options(settings.options)
+    argv += drop_source_flags(_options(settings.options), color, settings)
     if settings.extra.strip():
-        argv += split_args(settings.extra)
+        argv += drop_source_flags(split_args(settings.extra), color, settings)
     argv += ["--output", str(output)]
     return argv
 
 
-# x264 / x265's colour flags: (flag, the VideoColor field it tags, its H.273 code points)
-_COLOR_FLAGS = (
-    ("colorprim", "primaries", PRIMARIES_CODE),
-    ("transfer", "transfer", TRANSFER_CODE),
-    ("colormatrix", "matrix", MATRIX_CODE),
-)
-_RANGES = {"limited": "limited", "full": "full", "tv": "limited", "pc": "full"}  # x265's names, x264's
-
-
-def _color_name(value: str, codes: dict[str, int]) -> str:
-    """A colour flag's value as x264 / x265's name (both take the H.273 number too)."""
-    value = value.strip().lower()
-    if value.isdigit():
-        return next((name for name, code in codes.items() if code == int(value)), value)
-    return value
-
-
 def _color_issues(settings: EncoderSettings, video: VideoInfo | None) -> list[Issue]:
-    """x264 / x265: the options or extra arguments tag the encode with another colour than the source's (the flags
-    only label the picture, so unless the script converts it a player shows it wrong: a BT.2020 SDR source tagged
-    BT.709 comes out oversaturated); and, with the source's colour on, a UHD source that doesn't describe its colour
-    where the options don't either (the encode is untagged there and a player guesses, BT.709 or BT.2020; below UHD
-    it guesses as it did for the source, so that's left alone)."""
+    """The job's colour flags (options or extra arguments) that differ from the source's (color.color_choices):
+    dropped for the source's unless color_override is on, and then they tag the encode (the flags only label the
+    picture: a BT.2020 SDR source tagged BT.709 plays oversaturated unless the script converts it). And, with the
+    source's colour on, a UHD source that doesn't describe its colour where the job doesn't either (the encode is
+    untagged there and a player guesses, BT.709 or BT.2020; below UHD it guesses as it did for the source)."""
     if video is None or video.color is None:
         return []
-    color = video.color
-    retag, untagged = [], []
-    for flag, field, codes in _COLOR_FLAGS:
-        source, value = getattr(color, field), _setting(settings, flag)
-        if not value:
-            if not source:
-                untagged.append(f"--{flag}")
-        elif source and _color_name(value, codes) != source:
-            retag.append(f"--{flag} {value} (the source is {source})")
-    value = _setting(settings, "range")
-    tagged = _RANGES.get((value or "").strip().lower())
-    if tagged and color.range and tagged != color.range:
-        retag.append(f"--range {value} (the source is {color.range})")
     out = []
-    if retag:
-        out.append(
-            Issue(
-                Severity.WARN,
-                "video.color_retag",
-                f"The encoder options tag the encode {', '.join(retag)}: the flags only label the picture, so unless "
-                "the script converts it a player shows the colours wrong. Remove them to keep the source's colour",
+    if choices := color_choices(video.color, settings):
+        listed = ", ".join(f"{c.flag} {c.value} (the source's: {c.source})" for c in choices)
+        if settings.source_color and not settings.color_override:
+            out.append(
+                Issue(
+                    Severity.INFO,
+                    "video.color_source",
+                    f"The source's colour is used over the encoder options' {listed}. If the source's tags are "
+                    "wrong, or the script converts the colour, turn on Override the source's colour",
+                )
             )
-        )
-    if untagged and settings.source_color and (video.width >= 3840 or video.height >= 2160):
+        else:
+            why = "Override the source's colour is on" if settings.source_color else "the source's colour is off"
+            out.append(
+                Issue(
+                    Severity.INFO,
+                    "video.color_override",
+                    f"The encode is tagged with the encoder options' {listed} ({why}). The flags only label the "
+                    "picture: unless the source's tags are wrong or the script converts it, a player shows the "
+                    "colours wrong",
+                )
+            )
+    missing = untagged(video.color, settings)
+    if missing and (video.width >= 3840 or video.height >= 2160):
         out.append(
             Issue(
                 Severity.INFO,
                 "video.color_untagged",
-                f"The source doesn't describe its colour and the encoder options don't set it ({', '.join(untagged)}):"
+                f"The source doesn't describe its colour and the encoder options don't set it ({', '.join(missing)}):"
                 " the encode is untagged there and a player guesses",
             )
         )
@@ -382,16 +367,17 @@ def _color_issues(settings: EncoderSettings, video: VideoInfo | None) -> list[Is
 
 
 def issues(settings: EncoderSettings, video: VideoInfo | None, chapters: bool = False) -> list[Issue]:
-    """What an encode can't do as set. x264 / x265: options that re-tag the source's colour, or a source with
-    none (_color_issues). VP8 / VP9: VP8 is 8-bit only, the preset is -cpu-used (a
+    """What an encode can't do as set, and how its colour is tagged (every encoder: options that differ from the
+    source's colour, or a UHD source with none: _color_issues). VP8 / VP9: VP8 is 8-bit only, the preset is -cpu-used (a
     number), VP8 at -cpu-used 4 and up puts keyframes on every 2nd-3rd frame after a scene cut (a Fallout sample:
     69-73 of 200 at 4-5, 3 at 0-3), and an HDR10 source's mastering display and light levels aren't carried (the
     transfer and primaries are). SVT-AV1: 8 or 10-bit, its preset and CRF ranges, and with chapters (the job makes
     them) a bitrate can't force their keyframes."""
+    tags = _color_issues(settings, video)
     if settings.encoder is Encoder.SVTAV1:
-        return _svtav1_issues(settings, chapters)
+        return _svtav1_issues(settings, chapters) + tags
     if not settings.encoder.libvpx:
-        return _color_issues(settings, video)
+        return tags
     name, out = settings.encoder.label, []
     if settings.encoder is Encoder.VP8 and settings.depth != 8:
         out.append(Issue(Severity.BLOCK, "video.vp8_depth", "VP8 is 8-bit only: set the bit depth to 8"))
@@ -422,7 +408,7 @@ def issues(settings: EncoderSettings, video: VideoInfo | None, chapters: bool = 
                 "tagged with its transfer and primaries only",
             )
         )
-    return out
+    return out + tags
 
 
 def _svtav1_issues(settings: EncoderSettings, chapters: bool) -> list[Issue]:

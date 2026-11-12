@@ -461,9 +461,9 @@
               HDR10 mastering display and light levels aren't carried yet.
             {:else if svt}
               AV1 holds them in the stream; the mux tags an MKV's track with them too (mkvmerge doesn't copy them), and
-              the pixel aspect. An option below with the same flag wins.
+              the pixel aspect.
             {:else}
-              An option below with the same flag wins (--no-hrd turns one off).
+              A --no- option below turns one of the HDR10 flags off (--no-hrd).
             {/if}
             Untick it when the script changes the colours.
           </span>
@@ -483,6 +483,23 @@
               <span class="mt-1 block text-xs text-warning">An HDR source: encode it at 10-bit.</span>
             {/if}
           {/if}
+        </span>
+      </label>
+
+      <label class="flex items-start gap-3 text-sm {value.source_color ? '' : 'opacity-60'}">
+        <Checkbox
+          class="mt-0.5"
+          checked={value.color_override}
+          disabled={disabled || !value.source_color}
+          onCheckedChange={(v) => set('color_override', v)}
+        />
+        <span class="min-w-0">
+          Override the source's colour
+          <span class="block text-xs text-muted-foreground">
+            The colour flags in the options and extra arguments win over the source's: for a source whose tags are
+            wrong. Off, a flag the source has a value for is left out, as StaxRip's "Import VUI metadata" does, and one
+            it has no value for still applies. The chroma location is always the options'.
+          </span>
         </span>
       </label>
 

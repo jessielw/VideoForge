@@ -73,6 +73,7 @@ async function queueFixture(
         options: {},
         extra: '',
         source_color: true,
+        color_override: false,
         hdr10plus: false,
         dolby_vision: false,
       },

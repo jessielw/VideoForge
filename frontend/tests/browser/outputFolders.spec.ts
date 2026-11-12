@@ -13,6 +13,7 @@ const video: EncoderSettings = {
   options: { ref: '4' },
   extra: '',
   source_color: true,
+  color_override: false,
   hdr10plus: false,
   dolby_vision: false,
 }

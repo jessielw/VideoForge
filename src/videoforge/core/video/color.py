@@ -2,7 +2,9 @@
 tags.
 
 vspipe's y4m carries no colour information, so without these an encode is untagged and a player guesses
-(an HDR10 source plays washed out). The flags go before the job's options, so an option set there wins.
+(an HDR10 source plays washed out). The source's values win over the job's options and extra arguments (their
+flag for a value the source has is dropped: source_wins), unless EncoderSettings.color_override, for a source
+whose tags are wrong; a value the source doesn't have, the job's flag gives.
 x264 gets the VUI flags only (no HDR10 SEI); Dolby Vision isn't carried. A VP9 stream holds only the matrix
 and the range (VP8 none), so a VP8 / VP9 encode's colour is tagged by the mux too (container_codes); its HDR10
 mastering display and light levels aren't carried yet. An AV1 stream holds all of it (HDR10 in metadata OBUs),
@@ -269,6 +271,157 @@ def color_args(color: VideoColor | None, settings: EncoderSettings) -> list[str]
     return args
 
 
+# Per encoder, the flags color_args writes from the source and what each describes. Unless settings.color_override,
+# the source's value wins over the job's options and extra arguments (source_wins), as StaxRip's "Import VUI
+# metadata" replaces its profile's. The chroma location isn't here: as in StaxRip, a job's own --chromaloc wins.
+_FFMPEG_FLAGS = {
+    "color_primaries": "primaries",
+    "color_trc": "transfer",
+    "colorspace": "matrix",
+    "color_range": "range",
+}
+_X264_FLAGS = {"colorprim": "primaries", "transfer": "transfer", "colormatrix": "matrix", "range": "range"}
+SOURCE_FLAGS: dict[Encoder, dict[str, str]] = {
+    Encoder.X264: _X264_FLAGS,
+    Encoder.X265: {**_X264_FLAGS, "master-display": "master_display", "max-cll": "light_levels"},
+    Encoder.VP8: _FFMPEG_FLAGS,
+    Encoder.VP9: _FFMPEG_FLAGS,
+    Encoder.SVTAV1: {
+        "color-primaries": "primaries",
+        "transfer-characteristics": "transfer",
+        "matrix-coefficients": "matrix",
+        "color-range": "range",
+        "mastering-display": "master_display",
+        "content-light": "light_levels",
+    },
+}
+_FIELD_CODES = {"primaries": PRIMARIES_CODE, "transfer": TRANSFER_CODE, "matrix": MATRIX_CODE}
+_FROM_FFMPEG = {
+    "transfer": {v: k for k, v in FFMPEG_TRANSFER.items()},
+    "matrix": {v: k for k, v in FFMPEG_MATRIX.items()},
+}
+_RANGE_NAMES = {"limited": "limited", "full": "full", "tv": "limited", "mpeg": "limited", "pc": "full", "jpeg": "full"}
+
+
+def flag_name(arg: str, ffmpeg: bool = False) -> str | None:
+    """A flag's name less its dashes and value ("--colorprim=bt709": "colorprim"); None when arg isn't a flag, or
+    (ffmpeg) is another stream's (-color_trc:a)."""
+    if not arg.startswith("-"):
+        return None
+    name = arg.lstrip("-").partition("=")[0]
+    if ffmpeg:
+        name, _, stream = name.partition(":")
+        if stream not in ("", "v", "v:0", "0"):
+            return None
+    return name
+
+
+def _flags(args: list[str], ffmpeg: bool) -> dict[str, str]:
+    """Each flag in args with its value ("" for a bare one); a repeated one, the last."""
+    out = {}
+    for i, arg in enumerate(args):
+        name = flag_name(arg, ffmpeg)
+        if name is None:
+            continue
+        _, equals, value = arg.partition("=")
+        if not equals:
+            value = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("-") else ""
+        out[name] = value
+    return out
+
+
+def job_args(settings: EncoderSettings) -> list[str]:
+    """The job's options then its extra arguments, as argv (the dashes don't matter to flag_name)."""
+    args = []
+    for name, value in settings.options.items():
+        args += ["--" + name.lstrip("-")] + ([value] if value != "" else [])
+    return args + split_args(settings.extra)
+
+
+def source_wins(color: VideoColor | None, settings: EncoderSettings) -> dict[str, str]:
+    """The flags color_args writes from the source that win over the job's options and extra arguments (name ->
+    value); none with settings.color_override, or with no source colour to write."""
+    if settings.color_override:
+        return {}
+    names = SOURCE_FLAGS[settings.encoder]
+    return {n: v for n, v in _flags(color_args(color, settings), settings.encoder.libvpx).items() if n in names}
+
+
+def drop_source_flags(args: list[str], color: VideoColor | None, settings: EncoderSettings) -> list[str]:
+    """args (the job's options or extra arguments, as argv) less the colour flags the source's win over."""
+    wins = source_wins(color, settings)
+    if not wins:
+        return args
+    out, skip = [], False
+    for i, arg in enumerate(args):
+        if skip:
+            skip = False
+            continue
+        if flag_name(arg, settings.encoder.libvpx) in wins:
+            skip = "=" not in arg and i + 1 < len(args) and not args[i + 1].startswith("-")
+            continue
+        out.append(arg)
+    return out
+
+
+def _normal(field: str, value: str, encoder: Encoder) -> str:
+    """A colour flag's value in x264 / x265's terms, to compare: names for H.273 numbers and ffmpeg's own names,
+    limited / full for every encoder's range spellings."""
+    value = value.strip().lower()
+    if field == "range":
+        digits = {"0": "limited", "1": "full"} if encoder is Encoder.SVTAV1 else {"1": "limited", "2": "full"}
+        return {**_RANGE_NAMES, **digits}.get(value, value)
+    codes = _FIELD_CODES.get(field)
+    if codes is None:  # a mastering display or light levels
+        return re.sub(r"\s+", "", value)
+    value = _FROM_FFMPEG.get(field, {}).get(value, value)
+    if value.isdigit():
+        return next((name for name, code in codes.items() if code == int(value)), value)
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class ColorChoice:
+    """A colour flag the job sets (options or extra arguments) to another value than the source's."""
+
+    flag: str  # as written: "--colorprim"
+    value: str
+    source: str  # what color_args writes from the source
+
+
+def color_choices(color: VideoColor | None, settings: EncoderSettings) -> list[ColorChoice]:
+    """The job's colour flags whose value isn't the source's (as color_args writes it with the source's colour on),
+    in SOURCE_FLAGS' order; whether they or the source's win is settings.color_override's."""
+    if color is None:
+        return []
+    names, ffmpeg = SOURCE_FLAGS[settings.encoder], settings.encoder.libvpx
+    dash = "-" if ffmpeg else "--"
+    source = _flags(color_args(color, replace(settings, source_color=True)), ffmpeg)
+    job = _flags(job_args(settings), ffmpeg)
+    return [
+        ColorChoice(dash + name, job[name], source[name])
+        for name, field in names.items()
+        if name in job
+        and name in source
+        and _normal(field, job[name], settings.encoder) != _normal(field, source[name], settings.encoder)
+    ]
+
+
+def untagged(color: VideoColor | None, settings: EncoderSettings) -> list[str]:
+    """The flags for the primaries, transfer and matrix the source doesn't describe and the job doesn't set, so the
+    encode isn't tagged with them (none when the source's colour is off: the job's choice)."""
+    if color is None or not settings.source_color:
+        return []
+    names, ffmpeg = SOURCE_FLAGS[settings.encoder], settings.encoder.libvpx
+    dash = "-" if ffmpeg else "--"
+    job = {names[n] for n in _flags(job_args(settings), ffmpeg) if n in names}
+    return [
+        dash + name
+        for name, field in names.items()
+        if field in ("primaries", "transfer", "matrix") and not getattr(color, field) and field not in job
+    ]
+
+
 def _ffmpeg_args(color: VideoColor) -> list[str]:
     """ffmpeg's flags for the colour: libvpx-vp9 writes the matrix and the range into the stream, and the
     others are kept on the stream for the log (the mux tags the container: container_codes)."""
@@ -372,7 +525,8 @@ def _svt_mastering(value: str) -> Mastering | None:
 
 
 def effective_container_color(color: VideoColor | None, settings: EncoderSettings) -> ContainerColor | None:
-    """Resolve IVF output tags from the same defaults, options and extra arguments the encoder receives.
+    """Resolve IVF output tags from the same defaults, options and extra arguments the encoder receives (less the
+    flags the source's colour wins over: source_wins).
 
     Unknown explicit values clear that field rather than reviving the source's metadata. Explicit options
     still apply when source_color is off. FFmpeg's video stream specifiers select the sole output stream.
@@ -380,12 +534,7 @@ def effective_container_color(color: VideoColor | None, settings: EncoderSetting
     av1 = settings.encoder is Encoder.SVTAV1
     if not (av1 or settings.encoder.libvpx):
         return None
-    args = color_args(color, settings)
-    for name, value in settings.options.items():
-        args += ["--" + name.lstrip("-")]
-        if value != "":
-            args.append(value)
-    args += split_args(settings.extra)
+    args = color_args(color, settings) + drop_source_flags(job_args(settings), color, settings)
     names = (
         {
             "color-primaries": "primaries",
