@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - A plugin rule set built for 0.1.6 or earlier (`detected_flags(track)`, without `original_language`) no longer breaks the job page with a 500: it's called with the track alone.
+- Audio track labels no longer repeat Atmos or DTS:X when the format's commercial name already says it ("Dolby TrueHD with Dolby Atmos 7.1", not "… Dolby Atmos Atmos 7.1"), in the Tracks tab, the track editor and the track details.
 
 ## [0.1.7] - 2026-11-11
 

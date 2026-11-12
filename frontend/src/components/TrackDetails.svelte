@@ -1,7 +1,7 @@
 <script lang="ts">
   // A source track's details, as the probe read them (mkvmerge and MediaInfo): opened from the info button
   // on its row, so the row itself stays short.
-  import { audioFormat, basename, bytes, duration } from '../lib/format'
+  import { audioFormat, basename, bytes, duration, withImmersive } from '../lib/format'
   import type { AudioTrack, SubTrack } from '../lib/types'
   import InfoIcon from '@lucide/svelte/icons/info'
   import { buttonVariants } from '$lib/components/ui/button'
@@ -35,7 +35,7 @@
     if ('codec' in t)
       return [
         ...common,
-        ['Format', `${audioFormat(t)}${t.atmos ? ' Atmos' : t.dtsx ? ' DTS:X' : ''}`],
+        ['Format', withImmersive(audioFormat(t), t)],
         ['Codec', t.codec],
         ['Channels', t.layout],
         ['Sample rate', t.sample_rate ? `${+(t.sample_rate / 1000).toFixed(1)} kHz` : ''],
