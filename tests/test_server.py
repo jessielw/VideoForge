@@ -2392,6 +2392,13 @@ def test_mediainfo_reports_on_the_jobs_own_files_only(tmp_path, monkeypatch):
         assert client.get(f"/api/jobs/{job_id}/mediainfo", params={"path": str(stranger)}).status_code == 404
         assert client.get("/api/jobs/nope/mediainfo").status_code == 404
 
+        # The output a run made is one of its files too.
+        client.post("/api/queue/start", json={"ids": [job_id]})
+        output = wait_for(client, job_id, "done")["output"]
+        Path(output).parent.mkdir(parents=True, exist_ok=True)
+        Path(output).write_bytes(b"x")
+        assert client.get(f"/api/jobs/{job_id}/mediainfo", params={"path": output}).json()["path"] == output
+
         Path(source).unlink()
         gone = client.get(f"/api/jobs/{job_id}/mediainfo")
         assert gone.status_code == 404 and "Can't find" in gone.json()["detail"]

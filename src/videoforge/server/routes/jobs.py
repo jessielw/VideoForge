@@ -372,15 +372,19 @@ def job_commands(request: Request, job_id: str) -> list[dict[str, Any]]:
     return [{"id": s.id, "label": s.label, "command": s.command_line or "(runs in VideoForge)"} for s in built.steps]
 
 
-def _media_files(inputs: JobInputs) -> list[Path]:
-    """The job's files MediaInfo can report on: the source, its encode, added audio and subtitle files."""
-    return [inputs.source, *([inputs.encode] if inputs.encode else []), *inputs.audio, *inputs.subtitles]
+def _media_files(inputs: JobInputs, output: Path | None) -> list[Path]:
+    """The job's files MediaInfo can report on: the source, its encode, added audio and subtitle files, and the
+    output a run made."""
+    encode = [inputs.encode] if inputs.encode else []
+    made = [output] if output else []
+    return [inputs.source, *encode, *inputs.audio, *inputs.subtitles, *made]
 
 
 @router.get("/jobs/{job_id}/mediainfo")
 def job_mediainfo(request: Request, job_id: str, path: str | None = None) -> dict[str, Any]:
     """MediaInfo's text report of one of the job's files (the source when no path is given)."""
-    files = _media_files(_entry(queue_of(request), job_id).spec.inputs)
+    e = _entry(queue_of(request), job_id)
+    files = _media_files(e.spec.inputs, e.state.output)
     target = files[0] if path is None else next((f for f in files if str(f) == path), None)
     if target is None:
         raise HTTPException(404, "Not one of this job's files")

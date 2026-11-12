@@ -1,5 +1,6 @@
 <script lang="ts">
-  // MediaInfo's text report of one of the job's files: the source, its encode, added audio and subtitles.
+  // MediaInfo's text report of one of the job's files: the source, its encode, added audio and subtitles, and
+  // the output once a run made one.
   // The server parses it when asked (and keeps it while the file is unchanged), so a click waits here.
   import CheckIcon from '@lucide/svelte/icons/check'
   import CopyIcon from '@lucide/svelte/icons/copy'
@@ -23,6 +24,7 @@
       ...(i.encode ? [{ path: i.encode, label: `Encode · ${basename(i.encode)}` }] : []),
       ...(i.audio ?? []).map((p) => ({ path: p, label: `Audio · ${basename(p)}` })),
       ...(i.subtitles ?? []).map((p) => ({ path: p, label: `Subtitles · ${basename(p)}` })),
+      ...(job.output ? [{ path: job.output, label: `Output · ${basename(job.output)}` }] : []),
     ]
   })
 
