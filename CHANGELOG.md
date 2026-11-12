@@ -4,18 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Removed
-
-- `GET /api/fs/contents`. It only counted a folder's files for the old delete dialog.
-- The `recursive` option of `POST /api/fs/rmdir`. The endpoint now deletes empty folders only.
+## [0.1.8] - 2026-11-12
 
 ### Security
 
 - The folder picker now offers Delete only on folders you made in it while it's open, and only while they're empty. Before, it could permanently delete any folder on a browsable drive, along with everything in it. The server enforces the same limit: it refuses to delete a folder that has files in it.
-
-## [0.1.8] - 2026-11-12
 
 ### Added
 
@@ -34,6 +27,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - A plugin rule set built for 0.1.6 or earlier (`detected_flags(track)`, without `original_language`) no longer breaks the job page with a 500: it's called with the track alone.
 - Audio track labels no longer repeat Atmos or DTS:X when the format's commercial name already says it ("Dolby TrueHD with Dolby Atmos 7.1", not "… Dolby Atmos Atmos 7.1"), in the Tracks tab, the track editor and the track details.
+
+### Removed
+
+- `GET /api/fs/contents`. It only counted a folder's files for the old delete dialog.
+- The `recursive` option of `POST /api/fs/rmdir`. The endpoint now deletes empty folders only.
 
 ## [0.1.7] - 2026-11-11
 
