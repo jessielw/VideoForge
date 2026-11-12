@@ -344,9 +344,9 @@ def _color_issues(settings: EncoderSettings, video: VideoInfo | None) -> list[Is
     BT.709 comes out oversaturated); and, with the source's colour on, a UHD source that doesn't describe its colour
     where the options don't either (the encode is untagged there and a player guesses, BT.709 or BT.2020; below UHD
     it guesses as it did for the source, so that's left alone)."""
-    color = video.color if video is not None else None
-    if color is None:
+    if video is None or video.color is None:
         return []
+    color = video.color
     retag, untagged = [], []
     for flag, field, codes in _COLOR_FLAGS:
         source, value = getattr(color, field), _setting(settings, flag)
