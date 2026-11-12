@@ -1,6 +1,7 @@
 // App-wide state, kept current by the server's event WebSocket (/api/events).
 import { toast } from 'svelte-sonner'
 import { api } from './api'
+import { browserNotify, type QueueFinished } from './browserNotify.svelte'
 import { STATUS_LABEL } from './format'
 import type {
   AudioEncodeInfo,
@@ -335,6 +336,9 @@ class AppState {
         }
         break
       }
+      case 'queue.finished':
+        browserNotify.queueFinished(event as unknown as QueueFinished)
+        break
       case 'job':
       case 'job.added':
       case 'job.removed':

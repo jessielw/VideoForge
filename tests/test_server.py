@@ -545,6 +545,10 @@ def test_queue_runs_jobs_and_streams_events(tmp_path):
             while not ((ev := ws.receive_json())["type"] == "queue" and ev["queued"] == 0 and ev["current"] is None):
                 pass
             assert ev["running"] is False
+            # Then what it ran, for the page's toast and desktop notification.
+            while (ev := ws.receive_json())["type"] != "queue.finished":
+                pass
+            assert ev["statuses"] == ["done", "done"] and ev["left"] == 0 and ev["seconds"] >= 0
         for i in ids:
             job = wait_for(client, i, "done")
             assert job["steps"]["video"]["fingerprint"] == "abc"
