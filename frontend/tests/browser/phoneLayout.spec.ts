@@ -38,6 +38,7 @@ async function phoneFixture(page: Page) {
     custom_script: false,
     pause_after_pass1: false,
     indexed: true,
+    source_facts: null,
     index_error: '',
     index_held: false,
     sample_waiting: false,

@@ -123,6 +123,7 @@ async function fixture(page: Page, empty = false) {
     custom_script: false,
     pause_after_pass1: false,
     indexed: false,
+    source_facts: null,
     index_error: '',
     index_held: false,
     sample_waiting: false,
