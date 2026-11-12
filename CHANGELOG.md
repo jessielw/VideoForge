@@ -11,7 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - x264 / x265 encodes warn (`video.color_retag`) when the encoder options or extra arguments set `--colorprim`, `--transfer`, `--colormatrix` or `--range` to something other than the source's. The flags only label the picture, so unless the script converts it a player shows the wrong colours: a BT.2020 SDR UHD tagged BT.709 plays oversaturated. Remove the flags to keep the source's colour.
 - A UHD source that doesn't describe its colour gets a note (`video.color_untagged`) when the encoder options don't set it either: the encode is untagged there and a player has to guess.
 - Track editor: when a rule set picks the Default track itself and offers no Default pill (e.g. the first audio track), the track it marks shows a read-only "Default" label.
-- Job editor: a MediaInfo button shows MediaInfo's text report of the source, or of the job's encode, added audio or subtitle files, with a Copy button. The report is read when asked (a spinner shows while it loads) and kept until the file changes. API: `GET /api/jobs/{id}/mediainfo?path=`, limited to the job's own files.
+- Job editor: a MediaInfo button shows MediaInfo's text report of the source, or of the job's encode, added audio or subtitle files, with a Copy button. The report is read when asked (a spinner shows while it loads) and kept until the file changes. API: `GET /api/jobs/{id}/mediainfo?path=`, limited to the job's own files. Once a run has made the output, it's in the list too.
+- Queue rows show the source at a glance: its size, length, interlacing and HDR formats (`DV 7.6 FEL`, `HDR10+`, `HDR10`, `HLG`). A profile 7 source whose enhancement layer couldn't be read (dovi_tool not set) shows `FEL/MEL?`. API: `source_facts` on each job.
+- Settings, Automation: a desktop notification from this browser when the queue finishes, while VideoForge isn't the tab in front ("Queue finished: 3 jobs: 2 done, 1 failed · took 1:05:12"). Browsers allow it on https or localhost only. The server sends a `queue.finished` event over the page's WebSocket.
 
 ### Fixed
 
