@@ -642,7 +642,7 @@
       <Toggle
         pressed={boost}
         onPressedChange={toggleBoost}
-        class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+        class="data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
       >
         Boost
       </Toggle>
@@ -661,7 +661,7 @@
         <Toggle
           pressed={shaped}
           onPressedChange={toggleShaped}
-          class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+          class="data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
         >
           AR
         </Toggle>

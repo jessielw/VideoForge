@@ -72,6 +72,12 @@
 
 <Tooltip.Provider delayDuration={400}>
   <div class="flex h-full">
+    <!-- A button, not an #main link: the hash is the router's. -->
+    <button
+      type="button"
+      class="sr-only rounded-md bg-background px-3 py-2 text-sm font-medium shadow ring-2 ring-ring focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50"
+      onclick={() => document.getElementById('main')?.focus()}>Skip to main content</button
+    >
     <nav
       class="flex {navCollapsed ? 'w-14' : 'w-48'} shrink-0 flex-col overflow-y-auto border-r bg-card"
       aria-label="Main navigation"
@@ -87,24 +93,26 @@
       </div>
       <div class="flex flex-col gap-0.5 px-2">
         {#each NAV as item (item.page)}
+          {@const count = item.page === 'queue' ? app.jobs.length : 0}
+          {@const counted = count === 1 ? 'job' : 'jobs'}
           <Tip side="right" class="grid" text={navCollapsed ? item.label : undefined}>
             <Button
               variant="ghost"
               class="relative justify-start gap-3 {navCollapsed ? 'justify-center px-0' : 'px-3'}
             {router.page === item.page
-                ? 'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary'
+                ? 'bg-primary/15 text-foreground hover:bg-primary/20 hover:text-foreground [&_svg]:text-primary'
                 : 'text-muted-foreground'}"
               aria-current={router.page === item.page ? 'page' : undefined}
-              aria-label={item.label}
+              aria-label={navCollapsed ? `${item.label}${count ? ` ${count} ${counted}` : ''}` : undefined}
               onclick={() => router.go(item.page)}
             >
               <item.icon class="size-[18px]" />
               {#if !navCollapsed}{item.label}{/if}
-              {#if item.page === 'queue' && app.jobs.length}
+              {#if count}
                 <Badge
                   variant="secondary"
                   class="tabular-nums {navCollapsed ? 'absolute -top-1 -right-1 h-4 px-1 text-[10px]' : 'ml-auto'}"
-                  >{app.jobs.length}</Badge
+                  >{count}<span class="sr-only">{` ${counted}`}</span></Badge
                 >
               {/if}
             </Button>
@@ -179,7 +187,7 @@
       {/if}
     </nav>
 
-    <main class="min-w-0 flex-1 overflow-hidden">
+    <main id="main" tabindex="-1" class="min-w-0 flex-1 overflow-hidden outline-none">
       {#if app.connectionError}
         <div class="m-6 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
           Couldn't reach the VideoForge server: {app.connectionError}

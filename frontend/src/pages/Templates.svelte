@@ -315,9 +315,7 @@
       {@const active = opened && (c.builtin ? opened.builtin && draftName === c.name : opened.name === c.name)}
       {@const chosen = picked.includes(c.name)}
       <li
-        class="flex items-center gap-1 rounded-md {active && !selecting
-          ? 'bg-primary/15 text-primary'
-          : 'hover:bg-accent'}"
+        class="flex items-center gap-1 rounded-md {active && !selecting ? 'bg-primary/15' : 'hover:bg-accent'}"
         style:padding-left="{depth * 1.25}rem"
       >
         {#if selecting}
@@ -358,7 +356,7 @@
           </Tip>
           <Tip class="flex min-w-0 flex-1" text={c.name}>
             <button class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm" onclick={() => pick(c)}>
-              {label}{#if c.builtin}<span class="ml-2 text-xs text-muted-foreground">built in</span>{/if}
+              {label}{#if c.builtin}<span class="ml-2 text-xs opacity-75">built in</span>{/if}
             </button>
           </Tip>
         {/if}

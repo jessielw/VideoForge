@@ -48,7 +48,7 @@
     <div
       class="flex min-h-8 min-w-0 flex-wrap gap-1.5 rounded-lg border border-input px-2 py-1 outline-none focus-visible:border-ring
       focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
-      role="list"
+      role={paths.length ? 'list' : 'group'}
       aria-label={label}
       use:pathDrop={{ rule: { mode: mode === 'folder' ? 'folder' : 'files', extensions, label }, accept: add }}
     >

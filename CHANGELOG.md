@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A "Skip to main content" button is the first Tab stop on every page. It moves keyboard focus past the menu.
+
+### Changed
+
+- Light mode: the active menu item, the selected template, switched-on track flags and the preview toggles use dark text on their tint. Inactive tabs use the muted grey. Text now meets the WCAG 4.5:1 contrast minimum in all seven palettes.
+- Suggestion lists (Original language, Target size, encoder option names) open when you click, type or press Down. They no longer open when the field gets focus, so Tab moves straight past them. In a number field such as Target size, Alt+Down opens the list.
+- Menu items and preset buttons are named after what they show, for example "Encoder preset: Manual defaults", so the names voice control and screen readers use match the screen. Screen readers read the Queue item's count as "Queue 4 jobs".
+
+### Fixed
+
+- Screen readers: the job tabs announce the panel they show, and Settings checkboxes and palette choices read their name, then their help text as a description.
+- Track drag handles and the Rule set list on the Output tab no longer read as unnamed controls. Empty Sources and Output folder fields no longer read as empty lists.
+- The Log page and the job log can be scrolled with the keyboard.
+
 ## [0.1.8] - 2026-11-12
 
 ### Security
