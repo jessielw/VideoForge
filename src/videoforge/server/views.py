@@ -12,7 +12,7 @@ from videoforge.core.pipeline import crfsearch
 from videoforge.core.pipeline.build import indexed, output_path
 from videoforge.core.pipeline.sample import MKV, read_result, sample_dir, sample_key
 from videoforge.core.plan_io import to_json
-from videoforge.core.video import info, target
+from videoforge.core.video import hdr, info, target
 from videoforge.core.video.color import color_args
 from videoforge.core.video.settings import EncoderSettings, RateControl
 from videoforge.server.queue import Entry, JobQueue
@@ -92,6 +92,20 @@ def summary(e: Entry) -> dict[str, Any]:
         "search_error": e.search_error,
         "audio": [f"{a.title} ({a.language})" for a in e.plan.audio] if e.plan else [],
         "subs": len(e.plan.subs) if e.plan else 0,
+        "source_facts": source_facts(e),
+    }
+
+
+def source_facts(e: Entry) -> dict[str, Any] | None:
+    """What the source is, at a glance (the queue row): its size class, length, HDR formats, and interlacing."""
+    v = e.source_video
+    if v is None:
+        return None
+    return {
+        "resolution": e.plan.resolution if e.plan else f"{v.width}x{v.height}",
+        "duration_ms": v.duration_ms or None,
+        "hdr": hdr.formats(v),
+        "interlaced": v.interlaced,
     }
 
 

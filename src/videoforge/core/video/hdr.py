@@ -200,6 +200,25 @@ def _sample(source: str, _size: int, _mtime: int, ffmpeg: str, dovi_tool: str, s
     return 0, ""
 
 
+def formats(video: VideoInfo | None) -> list[str]:
+    """The source's HDR formats, as a release names them: "DV 7.6 FEL", "HDR10+", "HDR10", "HLG"; [] for SDR.
+    A profile 7 enhancement layer whose RPU wasn't read (no dovi_tool) is "FEL/MEL?": it decides the encode."""
+    if video is None:
+        return []
+    h, out = video.hdr, []
+    if h.dv_profile:
+        unread = h.dv_profile == 7 and "EL" in h.dv_layers and not h.dv_el
+        out.append(f"DV {h.dv_name}" + (" FEL/MEL?" if unread else ""))
+    transfer = video.color.transfer
+    if h.hdr10plus:
+        out.append("HDR10+")
+    elif transfer == "smpte2084" and h.dv_profile != 5:  # profile 5's base layer isn't HDR10 (IPTPQc2)
+        out.append("HDR10")
+    elif transfer == "arib-std-b67":
+        out.append("HLG")
+    return out
+
+
 def keeps_hdr10plus(video: VideoInfo | None, settings: EncoderSettings) -> bool:
     """Whether the encode carries the source's HDR10+: x265, the source has it, the job didn't untick it, and no
     FEL is baked in (its HDR10+ was measured on the base layer, which the baked picture no longer is)."""

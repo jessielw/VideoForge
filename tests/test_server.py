@@ -305,6 +305,9 @@ def test_add_inspect_and_edit(tmp_path):
         assert len(ids) == 2
         job = wait_for(client, ids[0], "ready", "warn")
         assert job["encoder"] == "x264 crf 18"  # the manual rule set's default encode
+        # The queue row's facts about the source: the fake probe's 1080p SDR, length not known.
+        facts = {"resolution": job["plan"]["resolution"], "duration_ms": None, "hdr": [], "interlaced": False}
+        assert job["source_facts"] == facts
         assert job["spec"]["encoder"]["preset"] == "slow"
         assert [a["action"] for a in job["plan"]["audio"]] == ["copy", "copy"]
         assert Path(job["plan"]["encode_path"]).parts[-3:] == ("Show.S01E01.mkv_tmp", "main", "video.264")
