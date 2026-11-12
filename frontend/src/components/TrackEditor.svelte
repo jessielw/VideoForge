@@ -552,8 +552,7 @@
           draggable={editable}
           ondragstart={(e) => dragStart(e, t)}
           ondragend={() => (drag = dropAt = null)}
-          role="button"
-          tabindex="-1"><GripVerticalIcon class="size-4" /></span
+          aria-hidden="true"><GripVerticalIcon class="size-4" /></span
         >
       </Tip>
       <Tip text="In the output{note(mark(t, (o) => o?.exclude))}">
@@ -596,7 +595,7 @@
             variant="outline"
             size="sm"
             class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
-              data-[state=on]:text-primary"
+              data-[state=on]:text-foreground"
             pressed={!!ov?.burn}
             onPressedChange={(on) => setBurn(t, on)}><FlameIcon class="size-3" />Burn in</Toggle
           >
@@ -604,7 +603,7 @@
       {/if}
       {#if copy}
         <Tip text="Another output track from {sourceLabel(t)}">
-          <Badge variant="outline" class="border-primary/40 bg-primary/10 text-primary">copy {copy.copy}</Badge>
+          <Badge variant="outline" class="border-primary/40 bg-primary/10 text-foreground">copy {copy.copy}</Badge>
         </Tip>
         <Tip text="Remove this copy">
           <Button
@@ -677,7 +676,7 @@
                 variant="outline"
                 size="sm"
                 class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
-                  data-[state=on]:text-primary {fm ? FLAG_MARK[fm] : ''}"
+                  data-[state=on]:text-foreground {fm ? FLAG_MARK[fm] : ''}"
                 pressed={on}
                 onPressedChange={() => toggleFlag(t, f.key)}
                 >{#if on}<CheckIcon class="size-3" />{/if}{f.label}</Toggle

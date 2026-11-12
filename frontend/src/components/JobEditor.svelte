@@ -257,15 +257,24 @@
       <Tabs.List
         bind:ref={tabList}
         variant="line"
+        aria-label="Job sections"
         class="-mx-2 h-9 max-sm:max-w-[calc(100%+1rem)] max-sm:justify-start max-sm:overflow-x-auto max-sm:[scrollbar-width:none]"
       >
         {#each TABS as t (t.id)}
-          <Tabs.Trigger value={t.id} class="px-3">{t.label}</Tabs.Trigger>
+          <Tabs.Trigger value={t.id} id="job-tab-{t.id}" aria-controls="job-tab-panel" class="px-3"
+            >{t.label}</Tabs.Trigger
+          >
         {/each}
       </Tabs.List>
     </header>
 
-    <div class="min-h-0 flex-1 overflow-auto p-5 max-sm:p-3">
+    <!-- One panel for every tab (the tabs swap what's in it), named by the tab that shows. -->
+    <div
+      id="job-tab-panel"
+      role="tabpanel"
+      aria-labelledby="job-tab-{tab}"
+      class="min-h-0 flex-1 overflow-auto p-5 max-sm:p-3"
+    >
       {#if tab === 'video'}
         {#if job.spec.inputs.encode}
           <p class="text-muted-foreground">
@@ -486,6 +495,7 @@
             <span class="text-muted-foreground">Rule set</span>
             <NativeSelect
               class="w-48"
+              aria-label="Rule set"
               value={job.rule_set}
               disabled={!editable}
               onchange={(e) => save({ rule_set: e.currentTarget.value })}

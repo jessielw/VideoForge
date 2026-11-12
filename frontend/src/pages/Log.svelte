@@ -38,8 +38,12 @@
     >
     <Button variant="outline" class="ml-auto" onclick={() => (app.log = [])}>Clear</Button>
   </header>
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex (a scrolling region: keyboard users scroll it once focused) -->
   <pre
     bind:this={box}
+    tabindex="0"
+    role="region"
+    aria-label="Log output"
     class="min-h-0 flex-1 overflow-auto rounded-lg border bg-card p-3 font-mono text-xs leading-relaxed max-sm:p-2 max-sm:wrap-anywhere max-sm:whitespace-pre-wrap max-sm:[&>div]:pl-4 max-sm:[&>div]:-indent-4">{#each lines as l, i (i)}<div
         class={tone(l.line)}>{filter ? '' : `${app.jobName(l.job)}: `}{l.line}</div>{:else}<span
         class="text-muted-foreground">Output from probes and runs appears here.</span

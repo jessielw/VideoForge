@@ -60,6 +60,7 @@
     dv?: VideoHdr | false | null
     budget?: SizeBudget | null
   } = $props()
+  const uid = $props.id() // the editor can show twice (job and preset manager): ids of its own
 
   // StaxRip's size menu (MB) and its default target size
   const SIZES: [number, string][] = [
@@ -443,11 +444,13 @@
           class="mt-0.5"
           checked={value.source_color}
           {disabled}
+          aria-labelledby="{uid}-color"
+          aria-describedby="{uid}-color-help {uid}-color-state"
           onCheckedChange={(v) => set('source_color', v)}
         />
         <span class="min-w-0">
-          Colour from the source
-          <span class="block text-xs text-muted-foreground">
+          <span id="{uid}-color">Colour from the source</span>
+          <span id="{uid}-color-help" class="block text-xs text-muted-foreground">
             Tags the encode with the source's colour description{value.encoder === 'x265' || svt
               ? ' and HDR10 metadata'
               : ''}
@@ -467,22 +470,24 @@
             {/if}
             Untick it when the script changes the colours.
           </span>
-          {#if colorArgs !== undefined}
-            {#if colorArgs === null}
-              <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
-            {:else if !colorArgs.length}
-              <span class="block text-xs text-muted-foreground">The source doesn't describe its colours.</span>
-            {:else}
-              <code
-                class="mt-1 block font-mono text-xs break-all {value.source_color
-                  ? ''
-                  : 'text-muted-foreground line-through'}">{colorArgs.join(' ')}</code
-              >
+          <span id="{uid}-color-state" class="block">
+            {#if colorArgs !== undefined}
+              {#if colorArgs === null}
+                <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
+              {:else if !colorArgs.length}
+                <span class="block text-xs text-muted-foreground">The source doesn't describe its colours.</span>
+              {:else}
+                <code
+                  class="mt-1 block font-mono text-xs break-all {value.source_color
+                    ? ''
+                    : 'text-muted-foreground line-through'}">{colorArgs.join(' ')}</code
+                >
+              {/if}
+              {#if hdr && value.source_color && value.depth < 10}
+                <span class="mt-1 block text-xs text-warning">An HDR source: encode it at 10-bit.</span>
+              {/if}
             {/if}
-            {#if hdr && value.source_color && value.depth < 10}
-              <span class="mt-1 block text-xs text-warning">An HDR source: encode it at 10-bit.</span>
-            {/if}
-          {/if}
+          </span>
         </span>
       </label>
 
@@ -491,11 +496,13 @@
           class="mt-0.5"
           checked={value.color_override}
           disabled={disabled || !value.source_color}
+          aria-labelledby="{uid}-override"
+          aria-describedby="{uid}-override-help"
           onCheckedChange={(v) => set('color_override', v)}
         />
         <span class="min-w-0">
-          Override the source's colour
-          <span class="block text-xs text-muted-foreground">
+          <span id="{uid}-override">Override the source's colour</span>
+          <span id="{uid}-override-help" class="block text-xs text-muted-foreground">
             The colour flags in the options and extra arguments win over the source's: for a source whose tags are
             wrong. Off, a flag the source has a value for is left out, as StaxRip's "Import VUI metadata" does, and one
             it has no value for still applies. The chroma location is always the options'.

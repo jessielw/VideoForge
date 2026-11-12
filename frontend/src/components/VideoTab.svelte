@@ -652,7 +652,7 @@
                 pressed={stage === 'crop'}
                 disabled={!canCrop}
                 onPressedChange={(on) => (vv.cropView = on)}
-                class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+                class="data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
               >
                 <CropIcon />Crop
               </Toggle>
@@ -661,7 +661,7 @@
               <Toggle
                 pressed={auto}
                 onPressedChange={setAuto}
-                class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+                class="data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
               >
                 Auto
               </Toggle>

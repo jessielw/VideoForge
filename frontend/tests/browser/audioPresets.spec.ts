@@ -140,7 +140,7 @@ async function fixture(page: Page) {
   await page.goto('/#/templates')
   const output = page.getByRole('group', { name: 'Audio track 1', exact: true })
   const openManager = async () => {
-    await output.getByRole('button', { name: 'Audio presets', exact: true }).click()
+    await output.getByRole('button', { name: /^Audio preset: / }).click()
     await page.getByRole('button', { name: 'Manage presets…', exact: true }).click()
     return page.getByRole('dialog', { name: 'Audio presets', exact: true })
   }
@@ -162,7 +162,7 @@ test('saved titles apply, remain editable, and survive saving and selecting agai
   await expect(output.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Bob edited')
   await output.getByRole('textbox', { name: 'Title', exact: true }).fill('Manual edit')
   await output.getByRole('textbox', { name: 'Title', exact: true }).blur()
-  await output.getByRole('button', { name: 'Audio presets', exact: true }).click()
+  await output.getByRole('button', { name: /^Audio preset: / }).click()
   await page.getByRole('textbox', { name: 'Search audio presets' }).fill('Surround')
   await page.getByRole('button', { name: /Surround/ }).click()
   await expect(output.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Bob edited')

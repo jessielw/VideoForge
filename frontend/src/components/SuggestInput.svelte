@@ -79,6 +79,10 @@
 
   // Arrows step through the list and back to the typed value (-1); a number box keeps them for stepping.
   function onkeydown(e: KeyboardEvent & { currentTarget: EventTarget & HTMLInputElement }) {
+    if (e.key === 'ArrowDown' && e.altKey && !open) {
+      e.preventDefault() // the combobox way to open the list, a number box too
+      return begin()
+    }
     if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && type === 'text') {
       e.preventDefault()
       if (!open) return begin()
@@ -123,15 +127,12 @@
       aria-activedescendant={open && items[active] ? `${uid}-${active}` : undefined}
       autocomplete="off"
       spellcheck="false"
-      onfocus={(e) => {
-        begin()
-        focus?.(e)
-      }}
+      onfocus={focus}
       onclick={begin}
       oninput={(e) => {
+        if (!open) begin() // first: it starts as untyped
         typed = true
         active = -1
-        if (!open) begin()
         input?.(e)
       }}
       onblur={(e) => {
@@ -152,7 +153,7 @@
       if (anchor?.contains(e.target as Node)) e.preventDefault()
     }}
   >
-    <div bind:this={list} id="{uid}-list" role="listbox" class="max-h-64 overflow-y-auto">
+    <div bind:this={list} id="{uid}-list" role="listbox" tabindex="-1" class="max-h-64 overflow-y-auto">
       {#each items as s, i (s.value)}
         <div
           id="{uid}-{i}"

@@ -8,12 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- A "Skip to main content" button is the first Tab stop on every page. It moves keyboard focus past the menu.
 - Encoder settings: **Override the source's colour** (under **Colour from the source**; `color_override` in encoder settings, off by default). On, the colour flags in the encoder options and extra arguments win over the source's: for a source whose tags are wrong, or a script that converts the colour.
 
 ### Changed
 
+- Light mode: the active menu item, the selected template, switched-on track flags and the preview toggles use dark text on their tint. Inactive tabs use the muted grey. Text now meets the WCAG 4.5:1 contrast minimum in all seven palettes.
+- Suggestion lists (Original language, Target size, encoder option names) open when you click, type or press Down. They no longer open when the field gets focus, so Tab moves straight past them. In a number field such as Target size, Alt+Down opens the list.
+- Menu items and preset buttons are named after what they show, for example "Encoder preset: Manual defaults", so the names voice control and screen readers use match the screen. Screen readers read the Queue item's count as "Queue 4 jobs".
 - The source's colour (primaries, transfer, matrix, range, and the HDR10 mastering display and light levels) now wins over the same flags in the encoder options and extra arguments, as StaxRip's "Import VUI metadata" does: those flags are left out of the command unless **Override the source's colour** is on. A preset forcing `--colorprim bt709` no longer mislabels a BT.2020 SDR source, which played oversaturated. A flag for a value the source doesn't have still applies, and the chroma location is still the options'. Jobs and presets whose flags were meant to replace the source's need the override turned on.
 - The colour warning (`video.color_retag`) is replaced by two notes, for every encoder: `video.color_source` (an option's colour flag differs from the source's, and the source's is used) and `video.color_override` (the option's is used: the override is on, or **Colour from the source** is off).
+
+### Fixed
+
+- Screen readers: the job tabs announce the panel they show, and Settings checkboxes and palette choices read their name, then their help text as a description.
+- Track drag handles and the Rule set list on the Output tab no longer read as unnamed controls. Empty Sources and Output folder fields no longer read as empty lists.
+- The Log page and the job log can be scrolled with the keyboard.
 
 ## [0.1.8] - 2026-11-12
 

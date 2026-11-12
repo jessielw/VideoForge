@@ -115,7 +115,13 @@
     <Tip class="max-w-full" text={currentLabel}>
       <Popover.Trigger {disabled}>
         {#snippet child({ props })}
-          <Button {...props} bind:ref={trigger} variant="outline" class="max-w-full" aria-label="{title} presets">
+          <Button
+            {...props}
+            bind:ref={trigger}
+            variant="outline"
+            class="max-w-full"
+            aria-label="{title} preset: {currentLabel}"
+          >
             <span class="truncate">{showTitle ? `${title} preset: ` : ''}{currentLabel}</span><ChevronDownIcon />
           </Button>
         {/snippet}

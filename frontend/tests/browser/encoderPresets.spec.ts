@@ -102,7 +102,7 @@ async function fixture(page: Page) {
     }
   })
   await page.goto('/#/templates')
-  await page.getByRole('button', { name: 'Encoder presets', exact: true }).click()
+  await page.getByRole('button', { name: /^Encoder preset: / }).click()
   await page.getByRole('button', { name: 'Manage presets…' }).click()
   const manager = page.getByRole('dialog', { name: 'Encoder presets', exact: true })
   await expect(manager).toBeVisible()

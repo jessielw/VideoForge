@@ -166,12 +166,11 @@
       {disabled}
       placeholder={open && shown ? shown : many && chosen.length ? '' : placeholder}
       value={open ? query : shown}
-      onfocus={begin}
       onclick={begin}
       oninput={(e) => {
+        if (!open) begin() // first: it starts from an empty query
         query = e.currentTarget.value
         active = 0
-        if (!open) begin()
       }}
       onblur={() => {
         const tag = typedTag()
@@ -203,7 +202,14 @@
       if (anchor?.contains(e.target as Node)) e.preventDefault()
     }}
   >
-    <div bind:this={list} id="{uid}-list" role="listbox" aria-multiselectable={many} class="max-h-64 overflow-y-auto">
+    <div
+      bind:this={list}
+      id="{uid}-list"
+      role="listbox"
+      tabindex="-1"
+      aria-multiselectable={many}
+      class="max-h-64 overflow-y-auto"
+    >
       {#each items as [tag, name], i (tag)}
         <div
           id="{uid}-{i}"
