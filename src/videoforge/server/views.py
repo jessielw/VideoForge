@@ -149,7 +149,7 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
 
         def track(t: AudioTrack | SubTrack) -> dict[str, Any]:
             key = track_key(t)
-            detected = rule_set.detected_flags(t, original_language=e.plan.original_language if e.plan else None)
+            detected = rule_set.detected(t, e.plan.original_language if e.plan else None)
             row = to_json(t) | {"key": key, "detected": detected}
             return row if auto is None else row | {"auto": auto.get(key, {"kept": False})}
 

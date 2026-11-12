@@ -9,6 +9,9 @@ Implementations live in videoforge.rule_sets (the core never imports them).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from functools import cache
+import inspect
 from pathlib import Path
 from typing import ClassVar
 
@@ -66,7 +69,20 @@ class RuleSet(ABC):
         original_language is the plan's (None before one is made), for flags that depend on it (a dub)."""
         return {}
 
+    def detected(self, track: AudioTrack | SubTrack, original_language: str | None) -> dict[str, bool]:
+        """detected_flags as the engine calls it. A plugin's rule set written before original_language
+        (VideoForge 0.1.6 and earlier) takes the track alone, so it's called that way rather than failing."""
+        if _takes_original_language(type(self).detected_flags):
+            return self.detected_flags(track, original_language=original_language)
+        return self.detected_flags(track)
+
     def output_stem(self, plan: Plan) -> str:
         if plan.source.path is not None:
             return plan.source.path.stem
         return Path(plan.source.name).stem
+
+
+@cache
+def _takes_original_language(method: Callable[..., object]) -> bool:
+    params = inspect.signature(method).parameters.values()
+    return any(p.name == "original_language" or p.kind is p.VAR_KEYWORD for p in params)

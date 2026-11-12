@@ -312,3 +312,27 @@ def test_first_audio_track_is_default_when_the_source_has_none():
         source(tracks, []), overrides=Overrides(tracks={"id:1": TrackOverride(flags={"default": False})})
     )
     assert [a.default for a in cleared.audio] == [False, False]
+
+
+def test_detected_still_calls_a_rule_set_written_before_original_language():
+    """A plugin built for 0.1.6 takes detected_flags(track) alone: the job page mustn't fail on it."""
+    seen: list[object] = []
+
+    class Old(ManualRuleSet):
+        def detected_flags(self, track):  # the 0.1.6 signature
+            seen.append(track)
+            return {"forced": True}
+
+    class New(ManualRuleSet):
+        def detected_flags(self, track, original_language=None):
+            return {"original": original_language == "ja"}
+
+    class Loose(ManualRuleSet):
+        def detected_flags(self, track, **extra):
+            return {"original": extra.get("original_language") == "ja"}
+
+    track = sub(F.PGS, "en", "English", index=0)
+    assert Old().detected(track, "ja") == {"forced": True} and seen == [track]
+    assert New().detected(track, "ja") == {"original": True}
+    assert Loose().detected(track, "ja") == {"original": True}
+    assert ManualRuleSet().detected(track, None) == ManualRuleSet().detected_flags(track)
