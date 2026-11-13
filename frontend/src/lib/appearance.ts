@@ -58,7 +58,7 @@ export const PALETTES = [
   {
     id: 'slate',
     label: 'Slate',
-    description: 'Neutral and restrained, cool grey-blue throughout.',
+    description: 'Neutral and restrained, cool gray-blue throughout.',
     light: ['#eef1f5', '#ffffff', '#334155'],
     dark: ['#0f1217', '#171b22', '#cbd5e1'],
   },

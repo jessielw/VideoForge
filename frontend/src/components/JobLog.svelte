@@ -102,7 +102,7 @@
     done: { icon: CheckIcon, tone: 'text-success', text: 'done' },
     reused: { icon: RefreshCwIcon, tone: 'text-success', text: 'reused' },
     failed: { icon: XIcon, tone: 'text-destructive', text: 'failed' },
-    cancelled: { icon: SquareIcon, tone: 'text-warning', text: 'cancelled' },
+    cancelled: { icon: SquareIcon, tone: 'text-warning', text: 'canceled' },
   }
 
   function outcome(s: StepRun): string {

@@ -652,7 +652,7 @@ def test_notifications(tmp_path):
         assert [d["name"] for d in saved] == ["Phone", "discord", "Off", "Down"]
         assert saved[1]["events"] == ["job_done", "job_failed", "queue_finished"]
         bad = client.put("/api/config", json={"notifications": [{"url": "nope"}]})
-        assert bad.status_code == 422 and "recognise" in bad.json()["detail"]
+        assert bad.status_code == 422 and "recognize" in bad.json()["detail"]
         assert (
             client.put("/api/config", json={"notifications": [{"url": "json://x", "events": ["x"]}]}).status_code == 422
         )

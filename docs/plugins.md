@@ -176,7 +176,7 @@ For a package module, supply its directory instead of the `.py` file; include `v
 | `on_queue_finished` | `QueueFinished(statuses, seconds, left)`, `ctx` | the queue's worker stops |
 | `on_index_finished` | `IndexFinished(spec, error)`, `ctx` | the index lane finished a source |
 
-A job cancelled by shutting VideoForge down sends no `JobFinished`, because it resumes on the next start.
+A job canceled by shutting VideoForge down sends no `JobFinished`, because it resumes on the next start.
 
 `JobFinished.record` is the path of the job record (`<output>.videoforge.json`, see [job-record.md](job-record.md)): every track, where it came from, the encode settings, the tools' versions. Read that instead of digging into `spec` and `result`.
 

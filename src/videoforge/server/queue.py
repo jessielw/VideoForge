@@ -1579,7 +1579,7 @@ class JobQueue:
         if error and error != "Cancelled":
             logger.warning("%s: index failed: %s", e.spec.name, error)
         else:
-            logger.info("%s: index %s", e.spec.name, "cancelled" if error else "done")
+            logger.info("%s: index %s", e.spec.name, "canceled" if error else "done")
         self._queue_event("index.finished", e, error=error or None)
         if not self._closing:
             self.bus.emit(IndexFinished(_copy(e.spec), error or None))

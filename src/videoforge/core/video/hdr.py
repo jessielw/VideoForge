@@ -319,7 +319,7 @@ def _dv_issues(
                 Severity.WARN,
                 "hdr.dv_profile5",
                 f"Dolby Vision profile 5 has no HDR10 layer: without its RPU (only {_CARRIERS} carry it, with "
-                "Dolby Vision from the source ticked) the encode's colours look wrong, unless the script maps them",
+                "Dolby Vision from the source ticked) the encode's colors look wrong, unless the script maps them",
             )
         ]
     if dv.dv_profile not in (5, 7, 8) or not settings.dolby_vision:
@@ -369,7 +369,7 @@ def _dv_issues(
     if dv.dv_profile != 5 and not (settings.source_color and video.color.master_display) and master not in flags:
         block(
             "hdr.dv_master",
-            f"{name}'s Dolby Vision 8.1 needs a mastering display: the source has none, or the source's colour is "
+            f"{name}'s Dolby Vision 8.1 needs a mastering display: the source has none, or the source's color is "
             f"off (or set --{master})",
         )
     if video_settings is not None and video_settings.custom is not None:

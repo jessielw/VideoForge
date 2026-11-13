@@ -353,19 +353,19 @@ def _color_issues(settings: EncoderSettings, video: VideoInfo | None) -> list[Is
                 Issue(
                     Severity.INFO,
                     "video.color_source",
-                    f"The source's colour is used over the encoder options' {listed}. If the source's tags are "
-                    "wrong, or the script converts the colour, turn on Override the source's colour",
+                    f"The source's color is used over the encoder options' {listed}. If the source's tags are "
+                    "wrong, or the script converts the color, turn on Override the source's color",
                 )
             )
         else:
-            why = "Override the source's colour is on" if settings.source_color else "the source's colour is off"
+            why = "Override the source's color is on" if settings.source_color else "the source's color is off"
             out.append(
                 Issue(
                     Severity.INFO,
                     "video.color_override",
                     f"The encode is tagged with the encoder options' {listed} ({why}). The flags only label the "
                     "picture: unless the source's tags are wrong or the script converts it, a player shows the "
-                    "colours wrong",
+                    "colors wrong",
                 )
             )
     missing = untagged(video.color, settings)
@@ -374,7 +374,7 @@ def _color_issues(settings: EncoderSettings, video: VideoInfo | None) -> list[Is
             Issue(
                 Severity.INFO,
                 "video.color_untagged",
-                f"The source doesn't describe its colour and the encoder options don't set it ({', '.join(missing)}):"
+                f"The source doesn't describe its color and the encoder options don't set it ({', '.join(missing)}):"
                 " the encode is untagged there and a player guesses",
             )
         )

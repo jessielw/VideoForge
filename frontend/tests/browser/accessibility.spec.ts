@@ -488,8 +488,8 @@ test('checkbox and palette names leave their help text to the description', asyn
   }
   await page.goto('/#/queue/a11y')
   await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
-  await expect(page.getByRole('checkbox', { name: 'Colour from the source', exact: true })).toHaveAccessibleDescription(
-    /colour description/,
+  await expect(page.getByRole('checkbox', { name: 'Color from the source', exact: true })).toHaveAccessibleDescription(
+    /color description/,
   )
   expect(errors).toEqual([])
 })

@@ -34,7 +34,7 @@ export const STATUS_LABEL: Record<Status, string> = {
   invalid: 'Invalid',
   failed: 'Failed',
   skipped: 'Skipped',
-  cancelled: 'Cancelled',
+  cancelled: 'Canceled',
   paused: 'Paused after pass 1',
 }
 

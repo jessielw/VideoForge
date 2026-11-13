@@ -760,7 +760,7 @@
                   <span id="delete-work-dir-help" class="block text-xs text-muted-foreground">
                     The <code>&lt;source&gt;_tmp</code> folder next to the source (index, encodes, log) is deleted after
                     the job succeeds; its job records and log are copied to {config.records_dir} first (the newest 100 kept).
-                    A job that fails or is cancelled keeps it, to resume from. Default:
+                    A job that fails or is canceled keeps it, to resume from. Default:
                     {config.delete_work_dir_default ? 'on' : 'off'}
                   </span>
                 </span>
@@ -1202,7 +1202,7 @@
       <Dialog.Title>Shut down VideoForge?</Dialog.Title>
       <Dialog.Description>
         {#if app.queue.running}
-          A job is running: it is cancelled. Started again, it skips the steps it finished.
+          A job is running: it is canceled. Started again, it skips the steps it finished.
         {:else}
           No job is running.
         {/if}

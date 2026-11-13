@@ -889,8 +889,8 @@
                 {#if dv.dv_profile === 5}
                   <p class="text-xs text-muted-foreground">
                     Dolby Vision goes into an x265 encode as profile 5 (Encoder tab: Dolby Vision from the source), its
-                    active area following the crop and resize. Its base layer isn't HDR10: the preview's colours look
-                    off (green / purple), the encode's play right through the RPU.
+                    active area following the crop and resize. Its base layer isn't HDR10: the preview's colors look off
+                    (green / purple), the encode's play right through the RPU.
                   </p>
                 {:else if (dv.dv_profile === 8 && dv.dv_compat !== 4) || (dv.dv_profile === 7 && (dv.dv_el === 'MEL' || dv.dv_el === 'FEL'))}
                   <p class="text-xs text-muted-foreground">

@@ -241,7 +241,7 @@ class AppState {
   #finished(job: JobSummary): void {
     const open = { label: 'Open', onClick: () => (location.hash = `#/queue/${encodeURIComponent(job.id)}`) }
     if (job.status === 'done') toast.success(`${job.name} is done`, { action: open })
-    else if (job.status === 'cancelled') toast.warning(`${job.name} was cancelled`, { action: open })
+    else if (job.status === 'cancelled') toast.warning(`${job.name} was canceled`, { action: open })
     else if (job.status === 'paused')
       toast.info(`${job.name} paused after pass 1`, {
         description: 'Run it again to go on with pass 2, even after closing VideoForge.',

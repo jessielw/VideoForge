@@ -474,9 +474,9 @@
           onCheckedChange={(v) => set('source_color', v)}
         />
         <span class="min-w-0">
-          <span id="{uid}-color">Colour from the source</span>
+          <span id="{uid}-color">Color from the source</span>
           <span id="{uid}-color-help" class="block text-xs text-muted-foreground">
-            Tags the encode with the source's colour description{value.encoder === 'x265' || svt
+            Tags the encode with the source's color description{value.encoder === 'x265' || svt
               ? ' and HDR10 metadata'
               : ''}
             (vspipe passes none on){value.encoder === 'x265'
@@ -485,7 +485,7 @@
             {#if vpx}
               {value.encoder === 'vp9'
                 ? 'VP9 holds the matrix and range in the stream'
-                : 'VP8 holds none in the stream'}: the mux tags the container with the colour (and the pixel aspect). An
+                : 'VP8 holds none in the stream'}: the mux tags the container with the color (and the pixel aspect). An
               HDR10 mastering display and light levels aren't carried yet.
             {:else if svt}
               AV1 holds them in the stream; the mux tags an MKV's track with them too (mkvmerge doesn't copy them), and
@@ -493,14 +493,14 @@
             {:else}
               A --no- option below turns one of the HDR10 flags off (--no-hrd).
             {/if}
-            Untick it when the script changes the colours.
+            Untick it when the script changes the colors.
           </span>
           <span id="{uid}-color-state" class="block">
             {#if colorArgs !== undefined}
               {#if colorArgs === null}
                 <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
               {:else if !colorArgs.length}
-                <span class="block text-xs text-muted-foreground">The source doesn't describe its colours.</span>
+                <span class="block text-xs text-muted-foreground">The source doesn't describe its colors.</span>
               {:else}
                 <code
                   class="mt-1 block font-mono text-xs break-all {value.source_color
@@ -526,11 +526,11 @@
           onCheckedChange={(v) => set('color_override', v)}
         />
         <span class="min-w-0">
-          <span id="{uid}-override">Override the source's colour</span>
+          <span id="{uid}-override">Override the source's color</span>
           <span id="{uid}-override-help" class="block text-xs text-muted-foreground">
-            The colour flags in the options and extra arguments win over the source's: for a source whose tags are
-            wrong. Off, a flag the source has a value for is left out, as StaxRip's "Import VUI metadata" does, and one
-            it has no value for still applies. The chroma location is always the options'.
+            The color flags in the options and extra arguments win over the source's: for a source whose tags are wrong.
+            Off, a flag the source has a value for is left out, as StaxRip's "Import VUI metadata" does, and one it has
+            no value for still applies. The chroma location is always the options'.
           </span>
         </span>
       </label>
@@ -541,7 +541,7 @@
         {#if dv && dv.dv_profile === 5}
           <p class="text-xs text-warning">
             The source is Dolby Vision profile 5, which has no HDR10 layer: without its RPU (x265 and SVT-AV1-HDR carry
-            it) the encode's colours look wrong, unless the script maps them.
+            it) the encode's colors look wrong, unless the script maps them.
           </p>
         {:else if (dv && dv.dv_profile) || hdr10plus}
           <p class="text-xs text-warning">
@@ -622,7 +622,7 @@
                 <span class="block text-xs text-muted-foreground">The source has no Dolby Vision.</span>
               {:else if dv.dv_profile === 5 && !value.dolby_vision}
                 <span class="mt-1 block text-xs text-warning"
-                  >Profile 5 has no HDR10 layer: without its RPU the encode's colours look wrong, unless the script maps
+                  >Profile 5 has no HDR10 layer: without its RPU the encode's colors look wrong, unless the script maps
                   them.</span
                 >
               {:else}
