@@ -55,7 +55,7 @@ def read(path: Path) -> JobSpec:
     if not isinstance(doc, dict) or not isinstance(doc.get("job"), dict):
         raise ValueError(f"{path.name} is not a job file")
     if int(doc.get("videoforge_job", 0)) > VERSION:
-        raise ValueError(f"{path.name} was saved by a newer VideoForge")
+        raise ValueError(f"{path.name} was saved by a newer version of VideoForge. Update VideoForge to add it")
     try:
         spec: JobSpec = from_json(JobSpec, doc["job"])
     except (KeyError, TypeError, ValueError, AttributeError) as ex:

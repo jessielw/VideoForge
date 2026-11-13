@@ -241,7 +241,7 @@ def test_batch_crop_continues_after_busy_and_preserves_other_video_settings(tmp_
         ).json()
         assert result["updated"] == [ids[1], ids[3]]
         assert ids[0] in result["skipped"]
-        assert result["skipped"][ids[2]] == "Uses an imported encode"
+        assert result["skipped"][ids[2]] == "Uses an existing encode, so there's nothing to crop"
         assert "missing" in result["failed"]
         after = client.get(f"/api/jobs/{ids[1]}").json()["spec"]["video"]
         assert after["crop"]["left"] == 2
