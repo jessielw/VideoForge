@@ -23,7 +23,7 @@
             <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <button class="underline" onclick={() => router.go('queue', j.existing_id)}>Open existing job</button>
               {#if ['queued', 'running', 'indexing'].includes(j.existing_status ?? '')}
-                <span>Kept: {j.existing_status}</span>
+                <span>Kept because it's {j.existing_status}</span>
               {:else}
                 <label class="flex items-center gap-1"
                   ><Checkbox
@@ -40,9 +40,7 @@
           {/if}
         </td>
         <td class={j.encode ? (j.encode_state === 'in_progress' ? 'text-warning' : '') : 'text-primary'}>
-          {j.encode
-            ? basename(j.encode) + (j.encode_state === 'in_progress' ? ' (still encoding)' : '')
-            : 'encode with VapourSynth'}
+          {j.encode ? basename(j.encode) + (j.encode_state === 'in_progress' ? ' (still encoding)' : '') : 'new encode'}
         </td>
         <td class="text-muted-foreground">{j.subtitles.map(basename).join(', ') || '—'}</td>
         <td class="text-muted-foreground">{j.chapters ? basename(j.chapters) : 'AutoQPF'}</td>

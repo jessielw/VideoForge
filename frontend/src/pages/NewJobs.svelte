@@ -197,7 +197,7 @@
   const cropWillRun = $derived(autoCrop && template?.data.crop_mode !== 'fixed')
   // What pressing Add will do, in words.
   const summary = $derived.by(() => {
-    if (!sources.length) return 'Paste file paths anywhere, or Browse…'
+    if (!sources.length) return 'Paste file paths on any page, or Browse…'
     if (matching || !result) return 'Matching…'
     const after = cropWillRun ? 'index and auto-crop' : autoIndex ? 'index' : 'neither index nor crop'
     return [
@@ -253,7 +253,8 @@
     <header class="flex shrink-0 flex-wrap items-center gap-3">
       <h1 class="text-xl font-semibold">New jobs</h1>
       <span class="text-sm text-muted-foreground"
-        >Paste file paths anywhere, or Browse. One job per source; a folder of episodes makes a batch.</span
+        >Use Browse, or copy files as paths (Explorer: Ctrl+Shift+C) and paste them on any page, outside a text box.
+        Each source file becomes one job. A folder adds a job for each source file in it, but not in its subfolders.</span
       >
     </header>
 
@@ -271,27 +272,27 @@
         <div class="mt-3 space-y-3">
           <PathSlot
             label="Encodes"
-            hint="Optional: existing encodes (e.g. StaxRip) to mux instead of encoding the video"
+            hint="Optional. Video you've already encoded goes into the output instead of a new encode. Each one is matched to its source by name or SxxEyy."
             bind:paths={encodes}
             extensions={['.mkv', '.h264', '.264', '.hevc', '.265', '.h265', '.avc']}
           />
           {#if takesSubs}
             <PathSlot
               label="Subtitles"
-              hint="Subtitle files or folders, matched by name or SxxEyy (plus those next to the source)"
+              hint="Subtitle files or folders, matched to each source by name or SxxEyy. With one source, they all go to it. Subtitles next to the source, or one folder down, are added too."
               bind:paths={subtitles}
               extensions={['.srt', '.ass', '.ssa', '.sup', '.idx']}
             />
           {/if}
           <PathSlot
             label="Chapters"
-            hint="Optional; otherwise AutoQPF reads or makes them"
+            hint="Optional. Without a file, AutoQPF uses the source's chapters or adds one every 5%. You can turn AutoQPF off on the job's Output tab."
             bind:paths={chapters}
             extensions={['.txt', '.xml']}
           />
         </div>
       </details>
-      <PathSlot label="Output folder" hint="Where the muxed releases go" bind:paths={output} mode="folder">
+      <PathSlot label="Output folder" hint="Where finished files are saved" bind:paths={output} mode="folder">
         {#snippet actions()}<OutputFolderMenu onpick={(path) => (output = [path])} />{/snippet}
       </PathSlot>
       <div class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 @min-[40rem]/import:grid-cols-[8rem_minmax(0,1fr)]">
@@ -310,6 +311,10 @@
               onchange={(v: string) => (language = v)}
             />
           </label>
+          <p class="basis-full text-xs text-muted-foreground">
+            The rule set picks each job's tracks and default settings, and checks the finished file. Manual keeps every
+            track in source order for you to change.
+          </p>
         </div>
         <div class="text-sm text-muted-foreground">Template</div>
         <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
@@ -347,14 +352,25 @@
         </div>
         <div class="text-sm text-muted-foreground">After adding</div>
         <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-          <label class="flex items-center gap-2">
-            <Checkbox checked={autoIndex} onCheckedChange={(v) => (autoIndex = v === true)} />Index
-          </label>
+          <span class="flex items-center gap-2">
+            <label class="flex items-center gap-2">
+              <Checkbox
+                checked={autoIndex}
+                aria-describedby="new-jobs-index-help"
+                onCheckedChange={(v) => (autoIndex = v === true)}
+              />Index
+            </label>
+            <span id="new-jobs-index-help" class="text-xs text-muted-foreground"
+              >(indexes each job in the background for its preview)</span
+            >
+          </span>
           <label class="flex items-center gap-2">
             <Checkbox checked={autoCrop} onCheckedChange={(v) => (autoCrop = v === true)} />Auto-crop
             <span class="text-xs text-muted-foreground">(indexes first)</span>
           </label>
-          <span class="text-xs text-muted-foreground">For this batch; defaults are in Settings.</span>
+          <span class="text-xs text-muted-foreground"
+            >These two apply to this batch. Their defaults are in Settings › Queue & indexing.</span
+          >
         </div>
         {#if encoder}
           <div class="text-sm text-muted-foreground">Encoder preset</div>
@@ -415,7 +431,7 @@
           </li>
         {/each}
         {#each completion.unmatched as path}
-          <li class="break-all">{path}: no matching source. Add its source or correct the filename.</li>
+          <li class="break-all">{path} matches no source. Add its source, or rename the file to match.</li>
         {/each}
       </ul>
     </details>

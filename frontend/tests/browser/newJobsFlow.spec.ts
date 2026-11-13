@@ -189,6 +189,9 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
 
   await page.getByRole('checkbox', { name: 'Auto-crop' }).click()
   await expect(bar).toContainText('will index ·')
+  await expect(page.getByRole('checkbox', { name: 'Index', exact: true })).toHaveAccessibleDescription(
+    '(indexes each job in the background for its preview)',
+  )
   await page.getByRole('checkbox', { name: 'Index', exact: true }).click()
   await expect(bar).toContainText('will neither index nor crop')
   await bar.getByRole('button', { name: /Add 2 jobs/ }).click()
@@ -200,7 +203,7 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
   expect(posted[0].sources).toEqual(sources)
 
   await bar.getByRole('button', { name: 'Add more' }).click() // a clean form for the next batch
-  await expect(bar).toContainText('Paste file paths anywhere')
+  await expect(bar).toContainText('Paste file paths on any page, or Browse')
   await expect(page.getByText('Show.S01E02.mkv')).toHaveCount(0)
 
   await paste(page, sources[0])
