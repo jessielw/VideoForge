@@ -10,7 +10,7 @@ VideoForge writes application data, per-source working files, and finished outpu
 | Linux from source | `$XDG_DATA_HOME/VideoForge`, or `~/.local/share/VideoForge` |
 | Docker | `/data` inside the container; `./data` in the Compose example |
 
-`videoforge serve --data-dir <folder>` changes the data location.
+`videoforge serve --data-dir <folder>` changes the data location. **Settings → Files & folders** shows the one in use.
 
 The data folder contains:
 

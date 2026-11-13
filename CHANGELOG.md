@@ -10,9 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - A "Skip to main content" button is the first Tab stop on every page. It moves keyboard focus past the menu.
 - Encoder settings: **Override the source's colour** (under **Colour from the source**; `color_override` in encoder settings, off by default). On, the colour flags in the encoder options and extra arguments win over the source's: for a source whose tags are wrong, or a script that converts the colour.
+- **Settings → Files & folders** lists the saved output folders, to pin, make the default or forget, as the New jobs **Saved** menu does. It also shows the data folder in use.
+- **Settings → Import & export** says where to import templates (the Templates page) and install plugins (Plugins), with a button to each.
 
 ### Changed
 
+- Settings has ten tabs in three groups instead of seven tabs: **Jobs**, **Queue & indexing**, **Presets** and **Files & folders**; **Tools**, **Plugins** and **Automation**; **Appearance**, **Profiles** and **Import & export**. Each starts with one sentence saying what it's for. Encoding's settings are now under Jobs, Queue & indexing and Files & folders. General's are under Appearance and Profiles, and Backup & reset's under Import & export, with Reset under Profiles. The folder browser is under Files & folders. The version and **Shut down** sit below the list. The first time after the update, Settings opens on Jobs.
 - Light mode: the active menu item, the selected template, switched-on track flags and the preview toggles use dark text on their tint. Inactive tabs use the muted grey. Text now meets the WCAG 4.5:1 contrast minimum in all seven palettes.
 - Suggestion lists (Original language, Target size, encoder option names) open when you click, type or press Down. They no longer open when the field gets focus, so Tab moves straight past them. In a number field such as Target size, Alt+Down opens the list.
 - Menu items and preset buttons are named after what they show, for example "Encoder preset: Manual defaults", so the names voice control and screen readers use match the screen. Screen readers read the Queue item's count as "Queue 4 jobs".
