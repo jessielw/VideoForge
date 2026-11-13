@@ -135,3 +135,66 @@ test('a long list gets a filter box that narrows it and keeps typing inside it',
   await expect(page.getByText('No saved folder matches.')).toBeVisible()
   expect(errors).toEqual([])
 })
+
+// Settings › Files & folders: the same saved folders, managed outside the New jobs menu. Answers GET from `current`
+// and records each PUT, so a test can change what the next load sees.
+async function settingsList(page: Page, folders: { path: string; pinned: boolean }[]) {
+  const errors = await fixture(page, folders)
+  const state = { current: folders, saved: [] as unknown[] }
+  await page.route('**/api/settings', async (route) => {
+    const empty = { output_dir: '', last_dir: '' }
+    if (route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON()
+      state.saved.push(body)
+      state.current = body.output_folders
+      await route.fulfill({ json: { ...empty, ...body } })
+    } else await route.fulfill({ json: { ...empty, output_folders: state.current, output_default: '' } })
+  })
+  await page.goto('/#/settings')
+  await page.getByRole('button', { name: 'Files & folders', exact: true }).click()
+  return { errors, state, section: page.getByRole('region', { name: 'Saved output folders' }) }
+}
+
+test('Files & folders lists saved folders and pins, stars and forgets them', async ({ page }) => {
+  const { errors, state, section } = await settingsList(page, [folder(1, true), folder(2)])
+  await expect(section.getByRole('listitem')).toHaveText([/show-1/, /show-2/])
+  await section.getByRole('button', { name: 'Make D:/Out/show-1 the default' }).click()
+  await expect
+    .poll(() => state.saved.at(-1))
+    .toEqual({ output_folders: [folder(1, true), folder(2)], output_default: 'D:/Out/show-1' })
+  await section.getByRole('button', { name: 'Pin D:/Out/show-2' }).click()
+  await expect
+    .poll(() => state.saved.at(-1))
+    .toEqual({ output_folders: [folder(1, true), folder(2, true)], output_default: 'D:/Out/show-1' })
+  await section.getByRole('button', { name: 'Forget D:/Out/show-1' }).click()
+  await expect.poll(() => state.saved.at(-1)).toEqual({ output_folders: [folder(2, true)], output_default: '' })
+  await expect(section.getByRole('listitem')).toHaveText([/show-2/])
+  expect(errors).toEqual([])
+})
+
+test('Files & folders says when nothing is saved yet', async ({ page }) => {
+  const { errors, section } = await settingsList(page, [])
+  await expect(section).toContainText('No saved folders yet.')
+  await expect(section.getByRole('list')).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test("reopening Files & folders shows the active profile's folders", async ({ page }) => {
+  const { errors, state, section } = await settingsList(page, [folder(1)])
+  await expect(section.getByRole('listitem')).toHaveText([/show-1/])
+  state.current = [folder(9)] // as after switching to another profile
+  await page.getByRole('button', { name: 'Profiles', exact: true }).click()
+  await page.getByRole('button', { name: 'Files & folders', exact: true }).click()
+  await expect(section.getByRole('listitem')).toHaveText([/show-9/])
+  expect(errors).toEqual([])
+})
+
+test('a long saved folder wraps inside Files & folders at 320 px', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  const long = { path: 'D:\\Some\\Very\\Long\\Folder\\Name\\That\\Keeps\\Going\\And\\Going\\Out', pinned: true }
+  const { errors, section } = await settingsList(page, [long])
+  await expect(section.getByRole('listitem')).toHaveCount(1)
+  const { scroll, client } = await section.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }))
+  expect(scroll).toBeLessThanOrEqual(client)
+  expect(errors).toEqual([])
+})

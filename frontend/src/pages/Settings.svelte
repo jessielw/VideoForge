@@ -9,6 +9,7 @@
   import PresetPackTransfer from '../components/PresetPackTransfer.svelte'
   import ResetConfiguration from '../components/ResetConfiguration.svelte'
   import ProfileManager from '../components/ProfileManager.svelte'
+  import SavedOutputFolders from '../components/SavedOutputFolders.svelte'
   import PluginManager from '../components/PluginManager.svelte'
   import ManagedPresets from '../components/ManagedPresets.svelte'
   import AudioPresetMenu from '../components/AudioPresetMenu.svelte'
@@ -684,6 +685,8 @@
           {/if}
         {:else if tab === 'files'}
           {#if config}
+            <SavedOutputFolders />
+
             <section class="space-y-3">
               <h2 class="font-medium">Work folders</h2>
               <label class="flex items-start gap-3 text-sm">

@@ -140,6 +140,7 @@ const HOME: [string, string][] = [
   ['Queue & indexing', 'Audio encodes'],
   ['Queue & indexing', 'Process priority'],
   ['Presets', 'Encoder presets'],
+  ['Files & folders', 'Saved output folders'],
   ['Files & folders', 'Work folders'],
   ['Files & folders', 'Folder browser'],
   ['Files & folders', 'Data folder'],
