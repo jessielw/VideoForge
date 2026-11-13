@@ -199,16 +199,16 @@ async function fixture(page: Page) {
     }
   })
   await page.goto('/#/settings')
-  await page.getByRole('button', { name: 'Backup & reset', exact: true }).click()
+  await page.getByRole('button', { name: 'Import & export', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Configuration backup', exact: true })).toBeVisible()
   return { bundle, imported, errors, exportedPacks, importedPacks }
 }
 
 async function expectParallelAudio(page: Page, value: string) {
-  // the audio-encodes setting lives on the Encoding tab; come back to Backup afterwards
-  await page.getByRole('button', { name: 'Encoding', exact: true }).click()
+  // the audio-encodes setting lives on the Queue & indexing tab; come back to Import & export afterwards
+  await page.getByRole('button', { name: 'Queue & indexing', exact: true }).click()
   await expect(page.getByRole('spinbutton')).toHaveValue(value)
-  await page.getByRole('button', { name: 'Backup & reset', exact: true }).click()
+  await page.getByRole('button', { name: 'Import & export', exact: true }).click()
 }
 
 test('exports the whole configuration from Settings with an empty queue', async ({ page }) => {

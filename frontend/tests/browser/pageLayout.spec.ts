@@ -170,11 +170,11 @@ for (const route of ['templates', 'settings']) {
     const bounds = await content.boundingBox()
     expect(bounds!.x + bounds!.width).toBeGreaterThan(1920 - 40)
     if (route === 'settings') {
-      await page.getByRole('button', { name: 'Encoding', exact: true }).click()
+      await page.getByRole('button', { name: 'Queue & indexing', exact: true }).click()
       const indexing = await page.getByRole('heading', { name: 'Batch indexing', exact: true }).boundingBox()
-      const ruleSet = await page.getByRole('heading', { name: 'Rule set', exact: true }).boundingBox()
-      expect(Math.abs(indexing!.y - ruleSet!.y)).toBeLessThan(2)
-      expect(indexing!.x).toBeGreaterThan(1000)
+      const audio = await page.getByRole('heading', { name: 'Audio encodes', exact: true }).boundingBox()
+      expect(Math.abs(audio!.y - indexing!.y)).toBeLessThan(2)
+      expect(audio!.x).toBeGreaterThan(1000)
     }
     await page.screenshot({ path: testInfo.outputPath(`${route}-wide.png`) })
     expect(errors).toEqual([])

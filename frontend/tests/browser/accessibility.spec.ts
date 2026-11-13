@@ -364,7 +364,18 @@ for (const mode of ['light', 'dark'] as const) {
     await expect(page.getByText('Film').first()).toBeVisible()
     await check('templates')
     await nav(page, 'Settings')
-    for (const section of ['General', 'Tools', 'Encoding', 'Presets', 'Automation', 'Plugins', 'Backup & reset']) {
+    for (const section of [
+      'Jobs',
+      'Queue & indexing',
+      'Presets',
+      'Files & folders',
+      'Tools',
+      'Plugins',
+      'Automation',
+      'Appearance',
+      'Profiles',
+      'Import & export',
+    ]) {
       await page
         .getByRole('navigation', { name: 'Settings sections' })
         .getByRole('button', { name: section, exact: true })
@@ -448,19 +459,20 @@ test('checkbox and palette names leave their help text to the description', asyn
   const { errors } = await fixture(page, 'light')
   await page.goto('/#/settings')
   const settings = page.getByRole('navigation', { name: 'Settings sections' })
+  await settings.getByRole('button', { name: 'Appearance', exact: true }).click()
   const gold = page.getByRole('radio', { name: 'Gold', exact: true })
   await expect(gold).toHaveAccessibleDescription(/original look/)
   const black = page.getByRole('checkbox', { name: 'Pure black dark mode', exact: true })
   await expect(black).toHaveAccessibleDescription(/OLED/)
-  await settings.getByRole('button', { name: 'Encoding', exact: true }).click()
-  for (const [name, help] of [
-    ['Index new jobs', /preview is ready/],
-    ['Auto-crop new jobs', /crop is detected/],
-    ['Wait while an encode reads the same disk', /jobs on other disks go first/],
-    ['Index anyway while it only encodes video', /reads the source slowly/],
-    ["Delete a job's work folder once it's done", /deleted after the job succeeds/],
-    ['Score its quality', /compare every frame/],
+  for (const [category, name, help] of [
+    ['Queue & indexing', 'Index new jobs', /preview is ready/],
+    ['Queue & indexing', 'Auto-crop new jobs', /crop is detected/],
+    ['Queue & indexing', 'Wait while an encode reads the same disk', /jobs on other disks go first/],
+    ['Queue & indexing', 'Index anyway while it only encodes video', /reads the source slowly/],
+    ['Files & folders', "Delete a job's work folder once it's done", /deleted after the job succeeds/],
+    ['Jobs', 'Score its quality', /compare every frame/],
   ] as const) {
+    await settings.getByRole('button', { name: category, exact: true }).click()
     await expect(page.getByRole('checkbox', { name, exact: true })).toHaveAccessibleDescription(help)
   }
   await page.goto('/#/queue/a11y')
