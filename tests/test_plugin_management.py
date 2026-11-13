@@ -299,7 +299,7 @@ plugin = Plugin("Example", setup=setup)
 def test_old_backups_upgrade_and_management_is_not_transferable(tmp_path):
     with make_client(tmp_path) as client:
         bundle = client.get("/api/configuration/export").json()
-        assert bundle["version"] == 8
+        assert bundle["version"] == 9
         bundle["version"] = 1
         del (
             bundle["settings"]["plugin_settings"],
@@ -307,6 +307,7 @@ def test_old_backups_upgrade_and_management_is_not_transferable(tmp_path):
             bundle["settings"]["auto_index"],
             bundle["settings"]["auto_crop"],
             bundle["settings"]["index_during_video"],
+            bundle["settings"]["naming"],
             bundle["subs_default"],
         )
         del bundle["profile"]

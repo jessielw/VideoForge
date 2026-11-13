@@ -28,6 +28,7 @@ from pathlib import Path
 import sys
 from typing import TYPE_CHECKING
 
+from videoforge.core import naming
 from videoforge.core.config import AppConfig
 from videoforge.core.execute import chapters as ogm, loudness
 from videoforge.core.execute.audio import audio_command, measure_argv, measure_path, needs_measure
@@ -65,10 +66,10 @@ class JobSteps:
 
 
 def output_path(spec: JobSpec, plan: Plan, rule_set: RuleSet, out_dir: Path) -> Path:
-    """The job's output in out_dir: its own name if it has one, else the rule set's, with the job's label
-    (if any) after it: `<name>.<label>.mkv`."""
-    stem = (spec.output_name or rule_set.output_stem(plan)) + (f".{spec.label}" if spec.label else "")
-    return out_dir / (stem + MUXERS[spec.container(rule_set)].extension)
+    """The job's output in out_dir: its own name if it has one, else its name template's (when that names the
+    file), else the rule set's; then the job's label and name suffix, if any: `<name>.<label>.<suffix>.mkv`
+    (naming.file_stem)."""
+    return out_dir / (naming.file_stem(spec, plan, rule_set) + MUXERS[spec.container(rule_set)].extension)
 
 
 def job_output(spec: JobSpec, plan: Plan, rule_set: RuleSet) -> Path | None:
@@ -660,6 +661,7 @@ def build_steps(
     mux_inputs += [s.source.external_path for s in plan.subs if s.source.external_path is not None]
     mux_inputs += list(dict.fromkeys(a.source.external_path for a in plan.audio if a.source.external_path is not None))
     muxer, extra = MUXERS[container], split_args(spec.mux.extra)
+    title = naming.title(spec, plan)
 
     # The job's encode is timed by the script's frame rate, once the info step has read it (before a run, the
     # source's); a reused encode by the source's. A VFR source's timestamps time it instead, while they fit the
@@ -681,7 +683,17 @@ def build_steps(
         try:
             argv = tuple(
                 muxer.command(
-                    plan, encoded, unfinished, app, extra, fps, stamps, sar=sar, color=tags, pgs_zlib=spec.mux.pgs_zlib
+                    plan,
+                    encoded,
+                    unfinished,
+                    app,
+                    extra,
+                    fps,
+                    stamps,
+                    sar=sar,
+                    color=tags,
+                    pgs_zlib=spec.mux.pgs_zlib,
+                    title=title,
                 )
             )
         except MuxError:

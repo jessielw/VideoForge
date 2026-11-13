@@ -283,11 +283,30 @@ export interface JobSpec {
   id: string
 }
 
-// The job's muxer: container ('' = the rule set's), extra arguments and MKV PGS compression.
+// The job's muxer: container ('' = the rule set's), extra arguments and MKV PGS compression; and the output's
+// naming (core/naming.py): a name template, whether it names the file and the MKV title, a suffix before the extension.
 export interface MuxSettings {
   container: string
   extra: string
   pgs_zlib: boolean
+  name_template: string // '' = the default template (NameTokens.default_template)
+  template_file_name: boolean // the file is named from the template (a name typed for the job still wins)
+  template_title: boolean // an MKV's segment title is the template's name
+  name_suffix: string // before the extension, after the label: <name>.<label>.<suffix>.mkv
+}
+
+// Settings' word, per rule set, on the name template's switches: 'template' = as each template says.
+export type NameUse = 'template' | 'on' | 'off'
+export interface NamePolicy {
+  file_name: NameUse
+  title: NameUse
+}
+
+// The name template's tokens (GET /api/name-tokens).
+export interface NameTokens {
+  default_template: string
+  tokens: { name: string; description: string }[]
+  filters: string[]
 }
 
 export interface AudioTrack {
@@ -442,6 +461,7 @@ export interface JobDetail extends JobSummary {
   plan: Plan | null
   tracks: Tracks | null
   output_name: string | null // the file the run will write (null until planned)
+  output_title: string | null // the MKV segment title from the name template (null when it gives none)
   color_args: string[] | null // the source's colour flags for this encoder (null until probed)
   target: SizeBudget | null // where a 2-pass target size goes (null without one, or until planned)
   sample: SampleResult | null // the last test encode (core/pipeline/sample.py)
@@ -566,6 +586,7 @@ export interface RuleSet {
   picks_tracks?: boolean // its own rules pick the tracks: Settings' default subtitle rules don't apply
   defaults: { video: VideoSettings; encoder: EncoderSettings; template: Template }
   default: boolean
+  naming?: NamePolicy // Settings' word on the name template's switches for its jobs (absent: as templates say)
 }
 
 // A profile: a whole configuration (Settings, templates, presets); one is active, the queue is shared.
@@ -845,6 +866,7 @@ export interface ConfigState {
   sample_quality: boolean // a test encode measures its quality (SSIMULACRA2, XPSNR) after it
   auto_index: boolean // a new job goes in the index lane once probed
   auto_crop: boolean // ... and its crop is detected (after the index)
+  naming: Record<string, NamePolicy> // rule set id -> the name template's switches; left out = as templates say
   parallel_audio: number // audio encodes at once beside a job's video; 0 = one by one
   parallel_audio_default: number // videoforge.toml's
   delete_work_dir: boolean // delete a done job's <source>_tmp/ (records and log copied to records_dir first)

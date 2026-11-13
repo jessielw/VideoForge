@@ -31,6 +31,7 @@ from videoforge.core.job import JobResult, JobSpec, JobStatus, StepRecord, StepR
 from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioCodec as C, SubFormat as F, VideoInfo
 from videoforge.core.pipeline.steps import Step, StepProgress
+from videoforge.core.plan_io import to_json
 from videoforge.core.video.settings import Crop
 from videoforge.core.workdir import keep_records, note_finished, work_dir
 from videoforge.rule_sets.manual import ManualRuleSet
@@ -193,7 +194,6 @@ def test_a_job_is_added_again_from_its_file_exactly_as_it_was(tmp_path):
 
 
 def test_pause_after_pass_1_is_set_for_two_pass_jobs_only(tmp_path):
-    from videoforge.core.plan_io import to_json
     from videoforge.core.video.settings import EncoderSettings, RateControl
 
     make_files(tmp_path)
@@ -1290,7 +1290,7 @@ def test_templates(tmp_path):
             assert job["status"] != "blocked", job["issues"] if "issues" in job else job["plan"]["issues"]
             spec = job["spec"]
             assert spec["encoder"]["encoder"] == "x265" and spec["encoder"]["crf"] == 16
-            assert spec["mux"] == {"container": "mkv", "extra": "-x", "pgs_zlib": False} and spec["qpf"] is False
+            assert spec["mux"] == to_json(MuxSettings(container="mkv", extra="-x")) and spec["qpf"] is False
             assert [(f["category"], f["script"]) for f in spec["video"]["filters"]] == [  # the old text, upgraded
                 ("crop", ""),
                 ("resize", ""),
@@ -1309,8 +1309,8 @@ def test_templates(tmp_path):
         client.patch(f"/api/jobs/{ids[0]}", json={"mux": {"container": "mp4", "extra": "-y"}})
         client.post("/api/jobs/apply", json={"ids": ids, "container": "mkv"})
         assert [client.get(f"/api/jobs/{i}").json()["spec"]["mux"] for i in ids] == [
-            {"container": "mkv", "extra": "-y", "pgs_zlib": False},
-            {"container": "mkv", "extra": "-x", "pgs_zlib": False},
+            to_json(MuxSettings(container="mkv", extra="-y")),
+            to_json(MuxSettings(container="mkv", extra="-x")),
         ]
 
         # Auto again, held: the job shows it, can't be queued, and a hand crop meanwhile wins.
@@ -1526,7 +1526,7 @@ def test_new_jobs_start_on_the_rule_sets_mux_defaults(tmp_path, monkeypatch):
     make_files(tmp_path, "S01E01")
     with make_client(tmp_path) as client:
         defaults = client.get("/api/rule-sets").json()[0]["defaults"]["template"]["mux"]
-        assert defaults == {"container": "", "extra": "--chapter-language und", "pgs_zlib": True}
+        assert defaults == to_json(MuxSettings(extra="--chapter-language und", pgs_zlib=True))
         (job_id,) = add(client, tmp_path)
         assert client.get(f"/api/jobs/{job_id}").json()["spec"]["mux"] == defaults
 

@@ -31,7 +31,7 @@ Subclass `videoforge.core.rule_set.RuleSet`. The required `plan(probed, original
 | `validate_output(plan, output)` | Check a completed job against its plan; a blocking issue makes it invalid |
 | `validate_release(info)` | Check an arbitrary release through the CLI `validate` command |
 
-`track_editor`, `track_properties`, `external_subtitles`, and `external_audio` control which editing and external-track features are available. `output_stem(plan)` controls the base output name.
+`track_editor`, `track_properties`, `external_subtitles`, and `external_audio` control which editing and external-track features are available. `output_stem(plan)` controls the base output name when the job's name template doesn't name the file (`core/naming.py`).
 
 Use the current [RuleSet interface](https://github.com/jessielw/VideoForge/blob/main/src/videoforge/core/rule_set.py) and [manual implementation](https://github.com/jessielw/VideoForge/blob/main/src/videoforge/rule_sets/manual.py) as the concrete reference. Rule sets use the core Python types and should be checked when updating VideoForge; they do not have the separately versioned plugin API.
 

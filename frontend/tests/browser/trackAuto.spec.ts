@@ -93,7 +93,15 @@ async function fixture(page: Page) {
     hdr10plus: false,
     dolby_vision: false,
   }
-  const mux = { container: 'mkv', extra: '', pgs_zlib: false }
+  const mux = {
+    container: 'mkv',
+    extra: '',
+    pgs_zlib: false,
+    name_template: '',
+    template_file_name: false,
+    template_title: false,
+    name_suffix: '',
+  }
   const job: JobDetail = {
     id: 'auto',
     name: 'Rules',
@@ -166,6 +174,7 @@ async function fixture(page: Page) {
       rule_set: 'group',
     },
     output_name: null,
+    output_title: null,
     color_args: null,
     target: null,
     sample: null,

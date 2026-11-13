@@ -10,7 +10,7 @@ jobs, probes and runs use them. Switching a plugin on or off takes effect on the
 from __future__ import annotations
 
 from contextlib import suppress
-from dataclasses import asdict
+from dataclasses import asdict, fields
 import os
 from pathlib import Path
 from typing import Any
@@ -21,8 +21,9 @@ from videoforge.core.actions import ACTION_LABELS, JOB_TOKENS, QUEUE_TOKENS, Act
 from videoforge.core.config import with_tools
 from videoforge.core.execute.audio import ENCODES
 from videoforge.core.execute.control import Priority
+from videoforge.core.naming import NamePolicy
 from videoforge.core.notify import DEFAULT_EVENTS, EVENT_LABELS, Destination
-from videoforge.core.plan_io import to_json
+from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.tools import TOOL_NAMES, TOOLS, check, detect, missing_for_encodes
 from videoforge.core.video import options as video_options, vs as vsx
 from videoforge.core.video.settings import Encoder
@@ -71,6 +72,7 @@ def _state(request: Request) -> dict[str, Any]:
         "sample_quality": saved.sample_quality,
         "auto_index": saved.auto_index,
         "auto_crop": saved.auto_crop,
+        "naming": {pid: to_json(p) for pid, p in saved.naming.items()},
         "parallel_audio": s.config.parallel_audio,
         "parallel_audio_default": s.base_config.parallel_audio,
         "delete_work_dir": s.config.delete_work_dir,
@@ -106,6 +108,8 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     index_during_video (bool: with index_waits_for_disk, a job still goes while the encode only encodes video),
     sample_quality (bool: a test encode measures its SSIMULACRA2 and XPSNR),
     auto_index (bool: new jobs are indexed once probed), auto_crop (bool: and their crop detected),
+    naming ({rule set id: {file_name, title}}, each "template", "on" or "off": the name template's switches a job
+    takes with a template or its rule set's defaults; the whole map),
     parallel_audio (audio encodes at once beside the video, 0 to MAX_PARALLEL_AUDIO; null for videoforge.toml's),
     delete_work_dir (bool: delete a done job's work folder; null for videoforge.toml's),
     encoder_priority / tool_priority (a Priority; null for videoforge.toml's),
@@ -138,6 +142,9 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     quality = bool(body["sample_quality"]) if "sample_quality" in body else saved.sample_quality
     index = bool(body["auto_index"]) if "auto_index" in body else saved.auto_index
     crop = bool(body["auto_crop"]) if "auto_crop" in body else saved.auto_crop
+    naming = saved.naming
+    if "naming" in body:
+        naming = _naming(body["naming"])
     parallel = saved.parallel_audio
     if "parallel_audio" in body:
         parallel = body["parallel_audio"]
@@ -189,11 +196,24 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         auto_index=index,
         auto_crop=crop,
         index_during_video=during_video,
+        naming=naming,
         **priorities,
     )
     new.save(s.store)
     apply_settings(request, new)
     return _state(request)
+
+
+def _naming(value: Any) -> dict[str, NamePolicy]:
+    """The naming map as sent: {rule set id: {file_name, title}}; a policy left as the templates say is dropped."""
+    keys = {f.name for f in fields(NamePolicy)}
+    if not isinstance(value, dict) or any(not isinstance(p, dict) or p.keys() - keys for p in value.values()):
+        raise HTTPException(422, "naming: {rule set id: {file_name, title}}")
+    try:
+        policies = {str(pid): from_json(NamePolicy, p) for pid, p in value.items()}
+    except ValueError:
+        raise HTTPException(422, "naming: each of file_name and title is template, on or off") from None
+    return {pid: p for pid, p in policies.items() if p != NamePolicy()}
 
 
 def apply_settings(request: Request, new: SavedSettings) -> None:
@@ -205,6 +225,7 @@ def apply_settings(request: Request, new: SavedSettings) -> None:
     s.queue.set_sample_quality(new.sample_quality)
     s.queue.auto_index = new.auto_index
     s.queue.auto_crop = new.auto_crop
+    s.queue.name_policies = dict(new.naming)
     s.notifier.destinations = new.notifications
     s.actions.actions = new.actions
     s.actions.allow_commands = s.base_config.allow_commands
