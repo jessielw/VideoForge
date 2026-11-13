@@ -438,6 +438,14 @@ test('the job tabs name their list and their panel', async ({ page }) => {
   expect(errors).toEqual([])
 })
 
+test("the Output tab's extra arguments box is named after its visible label", async ({ page }) => {
+  const { errors } = await fixture(page, 'light')
+  await page.goto('/#/queue/a11y')
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: /^Extra arguments for \S+$/ })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
 test('suggestion lists open when asked, not on focus, and are not a Tab stop', async ({ page }) => {
   const { errors } = await fixture(page, 'light')
   await page.goto('/#/new')
