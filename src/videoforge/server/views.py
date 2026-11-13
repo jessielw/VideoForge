@@ -54,11 +54,18 @@ def issues(e: Entry) -> list[Issue]:
     out: list[Issue] = []
     if e.probe_error:
         out.append(Issue(Severity.BLOCK, "probe", e.probe_error))
+    checks = [Issue(i.severity, "output." + i.code, i.message) for i in e.state.issues]
+    run = None
     if e.state.error:
-        out.append(
-            Issue(Severity.BLOCK, f"run.{e.state.status.value if e.state.status else 'interrupted'}", e.state.error)
-        )
-    out += [Issue(i.severity, "output." + i.code, i.message) for i in e.state.issues]
+        run = Issue(Severity.BLOCK, f"run.{e.state.status.value if e.state.status else 'interrupted'}", e.state.error)
+    if e.state.status is JobStatus.INVALID:
+        # The failed checks first (the queue row shows the first), then where the file went. A job that ran before
+        # the summary has the checks joined as its error: nothing more than the checks.
+        if run is not None and run.message == "; ".join(i.message for i in checks if i.severity is Severity.BLOCK):
+            run = None
+        out += checks + ([run] if run else [])
+    else:
+        out += ([run] if run else []) + checks
     if e.plan is not None:
         out += e.plan.issues
     order = {Severity.BLOCK: 0, Severity.WARN: 1, Severity.INFO: 2}

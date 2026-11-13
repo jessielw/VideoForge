@@ -2414,3 +2414,26 @@ def test_mediainfo_reports_on_the_jobs_own_files_only(tmp_path, monkeypatch):
         Path(source).unlink()
         gone = client.get(f"/api/jobs/{job_id}/mediainfo")
         assert gone.status_code == 404 and "Can't find" in gone.json()["detail"]
+
+
+def test_an_invalid_jobs_issues_say_each_check_once():
+    """The failed checks first (the queue row shows the first), then the run's summary of where the file went; a
+    job saved before the summary has the checks joined as its error, which isn't shown a second time."""
+    from types import SimpleNamespace
+
+    from videoforge.core.job import JobState
+    from videoforge.core.models import Issue, Severity
+    from videoforge.server.views import issues
+
+    checks = [Issue(Severity.BLOCK, "name.dual", "Name must not mention dual audio: X"), Issue(Severity.WARN, "a", "w")]
+
+    def shown(error: str) -> list[str]:
+        state = JobState(status=JobStatus.INVALID, error=error, issues=checks)
+        return [i.code for i in issues(SimpleNamespace(probe_error="", state=state, plan=None))]
+
+    assert shown("Failed 1 output check. The file is kept as X.unpublished-1a2b3c4d.mkv, not published as X.mkv.") == [
+        "output.name.dual",
+        "run.invalid",
+        "output.a",
+    ]
+    assert shown("Name must not mention dual audio: X") == ["output.name.dual", "output.a"]  # saved before
