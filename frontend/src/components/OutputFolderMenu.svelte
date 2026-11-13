@@ -11,6 +11,7 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { api } from '../lib/api'
   import type { OutputFolder } from '../lib/api'
+  import { forget, togglePin } from '../lib/outputFolders'
   import Tip from './Tip.svelte'
 
   let { onpick, disabled = false }: { onpick: (path: string) => void; disabled?: boolean } = $props()
@@ -37,16 +38,9 @@
   const shown = $derived(folders.filter((f) => f.path.toLowerCase().includes(filter.trim().toLowerCase())))
   const pinned = $derived(shown.filter((f) => f.pinned))
   const recent = $derived(shown.filter((f) => !f.pinned))
-  const toggle = (f: OutputFolder) =>
-    save(
-      folders.map((x) => (x === f ? { ...x, pinned: !x.pinned } : x)),
-      f.pinned && f.path === fallback ? '' : fallback,
-    )
-  const remove = (f: OutputFolder) =>
-    save(
-      folders.filter((x) => x !== f),
-      f.path === fallback ? '' : fallback,
-    )
+  const apply = (r: { folders: OutputFolder[]; fallback: string }) => save(r.folders, r.fallback)
+  const toggle = (f: OutputFolder) => apply(togglePin(folders, f, fallback))
+  const remove = (f: OutputFolder) => apply(forget(folders, f, fallback))
 </script>
 
 {#snippet row(f: OutputFolder)}

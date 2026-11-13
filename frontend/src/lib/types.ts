@@ -855,6 +855,7 @@ export interface ConfigState {
   tool_priority_default: Priority // videoforge.toml's
   priorities: Priority[]
   records_dir: string
+  data_dir: string // the server's data folder: database, logs, kept job records, plugins
   notifications: NotificationDestination[]
   notification_events: { id: NotificationEvent; label: string; default: boolean }[]
   actions: ActionSetting[]

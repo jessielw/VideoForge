@@ -249,6 +249,7 @@ async function fixture(page: Page, empty = false) {
     tool_priority_default: 'normal',
     priorities: ['normal'],
     records_dir: 'D:/records',
+    data_dir: 'D:/VideoForge',
     notifications: [],
     notification_events: [],
     actions: [],

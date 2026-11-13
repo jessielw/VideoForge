@@ -70,6 +70,7 @@ test('Settings: default subtitle rules save as they change, naming included, and
     tool_priority_default: 'normal',
     priorities: ['normal'],
     records_dir: 'D:\\records',
+    data_dir: 'D:/VideoForge',
     notifications: [],
     notification_events: [],
     actions: [],
@@ -113,7 +114,7 @@ test('Settings: default subtitle rules save as they change, naming included, and
     await route.fulfill({ json: responses[path] })
   })
   await page.goto('/#/settings')
-  await page.getByRole('button', { name: 'Encoding', exact: true }).click()
+  await page.getByRole('button', { name: 'Jobs', exact: true }).click()
   const section = page.getByRole('region', { name: 'Default subtitles' })
   await expect(section).toContainText('new jobs keep every subtitle track')
 
@@ -123,6 +124,7 @@ test('Settings: default subtitle rules save as they change, naming included, and
   await languages.fill('eng')
   await languages.press('Enter')
   await expect.poll(() => saves.at(-1)?.rules[0].languages).toEqual(['en'])
+  await languages.press('Escape') // the list stays open for more picks and covers what's below it
   await section.getByRole('checkbox', { name: 'Name untitled tracks' }).click()
   await expect.poll(() => saves.at(-1)?.name_untitled).toBe(true)
   await expect(section.getByRole('combobox', { name: 'Rule 1: languages' }).locator('..')).toContainText('English')
