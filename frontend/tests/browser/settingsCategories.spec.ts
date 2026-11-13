@@ -215,18 +215,27 @@ test('Settings fits a 320 px wide window without scrolling sideways', async ({ p
 })
 
 const ABOUT: [string, string][] = [
-  ['Jobs', 'What new jobs start with, and whether a test encode also measures its quality.'],
-  ['Queue & indexing', 'When jobs are indexed, and how the queue shares the computer while it works.'],
+  ['Jobs', 'The rule set and subtitle rules new jobs start with, and whether test encodes measure their quality.'],
+  [
+    'Queue & indexing',
+    'When jobs are indexed, how many audio encodes run beside the video, and how encodes share the CPU with other programs.',
+  ],
   ['Presets', 'Saved encoder and audio settings you can pick in any job or template. Templates have their own page.'],
-  ['Files & folders', 'The folders VideoForge saves to, browses and cleans up, and where it keeps its own data.'],
+  [
+    'Files & folders',
+    "Saved output folders, work folder clean-up, what the folder browser can open, and VideoForge's data folder.",
+  ],
   ['Tools', 'The programs VideoForge uses for each step, and where each one is installed.'],
-  ['Plugins', 'A plugin can add a rule set, templates and presets, or run its own code when jobs start and finish.'],
-  ['Automation', 'Send a message or run a command when a job ends or the queue finishes.'],
+  ['Plugins', 'A plugin can add rule sets, templates and presets, and can run its own code when jobs start or finish.'],
+  ['Automation', 'Send notifications and run actions when a job ends or the queue finishes.'],
   ['Appearance', 'How VideoForge looks in this browser.'],
-  ['Profiles', 'Separate sets of settings, templates and presets to switch between, and a reset to start one over.'],
+  [
+    'Profiles',
+    'Switch between whole sets of settings, templates and presets, or reset the active one to its defaults.',
+  ],
   [
     'Import & export',
-    'Back up your settings, templates and presets or move them to another computer, and share presets with other people.',
+    'Back up your settings, templates and presets, move them to another computer, or share presets with others.',
   ],
 ]
 
@@ -253,7 +262,7 @@ test('Files & folders shows where VideoForge keeps its data, wrapped to the wind
   await open(page, 'Files & folders')
   const section = page.getByRole('heading', { name: 'Data folder', exact: true }).locator('..')
   await expect(section).toContainText(DATA_DIR)
-  await expect(section).toContainText('database, logs, kept job records and plugins')
+  await expect(section).toContainText('VideoForge stores its database, logs, job records and plugins here.')
   const { scroll, client } = await section.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }))
   expect(scroll).toBeLessThanOrEqual(client)
   expect(errors).toEqual([])
@@ -263,6 +272,8 @@ test('Import & export points to template import and plugin install', async ({ pa
   const errors = await fixture(page)
   await page.goto('/#/settings')
   await open(page, 'Import & export')
+  await expect(page.getByText('Import and export templates on the Templates page.')).toBeVisible()
+  await expect(page.getByText('Install a plugin from its ZIP file under Plugins.')).toBeVisible()
   await page.getByRole('button', { name: 'Open Plugins', exact: true }).click()
   const plugins = sections(page).getByRole('button', { name: 'Plugins', exact: true })
   await expect(plugins).toHaveAttribute('aria-current', 'page')
@@ -277,6 +288,6 @@ test('Shut down asks first and says how to start again', async ({ page }) => {
   const errors = await fixture(page)
   await page.goto('/#/settings')
   await sections(page).getByRole('button', { name: 'Shut down…' }).click()
-  await expect(page.getByRole('dialog')).toContainText('videoforge serve')
+  await expect(page.getByRole('dialog')).toContainText('Start VideoForge again with videoforge serve')
   expect(errors).toEqual([])
 })

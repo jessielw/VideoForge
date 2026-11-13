@@ -319,12 +319,13 @@
       {
         id: 'jobs',
         label: 'Jobs',
-        about: 'What new jobs start with, and whether a test encode also measures its quality.',
+        about: 'The rule set and subtitle rules new jobs start with, and whether test encodes measure their quality.',
       },
       {
         id: 'queue',
         label: 'Queue & indexing',
-        about: 'When jobs are indexed, and how the queue shares the computer while it works.',
+        about:
+          'When jobs are indexed, how many audio encodes run beside the video, and how encodes share the CPU with other programs.',
       },
       {
         id: 'presets',
@@ -334,7 +335,8 @@
       {
         id: 'files',
         label: 'Files & folders',
-        about: 'The folders VideoForge saves to, browses and cleans up, and where it keeps its own data.',
+        about:
+          "Saved output folders, work folder clean-up, what the folder browser can open, and VideoForge's data folder.",
       },
     ],
     [
@@ -346,12 +348,12 @@
       {
         id: 'plugins',
         label: 'Plugins',
-        about: 'A plugin can add a rule set, templates and presets, or run its own code when jobs start and finish.',
+        about: 'A plugin can add rule sets, templates and presets, and can run its own code when jobs start or finish.',
       },
       {
         id: 'automation',
         label: 'Automation',
-        about: 'Send a message or run a command when a job ends or the queue finishes.',
+        about: 'Send notifications and run actions when a job ends or the queue finishes.',
       },
     ],
     [
@@ -359,13 +361,13 @@
       {
         id: 'profiles',
         label: 'Profiles',
-        about: 'Separate sets of settings, templates and presets to switch between, and a reset to start one over.',
+        about: 'Switch between whole sets of settings, templates and presets, or reset the active one to its defaults.',
       },
       {
         id: 'transfer',
         label: 'Import & export',
         about:
-          'Back up your settings, templates and presets or move them to another computer, and share presets with other people.',
+          'Back up your settings, templates and presets, move them to another computer, or share presets with others.',
       },
     ],
   ] as const
@@ -757,7 +759,7 @@
               <h2 class="font-medium">Data folder</h2>
               <code class="block font-mono text-xs break-all">{config.data_dir}</code>
               <p class="text-xs text-muted-foreground">
-                VideoForge keeps its database, logs, kept job records and plugins here.
+                VideoForge stores its database, logs, job records and plugins here.
               </p>
             </section>
           {:else}
@@ -1114,11 +1116,11 @@
             <section class="col-span-full space-y-3">
               <h2 class="font-medium">Templates and plugins</h2>
               <div class="flex flex-wrap items-center gap-3 text-sm">
-                <span class="text-muted-foreground">Templates are imported and exported on the Templates page.</span>
+                <span class="text-muted-foreground">Import and export templates on the Templates page.</span>
                 <Button variant="outline" onclick={() => router.go('templates')}>Open Templates</Button>
               </div>
               <div class="flex flex-wrap items-center gap-3 text-sm">
-                <span class="text-muted-foreground">Plugins are installed from a ZIP file under Plugins.</span>
+                <span class="text-muted-foreground">Install a plugin from its ZIP file under Plugins.</span>
                 <Button
                   variant="outline"
                   onclick={() => {
@@ -1148,7 +1150,7 @@
           No job is running.
         {/if}
         {#if app.queue.queued}{app.queue.queued} queued job(s) stay in the queue.{/if}
-        Start it again with <code class="text-xs">videoforge serve</code> (or VideoForge.exe).
+        Start VideoForge again with <code class="text-xs">videoforge serve</code> (or VideoForge.exe).
       </Dialog.Description>
     </Dialog.Header>
     <Dialog.Footer>

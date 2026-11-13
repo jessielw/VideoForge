@@ -29,7 +29,7 @@
       fallback = s.output_default
       return true
     } catch (e) {
-      toast.error("Couldn't save the folders", { description: e instanceof Error ? e.message : String(e) })
+      toast.error("Couldn't save the output folders", { description: e instanceof Error ? e.message : String(e) })
       return false
     }
   }
@@ -110,8 +110,8 @@
     <p class="text-xs text-muted-foreground">Loading…</p>
   {:else if folders.length}
     <p class="text-xs text-muted-foreground">
-      Folders you add jobs to are saved here. Pinned folders stay; only the 10 newest others are kept. The default one
-      fills in the output folder on New jobs.
+      Output folders you've sent jobs to are listed here, newest first. Pinned ones stay; only the 10 newest unpinned
+      ones are kept. The default fills in New jobs' output folder.
     </p>
     {@render list(
       'Pinned',
@@ -122,6 +122,8 @@
       folders.filter((f) => !f.pinned),
     )}
   {:else}
-    <p class="text-xs text-muted-foreground">No saved folders yet. Folders you add jobs to are saved here.</p>
+    <p class="text-xs text-muted-foreground">
+      No saved output folders yet. Each output folder you use for a job appears here.
+    </p>
   {/if}
 </section>
