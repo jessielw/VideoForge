@@ -42,31 +42,36 @@ class ToolInfo:
 
 
 TOOLS: tuple[ToolInfo, ...] = (
-    ToolInfo("vspipe", "vspipe", "Runs the VapourSynth script into the video encoder"),
+    ToolInfo("vspipe", "vspipe", "Feeds the VapourSynth script's frames to the video encoder"),
     ToolInfo(
-        "vs_plugins", "VapourSynth plugins", "Source filters (BestSource, L-SMASH, FFMS2) and filters", folder=True
+        "vs_plugins",
+        "VapourSynth plugins",
+        "Source filters (BestSource, L-SMASH, FFMS2) and the other filters scripts use",
+        folder=True,
     ),
     ToolInfo("x264", "x264", "H.264 video encoder"),
     ToolInfo("x265", "x265", "HEVC video encoder"),
     ToolInfo("svtav1", "SvtAv1EncApp", "AV1 video encoder (SVT-AV1)"),
     ToolInfo("svtav1hdr", "SvtAv1EncApp (HDR)", "AV1 video encoder with HDR10+ and Dolby Vision (SVT-AV1-HDR)"),
-    ToolInfo("mkvmerge", "mkvmerge", "Reads sources and muxes the output (MKVToolNix)"),
-    ToolInfo("mp4box", "MP4Box", "Muxes MP4 output (GPAC)", (("-version",),)),
+    ToolInfo("mkvmerge", "mkvmerge", "Reads sources' tracks and builds MKV files (MKVToolNix)"),
+    ToolInfo("mp4box", "MP4Box", "Builds MP4 files (GPAC)", (("-version",),)),
     ToolInfo(
         "ffmpeg",
         "ffmpeg",
-        "Decodes audio for the other encoders; its own FLAC, Opus, AAC, AC-3, E-AC-3, MP3, Vorbis",
+        "Encodes VP8 and VP9 video, and FLAC, Opus, AAC, AC-3, E-AC-3, MP3 and Vorbis audio. Decodes audio for the "
+        "other encoders",
         (("-version",),),
     ),
     ToolInfo(
         "ffprobe",
         "ffprobe",
-        "Times an MP4 or TS source's tracks (their start, the frame rate); without it, MediaInfo's",
+        "Reads each track's start and the frame rate in MP4 and TS sources. Without it, VideoForge uses MediaInfo's, "
+        "which misses some MP4 edit lists",
         (("-version",),),
     ),
     ToolInfo("qaac", "qaac", "AAC encoder (needs Apple's CoreAudioToolbox)", (("--check",),)),
     ToolInfo("opusenc", "opusenc", "Opus encoder (opus-tools)"),
-    ToolInfo("deezy", "DeeZy", "Drives DEE for DDP and DDP Atmos encodes"),
+    ToolInfo("deezy", "DeeZy", "Runs DEE for DDP and DDP Atmos encodes"),
     ToolInfo(
         "dee", "Dolby Encoding Engine", "DDP / Atmos encoder used by DeeZy (not redistributable)", (("--help",), ())
     ),
@@ -300,12 +305,12 @@ def _friendly_error(e: BaseException, found: str) -> str:
         return ""
     if e.errno == errno.ENOEXEC:
         if found.lower().endswith(".exe"):
-            return "This is a Windows program and can't run here directly: it needs Wine (the Docker image has it)"
+            return "This is a Windows program, so it needs Wine to run here. The Docker image has Wine"
         return "Not a program this system can run (wrong build for this CPU or system?)"
     if e.errno == errno.EACCES:
         return (
-            "This file or the programs next to it can't be read or run: make them readable and executable "
-            "(chmod -R a+rX), or in Docker set PUID and PGID so VideoForge fixes it at start"
+            "This file or the programs next to it can't be read or run. Make them readable and executable "
+            "(chmod -R a+rX), or in Docker set PUID and PGID so VideoForge fixes this when it starts"
         )
     return ""
 
@@ -324,7 +329,9 @@ def _check(info: ToolInfo, path: str, *, runner: Runner, timeout: float) -> Tool
     found = locate(path)
     base = (info.name, info.label, info.purpose, path)
     if not found:
-        detail = "A folder: point at the program in it" if Path(path).is_dir() else "Not found at this path or on PATH"
+        detail = (
+            "This is a folder. Choose the program in it" if Path(path).is_dir() else "Not found at this path or on PATH"
+        )
         return ToolCheck(*base, "", ToolStatus.MISSING, detail=detail)
     output, error = "", ""
     for args in info.args:

@@ -68,7 +68,7 @@ def test_missing_broken_and_unknown(tmp_path):
 
 def test_a_folder_or_a_file_that_cant_run_says_why(tmp_path):
     c = check(INFO["dee"], str(tmp_path))
-    assert (c.status, c.detail) == (ToolStatus.MISSING, "A folder: point at the program in it")
+    assert (c.status, c.detail) == (ToolStatus.MISSING, "This is a folder. Choose the program in it")
     exe = tmp_path / "dee"
     exe.write_bytes(b"")
 

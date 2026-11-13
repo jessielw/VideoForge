@@ -196,7 +196,9 @@ test('Files & folders keeps keyboard focus with the folder through pin, unpin an
 
 test('Files & folders says when nothing is saved yet', async ({ page }) => {
   const { errors, section } = await settingsList(page, [])
-  await expect(section).toContainText('No saved output folders yet. Each output folder you use for a job appears here.')
+  await expect(section).toContainText(
+    'No saved output folders yet. Each output folder you add jobs with on New jobs appears here.',
+  )
   await expect(section.getByRole('list')).toHaveCount(0)
   expect(errors).toEqual([])
 })
@@ -204,7 +206,7 @@ test('Files & folders says when nothing is saved yet', async ({ page }) => {
 test('Files & folders explains the list, and says when a change is not saved', async ({ page }) => {
   const { errors, section } = await settingsList(page, [folder(1, true), folder(2)])
   await expect(section).toContainText(
-    "Output folders you've sent jobs to are listed here, newest first. Pinned ones stay; only the 10 newest unpinned ones are kept. The default fills in New jobs' output folder.",
+    'Output folders you pick when adding jobs on New jobs are listed here, newest first. Pinned ones stay, and only the 10 newest unpinned ones are kept. The default fills in the output folder on New jobs.',
   )
   await page.route('**/api/settings', (route) =>
     route.request().method() === 'PUT'

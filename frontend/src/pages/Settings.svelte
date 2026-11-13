@@ -250,7 +250,7 @@
       await api.testNotification(url.trim())
       toast.success('Test notification sent')
     } catch (e) {
-      toast.error("The test notification didn't go", { description: e instanceof Error ? e.message : String(e) })
+      toast.error("Couldn't send the test notification", { description: e instanceof Error ? e.message : String(e) })
     } finally {
       testing = { ...testing, [key]: false }
     }
@@ -357,7 +357,7 @@
         id: 'files',
         label: 'Files & folders',
         about:
-          "Saved output folders, work folder clean-up, what the folder browser can open, and VideoForge's data folder.",
+          "Saved output folders, work folder cleanup, what the folder browser can open, and VideoForge's data folder.",
       },
     ],
     [
@@ -418,7 +418,7 @@
   <div class="flex min-w-0 flex-col gap-6">
     <header class="col-span-full flex flex-wrap items-center gap-3">
       <h1 class="text-xl font-semibold">Settings</h1>
-      <span class="text-sm text-muted-foreground">Saved as you go; used by new jobs and runs.</span>
+      <span class="text-sm text-muted-foreground">Changes are saved as you make them. New jobs and runs use them.</span>
       {#if pending}<span class="text-sm text-muted-foreground">{saveError ? 'Unsaved changes' : 'Saving…'}</span>{/if}
     </header>
 
@@ -429,7 +429,7 @@
       </div>{/if}
     {#if saveError}
       <div role="alert" class="col-span-full space-y-2 text-sm text-destructive">
-        <p>Changes are not saved: {saveError}</p>
+        <p>Changes aren't saved: {saveError}</p>
         <Button onclick={() => recoverSaves()}>Retry saves</Button>
         <Button variant="outline" onclick={() => recoverSaves(true)}>Discard unsaved changes</Button>
       </div>
@@ -536,8 +536,9 @@
                 <span>
                   <span id="sample-quality">Score its quality</span>
                   <span id="sample-quality-help" class="block text-xs text-muted-foreground">
-                    After a test encode, compare every frame with the encoder's input (SSIMULACRA2 and XPSNR, vszip) and
-                    show the scores beside its bitrate. It decodes both once more, so the test encode takes longer.
+                    After a test encode, VideoForge compares each of its frames with the encoder's input and shows the
+                    SSIMULACRA2 and XPSNR scores (from vszip) beside its bitrate. Both are decoded again, so the test
+                    encode takes longer.
                   </span>
                 </span>
               </label>
@@ -583,15 +584,16 @@
               <h2 class="font-medium">Default subtitles</h2>
               {#if !defaultRuleSet?.track_editor || defaultRuleSet.picks_tracks}
                 <p class="text-xs text-muted-foreground">
-                  {defaultRuleSet?.name}'s rules choose its jobs' subtitles; these apply to other rule sets' jobs.
+                  {defaultRuleSet?.name} picks its jobs' subtitles by its own rules, so these apply only to jobs with other
+                  rule sets.
                 </p>
               {/if}
               <TemplateSubsEditor
                 value={subsDefault}
                 flags={subFlags}
                 toggleLabel="Choose every new job's subtitles by rules"
-                offNote="Off: new jobs keep every subtitle track, unless their template sets subtitle rules."
-                appliedNote="New jobs get these rules unless their template sets its own; jobs already in the queue keep theirs."
+                offNote="When this is off, new jobs keep every subtitle track unless their template sets subtitle rules."
+                appliedNote="New jobs get these rules unless their template sets its own. Jobs already in the queue keep theirs."
                 onchange={setSubsDefault}
               />
             </section>
@@ -613,7 +615,8 @@
                 <span>
                   <span id="auto-index">Index new jobs</span>
                   <span id="auto-index-help" class="block text-xs text-muted-foreground">
-                    A job is put in the index lane as soon as it is probed, so its preview is ready when you open it.
+                    Indexes each new job in the background, beside the queue, as soon as its tracks are read. Its
+                    preview is then ready when you open it.
                   </span>
                 </span>
               </label>
@@ -628,8 +631,8 @@
                 <span>
                   <span id="auto-crop">Auto-crop new jobs</span>
                   <span id="auto-crop-help" class="block text-xs text-muted-foreground">
-                    The crop is detected after the job is indexed (it indexes the job even with the option above off). A
-                    template with a fixed crop keeps it; a crop set by hand always wins.
+                    Detects each new job's crop once it's indexed, and indexes the job for this even with Index new jobs
+                    off. A template with a fixed crop keeps its crop, and a crop you set by hand always wins.
                   </span>
                 </span>
               </label>
@@ -644,8 +647,8 @@
                 <span>
                   <span id="index-waits">Wait while an encode reads the same disk</span>
                   <span id="index-waits-help" class="block text-xs text-muted-foreground">
-                    A job in the index lane whose source is on the disk the running encode reads waits for it to finish;
-                    jobs on other disks go first. Index now on a job never waits.
+                    Indexing a job waits while the running job uses the disk its source is on, and jobs on other disks
+                    go first. Index now on a job never waits.
                   </span>
                 </span>
               </label>
@@ -662,7 +665,7 @@
                   <span id="index-during-video">Index anyway while it only encodes video</span>
                   <span id="index-during-video-help" class="block text-xs text-muted-foreground">
                     The video encode reads the source slowly, so an index beside it costs little. The wait still holds
-                    while the job extracts, encodes audio, indexes or muxes.
+                    while the job extracts tracks, encodes audio, indexes, or builds the output file.
                   </span>
                 </span>
               </label>
@@ -684,8 +687,8 @@
                 <span>
                   <span id="parallel-audio">At once, beside the video encode</span>
                   <span id="parallel-audio-help" class="block text-xs text-muted-foreground">
-                    A job's audio encodes start once its source is indexed and run while the video encodes; the mux
-                    waits for them. 0 encodes them one by one, before the video. Default: {config.parallel_audio_default}
+                    A job's audio encodes start once its source is indexed and run while the video encodes. The output
+                    file is built when they're done. 0 encodes them one at a time, before the video. Default: {config.parallel_audio_default}
                   </span>
                 </span>
               </label>
@@ -693,7 +696,7 @@
 
             <section class="space-y-3">
               <h2 class="font-medium">Process priority</h2>
-              {#each [{ key: 'encoder_priority', label: 'Video encode', hint: 'the encoder (x264, x265, ffmpeg for VP8 / VP9, SvtAv1EncApp) and the vspipe feeding it' }, { key: 'tool_priority', label: 'Other tools', hint: 'audio encodes, the mux, indexing' }] as const as row (row.key)}
+              {#each [{ key: 'encoder_priority', label: 'Video encode', hint: 'the encoder (x264, x265, ffmpeg for VP8 / VP9, SvtAv1EncApp) and the vspipe feeding it' }, { key: 'tool_priority', label: 'Other tools', hint: 'audio encodes, building the output file, indexing' }] as const as row (row.key)}
                 <label class="flex items-center gap-3 text-sm">
                   <span class="w-28 shrink-0 text-muted-foreground">{row.label}</span>
                   <NativeSelect
@@ -712,8 +715,10 @@
                 </label>
               {/each}
               <p class="text-xs text-muted-foreground">
-                For jobs started from now on; the Queue's toolbar changes the running one's. On Linux it's a nice value,
-                and raising one back needs CAP_SYS_NICE.
+                A change here applies to jobs, indexing and test encodes that start after you make it. To change the
+                ones already running, use the priority menu on the Queue's toolbar. On Linux, Above normal and High need
+                the CAP_SYS_NICE permission, and so does raising a running tool's priority again. Without it, the tool
+                keeps its lower priority.
               </p>
             </section>
           {:else}
@@ -827,7 +832,9 @@
             <section class="col-span-full min-w-0 space-y-3">
               <div class="flex items-center gap-3">
                 <h2 class="font-medium">Tools</h2>
-                <span class="text-xs text-muted-foreground">A bare name (e.g. ffmpeg) is looked up on PATH.</span>
+                <span class="text-xs text-muted-foreground"
+                  >A name without a folder, like ffmpeg, is looked up on PATH.</span
+                >
                 <Button
                   variant="outline"
                   class="ml-auto"
@@ -884,8 +891,8 @@
                 {/each}
               </div>
               <p class="text-xs text-muted-foreground">
-                Dolby Encoding Engine and qaac's CoreAudioToolbox can't be shipped with VideoForge: install them and
-                point at them here. DDP needs DeeZy + DEE (+ truehdd for Atmos); AAC needs ffmpeg + qaac.
+                VideoForge can't include Dolby Encoding Engine or qaac's CoreAudioToolbox, so install them yourself and
+                set them here. DDP encodes need DeeZy and DEE, plus truehdd for Atmos. AAC encodes need ffmpeg and qaac.
               </p>
             </section>
           {:else}
@@ -928,12 +935,12 @@
                 </label>
                 <p class="pl-6 text-xs text-muted-foreground">
                   {#if !browserNotify.supported}
-                    Browsers allow these on https or localhost only; this page is on plain http.
+                    Browsers allow these only on https or localhost, and this page is on plain http.
                   {:else if browserNotify.permission === 'denied'}
-                    This browser blocks notifications from VideoForge: allow them in its site settings.
+                    This browser blocks notifications from VideoForge. Allow them in the browser's site settings.
                   {:else}
-                    Only while VideoForge isn't the tab in front; in front, each job's own toast says it. Just this
-                    browser.
+                    Shown only when VideoForge isn't the tab in front. When it is, each job's toast tells you instead.
+                    This setting is for this browser only.
                   {/if}
                 </p>
               </div>
@@ -941,7 +948,7 @@
                 {#each config.notifications as d, i (i)}
                   <div class="space-y-2 px-4 py-3 {d.enabled ? '' : 'opacity-60'}">
                     <div class="flex min-w-0 items-center gap-2">
-                      <Tip text={d.enabled ? 'On' : 'Off: nothing is sent here'}>
+                      <Tip text={d.enabled ? 'On' : 'Off, so nothing is sent here'}>
                         <Checkbox
                           checked={d.enabled}
                           aria-label="Send to {d.name}"
@@ -1006,14 +1013,16 @@
               <div class="flex items-center gap-3">
                 <h2 class="font-medium">Actions</h2>
                 <span class="text-xs text-muted-foreground">
-                  After a job ends or the queue finishes: move or copy the output, run a command, or call a webhook. A
-                  job's actions run in this order; after a move, the ones below it see the new path.
+                  After a job ends or the queue finishes, actions can move or copy the output, run a command, call a
+                  webhook, or shut down or sleep the computer. A job's actions run in this order, and after a move, the
+                  ones below it get the new path.
                 </span>
               </div>
               {#if !config.allow_commands}
                 <p class="text-xs text-warning">
-                  Command actions are disabled by the current server configuration (the page has no login, so only if no
-                  one else can reach it).
+                  Command actions are off in this server's configuration. To turn them on, set commands = true under
+                  [actions] in videoforge.toml. Do this only if no one else can reach this page, because it has no
+                  login.
                 </p>
               {/if}
               {#snippet actionRow(
@@ -1023,7 +1032,7 @@
               )}
                 <div class="flex min-w-0 items-center gap-2">
                   {#if index !== 'draft'}
-                    <Tip text={a.enabled ? 'On' : 'Off: it never runs'}>
+                    <Tip text={a.enabled ? 'On' : "Off, so it doesn't run"}>
                       <Checkbox
                         checked={a.enabled}
                         aria-label="Run {a.name}"
@@ -1083,7 +1092,7 @@
                       Queue finished
                     </label>
                     <span class="text-xs text-muted-foreground">
-                      Only when the queue ran out of jobs (not when stopped). Put it last.
+                      Runs only when the queue runs out of jobs, not when it's stopped. Put it last.
                     </span>
                   {:else}
                     {@render eventChoices(
@@ -1202,7 +1211,7 @@
       <Dialog.Title>Shut down VideoForge?</Dialog.Title>
       <Dialog.Description>
         {#if app.queue.running}
-          A job is running: it is canceled. Started again, it skips the steps it finished.
+          The running job is canceled. When it runs again, it skips the steps it finished.
         {:else}
           No job is running.
         {/if}
@@ -1219,7 +1228,11 @@
 
 {#if browse}
   <FileBrowser
-    title={browse.kind === 'tool' ? browse.tool.label : browse.kind === 'action' ? 'The folder' : 'Add a folder'}
+    title={browse.kind === 'tool'
+      ? browse.tool.label
+      : browse.kind === 'action'
+        ? 'Destination folder'
+        : 'Add a folder'}
     mode={browse.kind !== 'tool' || browse.tool.folder ? 'folder' : 'files'}
     programs={browse.kind === 'tool' && !browse.tool.folder}
     orFolder={browse.kind === 'tool' && browse.tool.name === 'dee'}

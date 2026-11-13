@@ -64,7 +64,7 @@
             <span class="min-w-0 flex-1 py-1 font-mono text-xs break-all">{f.path}</span>
             {#if isDefault}<span class="py-1 text-xs text-muted-foreground">Default</span>{/if}
             {#if f.pinned}
-              <Tip text={isDefault ? 'Default (click to clear)' : 'Make the default'}>
+              <Tip text={isDefault ? 'Default. Click to clear it.' : 'Make the default'}>
                 <button
                   type="button"
                   class="rounded-sm p-1 text-muted-foreground hover:text-foreground"
@@ -110,8 +110,8 @@
     <p class="text-xs text-muted-foreground">Loading…</p>
   {:else if folders.length}
     <p class="text-xs text-muted-foreground">
-      Output folders you've sent jobs to are listed here, newest first. Pinned ones stay; only the 10 newest unpinned
-      ones are kept. The default fills in New jobs' output folder.
+      Output folders you pick when adding jobs on New jobs are listed here, newest first. Pinned ones stay, and only the
+      10 newest unpinned ones are kept. The default fills in the output folder on New jobs.
     </p>
     {@render list(
       'Pinned',
@@ -123,7 +123,7 @@
     )}
   {:else}
     <p class="text-xs text-muted-foreground">
-      No saved output folders yet. Each output folder you use for a job appears here.
+      No saved output folders yet. Each output folder you add jobs with on New jobs appears here.
     </p>
   {/if}
 </section>

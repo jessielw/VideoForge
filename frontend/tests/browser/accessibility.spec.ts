@@ -480,16 +480,16 @@ test('checkbox and palette names leave their help text to the description', asyn
   const settings = page.getByRole('navigation', { name: 'Settings sections' })
   await settings.getByRole('button', { name: 'Appearance', exact: true }).click()
   const gold = page.getByRole('radio', { name: 'Gold', exact: true })
-  await expect(gold).toHaveAccessibleDescription(/original look/)
+  await expect(gold).toHaveAccessibleDescription(/default look/)
   const black = page.getByRole('checkbox', { name: 'Pure black dark mode', exact: true })
   await expect(black).toHaveAccessibleDescription(/OLED/)
   for (const [category, name, help] of [
-    ['Queue & indexing', 'Index new jobs', /preview is ready/],
-    ['Queue & indexing', 'Auto-crop new jobs', /crop is detected/],
+    ['Queue & indexing', 'Index new jobs', /preview is then ready/],
+    ['Queue & indexing', 'Auto-crop new jobs', /Detects each new job's crop/],
     ['Queue & indexing', 'Wait while an encode reads the same disk', /jobs on other disks go first/],
     ['Queue & indexing', 'Index anyway while it only encodes video', /reads the source slowly/],
     ['Files & folders', "Delete a job's work folder once it's done", /deleted after the job succeeds/],
-    ['Jobs', 'Score its quality', /compare every frame/],
+    ['Jobs', 'Score its quality', /compares each of its frames/],
   ] as const) {
     await settings.getByRole('button', { name: category, exact: true }).click()
     await expect(page.getByRole('checkbox', { name, exact: true })).toHaveAccessibleDescription(help)

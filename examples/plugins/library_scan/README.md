@@ -31,7 +31,7 @@ api_key = "YOUR_JELLYFIN_API_KEY"
 when = "queue"
 ```
 
-Saved form values override TOML values and take effect after restart. Leave a stored password unchanged to keep it. Use **Reset overrides** to return to TOML values or defaults.
+Saved form values override TOML values and take effect after restart. Leave a stored password unchanged to keep it. Use **Reset to defaults** to return to TOML values or defaults.
 
 ## Expected behavior
 

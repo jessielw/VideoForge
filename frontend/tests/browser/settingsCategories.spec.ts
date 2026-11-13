@@ -254,7 +254,7 @@ const ABOUT: [string, string][] = [
   ['Presets', 'Saved encoder and audio settings you can pick in any job or template. Templates have their own page.'],
   [
     'Files & folders',
-    "Saved output folders, work folder clean-up, what the folder browser can open, and VideoForge's data folder.",
+    "Saved output folders, work folder cleanup, what the folder browser can open, and VideoForge's data folder.",
   ],
   ['Tools', 'The programs VideoForge uses for each step, and where each one is installed.'],
   ['Plugins', 'A plugin can add rule sets, templates and presets, and can run its own code when jobs start or finish.'],

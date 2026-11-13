@@ -23,7 +23,7 @@
   let error = $state('')
   const switchBlocked = $derived(
     app.queue.running
-      ? 'Stop the queue first: its jobs use the active profile’s settings'
+      ? "Stop the queue first, because its jobs use the active profile's settings"
       : disabled
         ? 'Wait for Settings to save'
         : '',
@@ -71,7 +71,7 @@
           app.ruleSets = ruleSets
         }),
         app.loadEncoders(),
-      ]).catch(() => toast.error('Switched. Reload the page to refresh available rule sets.'))
+      ]).catch(() => toast.error("Switched, but the rule set and encoder lists didn't load. Reload the page."))
     } catch (e) {
       toast.error('Profile not switched', { description: message(e) })
     } finally {
@@ -83,8 +83,8 @@
 <section class="col-span-full space-y-3" aria-label="Profiles">
   <h2 class="font-medium">Profiles</h2>
   <p class="text-sm text-muted-foreground">
-    Each profile holds its own settings, templates and presets; a new one starts as a fresh install does. The queue is
-    shared.
+    Each profile has its own settings, templates and presets, and a new one starts like a fresh install. All profiles
+    share the queue.
   </p>
   <ul class="max-w-xl divide-y rounded-md border">
     {#each app.profiles.profiles as profile (profile.id)}
@@ -150,7 +150,7 @@
             <Checkbox bind:checked={copy} disabled={busy} />
             <span
               >Copy {app.activeProfile}<span class="block text-xs text-muted-foreground"
-                >Start from its settings, templates and presets instead of a fresh install’s.</span
+                >Start from its settings, templates and presets instead of a fresh install's.</span
               ></span
             >
           </label>

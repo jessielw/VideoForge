@@ -186,10 +186,10 @@ def _check_tokens(text: str, events: frozenset[Event]) -> None:
     if jobs and queue:
         known, hint = (
             JOB_TOKENS.keys() & QUEUE_TOKENS.keys(),
-            " (an action for a job's end and the queue's too can only use {status})",
+            " (an action that runs when a job ends and when the queue finishes can use only {status})",
         )
     elif queue:
-        known, hint = QUEUE_TOKENS.keys(), " (the queue finishing has no job: no {output} or {source})"
+        known, hint = QUEUE_TOKENS.keys(), " (when the queue finishes there's no job, so no {output} or {source})"
     else:
         known, hint = JOB_TOKENS.keys(), ""
     for f in names:
@@ -295,7 +295,7 @@ def run_command(argv: list[str], timeout: float = COMMAND_TIMEOUT) -> Outcome:
     except FileNotFoundError:
         return Outcome(f"Not found: {argv[0]}")
     except subprocess.TimeoutExpired:
-        return Outcome(f"Still running after {duration(timeout)}; stopped")
+        return Outcome(f"Still running after {duration(timeout)}, so it was stopped")
     except OSError as ex:
         return Outcome(f"Couldn't start {argv[0]}: {ex}")
     if done.returncode:
@@ -316,7 +316,7 @@ def place_file(src: Path, folder: Path, *, move: bool, overwrite: bool) -> Outco
     if dest.resolve() == src.resolve():
         return Outcome(detail="already there", output=dest)
     if dest.exists() and not overwrite:
-        return Outcome(f"Already there (overwrite is off): {dest}")
+        return Outcome(f"A file is already there, and Replace a file already there is off: {dest}")
     try:
         if move:
             try:
