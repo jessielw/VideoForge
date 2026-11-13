@@ -256,6 +256,7 @@ async function fixture(page: Page, mode: 'light' | 'dark', palette = 'gold') {
     tool_priority_default: 'normal',
     priorities: ['normal'],
     records_dir: 'D:\\VideoForge\\records',
+    data_dir: 'D:/VideoForge',
     notifications: [],
     notification_events: [],
     actions: [],

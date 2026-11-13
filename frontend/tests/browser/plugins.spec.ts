@@ -89,6 +89,7 @@ async function fixture(
     tool_priority_default: 'normal',
     priorities: ['normal'],
     records_dir: 'records',
+    data_dir: 'D:/VideoForge',
     notifications: [],
     notification_events: [],
     actions: [],

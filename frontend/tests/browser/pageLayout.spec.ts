@@ -82,6 +82,7 @@ async function layoutFixture(page: Page) {
     tool_priority_default: 'normal',
     priorities: ['normal'],
     records_dir: 'D:\\VideoForge\\records',
+    data_dir: 'D:/VideoForge',
     notifications: [],
     notification_events: [],
     actions: [],

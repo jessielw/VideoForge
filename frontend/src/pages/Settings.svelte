@@ -750,6 +750,14 @@
                 <Button variant="outline" onclick={() => (browse = { kind: 'root' })}><FolderOpenIcon />Browse…</Button>
               </div>
             </section>
+
+            <section class="min-w-0 space-y-2">
+              <h2 class="font-medium">Data folder</h2>
+              <code class="block font-mono text-xs break-all">{config.data_dir}</code>
+              <p class="text-xs text-muted-foreground">
+                VideoForge keeps its database, logs, kept job records and plugins here.
+              </p>
+            </section>
           {:else}
             <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
           {/if}

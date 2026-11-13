@@ -81,6 +81,7 @@ def _state(request: Request) -> dict[str, Any]:
         "tool_priority_default": s.base_config.tool_priority,
         "priorities": [p.value for p in Priority],
         "records_dir": str(s.settings.records_dir),
+        "data_dir": str(s.settings.data_dir),
         "notifications": [d.to_json() for d in saved.notifications],
         "notification_events": [
             {"id": e.value, "label": label, "default": e in DEFAULT_EVENTS} for e, label in EVENT_LABELS.items()

@@ -1047,6 +1047,7 @@ def test_settings_page_config(tmp_path):
         tools = {t["name"]: t for t in cfg["tools"]}
         assert tools["x264"]["path"] == "x264" and tools["x264"]["custom"] is None
         assert cfg["rule_set"] == "manual" and not cfg["roots_custom"] and cfg["restart"] == []
+        assert cfg["data_dir"] == str(tmp_path / "data")  # shown under Settings › Files & folders
 
         changed = client.put("/api/config", json={"tools": {"x264": sys.executable}, "roots": [str(folder)]}).json()
         assert {t["name"]: t for t in changed["tools"]}["x264"]["path"] == sys.executable

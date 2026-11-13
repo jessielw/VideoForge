@@ -79,6 +79,7 @@ async function fixture(page: Page) {
     tool_priority_default: 'normal',
     priorities: ['normal'],
     records_dir: 'D:\\VideoForge\\records',
+    data_dir: DATA_DIR,
     notifications: [],
     notification_events: [],
     actions: [],
@@ -141,6 +142,7 @@ const HOME: [string, string][] = [
   ['Presets', 'Encoder presets'],
   ['Files & folders', 'Work folders'],
   ['Files & folders', 'Folder browser'],
+  ['Files & folders', 'Data folder'],
   ['Tools', 'Tools'],
   ['Plugins', 'Plugins'],
   ['Automation', 'Notifications'],
@@ -236,6 +238,22 @@ test('each category describes itself in one sentence', async ({ page }) => {
   await open(page, 'Presets')
   await page.getByRole('button', { name: 'Open Templates', exact: true }).click()
   await expect(page).toHaveURL(/#\/templates$/)
+  expect(errors).toEqual([])
+})
+
+// a path with no break opportunities, to show it wraps instead of widening the page
+const DATA_DIR = 'D:\\Some\\Very\\Long\\Folder\\Name\\That\\Keeps\\Going\\And\\Going\\VideoForge'
+
+test('Files & folders shows where VideoForge keeps its data, wrapped to the window', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  const errors = await fixture(page)
+  await page.goto('/#/settings')
+  await open(page, 'Files & folders')
+  const section = page.getByRole('heading', { name: 'Data folder', exact: true }).locator('..')
+  await expect(section).toContainText(DATA_DIR)
+  await expect(section).toContainText('database, logs, kept job records and plugins')
+  const { scroll, client } = await section.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }))
+  expect(scroll).toBeLessThanOrEqual(client)
   expect(errors).toEqual([])
 })
 
