@@ -172,6 +172,19 @@ test('Files & folders lists saved folders and pins, stars and forgets them', asy
   expect(errors).toEqual([])
 })
 
+test('Files & folders keeps keyboard focus with the folder through pin, unpin and forget', async ({ page }) => {
+  const { errors, section } = await settingsList(page, [folder(1, true), folder(2)])
+  await section.getByRole('button', { name: 'Pin D:/Out/show-2' }).press('Enter')
+  await expect(section.getByRole('button', { name: 'Unpin D:/Out/show-2' })).toBeFocused()
+  await section.getByRole('button', { name: 'Unpin D:/Out/show-2' }).press('Enter')
+  await expect(section.getByRole('button', { name: 'Pin D:/Out/show-2' })).toBeFocused()
+  await section.getByRole('button', { name: 'Forget D:/Out/show-1' }).press('Enter')
+  await expect(section.getByRole('button', { name: 'Forget D:/Out/show-2' })).toBeFocused()
+  await section.getByRole('button', { name: 'Forget D:/Out/show-2' }).press('Enter')
+  await expect(section.getByRole('heading', { name: 'Saved output folders' })).toBeFocused()
+  expect(errors).toEqual([])
+})
+
 test('Files & folders says when nothing is saved yet', async ({ page }) => {
   const { errors, section } = await settingsList(page, [])
   await expect(section).toContainText('No saved folders yet.')

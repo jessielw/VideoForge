@@ -1119,7 +1119,13 @@
               </div>
               <div class="flex flex-wrap items-center gap-3 text-sm">
                 <span class="text-muted-foreground">Plugins are installed from a ZIP file under Plugins.</span>
-                <Button variant="outline" onclick={() => openTab('plugins')}>Open Plugins</Button>
+                <Button
+                  variant="outline"
+                  onclick={() => {
+                    openTab('plugins')
+                    document.getElementById('settings-tab-plugins')?.focus() // this button goes with its tab
+                  }}>Open Plugins</Button
+                >
               </div>
             </section>
           {:else}

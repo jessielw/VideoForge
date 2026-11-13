@@ -264,10 +264,9 @@ test('Import & export points to template import and plugin install', async ({ pa
   await page.goto('/#/settings')
   await open(page, 'Import & export')
   await page.getByRole('button', { name: 'Open Plugins', exact: true }).click()
-  await expect(sections(page).getByRole('button', { name: 'Plugins', exact: true })).toHaveAttribute(
-    'aria-current',
-    'page',
-  )
+  const plugins = sections(page).getByRole('button', { name: 'Plugins', exact: true })
+  await expect(plugins).toHaveAttribute('aria-current', 'page')
+  await expect(plugins).toBeFocused() // the button that had focus is gone with its tab
   await open(page, 'Import & export')
   await page.getByRole('button', { name: 'Open Templates', exact: true }).click()
   await expect(page).toHaveURL(/#\/templates$/)
