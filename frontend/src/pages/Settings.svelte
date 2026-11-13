@@ -35,6 +35,7 @@
   import { saves } from '../lib/saves'
   import { PRIORITY_LABEL } from '../lib/format'
   import { app } from '../lib/state.svelte'
+  import { router } from '../lib/router.svelte'
   import { browserNotify } from '../lib/browserNotify.svelte'
   import type {
     ActionKind,
@@ -311,22 +312,60 @@
 
   // The sections are tabs in three groups (your work, setup and add-ons, the app itself); the last one open is
   // remembered, and an old one that is gone (general, encoding, backup) opens Jobs.
+  // `about` opens the tab and is its description for screen readers.
   const GROUPS = [
     [
-      { id: 'jobs', label: 'Jobs' },
-      { id: 'queue', label: 'Queue & indexing' },
-      { id: 'presets', label: 'Presets' },
-      { id: 'files', label: 'Files & folders' },
+      {
+        id: 'jobs',
+        label: 'Jobs',
+        about: 'What new jobs start with, and whether a test encode also measures its quality.',
+      },
+      {
+        id: 'queue',
+        label: 'Queue & indexing',
+        about: 'When jobs are indexed, and how the queue shares the computer while it works.',
+      },
+      {
+        id: 'presets',
+        label: 'Presets',
+        about: 'Saved encoder and audio settings you can pick in any job or template. Templates have their own page.',
+      },
+      {
+        id: 'files',
+        label: 'Files & folders',
+        about: 'The folders VideoForge saves to, browses and cleans up, and where it keeps its own data.',
+      },
     ],
     [
-      { id: 'tools', label: 'Tools' },
-      { id: 'plugins', label: 'Plugins' },
-      { id: 'automation', label: 'Automation' },
+      {
+        id: 'tools',
+        label: 'Tools',
+        about: 'The programs VideoForge uses for each step, and where each one is installed.',
+      },
+      {
+        id: 'plugins',
+        label: 'Plugins',
+        about: 'A plugin can add a rule set, templates and presets, or run its own code when jobs start and finish.',
+      },
+      {
+        id: 'automation',
+        label: 'Automation',
+        about: 'Send a message or run a command when a job ends or the queue finishes.',
+      },
     ],
     [
-      { id: 'appearance', label: 'Appearance' },
-      { id: 'profiles', label: 'Profiles' },
-      { id: 'transfer', label: 'Import & export' },
+      { id: 'appearance', label: 'Appearance', about: 'How VideoForge looks in this browser.' },
+      {
+        id: 'profiles',
+        label: 'Profiles',
+        about: 'Separate sets of settings, templates and presets to switch between, and a reset to start one over.',
+      },
+      {
+        id: 'transfer',
+        label: 'Import & export',
+        about:
+          'Back up your settings, templates and presets or move them to another computer, and share presets with other people.',
+      },
     ],
   ] as const
   const TABS = GROUPS.flat()
@@ -416,7 +455,20 @@
         </div>
       </nav>
 
-      <div class="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8 @min-[90rem]/settings:grid-cols-2">
+      <div
+        class="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8 @min-[90rem]/settings:grid-cols-2"
+        role="group"
+        aria-labelledby="settings-tab-{tab}"
+        aria-describedby="settings-about"
+      >
+        <div class="col-span-full -mb-4 space-y-1">
+          <p id="settings-about" class="text-sm text-muted-foreground">{TABS.find((t) => t.id === tab)?.about}</p>
+          {#if tab === 'presets'}
+            <button type="button" class="text-sm underline underline-offset-2" onclick={() => router.go('templates')}
+              >Open Templates</button
+            >
+          {/if}
+        </div>
         <!-- the events a notification or an action wants (skip: ones it can't have) -->
         {#snippet eventChoices(
           events: NotificationEvent[],
@@ -611,9 +663,6 @@
         {:else if tab === 'presets'}
           <section class="col-span-full space-y-3">
             <h2 class="font-medium">Encoder presets</h2>
-            <p class="text-sm text-muted-foreground">
-              Create, edit, organize, import, and export presets without opening a job or template.
-            </p>
             <div class="flex flex-wrap gap-2">
               {#if app.defaultRuleSet}
                 <EncoderPresetMenu

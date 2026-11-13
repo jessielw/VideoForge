@@ -136,10 +136,7 @@
       <UploadIcon />Install ZIP…
     </Button>
   </div>
-  <p class="text-xs text-muted-foreground">
-    Python plugins react to job started, job finished, queue finished, and indexing finished. Changes take effect when
-    VideoForge starts again.
-  </p>
+  <p class="text-xs text-muted-foreground">Changes take effect when VideoForge starts again.</p>
   {#if inventory}
     <p class="break-all text-xs text-muted-foreground">Plugin folder: <code>{inventory.folder}</code></p>
     {#if !inventory.management_enabled}<p class="text-xs text-muted-foreground">

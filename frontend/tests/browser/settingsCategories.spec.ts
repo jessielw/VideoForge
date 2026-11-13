@@ -106,6 +106,7 @@ async function fixture(page: Page) {
       },
       '/api/filter-presets': [],
       '/api/config/encoders': [],
+      '/api/config/video-options/x264': { dashes: '--', options: [] },
       '/api/settings': { output_dir: '', last_dir: '', output_folders: [], output_default: '' },
       '/api/config': config,
       '/api/config/tools': [],
@@ -206,6 +207,35 @@ test('Settings fits a 320 px wide window without scrolling sideways', async ({ p
     const { scroll, client } = await settings.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }))
     expect.soft(scroll, category).toBeLessThanOrEqual(client)
   }
+  expect(errors).toEqual([])
+})
+
+const ABOUT: [string, string][] = [
+  ['Jobs', 'What new jobs start with, and whether a test encode also measures its quality.'],
+  ['Queue & indexing', 'When jobs are indexed, and how the queue shares the computer while it works.'],
+  ['Presets', 'Saved encoder and audio settings you can pick in any job or template. Templates have their own page.'],
+  ['Files & folders', 'The folders VideoForge saves to, browses and cleans up, and where it keeps its own data.'],
+  ['Tools', 'The programs VideoForge uses for each step, and where each one is installed.'],
+  ['Plugins', 'A plugin can add a rule set, templates and presets, or run its own code when jobs start and finish.'],
+  ['Automation', 'Send a message or run a command when a job ends or the queue finishes.'],
+  ['Appearance', 'How VideoForge looks in this browser.'],
+  ['Profiles', 'Separate sets of settings, templates and presets to switch between, and a reset to start one over.'],
+  [
+    'Import & export',
+    'Back up your settings, templates and presets or move them to another computer, and share presets with other people.',
+  ],
+]
+
+test('each category describes itself in one sentence', async ({ page }) => {
+  const errors = await fixture(page)
+  await page.goto('/#/settings')
+  for (const [category, about] of ABOUT) {
+    await open(page, category)
+    await expect(page.getByRole('group', { name: category, exact: true })).toHaveAccessibleDescription(about)
+  }
+  await open(page, 'Presets')
+  await page.getByRole('button', { name: 'Open Templates', exact: true }).click()
+  await expect(page).toHaveURL(/#\/templates$/)
   expect(errors).toEqual([])
 })
 
