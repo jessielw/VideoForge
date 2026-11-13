@@ -1111,6 +1111,18 @@
               }}
             />
             <PresetPackTransfer disabled={pending > 0 || !!saveError} />
+
+            <section class="col-span-full space-y-3">
+              <h2 class="font-medium">Templates and plugins</h2>
+              <div class="flex flex-wrap items-center gap-3 text-sm">
+                <span class="text-muted-foreground">Templates are imported and exported on the Templates page.</span>
+                <Button variant="outline" onclick={() => router.go('templates')}>Open Templates</Button>
+              </div>
+              <div class="flex flex-wrap items-center gap-3 text-sm">
+                <span class="text-muted-foreground">Plugins are installed from a ZIP file under Plugins.</span>
+                <Button variant="outline" onclick={() => openTab('plugins')}>Open Plugins</Button>
+              </div>
+            </section>
           {:else}
             <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
           {/if}

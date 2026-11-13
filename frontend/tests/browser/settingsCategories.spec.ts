@@ -153,6 +153,7 @@ const HOME: [string, string][] = [
   ['Profiles', 'Reset VideoForge'],
   ['Import & export', 'Configuration backup'],
   ['Import & export', 'Preset sharing'],
+  ['Import & export', 'Templates and plugins'],
 ]
 
 const sections = (page: Page) => page.getByRole('navigation', { name: 'Settings sections' })
@@ -255,6 +256,21 @@ test('Files & folders shows where VideoForge keeps its data, wrapped to the wind
   await expect(section).toContainText('database, logs, kept job records and plugins')
   const { scroll, client } = await section.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }))
   expect(scroll).toBeLessThanOrEqual(client)
+  expect(errors).toEqual([])
+})
+
+test('Import & export points to template import and plugin install', async ({ page }) => {
+  const errors = await fixture(page)
+  await page.goto('/#/settings')
+  await open(page, 'Import & export')
+  await page.getByRole('button', { name: 'Open Plugins', exact: true }).click()
+  await expect(sections(page).getByRole('button', { name: 'Plugins', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  await open(page, 'Import & export')
+  await page.getByRole('button', { name: 'Open Templates', exact: true }).click()
+  await expect(page).toHaveURL(/#\/templates$/)
   expect(errors).toEqual([])
 })
 
