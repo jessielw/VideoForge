@@ -82,7 +82,7 @@
     </DropdownMenu.Item>
     <DropdownMenu.Item {disabled} onSelect={() => select(() => false)}><SquareIcon />Deselect all</DropdownMenu.Item>
     <DropdownMenu.Separator />
-    <DropdownMenu.Label>Select matching tracks; deselect the rest.</DropdownMenu.Label>
+    <DropdownMenu.Label>Selects the matching tracks and deselects the rest.</DropdownMenu.Label>
     <DropdownMenu.Sub>
       <DropdownMenu.SubTrigger {disabled}><LanguagesIcon />Select only by language</DropdownMenu.SubTrigger>
       <DropdownMenu.SubContent
