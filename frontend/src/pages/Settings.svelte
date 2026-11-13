@@ -446,8 +446,7 @@
               >VideoForge {app.version}</span
             >{/if}
           <Button
-            variant="ghost"
-            size="sm"
+            variant="outline"
             class="text-destructive hover:text-destructive"
             onclick={() => (confirmStop = true)}
           >
