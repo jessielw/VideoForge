@@ -235,7 +235,8 @@
                   >
                 {:else if !fresh && partial[s.id]}
                   <p class="text-xs text-muted-foreground">
-                    The last lines only (the full output is in the work folder's videoforge.log).
+                    The last lines only. The full output is in videoforge.log, in the job's folder inside the work
+                    folder.
                   </p>
                 {/if}
                 <!-- svelte-ignore a11y_no_noninteractive_tabindex (a scrolling region: keyboard users scroll it once focused) -->

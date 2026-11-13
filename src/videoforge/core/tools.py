@@ -152,7 +152,9 @@ def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]
     muxer = MUXERS[container]
     if not locate(getattr(tools, muxer.tool)):
         issues.append(
-            Issue(Severity.BLOCK, "tools.missing", f"{muxer.label} needs {_LABEL[muxer.tool]}: set it in Settings")
+            Issue(
+                Severity.BLOCK, "tools.missing", f"{muxer.label} needs {_LABEL[muxer.tool]}. Set it in Settings › Tools"
+            )
         )
     if container == "mp4" and any(s.source.format is SubFormat.SRT and not s.source.is_external for s in plan.subs):
         for tool in ("mkvmerge", "mkvextract"):
@@ -161,7 +163,7 @@ def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]
                     Issue(
                         Severity.BLOCK,
                         "tools.missing",
-                        f"Source SRT subtitles for MP4 need {tool}: set the MKVToolNix path in Settings",
+                        f"SRT subtitles from the source need {tool} for MP4. Set the MKVToolNix path in Settings › Tools",
                     )
                 )
     for action in dict.fromkeys(a.action for a in plan.audio):
@@ -170,7 +172,7 @@ def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]
                 Issue(
                     Severity.BLOCK,
                     "tools.missing",
-                    f"{ENCODES[action].label} needs {', '.join(missing[action])}: set it in Settings",
+                    f"{ENCODES[action].label} needs {', '.join(missing[action])}. Set it in Settings › Tools",
                 )
             )
     issues += _dee_issues(plan, tools)
@@ -192,7 +194,7 @@ def _dee_issues(plan: Plan, tools: Tools) -> list[Issue]:
                 Issue(
                     Severity.WARN,
                     "tools.dee_split",
-                    f"{ENCODES[a.action].label}: {', '.join(used)} need the split DEE encoders and are left out",
+                    f"{ENCODES[a.action].label}: {', '.join(used)} need the split DEE encoders, so they're left out",
                 )
             )
         if split and a.options.get("loudness_target"):

@@ -24,7 +24,7 @@ def test_low_space_reads_the_nearest_existing_folder_once_per_volume(tmp_path, m
     assert low_space([work, out], 4) == ""
     assert looked == [str(tmp_path)]  # one volume: looked at once
     short = low_space([work, out], 20)
-    assert short.startswith(f"Only 5.0 GB free on the disk of {work}, under the 20 GB minimum")
+    assert short.startswith(f"Only 5.0 GB is free on the disk of {work}, below the 20 GB minimum")
 
 
 def test_low_space_passes_a_volume_it_cant_read(tmp_path, monkeypatch):

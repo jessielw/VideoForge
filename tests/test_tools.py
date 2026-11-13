@@ -157,7 +157,7 @@ def test_encodes_need_their_tools(tmp_path):
     plan.audio[0].action, plan.audio[1].action = AudioAction.AAC, AudioAction.DDP
     issues = tool_issues(plan, tools)
     assert [(i.severity, i.code) for i in issues] == [(Severity.BLOCK, "tools.missing")]
-    assert issues[0].message == "DDP (DEE) needs Dolby Encoding Engine: set it in Settings"
+    assert issues[0].message == "DDP (DEE) needs Dolby Encoding Engine. Set it in Settings › Tools"
     plan.audio[1].action = AudioAction.COPY
     assert tool_issues(plan, tools) == []
 

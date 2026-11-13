@@ -309,8 +309,8 @@ def _dv_issues(
             Issue(
                 Severity.WARN,
                 "hdr.dv_second_track",
-                "The source has a second HEVC video track (a UHD Blu-ray's Dolby Vision enhancement layer?) that "
-                "couldn't be read: set dovi_tool in Settings, or the encode keeps the base layer only",
+                "The source has a second HEVC video track that couldn't be read. It may be a UHD Blu-ray's Dolby "
+                "Vision enhancement layer. Set dovi_tool in Settings › Tools, or the encode keeps only the base layer",
             )
         ]
     if dv.dv_profile == 5 and not keeps_dv(video, settings):
@@ -318,8 +318,9 @@ def _dv_issues(
             Issue(
                 Severity.WARN,
                 "hdr.dv_profile5",
-                f"Dolby Vision profile 5 has no HDR10 layer: without its RPU (only {_CARRIERS} carry it, with "
-                "Dolby Vision from the source ticked) the encode's colors look wrong, unless the script maps them",
+                "Dolby Vision profile 5 has no HDR10 layer. Without its RPU, the encode's colors look wrong unless the "
+                "script maps them. To keep the RPU, use x265 or SVT-AV1-HDR and tick Dolby Vision from the source on "
+                "the Encoder tab",
             )
         ]
     if dv.dv_profile not in (5, 7, 8) or not settings.dolby_vision:
@@ -330,8 +331,8 @@ def _dv_issues(
             Issue(
                 Severity.WARN,
                 "hdr.dv_x264",
-                f"{settings.encoder.label} can't carry Dolby Vision ({_CARRIERS} can): the encode keeps the HDR10 "
-                "layer",
+                f"{settings.encoder.label} can't carry Dolby Vision ({_CARRIERS} can), so the encode keeps only the "
+                "HDR10 layer",
             )
         ]
     out = []
@@ -340,13 +341,24 @@ def _dv_issues(
     def block(code: str, message: str) -> None:
         out.append(Issue(Severity.BLOCK, code, f"{message}, {untick}"))
 
+    # these two say what unticking keeps, so they don't take block()'s "or untick" tail
     if dv.dv_compat == 4:
-        block("hdr.dv_hlg", "Dolby Vision 8.4 (HLG) isn't carried yet: unticked, the encode keeps the HLG layer")
+        out.append(
+            Issue(
+                Severity.BLOCK,
+                "hdr.dv_hlg",
+                "Dolby Vision 8.4 (HLG) isn't carried yet. Untick Dolby Vision from the source on the Encoder tab, "
+                "and the encode keeps the HLG layer",
+            )
+        )
     if dv.dv_profile == 7 and dv.dv_el not in ("MEL", "FEL"):
-        block(
-            "hdr.dv_el",
-            "The enhancement layer's kind (FEL or MEL) couldn't be read (is dovi_tool set?): unticked, the encode "
-            "keeps the base layer",
+        out.append(
+            Issue(
+                Severity.BLOCK,
+                "hdr.dv_el",
+                "The enhancement layer's kind (FEL or MEL) couldn't be read. Check that dovi_tool is set. Or untick "
+                "Dolby Vision from the source on the Encoder tab, and the encode keeps the base layer",
+            )
         )
     tools_needed: tuple[str, ...] = ("ffmpeg", "dovi_tool")
     if dv.dv_profile == 7 and dv.dv_el == "FEL":
@@ -354,30 +366,34 @@ def _dv_issues(
         if video_settings is not None and video_settings.source_filter is SourceFilter.BESTSOURCE:
             block(
                 "hdr.dv_bake_bs",
-                "Baking a FEL needs FFMS2 or L-SMASH as the source filter (BestSource counts this source's frames "
-                "differently, so the enhancement layer and the RPU would be out of step)",
+                "Baking a FEL needs FFMS2 or L-SMASH as the source filter. BestSource counts this source's frames "
+                "differently, so the enhancement layer and the RPU would be out of step. Pick another source filter "
+                "on the Video tab",
             )
     if settings.depth != 10:
-        block("hdr.dv_depth", "Dolby Vision needs a 10-bit encode: set the bit depth")
+        block("hdr.dv_depth", "Dolby Vision needs a 10-bit encode. Set the bit depth to 10")
     flags = _flags(settings)
     if settings.encoder is Encoder.X265 and level_vbv(settings) is None:
         block(
             "hdr.dv_vbv",
-            "x265 needs --vbv-maxrate and --vbv-bufsize for Dolby Vision (HRD): set them in the options, or "
-            "--level-idc to fill them with its max bitrate",
+            "x265 needs --vbv-maxrate and --vbv-bufsize for Dolby Vision (HRD). Set them in the options, or "
+            "--level-idc to fill them in from its max bitrate",
         )
     if dv.dv_profile != 5 and not (settings.source_color and video.color.master_display) and master not in flags:
         block(
             "hdr.dv_master",
-            f"{name}'s Dolby Vision 8.1 needs a mastering display: the source has none, or the source's color is "
-            f"off (or set --{master})",
+            f"{name}'s Dolby Vision 8.1 needs a mastering display, and the source has none or Color from the source "
+            f"is off. Add --{master} in the options",
         )
     if video_settings is not None and video_settings.custom is not None:
         block(
-            "hdr.dv_custom", "Dolby Vision follows the Video tab's crop and resize, and a custom script's aren't known"
+            "hdr.dv_custom",
+            "Dolby Vision follows the Video tab's crop and resize, and a custom script body's aren't known. Go back "
+            "to the generated script",
         )
     if missing := _missing_tools(tools, tools_needed):
-        block("tools.missing", f"Dolby Vision needs {' and '.join(missing)}: set it in Settings")
+        them = "it" if len(missing) == 1 else "them"
+        block("tools.missing", f"Dolby Vision needs {' and '.join(missing)}. Set {them} in Settings › Tools")
     if _lacks(settings, tools, "dolby-vision-rpu"):
         block("hdr.svt_build", f"This {name} build takes no --dolby-vision-rpu (built without libdovi?)")
     return out
@@ -401,7 +417,7 @@ def _hdr10plus_issues(video: VideoInfo, settings: EncoderSettings, tools: Tools 
             Issue(
                 Severity.WARN,
                 "hdr.hdr10plus_x264",
-                f"{settings.encoder.label} can't carry HDR10+ ({_CARRIERS} can): the encode keeps HDR10 only",
+                f"{settings.encoder.label} can't carry HDR10+ ({_CARRIERS} can), so the encode keeps only HDR10",
             )
         ]
     if bakes_fel(video, settings):
@@ -409,19 +425,26 @@ def _hdr10plus_issues(video: VideoInfo, settings: EncoderSettings, tools: Tools 
             Issue(
                 Severity.WARN,
                 "hdr.hdr10plus_fel",
-                "HDR10+ is left out: it describes the base layer, not the picture with the FEL baked in (which can "
-                "be brighter); the Dolby Vision RPU and the HDR10 values come from the baked picture",
+                "HDR10+ is left out, because it describes the base layer and not the picture with the FEL baked in, "
+                "which can be brighter. The Dolby Vision RPU and the HDR10 values come from the baked picture",
             )
         ]
     out = []
     if settings.depth < 10:
         out.append(
-            Issue(Severity.BLOCK, "hdr.hdr10plus_depth", f"HDR10+ needs a 10-bit encode: set the bit depth, {untick}")
+            Issue(
+                Severity.BLOCK,
+                "hdr.hdr10plus_depth",
+                f"HDR10+ needs a 10-bit encode. Set the bit depth to 10, {untick}",
+            )
         )
     if missing := _missing_tools(tools, ("ffmpeg", "hdr10plus_tool")):
+        them = "it" if len(missing) == 1 else "them"
         out.append(
             Issue(
-                Severity.BLOCK, "tools.missing", f"HDR10+ needs {' and '.join(missing)}: set it in Settings, {untick}"
+                Severity.BLOCK,
+                "tools.missing",
+                f"HDR10+ needs {' and '.join(missing)}. Set {them} in Settings › Tools, {untick}",
             )
         )
     if _lacks(settings, tools, "hdr10plus-json"):
@@ -460,9 +483,9 @@ def hdr10plus_frames(path: Path) -> int:
 def _same_frames(frames: int, meta: int, what: str, setting: str, log: LogFn) -> None:
     if frames != meta:
         raise ToolError(
-            f"The script gives {frames} frames and the source's {what} has {meta}: they would be out of step "
-            "(a trim or a frame-rate filter, or a source filter counting frames differently: try FFMS2). Untick "
-            f"{setting} from the source on the Encoder tab to encode without it."
+            f"The script gives {frames} frames, but the source's {what} has {meta}, so they would be out of step. "
+            "A trim, a frame-rate filter, or a source filter that counts frames differently causes this. Try FFMS2, "
+            f"or untick {setting} from the source on the Encoder tab to encode without it"
         )
     log(f"{what}: {meta} frames, as the script")
 

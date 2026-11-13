@@ -237,7 +237,7 @@ def test_missing_encoder_tool_fails_before_running(rule_set, tmp_path):
     app = replace(APP, tools=replace(APP.tools, qaac=str(tmp_path / "qaac64.exe")))
     runner = FakeRunner()
     result = run_plan(plan, tmp_path / "out", rule_set, app, runner=runner)
-    assert result.status is JobStatus.FAILED and result.error == "AAC (qaac) needs qaac: set it in Settings"
+    assert result.status is JobStatus.FAILED and result.error == "AAC (qaac) needs qaac. Set it in Settings › Tools"
     assert not runner.calls
 
 

@@ -423,7 +423,7 @@ def video_steps(
                 if fps is None:
                     raise ToolError("Neither the source nor the script has a frame rate to place chapters by")
                 if make_qpf(source, home, fps) is None:
-                    raise ToolError("AutoQPF could not read or generate chapters for the source")
+                    raise ToolError("AutoQPF couldn't read or make chapters for the source")
                 log(f"Chapters and qpfile written ({fps} fps)")
 
             return Step(

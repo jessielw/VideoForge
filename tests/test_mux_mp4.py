@@ -203,15 +203,17 @@ def test_mp4_issues():
     issues = mux_issues(plan, "mp4")
     blocks = [i.message for i in issues if i.severity is Severity.BLOCK]
     warns = [i.message for i in issues if i.severity is Severity.WARN]
-    assert blocks == ["Subtitle 1 (pgs) can't go into MP4 (SRT and VobSub can): leave it out or use MKV"]
-    assert "Audio 2: MP4 has no commentary flag; left out" in warns
-    assert "Subtitle 2: MP4 has no hearing impaired flag; left out" in warns  # forced is carried on an SRT
+    assert blocks == ["Subtitle 1 (pgs) can't go into MP4, which takes only SRT and VobSub. Leave it out, or use MKV"]
+    assert "Audio 2: MP4 has no commentary flag, so it's left out" in warns
+    assert "Subtitle 2: MP4 has no hearing impaired flag, so it's left out" in warns  # forced is carried on an SRT
     assert any("written as 'Main - 5.1'" in w for w in warns)
     assert plan.audio[0].original and not any("original" in w for w in warns)  # the source's own flag: no warning
     assert mux_issues(plan, "mkv") == []
 
     plan = mp4_plan(overrides=Overrides(tracks={"id:1": TrackOverride(flags={"original": True})}))
-    assert "Audio 1: MP4 has no original flag; left out" in [i.message for i in mux_issues(plan, "mp4")]  # set by hand
+    assert "Audio 1: MP4 has no original flag, so it's left out" in [
+        i.message for i in mux_issues(plan, "mp4")
+    ]  # set by hand
 
 
 def test_a_vfr_source_into_mp4_warns():
@@ -257,9 +259,9 @@ def test_mp4_languages_are_3_letter_codes():
     plan = mp4_plan([sub(F.SRT, t, index=n) for n, t in enumerate(tags)])
     warns = [i.message for i in mux_issues(plan, "mp4") if i.code == "mux.mp4_language"]
     assert warns == [
-        "Subtitle 1: MP4 holds a 3-letter language code; es-419 is written as es",
-        "Subtitle 3: MP4 holds a 3-letter language code; nb is written as no",
-        "Subtitle 4: MP4 holds a 3-letter language code; zh-Hant is written as zh",
+        "Subtitle 1: MP4 holds only a 3-letter language code, so es-419 is written as es",
+        "Subtitle 3: MP4 holds only a 3-letter language code, so nb is written as no",
+        "Subtitle 4: MP4 holds only a 3-letter language code, so zh-Hant is written as zh",
     ]
     out = simulate_output(plan, "Movie.mp4")
     for t in [*out.audio, *out.subs]:

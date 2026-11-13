@@ -152,13 +152,13 @@ def option_issues(settings: EncoderSettings, tools: Tools | None) -> list[Issue]
         if name in known:
             continue
         near = difflib.get_close_matches(name, list(known), n=1, cutoff=0.75)
-        hint = f": did you mean {d}{near[0]}?" if near else ": check its spelling."
+        hint = f". Did you mean {d}{near[0]}?" if near else ". Check its spelling."
         out.append(
             Issue(
                 Severity.WARN,
                 "video.option_unknown",
-                f"{settings.encoder.label}'s help doesn't list {d}{name}{hint} An option it doesn't take fails the "
-                "encode when it runs",
+                f"{settings.encoder.label}'s help doesn't list {d}{name}{hint} An option the encoder doesn't take "
+                "makes the encode fail",
             )
         )
     return out

@@ -122,10 +122,14 @@ def _run(
     if no_tools:
         return JobResult(plan, JobStatus.FAILED, error="; ".join(i.message for i in no_tools))
     if spec.output_dir is None:
-        return JobResult(plan, JobStatus.FAILED, error="No output folder set")
+        return JobResult(plan, JobStatus.FAILED, error="No output folder is set. Choose one on the Output tab")
     output = output_path(spec, plan, rule_set, spec.output_dir)
     if output.resolve() == spec.inputs.source.resolve():
-        return JobResult(plan, JobStatus.FAILED, error=f"Output would overwrite the source: {output}")
+        return JobResult(
+            plan,
+            JobStatus.FAILED,
+            error=f"The output would overwrite the source ({output}). Change the output name or folder",
+        )
 
     work = spec.job_dir
     encoded: dict[int, Path] = {}
@@ -144,7 +148,8 @@ def _run(
             if spec.output_policy is OutputPolicy.STOP:
                 return result(
                     JobStatus.FAILED,
-                    error=f"Output already exists: {output}. Choose Skip, Rename or Replace in Output.",
+                    error=f"The output already exists ({output}). Change Existing output on the Output tab to skip, "
+                    "rename or replace it",
                 )
             if spec.output_policy is OutputPolicy.SKIP:
                 return result(JobStatus.SKIPPED, error=f"Kept existing output: {output}")
@@ -182,7 +187,9 @@ def _run(
             try:
                 validate_output(candidate)
                 if _identity(target) != original:
-                    raise OSError(f"Output changed during the run; kept the existing file: {target}")
+                    raise OSError(
+                        f"The file at the output path appeared or changed during the run, so it was kept ({target})"
+                    )
                 if original is None:
                     # An exclusive publication: even a file appearing after the check cannot be overwritten.
                     if os.name == "nt":

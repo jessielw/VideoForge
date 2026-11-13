@@ -546,8 +546,8 @@ class Mp4Box:
                 Issue(
                     Severity.WARN,
                     "mux.mp4_vfr",
-                    "The source has a variable frame rate: MP4Box takes no timestamps file, so the MP4 is muxed "
-                    "at a constant rate (MKV keeps the source's timestamps)",
+                    "The source has a variable frame rate, but the MP4 is written at a constant rate. Use MKV to keep "
+                    "the source's timestamps",
                 )
             )
         for i, a in enumerate(plan.audio, 1):
@@ -556,8 +556,8 @@ class Mp4Box:
                     Issue(
                         Severity.BLOCK,
                         "mux.mp4_core",
-                        f"Audio {i} is the AC-3 core of a TrueHD track: MP4Box can't copy it apart from the TrueHD; "
-                        "encode it or use MKV",
+                        f"Audio {i} is the AC-3 core of a TrueHD track, and it can't be copied into MP4 on its own. "
+                        "Encode it, or use MKV",
                     )
                 )
             elif a.out_codec in (AudioCodec.LPCM, AudioCodec.VORBIS, AudioCodec.OTHER):
@@ -565,7 +565,7 @@ class Mp4Box:
                     Issue(
                         Severity.BLOCK,
                         "mux.mp4_audio",
-                        f"Audio {i} ({a.out_codec.value}) can't go into MP4: encode it (e.g. FLAC) or use MKV",
+                        f"Audio {i} ({a.out_codec.value}) can't go into MP4. Encode it (to FLAC, for example), or use MKV",
                     )
                 )
         for i, s in enumerate(plan.subs, 1):
@@ -574,8 +574,8 @@ class Mp4Box:
                     Issue(
                         Severity.BLOCK,
                         "mux.mp4_subs",
-                        f"Subtitle {i} ({s.source.format.value}) can't go into MP4 (SRT and VobSub can): "
-                        "leave it out or use MKV",
+                        f"Subtitle {i} ({s.source.format.value}) can't go into MP4, which takes only SRT and VobSub. "
+                        "Leave it out, or use MKV",
                     )
                 )
         kinds: tuple[tuple[str, list[PlannedAudio] | list[PlannedSub]], ...] = (
@@ -596,7 +596,7 @@ class Mp4Box:
                         Issue(
                             Severity.WARN,
                             "mux.mp4_flags",
-                            f"{label} {i}: MP4 has no {', '.join(dropped)} flag; left out",
+                            f"{label} {i}: MP4 has no {', '.join(dropped)} flag, so it's left out",
                         )
                     )
                 if lang.primary(t.language) != lang.normalize(t.language):
@@ -604,7 +604,7 @@ class Mp4Box:
                         Issue(
                             Severity.WARN,
                             "mux.mp4_language",
-                            f"{label} {i}: MP4 holds a 3-letter language code; {t.language} is written as "
+                            f"{label} {i}: MP4 holds only a 3-letter language code, so {t.language} is written as "
                             f"{lang.primary(t.language)}",
                         )
                     )
@@ -613,7 +613,8 @@ class Mp4Box:
                         Issue(
                             Severity.WARN,
                             "mux.mp4_title",
-                            f"{label} {i}: MP4Box can't write ':' in a title; written as '{_mp4_title(t.title)}'",
+                            f"{label} {i}: VideoForge can't write ':' in an MP4 title, so it's written as "
+                            f"'{_mp4_title(t.title)}'",
                         )
                     )
         return issues
