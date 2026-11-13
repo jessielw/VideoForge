@@ -83,7 +83,10 @@
       await saves.flush()
       const res = await api.search(job.id, percent, metric, target)
       if (!res.taken)
-        toast.info('No CRF search', { description: 'The job is queued, running or being indexed, or not probed yet.' })
+        toast.info('No CRF search', {
+          description:
+            "A CRF search can't start while the job is queued, running, being indexed or already testing, or before its tracks are read.",
+        })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
@@ -115,8 +118,9 @@
       >{/if}
   </div>
   <p class="text-xs text-muted-foreground">
-    Encodes the test encode's sample at several CRFs and scores each against the encoder's input, for the highest CRF
-    that still reaches the target: up to {MAX_TRIES} tries, starting at the job's CRF. CRFs it tried before are reused.
+    Finds the highest CRF that still reaches the target score. It encodes the test encode's sample at several CRFs,
+    starting at the job's CRF, and scores each against the encoder's input, for up to {MAX_TRIES} tries. CRFs already encoded,
+    for this target or another, are reused.
   </p>
 
   {#if !crfMode}
@@ -128,9 +132,8 @@
         <div class="h-full bg-info transition-[width]" style="width:{(p?.overall ?? 0) * 100}%"></div>
       </div>
       <span class="tabular-nums"
-        >{#if !searching}{status === 'indexing'
-            ? 'Indexing first'
-            : 'Waiting in the index lane'}{:else if p}{p.step}{p.fps != null
+        >{#if !searching}{status === 'indexing' ? 'Indexing first' : 'Waiting its turn'}{:else if p}{p.step}{p.fps !=
+          null
             ? ` · ${p.fps.toFixed(1)} fps`
             : ''}{p.left != null ? ` · at most ${duration(p.left)} left` : ''}{:else}Starting…{/if}</span
       >
@@ -188,7 +191,7 @@
             <strong class="tabular-nums">CRF {r.crf}</strong> is the highest that reaches {goal}{r.exact
               ? ''
               : r.tries.length >= MAX_TRIES
-                ? ` (after ${MAX_TRIES} tries; one between it and the next failure may reach it too)`
+                ? ` (stopped after ${MAX_TRIES} tries, so a CRF between it and the lowest one that failed may also reach it)`
                 : " (the encoder's highest CRF)"}.
           </span>
           {#if job.spec.encoder.crf === r.crf}
