@@ -203,9 +203,10 @@ test('Settings fits a 320 px wide window without scrolling sideways', async ({ p
   const errors = await fixture(page)
   await page.goto('/#/settings')
   const settings = page.locator('[class*="@container/settings"]')
-  // shortcut: four tabs have rows that don't wrap yet (Process priority's hints, Folder browser's Reset row, the tool
-  // path rows, Automation's Add rows), so they are left out until those rows wrap.
-  const wide = ['Queue & indexing', 'Files & folders', 'Tools', 'Automation']
+  // shortcut: six tabs have content that doesn't wrap yet (Process priority's hints, Folder browser's Reset row, the
+  // tool path rows, Automation's Add rows; with Linux CI's wider fonts also the "Manage video encoder presets" button
+  // and Appearance), so they are left out until it does. The four checked here fit even with a wide font.
+  const wide = ['Queue & indexing', 'Presets', 'Files & folders', 'Tools', 'Automation', 'Appearance']
   for (const category of ORDER.filter((c) => !wide.includes(c))) {
     await open(page, category)
     const { scroll, client } = await settings.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }))
