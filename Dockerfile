@@ -17,7 +17,7 @@ ARG X265_COMMIT=1e85ca6eb
 ARG X265_SHA256=bc603457c7e4de3b0349a92a4af50e597d3cd9f2c6dd687c1fc2e753627175db
 # SVT-AV1's SvtAv1EncApp from its tag (Debian's is older)
 ARG SVTAV1_VERSION=v4.2.0
-ARG TRUEHDD_VERSION=0.6.2
+ARG TRUEHDD_VERSION=0.6.3
 # quietvoid's Dolby Vision / HDR10+ tools (MIT): the versions scripts/fetch_tools.py takes for Windows
 ARG DOVI_TOOL_VERSION=2.3.4
 ARG DOVI_TOOL_SHA256=1844258e13c26607b32224bf1fa82b595d3b35949f5467405fda560daad32b3f

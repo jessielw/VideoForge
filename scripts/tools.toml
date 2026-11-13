@@ -182,21 +182,25 @@ sha256 = "4f4f2823a6b2644d049561528371bea1dca2022e5611069b5a60e254c954e4ce"
 
 [[tool]]
 name = "truehdd"
-version = "0.6.2"
+version = "0.6.3"
 license = "Apache-2.0"
-source = "https://github.com/truehdd/truehdd/tree/0.6.2"
+source = "https://github.com/truehdd/truehdd/tree/0.6.3"
 purpose = "TrueHD Atmos decoding for DeeZy / DEE"
 [tool.windows]
-url = "https://github.com/truehdd/truehdd/releases/download/0.6.2/truehdd-0.6.2-x86_64-pc-windows-msvc.zip"
-sha256 = "d1c1920d2da8aec42ffe1c6df1d653dd0dc51c77a576df8704c666bf008e156e"
+url = "https://github.com/truehdd/truehdd/releases/download/0.6.3/truehdd-0.6.3-x86_64-pc-windows-msvc.zip"
+sha256 = "34657a2c7d97779badc123929ee9ad055ef09366857d67eb40289948fbd0d555"
 directory = "truehdd"
 prefix = ""
 include = ["truehdd.exe"]
 executables = { truehdd = "truehdd.exe" }
 [[tool.notice]]
 file = "LICENSE"
-url = "https://raw.githubusercontent.com/truehdd/truehdd/0.6.2/LICENSE"
-sha256 = "0b137648922ebbb5e5d1188ec08b5e2e7873e7eab282d039d8db740cba5bd805"
+url = "https://raw.githubusercontent.com/truehdd/truehdd/0.6.3/LICENSE"
+sha256 = "b60cc7bcd4ac24358f6aa40e504555d904b2d30b88049de61a52512bb5cda43f"
+[[tool.notice]]
+file = "NOTICE"
+url = "https://raw.githubusercontent.com/truehdd/truehdd/0.6.3/NOTICE"
+sha256 = "890e1719d44d434c6433f2dcf0ab8affe5e028552095fc65a7b560f432710f98"
 
 [[tool]]
 name = "qaac"
