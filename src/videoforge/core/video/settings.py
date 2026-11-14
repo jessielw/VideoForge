@@ -257,8 +257,9 @@ class EncoderSettings:
     # the options' and extra arguments' colour flags win over the source's (a source whose tags are wrong); off, a
     # flag the source has a value for is dropped from them, as StaxRip's "Import VUI metadata" replaces its profile's
     color_override: bool = False
-    hdr10plus: bool = True  # carry a source's HDR10+ metadata into an x265 encode (hdr.py)
-    dolby_vision: bool = True  # carry a source's Dolby Vision (as profile 8.1, or 5) into an x265 encode (hdr.py)
+    hdr10plus: bool = True  # carry a source's HDR10+ metadata into an x265 or SVT-AV1-HDR encode (hdr.py)
+    # carry a source's Dolby Vision (as profile 8.1, or 5) into an x265 or SVT-AV1-HDR encode (hdr.py)
+    dolby_vision: bool = True
 
     @property
     def passes(self) -> int:

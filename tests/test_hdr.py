@@ -11,6 +11,7 @@ import pytest
 from videoforge.core.models import VideoHdr, VideoInfo
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video import hdr
+from videoforge.core.video.color import SVT_DV5_ARGS, effective_container_color
 from videoforge.core.video.encoders import encoder_command, level_vbv
 from videoforge.core.video.hdr import from_mediainfo, hdr10plus_frames, l5_offsets, rpu_edit, video_stream_argv
 from videoforge.core.video.settings import (
@@ -273,6 +274,39 @@ def test_dolby_vision_x265_args():
     assert x265[i + 4 : i + 6] == ["--vbv-bufsize", "160000"] and x265.count("--vbv-maxrate") == 1
     plain = encoder_command("x265", leveled, output=Path("v.hevc"))
     assert "--vbv-bufsize" not in plain  # only for Dolby Vision
+
+
+def test_svtav1hdr_metadata_args():
+    """SVT-AV1-HDR: the HDR10+ JSON and the RPU after the colour, no x265 profile or VBV; profile 5's colour forced
+    after the job's own flags."""
+    rpu, meta = Path("dv_rpu.bin"), Path("hdr10plus.json")
+    s = EncoderSettings(encoder=Encoder.SVTAV1HDR, depth=10, preset="4", extra="--color-range 0")
+    argv = encoder_command("svt", s, output=Path("v.ivf"), hdr10plus=meta, dolby_vision=rpu)
+    assert argv[argv.index("--hdr10plus-json") + 1] == "hdr10plus.json"
+    assert argv[argv.index("--dolby-vision-rpu") + 1] == "dv_rpu.bin"
+    assert "--dolby-vision-profile" not in argv and "--vbv-bufsize" not in argv and argv.count("--color-range") == 1
+    five = encoder_command("svt", s, output=Path("v.ivf"), dolby_vision=rpu, dv_profile="5")
+    assert five[-10:-2] == list(SVT_DV5_ARGS) and five[five.index("--color-range") :][:2] == ["--color-range", "0"]
+    assert five[-2:] == ["--output", "v.ivf"] and "--hdr10plus-json" not in five
+    tags = effective_container_color(None, s, "5")
+    assert (tags.primaries, tags.transfer, tags.matrix, tags.full_range) == (2, 2, 2, True)
+    assert effective_container_color(None, s, "8.1").full_range is False  # the job's --color-range 0
+
+
+def test_a_build_without_the_metadata_flags_blocks(monkeypatch):
+    """Settings pointing SVT-AV1-HDR at a build whose help leaves the flags out (mainline SVT-AV1, one built
+    without libdovi / hdr10plus) blocks the metadata it can't write; a build it can't read checks nothing."""
+    video = VideoInfo(3840, 2160, hdr=VideoHdr(dv_profile=8, dv_compat=1, hdr10plus=True))
+    video.color.master_display = "G(13250,34500)B(7500,3000)"
+    s = EncoderSettings(encoder=Encoder.SVTAV1HDR, depth=10, preset="4")
+    tools = SimpleNamespace(ffmpeg="", dovi_tool="", mkvmerge="", hdr10plus_tool="")
+    monkeypatch.setattr(hdr, "_missing_tools", lambda *_: [])
+    monkeypatch.setattr(hdr, "known_options", lambda *_: {"preset": "", "crf": ""})
+    assert [i.code for i in hdr.issues(video, s, tools)] == ["hdr.svt_build", "hdr.svt_build"]
+    monkeypatch.setattr(hdr, "known_options", lambda *_: {"dolby-vision-rpu": "", "hdr10plus-json": ""})
+    assert hdr.issues(video, s, tools) == []
+    monkeypatch.setattr(hdr, "known_options", lambda *_: {})
+    assert hdr.issues(video, s, tools) == []
 
 
 @pytest.mark.parametrize(

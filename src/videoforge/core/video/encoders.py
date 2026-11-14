@@ -22,7 +22,7 @@ import re
 
 from videoforge.core.arguments import split_args
 from videoforge.core.models import Issue, Severity, VideoColor, VideoInfo
-from videoforge.core.video.color import color_args, color_choices, drop_source_flags, hdr10, untagged
+from videoforge.core.video.color import SVT_DV5_ARGS, color_args, color_choices, drop_source_flags, hdr10, untagged
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
 
 EXTENSIONS = {
@@ -182,12 +182,12 @@ def encoder_command(
 ) -> list[str]:
     """One encoder run reading y4m from stdin. pass_number is 1 or 2 for a two-pass encode. sar is the
     encode's pixel aspect ratio (vspipe's y4m carries none), written when it isn't square; color is the
-    source's colour description (color.color_args); hdr10plus an x265 encode's HDR10+ metadata and dolby_vision
-    its RPU, written as dv_profile (8.1, or 5: hdr.dv_profile); with that RPU or HDR10, the VBV (HRD) is filled from --level-idc (level_vbv), as
-    StaxRip does. A --sar in the options or extra arguments comes after it, and wins; a colour flag for a value the
-    source has is dropped from them unless settings.color_override (color.source_wins). VP8 / VP9
-    (ffmpeg_command) and SVT-AV1 (svtav1_command) take keyframes (qpfile_frames) instead of the qpfile, and no
-    sar."""
+    source's colour description (color.color_args); hdr10plus an x265 or SVT-AV1-HDR encode's HDR10+ metadata and
+    dolby_vision its RPU, written as dv_profile (8.1, or 5: hdr.dv_profile); with that RPU or HDR10, x265's VBV
+    (HRD) is filled from --level-idc (level_vbv), as StaxRip does. A --sar in the options or extra arguments comes
+    after it, and wins; a colour flag for a value the source has is dropped from them unless settings.color_override
+    (color.source_wins). VP8 / VP9 (ffmpeg_command) and SVT-AV1 (svtav1_command) take keyframes (qpfile_frames)
+    instead of the qpfile, and no sar."""
     if settings.encoder.svt:
         return svtav1_command(
             exe,
@@ -197,6 +197,9 @@ def encoder_command(
             pass_number=pass_number,
             stats=stats,
             color=color,
+            hdr10plus=hdr10plus,
+            dolby_vision=dolby_vision,
+            dv_profile=dv_profile,
             keyframes=keyframes,
         )
     if settings.encoder.libvpx:
@@ -294,6 +297,9 @@ def svtav1_command(
     pass_number: int | None = None,
     stats: Path | None = None,
     color: VideoColor | None = None,
+    hdr10plus: Path | None = None,
+    dolby_vision: Path | None = None,
+    dv_profile: str = "8.1",
     keyframes: Sequence[int] = (),
 ) -> list[str]:
     """A SvtAv1EncApp run reading y4m from stdin, as StaxRip's SVT-AV1 encoder writes it: --rc 0 --crf for
@@ -301,7 +307,9 @@ def svtav1_command(
     progress lines progress() reads). The y4m gives the size, frame rate and bit depth. keyframes (the chapters')
     are forced in CRF only (forces_keyframes). Two passes get --undershoot-pct 5 unless the options or extra
     arguments set it: at its default (25) a Fallout sample came in 26% under --tbr (8 minutes of it, 33%), at 5
-    within 5.5%."""
+    within 5.5%. SVT-AV1-HDR takes an HDR10+ JSON (--hdr10plus-json) and a Dolby Vision RPU (--dolby-vision-rpu),
+    which it writes as metadata OBUs (AV1's profile 10: 8.1 -> 10.1, 5 -> 10.0, the RPU tells it); a profile 5
+    encode's colour is forced last (SVT_DV5_ARGS), as x265 forces it."""
     argv = [exe, "--input", "-"]
     argv += ["--frames", str(frames)] if frames else []
     argv += ["--preset", settings.preset] if settings.preset else []
@@ -316,12 +324,15 @@ def svtav1_command(
         argv += ["--pass", str(pass_number), "--stats", str(stats)]
         argv += ["--undershoot-pct", SVTAV1_UNDERSHOOT] if _setting(settings, "undershoot-pct") is None else []
     argv += color_args(color, settings)
+    argv += ["--hdr10plus-json", str(hdr10plus)] if hdr10plus is not None else []
+    argv += ["--dolby-vision-rpu", str(dolby_vision)] if dolby_vision is not None else []
     if keyframes and forces_keyframes(settings):
         argv += ["--force-key-frames", ",".join(f"{n}f" for n in keyframes)]
     argv += ["--progress", "2"]
     argv += drop_source_flags(_options(settings.options), color, settings)
     if settings.extra.strip():
         argv += drop_source_flags(split_args(settings.extra), color, settings)
+    argv += SVT_DV5_ARGS if dolby_vision is not None and dv_profile == "5" else ()
     argv += ["--output", str(output)]
     return argv
 

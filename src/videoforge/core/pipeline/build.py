@@ -677,7 +677,8 @@ def build_steps(
     sar, tags = None, None
     if spec.encodes_video and spec.encoder.encoder.ivf and video is not None:
         sar = spec.video.output_sar(video.width, video.height, video.sar)
-        tags = effective_container_color(video.color, spec.encoder)
+        carried = hdr.dv_profile(video) if hdr.keeps_dv(video, spec.encoder) else None  # profile 5's colour
+        tags = effective_container_color(video.color, spec.encoder, carried)
 
     def mux_step(fps: Fraction | None, stamps: Path | None) -> Step:
         try:
