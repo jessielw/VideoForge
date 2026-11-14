@@ -28,10 +28,12 @@ def state(request: Request) -> dict[str, Any]:
 def reuse(request: Request, body: dict[str, Any] | None = Body(None)) -> dict[str, Any]:  # noqa: B008
     """What a start of the given jobs (as /start picks them) could reuse: the jobs with finished files, each
     with its offers (`id` "video" / "audio.N", label, file, size, seconds, finished, current, origin: the other
-    job's folder a run links it from, or "")."""
+    job's folder a run links it from, or ""). A job whose question was answered when it was queued is left out."""
     q = queue_of(request)
     jobs = []
     for e in q.start_targets((body or {}).get("ids")):
+        if q.reuse_answered(e):
+            continue
         if offers := q.reuse_offers(e):
             jobs.append(
                 {
@@ -72,8 +74,11 @@ def start(request: Request, body: dict[str, Any] | None = Body(None)) -> dict[st
 
 @router.post("/enqueue")
 def enqueue(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    """Queue the given jobs: the queue's state, plus the ids it queued (`enqueued`; `queued` is the count)."""
+    """Queue the given jobs: the queue's state, plus the ids it queued (`enqueued`; `queued` is the count).
+    `reuse` is the answer to /reuse, as for /start: a running queue can take the job as soon as it's queued."""
     q = queue_of(request)
+    if reuse := body.get("reuse"):
+        q.choose_reuse(reuse)
     enqueued = q.enqueue(body.get("ids"))
     return {**q.queue_state(), "enqueued": enqueued}
 

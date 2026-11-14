@@ -3,6 +3,7 @@
   // Changes save straight away (the server replans); a queued, running or indexing job is read-only.
   // Queue (top left, and the tick on its queue row) locks the job for the run: the queue runs it.
   import { api, type SpecChanges } from '../lib/api'
+  import { reuseQuestion } from '../lib/reuse.svelte'
   import { saves } from '../lib/saves'
   import { basename, bytes, duration, percent, SEVERITY_TONE, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { queueable } from '../lib/queueView'
@@ -122,8 +123,10 @@
   async function setQueued(on: boolean) {
     try {
       await saves.flush()
+      // A running queue takes it at once: ask about an earlier run's files first (null: cancelled).
+      const reuse = on ? await reuseQuestion.ask([jobId], 'queue') : {}
       if (!on) await api.dequeue([jobId])
-      else if (!(await api.enqueue([jobId])).enqueued.length)
+      else if (reuse && !(await api.enqueue([jobId], reuse)).enqueued.length)
         toast.warning("Couldn't queue the job", {
           description: 'It changed meanwhile: it is being probed or indexed, or is blocked.',
         })
@@ -170,9 +173,8 @@
               {queued ? 'border-info/40 bg-info/10 text-info' : 'border-border'}"
           >
             <Checkbox
-              checked={queued}
+              bind:checked={() => queued, setQueued}
               disabled={job.status === 'running' || (!queued && !queueable(job.status))}
-              onCheckedChange={setQueued}
             />
             {queued ? 'Queued · locked' : 'Queue'}
           </label>

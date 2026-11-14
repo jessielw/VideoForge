@@ -1,22 +1,20 @@
 <script lang="ts">
-  // Asked on Start queue / Run selected when the jobs have finished files from an earlier run (any job on
-  // the same source): per section (video, each audio encode), reuse it or make it again, StaxRip-like.
+  // Asked on Start queue / Run selected / Queue when the jobs have finished files from an earlier run (any job
+  // on the same source): per section (video, each audio encode), reuse it or make it again, StaxRip-like.
   // Files made with today's settings start ticked; ones made with other settings start unticked. A file another
   // job on the source made the same way is linked into this job's folder (origin: that job's folder).
+  // One instance (the Queue page's) answers lib/reuse.svelte.ts's question.
+  import ListPlusIcon from '@lucide/svelte/icons/list-plus'
   import PlayIcon from '@lucide/svelte/icons/play'
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
   import { Checkbox } from '$lib/components/ui/checkbox'
   import * as Dialog from '$lib/components/ui/dialog'
   import { basename, bytes, duration } from '../lib/format'
-  import type { ReuseJob } from '../lib/types'
+  import { reuseQuestion } from '../lib/reuse.svelte'
   import Tip from './Tip.svelte'
 
-  let {
-    open = $bindable(false),
-    jobs,
-    onstart,
-  }: { open?: boolean; jobs: ReuseJob[]; onstart: (reuse: Record<string, string[]>) => void } = $props()
+  const jobs = $derived(reuseQuestion.jobs)
 
   let chosen = $state<Record<string, string[]>>({})
   $effect(() => {
@@ -41,7 +39,14 @@
   const stale = $derived(jobs.some((j) => j.offers.some((o) => !o.current)))
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root
+  bind:open={
+    () => reuseQuestion.open,
+    (on) => {
+      if (!on) reuseQuestion.answer(null)
+    }
+  }
+>
   <Dialog.Content class="sm:max-w-2xl">
     <Dialog.Header>
       <Dialog.Title>Reuse finished files?</Dialog.Title>
@@ -104,8 +109,10 @@
         <Button variant="ghost" size="sm" onclick={() => all(false)}>Make all again</Button>
       </div>
       <div class="flex gap-2">
-        <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
-        <Button onclick={() => onstart($state.snapshot(chosen))}><PlayIcon />Start</Button>
+        <Button variant="outline" onclick={() => reuseQuestion.answer(null)}>Cancel</Button>
+        <Button onclick={() => reuseQuestion.answer($state.snapshot(chosen))}>
+          {#if reuseQuestion.action === 'queue'}<ListPlusIcon />Queue{:else}<PlayIcon />Start{/if}
+        </Button>
       </div>
     </Dialog.Footer>
   </Dialog.Content>

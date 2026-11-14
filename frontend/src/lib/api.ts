@@ -314,7 +314,8 @@ export const api = {
   start: (ids?: string[], reuse?: Record<string, string[]>) =>
     post<QueueState>('/api/queue/start', { ...(ids ? { ids } : {}), ...(reuse ? { reuse } : {}) }),
   reuse: (ids?: string[]) => post<{ jobs: ReuseJob[] }>('/api/queue/reuse', ids ? { ids } : {}),
-  enqueue: (ids: string[]) => post<QueueState & { enqueued: string[] }>('/api/queue/enqueue', { ids }),
+  enqueue: (ids: string[], reuse?: Record<string, string[]>) =>
+    post<QueueState & { enqueued: string[] }>('/api/queue/enqueue', { ids, ...(reuse ? { reuse } : {}) }),
   dequeue: (ids: string[]) => post<QueueState>('/api/queue/dequeue', { ids }),
   stop: () => post<QueueState>('/api/queue/stop'),
   cancel: () => post<QueueState>('/api/queue/cancel'),

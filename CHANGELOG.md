@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Screen readers: the job tabs announce the panel they show, and Settings checkboxes and palette choices read their name, then their help text as a description.
 - Track drag handles and the Rule set list on the Output tab no longer read as unnamed controls. Empty Sources and Output folder fields no longer read as empty lists.
 - The Log page and the job log can be scrolled with the keyboard.
+- Queuing a job that has finished files from an earlier run now asks which to reuse, as Start queue and Run selected do. Before, a running queue took the job straight away and reused whatever matched its settings without asking. Start queue doesn't ask again about a job answered when it was queued. Unqueued, the job is asked again.
 
 ## [0.1.8] - 2026-11-12
 

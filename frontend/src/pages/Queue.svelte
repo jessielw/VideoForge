@@ -44,8 +44,9 @@
   import { bytes, duration, percent, PRIORITY_LABEL, progressTimes, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { router } from '../lib/router.svelte'
   import { layout } from '../lib/layout.svelte'
+  import { reuseQuestion } from '../lib/reuse.svelte'
   import { app } from '../lib/state.svelte'
-  import type { EncoderSettings, JobDetail, Priority, ReuseJob, Status } from '../lib/types'
+  import type { EncoderSettings, JobDetail, Priority, Status } from '../lib/types'
 
   let selected = $state<string[]>([])
   let anchor = $state<string | null>(null)
@@ -131,9 +132,12 @@
   }
 
   // Queued: locked (read-only), and the queue runs it, even one already running. Edits still saving go first.
+  // A running queue takes it at once, so the reuse question is asked here, not on Start.
   async function queue(ids = [...queueableSelected]) {
     await saves.flush()
-    const { enqueued } = await api.enqueue(ids)
+    const reuse = await reuseQuestion.ask(ids, 'queue')
+    if (!reuse) return
+    const { enqueued } = await api.enqueue(ids, reuse)
     await app.refreshJobs()
     if (enqueued.length < ids.length) {
       toast.warning(`Queued ${enqueued.length} of ${ids.length} jobs`, {
@@ -294,9 +298,6 @@
   }
 
   // Start queue / Run selected: when the jobs have finished files from an earlier run, ask which to reuse.
-  let reuseJobs = $state<ReuseJob[]>([])
-  let reuseIds = $state<string[] | undefined>()
-  let reuseOpen = $state(false)
   let starting = $state(false)
   let saveError = $state('')
   $effect(() =>
@@ -310,22 +311,13 @@
     starting = true
     try {
       await saves.flush()
-      const { jobs } = await api.reuse(ids)
-      if (!jobs.length) return await api.start(ids)
-      reuseJobs = jobs
-      reuseIds = ids
-      reuseOpen = true
+      const reuse = await reuseQuestion.ask(ids, 'start')
+      if (!reuse) return
+      await saves.flush()
+      await api.start(ids, Object.keys(reuse).length ? reuse : undefined)
     } finally {
       starting = false
     }
-  }
-
-  function startReusing(reuse: Record<string, string[]>) {
-    reuseOpen = false
-    act(async () => {
-      await saves.flush()
-      await api.start(reuseIds, reuse)
-    })
   }
 
   async function move(step: number) {
@@ -974,9 +966,8 @@
                       : `Can't be queued while ${STATUS_LABEL[job.status].toLowerCase()}`}
               >
                 <Checkbox
-                  checked={queued}
+                  bind:checked={() => queued, (on) => act(() => (on ? queue([job.id]) : unqueue([job.id])))}
                   disabled={job.status === 'running' || (!queued && !queueable(job.status))}
-                  onCheckedChange={(on) => act(() => (on ? queue([job.id]) : unqueue([job.id])))}
                   tabindex={-1}
                   aria-label={`Queued: ${job.name}${job.label ? ` (${job.label})` : ''}`}
                 />
@@ -1217,7 +1208,7 @@
   </section>
 </div>
 
-<ReuseDialog bind:open={reuseOpen} jobs={reuseJobs} onstart={startReusing} />
+<ReuseDialog />
 
 <Dialog.Root bind:open={importOpen}>
   <Dialog.Content>

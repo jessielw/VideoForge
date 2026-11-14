@@ -927,6 +927,9 @@ class JobQueue:
                 e = self._entries.get(job_id)
                 if e is not None and e.queued:
                     e.queued = False
+                    # Its settings can change now: queued or started again, it's asked again.
+                    e.state.keep = []
+                    e.state.redo = []
                     self._save(e)
                     self._changed(e)
         self._queue_changed()
@@ -950,6 +953,11 @@ class JobQueue:
         except (ToolError, OSError, ValueError) as ex:
             logger.warning("%s: no reuse offers (%s)", e.spec.name, ex)
             return []
+
+    @staticmethod
+    def reuse_answered(e: Entry) -> bool:
+        """Whether e is queued with its reuse question answered (on Queue), not yet used up by a run."""
+        return e.queued and bool(e.state.keep or e.state.redo)
 
     def choose_reuse(self, choices: dict[str, Iterable[str]]) -> None:
         """The user's answer to the reuse question, per job: the sections to reuse (offer ids). Those are

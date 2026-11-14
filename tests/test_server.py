@@ -825,6 +825,30 @@ def test_reuse_question(tmp_path):
         assert client.post("/api/queue/reuse", json={"ids": [two]}).json() == {"jobs": []}
 
 
+def test_reuse_answered_on_queue(tmp_path):
+    """A running queue takes a job as soon as it's queued, so /enqueue takes the reuse answer too. Start queue
+    doesn't ask about it again; unqueued, it's asked again."""
+    make_files(tmp_path, "S01E01")
+    with make_client(tmp_path, run=KeepSpyRun()) as client:
+        (one,) = add(client, tmp_path)
+        wait_for(client, one, "ready", "warn")
+        q = client.app.state.queue
+        video = q.get(one).spec.video_output
+        video.parent.mkdir(parents=True)
+        video.write_bytes(b"264")
+        note_finished(video.parent, "video", "made with other settings", [video], 12.0)
+        assert [j["id"] for j in client.post("/api/queue/reuse", json={"ids": [one]}).json()["jobs"]] == [one]
+
+        assert client.post("/api/queue/enqueue", json={"ids": [one], "reuse": {one: ["video"]}}).json()["enqueued"]
+        assert q.get(one).state.keep == ["video"]
+        assert client.post("/api/queue/reuse", json={}).json() == {"jobs": []}  # answered on Queue
+
+        client.post("/api/queue/dequeue", json={"ids": [one]})
+        assert q.get(one).state.keep == []
+        client.post("/api/queue/enqueue", json={"ids": [one]})
+        assert [j["id"] for j in client.post("/api/queue/reuse", json={}).json()["jobs"]] == [one]
+
+
 def test_work_folders(tmp_path):
     """Off by default: a done job keeps its work folder. On: it's deleted after its record and log are copied
     to <data dir>/records, and the record path actions get is the copy. Removing jobs can delete theirs."""
