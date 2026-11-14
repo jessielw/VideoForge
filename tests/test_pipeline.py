@@ -1861,6 +1861,11 @@ def test_dolby_vision_and_hdr10plus_into_svtav1hdr(rule_set, tmp_path, profile, 
     forced = ("--color-primaries", "2", "--transfer-characteristics", "2", "--matrix-coefficients", "2")
     assert (tail == (*forced, "--color-range", "1")) is (profile == 5)
     mux = step["mux"].argvs[0]
+    assert not any("dvp" in a for a in mux)  # mkvmerge finds it in the stream
+    job.mux = replace(job.mux, container="mp4")
+    mp4 = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mp4").steps}
+    want = ":dvp=10.1" if profile == 8 else ":dvp=10.0"
+    assert any(want in a for a in mp4["mux"].argvs[0])
     if profile == 5:  # the container says the same as the stream
         assert mux[mux.index("--colour-primaries") + 1].endswith(":2")
         assert mux[mux.index("--colour-range") + 1].endswith(":2")  # mkvmerge's 2 is full
@@ -1983,6 +1988,28 @@ def test_fel_is_baked_into_the_encode(rule_set, tmp_path, monkeypatch, source_fi
     result = run_job(job, plan, rule_set, APP, state=state, runner=runner, prober=lambda *_: carried)
     assert result.status is JobStatus.DONE, result.error
     assert "x265" not in tools_called(runner)
+
+
+def test_a_baked_fel_into_svtav1hdr_tags_the_rpus_hdr10(rule_set, tmp_path, monkeypatch):
+    """SVT-AV1-HDR bakes a FEL as x265 does, and the container's HDR10 tags (mkvmerge doesn't copy an AV1 stream's)
+    follow the encode's: the RPU's values, read when the mux's turn comes, not the source's."""
+    plan = make_plan(tmp_path)
+    job = fel_job(plan, tmp_path, encoder=Encoder.SVTAV1HDR, options={})
+    job.encoder.preset = "4"
+    monkeypatch.setattr(hdr, "edit_rpu", lambda _d, _s, dst, *_a: dst.write_bytes(b"rpu"))
+    monkeypatch.setattr(hdr, "script_frames", lambda *_: 240)
+    monkeypatch.setattr(hdr, "rpu_frames", lambda *_: 240)
+    monkeypatch.setattr(hdr, "rpu_summary", lambda *_: SUMMARY.format(l1="0.01", l1f="0.00"))
+    monkeypatch.setattr(hdr, "av1_metadata", lambda _ivf: (240, 0, 240))  # the fake encode is no IVF
+    runner = FakeRunner()
+    carried = replace(simulate_output(plan), video=replace(plan.source.video, hdr=VideoHdr(dv_profile=10)))
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=runner, prober=lambda *_: carried)
+    assert result.status is JobStatus.DONE, result.error
+    svt = next(c[-1] for c in runner.calls if Path(c[-1][0]).stem == "SvtAv1EncApp-HDR")
+    assert svt[svt.index("--content-light") + 1] == "2573,684"
+    mkvmerge = next(c[-1] for c in runner.calls if Path(c[-1][0]).stem == "mkvmerge" and "--max-content-light" in c[-1])
+    assert mkvmerge[mkvmerge.index("--max-content-light") + 1] == "0:2573"
+    assert mkvmerge[mkvmerge.index("--max-frame-light") + 1] == "0:684"
 
 
 def test_a_uhd_bluray_m2ts_bakes_its_second_track(rule_set, tmp_path):

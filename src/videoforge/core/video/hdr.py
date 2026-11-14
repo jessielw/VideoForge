@@ -259,8 +259,15 @@ def dv_profile(video: VideoInfo | None) -> str:
     return "5" if video is not None and video.hdr.dv_profile == 5 else "8.1"
 
 
-# MediaInfo's (profile, compatibility) of each written profile
+# MediaInfo's (profile, compatibility) of each written profile; in AV1, profile 10 (dvvC's: 10.0 and 10.1), whose
+# compatibility MediaInfo leaves out of an MKV without colour tags ("Profile 10, dav1.10.03")
 _DV_FOUND = {"5": (5, None), "8.1": (8, 1)}
+_DV_FOUND_AV1 = {"5": (10, 0), "8.1": (10, 1)}
+# ITU-T T.35 metadata OBUs' payload starts: the country (B5, USA) and provider code, then HDR10+'s provider-oriented
+# code and application id (ST 2094-40), or Dolby's RPU header
+_T35_HDR10PLUS = bytes((0xB5, 0x00, 0x3C, 0x00, 0x01, 0x04))
+_T35_DOVI = bytes((0xB5, 0x00, 0x3B, 0x00, 0x00, 0x08, 0x00, 0x37, 0xCD, 0x08))
+_OBU_METADATA, _METADATA_T35 = 5, 4
 # dovi_tool's editor mode per written profile: 0 leaves the RPU as it is, 2 makes it 8.1 (StaxRip's)
 _DV_MODES = {"5": 0, "8.1": 2}
 
@@ -652,16 +659,91 @@ def edit_rpu(
     log(f"Dolby Vision RPU: profile {profile}, L5 offsets {areas}")
 
 
-def output_issues(video: VideoInfo | None, settings: EncoderSettings, output: SourceInfo) -> list[Issue]:
-    """A BLOCK when the output was meant to carry HDR10+ or Dolby Vision and MediaInfo finds none in it."""
+def _leb128(data: bytes, at: int) -> tuple[int, int]:
+    """An AV1 leb128 number at data[at:]: (its value, where it ends)."""
+    value = 0
+    for i in range(8):
+        if at + i >= len(data):
+            break
+        value |= (data[at + i] & 0x7F) << (7 * i)
+        if not data[at + i] & 0x80:
+            return value, at + i + 1
+    raise ValueError("a leb128 number runs past its OBU")
+
+
+def _t35(unit: bytes) -> set[bytes]:
+    """The T.35 payloads' starts (_T35_*) in one temporal unit's metadata OBUs."""
+    found, at = set(), 0
+    while at < len(unit):
+        header = unit[at]
+        kind, extension, sized = (header >> 3) & 0xF, header & 4, header & 2
+        at += 2 if extension else 1
+        size, at = _leb128(unit, at) if sized else (len(unit) - at, at)
+        payload = unit[at : at + size]
+        at += size
+        if kind == _OBU_METADATA and payload:
+            metadata_type, start = _leb128(payload, 0)
+            if metadata_type == _METADATA_T35:
+                found |= {p for p in (_T35_HDR10PLUS, _T35_DOVI) if payload.startswith(p, start)}
+    return found
+
+
+def av1_metadata(ivf: Path) -> tuple[int, int, int]:
+    """(frames, frames with HDR10+, frames with a Dolby Vision RPU) of an AV1 IVF: the ITU-T T.35 metadata OBUs
+    SVT-AV1-HDR writes with each frame (--hdr10plus-json, --dolby-vision-rpu). MediaInfo reads neither HDR10+ in
+    AV1 nor an MKV's profile 10 compatibility, so the output check counts them in the encode."""
+    frames = hdr10plus = dovi = 0
+    with ivf.open("rb") as f:
+        head = f.read(32)
+        if head[:4] != b"DKIF":
+            raise ValueError(f"{ivf.name} isn't an IVF")
+        f.seek(int.from_bytes(head[6:8], "little"))
+        while len(frame := f.read(12)) == 12:
+            unit = f.read(int.from_bytes(frame[:4], "little"))
+            found = _t35(unit)
+            frames, hdr10plus, dovi = frames + 1, hdr10plus + (_T35_HDR10PLUS in found), dovi + (_T35_DOVI in found)
+    return frames, hdr10plus, dovi
+
+
+def output_issues(
+    video: VideoInfo | None, settings: EncoderSettings, output: SourceInfo, encode: Path | None = None
+) -> list[Issue]:
+    """A BLOCK when the output was meant to carry HDR10+ or Dolby Vision and MediaInfo finds none in it. An AV1
+    encode's (SVT-AV1-HDR) are counted in its IVF (encode, av1_metadata): HDR10+ and the RPU on every frame, and
+    MediaInfo's Dolby Vision profile 10 (its compatibility, where it reads one, 10.1 or 10.0)."""
     found = output.video.hdr if output.video is not None else None
     if found is None:
         return []
     out = []
-    if keeps_hdr10plus(video, settings) and not found.hdr10plus:
-        out.append(Issue(Severity.BLOCK, "hdr.hdr10plus_missing", "The output has no HDR10+ metadata"))
+    av1 = settings.encoder.svt
+    hdr10plus, dv = keeps_hdr10plus(video, settings), keeps_dv(video, settings)
+    counts = None
+    if av1 and (hdr10plus or dv) and encode is not None and encode.is_file():
+        try:
+            counts = av1_metadata(encode)
+        except (OSError, ValueError) as error:
+            return [Issue(Severity.BLOCK, "hdr.av1_unread", f"The encode's HDR metadata couldn't be read: {error}")]
+    if hdr10plus and (counts[1] < counts[0] if counts else not found.hdr10plus):
+        what = f" on {counts[1]} of its {counts[0]} frames" if counts and counts[1] else " metadata"
+        out.append(Issue(Severity.BLOCK, "hdr.hdr10plus_missing", f"The output has no HDR10+{what}"))
     want = dv_profile(video)
-    if keeps_dv(video, settings) and (found.dv_profile, found.dv_compat) != _DV_FOUND[want]:
+    if not dv:
+        return out
+    if av1:
+        profile, compat = _DV_FOUND_AV1[want]
+        carried = found.dv_profile == profile and found.dv_compat in (compat, None)
+        if carried and counts and counts[2] < counts[0]:
+            out.append(
+                Issue(
+                    Severity.BLOCK,
+                    "hdr.dv_missing",
+                    f"The output's Dolby Vision RPU is on {counts[2]} of its {counts[0]} frames",
+                )
+            )
+        want = f"{profile}.{compat} ({want})"
+    else:
+        carried = (found.dv_profile, found.dv_compat) == _DV_FOUND[want]
+    if not carried:
         what = f"Dolby Vision {found.dv_name}" if found.dv_profile else "no Dolby Vision"
         out.append(Issue(Severity.BLOCK, "hdr.dv_missing", f"The output has {what}, not {want}"))
     return out

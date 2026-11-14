@@ -39,7 +39,7 @@ from videoforge.core.models import Plan, PlannedAudio, SubFormat, SubTrack, Vide
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.tools import locate
 from videoforge.core.video import burn as burn_in, hdr, info, remux, target, vfr
-from videoforge.core.video.color import effective_container_color
+from videoforge.core.video.color import ContainerColor, effective_container_color
 from videoforge.core.video.encoders import (
     TOOLS,
     analysis_file,
@@ -674,13 +674,26 @@ def build_steps(
 
     # A VP8 / VP9 / AV1 encode's stream has no pixel aspect, and VP8 / VP9's little colour: the mux tags the track
     # with them. An AV1 stream's colour and HDR10 are tagged too, which mkvmerge doesn't copy from it.
-    sar, tags = None, None
-    if spec.encodes_video and spec.encoder.encoder.ivf and video is not None:
+    # An AV1 encode's Dolby Vision (profile 5's colour is forced: color.SVT_DV5_ARGS) is named to MP4Box, which
+    # doesn't find it in the stream; a baked FEL's HDR10 is the RPU's (hdr.fel_color, as the encode's), read when
+    # the mux's turn comes.
+    sar, dvp, carried = None, None, None
+    ivf = spec.encodes_video and spec.encoder.encoder.ivf and video is not None
+    if ivf and video is not None:
         sar = spec.video.output_sar(video.width, video.height, video.sar)
-        carried = hdr.dv_profile(video) if hdr.keeps_dv(video, spec.encoder) else None  # profile 5's colour
-        tags = effective_container_color(video.color, spec.encoder, carried)
+        carried = hdr.dv_profile(video) if hdr.keeps_dv(video, spec.encoder) else None
+        dvp = {"8.1": "10.1", "5": "10.0"}.get(carried or "") if spec.encoder.encoder.svt else None
+    baked_rpu = work / hdr.DV_SOURCE_RPU if baked_el(spec, video) is not None else None
 
-    def mux_step(fps: Fraction | None, stamps: Path | None) -> Step:
+    def tags(final: bool) -> ContainerColor | None:
+        if not ivf or video is None:
+            return None
+        color = video.color
+        if final and color is not None and baked_rpu is not None and baked_rpu.is_file():
+            color = hdr.fel_color(color, hdr.rpu_summary(app.tools.dovi_tool, baked_rpu))
+        return effective_container_color(color, spec.encoder, carried)
+
+    def mux_step(fps: Fraction | None, stamps: Path | None, final: bool = False) -> Step:
         try:
             argv = tuple(
                 muxer.command(
@@ -692,9 +705,10 @@ def build_steps(
                     fps,
                     stamps,
                     sar=sar,
-                    color=tags,
+                    color=tags(final),
                     pgs_zlib=spec.mux.pgs_zlib,
                     title=title,
+                    dvp=dvp,
                 )
             )
         except MuxError:
@@ -710,7 +724,7 @@ def build_steps(
             inputs=(*mux_inputs, *((stamps,) if stamps else ())),
             finalize=lambda: publish(unfinished, output) if publish else unfinished.replace(output),
             weight=3,
-            refresh=(lambda: mux_step(*timing())) if spec.encodes_video else None,
+            refresh=(lambda: mux_step(*timing(), final=True)) if spec.encodes_video else None,
         )
 
     steps.append(mux_step(None, timestamps))

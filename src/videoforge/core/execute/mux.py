@@ -343,10 +343,12 @@ def mp4box_command(
     *,
     sar: Fraction | None = None,
     color: ContainerColor | None = None,
+    dvp: str | None = None,
 ) -> list[str]:
     """MP4Box argv for a plan (the same inputs, timing, fps, sar and color as mux_command). chapters_path must
     be OGM text; source SRTs are extracted/aligned by build.mp4_subtitle_steps before import so the final
-    cue keeps its duration. extra goes just before -new."""
+    cue keeps its duration. extra goes just before -new. dvp is an AV1 encode's Dolby Vision profile ("10.1"):
+    MP4Box writes its dvvC from the stream's RPU only when it's told the profile (an HEVC one's it finds)."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
     video = plan.source.video
@@ -366,6 +368,8 @@ def mp4box_command(
         )
     if sar is not None and sar != 1:
         opts = f":par={sar.numerator}:{sar.denominator}" + opts
+    if dvp:
+        opts = f":dvp={dvp}" + opts
     if plan.encode_path.suffix.lower() in raw_extensions:
         argv += ["-add", f"{plan.encode_path}:fps={_raw_rate(video, fps)}{opts}"]
     else:
@@ -434,11 +438,13 @@ class Muxer(Protocol):
         color: ContainerColor | None = None,
         pgs_zlib: bool = False,
         title: str = "",
+        dvp: str | None = None,
     ) -> list[str]:
         """fps: a raw encode's frame rate (the script's); None for the source's. timestamps: a VFR source's,
         which time the encode instead (an MKV's; MP4Box takes none). sar and color: the pixel aspect and colour
         an encode's stream doesn't hold (VP8 / VP9) or the muxer doesn't copy (AV1), for the container to tag.
-        title: the file's title (MKV's segment title; MP4Box writes none)."""
+        title: the file's title (MKV's segment title; MP4Box writes none). dvp: an AV1 encode's Dolby Vision profile
+        ("10.1", "10.0"), which MP4Box doesn't find in the stream (mkvmerge does)."""
         ...
 
     def issues(self, plan: Plan) -> list[Issue]:
@@ -471,6 +477,7 @@ class MkvMerge:
         color: ContainerColor | None = None,
         pgs_zlib: bool = False,
         title: str = "",
+        dvp: str | None = None,
     ) -> list[str]:
         return mux_command(
             plan,
@@ -517,6 +524,7 @@ class Mp4Box:
         color: ContainerColor | None = None,
         pgs_zlib: bool = False,
         title: str = "",
+        dvp: str | None = None,
     ) -> list[str]:
         return mp4box_command(
             plan,
@@ -528,6 +536,7 @@ class Mp4Box:
             fps,
             sar=sar,
             color=color,
+            dvp=dvp,
         )
 
     def issues(self, plan: Plan) -> list[Issue]:
