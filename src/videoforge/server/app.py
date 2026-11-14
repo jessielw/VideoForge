@@ -104,6 +104,7 @@ def create_app(
     job_queue.sample_quality = saved.sample_quality
     job_queue.auto_index = saved.auto_index
     job_queue.auto_crop = saved.auto_crop
+    job_queue.name_policies = dict(saved.naming)
     notifier = Notifier(services.send_notification, list(saved.notifications))
     bus.subscribe(notifier.on_event, JobFinished, QueueFinished, name="notifications")
     actions = ActionRunner(

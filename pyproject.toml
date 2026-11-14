@@ -13,6 +13,7 @@ dependencies = [
     "apprise>=2.2.0",
     "autoqpf>=0.2.5",
     "fastapi>=0.162.5",
+    "guessit>=4.5.1",
     "niquests>=3.21.3",
     "numpy>=2.5.4",
     "pillow>=13.0.0",

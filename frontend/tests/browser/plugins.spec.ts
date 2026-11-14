@@ -79,6 +79,7 @@ async function fixture(
     sample_quality: false,
     auto_index: true,
     auto_crop: true,
+    naming: {},
     parallel_audio: 2,
     parallel_audio_default: 2,
     delete_work_dir: false,

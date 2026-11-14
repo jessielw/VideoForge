@@ -18,7 +18,7 @@ from videoforge.core.config import AppConfig
 from videoforge.core.execute import process
 from videoforge.core.execute.process import Cancelled, CancelToken, LogFn, ToolError
 from videoforge.core.job import JobResult, JobSpec, JobState, JobStatus, OutputPolicy, StepRecord, StepRun, StepStatus
-from videoforge.core.models import JobInputs, Plan, Severity, SourceInfo
+from videoforge.core.models import Issue, JobInputs, Plan, Severity, SourceInfo
 from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.pipeline.share import Sharing
 from videoforge.core.pipeline.steps import Held, ProgressFn, Runner, run_steps
@@ -36,6 +36,16 @@ PASS1 = "video.pass1"  # the step JobState.pause_after_pass1 stops after (a 2-pa
 
 class _InvalidOutput(Exception):
     pass
+
+
+def invalid_error(issues: list[Issue], rejected: Path | None, output: Path) -> str:
+    """An invalid run's error: how many checks failed and where the file is, not the checks again (they're its
+    issues). A rejected candidate is kept under an unpublished name; a reused output stays where it is."""
+    n = sum(1 for i in issues if i.severity is Severity.BLOCK)
+    failed = f"Failed {n} output check{'s' if n != 1 else ''}."
+    if rejected is None:
+        return failed
+    return f"{failed} The file is kept as {rejected.name}, not published as {output.name}."
 
 
 def _identity(path: Path) -> tuple[int, int, int] | None:
@@ -220,7 +230,10 @@ def _run(
             validate_output(output)
         return result(JobStatus.DONE, output=output, issues=issues)
     except _InvalidOutput:
-        return result(JobStatus.INVALID, output=rejected or output, issues=issues, error=validate.error)
+        # The issues say why (and the Validate step's error lists them); the error says what became of the file.
+        return result(
+            JobStatus.INVALID, output=rejected or output, issues=issues, error=invalid_error(issues, rejected, output)
+        )
     except Held:
         state.pause_after_pass1 = False  # the next run goes on with pass 2
         return result(JobStatus.PAUSED)

@@ -21,6 +21,7 @@ import re
 from typing import TYPE_CHECKING, Any
 import uuid
 
+from videoforge.core import naming
 from videoforge.core.config import AppConfig, Tools
 from videoforge.core.execute.mux import MUXERS, MuxSettings, mux_issues
 from videoforge.core.jobs import ProbedInputs, plan_job, probe_inputs
@@ -286,6 +287,7 @@ def plan_spec(spec: JobSpec, probed: ProbedInputs, rule_set: RuleSet, tools: Too
     if tools is not None:
         plan.issues += tool_issues(plan, tools, spec.container(rule_set))
     plan.issues += mux_issues(plan, spec.container(rule_set))
+    plan.issues += naming.issues(spec)
     if spec.encodes_video:
         plan.issues += encoders.issues(spec.encoder, probed.source.video, spec.makes_chapters)
         plan.issues += options.option_issues(spec.encoder, tools)

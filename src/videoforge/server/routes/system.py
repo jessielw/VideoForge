@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 from videoforge import version
+from videoforge.core import naming
 from videoforge.core.execute.mux import MUXERS
 from videoforge.core.plan_io import to_json
 from videoforge.core.template import Template
@@ -164,6 +165,7 @@ def shutdown(request: Request, tasks: BackgroundTasks) -> dict[str, Any]:
 @router.get("/rule-sets")
 def rule_sets(request: Request) -> list[dict[str, Any]]:
     out = []
+    policies = request.app.state.saved.naming
     for pid in request.app.state.rule_set_ids:
         p = request.app.state.queue.rule_sets(pid)
         video, encoder = p.video_defaults()
@@ -186,9 +188,21 @@ def rule_sets(request: Request) -> list[dict[str, Any]]:
                     "template": to_json(Template.defaults(p)),
                 },
                 "default": pid == request.app.state.default_rule_set,
+                # Settings' word on the name template's switches for its jobs (naming.NamePolicy)
+                "naming": to_json(policies.get(pid, naming.NamePolicy())),
             }
         )
     return out
+
+
+@router.get("/name-tokens")
+def name_tokens() -> dict[str, Any]:
+    """The output name template's tokens and filters (core.naming), and the template used when none is typed."""
+    return {
+        "default_template": naming.DEFAULT_TEMPLATE,
+        "tokens": [{"name": t.name, "description": t.description} for t in naming.TOKENS],
+        "filters": list(naming.FILTERS),
+    }
 
 
 @router.get("/filter-presets")

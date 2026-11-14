@@ -28,7 +28,15 @@ async function fixture(page: Page) {
       hdr10plus: false,
       dolby_vision: false,
     },
-    mux: { container: 'mkv', extra: '', pgs_zlib: false },
+    mux: {
+      container: 'mkv',
+      extra: '',
+      pgs_zlib: false,
+      name_template: '',
+      template_file_name: false,
+      template_title: false,
+      name_suffix: '',
+    },
     qpf: true,
     crop_mode: 'keep',
     audio: null,
@@ -69,6 +77,7 @@ async function fixture(page: Page) {
     sample_quality: false,
     auto_index: true,
     auto_crop: true,
+    naming: {},
     parallel_audio: 2,
     parallel_audio_default: 2,
     delete_work_dir: false,
@@ -136,6 +145,7 @@ const HOME: [string, string][] = [
   ['Jobs', 'Rule set'],
   ['Jobs', 'Default subtitles'],
   ['Jobs', 'Test encode'],
+  ['Jobs', 'Output names'],
   ['Queue & indexing', 'Batch indexing'],
   ['Queue & indexing', 'Audio encodes'],
   ['Queue & indexing', 'Process priority'],
@@ -198,6 +208,23 @@ for (const [saved, opens] of [
   })
 }
 
+test('Output names: a rule set can name its jobs from the template always, never, or as each template says', async ({
+  page,
+}) => {
+  const errors = await fixture(page)
+  const sent: unknown[] = []
+  page.on('request', (r) => {
+    if (r.method() === 'PUT' && new URL(r.url()).pathname === '/api/config') sent.push(r.postDataJSON())
+  })
+  await page.goto('/#/settings')
+  const fileName = page.getByRole('combobox', { name: 'Manual: File name from the name template' })
+  await expect(fileName).toHaveValue('template')
+  await expect(fileName.locator('option[value="template"]')).toHaveText('As each template says (its defaults: off)')
+  await fileName.selectOption('off')
+  await expect.poll(() => sent).toEqual([{ naming: { manual: { file_name: 'off', title: 'template' } } }])
+  expect(errors).toEqual([])
+})
+
 test('Settings fits a 320 px wide window without scrolling sideways', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 })
   const errors = await fixture(page)
@@ -216,7 +243,10 @@ test('Settings fits a 320 px wide window without scrolling sideways', async ({ p
 })
 
 const ABOUT: [string, string][] = [
-  ['Jobs', 'The rule set and subtitle rules new jobs start with, and whether test encodes measure their quality.'],
+  [
+    'Jobs',
+    'The rule set, output names and subtitle rules new jobs start with, and whether test encodes measure their quality.',
+  ],
   [
     'Queue & indexing',
     'When jobs are indexed, how many audio encodes run beside the video, and how encodes share the CPU with other programs.',

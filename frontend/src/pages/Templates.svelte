@@ -23,6 +23,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import EncoderPanel from '../components/EncoderPanel.svelte'
+  import NameSettings from '../components/NameSettings.svelte'
   import FilterChain from '../components/FilterChain.svelte'
   import ResizeEditor from '../components/ResizeEditor.svelte'
   import TemplateAudioEditor from '../components/TemplateAudioEditor.svelte'
@@ -592,6 +593,14 @@
                   aria-label="Extra muxer arguments"
                   placeholder="added to the muxer command as typed"
                   bind:value={draft.mux.extra}
+                />
+                <NameSettings
+                  mux={draft.mux}
+                  mkv={container?.id === 'mkv'}
+                  disabled={readOnly}
+                  policy={app.ruleSets.find((r) => r.id === ruleSet)?.naming}
+                  ruleSetName={app.ruleSets.find((r) => r.id === ruleSet)?.name}
+                  onchange={(mux) => (draft!.mux = mux)}
                 />
                 <span class="hidden @min-[26rem]/output:block"></span>
                 <label class="flex items-center gap-2">
