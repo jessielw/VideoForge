@@ -2,9 +2,9 @@
   // The queue: jobs on the left (click, Ctrl/Shift-click, drag across rows, Shift+arrows or Ctrl+A to
   // select several), the selected job's editor on the right, or a batch panel when several are selected.
   import EncoderPanel from '../components/EncoderPanel.svelte'
+  import PathSlot from '../components/PathSlot.svelte'
   import { tick, onDestroy } from 'svelte'
   import { Input } from '$lib/components/ui/input'
-  import { Textarea } from '$lib/components/ui/textarea'
   import { matchingJobs, queuePage, queueRange, queueable, QUEUE_PAGE_SIZE } from '../lib/queueView'
   import { saves } from '../lib/saves'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
@@ -370,13 +370,10 @@
 
   // Jobs added again from job files, exactly as they were (a job file, a job's folder or a <source>_tmp folder).
   let importOpen = $state(false)
-  let importText = $state('')
+  let importPaths = $state<string[]>([])
   let importing = $state(false)
   async function importJobs() {
-    const paths = importText
-      .split('\n')
-      .map((p) => p.trim().replace(/^"(.*)"$/, '$1'))
-      .filter(Boolean)
+    const paths = importPaths
     if (!paths.length) return
     importing = true
     await act(async () => {
@@ -387,7 +384,7 @@
       for (const s of skipped) toast.warning(`Not added: ${s.path}`, { description: s.reason })
       if (added.length && !skipped.length) {
         importOpen = false
-        importText = ''
+        importPaths = []
       }
     })
     importing = false
@@ -1215,14 +1212,19 @@
     <Dialog.Header>
       <Dialog.Title>Add jobs from job files</Dialog.Title>
       <Dialog.Description>
-        One path per line: a <code>videoforge-job.json</code>, a job's folder, or a source's <code>_tmp</code> folder (every
-        job in it). Each job comes back exactly as it was saved, and its run reuses the files it finished.
+        A <code>videoforge-job.json</code>, a job's folder, or a source's <code>_tmp</code> folder (every job in it). Each
+        job comes back exactly as it was saved, and its run reuses the files it finished.
       </Dialog.Description>
     </Dialog.Header>
-    <Textarea bind:value={importText} rows={5} placeholder="D:\Videos\Show.S01E01.mkv_tmp" class="font-mono text-sm" />
+    <PathSlot
+      label="Job files"
+      hint="Browse, or paste paths (Explorer: Ctrl+Shift+C)"
+      extensions={['.json']}
+      bind:paths={importPaths}
+    />
     <Dialog.Footer>
       <Button variant="outline" onclick={() => (importOpen = false)}>Close</Button>
-      <Button disabled={importing || !importText.trim()} onclick={importJobs}>Add jobs</Button>
+      <Button disabled={importing || !importPaths.length} onclick={importJobs}>Add jobs</Button>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

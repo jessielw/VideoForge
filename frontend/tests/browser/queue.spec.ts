@@ -122,6 +122,21 @@ async function queueFixture(
     else if (path === '/api/queue/start') json = {}
     else if (path === '/api/queue/enqueue') json = { enqueued: request.postDataJSON().ids }
     else if (['/api/rule-sets', '/api/config/encoders', '/api/filter-presets'].includes(path)) json = []
+    else if (path === '/api/settings') json = { output_dir: '', last_dir: '' }
+    else if (path === '/api/fs/roots') json = ['D:\\']
+    else if (path === '/api/fs/list')
+      json = {
+        path: 'D:\\Show',
+        parent: 'D:\\',
+        dirs: [{ name: '1.mkv_tmp', path: 'D:\\Show\\1.mkv_tmp' }],
+        files: [{ name: 'videoforge-job.json', path: 'D:\\Show\\videoforge-job.json', size: 900 }],
+      }
+    else if (path === '/api/fs/kinds')
+      json = (request.postDataJSON().paths as string[]).map((p) => ({
+        path: p,
+        kind: p.endsWith('_tmp') ? 'folder' : 'file',
+      }))
+    else if (path === '/api/jobs/import') json = { added: [], skipped: [] }
     else throw new Error(`Unhandled queue fixture request: ${request.method()} ${path}`)
     await route.fulfill({ json })
   })
@@ -207,6 +222,34 @@ test('deep links reveal jobs beyond page one; shrinking a live result clamps its
   await expect(page.getByText('Showing 1–100 of 100', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Next queue page', exact: true })).toBeDisabled()
   expect(fixture.errors).toEqual([])
+})
+
+test('job files to add are pasted or browsed for on the server, and checked as they go in', async ({ page }) => {
+  const { calls, errors } = await queueFixture(page, 3)
+  await page.getByRole('button', { name: 'Add jobs from job files', exact: true }).click()
+  const add = page.getByRole('button', { name: 'Add jobs', exact: true })
+  await expect(add).toBeDisabled()
+  const slot = page.getByRole('dialog', { name: 'Add jobs from job files' }).getByRole('group', { name: 'Job files' })
+  await slot.evaluate((el) => {
+    const data = new DataTransfer()
+    data.setData('text/plain', ['"D:\\Show\\1.mkv_tmp"', 'D:\\Show\\notes.txt'].join(String.fromCharCode(13, 10)))
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+  })
+  await expect(page.getByText('notes.txt: not .json')).toBeVisible() // checked on the way in
+  const list = page.getByRole('dialog', { name: 'Add jobs from job files' }).getByRole('list', { name: 'Job files' })
+  await expect(list.getByRole('listitem')).toHaveText(['1.mkv_tmp\\'])
+  await page.getByRole('button', { name: 'Browse…', exact: true }).click()
+  const browser = page.getByRole('dialog', { name: 'Job files', exact: true })
+  await browser.getByRole('checkbox', { name: 'Pick 1.mkv_tmp' }).click() // already listed: not added twice
+  await browser.getByText('videoforge-job.json').click()
+  await browser.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(browser).toBeHidden()
+  await expect(list.getByRole('listitem')).toHaveText(['1.mkv_tmp\\', 'videoforge-job.json'])
+  await add.click()
+  await expect
+    .poll(() => calls.find((call) => call.path === '/api/jobs/import')?.body.paths)
+    .toEqual(['D:\\Show\\1.mkv_tmp', 'D:\\Show\\videoforge-job.json'])
+  expect(errors).toEqual([])
 })
 
 test('the tab title follows the running job', async ({ page }) => {

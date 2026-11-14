@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Queue → **Add jobs from job files** takes paths the way New jobs does: **Browse…** for job files and job or `_tmp` folders on the server's disk, or paste them (Explorer: Ctrl+Shift+C). Each path is checked as it goes in. The text box is gone.
 - Settings has ten tabs in three groups instead of seven tabs: **Jobs**, **Queue & indexing**, **Presets** and **Files & folders**; **Tools**, **Plugins** and **Automation**; **Appearance**, **Profiles** and **Import & export**. Each starts with one sentence saying what it's for. Encoding's settings are now under Jobs, Queue & indexing and Files & folders. General's are under Appearance and Profiles, and Backup & reset's under Import & export, with Reset under Profiles. The folder browser is under Files & folders. The version and **Shut down** sit below the list. If Settings was last left on General, Encoding or Backup & reset, it opens on Jobs.
 - Light mode: the active menu item, the selected template, switched-on track flags and the preview toggles use dark text on their tint. Inactive tabs use the muted grey. Text now meets the WCAG 4.5:1 contrast minimum in all seven palettes.
 - Suggestion lists (Original language, Target size, encoder option names) open when you click, type or press Down. They no longer open when the field gets focus, so Tab moves straight past them. In a number field such as Target size, Alt+Down opens the list.
