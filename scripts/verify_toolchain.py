@@ -3,7 +3,7 @@
     uv run python scripts/verify_toolchain.py [--tools DIR] [--plugins DIR] [--smoke]
 
 --smoke checks plugin/script imports, indexing and a preview frame, vspipe output,
-H.264/HEVC/AV1 encodes, audio encoding, and MKV/MP4 muxing using tiny generated fixtures.
+H.264/HEVC/AV1 encodes (with HDR10+ and Dolby Vision in x265 and SVT-AV1-HDR), audio encoding, and MKV/MP4 muxing using tiny generated fixtures.
 DEE and Apple's runtime are intentionally user supplied and are not required.
 """
 
@@ -182,6 +182,8 @@ def smoke(paths: dict[str, Path], plugins: Path, env: dict[str, str]) -> None:
                 {
                     "JSONInfo": {"HDR10plusProfile": "B", "Version": "1.0"},
                     "SceneInfo": frames,
+                    # SVT-AV1-HDR's parser (hdr10plus_rs) needs it; x265 doesn't read it
+                    "ToolInfo": {"Tool": "VideoForge", "Version": "1.0"},
                     "SceneInfoSummary": {"SceneFirstFrameIndex": [0], "SceneFrameNumbers": [4]},
                 }
             ),
@@ -231,9 +233,56 @@ def smoke(paths: dict[str, Path], plugins: Path, env: dict[str, str]) -> None:
         if "Frames: 4" not in run([paths["dovi_tool"], "info", "-i", rpu_out, "-s"], env):
             raise ValueError("x265 did not write Dolby Vision RPUs (--dolby-vision-rpu)")
         run([paths["svtav1"], "--preset", "13", "--lp", "1", "-i", y4m, "-b", av1], env)
-        for path in (h264, hevc, av1):
+        # SVT-AV1-HDR: the same HDR10+ and RPU into a 10-bit AV1, counted on its frames (MediaInfo and the tools
+        # can't read HDR10+ in AV1), then muxed with the Dolby Vision configuration (profile 10.1) each container
+        # needs: mkvmerge finds it in the stream, MP4Box is told
+        y4m10, dv_av1 = work / "source10.y4m", work / "dv.ivf"
+        run([ffmpeg, "-v", "error", "-i", y4m, "-pix_fmt", "yuv420p10le", "-strict", "-1", y4m10], env)
+        run(
+            [
+                paths["svtav1hdr"],
+                "--preset",
+                "13",
+                "--lp",
+                "1",
+                "--color-primaries",
+                "9",
+                "--transfer-characteristics",
+                "16",
+                "--matrix-coefficients",
+                "9",
+                "--color-range",
+                "0",
+                "--mastering-display",
+                "G(0.265,0.69)B(0.15,0.06)R(0.68,0.32)WP(0.3127,0.329)L(1000,0.0001)",
+                "--content-light",
+                "1000,400",
+                "--hdr10plus-json",
+                hdr10plus,
+                "--dolby-vision-rpu",
+                rpu,
+                "-i",
+                y4m10,
+                "-b",
+                dv_av1,
+            ],
+            env,
+        )
+        from videoforge.core.video.hdr import av1_metadata
+
+        if (counted := av1_metadata(dv_av1)) != (4, 4, 4):
+            raise ValueError(f"SVT-AV1-HDR's frames, HDR10+ and Dolby Vision RPUs: {counted}, not (4, 4, 4)")
+        dv_mkv, dv_mp4 = work / "dv.mkv", work / "dv.mp4"
+        run([paths["mkvmerge"], "-o", dv_mkv, dv_av1], env)
+        run([paths["mp4box"], "-add", f"{dv_av1}:dvp=10.1", "-new", dv_mp4], env)
+        for output in (dv_mkv, dv_mp4):
+            probe = json.loads(run([paths["ffprobe"], "-v", "error", "-show_streams", "-of", "json", output], env))
+            found = [d for s in probe["streams"] for d in s.get("side_data_list", []) if "dv_profile" in d]
+            if [(d["dv_profile"], d["dv_bl_signal_compatibility_id"]) for d in found] != [(10, 1)]:
+                raise ValueError(f"{output.name}: no Dolby Vision 10.1 configuration ({found})")
+        for path in (h264, hevc, av1, dv_av1):
             run([ffmpeg, "-v", "error", "-i", path, "-f", "null", "-"], env)
-        print("OK vspipe and H.264 / HEVC / AV1 encoding and decoding", flush=True)
+        print("OK vspipe and H.264 / HEVC / AV1 / AV1 with HDR10+ and Dolby Vision encoding and decoding", flush=True)
 
         wav = work / "audio.wav"
         run(
