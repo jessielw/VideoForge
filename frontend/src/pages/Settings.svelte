@@ -2,7 +2,7 @@
   // Settings, in ten tabs: Jobs, Queue & indexing, Presets, Files & folders | Tools, Plugins, Automation |
   // Appearance, Profiles, Import & export. Each change saves at once and is used by new jobs and runs;
   // Reset (under Profiles) goes back to the server's configuration defaults.
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import AppearanceSettings from '../components/AppearanceSettings.svelte'
   import FileBrowser from '../components/FileBrowser.svelte'
   import ConfigurationTransfer from '../components/ConfigurationTransfer.svelte'
@@ -33,6 +33,7 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import { api } from '../lib/api'
   import { configDraft } from '../lib/configDraft'
+  import { SETTINGS_TAB_KEY, takeSettingsSection } from '../lib/settingsLink'
   import { saves } from '../lib/saves'
   import { PRIORITY_LABEL } from '../lib/format'
   import { app } from '../lib/state.svelte'
@@ -42,6 +43,8 @@
     ActionKind,
     ActionSetting,
     ConfigState,
+    NamePolicy,
+    NameUse,
     NotificationDestination,
     NotificationEvent,
     Priority,
@@ -87,10 +90,27 @@
       error = e instanceof Error ? e.message : String(e)
       return
     }
+    const section = takeSettingsSection() // a link elsewhere asked for it: shown and focused
+    if (section) {
+      await tick()
+      const target = document.getElementById(section)
+      target?.scrollIntoView({ block: 'start' })
+      target?.focus({ preventScroll: true })
+    }
     draft.events = defaultEvents()
     checkAll()
     void app.loadProfiles()
   })
+
+  // One rule set's naming policy; "as templates say" for both is stored as nothing. The rule sets carry the
+  // policies too (the Templates page's note), so they're read again.
+  async function setNaming(ruleSet: string, policy: NamePolicy) {
+    if (!config) return
+    const naming = { ...config.naming }
+    if (policy.file_name === 'template' && policy.title === 'template') delete naming[ruleSet]
+    else naming[ruleSet] = policy
+    if (await change({ naming })) app.ruleSets = await api.ruleSets().catch(() => app.ruleSets)
+  }
 
   async function change(changes: Parameters<typeof api.saveConfig>[0]): Promise<boolean> {
     if (!config) return false
@@ -319,7 +339,8 @@
       {
         id: 'jobs',
         label: 'Jobs',
-        about: 'The rule set and subtitle rules new jobs start with, and whether test encodes measure their quality.',
+        about:
+          'The rule set, output names and subtitle rules new jobs start with, and whether test encodes measure their quality.',
       },
       {
         id: 'queue',
@@ -373,7 +394,7 @@
   ] as const
   const TABS = GROUPS.flat()
   type TabId = (typeof TABS)[number]['id']
-  const TAB_KEY = 'videoforge.settingsTab'
+  const TAB_KEY = SETTINGS_TAB_KEY
   function readTab(): TabId {
     try {
       const saved = localStorage.getItem(TAB_KEY)
@@ -520,6 +541,42 @@
                   </span>
                 </span>
               </label>
+            </section>
+
+            <section class="col-span-full min-w-0 space-y-3" aria-labelledby="output-names">
+              <h2 id="output-names" tabindex="-1" class="font-medium outline-none">Output names</h2>
+              <p class="text-xs text-muted-foreground">
+                Whether a job is named from its template's name template, per rule set. Jobs take this when they're
+                added or a template is applied to them; a job's own Output tab can still change it.
+              </p>
+              <div class="space-y-3">
+                {#each config.rule_sets as r (r.id)}
+                  {@const policy = config.naming[r.id] ?? { file_name: 'template', title: 'template' }}
+                  {@const own = app.ruleSets.find((x) => x.id === r.id)?.defaults.template.mux}
+                  <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                    <span class="w-full font-medium sm:w-32 sm:shrink-0">{r.name}</span>
+                    {#each [{ key: 'file_name', label: 'File name', own: own?.template_file_name }, { key: 'title', label: 'MKV title', own: own?.template_title }] as const as row (row.key)}
+                      <label class="flex min-w-0 items-center gap-2">
+                        <span class="text-muted-foreground">{row.label}</span>
+                        <NativeSelect
+                          class="min-w-0"
+                          aria-label="{r.name}: {row.label} from the name template"
+                          value={policy[row.key]}
+                          onchange={(e) => setNaming(r.id, { ...policy, [row.key]: e.currentTarget.value as NameUse })}
+                        >
+                          <option value="template"
+                            >As each template says{row.own === undefined
+                              ? ''
+                              : ` (its defaults: ${row.own ? 'on' : 'off'})`}</option
+                          >
+                          <option value="on">Always on</option>
+                          <option value="off">Always off</option>
+                        </NativeSelect>
+                      </label>
+                    {/each}
+                  </div>
+                {/each}
+              </div>
             </section>
 
             <section class="col-span-full min-w-0 space-y-3" aria-label="Default subtitles">

@@ -146,6 +146,7 @@ def mux_command(
     sar: Fraction | None = None,
     color: ContainerColor | None = None,
     pgs_zlib: bool = False,
+    title: str = "",
 ) -> list[str]:
     """mkvmerge argv for a plan. encoded_audio maps plan.audio positions to their encoded files;
     extra (the user's arguments) goes before the first input. fps is a raw encode's frame rate (the script's,
@@ -153,7 +154,8 @@ def mux_command(
     core/video/vfr.py) time the encode instead. sar and color tag an encode whose stream doesn't hold them (VP8 /
     VP9), or whose stream mkvmerge doesn't read them from (AV1): its pixel aspect, its colour as H.273 code points,
     and an AV1 encode's HDR10 mastering display and light levels. pgs_zlib enables lossless zlib compression
-    for PGS subtitles; otherwise their compression is explicitly disabled."""
+    for PGS subtitles; otherwise their compression is explicitly disabled. title is the segment title (none when
+    empty)."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
     video = plan.source.video
@@ -161,7 +163,7 @@ def mux_command(
     external_chapters = plan.chapters_path is not None
 
     # An empty --title stops mkvmerge taking an input's; the user's own --title (in extra) still wins.
-    argv: list[str] = [mkvmerge, "--output", str(output), "--title", "", *(extra or [])]
+    argv: list[str] = [mkvmerge, "--output", str(output), "--title", title, *(extra or [])]
     order: list[str] = ["0:0"]
 
     # 0: the encode, video only.
@@ -396,11 +398,17 @@ def mp4box_command(
 
 @dataclass(slots=True)
 class MuxSettings:
-    """A job's muxer: container ("" = the rule set's), extra arguments and MKV PGS compression."""
+    """A job's muxer: container ("" = the rule set's), extra arguments and MKV PGS compression; and the output's
+    naming (core/naming.py): a name template, whether it names the file and the MKV title, and a suffix before
+    the extension."""
 
     container: str = ""
     extra: str = ""
     pgs_zlib: bool = False
+    name_template: str = ""  # "" = naming.DEFAULT_TEMPLATE
+    template_file_name: bool = False  # the file is named from name_template (a name typed for the job still wins)
+    template_title: bool = False  # an MKV's segment title is name_template's name (none otherwise)
+    name_suffix: str = ""  # goes before the extension, after the label: <name>.<label>.<suffix>.mkv
 
 
 class Muxer(Protocol):
@@ -425,10 +433,12 @@ class Muxer(Protocol):
         sar: Fraction | None = None,
         color: ContainerColor | None = None,
         pgs_zlib: bool = False,
+        title: str = "",
     ) -> list[str]:
         """fps: a raw encode's frame rate (the script's); None for the source's. timestamps: a VFR source's,
         which time the encode instead (an MKV's; MP4Box takes none). sar and color: the pixel aspect and colour
-        an encode's stream doesn't hold (VP8 / VP9) or the muxer doesn't copy (AV1), for the container to tag."""
+        an encode's stream doesn't hold (VP8 / VP9) or the muxer doesn't copy (AV1), for the container to tag.
+        title: the file's title (MKV's segment title; MP4Box writes none)."""
         ...
 
     def issues(self, plan: Plan) -> list[Issue]:
@@ -460,6 +470,7 @@ class MkvMerge:
         sar: Fraction | None = None,
         color: ContainerColor | None = None,
         pgs_zlib: bool = False,
+        title: str = "",
     ) -> list[str]:
         return mux_command(
             plan,
@@ -473,6 +484,7 @@ class MkvMerge:
             sar=sar,
             color=color,
             pgs_zlib=pgs_zlib,
+            title=title,
         )
 
     def issues(self, plan: Plan) -> list[Issue]:
@@ -504,6 +516,7 @@ class Mp4Box:
         sar: Fraction | None = None,
         color: ContainerColor | None = None,
         pgs_zlib: bool = False,
+        title: str = "",
     ) -> list[str]:
         return mp4box_command(
             plan,

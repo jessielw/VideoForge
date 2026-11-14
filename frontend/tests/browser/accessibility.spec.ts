@@ -77,7 +77,15 @@ async function fixture(page: Page, mode: 'light' | 'dark', palette = 'gold') {
     hdr10plus: false,
     dolby_vision: false,
   }
-  const mux = { container: 'mkv', extra: '', pgs_zlib: false }
+  const mux = {
+    container: 'mkv',
+    extra: '',
+    pgs_zlib: false,
+    name_template: '',
+    template_file_name: false,
+    template_title: false,
+    name_suffix: '',
+  }
   const template: Template = {
     video,
     encoder: { ...encoder, rate_control: '2pass', bitrate_kbps: 8000, target_mb: 5000 }, // shows Target size
@@ -189,6 +197,7 @@ async function fixture(page: Page, mode: 'light' | 'dark', palette = 'gold') {
       rule_set: 'manual',
     },
     output_name: null,
+    output_title: null,
     color_args: null,
     target: null,
     sample: null,
@@ -246,6 +255,7 @@ async function fixture(page: Page, mode: 'light' | 'dark', palette = 'gold') {
     sample_quality: false,
     auto_index: true,
     auto_crop: true,
+    naming: {},
     parallel_audio: 2,
     parallel_audio_default: 2,
     delete_work_dir: false,

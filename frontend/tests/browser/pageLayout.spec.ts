@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
-import type { ConfigState, RuleSet, Template } from '../../src/lib/types.ts'
+import type { ConfigState, NamePolicy, RuleSet, Template } from '../../src/lib/types.ts'
 
-async function layoutFixture(page: Page) {
+async function layoutFixture(page: Page, naming?: NamePolicy) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   const template: Template = {
@@ -28,7 +28,15 @@ async function layoutFixture(page: Page) {
       hdr10plus: false,
       dolby_vision: false,
     },
-    mux: { container: 'mkv', extra: '', pgs_zlib: false },
+    mux: {
+      container: 'mkv',
+      extra: '',
+      pgs_zlib: false,
+      name_template: '',
+      template_file_name: false,
+      template_title: false,
+      name_suffix: '',
+    },
     qpf: true,
     crop_mode: 'keep',
     audio: null,
@@ -47,6 +55,7 @@ async function layoutFixture(page: Page) {
     track_editor: true,
     track_properties: [],
     defaults: { video: template.video, encoder: template.encoder, template },
+    naming,
   }
   const config: ConfigState = {
     tools: [
@@ -72,6 +81,7 @@ async function layoutFixture(page: Page) {
     sample_quality: false,
     auto_index: true,
     auto_crop: true,
+    naming: {},
     parallel_audio: 2,
     parallel_audio_default: 2,
     delete_work_dir: false,
@@ -115,6 +125,14 @@ async function layoutFixture(page: Page) {
         encoder_starters: [],
       },
       '/api/filter-presets': [],
+      '/api/name-tokens': {
+        default_template: '{title} {release_year} {resolution}',
+        tokens: [
+          { name: 'title', description: 'Title' },
+          { name: 'video_codec', description: "The encode's codec" },
+        ],
+        filters: ['upper', 'lower', 'dots'],
+      },
       '/api/config/encoders': [],
       '/api/config/video-options/x264': { dashes: '--', options: [] },
       '/api/settings': { output_dir: 'D:\\Output', last_dir: '' },
@@ -154,6 +172,89 @@ test('Templates saves optional PGS compression and only shows it for MKV', async
   await expect(compression).toHaveCount(0)
   await page.getByRole('radio', { name: 'MKV (mkvmerge)', exact: true }).click()
   await expect(compression).toBeChecked()
+  expect(errors).toEqual([])
+})
+
+test('Templates saves a name template, what it names, and a name suffix', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  let saved: Template | null = null
+  await page.route('**/api/presets/template/*', async (route) => {
+    saved = route.request().postDataJSON() as Template
+    await route.fulfill({
+      json: {
+        video: [],
+        encoder: [],
+        audio: [],
+        template: [{ name: 'Film 1080p CEL', data: saved }],
+        template_defaults: {},
+        encoder_starters: [],
+      },
+    })
+  })
+  await page.goto('/#/templates')
+  const field = page.getByRole('textbox', { name: 'Name template' })
+  await expect(page.getByText('Not used until one of these is on.')).toBeVisible()
+  await field.focus()
+  await expect(field).toHaveAttribute('placeholder', '{title} {release_year} {resolution}')
+  // a token goes on the end of the default template when the field is empty
+  await page.getByRole('button', { name: 'Tokens' }).click()
+  await page.getByRole('button', { name: /\{video_codec\}/ }).click()
+  await expect(field).toHaveValue('{title} {release_year} {resolution} {video_codec}')
+  // ... and at the cursor in a typed one, left selected so it shows where it went
+  await field.fill('{title} {resolution}')
+  await field.press('Home')
+  for (let i = 0; i < '{title}'.length; i++) await field.press('ArrowRight')
+  await page.getByRole('button', { name: 'Tokens' }).click()
+  await page.getByRole('button', { name: /\{video_codec\}/ }).click()
+  await expect(field).toHaveValue('{title} {video_codec} {resolution}')
+  await expect(field).toBeFocused()
+  expect(await field.evaluate((el: HTMLTextAreaElement) => el.value.slice(el.selectionStart, el.selectionEnd))).toBe(
+    '{video_codec}',
+  )
+  await field.fill('{title} {release_year} {resolution} {video_codec}')
+  await field.blur()
+  await page.getByRole('checkbox', { name: 'Name the file with it' }).check()
+  await page.getByRole('checkbox', { name: 'Set the MKV title with it' }).check()
+  await page.getByRole('textbox', { name: 'Name suffix' }).fill('vf')
+  await page.getByRole('textbox', { name: 'Name suffix' }).blur()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect
+    .poll(() => saved?.mux)
+    .toMatchObject({
+      name_template: '{title} {release_year} {resolution} {video_codec}',
+      template_file_name: true,
+      template_title: true,
+      name_suffix: 'vf',
+    })
+  // the title is MKV's alone
+  await page.getByRole('radio', { name: 'MP4 (MP4Box)', exact: true }).click()
+  await expect(page.getByRole('checkbox', { name: 'Set the MKV title with it' })).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test("Templates says when Settings decides a rule set's naming instead of the template", async ({ page }) => {
+  const errors = await layoutFixture(page, { file_name: 'off', title: 'template' })
+  await page.goto('/#/templates')
+  const note = page.getByText(
+    'Settings decides this for all Manual jobs: the file name is always off, whatever this template says.',
+  )
+  await expect(note).toBeVisible()
+  await expect(page.getByText('Not used until one of these is on.')).toBeVisible()
+  await page.getByRole('checkbox', { name: 'Name the file with it' }).check() // the template keeps its own switch
+  await expect(page.getByText('Not used until one of these is on.')).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('the name template links to the Settings that turns it on or off for every job', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.addInitScript(() => localStorage.setItem('videoforge.settingsTab', 'tools')) // last left elsewhere
+  await page.goto('/#/templates')
+  await expect(page.getByText('Settings can turn these on or off for all Manual jobs at once.')).toBeVisible()
+  await page.getByRole('button', { name: 'Settings → Output names' }).click()
+  await expect(page).toHaveURL(/#\/settings$/)
+  const heading = page.getByRole('heading', { name: 'Output names', exact: true })
+  await expect(heading).toBeFocused()
+  await expect(heading).toBeInViewport()
   expect(errors).toEqual([])
 })
 

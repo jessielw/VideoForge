@@ -73,6 +73,7 @@ from videoforge.core.models import (
     VideoInfo,
     track_key,
 )
+from videoforge.core.naming import NamePolicy
 from videoforge.core.notify import Sender, send as notify_send
 from videoforge.core.pipeline import crfsearch
 from videoforge.core.pipeline.build import auto_crop, index_steps, job_output
@@ -307,6 +308,14 @@ class JobQueue:
         self.sample_quality = False  # a test encode measures its quality (SSIMULACRA2, XPSNR) after it
         self.auto_index = True  # a new job goes in the index lane once probed
         self.auto_crop = True  # ... and its crop is detected (after the index; a template's fixed crop stays)
+        # Settings' word on the name template's switches, by rule set id (NamePolicy): what a job takes with a
+        # template or its rule set's defaults; its own Output tab edits come after.
+        self.name_policies: dict[str, NamePolicy] = {}
+
+    def _name_by_policy(self, spec: JobSpec) -> None:
+        """The job's naming switches as Settings has them for its rule set, over its template's."""
+        if (policy := self.name_policies.get(spec.rule_set)) is not None:
+            spec.mux = policy.apply(spec.mux)
 
     # --- state ---------------------------------------------------------------------
 
@@ -446,6 +455,7 @@ class JobQueue:
                 )
                 if template is not None:
                     template.apply(spec)
+                self._name_by_policy(spec)
                 if (
                     crop_new
                     and not video
@@ -799,6 +809,7 @@ class JobQueue:
                 s.rule_set = rule_set
             if template is not None:
                 template.apply(s)
+                self._name_by_policy(s)
             if video is not None:
                 if video.crop != s.video.crop:
                     s.autocrop = False  # a crop set by hand wins over a pending detection

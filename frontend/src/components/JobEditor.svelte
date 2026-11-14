@@ -12,6 +12,7 @@
   import type { CommandStep, JobDetail } from '../lib/types'
   import EncoderPanel from './EncoderPanel.svelte'
   import OutputFolderMenu from './OutputFolderMenu.svelte'
+  import NameSettings from './NameSettings.svelte'
   import SampleCard from './SampleCard.svelte'
   import CrfSearchCard from './CrfSearchCard.svelte'
   import { videoView } from '../lib/videoView.svelte'
@@ -369,7 +370,7 @@
             <span class="text-muted-foreground">Output name</span>
             <Tip
               class="grid"
-              text="The output's file name, without its extension; empty = the rule set's name for it (the source's). The label and the container's extension go after it"
+              text="The output's file name, without its extension; empty = the name template's (when it names the file), else the rule set's (the source's). The label, the name suffix and the container's extension go after it"
             >
               <Input
                 aria-label="Output name"
@@ -414,6 +415,14 @@
                 >
               {/if}
             </div>
+            <NameSettings
+              mux={job.spec.mux}
+              mkv={container?.id === 'mkv'}
+              disabled={!editable}
+              title={job.output_title}
+              ruleSetName={app.ruleSets.find((r) => r.id === job?.rule_set)?.name}
+              onchange={(mux) => save({ mux })}
+            />
             <span class="text-muted-foreground">Container</span>
             {#if containers.length > 1}
               <ToggleGroup.Root
