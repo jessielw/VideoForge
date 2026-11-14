@@ -4,6 +4,8 @@ the rule set's own (x264 CRF 18 slow) in every preset picker. The user saves a c
 The colour and HDR10 flags come from the source either way (EncoderSettings.source_color, color.py): "SDR" and
 "HDR10" say what the preset is tuned for, not what it tags. Quality and speed follow StaxRip's defaults where it
 has them (x265 CRF 20, 10-bit; SVT-AV1 at the Encoder tab's preset 4), a step slower for archive-quality output.
+SVT-AV1-HDR's are its own README's: preset 4 and CRF 30 at tune 0 (VQ, detail retention), and its film grain tune
+(6) for grainy sources; HDR10+ and Dolby Vision on, as the x265 HDR starters.
 """
 
 from __future__ import annotations
@@ -59,5 +61,15 @@ def starters() -> list[Starter]:
             "svtav1-10bit",
             "SVT-AV1 10-bit, CRF 30",
             EncoderSettings(Encoder.SVTAV1, RateControl.CRF, crf=30.0, preset="4", depth=10),
+        ),
+        Starter(
+            "svtav1hdr-vq",
+            "SVT-AV1-HDR 10-bit, CRF 30, VQ",
+            EncoderSettings(Encoder.SVTAV1HDR, RateControl.CRF, crf=30.0, preset="4", tune="0", depth=10),
+        ),
+        Starter(
+            "svtav1hdr-grain",
+            "SVT-AV1-HDR film grain, CRF 30",
+            EncoderSettings(Encoder.SVTAV1HDR, RateControl.CRF, crf=30.0, preset="4", tune="6", depth=10),
         ),
     ]
