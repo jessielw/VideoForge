@@ -37,7 +37,7 @@ from videoforge.core.video import burn as burn_in, info, metrics, target
 from videoforge.core.video.encoders import TOOLS, encoder_command, output_name, vspipe_command
 from videoforge.core.video.info import ScriptInfo
 from videoforge.core.video.script import ffms2_index
-from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
+from videoforge.core.video.settings import EncoderSettings, RateControl
 
 SAMPLE_DIR = "sample"  # in the job's folder
 SCRIPT = "sample.vpy"
@@ -171,7 +171,7 @@ def sample_steps(
         getattr(app.tools, TOOLS[enc.encoder]),
         enc,
         output=out,
-        frames=sel.frames(found.frames) if enc.encoder is Encoder.SVTAV1 else None,
+        frames=sel.frames(found.frames) if enc.encoder.svt else None,
         sar=spec.video.output_sar(v.width, v.height, v.sar) if v is not None else None,
         color=v.color if v is not None else None,
     )

@@ -245,7 +245,7 @@ def color_args(color: VideoColor | None, settings: EncoderSettings) -> list[str]
         return []
     if settings.encoder.libvpx:
         return _ffmpeg_args(color)
-    if settings.encoder is Encoder.SVTAV1:
+    if settings.encoder.svt:
         return _svtav1_args(color)
     x265 = settings.encoder is Encoder.X265
     args = []
@@ -281,19 +281,21 @@ _FFMPEG_FLAGS = {
     "color_range": "range",
 }
 _X264_FLAGS = {"colorprim": "primaries", "transfer": "transfer", "colormatrix": "matrix", "range": "range"}
+_SVT_FLAGS = {
+    "color-primaries": "primaries",
+    "transfer-characteristics": "transfer",
+    "matrix-coefficients": "matrix",
+    "color-range": "range",
+    "mastering-display": "master_display",
+    "content-light": "light_levels",
+}
 SOURCE_FLAGS: dict[Encoder, dict[str, str]] = {
     Encoder.X264: _X264_FLAGS,
     Encoder.X265: {**_X264_FLAGS, "master-display": "master_display", "max-cll": "light_levels"},
     Encoder.VP8: _FFMPEG_FLAGS,
     Encoder.VP9: _FFMPEG_FLAGS,
-    Encoder.SVTAV1: {
-        "color-primaries": "primaries",
-        "transfer-characteristics": "transfer",
-        "matrix-coefficients": "matrix",
-        "color-range": "range",
-        "mastering-display": "master_display",
-        "content-light": "light_levels",
-    },
+    Encoder.SVTAV1: _SVT_FLAGS,
+    Encoder.SVTAV1HDR: _SVT_FLAGS,
 }
 _FIELD_CODES = {"primaries": PRIMARIES_CODE, "transfer": TRANSFER_CODE, "matrix": MATRIX_CODE}
 _FROM_FFMPEG = {
@@ -369,7 +371,7 @@ def _normal(field: str, value: str, encoder: Encoder) -> str:
     limited / full for every encoder's range spellings."""
     value = value.strip().lower()
     if field == "range":
-        digits = {"0": "limited", "1": "full"} if encoder is Encoder.SVTAV1 else {"1": "limited", "2": "full"}
+        digits = {"0": "limited", "1": "full"} if encoder.svt else {"1": "limited", "2": "full"}
         return {**_RANGE_NAMES, **digits}.get(value, value)
     codes = _FIELD_CODES.get(field)
     if codes is None:  # a mastering display or light levels
@@ -531,7 +533,7 @@ def effective_container_color(color: VideoColor | None, settings: EncoderSetting
     Unknown explicit values clear that field rather than reviving the source's metadata. Explicit options
     still apply when source_color is off. FFmpeg's video stream specifiers select the sole output stream.
     """
-    av1 = settings.encoder is Encoder.SVTAV1
+    av1 = settings.encoder.svt
     if not (av1 or settings.encoder.libvpx):
         return None
     args = color_args(color, settings) + drop_source_flags(job_args(settings), color, settings)

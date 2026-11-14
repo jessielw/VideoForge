@@ -20,6 +20,7 @@ from videoforge.core.models import Severity, VideoColor, VideoInfo
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video import crop as autocrop, vs as vsx
 from videoforge.core.video.encoders import (
+    TOOLS as ENCODER_TOOLS,
     VP8_CRF_CAP,
     analysis_file,
     encoder_command,
@@ -370,6 +371,29 @@ def test_svtav1_issues():
     assert encoder_issues(replace(s, rate_control=RateControl.TWO_PASS, target_mb=500), None) == []
     hdr10 = VideoInfo(3840, 2160, color=VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", None, P3_1000, 1000))
     assert encoder_issues(s, hdr10) == []  # AV1 carries HDR10
+
+
+def test_svtav1hdr_shares_svtav1s_command_and_checks(tmp_path):
+    """SVT-AV1-HDR is an SvtAv1EncApp build: the same command line, IVF and checks as SVT-AV1, its own Tools path,
+    and presets down to -3 (SVT-AV1's stop at -1)."""
+    s = EncoderSettings(Encoder.SVTAV1, crf=27.25, preset="6", tune="0", depth=10, options={"film-grain": "8"})
+    hdr = replace(s, encoder=Encoder.SVTAV1HDR)
+    color = VideoColor("bt2020", "smpte2084", "bt2020nc", "", 2, P3_1000, 1000, 400)
+    args = {"frames": 48, "output": Path("v.ivf"), "color": color, "keyframes": [0, 24]}
+    assert encoder_command("svt", hdr, **args) == encoder_command("svt", s, **args)
+    assert Encoder.SVTAV1HDR.svt and Encoder.SVTAV1HDR.ivf and not Encoder.SVTAV1HDR.libvpx
+    assert Encoder.SVTAV1HDR.label == "SVT-AV1-HDR" and ENCODER_TOOLS[Encoder.SVTAV1HDR] == "svtav1hdr"
+    assert output_name(hdr) == "video.ivf" and stats_path(tmp_path, hdr).name == "video.stats"
+    assert encoder_issues(replace(hdr, preset="-3"), None) == []
+    (issue,) = encoder_issues(replace(s, preset="-3"), None)
+    assert issue.code == "video.svtav1_preset" and "from -1 to 13" in issue.message
+    (issue,) = encoder_issues(replace(hdr, preset="-4"), None)
+    assert "SVT-AV1-HDR's preset is a number from -3 to 13" in issue.message
+    codes = [i.code for i in encoder_issues(replace(hdr, depth=12, crf=80), None)]
+    assert codes == ["video.svtav1_depth", "video.svtav1_crf"]
+    abr = replace(hdr, rate_control=RateControl.ABR)
+    (issue,) = encoder_issues(abr, None, chapters=True)
+    assert issue.code == "video.svtav1_keyframes" and issue.message.startswith("SVT-AV1-HDR forces")
 
 
 def test_qpfile_frames(tmp_path):

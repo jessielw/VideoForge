@@ -101,7 +101,7 @@ def test_no_list_no_issues(tmp_path):
     assert option_issues(EncoderSettings(Encoder.X265, options={"anything": "1"}), tools) == []
 
 
-@pytest.mark.parametrize("encoder", [Encoder.X264, Encoder.X265, Encoder.SVTAV1, Encoder.VP9])
+@pytest.mark.parametrize("encoder", [Encoder.X264, Encoder.X265, Encoder.SVTAV1, Encoder.SVTAV1HDR, Encoder.VP9])
 def test_real_encoder_lists(encoder):
     """The configured encoders' own help, where they're installed."""
     from videoforge.core.config import load_app_config
@@ -110,4 +110,5 @@ def test_real_encoder_lists(encoder):
     if not known:
         pytest.skip(f"{encoder.label} isn't installed")
     common = {Encoder.X264: "bframes", Encoder.X265: "level-idc", Encoder.SVTAV1: "film-grain", Encoder.VP9: "row-mt"}
+    common[Encoder.SVTAV1HDR] = "dolby-vision-rpu"  # SVT-AV1-HDR's own, with --hdr10plus-json
     assert common[encoder] in known and len(known) > 50

@@ -124,8 +124,10 @@ _AUDIO = {
     AudioCodec.MP3: "MP3",
     AudioCodec.VORBIS: "Vorbis",
 }
-_CODEC = {Encoder.X264: "x264", Encoder.X265: "x265", Encoder.SVTAV1: "AV1", Encoder.VP9: "VP9", Encoder.VP8: "VP8"}
-_FORMAT = {Encoder.X264: "AVC", Encoder.X265: "HEVC", Encoder.SVTAV1: "AV1", Encoder.VP9: "VP9", Encoder.VP8: "VP8"}
+_CODEC = {Encoder.X264: "x264", Encoder.X265: "x265", Encoder.VP9: "VP9", Encoder.VP8: "VP8"}
+_CODEC |= {Encoder.SVTAV1: "AV1", Encoder.SVTAV1HDR: "AV1"}
+_FORMAT = {Encoder.X264: "AVC", Encoder.X265: "HEVC", Encoder.VP9: "VP9", Encoder.VP8: "VP8"}
+_FORMAT |= {Encoder.SVTAV1: "AV1", Encoder.SVTAV1HDR: "AV1"}
 # a reused encode's codec, by its extension (StaxRip's raw streams)
 _REUSED = {".264": Encoder.X264, ".h264": Encoder.X264, ".avc": Encoder.X264, ".265": Encoder.X265}
 _REUSED |= {".h265": Encoder.X265, ".hevc": Encoder.X265}

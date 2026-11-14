@@ -11,6 +11,7 @@ import http.client
 import io
 from pathlib import Path, PureWindowsPath
 import subprocess
+import tarfile
 import tempfile
 import time
 import urllib.request
@@ -103,17 +104,35 @@ def _reader(folder: Path, *, full: bool = False) -> Path:
     return folder / "reader" / "7z.exe"
 
 
+TARS = (".tar.xz", ".tar.gz", ".tgz")  # read with tarfile (7-Zip would take one layer at a time)
+
+
+def _tar_read(archive: tarfile.TarFile, url: str, member: str) -> bytes:
+    """A regular file's bytes (no links or devices: the names were checked, the member types are checked here)."""
+    try:
+        info = archive.getmember(member)
+    except KeyError:
+        raise ValueError(f"{url}: not in the archive: {member}") from None
+    stream = archive.extractfile(info) if info.isfile() else None
+    if stream is None:
+        raise ValueError(f"{url}: not a regular file: {member}")
+    return stream.read()
+
+
 def unpack(url: str, data: bytes, files: dict[str, str]) -> dict[str, bytes]:
     """Exact destination -> archive member mappings (also used by the plugin manifest)."""
     for dest, member in files.items():
         relative_path(dest)
         relative_path(member)
     name = url.rsplit("/", 1)[-1]
-    if not name.endswith((".zip", ".whl", ".7z", ".exe", ".cab")) or not files:
+    if not name.endswith((".zip", ".whl", ".7z", ".exe", ".cab", *TARS)) or not files:
         return {relative_path(next(iter(files), name)): data}
     if name.endswith((".zip", ".whl")):
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             return {dest: archive.read(member) for dest, member in files.items()}
+    if name.endswith(TARS):
+        with tarfile.open(fileobj=io.BytesIO(data)) as archive:
+            return {dest: _tar_read(archive, url, member) for dest, member in files.items()}
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp)
         exe = _reader(folder, full=name.endswith((".exe", ".cab")))
@@ -136,6 +155,9 @@ def extract(url: str, data: bytes, prefix: str, include: list[str]) -> dict[str,
     if url.endswith(".zip"):
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             members = [n for n in archive.namelist() if not n.endswith("/")]
+    elif url.endswith(TARS):
+        with tarfile.open(fileobj=io.BytesIO(data)) as archive:
+            members = [m.name for m in archive.getmembers() if m.isfile()]
     else:
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)

@@ -51,7 +51,7 @@ from videoforge.core.video.encoders import (
 )
 from videoforge.core.video.qpf import make_qpf, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
-from videoforge.core.video.settings import Crop, Encoder, EncoderSettings, SourceFilter
+from videoforge.core.video.settings import Crop, EncoderSettings, SourceFilter
 from videoforge.core.workdir import finished_files
 
 if TYPE_CHECKING:
@@ -486,7 +486,7 @@ def video_steps(
     keyframes = qpfile is not None and forces_keyframes(enc)
     # SvtAv1EncApp doesn't know a pipe's length (its pass 2 printed no total): it's given the script's frames, as
     # StaxRip gives them, once the info step has read them.
-    counts = enc.encoder is Encoder.SVTAV1
+    counts = enc.encoder.svt
 
     def encodes(color: VideoColor | None) -> list[Step]:
         found = info.read(info_file) if counts else None

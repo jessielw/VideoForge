@@ -101,6 +101,10 @@ def test_tokens_from_what_the_job_makes():
     assert (got["audio_codec"], got["audio_channel_s"], got["atmos"]) == ("DDP", "5.1", "")
     assert (got["video_codec"], got["video_format"], got["video_bit_depth_dash"]) == ("x265", "HEVC", "10-Bit")
     assert (got["video_dynamic_range"], got["video_dynamic_range_type"]) == ("SDR", "")
+    for encoder in (Encoder.SVTAV1, Encoder.SVTAV1HDR):  # both SvtAv1EncApp builds write AV1
+        spec.encoder.encoder = encoder
+        got = naming.tokens(spec, plan)
+        assert (got["video_codec"], got["video_format"]) == ("AV1", "AV1")
 
 
 def test_resolution_follows_the_crop_and_resize():

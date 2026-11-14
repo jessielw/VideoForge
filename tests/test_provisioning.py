@@ -5,6 +5,7 @@ import importlib
 import io
 import json
 from pathlib import Path
+import tarfile
 import tomllib
 import zipfile
 
@@ -75,6 +76,26 @@ def test_extract_preserves_selected_dlls_and_notices_without_installer_files(pro
     assert result == {"tool.exe": b"exe", "runtime.dll": b"dll", "doc/LICENSE": b"notice"}
     with pytest.raises(ValueError, match="no files match"):
         artifacts.extract("https://example.test/tools.zip", data, "pkg", ["missing.dll"])
+
+
+def test_extract_reads_a_tar_xz(provisioner):
+    """SVT-AV1-HDR ships a .tar.xz: tarfile reads it in one go (7-Zip would unpack the .xz to a .tar first)."""
+    artifacts = importlib.import_module("artifacts")
+    stream = io.BytesIO()
+    with tarfile.open(fileobj=stream, mode="w:xz") as tar:
+        for name, content in {"SvtAv1EncApp.exe": b"exe", "notes.txt": b"notes"}.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(content)
+            tar.addfile(info, io.BytesIO(content))
+        link = tarfile.TarInfo("link.exe")
+        link.type, link.linkname = tarfile.SYMTYPE, "/etc/passwd"
+        tar.addfile(link)
+    url = "https://example.test/Windows_x86-64.tar.xz"
+    assert artifacts.extract(url, stream.getvalue(), "", ["SvtAv1EncApp.exe"]) == {"SvtAv1EncApp.exe": b"exe"}
+    with pytest.raises(ValueError, match="no files match"):
+        artifacts.extract(url, stream.getvalue(), "", ["link.exe"])  # a link isn't a file it takes
+    with pytest.raises(ValueError, match="not a regular file"):
+        artifacts.unpack(url, stream.getvalue(), {"x.exe": "link.exe"})
 
 
 @pytest.mark.parametrize(
