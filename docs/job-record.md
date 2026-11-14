@@ -89,7 +89,7 @@ When VideoForge encoded the video:
   ],
   "custom_script": false, // true: the user wrote the script body
   "encoder": {
-    "name": "x264", // "x264" | "x265" | "vp8" | "vp9" | "svtav1"
+    "name": "x264", // "x264" | "x265" | "vp8" | "vp9" | "svtav1" | "svtav1hdr"
     "rate_control": "crf", // "crf" | "abr" | "2pass"
     "crf": 18.0,
     "bitrate_kbps": 10000, // the one rate_control uses counts
