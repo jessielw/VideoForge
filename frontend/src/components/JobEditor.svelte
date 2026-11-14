@@ -418,6 +418,7 @@
               mkv={container?.id === 'mkv'}
               disabled={!editable}
               title={job.output_title}
+              ruleSetName={app.ruleSets.find((r) => r.id === job?.rule_set)?.name}
               onchange={(mux) => save({ mux })}
             />
             <span class="text-muted-foreground">Container</span>

@@ -236,12 +236,25 @@ test("Templates says when Settings decides a rule set's naming instead of the te
   const errors = await layoutFixture(page, { file_name: 'off', title: 'template' })
   await page.goto('/#/templates')
   const note = page.getByText(
-    "Settings → Jobs: the file name is always off for Manual's jobs, whatever this template says.",
+    'Settings decides this for all Manual jobs: the file name is always off, whatever this template says.',
   )
   await expect(note).toBeVisible()
   await expect(page.getByText('Not used until one of these is on.')).toBeVisible()
   await page.getByRole('checkbox', { name: 'Name the file with it' }).check() // the template keeps its own switch
   await expect(page.getByText('Not used until one of these is on.')).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('the name template links to the Settings that turns it on or off for every job', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.addInitScript(() => localStorage.setItem('videoforge.settingsTab', 'tools')) // last left elsewhere
+  await page.goto('/#/templates')
+  await expect(page.getByText('Settings can turn these on or off for all Manual jobs at once.')).toBeVisible()
+  await page.getByRole('button', { name: 'Settings → Output names' }).click()
+  await expect(page).toHaveURL(/#\/settings$/)
+  const heading = page.getByRole('heading', { name: 'Output names', exact: true })
+  await expect(heading).toBeFocused()
+  await expect(heading).toBeInViewport()
   expect(errors).toEqual([])
 })
 

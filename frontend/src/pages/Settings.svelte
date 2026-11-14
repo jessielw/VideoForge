@@ -2,7 +2,7 @@
   // Settings, in ten tabs: Jobs, Queue & indexing, Presets, Files & folders | Tools, Plugins, Automation |
   // Appearance, Profiles, Import & export. Each change saves at once and is used by new jobs and runs;
   // Reset (under Profiles) goes back to the server's configuration defaults.
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import AppearanceSettings from '../components/AppearanceSettings.svelte'
   import FileBrowser from '../components/FileBrowser.svelte'
   import ConfigurationTransfer from '../components/ConfigurationTransfer.svelte'
@@ -33,6 +33,7 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import { api } from '../lib/api'
   import { configDraft } from '../lib/configDraft'
+  import { SETTINGS_TAB_KEY, takeSettingsSection } from '../lib/settingsLink'
   import { saves } from '../lib/saves'
   import { PRIORITY_LABEL } from '../lib/format'
   import { app } from '../lib/state.svelte'
@@ -88,6 +89,13 @@
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
       return
+    }
+    const section = takeSettingsSection() // a link elsewhere asked for it: shown and focused
+    if (section) {
+      await tick()
+      const target = document.getElementById(section)
+      target?.scrollIntoView({ block: 'start' })
+      target?.focus({ preventScroll: true })
     }
     draft.events = defaultEvents()
     checkAll()
@@ -386,7 +394,7 @@
   ] as const
   const TABS = GROUPS.flat()
   type TabId = (typeof TABS)[number]['id']
-  const TAB_KEY = 'videoforge.settingsTab'
+  const TAB_KEY = SETTINGS_TAB_KEY
   function readTab(): TabId {
     try {
       const saved = localStorage.getItem(TAB_KEY)
@@ -536,7 +544,7 @@
             </section>
 
             <section class="col-span-full min-w-0 space-y-3" aria-labelledby="output-names">
-              <h2 id="output-names" class="font-medium">Output names</h2>
+              <h2 id="output-names" tabindex="-1" class="font-medium outline-none">Output names</h2>
               <p class="text-xs text-muted-foreground">
                 Whether a job is named from its template's name template, per rule set. Jobs take this when they're
                 added or a template is applied to them; a job's own Output tab can still change it.

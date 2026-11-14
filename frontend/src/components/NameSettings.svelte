@@ -19,6 +19,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import * as Popover from '$lib/components/ui/popover'
   import Tip from './Tip.svelte'
+  import { openSettings } from '../lib/settingsLink'
 
   let {
     mux,
@@ -64,6 +65,7 @@
 
   const set = (patch: Partial<MuxSettings>) => onchange({ ...mux, ...patch })
   const used = $derived(fileName || mkvTitle)
+  const whose = $derived(ruleSetName ? `all ${ruleSetName} jobs` : "all of this rule set's jobs")
 
   // Tokens go in at the cursor (the end before the field was used), and come back selected so it shows where.
   let field = $state<HTMLTextAreaElement | null>(null)
@@ -171,12 +173,18 @@
       </label>
     {/if}
   </div>
-  {#if overridden.length}
-    <p class="text-xs text-muted-foreground">
-      Settings → Jobs: {overridden.join(' and ')} for {ruleSetName || 'this rule set'}'s jobs, whatever this template
-      says.
-    </p>
-  {/if}
+  <p class="text-xs text-muted-foreground">
+    {#if overridden.length}
+      Settings decides this for {whose}: {overridden.join(' and ')}, whatever this template says.
+    {:else}
+      Settings can turn these on or off for {whose} at once.
+    {/if}
+    <button
+      type="button"
+      class="underline underline-offset-2 hover:text-foreground"
+      onclick={() => openSettings('jobs', 'output-names')}>Settings → Output names</button
+    >
+  </p>
   {#if !used}
     <p class="text-xs text-muted-foreground">Not used until one of these is on. Empty uses the template shown.</p>
   {:else if title}
