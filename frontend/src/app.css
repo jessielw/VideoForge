@@ -116,9 +116,9 @@
   }
 }
 
-/* Small uppercase heading over a group of controls. */
+/* Heading over a group of controls: the same look as the Settings group headings. */
 @utility section-label {
-  @apply text-xs font-medium tracking-wide text-muted-foreground uppercase;
+  @apply text-sm font-medium;
 }
 
 /* Number boxes: keep the value clear of the spin arrows (Chromium draws them inside the text area;

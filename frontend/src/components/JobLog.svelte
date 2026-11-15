@@ -212,7 +212,7 @@
             <div class="space-y-2 border-t p-3">
               {#if s.command}
                 <div class="flex items-start gap-2">
-                  <code class="min-w-0 flex-1 rounded-md bg-muted px-2 py-1 font-mono text-[11px] break-all"
+                  <code class="min-w-0 flex-1 rounded-md bg-muted px-2 py-1 font-mono text-xs break-all"
                     >{s.command}</code
                   >
                   <Tip class="shrink-0" text="Copy the command line">
@@ -244,7 +244,7 @@
                   tabindex="0"
                   role="region"
                   aria-label="{s.label} output"
-                  class="max-h-96 overflow-auto rounded-lg border bg-background p-2 font-mono text-[11px] leading-relaxed max-sm:wrap-anywhere max-sm:whitespace-pre-wrap"
+                  class="max-h-96 overflow-auto rounded-lg border bg-background p-2 font-mono text-xs leading-relaxed max-sm:wrap-anywhere max-sm:whitespace-pre-wrap"
                   use:follow={lines.length}>{shown.join('\n')}</pre>
               {:else if s.status !== 'pending'}
                 <p class="text-xs text-muted-foreground">No output.</p>

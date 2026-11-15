@@ -573,8 +573,7 @@
             <Tip
               text="This file has no title of its own. The _trackN_ in its name matches input track #{t.title_from}, so it takes that track's title and its Forced and SDH flags."
             >
-              <span class="text-xs text-muted-foreground italic">(title inferred from input track #{t.title_from})</span
-              >
+              <span class="text-xs text-muted-foreground">(title inferred from input track #{t.title_from})</span>
             </Tip>
           {/if}
         </div>

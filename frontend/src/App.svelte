@@ -88,7 +88,7 @@
           <img src="/favicon.svg" alt="" class="size-6" />
         </Tip>
         {#if !navCollapsed}
-          <span class="text-base font-semibold tracking-wide">VideoForge</span>
+          <span class="text-base font-semibold">VideoForge</span>
           {#if app.version}<span class="text-xs text-muted-foreground tabular-nums">{app.version}</span>{/if}
         {/if}
       </div>
@@ -112,7 +112,7 @@
               {#if count}
                 <Badge
                   variant="secondary"
-                  class="tabular-nums {navCollapsed ? 'absolute -top-1 -right-1 h-4 px-1 text-[10px]' : 'ml-auto'}"
+                  class="tabular-nums {navCollapsed ? 'absolute -top-1 -right-1 h-5 px-1 text-xs' : 'ml-auto'}"
                   >{count}<span class="sr-only">{` ${counted}`}</span></Badge
                 >
               {/if}

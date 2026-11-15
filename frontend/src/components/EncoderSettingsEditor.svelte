@@ -772,7 +772,7 @@
       <label class="block">
         <span class="section-label">Extra arguments</span>
         <Input
-          class="mt-1 w-full font-mono text-xs"
+          class="mt-1 w-full font-mono text-xs placeholder:font-sans"
           value={value.extra}
           placeholder="added at the end, as typed"
           onchange={(e) => set('extra', (e.target as HTMLInputElement).value)}

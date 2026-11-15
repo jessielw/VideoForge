@@ -561,6 +561,73 @@ test('the menu marks the running job with an icon, in both widths', async ({ pag
   expect(errors).toEqual([])
 })
 
+/** Visible text set under 12 px, in uppercase, or in italics: each as "<reason>: <text>". */
+const typeProblems = (page: Page) =>
+  page.evaluate(() => {
+    const out: string[] = []
+    for (const el of document.querySelectorAll<HTMLElement>('body *')) {
+      const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent!.trim())
+      if (!own || el.closest('.sr-only, [data-sonner-toaster]')) continue
+      const r = el.getBoundingClientRect()
+      const cs = getComputedStyle(el)
+      if (r.width <= 1 || r.height <= 1 || cs.visibility === 'hidden') continue
+      const text = el.textContent!.trim().slice(0, 40)
+      if (parseFloat(cs.fontSize) < 12) out.push(`${cs.fontSize}: ${text}`)
+      if (cs.textTransform === 'uppercase') out.push(`uppercase: ${text}`)
+      if (cs.fontStyle === 'italic') out.push(`italic: ${text}`)
+    }
+    return [...new Set(out)]
+  })
+
+test('a placeholder that is a sentence uses the normal font, even in a code-font field', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await page.goto('/#/queue/job-0')
+  const placeholderFont = (field: Locator) => field.evaluate((el) => getComputedStyle(el, '::placeholder').fontFamily)
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  const extra = page.getByPlaceholder('added at the end, as typed')
+  expect(await placeholderFont(extra)).not.toMatch(/Cascadia Mono/)
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  // Until the field is focused, the name template's placeholder is a sentence, not a template.
+  const template = page.getByRole('textbox', { name: 'Name template', exact: true })
+  await expect(template).toHaveAttribute('placeholder', 'Empty uses the default template (see Tokens)')
+  expect(await placeholderFont(template)).not.toMatch(/Cascadia Mono/)
+  expect(errors).toEqual([])
+})
+
+test('encoder option names keep their case', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  expect(await page.getByText(/^Options \(/).innerText()).toContain('--name value')
+  expect(errors).toEqual([])
+})
+
+test('job tabs: no text under 12 px, no uppercase labels, no italics', async ({ page }) => {
+  const { errors } = await queueFixture(page, 2, ['ready'], null, null, null, () => ({
+    resolution: '3840x2160',
+    duration_ms: 60_000,
+    hdr: ['DV 8.1', 'HDR10'],
+    interlaced: false,
+  }))
+  await page.goto('/#/queue/job-0')
+  const problems: string[] = [...(await typeProblems(page)).map((p) => `Queue: ${p}`)]
+  for (const tab of ['Encoder', 'Audio', 'Subtitles', 'Output']) {
+    await page.getByRole('tab', { name: tab, exact: true }).click()
+    problems.push(...(await typeProblems(page)).map((p) => `${tab}: ${p}`))
+  }
+  expect([...new Set(problems)]).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('the collapsed menu keeps the queue count inside it', async ({ page }) => {
+  const { errors } = await queueFixture(page, 12)
+  await page.getByRole('button', { name: 'Collapse the menu', exact: true }).click()
+  const nav = (await page.getByRole('navigation', { name: 'Main navigation' }).boundingBox())!
+  const count = (await page.getByRole('button', { name: 'Queue 12 jobs' }).getByText('12').boundingBox())!
+  expect(count.x + count.width).toBeLessThanOrEqual(nav.x + nav.width)
+  expect(errors).toEqual([])
+})
+
 /** A theme color as the browser computes it, read from a probe element with that Tailwind class. */
 const themeColor = (page: Page, cls: string, prop: 'backgroundColor' | 'color') =>
   page.evaluate(

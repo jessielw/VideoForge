@@ -378,6 +378,43 @@ test('Matched files shows no empty box before a source is added', async ({ page 
   expect(errors).toEqual([])
 })
 
+/** Visible text set under 12 px, in uppercase, or in italics: each as "<reason>: <text>". */
+const typeProblems = (page: Page) =>
+  page.evaluate(() => {
+    const out: string[] = []
+    for (const el of document.querySelectorAll<HTMLElement>('body *')) {
+      const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent!.trim())
+      if (!own || el.closest('.sr-only, [data-sonner-toaster]')) continue
+      const r = el.getBoundingClientRect()
+      const cs = getComputedStyle(el)
+      if (r.width <= 1 || r.height <= 1 || cs.visibility === 'hidden') continue
+      const text = el.textContent!.trim().slice(0, 40)
+      if (parseFloat(cs.fontSize) < 12) out.push(`${cs.fontSize}: ${text}`)
+      if (cs.textTransform === 'uppercase') out.push(`uppercase: ${text}`)
+      if (cs.fontStyle === 'italic') out.push(`italic: ${text}`)
+    }
+    return [...new Set(out)]
+  })
+
+test('pages and Settings: no text under 12 px, no uppercase labels, no italics', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  const problems: string[] = []
+  for (const route of ['new', 'templates', 'log']) {
+    await page.goto(`/#/${route}`)
+    await expect(page.locator('main h1, main h2').first()).toBeVisible()
+    problems.push(...(await typeProblems(page)).map((p) => `${route}: ${p}`))
+  }
+  await page.goto('/#/settings')
+  const sections = page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button')
+  for (const name of await sections.allInnerTexts()) {
+    if (/shut down/i.test(name)) continue
+    await sections.filter({ hasText: name.trim() }).first().click()
+    problems.push(...(await typeProblems(page)).map((p) => `Settings ${name.trim()}: ${p}`))
+  }
+  expect([...new Set(problems)]).toEqual([])
+  expect(errors).toEqual([])
+})
+
 /** How far a label sits above or below the control beside it: the distance between their vertical centers, in px. */
 async function labelGap(label: Locator, control: Locator): Promise<number> {
   const a = (await label.boundingBox())!

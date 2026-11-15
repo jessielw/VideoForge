@@ -595,7 +595,7 @@
                 {/if}
                 <span class="text-muted-foreground">Extra arguments</span>
                 <Input
-                  class="font-mono text-xs"
+                  class="font-mono text-xs placeholder:font-sans"
                   aria-label="Extra arguments for {container?.tool ?? 'the output'}"
                   placeholder="added to the {container?.tool ?? 'output'} command as typed"
                   bind:value={draft.mux.extra}

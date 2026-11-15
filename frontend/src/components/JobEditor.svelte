@@ -324,7 +324,7 @@
               {#each commands as c (c.id)}
                 <div class="rounded-lg border bg-muted/50 p-2">
                   <div class="text-xs font-medium text-foreground">{c.label}</div>
-                  <code class="block text-[11px] break-all text-muted-foreground">{c.command}</code>
+                  <code class="block text-xs break-all text-muted-foreground">{c.command}</code>
                 </div>
               {:else}
                 <p class="text-sm text-muted-foreground">Available once the source is probed.</p>
@@ -467,7 +467,7 @@
             {/if}
             <span class="text-muted-foreground">Extra arguments</span>
             <Input
-              class="font-mono text-xs"
+              class="font-mono text-xs placeholder:font-sans"
               aria-label="Extra arguments for {container?.tool ?? 'the output'}"
               placeholder="added to the {container?.tool ?? 'output'} command as typed"
               value={job.spec.mux.extra}
@@ -533,7 +533,7 @@
               {#each muxCommands as c (c.id)}
                 <div class="rounded-lg border bg-muted/50 p-2">
                   <div class="text-xs font-medium text-foreground">{c.label}</div>
-                  <code class="block text-[11px] break-all text-muted-foreground">{c.command}</code>
+                  <code class="block text-xs break-all text-muted-foreground">{c.command}</code>
                 </div>
               {/each}
             </div>

@@ -175,7 +175,7 @@
           </Button>
         </div>
         <table class="w-full text-sm">
-          <thead class="text-left text-xs text-muted-foreground uppercase">
+          <thead class="text-left text-xs text-muted-foreground">
             <tr
               ><th class="w-10"></th><th>Source</th><th>Lang</th><th>Title</th><th>Output</th><th class="w-16"></th></tr
             >
@@ -224,7 +224,7 @@
           <SubtitleSelectionMenu tracks={subRows} {overrides} disabled={!editable} onselect={selectSubs} />
         </div>
         <table class="w-full text-sm">
-          <thead class="text-left text-xs text-muted-foreground uppercase">
+          <thead class="text-left text-xs text-muted-foreground">
             <tr>
               <th class="w-10"></th><th>Source</th><th>Format</th><th>Lang</th>
               {#each flags as f (f.key)}<th><Tip text={f.help}>{f.label}</Tip></th>{/each}

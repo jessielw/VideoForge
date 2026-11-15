@@ -623,7 +623,7 @@
       </Tip>
       <Tip
         side="right"
-        class="pb-1 text-[10px] text-muted-foreground"
+        class="pb-1 text-xs text-muted-foreground"
         text={`${matching.length} matching jobs of ${app.jobs.length}`}>{matching.length}</Tip
       >
       <div
@@ -1022,7 +1022,7 @@
                     >
                       <Badge
                         variant="outline"
-                        class="px-1 py-0 text-[10px] font-normal {name.endsWith('?')
+                        class="px-1 py-0 text-xs font-normal {name.endsWith('?')
                           ? 'border-warning/40 text-warning'
                           : ''}">{name}</Badge
                       >
