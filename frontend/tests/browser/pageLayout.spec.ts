@@ -386,6 +386,22 @@ test('filter values read as figures', async ({ page }) => {
   expect(errors).toEqual([])
 })
 
+test('controls animate only color and movement, and a dialog does not blur the page', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  // Buttons, button groups and badges name what they animate instead of "all".
+  const animated = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-slot=button], [data-slot=toggle-group-item], [data-slot=badge]')].map(
+      (el) => getComputedStyle(el).transitionProperty,
+    ),
+  )
+  expect(animated.length).toBeGreaterThan(3)
+  expect(animated.filter((p) => p.split(', ').includes('all'))).toEqual([])
+  await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
+  await expect(page.locator('[data-slot=dialog-overlay]')).toHaveCSS('backdrop-filter', 'none')
+  expect(errors).toEqual([])
+})
+
 test('Matched files shows no empty box before a source is added', async ({ page }) => {
   const errors = await layoutFixture(page)
   await page.goto('/#/new')
