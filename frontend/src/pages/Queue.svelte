@@ -1007,7 +1007,7 @@
               </div>
               {#if job.source_facts}
                 {@const f = job.source_facts}
-                <div class="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-muted-foreground">
+                <div class="mt-0.5 flex h-5 min-w-0 items-center gap-1.5 overflow-hidden text-xs text-muted-foreground">
                   <span class="shrink-0"
                     >{f.resolution}{f.duration_ms ? ` · ${duration(f.duration_ms / 1000)}` : ''}{f.interlaced
                       ? ' · interlaced'

@@ -404,8 +404,9 @@
       </div>
     </Card.Root>
 
-    <Card.Root class="min-h-48 flex-1 shrink-0 gap-0 py-0">
-      <div class="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2">
+    <!-- Grows with the matched jobs, and keeps its size while they match again; with no sources it's only its header line. -->
+    <Card.Root class="{result || matching ? 'min-h-48 flex-1' : ''} shrink-0 gap-0 py-0">
+      <div class="flex shrink-0 flex-wrap items-center gap-3 px-4 py-2">
         <h2 class="font-medium">Matched files</h2>
         <span class="text-sm text-muted-foreground">
           {#if matching}Matching…{:else if result}{result.jobs.length} job(s){result.unmatched.length
@@ -413,11 +414,11 @@
               : ''}{:else}Add a source to see the jobs{/if}
         </span>
       </div>
-      <div class="min-h-0 flex-1 overflow-auto">
-        {#if result}
+      {#if result}
+        <div class="min-h-0 flex-1 overflow-auto border-t">
           <MatchTable {result} bind:replacements />
-        {/if}
-      </div>
+        </div>
+      {/if}
     </Card.Root>
   </div>
 

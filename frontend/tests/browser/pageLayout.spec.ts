@@ -334,6 +334,35 @@ test('the sidebar keeps one left edge: logo, icons and status', async ({ page })
   expect(errors).toEqual([])
 })
 
+test('palette cards in one row start their name and swatch on one line', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/settings')
+  await page.getByRole('button', { name: 'Appearance', exact: true }).click()
+  const cards = await page.getByRole('radiogroup', { name: 'Palette' }).evaluate((group) =>
+    [...group.querySelectorAll('[role=radio]')].map((card) => ({
+      top: Math.round(card.getBoundingClientRect().top),
+      name: card.querySelector('[id^=palette-]')!.getBoundingClientRect().top,
+      swatch: card.querySelector('div[aria-hidden=true]')!.getBoundingClientRect().bottom, // the mock, not the check icon
+    })),
+  )
+  const rows = new Map<number, typeof cards>()
+  for (const card of cards) rows.set(card.top, [...(rows.get(card.top) ?? []), card])
+  expect([...rows.values()].some((row) => row.length > 1)).toBe(true)
+  for (const row of rows.values()) {
+    expect(Math.max(...row.map((c) => c.name)) - Math.min(...row.map((c) => c.name))).toBeLessThanOrEqual(1)
+    expect(Math.max(...row.map((c) => c.swatch)) - Math.min(...row.map((c) => c.swatch))).toBeLessThanOrEqual(1)
+  }
+  expect(errors).toEqual([])
+})
+
+test('Matched files shows no empty box before a source is added', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/new')
+  const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
+  expect((await card.boundingBox())!.height).toBeLessThanOrEqual(48)
+  expect(errors).toEqual([])
+})
+
 /** How far a label sits above or below the control beside it: the distance between their vertical centers, in px. */
 async function labelGap(label: Locator, control: Locator): Promise<number> {
   const a = (await label.boundingBox())!

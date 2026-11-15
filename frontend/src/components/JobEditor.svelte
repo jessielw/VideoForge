@@ -302,7 +302,7 @@
               onchange={(encoder) => save({ encoder })}
             />
           </div>
-          <div class="space-y-2">
+          <div class="space-y-4">
             {#if !job.spec.inputs.encode}
               <SampleCard
                 {job}
@@ -319,15 +319,17 @@
                 onapply={(crf) => job && save({ encoder: { ...job.spec.encoder, crf } })}
               />
             {/if}
-            <span class="section-label">Commands this job runs</span>
-            {#each commands as c (c.id)}
-              <div class="rounded-lg border bg-muted/50 p-2">
-                <div class="text-xs text-primary">{c.label}</div>
-                <code class="block text-[11px] break-all text-muted-foreground">{c.command}</code>
-              </div>
-            {:else}
-              <p class="text-sm text-muted-foreground">Available once the source is probed.</p>
-            {/each}
+            <div class="space-y-2">
+              <span class="section-label">Commands this job runs</span>
+              {#each commands as c (c.id)}
+                <div class="rounded-lg border bg-muted/50 p-2">
+                  <div class="text-xs text-primary">{c.label}</div>
+                  <code class="block text-[11px] break-all text-muted-foreground">{c.command}</code>
+                </div>
+              {:else}
+                <p class="text-sm text-muted-foreground">Available once the source is probed.</p>
+              {/each}
+            </div>
           </div>
         </div>
       {:else if tab === 'audio' || tab === 'subs'}

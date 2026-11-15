@@ -9,6 +9,7 @@ async function queueFixture(
   sample: JobDetail['sample'] = null,
   search: JobDetail['search'] = null,
   made: JobDetail['made'] = null,
+  facts: (i: number) => JobSummary['source_facts'] = () => null,
 ) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
@@ -27,7 +28,7 @@ async function queueFixture(
     custom_script: false,
     pause_after_pass1: false,
     indexed: false,
-    source_facts: null,
+    source_facts: facts(i),
     index_error: '',
     index_held: false,
     sample_waiting: false,
@@ -518,6 +519,31 @@ test("Index on one job it can't take says why, about that one job", async ({ pag
   const why = page.getByText(/^1 left out: /)
   await expect(why).toBeVisible()
   expect(await why.textContent()).toContain("1 left out: it's queued or running") // read now: the toast closes
+  expect(errors).toEqual([])
+})
+
+test('queue rows of one kind are one height, with or without format tags', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3, ['ready'], null, null, null, (i) => ({
+    resolution: '1920x1080',
+    duration_ms: 60_000,
+    hdr: i === 0 ? [] : ['HDR10'],
+    interlaced: false,
+  }))
+  const heights = await page
+    .locator('[data-job]')
+    .evaluateAll((rows) => rows.map((r) => r.parentElement!.getBoundingClientRect().height))
+  expect(heights).toHaveLength(3)
+  expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(0.5)
+  expect(errors).toEqual([])
+})
+
+test('Encoder tab: the test encode and CRF search cards sit 16 px apart', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  const sample = await page.getByRole('region', { name: 'Test encode', exact: true }).boundingBox()
+  const search = await page.getByRole('region', { name: 'CRF search', exact: true }).boundingBox()
+  expect(search!.y - (sample!.y + sample!.height)).toBeGreaterThanOrEqual(16)
   expect(errors).toEqual([])
 })
 
