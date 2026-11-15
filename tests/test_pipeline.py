@@ -978,6 +978,54 @@ def test_real_anamorphic_job_keeps_its_shape(tmp_path, keep_ar, container):
 
 
 @needs_tools
+def test_real_mp4_job_copies_truehd_out_of_an_mkv(tmp_path):
+    """A TrueHD track copied from an MKV into an MP4: MP4Box can't read it there (GPAC 26.07: "Feature Not
+    Supported"; 2.4 hangs), so it's extracted first and the MP4 holds it."""
+    ffprobe = shutil.which("ffprobe")
+    if shutil.which("MP4Box") is None or ffprobe is None:
+        pytest.skip("needs MP4Box (GPAC) and ffprobe on PATH")
+    from videoforge.core.config import load_app_config
+    from videoforge.core.execute.mux import MuxSettings
+    from videoforge.core.job import plan_spec, probe_spec
+    from videoforge.core.video import vs as vsx
+    from videoforge.rule_sets import get_rule_set
+
+    app = load_app_config()
+    vsx.configure(app.tools.vs_plugins)
+    vsx.ensure_vspipe(app.tools.vspipe)
+    src = tmp_path / "Movie.2001.mkv"
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=1:size=320x240:rate=24",
+         "-f", "lavfi", "-i", "sine=duration=1:sample_rate=48000", "-map", "0:v", "-map", "1:a", "-c:v", "libx264",
+         "-pix_fmt", "yuv420p", "-c:a", "truehd", "-strict", "-2", "-ac", "2", "-metadata:s:a:0", "language=eng",
+         "-y", str(src)],
+        check=True,
+    )  # fmt: skip
+    job = JobSpec(
+        inputs=JobInputs(src),
+        rule_set="manual",
+        output_dir=tmp_path / "out",
+        encoder=EncoderSettings(preset="ultrafast", crf=30),
+        qpf=False,
+        mux=MuxSettings(container="mp4"),
+    )
+    rule_set = get_rule_set("manual")
+    plan = plan_spec(job, probe_spec(job, app), rule_set)
+    assert not plan.blocked, plan.issues
+    assert [(a.source.codec, a.action) for a in plan.audio] == [(C.TRUEHD, AudioAction.COPY)]
+    lines: list[str] = []
+    result = run_job(job, plan, rule_set, app, log=lines.append)
+    assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
+    assert any("TrueHD 1 for MP4 (mkvextract)" in line for line in lines)
+    probe = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "stream=codec_name", "-of", "csv=p=0",
+         str(result.output)],
+        capture_output=True, text=True, check=True,
+    )  # fmt: skip
+    assert probe.stdout.split() == ["h264", "truehd"]
+
+
+@needs_tools
 def test_real_decimated_job_keeps_the_scripts_frame_rate(tmp_path):
     """A 30 fps source a script decimates to 24 (as an IVTC does): the output plays at 24 fps for as long as the
     source, and AutoQPF's chapter keyframe is the 24 fps frame. The source's attachment (a font) goes along."""
