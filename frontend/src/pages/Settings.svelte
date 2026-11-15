@@ -849,7 +849,7 @@
                 {#each config.tools as t (t.name)}
                   {@const c = checks[t.name]}
                   {@const look = c ? LOOK[c.status] : null}
-                  <div class="grid grid-cols-[12rem_1fr] gap-x-4 gap-y-1.5 px-4 py-3">
+                  <div class="grid grid-cols-[12rem_1fr] items-baseline gap-x-4 gap-y-1.5 px-4 py-3">
                     <div>
                       <div class="text-sm font-medium">{t.label}</div>
                       <div class="text-xs text-muted-foreground">{t.purpose}</div>

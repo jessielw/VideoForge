@@ -520,3 +520,60 @@ test("Index on one job it can't take says why, about that one job", async ({ pag
   expect(await why.textContent()).toContain("1 left out: it's queued or running") // read now: the toast closes
   expect(errors).toEqual([])
 })
+
+test('Output tab: every label lines up with the first control in its row', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  // The rule set's containers bring the Container and PGS compression rows (a checkbox first: no text baseline).
+  const containers = [
+    { id: 'mkv', label: 'MKV (mkvmerge)', extension: '.mkv', tool: 'mkvmerge' },
+    { id: 'mp4', label: 'MP4 (MP4Box)', extension: '.mp4', tool: 'MP4Box' },
+  ]
+  const spec = await page.evaluate(() =>
+    fetch('/api/jobs/job-0')
+      .then((r) => r.json())
+      .then((d) => d.spec),
+  )
+  const template = { ...spec, crop_mode: 'keep', audio: null, subs: null }
+  const defaults = { video: spec.video, encoder: spec.encoder, template }
+  await page.route('**/api/rule-sets', (route) =>
+    route.fulfill({
+      json: [
+        { id: 'manual', name: 'Manual', default: true, container: 'mkv', containers, defaults, track_editor: true },
+      ],
+    }),
+  )
+  await page.goto('/#/queue/job-0')
+  await page.reload()
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  await expect(page.getByText('PGS compression', { exact: true })).toBeVisible()
+  // Each label in the tab's label column against the first control on its row; a textarea counts by its first line.
+  const rows = await page.evaluate(() => {
+    const grid = [...document.querySelectorAll<HTMLElement>('main .grid')].find((g) =>
+      g.textContent?.includes('Existing output'),
+    )!
+    const control = 'input:not([type=hidden]), select, textarea, button, [role=checkbox]'
+    const out: { label: string; gap: number }[] = []
+    for (const label of [...grid.children] as HTMLElement[]) {
+      const cell = label.nextElementSibling as HTMLElement | null
+      const text = label.textContent?.trim()
+      if (!cell || !text || label.querySelector(control)) continue
+      if (cell.getBoundingClientRect().left <= label.getBoundingClientRect().right) continue
+      const first = [...cell.querySelectorAll<HTMLElement>(control)].find((c) => c.getBoundingClientRect().height > 1)
+      if (!first) continue
+      const r = first.getBoundingClientRect()
+      const cs = getComputedStyle(first)
+      const center =
+        first.tagName === 'TEXTAREA'
+          ? r.top + parseFloat(cs.borderTopWidth) + parseFloat(cs.paddingTop) + parseFloat(cs.lineHeight) / 2
+          : r.top + r.height / 2
+      const l = label.getBoundingClientRect()
+      out.push({ label: text, gap: Math.round(Math.abs(l.top + l.height / 2 - center)) })
+    }
+    return out
+  })
+  expect(rows.map((r) => r.label)).toEqual(
+    expect.arrayContaining(['Existing output', 'Name template', 'PGS compression']),
+  )
+  expect(rows.filter((r) => r.gap > 2)).toEqual([])
+  expect(errors).toEqual([])
+})

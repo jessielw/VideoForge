@@ -315,7 +315,7 @@
 <fieldset class="@container/encoder min-w-0 space-y-4" {disabled}>
   <!-- Respond to the panel's width: template cards can be narrow even in a wide window. -->
   <div
-    class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-4 gap-y-3 @min-[32rem]/encoder:grid-cols-[9rem_minmax(0,1fr)]"
+    class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-x-4 gap-y-3 @min-[32rem]/encoder:grid-cols-[9rem_minmax(0,1fr)]"
   >
     <span class="section-label">Encoder</span>
     <ToggleGroup.Root

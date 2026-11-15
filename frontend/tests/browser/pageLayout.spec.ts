@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import type { ConfigState, NamePolicy, RuleSet, Template } from '../../src/lib/types.ts'
 
 async function layoutFixture(page: Page, naming?: NamePolicy) {
@@ -319,5 +319,62 @@ test('Templates stacks editor columns when zoom leaves insufficient panel width'
   await extra.scrollIntoViewIfNeeded()
   await expect(extra).toBeInViewport()
   await page.screenshot({ path: testInfo.outputPath('templates-narrow.png') })
+  expect(errors).toEqual([])
+})
+
+/** How far a label sits above or below the control beside it: the distance between their vertical centers, in px. */
+async function labelGap(label: Locator, control: Locator): Promise<number> {
+  const a = (await label.boundingBox())!
+  const b = (await control.boundingBox())!
+  return Math.abs(a.y + a.height / 2 - (b.y + b.height / 2))
+}
+
+for (const width of [1600, 1280]) {
+  test(`New jobs labels line up with their controls at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const errors = await layoutFixture(page)
+    await page.goto('/#/new')
+    const main = page.locator('main')
+    const ruleSet = main.getByRole('combobox', { name: 'Rule set', exact: true })
+    expect(await labelGap(main.getByText('Rule set', { exact: true }), ruleSet)).toBeLessThanOrEqual(2)
+    const preset = main.getByRole('button', { name: /^Encoder preset/ })
+    expect(await labelGap(main.getByText('Encoder preset', { exact: true }), preset)).toBeLessThanOrEqual(2)
+    expect(errors).toEqual([])
+  })
+}
+
+test('New jobs: After adding stays level with its checkboxes, ticked or not', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/new')
+  const label = page.getByText('After adding', { exact: true })
+  const index = page.getByRole('checkbox', { name: /^Index/ })
+  for (let i = 0; i < 2; i++) {
+    expect(await labelGap(label, index), `Index ${await index.getAttribute('aria-checked')}`).toBeLessThanOrEqual(2)
+    await index.click() // a checkbox's own baseline changes with its tick
+  }
+  expect(errors).toEqual([])
+})
+
+test('Settings › Tools: each tool name lines up with its path box', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/settings')
+  await page.getByRole('button', { name: 'Tools', exact: true }).click()
+  const path = page.getByRole('textbox', { name: 'ffmpeg path', exact: true })
+  // A 14 px name beside a 12 px path: their baselines meet, so their centers differ by a pixel or so.
+  expect(await labelGap(page.getByText('ffmpeg', { exact: true }), path)).toBeLessThanOrEqual(3)
+  expect(errors).toEqual([])
+})
+
+test('Templates › Video: Crop sits beside its choices, like Source filter', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  const video = page.locator('[data-slot=card]').filter({ hasText: 'Source filter' })
+  const crop = video.getByText('Crop', { exact: true }).first()
+  const keep = video.getByText("Keep each job's", { exact: true })
+  const source = await video.getByText('Source filter', { exact: true }).boundingBox()
+  const label = (await crop.boundingBox())!
+  expect(Math.abs(label.x - source!.x)).toBeLessThanOrEqual(1)
+  expect(label.x + label.width).toBeLessThan((await keep.boundingBox())!.x)
+  expect(await labelGap(crop, keep)).toBeLessThanOrEqual(2)
   expect(errors).toEqual([])
 })

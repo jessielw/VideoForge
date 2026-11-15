@@ -345,7 +345,7 @@
         {/if}
       {:else if tab === 'output'}
         <div class="max-w-3xl space-y-5">
-          <div class="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 text-sm">
+          <div class="grid grid-cols-[8rem_minmax(0,1fr)] items-baseline gap-3 text-sm">
             <span class="text-muted-foreground">Output folder</span>
             <div
               class="-m-1 flex gap-2 rounded-lg p-1 outline-none"
@@ -452,7 +452,8 @@
               <span>{container?.label ?? job.spec.mux.container}</span>
             {/if}
             {#if container?.id === 'mkv'}
-              <span class="text-muted-foreground">PGS compression</span>
+              <!-- self-start: the row starts with a checkbox, whose baseline moves with its tick; its first line is at the top -->
+              <span class="self-start text-muted-foreground">PGS compression</span>
               <label class="flex items-center gap-2">
                 <Checkbox
                   checked={job.spec.mux.pgs_zlib ?? false}

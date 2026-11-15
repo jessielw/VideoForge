@@ -295,7 +295,9 @@
       <PathSlot label="Output folder" hint="Where finished files are saved" bind:paths={output} mode="folder">
         {#snippet actions()}<OutputFolderMenu onpick={(path) => (output = [path])} />{/snippet}
       </PathSlot>
-      <div class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 @min-[40rem]/import:grid-cols-[8rem_minmax(0,1fr)]">
+      <div
+        class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-3 @min-[40rem]/import:grid-cols-[8rem_minmax(0,1fr)]"
+      >
         <div class="text-sm text-muted-foreground">Rule set</div>
         <div class="flex flex-wrap items-center gap-3">
           <NativeSelect bind:value={ruleSet} aria-label="Rule set">
@@ -350,7 +352,8 @@
             <span>Crop {c.left}/{c.top}/{c.right}/{c.bottom} on every job</span>
           {/if}
         </div>
-        <div class="text-sm text-muted-foreground">After adding</div>
+        <!-- self-start: the row starts with a checkbox, whose baseline moves with its tick; its first line is at the top -->
+        <div class="self-start text-sm text-muted-foreground">After adding</div>
         <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
           <span class="flex items-center gap-2">
             <label class="flex items-center gap-2">

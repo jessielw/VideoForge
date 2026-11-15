@@ -469,7 +469,7 @@
         >
           <Card.Root class="gap-4 p-4">
             <span class="section-label">Video</span>
-            <label class="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-2 text-sm">
+            <label class="grid grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-2 text-sm">
               <span class="text-muted-foreground">Source filter</span>
               <NativeSelect
                 class="w-full"
@@ -479,43 +479,45 @@
                 {#each SOURCE_FILTERS as f (f.id)}<option value={f.id} title={f.title}>{f.label}</option>{/each}
               </NativeSelect>
             </label>
-            <div class="space-y-2">
-              <span class="text-sm text-muted-foreground">Crop</span>
-              <ToggleGroup.Root
-                type="single"
-                variant="outline"
-                spacing={1}
-                class="w-fit max-w-full flex-wrap"
-                disabled={readOnly}
-                value={draft.crop_mode}
-                onValueChange={(v) => v && (draft!.crop_mode = v as CropMode)}
-              >
-                {#each CROP_MODES as m (m.id)}
-                  <ToggleGroup.Item
-                    value={m.id}
-                    class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                    >{m.label}</ToggleGroup.Item
-                  >
-                {/each}
-              </ToggleGroup.Root>
-              {#if draft.crop_mode === 'fixed'}
-                <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">
-                  {#each SIDES as side (side)}
-                    <label class="text-muted-foreground capitalize" for="tcrop-{side}">{side}</label>
-                    <Input id="tcrop-{side}" type="number" step="2" min="0" bind:value={draft.video.crop[side]} />
+            <div class="grid grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-2 text-sm">
+              <span class="text-muted-foreground">Crop</span>
+              <div class="min-w-0 space-y-2">
+                <ToggleGroup.Root
+                  type="single"
+                  variant="outline"
+                  spacing={1}
+                  class="w-fit max-w-full flex-wrap"
+                  disabled={readOnly}
+                  value={draft.crop_mode}
+                  onValueChange={(v) => v && (draft!.crop_mode = v as CropMode)}
+                >
+                  {#each CROP_MODES as m (m.id)}
+                    <ToggleGroup.Item
+                      value={m.id}
+                      class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                      >{m.label}</ToggleGroup.Item
+                    >
                   {/each}
-                </div>
-                <p class="text-xs text-muted-foreground">
-                  Uses the same crop on every job, for sources that share their black bars, such as one show.
-                </p>
-              {:else if draft.crop_mode === 'auto'}
-                <p class="text-xs text-muted-foreground">
-                  Detects each job's crop after it's added. The source is indexed first, which takes a while the first
-                  time.
-                </p>
-              {:else}
-                <p class="text-xs text-muted-foreground">Applying the template leaves each job's crop as it is.</p>
-              {/if}
+                </ToggleGroup.Root>
+                {#if draft.crop_mode === 'fixed'}
+                  <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">
+                    {#each SIDES as side (side)}
+                      <label class="text-muted-foreground capitalize" for="tcrop-{side}">{side}</label>
+                      <Input id="tcrop-{side}" type="number" step="2" min="0" bind:value={draft.video.crop[side]} />
+                    {/each}
+                  </div>
+                  <p class="text-xs text-muted-foreground">
+                    Uses the same crop on every job, for sources that share their black bars, such as one show.
+                  </p>
+                {:else if draft.crop_mode === 'auto'}
+                  <p class="text-xs text-muted-foreground">
+                    Detects each job's crop after it's added. The source is indexed first, which takes a while the first
+                    time.
+                  </p>
+                {:else}
+                  <p class="text-xs text-muted-foreground">Applying the template leaves each job's crop as it is.</p>
+                {/if}
+              </div>
             </div>
             <ResizeEditor bind:resize={draft.video.resize} disabled={readOnly} />
             <FilterChain
@@ -549,7 +551,7 @@
             <Card.Root class="@container/output gap-3 p-4">
               <span class="section-label">Output</span>
               <div
-                class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 text-sm @min-[26rem]/output:grid-cols-[7rem_minmax(0,1fr)]"
+                class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-3 text-sm @min-[26rem]/output:grid-cols-[7rem_minmax(0,1fr)]"
               >
                 <span class="text-muted-foreground">Container</span>
                 {#if containers.length > 1}
@@ -580,7 +582,8 @@
                   >
                 {/if}
                 {#if container?.id === 'mkv'}
-                  <span class="text-muted-foreground">PGS compression</span>
+                  <!-- self-start: the row starts with a checkbox, whose baseline moves with its tick; its first line is at the top -->
+                  <span class="self-start text-muted-foreground">PGS compression</span>
                   <label class="flex items-center gap-2">
                     <Checkbox
                       checked={draft.mux.pgs_zlib ?? false}
