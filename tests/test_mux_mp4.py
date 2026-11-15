@@ -77,6 +77,9 @@ def test_mp4box_vpx_encode_is_tagged():
     av1 = ContainerColor(9, 16, 9, False, max_cll=1000, max_fall=400)
     argv = mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW, color=av1)
     assert adds(argv)[0] == "video.ivf#video:colr=nclx,9,16,9,0:lang=en-US:name="
+    # an AV1 encode's Dolby Vision: MP4Box writes its dvvC only when told the profile
+    argv = mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW, color=av1, dvp="10.1")
+    assert adds(argv)[0] == "video.ivf#video:dvp=10.1:colr=nclx,9,16,9,0:lang=en-US:name="
 
 
 def test_mp4box_command():

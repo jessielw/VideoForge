@@ -42,6 +42,7 @@ class Tools:
     x264: str = "x264"
     x265: str = "x265"
     svtav1: str = "SvtAv1EncApp"
+    svtav1hdr: str = "SvtAv1EncApp-HDR"  # SVT-AV1-HDR's SvtAv1EncApp, under its own name beside the mainline one
     opusenc: str = "opusenc"
     mp4box: str = "MP4Box"
     dovi_tool: str = "dovi_tool"  # Dolby Vision RPU extract / edit

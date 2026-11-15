@@ -11,6 +11,7 @@ import pytest
 from videoforge.core.models import VideoHdr, VideoInfo
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video import hdr
+from videoforge.core.video.color import SVT_DV5_ARGS, effective_container_color
 from videoforge.core.video.encoders import encoder_command, level_vbv
 from videoforge.core.video.hdr import from_mediainfo, hdr10plus_frames, l5_offsets, rpu_edit, video_stream_argv
 from videoforge.core.video.settings import (
@@ -273,6 +274,105 @@ def test_dolby_vision_x265_args():
     assert x265[i + 4 : i + 6] == ["--vbv-bufsize", "160000"] and x265.count("--vbv-maxrate") == 1
     plain = encoder_command("x265", leveled, output=Path("v.hevc"))
     assert "--vbv-bufsize" not in plain  # only for Dolby Vision
+
+
+def test_svtav1hdr_metadata_args():
+    """SVT-AV1-HDR: the HDR10+ JSON and the RPU after the colour, no x265 profile or VBV; profile 5's colour forced
+    after the job's own flags."""
+    rpu, meta = Path("dv_rpu.bin"), Path("hdr10plus.json")
+    s = EncoderSettings(encoder=Encoder.SVTAV1HDR, depth=10, preset="4", extra="--color-range 0")
+    argv = encoder_command("svt", s, output=Path("v.ivf"), hdr10plus=meta, dolby_vision=rpu)
+    assert argv[argv.index("--hdr10plus-json") + 1] == "hdr10plus.json"
+    assert argv[argv.index("--dolby-vision-rpu") + 1] == "dv_rpu.bin"
+    assert "--dolby-vision-profile" not in argv and "--vbv-bufsize" not in argv and argv.count("--color-range") == 1
+    five = encoder_command("svt", s, output=Path("v.ivf"), dolby_vision=rpu, dv_profile="5")
+    assert five[-10:-2] == list(SVT_DV5_ARGS) and five[five.index("--color-range") :][:2] == ["--color-range", "0"]
+    assert five[-2:] == ["--output", "v.ivf"] and "--hdr10plus-json" not in five
+    tags = effective_container_color(None, s, "5")
+    assert (tags.primaries, tags.transfer, tags.matrix, tags.full_range) == (2, 2, 2, True)
+    assert effective_container_color(None, s, "8.1").full_range is False  # the job's --color-range 0
+
+
+def _obu(kind: int, payload: bytes, extension: bool = False) -> bytes:
+    """One OBU with its size field (and an extension byte when asked)."""
+    header = bytes([(kind << 3) | (4 if extension else 0) | 2]) + (b"\x00" if extension else b"")
+    size, out = len(payload), b""
+    while True:
+        out += bytes([(size & 0x7F) | (0x80 if size > 0x7F else 0)])
+        size >>= 7
+        if not size:
+            return header + out + payload
+
+
+def _ivf(path: Path, units: list[bytes]) -> Path:
+    head = b"DKIF" + (0).to_bytes(2, "little") + (32).to_bytes(2, "little") + b"AV01" + bytes(20)
+    frames = b"".join(len(u).to_bytes(4, "little") + n.to_bytes(8, "little") + u for n, u in enumerate(units))
+    path.write_bytes(head + frames)
+    return path
+
+
+def test_av1_metadata_counts_the_t35_obus(tmp_path):
+    """Each frame's HDR10+ and Dolby Vision T.35 metadata OBUs (metadata type 4), past a temporal delimiter, an
+    extension byte and a long (two-byte leb128) payload; another provider's T.35 or another metadata type isn't
+    counted."""
+    hdr10plus = _obu(5, b"\x04" + bytes((0xB5, 0x00, 0x3C, 0x00, 0x01, 0x04)) + bytes(200))
+    dovi = _obu(5, b"\x04" + bytes((0xB5, 0x00, 0x3B, 0x00, 0x00, 0x08, 0x00, 0x37, 0xCD, 0x08)) + b"rpu", True)
+    other = _obu(5, b"\x04" + bytes((0xB5, 0x00, 0x31)) + b"x") + _obu(5, b"\x01" + bytes(8))  # ATSC, HDR CLL
+    frame = _obu(6, bytes(40))
+    units = [_obu(2, b"") + hdr10plus + dovi + frame, _obu(2, b"") + dovi + other + frame, _obu(2, b"") + frame]
+    assert hdr.av1_metadata(_ivf(tmp_path / "v.ivf", units)) == (3, 1, 2)
+    (tmp_path / "bad.ivf").write_bytes(b"not an ivf")
+    with pytest.raises(ValueError, match="isn't an IVF"):
+        hdr.av1_metadata(tmp_path / "bad.ivf")
+
+
+def test_av1_output_check(tmp_path):
+    """An SVT-AV1-HDR output: MediaInfo's profile 10 (an MKV's without its compatibility, an MP4's 10.1), and the
+    HDR10+ and the RPU counted on every frame of the encode, which MediaInfo can't read."""
+    video = VideoInfo(3840, 2160, hdr=VideoHdr(dv_profile=8, dv_compat=1, hdr10plus=True))
+    s = EncoderSettings(encoder=Encoder.SVTAV1HDR, depth=10)
+    meta = _obu(5, b"\x04" + bytes((0xB5, 0x00, 0x3C, 0x00, 0x01, 0x04)))
+    rpu = _obu(5, b"\x04" + bytes((0xB5, 0x00, 0x3B, 0x00, 0x00, 0x08, 0x00, 0x37, 0xCD, 0x08)))
+    full = _ivf(tmp_path / "full.ivf", [meta + rpu, meta + rpu])
+    part = _ivf(tmp_path / "part.ivf", [meta + rpu, rpu])
+
+    def output(dv_profile, dv_compat=None):
+        return SimpleNamespace(video=SimpleNamespace(hdr=VideoHdr(dv_profile=dv_profile, dv_compat=dv_compat)))
+
+    assert hdr.output_issues(video, s, output(10), full) == []
+    assert hdr.output_issues(video, s, output(10, 1), full) == []
+    messages = [i.message for i in hdr.output_issues(video, s, output(10, 1), part)]
+    assert messages == ["The output has no HDR10+ on 1 of its 2 frames"]
+    messages = [i.message for i in hdr.output_issues(video, s, output(10, 0), full)]
+    assert messages == ["The output has Dolby Vision 10.0, not 10.1 (8.1)"]
+    assert [i.code for i in hdr.output_issues(video, s, output(0), full)] == ["hdr.dv_missing"]
+    no_rpu = _ivf(tmp_path / "meta.ivf", [meta, meta])
+    messages = [i.message for i in hdr.output_issues(video, s, output(10), no_rpu)]
+    assert messages == ["The output's Dolby Vision RPU is on 0 of its 2 frames"]
+    five = replace(video, hdr=VideoHdr(dv_profile=5))
+    assert hdr.output_issues(five, s, output(10), full) == []
+    assert [i.code for i in hdr.output_issues(five, s, output(10, 1), full)] == ["hdr.dv_missing"]
+    (tmp_path / "bad.ivf").write_bytes(b"x")
+    (issue,) = hdr.output_issues(video, s, output(10), tmp_path / "bad.ivf")
+    assert issue.code == "hdr.av1_unread" and "isn't an IVF" in issue.message
+    # without the encode (a test that left it out) MediaInfo's HDR10+ stands
+    assert [i.code for i in hdr.output_issues(video, s, output(10))] == ["hdr.hdr10plus_missing"]
+
+
+def test_a_build_without_the_metadata_flags_blocks(monkeypatch):
+    """Settings pointing SVT-AV1-HDR at a build whose help leaves the flags out (mainline SVT-AV1, one built
+    without libdovi / hdr10plus) blocks the metadata it can't write; a build it can't read checks nothing."""
+    video = VideoInfo(3840, 2160, hdr=VideoHdr(dv_profile=8, dv_compat=1, hdr10plus=True))
+    video.color.master_display = "G(13250,34500)B(7500,3000)"
+    s = EncoderSettings(encoder=Encoder.SVTAV1HDR, depth=10, preset="4")
+    tools = SimpleNamespace(ffmpeg="", dovi_tool="", mkvmerge="", hdr10plus_tool="")
+    monkeypatch.setattr(hdr, "_missing_tools", lambda *_: [])
+    monkeypatch.setattr(hdr, "known_options", lambda *_: {"preset": "", "crf": ""})
+    assert [i.code for i in hdr.issues(video, s, tools)] == ["hdr.svt_build", "hdr.svt_build"]
+    monkeypatch.setattr(hdr, "known_options", lambda *_: {"dolby-vision-rpu": "", "hdr10plus-json": ""})
+    assert hdr.issues(video, s, tools) == []
+    monkeypatch.setattr(hdr, "known_options", lambda *_: {})
+    assert hdr.issues(video, s, tools) == []
 
 
 @pytest.mark.parametrize(

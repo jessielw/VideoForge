@@ -87,13 +87,14 @@ export interface VideoSettings {
   custom: string | null
 }
 
-export type EncoderName = 'x264' | 'x265' | 'vp8' | 'vp9' | 'svtav1'
+export type EncoderName = 'x264' | 'x265' | 'vp8' | 'vp9' | 'svtav1' | 'svtav1hdr'
 export const ENCODERS: [EncoderName, string][] = [
   ['x264', 'x264'],
   ['x265', 'x265'],
   ['vp8', 'VP8'],
   ['vp9', 'VP9'],
   ['svtav1', 'SVT-AV1'],
+  ['svtav1hdr', 'SVT-AV1-HDR'],
 ]
 export type RateControl = 'crf' | 'abr' | '2pass'
 

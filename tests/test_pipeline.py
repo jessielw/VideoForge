@@ -1633,6 +1633,9 @@ def test_hdr10plus_is_carried_into_x265(rule_set, tmp_path, monkeypatch):
         (Encoder.X265, 8, True, ["hdr.hdr10plus_depth"]),
         (Encoder.X265, 10, False, []),
         (Encoder.X265, 10, True, []),
+        (Encoder.SVTAV1, 10, True, ["hdr.hdr10plus_x264"]),
+        (Encoder.SVTAV1HDR, 8, True, ["hdr.hdr10plus_depth"]),
+        (Encoder.SVTAV1HDR, 10, True, []),
     ],
 )
 def test_hdr10plus_plan(rule_set, tmp_path, encoder, depth, on, codes):
@@ -1644,7 +1647,7 @@ def test_hdr10plus_plan(rule_set, tmp_path, encoder, depth, on, codes):
     tools = replace(APP.tools, hdr10plus_tool=fake_tool_files("hdr10plus_tool")["hdr10plus_tool"])
     assert [i.code for i in hdr.issues(plan.source.video, job.encoder, tools)] == codes
     built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
-    carried = encoder is Encoder.X265 and on
+    carried = encoder in (Encoder.X265, Encoder.SVTAV1HDR) and on
     assert ("hdr10plus" in [s.id for s in built.steps]) is carried
     missing = replace(APP.tools, hdr10plus_tool=str(tmp_path / "nope.exe"))
     found = [i.code for i in hdr.issues(plan.source.video, job.encoder, missing)]
@@ -1808,6 +1811,17 @@ def test_dolby_vision_profile_5_stays_profile_5(rule_set, tmp_path, monkeypatch)
         ({"dv_profile": 7, "dv_compat": 6, "dv_el": "MEL"}, {}, []),
         ({"dv_profile": 7, "dv_compat": 6, "dv_el": "FEL"}, {}, []),
         ({"dv_profile": 7, "dv_compat": 6, "dv_el": ""}, {}, ["hdr.dv_el"]),
+        # SVT-AV1-HDR: no VBV, the mastering display by its own flag; SVT-AV1 carries none
+        ({}, {"encoder": Encoder.SVTAV1HDR, "options": {}}, []),
+        ({}, {"encoder": Encoder.SVTAV1HDR, "options": {}, "depth": 8}, ["hdr.dv_depth"]),
+        ({}, {"encoder": Encoder.SVTAV1HDR, "source_color": False}, ["hdr.dv_master"]),
+        ({}, {"encoder": Encoder.SVTAV1HDR, "source_color": False, "extra": "--mastering-display G(0.265,0.69)"}, []),
+        ({}, {"encoder": Encoder.SVTAV1HDR, "source_color": False, "extra": "--master-display x"}, ["hdr.dv_master"]),
+        ({"dv_profile": 5, "dv_compat": None}, {"encoder": Encoder.SVTAV1HDR}, []),
+        ({"dv_profile": 7, "dv_compat": 6, "dv_el": "FEL"}, {"encoder": Encoder.SVTAV1HDR}, []),
+        ({"dv_compat": 4}, {"encoder": Encoder.SVTAV1HDR}, ["hdr.dv_hlg"]),
+        ({}, {"encoder": Encoder.SVTAV1, "depth": 10}, ["hdr.dv_x264"]),
+        ({"dv_profile": 5, "dv_compat": None}, {"encoder": Encoder.SVTAV1, "depth": 10}, ["hdr.dv_profile5"]),
     ],
 )
 def test_dolby_vision_plan(rule_set, tmp_path, hdr_info, encoder, codes):
@@ -1821,6 +1835,42 @@ def test_dolby_vision_plan(rule_set, tmp_path, hdr_info, encoder, codes):
     assert ("tools.missing" in [i.code for i in hdr.issues(video, job.encoder, missing)]) is (
         hdr.keeps_dv(video, job.encoder)
     )
+
+
+@pytest.mark.parametrize(("profile", "compat"), [(8, 1), (5, None)])
+def test_dolby_vision_and_hdr10plus_into_svtav1hdr(rule_set, tmp_path, profile, compat):
+    """SVT-AV1-HDR takes the edited RPU and the HDR10+ JSON as x265 does (--dolby-vision-rpu, --hdr10plus-json),
+    with no --dolby-vision-profile (the RPU says it) or VBV. A profile 5 encode's colour is x265's for it: H.273's
+    unspecified in full range, last on the command line and on the container's tags."""
+    plan = make_plan(tmp_path)
+    job = dv_job(plan, tmp_path, encoder=Encoder.SVTAV1HDR, options={})
+    job.encoder.preset = "4"
+    video = plan.source.video
+    video.hdr = replace(video.hdr, dv_profile=profile, dv_compat=compat, hdr10plus=profile == 8)
+    video.color = replace(video.color, primaries="bt2020", transfer="smpte2084", matrix="bt2020nc", range="limited")
+    built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    step = {s.id: s for s in built.steps}
+    assert step["dovi.edit"].label == f"Dolby Vision RPU: crop, resize, profile {'8.1' if profile == 8 else '5'}"
+    argv = step["video"].argvs[1]
+    assert argv[0] == "SvtAv1EncApp-HDR" and argv[argv.index("--dolby-vision-rpu") + 1] == str(
+        job.job_dir / "dv_rpu.bin"
+    )
+    assert "--dolby-vision-profile" not in argv and "--vbv-maxrate" not in argv
+    assert ("--hdr10plus-json" in argv) is (profile == 8)
+    tail = argv[argv.index("--output") - 8 : argv.index("--output")]
+    forced = ("--color-primaries", "2", "--transfer-characteristics", "2", "--matrix-coefficients", "2")
+    assert (tail == (*forced, "--color-range", "1")) is (profile == 5)
+    mux = step["mux"].argvs[0]
+    assert not any("dvp" in a for a in mux)  # mkvmerge finds it in the stream
+    job.mux = replace(job.mux, container="mp4")
+    mp4 = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mp4").steps}
+    want = ":dvp=10.1" if profile == 8 else ":dvp=10.0"
+    assert any(want in a for a in mp4["mux"].argvs[0])
+    if profile == 5:  # the container says the same as the stream
+        assert mux[mux.index("--colour-primaries") + 1].endswith(":2")
+        assert mux[mux.index("--colour-range") + 1].endswith(":2")  # mkvmerge's 2 is full
+    else:
+        assert mux[mux.index("--colour-primaries") + 1].endswith(":9")
 
 
 def test_dolby_vision_custom_script_blocks(tmp_path):
@@ -1938,6 +1988,28 @@ def test_fel_is_baked_into_the_encode(rule_set, tmp_path, monkeypatch, source_fi
     result = run_job(job, plan, rule_set, APP, state=state, runner=runner, prober=lambda *_: carried)
     assert result.status is JobStatus.DONE, result.error
     assert "x265" not in tools_called(runner)
+
+
+def test_a_baked_fel_into_svtav1hdr_tags_the_rpus_hdr10(rule_set, tmp_path, monkeypatch):
+    """SVT-AV1-HDR bakes a FEL as x265 does, and the container's HDR10 tags (mkvmerge doesn't copy an AV1 stream's)
+    follow the encode's: the RPU's values, read when the mux's turn comes, not the source's."""
+    plan = make_plan(tmp_path)
+    job = fel_job(plan, tmp_path, encoder=Encoder.SVTAV1HDR, options={})
+    job.encoder.preset = "4"
+    monkeypatch.setattr(hdr, "edit_rpu", lambda _d, _s, dst, *_a: dst.write_bytes(b"rpu"))
+    monkeypatch.setattr(hdr, "script_frames", lambda *_: 240)
+    monkeypatch.setattr(hdr, "rpu_frames", lambda *_: 240)
+    monkeypatch.setattr(hdr, "rpu_summary", lambda *_: SUMMARY.format(l1="0.01", l1f="0.00"))
+    monkeypatch.setattr(hdr, "av1_metadata", lambda _ivf: (240, 0, 240))  # the fake encode is no IVF
+    runner = FakeRunner()
+    carried = replace(simulate_output(plan), video=replace(plan.source.video, hdr=VideoHdr(dv_profile=10)))
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=runner, prober=lambda *_: carried)
+    assert result.status is JobStatus.DONE, result.error
+    svt = next(c[-1] for c in runner.calls if Path(c[-1][0]).stem == "SvtAv1EncApp-HDR")
+    assert svt[svt.index("--content-light") + 1] == "2573,684"
+    mkvmerge = next(c[-1] for c in runner.calls if Path(c[-1][0]).stem == "mkvmerge" and "--max-content-light" in c[-1])
+    assert mkvmerge[mkvmerge.index("--max-content-light") + 1] == "0:2573"
+    assert mkvmerge[mkvmerge.index("--max-frame-light") + 1] == "0:684"
 
 
 def test_a_uhd_bluray_m2ts_bakes_its_second_track(rule_set, tmp_path):

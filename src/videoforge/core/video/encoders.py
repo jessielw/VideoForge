@@ -9,7 +9,8 @@ chapters) forces keyframes at chapter starts. VP8 / VP9 go through ffmpeg's libv
 (timed by the y4m's frame rate); the chapters' keyframes become -force_key_frames, and the mux writes the pixel
 aspect and the colour the stream doesn't hold. SVT-AV1 (SvtAv1EncApp, as StaxRip runs it) writes an IVF too; its
 keyframes are --force-key-frames (CRF only: SvtAv1EncApp refuses it with a bitrate), and the mux writes the pixel
-aspect, and the colour mkvmerge doesn't copy from the stream.
+aspect, and the colour mkvmerge doesn't copy from the stream. SVT-AV1-HDR (juliobbv-p's fork, its own Tools path)
+runs the same command line (Encoder.svt), with presets from -3.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import re
 
 from videoforge.core.arguments import split_args
 from videoforge.core.models import Issue, Severity, VideoColor, VideoInfo
-from videoforge.core.video.color import color_args, color_choices, drop_source_flags, hdr10, untagged
+from videoforge.core.video.color import SVT_DV5_ARGS, color_args, color_choices, drop_source_flags, hdr10, untagged
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
 
 EXTENSIONS = {
@@ -30,6 +31,7 @@ EXTENSIONS = {
     Encoder.VP8: ".ivf",
     Encoder.VP9: ".ivf",
     Encoder.SVTAV1: ".ivf",
+    Encoder.SVTAV1HDR: ".ivf",
 }
 # The Tools field that runs each encoder
 TOOLS = {
@@ -38,6 +40,7 @@ TOOLS = {
     Encoder.VP8: "ffmpeg",
     Encoder.VP9: "ffmpeg",
     Encoder.SVTAV1: "svtav1",
+    Encoder.SVTAV1HDR: "svtav1hdr",
 }
 LIBVPX = {Encoder.VP8: "libvpx", Encoder.VP9: "libvpx-vp9"}
 # StaxRip's ffmpeg VP9 defaults (ffmpegEnc.vb), plus row-based threading; the job's options come after them, and win
@@ -45,8 +48,9 @@ VP9_DEFAULTS = {"tile-columns": "6", "frame-parallel": "1", "auto-alt-ref": "1",
 # VP8's CRF ceiling. ffmpeg runs VP8 -crf as constrained quality and reads -b:v 0 as its 256 kbit/s default (VP9
 # alone has a true constant quality); a Fallout 1080p sample at -crf 20 came out the same with 100M and 1000M
 VP8_CRF_CAP = "100M"
-# SvtAv1EncApp's --preset and --crf ranges (13 fastest; CRF in quarter steps)
+# SvtAv1EncApp's --preset and --crf ranges (13 fastest; CRF in quarter steps); SVT-AV1-HDR's presets go to -3
 SVTAV1_PRESETS = range(-1, 14)
+SVTAV1HDR_PRESETS = range(-3, 14)
 SVTAV1_CRF = (1, 70)
 SVTAV1_UNDERSHOOT = "5"  # a 2-pass encode's --undershoot-pct (svtav1_command)
 _PERCENT = re.compile(r"\[\s*(\d+(?:\.\d+)?)%\]")  # both encoders: "[ 12.3%] 1234/10000 frames, ..."
@@ -85,7 +89,7 @@ def output_name(settings: EncoderSettings) -> str:
 def forces_keyframes(settings: EncoderSettings) -> bool:
     """Whether the chapters' keyframes go in as a list of frames (keyframes), not a qpfile: VP8 / VP9, and SVT-AV1
     in CRF (SvtAv1EncApp: "Force key frames is not supported for VBR mode")."""
-    return settings.encoder.libvpx or (settings.encoder is Encoder.SVTAV1 and settings.rate_control is RateControl.CRF)
+    return settings.encoder.libvpx or (settings.encoder.svt and settings.rate_control is RateControl.CRF)
 
 
 def stats_path(work: Path, settings: EncoderSettings) -> Path:
@@ -178,13 +182,13 @@ def encoder_command(
 ) -> list[str]:
     """One encoder run reading y4m from stdin. pass_number is 1 or 2 for a two-pass encode. sar is the
     encode's pixel aspect ratio (vspipe's y4m carries none), written when it isn't square; color is the
-    source's colour description (color.color_args); hdr10plus an x265 encode's HDR10+ metadata and dolby_vision
-    its RPU, written as dv_profile (8.1, or 5: hdr.dv_profile); with that RPU or HDR10, the VBV (HRD) is filled from --level-idc (level_vbv), as
-    StaxRip does. A --sar in the options or extra arguments comes after it, and wins; a colour flag for a value the
-    source has is dropped from them unless settings.color_override (color.source_wins). VP8 / VP9
-    (ffmpeg_command) and SVT-AV1 (svtav1_command) take keyframes (qpfile_frames) instead of the qpfile, and no
-    sar."""
-    if settings.encoder is Encoder.SVTAV1:
+    source's colour description (color.color_args); hdr10plus an x265 or SVT-AV1-HDR encode's HDR10+ metadata and
+    dolby_vision its RPU, written as dv_profile (8.1, or 5: hdr.dv_profile); with that RPU or HDR10, x265's VBV
+    (HRD) is filled from --level-idc (level_vbv), as StaxRip does. A --sar in the options or extra arguments comes
+    after it, and wins; a colour flag for a value the source has is dropped from them unless settings.color_override
+    (color.source_wins). VP8 / VP9 (ffmpeg_command) and SVT-AV1 (svtav1_command) take keyframes (qpfile_frames)
+    instead of the qpfile, and no sar."""
+    if settings.encoder.svt:
         return svtav1_command(
             exe,
             settings,
@@ -193,6 +197,9 @@ def encoder_command(
             pass_number=pass_number,
             stats=stats,
             color=color,
+            hdr10plus=hdr10plus,
+            dolby_vision=dolby_vision,
+            dv_profile=dv_profile,
             keyframes=keyframes,
         )
     if settings.encoder.libvpx:
@@ -290,6 +297,9 @@ def svtav1_command(
     pass_number: int | None = None,
     stats: Path | None = None,
     color: VideoColor | None = None,
+    hdr10plus: Path | None = None,
+    dolby_vision: Path | None = None,
+    dv_profile: str = "8.1",
     keyframes: Sequence[int] = (),
 ) -> list[str]:
     """A SvtAv1EncApp run reading y4m from stdin, as StaxRip's SVT-AV1 encoder writes it: --rc 0 --crf for
@@ -297,7 +307,9 @@ def svtav1_command(
     progress lines progress() reads). The y4m gives the size, frame rate and bit depth. keyframes (the chapters')
     are forced in CRF only (forces_keyframes). Two passes get --undershoot-pct 5 unless the options or extra
     arguments set it: at its default (25) a Fallout sample came in 26% under --tbr (8 minutes of it, 33%), at 5
-    within 5.5%."""
+    within 5.5%. SVT-AV1-HDR takes an HDR10+ JSON (--hdr10plus-json) and a Dolby Vision RPU (--dolby-vision-rpu),
+    which it writes as metadata OBUs (AV1's profile 10: 8.1 -> 10.1, 5 -> 10.0, the RPU tells it); a profile 5
+    encode's colour is forced last (SVT_DV5_ARGS), as x265 forces it."""
     argv = [exe, "--input", "-"]
     argv += ["--frames", str(frames)] if frames else []
     argv += ["--preset", settings.preset] if settings.preset else []
@@ -312,12 +324,15 @@ def svtav1_command(
         argv += ["--pass", str(pass_number), "--stats", str(stats)]
         argv += ["--undershoot-pct", SVTAV1_UNDERSHOOT] if _setting(settings, "undershoot-pct") is None else []
     argv += color_args(color, settings)
+    argv += ["--hdr10plus-json", str(hdr10plus)] if hdr10plus is not None else []
+    argv += ["--dolby-vision-rpu", str(dolby_vision)] if dolby_vision is not None else []
     if keyframes and forces_keyframes(settings):
         argv += ["--force-key-frames", ",".join(f"{n}f" for n in keyframes)]
     argv += ["--progress", "2"]
     argv += drop_source_flags(_options(settings.options), color, settings)
     if settings.extra.strip():
         argv += drop_source_flags(split_args(settings.extra), color, settings)
+    argv += SVT_DV5_ARGS if dolby_vision is not None and dv_profile == "5" else ()
     argv += ["--output", str(output)]
     return argv
 
@@ -374,7 +389,7 @@ def issues(settings: EncoderSettings, video: VideoInfo | None, chapters: bool = 
     transfer and primaries are). SVT-AV1: 8 or 10-bit, its preset and CRF ranges, and with chapters (the job makes
     them) a bitrate can't force their keyframes."""
     tags = _color_issues(settings, video)
-    if settings.encoder is Encoder.SVTAV1:
+    if settings.encoder.svt:
         return _svtav1_issues(settings, chapters) + tags
     if not settings.encoder.libvpx:
         return tags
@@ -411,12 +426,17 @@ def issues(settings: EncoderSettings, video: VideoInfo | None, chapters: bool = 
     return out + tags
 
 
+def svt_presets(encoder: Encoder) -> range:
+    """The --preset range of an SvtAv1EncApp build: SVT-AV1-HDR's starts at -3, SVT-AV1's at -1."""
+    return SVTAV1HDR_PRESETS if encoder is Encoder.SVTAV1HDR else SVTAV1_PRESETS
+
+
 def _svtav1_issues(settings: EncoderSettings, chapters: bool) -> list[Issue]:
-    out = []
+    name, presets, out = settings.encoder.label, svt_presets(settings.encoder), []
     if settings.depth not in (8, 10):
-        out.append(Issue(Severity.BLOCK, "video.svtav1_depth", "SVT-AV1 encodes 8 or 10-bit: set the bit depth to one"))
+        out.append(Issue(Severity.BLOCK, "video.svtav1_depth", f"{name} encodes 8 or 10-bit: set the bit depth to one"))
     try:
-        preset_ok = not settings.preset or int(settings.preset) in SVTAV1_PRESETS
+        preset_ok = not settings.preset or int(settings.preset) in presets
     except ValueError:
         preset_ok = False
     if not preset_ok:
@@ -424,22 +444,21 @@ def _svtav1_issues(settings: EncoderSettings, chapters: bool) -> list[Issue]:
             Issue(
                 Severity.BLOCK,
                 "video.svtav1_preset",
-                f"SVT-AV1's preset is a number from -1 to 13 (13 fastest): {settings.preset!r} isn't one",
+                f"{name}'s preset is a number from {presets.start} to {presets.stop - 1} (13 fastest): "
+                f"{settings.preset!r} isn't one",
             )
         )
     low, high = SVTAV1_CRF
     if settings.rate_control is RateControl.CRF and not low <= settings.crf <= high:
         out.append(
-            Issue(
-                Severity.BLOCK, "video.svtav1_crf", f"SVT-AV1's CRF goes from {low} to {high}: {settings.crf:g} isn't"
-            )
+            Issue(Severity.BLOCK, "video.svtav1_crf", f"{name}'s CRF goes from {low} to {high}: {settings.crf:g} isn't")
         )
     if chapters and not forces_keyframes(settings):
         out.append(
             Issue(
                 Severity.WARN,
                 "video.svtav1_keyframes",
-                "SVT-AV1 forces keyframes in CRF only: with a bitrate, the chapters don't start on one",
+                f"{name} forces keyframes in CRF only: with a bitrate, the chapters don't start on one",
             )
         )
     return out

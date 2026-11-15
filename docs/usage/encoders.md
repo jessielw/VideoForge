@@ -13,6 +13,7 @@ The **Encoder** tab controls the video encoder, rate control, preset, bit depth,
 | VP8 | `ffmpeg` with libvpx | Intermediate IVF stream |
 | VP9 | `ffmpeg` with libvpx-vp9 | Intermediate IVF stream |
 | SVT-AV1 | `SvtAv1EncApp` | AV1; intermediate IVF stream |
+| SVT-AV1-HDR | `SvtAv1EncApp` ([juliobbv-p's build](https://github.com/juliobbv-p/svt-av1-hdr)) | AV1 with HDR10+ and Dolby Vision; presets down to -3, tunes for film grain and still images; intermediate IVF stream |
 
 VideoForge muxes the encoded stream into the chosen MKV or MP4 container. Encoder availability depends on the tool paths and installed builds; inspect **Settings** if an encoder is unavailable.
 
@@ -23,7 +24,7 @@ Use **Encoder preset** in a job's Encoder tab, the template editor, or New jobs 
 The compact picker opens with **My presets** and your folders above the built-in configurations, across all encoders. Select a preset to apply its encoder and settings together. Search by name, folder, encoder, or settings across the library, or use the **Encoder** filter to narrow the results. The manager uses the same browser. Choose **Manage presets…** to open the larger editor:
 
 1. Select a preset on the left, or choose **New from current settings**.
-2. Edit its name, folder, encoder, quality, speed, and bit depth on the right. Expand **Advanced settings** (**Advanced settings and HDR** for x265 and SVT-AV1) for structured options, extra arguments, and metadata settings. The HDR10+ and Dolby Vision boxes show for x265 only, the one encoder that carries them.
+2. Edit its name, folder, encoder, quality, speed, and bit depth on the right. Expand **Advanced settings** (**Advanced settings and HDR** for x265 and the SVT-AV1 encoders) for structured options, extra arguments, and metadata settings. The HDR10+ and Dolby Vision boxes show for x265 and SVT-AV1-HDR only, the encoders that carry them.
 3. Choose **Save preset** to update the library, or **Save new preset** to create a copy of a built-in configuration. Use `/` in the folder field for nesting, such as `1080p / SDR`.
 
 Saving does not change the current job or template. **Apply encoder settings** applies the edited configuration and closes the dialog; it does not save library changes. **Cancel** discards the open draft. Switching presets with unsaved edits offers Save, Discard, or Keep editing.
@@ -40,6 +41,8 @@ Built-in choices are marked **rule set** (the rule set's own defaults) or **star
 | x265 HDR10 / HDR10+ | CRF 18, `slow`; Dolby Vision off |
 | x265 Dolby Vision | CRF 18, `slow`, `--level-idc 5.1`: the level fills the VBV that Dolby Vision requires |
 | SVT-AV1 | CRF 30, preset 4 |
+| SVT-AV1-HDR 10-bit, VQ | CRF 30, preset 4, `--tune 0` (visual quality) |
+| SVT-AV1-HDR film grain | CRF 30, preset 4, `--tune 6` (film grain) |
 
 A starter's name says what it is tuned for. Source color and HDR10 metadata are carried whenever **Colour from the source** is on, whichever preset is picked. Save a starter as your own preset to change it.
 
@@ -115,17 +118,19 @@ Turn on **Override the source's colour** (under **Colour from the source**) when
 
 ## HDR10+ and Dolby Vision
 
-Supported metadata preservation uses **x265** with the relevant option enabled:
+Supported metadata preservation uses **x265** or **SVT-AV1-HDR** with the relevant option enabled:
 
 | Source | Supported treatment |
 | --- | --- |
-| HDR10+ | Extract metadata with `hdr10plus_tool` and pass it to x265 |
-| Dolby Vision profile 8.1 | Carry as profile 8.1 |
-| Dolby Vision profile 7 MEL | Convert to profile 8.1 |
-| Dolby Vision profile 7 FEL | Bake the enhancement layer into the picture and carry profile 8.1 metadata; HDR10+ is left out |
-| Dolby Vision profile 5 | Carry as profile 5 |
+| HDR10+ | Extract metadata with `hdr10plus_tool` and pass it to the encoder |
+| Dolby Vision profile 8.1 | Carry as profile 8.1 (10.1 in AV1) |
+| Dolby Vision profile 7 MEL | Convert to profile 8.1 (10.1 in AV1) |
+| Dolby Vision profile 7 FEL | Bake the enhancement layer into the picture and carry profile 8.1 metadata (10.1 in AV1); HDR10+ is left out |
+| Dolby Vision profile 5 | Carry as profile 5 (10.0 in AV1) |
 | Dolby Vision profile 8.4 (HLG) | Not supported for Dolby Vision preservation |
 
-Dolby Vision requires a **10-bit encode** and x265 VBV values. Set `--vbv-maxrate` and `--vbv-bufsize`, or use a supported `--level-idc` to fill the missing values. FEL processing uses FFMS2 or L-SMASH. A UHD Blu-ray's `.m2ts` keeps its enhancement layer in a second video track that MediaInfo reports as plain HDR10; VideoForge reads that track's RPU (dovi_tool is needed for this) and takes the RPU and the enhancement layer from it. A FEL source's HDR10+ is left out of the encode: it was measured on the base layer, so its values don't fit the picture with the enhancement layer baked in, which can be brighter. The Dolby Vision RPU and the HDR10 values describe the baked picture. Crop and resize adjust the RPU's active-area information, and auto crop reads it (see [Crop and resize](video.md#crop-and-resize)).
+Dolby Vision requires a **10-bit encode**, and profile 8.1 an HDR10 mastering display. x265 also needs VBV values: set `--vbv-maxrate` and `--vbv-bufsize`, or use a supported `--level-idc` to fill the missing values. SVT-AV1-HDR needs none.
+
+SVT-AV1-HDR writes HDR10+ and the Dolby Vision RPU into the AV1 stream with `--hdr10plus-json` and `--dolby-vision-rpu`. A build without its HDR libraries leaves those flags out of its `--help`, and the job is blocked (`hdr.svt_build`). An MP4 gets the Dolby Vision profile from MP4Box's `:dvp=10.1` (or `10.0`), and mkvmerge finds it in the stream. MediaInfo can't see HDR10+ in AV1, so the validate step counts the HDR10+ and RPU metadata on each frame of the encode instead. A profile 5 encode is tagged as unspecified colour with full range, the same as x265 writes for it, because its base layer isn't BT.2020 PQ. FEL processing uses FFMS2 or L-SMASH. A UHD Blu-ray's `.m2ts` keeps its enhancement layer in a second video track that MediaInfo reports as plain HDR10; VideoForge reads that track's RPU (dovi_tool is needed for this) and takes the RPU and the enhancement layer from it. A FEL source's HDR10+ is left out of the encode: it was measured on the base layer, so its values don't fit the picture with the enhancement layer baked in, which can be brighter. The Dolby Vision RPU and the HDR10 values describe the baked picture. Crop and resize adjust the RPU's active-area information, and auto crop reads it (see [Crop and resize](video.md#crop-and-resize)).
 
 Changes to frame count or frame rate can make dynamic metadata incompatible with the output. Resolve the job's HDR planning issues before starting. Selecting another encoder does not preserve Dolby Vision metadata; review the warning and intended base-layer output in the editor.

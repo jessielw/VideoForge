@@ -3,7 +3,7 @@
 An encode and mux job queue that runs in your browser, in the spirit of StaxRip. Queue one source or a season of episodes, and each job runs end to end:
 
 ```text
-index → VapourSynth (crop, resize, filters) → x264 / x265 / VP8 / VP9 / SVT-AV1 → audio → subtitles → mux (MKV or MP4) → validate
+index → VapourSynth (crop, resize, filters) → x264 / x265 / VP8 / VP9 / SVT-AV1 / SVT-AV1-HDR → audio → subtitles → mux (MKV or MP4) → validate
 ```
 
 [Documentation](https://jessielw.github.io/VideoForge/) · [Getting started](https://jessielw.github.io/VideoForge/getting-started/) · [Releases](https://github.com/jessielw/VideoForge/releases) · [Changelog](CHANGELOG.md)
@@ -15,12 +15,12 @@ index → VapourSynth (crop, resize, filters) → x264 / x265 / VP8 / VP9 / SVT-
 
 ## Features
 
-- **Video:** frame preview with zoom and a crop overlay, auto crop, resize, a CPU filter chain, and a generated VapourSynth script you can edit. Encode with x264, x265, VP8, VP9 or SVT-AV1, in 1 or 2 passes, with test encodes and CRF search.
+- **Video:** frame preview with zoom and a crop overlay, auto crop, resize, a CPU filter chain, and a generated VapourSynth script you can edit. Encode with x264, x265, VP8, VP9, SVT-AV1 or SVT-AV1-HDR, in 1 or 2 passes, with test encodes and CRF search.
 - **Audio and subtitles:** keep, drop, reorder, retitle and flag tracks. Copy or encode each audio track (FLAC, Opus, AAC, AC-3, E-AC-3, MP3, Vorbis, DDP and Atmos), and make several outputs from one track.
 - **Output:** MKV or MP4, chapters, AutoQPF, and a validation pass before the file is published.
 - **Queue:** batch import, background batch indexing, pause and resume, and per-step reuse: finished steps are skipped on a rerun. Jobs survive restarts.
 - **Templates:** save a whole setup and apply it to every episode. Audio and subtitles can be picked by position or by rules (language, codec, channels, forced / SDH / commentary).
-- **HDR:** HDR10, HDR10+ and Dolby Vision (profile 8.1, a MEL or FEL as 8.1, profile 5 as 5) for x265 encodes.
+- **HDR:** HDR10, HDR10+ and Dolby Vision (profile 8.1, a MEL or FEL as 8.1, profile 5 as 5) for x265 and SVT-AV1-HDR encodes (in AV1 as profile 10.1 and 10.0).
 - **Automation:** notifications, command and webhook actions, and Python plugins and rule sets.
 
 <table><tr><td><a href="docs/assets/screenshots/new-jobs.png"><picture>   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/new-jobs-dark.png">   <img src="docs/assets/screenshots/new-jobs.png" alt="New jobs" width="100%"> </picture></a></td><td><a href="docs/assets/screenshots/encoder.png"><picture>   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/encoder-dark.png">   <img src="docs/assets/screenshots/encoder.png" alt="Encoder" width="100%"> </picture></a></td></tr><tr><td><a href="docs/assets/screenshots/audio.png"><picture>   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/audio-dark.png">   <img src="docs/assets/screenshots/audio.png" alt="Audio" width="100%"> </picture></a></td><td><a href="docs/assets/screenshots/templates.png"><picture>   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/templates-dark.png">   <img src="docs/assets/screenshots/templates.png" alt="Templates" width="100%"> </picture></a></td></tr></table>

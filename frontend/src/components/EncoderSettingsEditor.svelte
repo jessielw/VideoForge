@@ -13,7 +13,8 @@
 </script>
 
 <script lang="ts">
-  // Encoder settings (x264 / x265, VP8 / VP9 through ffmpeg, SVT-AV1): rate control, preset, tune, bit depth, options, extra args.
+  // Encoder settings (x264 / x265, VP8 / VP9 through ffmpeg, SVT-AV1 and SVT-AV1-HDR): rate control, preset, tune,
+  // bit depth, options, extra args.
   // Emits a fresh copy on every change; the parent decides when to save.
   import {
     ENCODERS,
@@ -123,6 +124,11 @@
     return missing.flatMap((f) => [`--${f}`, String(rate)])
   })
 
+  // what a profile 5 SVT-AV1-HDR encode's colour is forced to, last on its command line (color.SVT_DV5_ARGS)
+  const SVT_DV5 = [
+    ...['--color-primaries', '2', '--transfer-characteristics', '2'],
+    ...['--matrix-coefficients', '2', '--color-range', '1'],
+  ]
   const HDR_TRANSFERS = ['smpte2084', 'arib-std-b67'] // PQ, HLG
   const hdr = $derived(
     !!colorArgs &&
@@ -136,7 +142,13 @@
   const encoderLabel = $derived(ENCODERS.find(([e]) => e === value.encoder)?.[1] ?? value.encoder)
   // VP8 / VP9 run through ffmpeg (libvpx), as StaxRip's ffmpeg encoder does: its speed list is -cpu-used
   const vpx = $derived(value.encoder === 'vp8' || value.encoder === 'vp9')
-  const svt = $derived(value.encoder === 'svtav1')
+  // SvtAv1EncApp: SVT-AV1, or the SVT-AV1-HDR build (the same command line, presets from -3, HDR10+ and Dolby Vision)
+  const isSvt = (enc: EncoderName) => enc === 'svtav1' || enc === 'svtav1hdr'
+  const svt = $derived(isSvt(value.encoder))
+  const svtHdr = $derived(value.encoder === 'svtav1hdr')
+  // the encoders that carry HDR10+ and Dolby Vision (hdr.DYNAMIC_HDR)
+  const carriesHdr = $derived(value.encoder === 'x265' || svtHdr)
+  const hdr10plusFlag = $derived(svtHdr ? '--hdr10plus-json' : '--dhdr10-info')
   // SvtAv1EncApp's CRF range, in quarter steps (encoders.SVTAV1_CRF)
   const SVT_CRF: [number, number] = [1, 70]
   const X26X_PRESETS: [string, string][] = [
@@ -179,12 +191,20 @@
   ]
     .map((name, n): [string, string] => [String(n), `${n} - ${name}`])
     .reverse()
+  // SVT-AV1-HDR's below 0 are "for research purposes" (its help): slower still
+  const SVT_HDR_PRESETS: [string, string][] = [
+    ...SVT_PRESETS,
+    ['-1', '-1 - Research'],
+    ['-2', '-2 - Research'],
+    ['-3', '-3 - Research'],
+  ]
   const PRESETS: Record<EncoderName, [string, string][]> = {
     x264: X26X_PRESETS,
     x265: X26X_PRESETS,
     vp8: VPX_PRESETS,
     vp9: VPX_PRESETS,
     svtav1: SVT_PRESETS,
+    svtav1hdr: SVT_HDR_PRESETS,
   }
   const DEFAULT_PRESET: Record<EncoderName, string> = {
     x264: 'slower',
@@ -192,8 +212,17 @@
     vp8: '1',
     vp9: '1',
     svtav1: '4',
+    svtav1hdr: '4',
   }
   const named = (names: string[]) => names.map((t): [string, string] => [t, t])
+  const SVT_TUNES: [string, string][] = [
+    ['0', '0 - VQ'],
+    ['1', '1 - PSNR'],
+    ['2', '2 - SSIM'],
+    ['3', '3 - Image quality'],
+    ['4', '4 - MS-SSIM / SSIMULACRA2'],
+    ['5', '5 - VMAF'],
+  ]
   // [value, label]
   const TUNES: Record<EncoderName, [string, string][]> = {
     x264: named(['film', 'animation', 'grain', 'stillimage', 'psnr', 'ssim', 'fastdecode', 'zerolatency']),
@@ -201,14 +230,9 @@
     vp8: [],
     vp9: [],
     // SvtAv1EncApp's --tune (1, PSNR, is its default)
-    svtav1: [
-      ['0', '0 - VQ'],
-      ['1', '1 - PSNR'],
-      ['2', '2 - SSIM'],
-      ['3', '3 - Image quality'],
-      ['4', '4 - MS-SSIM / SSIMULACRA2'],
-      ['5', '5 - VMAF'],
-    ],
+    svtav1: SVT_TUNES,
+    // and its film grain tune (VQ with the filters that smear grain off, as its README sets it)
+    svtav1hdr: [...SVT_TUNES, ['6', '6 - Film grain']],
   }
   const DEPTHS: Record<EncoderName, number[]> = {
     x264: [8, 10],
@@ -216,6 +240,7 @@
     vp8: [8],
     vp9: [8, 10, 12],
     svtav1: [8, 10],
+    svtav1hdr: [8, 10],
   }
   // what encoders.VP9_DEFAULTS writes before the options (StaxRip's, plus row-mt)
   const VP9_DEFAULTS = '-tile-columns 6 -frame-parallel 1 -auto-alt-ref 1 -lag-in-frames 25 -row-mt 1'
@@ -258,7 +283,7 @@
       if (!DEPTHS[enc].includes(next.depth)) next.depth = 8
       if (next.preset && !PRESETS[enc].some(([p]) => p === next.preset)) next.preset = DEFAULT_PRESET[enc]
       if (enc === 'vp8' || enc === 'vp9') next.crf = Math.min(63, Math.round(next.crf))
-      if (enc === 'svtav1') next.crf = Math.min(SVT_CRF[1], Math.max(SVT_CRF[0], Math.round(next.crf * 4) / 4))
+      if (isSvt(enc)) next.crf = Math.min(SVT_CRF[1], Math.max(SVT_CRF[0], Math.round(next.crf * 4) / 4))
     }
     onchange(next)
   }
@@ -510,13 +535,13 @@
         </span>
       </label>
 
-      <!-- only x265 carries HDR10+ and Dolby Vision (hdr.keeps_hdr10plus / keeps_dv): other encoders just say what
-           the source loses -->
-      {#if value.encoder !== 'x265'}
+      <!-- only x265 and SVT-AV1-HDR carry HDR10+ and Dolby Vision (hdr.keeps_hdr10plus / keeps_dv): other encoders
+           just say what the source loses -->
+      {#if !carriesHdr}
         {#if dv && dv.dv_profile === 5}
           <p class="text-xs text-warning">
-            The source is Dolby Vision profile 5, which has no HDR10 layer: without its RPU (x265 only) the encode's
-            colours look wrong, unless the script maps them.
+            The source is Dolby Vision profile 5, which has no HDR10 layer: without its RPU (x265 and SVT-AV1-HDR carry
+            it) the encode's colours look wrong, unless the script maps them.
           </p>
         {:else if (dv && dv.dv_profile) || hdr10plus}
           <p class="text-xs text-warning">
@@ -524,7 +549,7 @@
               ? hdr10plus
                 ? 'Dolby Vision and HDR10+'
                 : 'Dolby Vision'
-              : 'HDR10+'}: pick x265 to keep it.
+              : 'HDR10+'}: pick x265 or SVT-AV1-HDR to keep it.
           </p>
         {/if}
       {:else}
@@ -533,9 +558,9 @@
           <span class="min-w-0">
             HDR10+ from the source
             <span class="block text-xs text-muted-foreground">
-              x265: carries a source's HDR10+ metadata into the encode (hdr10plus_tool reads it, x265's --dhdr10-info
-              writes it). Needs a 10-bit encode and a script that keeps every frame (no trims). Left out when a Dolby
-              Vision FEL is baked in.
+              {encoderLabel}: carries a source's HDR10+ metadata into the encode (hdr10plus_tool reads it, {encoderLabel}'s
+              {hdr10plusFlag} writes it). Needs a 10-bit encode and a script that keeps every frame (no trims). Left out when
+              a Dolby Vision FEL is baked in.
             </span>
             {#if hdr10plus !== undefined}
               {#if hdr10plus === null}
@@ -544,7 +569,7 @@
                 <span class="block text-xs text-muted-foreground">The source has no HDR10+.</span>
               {:else if value.dolby_vision && dv && dv.dv_profile === 7 && dv.dv_el === 'FEL'}
                 <code class="mt-1 block font-mono text-xs break-all text-muted-foreground line-through"
-                  >--dhdr10-info hdr10plus.json</code
+                  >{hdr10plusFlag} hdr10plus.json</code
                 >
                 {#if value.hdr10plus}
                   <span class="mt-1 block text-xs text-warning"
@@ -556,7 +581,7 @@
                 <code
                   class="mt-1 block font-mono text-xs break-all {value.hdr10plus
                     ? ''
-                    : 'text-muted-foreground line-through'}">--dhdr10-info hdr10plus.json</code
+                    : 'text-muted-foreground line-through'}">{hdr10plusFlag} hdr10plus.json</code
                 >
                 {#if value.hdr10plus && value.depth < 10}
                   <span class="mt-1 block text-xs text-warning">HDR10+ needs a 10-bit encode.</span>
@@ -576,10 +601,19 @@
           <span class="min-w-0">
             Dolby Vision from the source
             <span class="block text-xs text-muted-foreground">
-              x265: carries a source's Dolby Vision into the encode as profile 8.1, or a profile 5 as 5 (dovi_tool reads
-              the RPU and moves its active area with the crop and resize). Needs a 10-bit encode, --vbv-maxrate and
-              --vbv-bufsize (or --level-idc, whose max bitrate fills the ones not set), and a script that keeps every
-              frame. A FEL's enhancement layer is baked into the picture first (felbaker). 8.4 (HLG) isn't carried yet.
+              {#if svtHdr}
+                SVT-AV1-HDR: carries a source's Dolby Vision into the encode as AV1's profile 10.1, or a profile 5 as
+                10.0 with its colour signalled as x265 does it (unspecified, full range); dovi_tool reads the RPU and
+                moves its active area with the crop and resize. Needs a 10-bit encode and a script that keeps every
+                frame; an MP4 is told the profile (MP4Box doesn't find it). A FEL's enhancement layer is baked into the
+                picture first (felbaker). 8.4 (HLG) isn't carried yet.
+              {:else}
+                x265: carries a source's Dolby Vision into the encode as profile 8.1, or a profile 5 as 5 (dovi_tool
+                reads the RPU and moves its active area with the crop and resize). Needs a 10-bit encode, --vbv-maxrate
+                and --vbv-bufsize (or --level-idc, whose max bitrate fills the ones not set), and a script that keeps
+                every frame. A FEL's enhancement layer is baked into the picture first (felbaker). 8.4 (HLG) isn't
+                carried yet.
+              {/if}
             </span>
             {#if dv !== undefined}
               {#if dv === null}
@@ -596,9 +630,11 @@
                   class="mt-1 block font-mono text-xs break-all {value.dolby_vision
                     ? ''
                     : 'text-muted-foreground line-through'}"
-                  >--dolby-vision-profile {dv.dv_profile === 5 ? '5' : '8.1'} --dolby-vision-rpu dv_rpu.bin{levelVbv?.length
-                    ? ' ' + levelVbv.join(' ')
-                    : ''}</code
+                  >{#if svtHdr}--dolby-vision-rpu dv_rpu.bin{dv.dv_profile === 5
+                      ? ' ' + SVT_DV5.join(' ')
+                      : ''}{:else}--dolby-vision-profile {dv.dv_profile === 5 ? '5' : '8.1'} --dolby-vision-rpu dv_rpu.bin{levelVbv?.length
+                      ? ' ' + levelVbv.join(' ')
+                      : ''}{/if}</code
                 >
                 {#if value.dolby_vision}
                   {#if dv.dv_compat === 4}
@@ -619,7 +655,7 @@
                   {#if value.depth !== 10}
                     <span class="mt-1 block text-xs text-warning">Dolby Vision needs a 10-bit encode.</span>
                   {/if}
-                  {#if levelVbv === null}
+                  {#if levelVbv === null && !svtHdr}
                     <span class="mt-1 block text-xs text-warning"
                       >Add --vbv-maxrate and --vbv-bufsize below, or --level-idc to fill them with its max bitrate (x265
                       needs VBV for Dolby Vision).</span

@@ -122,6 +122,31 @@ prefix = ""
 include = ["SvtAv1EncApp.exe", "LICENSE.md", "README.md"]
 executables = { svtav1 = "SvtAv1EncApp.exe" }
 
+# juliobbv-p's SVT-AV1-HDR: its releases are rolling "pgo-build-<date>-<commit>" tags, so this pins the commit.
+# x86-64-v3 + znver2 is its build that runs on any AVX2 CPU; built with Dolby Vision and HDR10+ (libdovi,
+# hdr10plus). The archive holds the exe alone: the licences come from the same commit.
+[[tool]]
+name = "svtav1hdr"
+version = "4.2.0-3-ga46bc2d59"
+license = "BSD-3-Clause-Clear and the AOM Patent License 1.0; see LICENSE.md and PATENTS.md"
+source = "https://github.com/juliobbv-p/svt-av1-hdr/tree/a46bc2d59774785f4db7341003fa23dbeb473b5a"
+purpose = "AV1 encoding with HDR10+ and Dolby Vision (SVT-AV1-HDR, LTO + PGO clang build)"
+[tool.windows]
+url = "https://github.com/juliobbv-p/svt-av1-hdr/releases/download/pgo-build-2026-09-29-a46bc2d/Windows_x86-64_x86-64-v3+znver2.tar.xz"
+sha256 = "b18c0315ac85a0e36c41599b9240ed6f905ec514f771898109b6321da00771c4"
+directory = "SvtAv1EncApp-HDR"
+prefix = ""
+include = ["SvtAv1EncApp.exe"]
+executables = { svtav1hdr = "SvtAv1EncApp.exe" }
+[[tool.notice]]
+file = "LICENSE.md"
+url = "https://raw.githubusercontent.com/juliobbv-p/svt-av1-hdr/a46bc2d59774785f4db7341003fa23dbeb473b5a/LICENSE.md"
+sha256 = "0acc2fcb27472bdc9aaf8b71f37055bbdac4f54671b7d922f241bd7fcd0dd3e6"
+[[tool.notice]]
+file = "PATENTS.md"
+url = "https://raw.githubusercontent.com/juliobbv-p/svt-av1-hdr/a46bc2d59774785f4db7341003fa23dbeb473b5a/PATENTS.md"
+sha256 = "20678ab10402659106dc4c147c97b2a6e94b5c0695415e15a8f195ebc3547922"
+
 [[tool]]
 name = "opusenc"
 version = "0.2-52-g5f894e9 / libopus 1.6.1-11-g788cc89"

@@ -166,7 +166,7 @@ def _run(
             found = replace(prober(path, app.tools.mkvmerge), path=output, name=output.name)
             issues = rule_set.validate_output(plan, found)
             if spec.encodes_video:
-                issues += hdr.output_issues(plan.source.video, spec.encoder, found)
+                issues += hdr.output_issues(plan.source.video, spec.encoder, found, spec.video_output)
                 issues += info.length_issues(plan.source.video, info.read(work / info.SCRIPT_INFO))
             blocking = [i.message for i in issues if i.severity is Severity.BLOCK]
             for issue in issues:

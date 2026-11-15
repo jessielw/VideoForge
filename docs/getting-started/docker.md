@@ -1,6 +1,6 @@
 # Docker
 
-The Linux **amd64** image is `ghcr.io/jessielw/videoforge`. It contains the application and the free media tools: MKVToolNix, x264, x265, SVT-AV1, FFmpeg, MP4Box, opus-tools, DeeZy, truehdd, HDR metadata tools, Wine, and the bundled VapourSynth plugins.
+The Linux **amd64** image is `ghcr.io/jessielw/videoforge`. It contains the application and the free media tools: MKVToolNix, x264, x265, SVT-AV1, SVT-AV1-HDR, FFmpeg, MP4Box, opus-tools, DeeZy, truehdd, HDR metadata tools, Wine, and the bundled VapourSynth plugins.
 
 ## Platform support
 

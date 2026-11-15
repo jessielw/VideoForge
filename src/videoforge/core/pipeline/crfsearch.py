@@ -45,6 +45,7 @@ CRF_RANGE: dict[Encoder, tuple[int, int]] = {
     Encoder.VP8: (4, 63),
     Encoder.VP9: (0, 63),
     Encoder.SVTAV1: SVTAV1_CRF,
+    Encoder.SVTAV1HDR: SVTAV1_CRF,
 }
 _REPLACE_WAITS = (0.02, 0.05, 0.1, 0.2, 0.5, None)  # seconds, then give up
 JUMP: dict[Encoder, int] = {Encoder.X264: 4, Encoder.X265: 4}  # the others' (a longer range): 6

@@ -20,6 +20,7 @@ from videoforge.core.models import Severity, VideoColor, VideoInfo
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.video import crop as autocrop, vs as vsx
 from videoforge.core.video.encoders import (
+    TOOLS as ENCODER_TOOLS,
     VP8_CRF_CAP,
     analysis_file,
     encoder_command,
@@ -370,6 +371,29 @@ def test_svtav1_issues():
     assert encoder_issues(replace(s, rate_control=RateControl.TWO_PASS, target_mb=500), None) == []
     hdr10 = VideoInfo(3840, 2160, color=VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", None, P3_1000, 1000))
     assert encoder_issues(s, hdr10) == []  # AV1 carries HDR10
+
+
+def test_svtav1hdr_shares_svtav1s_command_and_checks(tmp_path):
+    """SVT-AV1-HDR is an SvtAv1EncApp build: the same command line, IVF and checks as SVT-AV1, its own Tools path,
+    and presets down to -3 (SVT-AV1's stop at -1)."""
+    s = EncoderSettings(Encoder.SVTAV1, crf=27.25, preset="6", tune="0", depth=10, options={"film-grain": "8"})
+    hdr = replace(s, encoder=Encoder.SVTAV1HDR)
+    color = VideoColor("bt2020", "smpte2084", "bt2020nc", "", 2, P3_1000, 1000, 400)
+    args = {"frames": 48, "output": Path("v.ivf"), "color": color, "keyframes": [0, 24]}
+    assert encoder_command("svt", hdr, **args) == encoder_command("svt", s, **args)
+    assert Encoder.SVTAV1HDR.svt and Encoder.SVTAV1HDR.ivf and not Encoder.SVTAV1HDR.libvpx
+    assert Encoder.SVTAV1HDR.label == "SVT-AV1-HDR" and ENCODER_TOOLS[Encoder.SVTAV1HDR] == "svtav1hdr"
+    assert output_name(hdr) == "video.ivf" and stats_path(tmp_path, hdr).name == "video.stats"
+    assert encoder_issues(replace(hdr, preset="-3"), None) == []
+    (issue,) = encoder_issues(replace(s, preset="-3"), None)
+    assert issue.code == "video.svtav1_preset" and "from -1 to 13" in issue.message
+    (issue,) = encoder_issues(replace(hdr, preset="-4"), None)
+    assert "SVT-AV1-HDR's preset is a number from -3 to 13" in issue.message
+    codes = [i.code for i in encoder_issues(replace(hdr, depth=12, crf=80), None)]
+    assert codes == ["video.svtav1_depth", "video.svtav1_crf"]
+    abr = replace(hdr, rate_control=RateControl.ABR)
+    (issue,) = encoder_issues(abr, None, chapters=True)
+    assert issue.code == "video.svtav1_keyframes" and issue.message.startswith("SVT-AV1-HDR forces")
 
 
 def test_qpfile_frames(tmp_path):
@@ -867,6 +891,70 @@ def test_vspipe_into_svtav1_and_mux(clip_file, tmp_path, override):
         assert video.mastering_display_luminance == f"min: 0.0050 cd/m2, max: {max_nits} cd/m2", file
         light = (video.maximum_content_light_level, video.maximum_frameaverage_light_level)
         assert [n.split()[0] for n in light] == (["500", "100"] if override else ["1000", "400"]), file
+
+
+@needs_vs
+def test_vspipe_into_svtav1hdr_with_hdr10plus_and_dolby_vision(clip_file, tmp_path):
+    """A real SVT-AV1-HDR encode with an HDR10+ JSON and a Dolby Vision 8.1 RPU (dovi_tool generate): every frame
+    carries both (hdr.av1_metadata), mkvmerge finds profile 10 in the stream and MP4Box writes 10.1 when told."""
+    import json
+
+    from conftest import plan_for, source
+    from pymediainfo import MediaInfo
+
+    from videoforge.core.config import default_vspipe
+    from videoforge.core.execute import process
+    from videoforge.core.execute.mux import mp4box_command, mux_command
+    from videoforge.core.video import hdr
+    from videoforge.core.video.color import effective_container_color
+
+    svt, dovi = TOOLS / "SvtAv1EncApp-HDR" / "SvtAv1EncApp.exe", TOOLS / "dovi_tool" / "dovi_tool.exe"
+    mkvmerge, mp4box = TOOLS / "MKVToolNix" / "mkvmerge.exe", shutil.which("MP4Box")
+    if not svt.exists() or not dovi.exists() or not mkvmerge.exists() or mp4box is None:
+        pytest.skip("needs tools/SvtAv1EncApp-HDR, tools/dovi_tool, tools/MKVToolNix and MP4Box")
+    vspipe = default_vspipe()
+    vsx.ensure_vspipe(vspipe)
+    script = tmp_path / "video.vpy"
+    script.write_text(build_script(VideoSettings(), clip_file, tmp_path, depth=10), encoding="utf-8")
+    frames = 48
+    generate, rpu, meta = tmp_path / "generate.json", tmp_path / "rpu.bin", tmp_path / "hdr10plus.json"
+    level6 = {"max_display_mastering_luminance": 1000, "min_display_mastering_luminance": 50}
+    level6 |= {"max_content_light_level": 1000, "max_frame_average_light_level": 400}
+    l1 = {"Level1": {"min_pq": 0, "max_pq": 2081, "avg_pq": 819}}
+    config = {"cm_version": "V40", "length": frames, "level6": level6, "default_metadata_blocks": [l1]}
+    generate.write_text(json.dumps(config), encoding="utf-8")
+    subprocess.run([str(dovi), "generate", "-j", str(generate), "-o", str(rpu)], check=True, capture_output=True)
+    # hdr10plus_tool's shape (profile B: a Bezier curve, the nine distribution points); SvtAv1EncApp refuses less
+    distribution = {"DistributionIndex": [1, 5, 10, 25, 50, 75, 90, 95, 99]}
+    distribution["DistributionValues"] = [10, 50, 100, 500, 1000, 5000, 10000, 20000, 40000]
+    luminance = {"AverageRGB": 1000, "MaxScl": [50000, 50000, 50000], "LuminanceDistributions": distribution}
+    curve = {"Anchors": [102, 205, 307, 410, 512, 614, 717, 819, 922], "KneePointX": 0, "KneePointY": 0}
+    scene = {"NumberOfWindows": 1, "TargetedSystemDisplayMaximumLuminance": 400, "LuminanceParameters": luminance}
+    scene["BezierCurveData"] = curve
+    scenes = [scene | {"SceneFrameIndex": n, "SceneId": 0, "SequenceFrameIndex": n} for n in range(frames)]
+    info = {"JSONInfo": {"HDR10plusProfile": "B", "Version": "1.0"}, "SceneInfo": scenes}
+    info["SceneInfoSummary"] = {"SceneFirstFrameIndex": [0], "SceneFrameNumbers": [frames]}
+    info["ToolInfo"] = {"Tool": "hdr10plus_tool", "Version": "1.7.2"}  # its parser requires it
+    meta.write_text(json.dumps(info), encoding="utf-8")
+
+    enc = EncoderSettings(encoder=Encoder.SVTAV1HDR, preset="12", crf=40, depth=10)
+    out = tmp_path / output_name(enc)
+    color = VideoColor("bt2020", "smpte2084", "bt2020nc", "limited", 2, P3_1000, 1000, 400)
+    argv = encoder_command(str(svt), enc, frames=frames, output=out, color=color, hdr10plus=meta, dolby_vision=rpu)
+    lines: list[str] = []
+    process.run([vspipe_command(vspipe, script), argv], lines.append)
+    assert hdr.av1_metadata(out) == (frames, frames, frames)
+
+    plan = plan_for(source(name=str(clip_file)))
+    plan.source.path, plan.encode_path = clip_file, out
+    tags = effective_container_color(color, enc, "8.1")
+    mkv, mp4 = tmp_path / "out.mkv", tmp_path / "out.mp4"
+    process.run([mux_command(plan, {}, mkv, str(mkvmerge), (), color=tags)], lines.append)
+    process.run([mp4box_command(plan, {}, mp4, mp4box, (), color=tags, dvp="10.1")], lines.append)
+    for file in (mkv, mp4):  # 10.1: the MKV's tagged colour lets MediaInfo name its compatibility too
+        [video] = [t for t in MediaInfo.parse(str(file)).tracks if t.track_type == "Video"]
+        found = hdr.from_mediainfo(video)
+        assert (found.dv_profile, found.dv_compat) == (10, 1), file
 
 
 def test_manual_encode_defaults_are_fresh_copies(rule_set):

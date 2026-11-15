@@ -245,7 +245,7 @@ def color_args(color: VideoColor | None, settings: EncoderSettings) -> list[str]
         return []
     if settings.encoder.libvpx:
         return _ffmpeg_args(color)
-    if settings.encoder is Encoder.SVTAV1:
+    if settings.encoder.svt:
         return _svtav1_args(color)
     x265 = settings.encoder is Encoder.X265
     args = []
@@ -281,19 +281,21 @@ _FFMPEG_FLAGS = {
     "color_range": "range",
 }
 _X264_FLAGS = {"colorprim": "primaries", "transfer": "transfer", "colormatrix": "matrix", "range": "range"}
+_SVT_FLAGS = {
+    "color-primaries": "primaries",
+    "transfer-characteristics": "transfer",
+    "matrix-coefficients": "matrix",
+    "color-range": "range",
+    "mastering-display": "master_display",
+    "content-light": "light_levels",
+}
 SOURCE_FLAGS: dict[Encoder, dict[str, str]] = {
     Encoder.X264: _X264_FLAGS,
     Encoder.X265: {**_X264_FLAGS, "master-display": "master_display", "max-cll": "light_levels"},
     Encoder.VP8: _FFMPEG_FLAGS,
     Encoder.VP9: _FFMPEG_FLAGS,
-    Encoder.SVTAV1: {
-        "color-primaries": "primaries",
-        "transfer-characteristics": "transfer",
-        "matrix-coefficients": "matrix",
-        "color-range": "range",
-        "mastering-display": "master_display",
-        "content-light": "light_levels",
-    },
+    Encoder.SVTAV1: _SVT_FLAGS,
+    Encoder.SVTAV1HDR: _SVT_FLAGS,
 }
 _FIELD_CODES = {"primaries": PRIMARIES_CODE, "transfer": TRANSFER_CODE, "matrix": MATRIX_CODE}
 _FROM_FFMPEG = {
@@ -369,7 +371,7 @@ def _normal(field: str, value: str, encoder: Encoder) -> str:
     limited / full for every encoder's range spellings."""
     value = value.strip().lower()
     if field == "range":
-        digits = {"0": "limited", "1": "full"} if encoder is Encoder.SVTAV1 else {"1": "limited", "2": "full"}
+        digits = {"0": "limited", "1": "full"} if encoder.svt else {"1": "limited", "2": "full"}
         return {**_RANGE_NAMES, **digits}.get(value, value)
     codes = _FIELD_CODES.get(field)
     if codes is None:  # a mastering display or light levels
@@ -420,6 +422,21 @@ def untagged(color: VideoColor | None, settings: EncoderSettings) -> list[str]:
         for name, field in names.items()
         if field in ("primaries", "transfer", "matrix") and not getattr(color, field) and field not in job
     ]
+
+
+# Dolby Vision profile 5 in AV1 (profile 10.0): its base layer is IPTPQc2, signalled as unspecified colour (2) in
+# full range, as x265 writes it for --dolby-vision-profile 5 (encoder.cpp's dovi table: 2, 2, 2, full range).
+# SvtAv1EncApp doesn't, so these go last on its command line and win over the source's and the job's.
+SVT_DV5_ARGS = (
+    "--color-primaries",
+    "2",
+    "--transfer-characteristics",
+    "2",
+    "--matrix-coefficients",
+    "2",
+    "--color-range",
+    "1",
+)
 
 
 def _ffmpeg_args(color: VideoColor) -> list[str]:
@@ -524,17 +541,22 @@ def _svt_mastering(value: str) -> Mastering | None:
     return Mastering((g[4], g[5]), (g[0], g[1]), (g[2], g[3]), (g[6], g[7]), g[8], g[9])
 
 
-def effective_container_color(color: VideoColor | None, settings: EncoderSettings) -> ContainerColor | None:
+def effective_container_color(
+    color: VideoColor | None, settings: EncoderSettings, dv_profile: str | None = None
+) -> ContainerColor | None:
     """Resolve IVF output tags from the same defaults, options and extra arguments the encoder receives (less the
-    flags the source's colour wins over: source_wins).
+    flags the source's colour wins over: source_wins). dv_profile is the Dolby Vision an AV1 encode carries
+    (hdr.dv_profile): profile 5's forced colour (SVT_DV5_ARGS) comes last, as on its command line.
 
     Unknown explicit values clear that field rather than reviving the source's metadata. Explicit options
     still apply when source_color is off. FFmpeg's video stream specifiers select the sole output stream.
     """
-    av1 = settings.encoder is Encoder.SVTAV1
+    av1 = settings.encoder.svt
     if not (av1 or settings.encoder.libvpx):
         return None
     args = color_args(color, settings) + drop_source_flags(job_args(settings), color, settings)
+    if av1 and dv_profile == "5":
+        args += SVT_DV5_ARGS
     names = (
         {
             "color-primaries": "primaries",
