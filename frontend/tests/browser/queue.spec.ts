@@ -50,7 +50,7 @@ async function queueFixture(
     target: null,
     sample,
     search,
-    compare: { encode: false, sample: !!sample },
+    compare: { encode: false, sample: !!sample, filters: false },
     spec: {
       id: job.id,
       rule_set: 'manual',

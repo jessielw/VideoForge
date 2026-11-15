@@ -202,7 +202,7 @@ async function fixture(page: Page, mode: 'light' | 'dark', palette = 'gold') {
     target: null,
     sample: null,
     search: null,
-    compare: { encode: false, sample: false },
+    compare: { encode: false, sample: false, filters: false },
     tracks,
     spec: {
       id: 'a11y',

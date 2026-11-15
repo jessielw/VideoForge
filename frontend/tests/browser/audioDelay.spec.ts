@@ -95,7 +95,7 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
     target: null,
     sample: null,
     search: null,
-    compare: { encode: false, sample: false },
+    compare: { encode: false, sample: false, filters: false },
     tracks: { video: null, audio: [track], subs: [], has_chapters: false, count: 1 },
     spec: {
       id: 'delay',

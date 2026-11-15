@@ -13,10 +13,12 @@
   // that only change when the content does; otherwise each save would remount the preview.
   // Opening a job never indexes its source: until it's indexed the preview is an index panel (Index
   // now puts the job first in the queue's index lane, one job at a time; it's locked meanwhile).
-  // Compare (with Settings, once there's something to compare): the encoder's input against its output, the
-  // script's frame and the encoded one, flipped with C (each flip's other side is loaded beside it). A done run's
+  // Compare (with Settings; a choice it can't make yet says what it needs): the script without its filters against
+  // the output, or the encoder's input against its output, the script's frame and the encoded one, flipped with C
+  // (each flip's other side is loaded beside it), or both at once either side of a line (Split). A done run's
   // encode has the output's frames; a test encode its own (the sample's blocks back to back), so its frame is kept
   // apart (sampleFrame) and the notice says which frame of the script it is.
+  // Bookmarks (vv.marks, lib/marks.ts) are in the script's frames; the test encode's compare maps them to its own.
   import { onDestroy, untrack } from 'svelte'
   import { saves } from '../lib/saves'
   import { toast } from 'svelte-sonner'
@@ -25,6 +27,7 @@
   import { layout } from '../lib/layout.svelte'
   import { videoView } from '../lib/videoView.svelte'
   import { clipLength, hdrFormats } from '../lib/format'
+  import { sampleMarks, scriptFrame, toggleMark, writeMarks } from '../lib/marks'
   import { fitted, previewShape, resizeInput, type Geometry } from '../lib/resize'
   import {
     SOURCE_FILTERS,
@@ -37,6 +40,7 @@
   } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
+  import Columns2Icon from '@lucide/svelte/icons/columns-2'
   import CopyIcon from '@lucide/svelte/icons/copy'
   import DownloadIcon from '@lucide/svelte/icons/download'
   import CropIcon from '@lucide/svelte/icons/crop'
@@ -73,9 +77,18 @@
   const compare = $derived(
     vv.panel === 'settings' && vv.compare !== 'off' && job.compare[vv.compare] ? vv.compare : 'off',
   )
-  const pair = $derived<[PreviewStage, PreviewStage] | null>(
-    compare === 'sample' ? ['sample-in', 'sample'] : compare === 'encode' ? ['output', 'encode'] : null,
-  )
+  const PAIRS = {
+    sample: ['sample-in', 'sample'],
+    encode: ['output', 'encode'],
+    filters: ['unfiltered', 'output'],
+  } as const satisfies Record<string, [PreviewStage, PreviewStage]>
+  // Each side's name: [in, out] for the notice, and for the toggle that picks one.
+  const NAMES = {
+    sample: { notice: ['Input (the script)', 'Test encode'], toggle: ['Input', 'Encoded'] },
+    encode: { notice: ['Input (the script)', 'Encode'], toggle: ['Input', 'Encoded'] },
+    filters: { notice: ['Before filters', 'After filters'], toggle: ['Before', 'After'] },
+  } as const
+  const pair = $derived<readonly [PreviewStage, PreviewStage] | null>(compare === 'off' ? null : PAIRS[compare])
   let pairInfo = $state<[ClipInfo, ClipInfo] | null>(null)
   let pairError = $state('')
   let infoError = $state('')
@@ -374,7 +387,9 @@
   }
 
   // The compare's two clips (the same frames): again for a new sample or output.
-  const pairKey = $derived(`${compare} ${job.sample?.finished ?? ''} ${job.output ?? ''} ${ready}`)
+  const pairKey = $derived(
+    `${compare} ${job.sample?.finished ?? ''} ${job.output ?? ''} ${ready} ${compare === 'filters' ? scriptKey : ''}`,
+  )
   $effect(() => {
     void pairKey
     const both = pair
@@ -398,21 +413,31 @@
       frames: Math.min(pairInfo[0].frames, pairInfo[1].frames),
     }
   })
-  // The test encode's frame n is the script's: its block's start, plus how far into the block it is.
-  function scriptFrame(n: number): number {
-    const s = job.sample
-    return s ? Math.floor(n / s.length) * s.cycle + (n % s.length) : n
-  }
   const compareNotice = $derived.by(() => {
-    if (!compared) return null
-    const side = vv.shows === 'in' ? 'Input (the script)' : compare === 'sample' ? 'Test encode' : 'Encode'
+    if (!compared || compare === 'off') return null
+    const [input, output] = NAMES[compare].notice
+    const [shown, other] = vv.shows === 'in' ? [input, output] : [output, input]
+    const sides = vv.split ? `Left: ${shown} · Right: ${other}` : shown
     const where =
-      compare === 'sample'
-        ? ` · frame ${vv.sampleFrame} of the sample, ${scriptFrame(vv.sampleFrame)} of the script`
+      compare === 'sample' && job.sample
+        ? ` · frame ${vv.sampleFrame} of the sample, ${scriptFrame(vv.sampleFrame, job.sample)} of the script`
         : ''
     const stale = compare === 'sample' && job.sample && !job.sample.current ? ' · made before the last changes' : ''
-    return { text: `${side}${where}${stale} · C flips`, tone: 'muted' as const }
+    return { text: `${sides}${where}${stale} · C ${vv.split ? 'swaps' : 'flips'}`, tone: 'muted' as const }
   })
+
+  // Bookmarks: frame n of the script marked or unmarked (kept in this browser, per job).
+  function mark(n: number) {
+    vv.marks = toggleMark(vv.marks, n)
+    writeMarks(jobId, vv.marks)
+  }
+  // The compare's bookmarks in its clip's frames: a test encode's own numbers hold the marks inside its blocks.
+  const compareMarks = $derived(
+    compare === 'sample' && job.sample && compared ? sampleMarks(vv.marks, job.sample, compared.frames) : vv.marks,
+  )
+  function compareMark(n: number) {
+    mark(compare === 'sample' && job.sample ? scriptFrame(n, job.sample) : n)
+  }
 
   // Crop edits from the side panel show the lines (the picture only shows them in the crop view).
   function setCrop(side: keyof Crop, value: number) {
@@ -484,8 +509,12 @@
 <svelte:window {onkeydown} />
 
 {#snippet compareTools()}
-  {#if vv.panel === 'settings' && (job.compare.sample || job.compare.encode)}
-    <Tip text="Compare the encoder's input (the script's frames) with what it encoded">
+  {#if vv.panel === 'settings'}
+    <Tip
+      text={job.compare.filters || job.compare.sample || job.compare.encode
+        ? "Compare two sides of the same frames: the script without and with its filters, or the encoder's input and what it encoded (C flips)"
+        : 'Nothing to compare yet: add a filter to the chain, run a test encode (Encoder tab), or run the job'}
+    >
       <NativeSelect
         aria-label="Compare"
         value={compare}
@@ -495,11 +524,19 @@
         }}
       >
         <option value="off">Compare: off</option>
-        {#if job.compare.sample}<option value="sample">Compare: test encode</option>{/if}
-        {#if job.compare.encode}<option value="encode">Compare: encode</option>{/if}
+        <option value="filters" disabled={!job.compare.filters}
+          >Compare: filters{job.compare.filters ? '' : ' (none in the chain)'}</option
+        >
+        <option value="sample" disabled={!job.compare.sample}
+          >Compare: test encode{job.compare.sample ? '' : ' (run one on the Encoder tab)'}</option
+        >
+        <option value="encode" disabled={!job.compare.encode}
+          >Compare: encode{job.compare.encode ? '' : ' (once the job is done)'}</option
+        >
       </NativeSelect>
     </Tip>
     {#if compare !== 'off'}
+      {@const names = NAMES[compare]}
       <ToggleGroup.Root
         type="single"
         variant="outline"
@@ -507,17 +544,34 @@
         value={vv.shows}
         onValueChange={(v) => v && (vv.shows = v as 'in' | 'out')}
       >
-        <Tip text="The encoder's input: the script's frame (C flips)">
+        <Tip
+          text={compare === 'filters'
+            ? 'The script without its filters: crop, resize and field matching only (C flips)'
+            : "The encoder's input: the script's frame (C flips)"}
+        >
           <ToggleGroup.Item value="in" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-            >Input</ToggleGroup.Item
+            >{names.toggle[0]}</ToggleGroup.Item
           >
         </Tip>
-        <Tip text="The encoded frame (C flips)">
+        <Tip
+          text={compare === 'filters'
+            ? 'The script with its filters: the output (C flips)'
+            : 'The encoded frame (C flips)'}
+        >
           <ToggleGroup.Item value="out" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-            >Encoded</ToggleGroup.Item
+            >{names.toggle[1]}</ToggleGroup.Item
           >
         </Tip>
       </ToggleGroup.Root>
+      <Tip text="Both sides at once, either side of a line you drag: the picked side on the left">
+        <Toggle
+          pressed={vv.split}
+          onPressedChange={(on) => (vv.split = on)}
+          class="data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
+        >
+          <Columns2Icon />Split
+        </Toggle>
+      </Tip>
     {/if}
   {/if}
 {/snippet}
@@ -604,6 +658,10 @@
         bind:scroll={vv.scroll}
         notice={compareNotice}
         sar={previewShape(job.spec.video, source, 'output')}
+        split={vv.split}
+        bind:splitAt={vv.splitAt}
+        marks={compareMarks}
+        onmark={compareMark}
       >
         {#snippet tools()}{@render compareTools()}{/snippet}
       </FramePreview>
@@ -633,6 +691,8 @@
         bind:scroll={vv.scroll}
         {notice}
         sar={shape}
+        marks={vv.marks}
+        onmark={mark}
         oncrop={editable && stage === 'crop'
           ? (c) => {
               video.crop = c

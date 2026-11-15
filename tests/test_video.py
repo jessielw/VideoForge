@@ -34,7 +34,7 @@ from videoforge.core.video.encoders import (
     vspipe_command,
 )
 from videoforge.core.video.filters import PRESETS, field_issues
-from videoforge.core.video.script import build_script, script_parts
+from videoforge.core.video.script import build_script, compares_filters, script_parts
 from videoforge.core.video.settings import (
     Crop,
     Encoder,
@@ -107,6 +107,27 @@ def test_crop_stage_is_the_output_with_its_margins_back():
     assert script_parts(s, Path("a.mkv"), Path("w"), stage="crop")[1][0].startswith("clip = core.resize.Spline36")
     s.custom = "clip = src"
     assert script_parts(s, Path("a.mkv"), Path("w"), stage="crop")[1] == ["clip = src"]
+
+
+def test_unfiltered_stage_is_the_output_without_its_filters():
+    field = FilterStep(FilterCategory.FIELD, "IVTC", "clip = ivtc(clip)")
+    s = VideoSettings(crop=Crop(0, 22, 0, 20), resize=Resize(1280, 544))
+    s.filters = [field, s.filters[0], INVERT, s.filters[1]]  # IVTC, crop, invert, resize
+    assert not compares_filters(VideoSettings(filters=[field, *VideoSettings().filters]))
+    assert compares_filters(s)
+    head, body, tail = script_parts(s, Path("a.mkv"), Path("w"), depth=10, stage="unfiltered")
+    output = script_parts(s, Path("a.mkv"), Path("w"), depth=10)
+    assert body == [  # the field matching, crop and resize stay, so the frames line up with the output's
+        "clip = ivtc(clip)",
+        "clip = core.std.Crop(clip, left=0, right=0, top=22, bottom=20)",
+        "clip = core.resize.Spline36(clip, width=1280, height=544)",
+    ]
+    assert (head, tail) == (output[0], output[2]) and "clip = clip.std.Invert()" in output[1]
+    s.filters[2] = replace(INVERT, enabled=False)
+    assert not compares_filters(s)  # only a disabled filter: nothing to compare
+    s.filters[2] = INVERT
+    s.custom = "clip = src"
+    assert not compares_filters(s)  # a custom body has no chain
 
 
 @pytest.mark.parametrize(

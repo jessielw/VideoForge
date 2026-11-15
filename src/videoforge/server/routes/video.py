@@ -1,6 +1,9 @@
 """A job's video in the browser: clip info, frames (source = uncropped, crop = the crop editor's view,
 output = processed), auto-crop, the generated script, and a check that runs it (the script editor's Run).
 
+To compare the filters' work, `unfiltered` is the output without its filters (core/video/script.py): the same
+frames, size and depth.
+
 To compare the encoder's input with its output, two pairs of stages give the same frames: `output` and `encode`
 (the output file a done run wrote), and `sample-in` and `sample` (a test encode's script, as it ran, and its MKV;
 core/pipeline/sample.py). The encodes open through FFMS2, their indexes in the job's folder.
@@ -27,7 +30,13 @@ from videoforge.core.pipeline.sample import MKV, SCRIPT, read_result, sample_dir
 from videoforge.core.plan_io import to_json
 from videoforge.core.video.info import length_warning
 from videoforge.core.video.preview import FrameError, Preview, PreviewError
-from videoforge.core.video.script import build_script, encoded_script, script_parts
+from videoforge.core.video.script import (
+    Stage as BuiltStage,
+    build_script,
+    compares_filters,
+    encoded_script,
+    script_parts,
+)
 from videoforge.core.video.settings import Crop
 from videoforge.core.video.vs import ClipInfo, ScriptError
 from videoforge.server.queue import Entry, JobQueue
@@ -35,7 +44,7 @@ from videoforge.server.views import encode_compare
 
 router = APIRouter(prefix="/api/jobs/{job_id}/video")
 ScriptStage = Literal["source", "crop", "output"]  # the job's own script's
-Stage = Literal[ScriptStage, "sample-in", "sample", "encode"]
+Stage = Literal[ScriptStage, "unfiltered", "sample-in", "sample", "encode"]
 _ENCODED = ("sample-in", "sample", "encode")  # the compare's stages (_slot)
 
 
@@ -84,10 +93,12 @@ def script_for(e: Entry, stage: Stage) -> str:
             )
         except OSError as ex:
             raise HTTPException(409, f"The test encode's script can't be read: {ex}") from None
-    return _script(e.spec, cast(ScriptStage, stage), baked_el(e.spec, e.source_video), e.burn)
+    if stage == "unfiltered" and not compares_filters(e.spec.video):
+        raise HTTPException(409, "The job has no filters to compare: the chain has none enabled, or a custom body")
+    return _script(e.spec, cast(BuiltStage, stage), baked_el(e.spec, e.source_video), e.burn)
 
 
-def _script(spec: JobSpec, stage: ScriptStage, el: Path | None = None, burn: SubTrack | None = None) -> str:
+def _script(spec: JobSpec, stage: BuiltStage, el: Path | None = None, burn: SubTrack | None = None) -> str:
     """The job's script at stage; el is a FEL's enhancement layer it bakes in (stage "source" leaves it out:
     auto crop reads the base layer, the same size), burn a subtitle track it burns in (not at stage "source")."""
     spec.work_dir.mkdir(parents=True, exist_ok=True)  # the index lives there

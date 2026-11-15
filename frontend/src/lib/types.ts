@@ -467,7 +467,7 @@ export interface JobDetail extends JobSummary {
   target: SizeBudget | null // where a 2-pass target size goes (null without one, or until planned)
   sample: SampleResult | null // the last test encode (core/pipeline/sample.py)
   search: SearchResult | null // the last CRF search, or the one running (core/pipeline/crfsearch.py)
-  compare: { encode: boolean; sample: boolean } // what the Video tab can compare the script's frames with
+  compare: { encode: boolean; sample: boolean; filters: boolean } // what the Video tab can compare the script's frames with (filters: without them)
 }
 
 // A test encode: the job's script and encoder on `length` frames of every `cycle` (POST /api/queue/sample)
@@ -529,8 +529,9 @@ export interface SearchResult {
 }
 
 // The preview's clips: the crop view and the output; to compare encoder input and output, the output and the
-// encode a done run wrote, or a test encode's script and its encode (numbered by the sample's frames).
-export type PreviewStage = 'crop' | 'output' | 'encode' | 'sample-in' | 'sample'
+// encode a done run wrote, or a test encode's script and its encode (numbered by the sample's frames); to compare
+// the filters' work, the output without its filters (unfiltered) and the output.
+export type PreviewStage = 'crop' | 'output' | 'unfiltered' | 'encode' | 'sample-in' | 'sample'
 
 // A target size's bytes: the video gets what the rest leaves (core/video/target.py)
 export interface SizeBudget {

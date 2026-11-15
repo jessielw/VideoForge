@@ -181,7 +181,7 @@ async function fixture(page: Page, empty = false) {
     target: null,
     sample: null,
     search: null,
-    compare: { encode: false, sample: false },
+    compare: { encode: false, sample: false, filters: false },
     tracks: { video: null, audio: [source], subs: [], has_chapters: false, count: 1 },
     spec: {
       id: 'presets',

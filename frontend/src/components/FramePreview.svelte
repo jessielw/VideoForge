@@ -24,15 +24,23 @@
   // `sar` is the frame's pixel shape (width / height): an anamorphic frame is shown widened (or narrowed)
   // to the shape it plays at, zoom counting the frame's rows; the crop lines and the pointer follow. The
   // AR toggle shows the stored pixels instead (one screen pixel per frame pixel both ways at 100%).
+  // A compare's `split` shows both sides at once: the shown one left of a line (dragged, or ←/→ on it), the other
+  // (prefetch) right of it, same frame and zoom; boost applies to both. Two sides of different sizes don't split.
+  // `marks` are bookmarked frames (the caller keeps them): ticks on the scrub bar, M marks or unmarks the frame
+  // (onmark), [ and ] go to the previous and next mark.
   import { tick, untrack, type Snippet } from 'svelte'
   import { api } from '../lib/api'
   import { frameFilename, parseSeek, timecode } from '../lib/format'
+  import { nextMark, prevMark } from '../lib/marks'
   import type { Crop, PreviewStage } from '../lib/types'
   import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left'
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
   import ChevronsLeftIcon from '@lucide/svelte/icons/chevrons-left'
   import ChevronsRightIcon from '@lucide/svelte/icons/chevrons-right'
+  import BookmarkIcon from '@lucide/svelte/icons/bookmark'
   import DownloadIcon from '@lucide/svelte/icons/download'
+  import StepBackIcon from '@lucide/svelte/icons/step-back'
+  import StepForwardIcon from '@lucide/svelte/icons/step-forward'
   import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle'
   import ZoomInIcon from '@lucide/svelte/icons/zoom-in'
   import ZoomOutIcon from '@lucide/svelte/icons/zoom-out'
@@ -61,6 +69,10 @@
     oncrop,
     tools,
     prefetch = null,
+    split = false,
+    splitAt = $bindable(0.5),
+    marks = null,
+    onmark,
   }: {
     jobId: string
     source?: string // the source's path, for a saved frame's name
@@ -80,6 +92,10 @@
     oncrop?: (crop: Crop) => void // set: the wheel and the crop lines edit the crop (crop stage only)
     tools?: Snippet // more toolbar controls, after Matte
     prefetch?: PreviewStage | null // a compare's other side: its frame loads beside each one, and both are kept
+    split?: boolean // with prefetch: the other side's frame right of a line, the shown one left of it
+    splitAt?: number // the line, 0..1 of the frame's width
+    marks?: readonly number[] | null // bookmarked frames, in this clip's numbers; null: no bookmarks here
+    onmark?: (n: number) => void // mark or unmark frame n (M)
   } = $props()
 
   const ZOOMS = [25, 50, 75, 100, 150, 200, 300, 400, 600, 800]
@@ -119,6 +135,7 @@
   const KEPT = 8
   const keyOf = (n: number, st: PreviewStage, v: number) => `${st}:${n}:${v}`
   let warming: AbortController | null = null
+  let keptTick = $state(0) // kept isn't reactive: this counts its changes, for the split's other side
 
   async function fetchFrame(n: number, st: PreviewStage, v: number, signal: AbortSignal): Promise<Frame> {
     const res = await fetch(api.frameUrl(jobId, n, st, v, 'png'), { signal })
@@ -146,6 +163,7 @@
 
   function keep(key: string, f: Frame) {
     kept.set(key, f)
+    keptTick++
     while (kept.size > KEPT) {
       const [k, old] = kept.entries().next().value!
       kept.delete(k)
@@ -224,9 +242,12 @@
     warming?.abort()
     for (const f of kept.values()) if (f.url !== src) URL.revokeObjectURL(f.url)
     kept.clear()
+    keptTick++
   }
+  // The pair, not the side: a flip swaps stage and prefetch, and must keep both sides' frames.
+  const pairKey = $derived(prefetch ? [stage, prefetch].sort().join(' ') : '')
   $effect(() => {
-    void prefetch
+    void pairKey
     return forget
   })
 
@@ -274,9 +295,17 @@
     else if (e.key === '+' || e.key === '=') zoomBy(1)
     else if (e.key === '-') zoomBy(-1)
     else if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey && !e.altKey) saveFrame()
+    else if (marks && onmark && (e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey && !e.altKey) onmark(frame)
+    else if (marks && e.key === '[') toMark(prevMark(marks, frame))
+    else if (marks && e.key === ']') toMark(nextMark(marks, frame))
     else return
     e.preventDefault()
   }
+
+  function toMark(n: number | null) {
+    if (n !== null) seek(n)
+  }
+  const marked = $derived(!!marks?.includes(frame))
 
   // Back to the scroll position the view was left at (zoom and boost come back through their props).
   let restored = false
@@ -588,6 +617,14 @@
   // --- boost: stretch the dark levels, to see dirty border rows against black ---
   function makeBoost() {
     if (!src) return
+    boostOf(src, (url) => {
+      if (boostSrc) URL.revokeObjectURL(boostSrc)
+      boostSrc = url
+    })
+  }
+
+  // A frame's boosted copy, as a blob URL (done gets it; it's done's to revoke).
+  function boostOf(url: string, done: (boosted: string) => void) {
     const img = new Image()
     img.onload = () => {
       const canvas = document.createElement('canvas')
@@ -604,13 +641,9 @@
         data[i + 2] = Math.min(255, data[i + 2] * 6)
       }
       ctx.putImageData(new ImageData(data, img.width, img.height), 0, 0)
-      canvas.toBlob((b) => {
-        if (!b) return
-        if (boostSrc) URL.revokeObjectURL(boostSrc)
-        boostSrc = URL.createObjectURL(b)
-      })
+      canvas.toBlob((b) => b && done(URL.createObjectURL(b)))
     }
-    img.src = src
+    img.src = url
   }
 
   function saveFrame() {
@@ -629,6 +662,61 @@
   }
 
   const shown = $derived(boost && boostSrc ? boostSrc : src)
+
+  // --- split: the compare's other side at this frame, right of the line ---
+  const other = $derived.by(() => {
+    void keptTick
+    return split && prefetch ? (kept.get(keyOf(shownAt.n, prefetch, version)) ?? null) : null
+  })
+  const splitSized = $derived(!!other && other.w === nat.w && other.h === nat.h)
+  let otherBoost = $state<string | null>(null)
+  $effect(() => {
+    const f = other
+    if (!boost || !f) return
+    let live = true
+    boostOf(f.url, (url) => {
+      if (live) otherBoost = url
+      else URL.revokeObjectURL(url)
+    })
+    return () => {
+      live = false
+      if (otherBoost) URL.revokeObjectURL(otherBoost)
+      otherBoost = null
+    }
+  })
+  const otherShown = $derived(splitSized ? (boost && otherBoost ? otherBoost : other!.url) : null)
+  let splitting = $state(false)
+
+  function splitTo(e: PointerEvent) {
+    const r = frameEl!.getBoundingClientRect()
+    splitAt = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))
+  }
+
+  function splitDown(e: PointerEvent) {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    splitting = true
+  }
+
+  function splitMove(e: PointerEvent) {
+    e.stopPropagation()
+    if (splitting) splitTo(e)
+  }
+
+  function splitUp(e: PointerEvent) {
+    splitting = false
+    ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+  }
+
+  function splitKey(e: KeyboardEvent) {
+    const d = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0
+    if (!d) return
+    e.preventDefault()
+    e.stopPropagation()
+    splitAt = Math.max(0, Math.min(1, splitAt + d * (e.shiftKey ? 0.1 : 0.01)))
+  }
   const outW = $derived(crop ? W - crop.left - crop.right : W)
   const outH = $derived(crop ? H - crop.top - crop.bottom : H)
   // The crop stage's frame came back without its margins: a filter after the crop changes the frame.
@@ -732,6 +820,39 @@
               class="block h-full w-full select-none"
               style="image-rendering: {scale >= 1 ? 'pixelated' : 'auto'}"
             />
+            {#if otherShown}
+              <img
+                src={otherShown}
+                alt="The other side of frame {frame}"
+                draggable="false"
+                class="pointer-events-none absolute inset-0 block h-full w-full select-none"
+                style="clip-path: inset(0 0 0 {splitAt * 100}%); image-rendering: {scale >= 1 ? 'pixelated' : 'auto'}"
+              />
+              <!-- The line: dragged, or ←/→ (Shift 10%) once focused. -->
+              <div
+                role="slider"
+                tabindex="0"
+                aria-label="Split line"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(splitAt * 100)}
+                aria-valuetext="{Math.round(splitAt * 100)}% from the left"
+                class="group absolute inset-y-0 z-10 w-4 -translate-x-1/2 cursor-ew-resize touch-none outline-none"
+                style="left:{splitAt * 100}%"
+                onpointerdown={splitDown}
+                onpointermove={splitMove}
+                onpointerup={splitUp}
+                onpointercancel={splitUp}
+                ondblclick={(e) => e.stopPropagation()}
+                onkeydown={splitKey}
+              >
+                <div
+                  class="mx-auto h-full w-0.5 shadow-[0_0_0_1px_rgb(0_0_0/0.6)] group-focus-visible:bg-primary {splitting
+                    ? 'bg-primary'
+                    : 'bg-white'}"
+                ></div>
+              </div>
+            {/if}
             {#if lined && crop}
               {@const band = (side: keyof Crop) => (armed === side ? 'bg-destructive/55' : 'bg-destructive/35')}
               {@const line = (side: keyof Crop) => (armed === side ? 'var(--primary)' : 'var(--destructive)')}
@@ -794,7 +915,7 @@
           <span class="text-muted-foreground">Loading the frame…</span>
         {/if}
       </div>
-    {:else if error || notice || unlined}
+    {:else if error || notice || unlined || (other && !splitSized)}
       <!-- Over the kept frame: why it isn't the newest (or has no crop lines). -->
       <div class="pointer-events-none absolute inset-x-2 top-2 flex flex-col items-start gap-1 text-xs">
         {#if error}
@@ -804,6 +925,11 @@
         {#if notice}
           <span class="px-2 py-1 text-white {notice.tone === 'bad' ? 'bg-destructive' : 'bg-black/70'}"
             >{notice.text}</span
+          >
+        {/if}
+        {#if other && !splitSized}
+          <span class="bg-black/70 px-2 py-1 text-white"
+            >No split: the two sides differ in size ({nat.w}×{nat.h} and {other.w}×{other.h}).</span
           >
         {/if}
         {#if unlined}
@@ -838,18 +964,30 @@
         ><ChevronLeftIcon /></Button
       >
     </Tip>
-    <input
-      type="range"
-      class="scrub mx-2 min-w-10 flex-1"
-      min={0}
-      max={Math.max(0, frames - 1)}
-      step={1}
-      bind:value={scrub}
-      style="--p:{frames > 1 ? scrub / (frames - 1) : 0}"
-      oninput={onscrub}
-      onchange={() => seek(scrub)}
-      aria-label="Frame"
-    />
+    <div class="relative mx-2 flex min-w-10 flex-1 items-center">
+      <input
+        type="range"
+        class="scrub w-full"
+        min={0}
+        max={Math.max(0, frames - 1)}
+        step={1}
+        bind:value={scrub}
+        style="--p:{frames > 1 ? scrub / (frames - 1) : 0}"
+        oninput={onscrub}
+        onchange={() => seek(scrub)}
+        aria-label="Frame"
+      />
+      <!-- The bookmarks, where the thumb's centre stands at each (it travels half a thumb in from either end). -->
+      {#each marks ?? [] as m (m)}
+        {#if m < frames}
+          <span
+            class="pointer-events-none absolute top-1/2 h-2.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-warning"
+            style="left:calc(0.375rem + (100% - 0.75rem) * {frames > 1 ? m / (frames - 1) : 0})"
+            data-mark={m}
+          ></span>
+        {/if}
+      {/each}
+    </div>
     <Tip class="shrink-0" text="Next (→)">
       <Button variant="ghost" size="icon" onclick={() => seek(frame + 1)} aria-label="Next frame"
         ><ChevronRightIcon /></Button
@@ -860,6 +998,40 @@
         ><ChevronsRightIcon /></Button
       >
     </Tip>
+    {#if marks}
+      <Tip class="hidden shrink-0 @md:inline-flex" text="Previous bookmark ([)">
+        <Button
+          variant="ghost"
+          size="icon"
+          onclick={() => toMark(prevMark(marks, frame))}
+          disabled={prevMark(marks, frame) === null}
+          aria-label="Previous bookmark"><StepBackIcon /></Button
+        >
+      </Tip>
+      {#if onmark}
+        <Tip
+          class="shrink-0"
+          text={marked ? `Remove the bookmark on frame ${frame} (M)` : `Bookmark frame ${frame} (M)`}
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            onclick={() => onmark(frame)}
+            aria-label="Bookmark this frame"
+            aria-pressed={marked}><BookmarkIcon class={marked ? 'fill-warning text-warning' : ''} /></Button
+          >
+        </Tip>
+      {/if}
+      <Tip class="hidden shrink-0 @md:inline-flex" text="Next bookmark (])">
+        <Button
+          variant="ghost"
+          size="icon"
+          onclick={() => toMark(nextMark(marks, frame))}
+          disabled={nextMark(marks, frame) === null}
+          aria-label="Next bookmark"><StepForwardIcon /></Button
+        >
+      </Tip>
+    {/if}
     <Tip class="shrink-0" text="Go to a frame number, or a time: 1:23.5, 1:02:03 or 83.5s (Enter)">
       <Input
         class="w-24 text-right font-mono"

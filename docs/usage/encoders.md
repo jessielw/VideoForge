@@ -71,7 +71,7 @@ A two-pass job is tested as one pass at its bitrate (a target size's, as its fir
 
 The test encode runs in the index lane, beside the queue: it indexes the source first if it has to, and jobs waiting to be indexed wait for it. The job is locked meanwhile, but its preview opens. **Stop** (or Stop indexing on the Queue toolbar) cancels it. The result stays with the job until a settings change marks it out of date ("settings changed since"); running the same sample again reuses it. Its files are in the job's folder, under `sample/` (`sample.mkv` plays in any player).
 
-**Compare** opens the sample's frames on the Video tab, against the encoder's input (see [Compare encoded frames](video.md#compare-encoded-frames)).
+**Compare** opens the sample's frames on the Video tab, against the encoder's input (see [Compare frames](video.md#compare-frames)).
 
 ### Quality score
 
@@ -90,7 +90,7 @@ Each try is a test encode at one CRF with its [quality score](#quality-score) (w
 
 Each try shows as it ends: its CRF, bitrate, the whole video's size at that bitrate, and its scores. **Use CRF N** sets the job's CRF to the answer; the result stays current after that, and shows "settings changed since" once the script or another encoder setting changes. The search runs in the index lane like the test encode (**Stop** cancels it, keeping the tries so far). The tries are kept in `sample/search/crf-<n>/`, so searching again, for another target too, reuses each CRF already encoded at the same settings.
 
-A short sample scores differently from the whole video, and the scores compare with the encoder's input, not the source, so treat the CRF found as a starting point and check the encode by eye ([Compare](video.md#compare-encoded-frames)).
+A short sample scores differently from the whole video, and the scores compare with the encoder's input, not the source, so treat the CRF found as a starting point and check the encode by eye ([Compare](video.md#compare-frames)).
 
 ## Options and extra arguments
 

@@ -61,7 +61,7 @@ async function phoneFixture(page: Page) {
     target: null,
     sample: null,
     search: null,
-    compare: { encode: false, sample: false },
+    compare: { encode: false, sample: false, filters: false },
     spec: {
       id: job.id,
       rule_set: 'manual',

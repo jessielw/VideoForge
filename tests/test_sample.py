@@ -245,7 +245,7 @@ def test_test_encode_runs_in_the_index_lane(tmp_path):
         found = done["sample"]
         assert (found["percent"], found["frames"], found["total_frames"], found["current"]) == (5, 144, 2400, True)
         assert found["estimate_mb"] == pytest.approx(found["kbps"] * 2400 / float(NTSC) / 8000)
-        assert done["compare"] == {"encode": False, "sample": True}
+        assert done["compare"] == {"encode": False, "sample": True, "filters": False}
         e = client.app.state.queue.get(job)
         assert e.state.status is None  # a test encode is no run
         assert any("Test encode: 144 frames of 2400" in line for line in e.log)
@@ -308,11 +308,12 @@ def test_compare_stages_need_their_encodes(tmp_path):
     make_files(tmp_path)
     with make_client(tmp_path) as client:
         (job,) = add(client, tmp_path)
-        wait_for(client, job, "ready", "warn")
+        ready = wait_for(client, job, "ready", "warn")
+        assert ready["compare"] == {"encode": False, "sample": False, "filters": False}
         e = client.app.state.queue.get(job)
         e.spec.work_dir.mkdir(exist_ok=True)
         (e.spec.work_dir / "Show.S01E01.mkv.ffindex").write_bytes(b"index")  # indexed
-        for stage in ("sample-in", "sample", "encode"):
+        for stage in ("sample-in", "sample", "encode", "unfiltered"):  # unfiltered: the chain has no filters
             r = client.get(f"/api/jobs/{job}/video/info", params={"stage": stage})
             assert r.status_code == 409, stage
 

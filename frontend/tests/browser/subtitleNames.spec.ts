@@ -117,7 +117,7 @@ async function fixture(page: Page) {
     target: null,
     sample: null,
     search: null,
-    compare: { encode: false, sample: false },
+    compare: { encode: false, sample: false, filters: false },
     tracks: { video: null, audio: [], subs, has_chapters: false, count: 4 },
     spec: {
       id: 'names',

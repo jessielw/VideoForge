@@ -76,6 +76,7 @@ export function basename(path: string | null | undefined): string {
 const STAGE_MARK: Record<PreviewStage, string> = {
   crop: ' (crop view)',
   output: '',
+  unfiltered: ' (unfiltered)',
   encode: ' (encode)',
   'sample-in': ' (test encode input)',
   sample: ' (test encode)',
