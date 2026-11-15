@@ -127,7 +127,7 @@
     await app.refreshJobs()
     if (ids.length > 1)
       toast.success(`Unqueued ${ids.length} jobs`, {
-        description: 'Their settings can be edited again; the queue leaves them out.',
+        description: 'You can edit them again, and the queue skips them.',
       })
   }
 
@@ -141,10 +141,14 @@
     await app.refreshJobs()
     if (enqueued.length < ids.length) {
       toast.warning(`Queued ${enqueued.length} of ${ids.length} jobs`, {
-        description: 'The others are still being probed or indexed, or are blocked.',
+        description:
+          "The others can't be queued while VideoForge reads their tracks, indexes them, detects their crop or runs a test encode or CRF search, or while they're blocked.",
       })
     } else if (ids.length > 1)
-      toast.success(`Queued ${ids.length} jobs`, { description: 'Locked until they run; Start queue runs them.' })
+      toast.success(`Queued ${ids.length} jobs`, {
+        description:
+          "You can't edit them while they're queued. Start queue runs them, or a running queue picks them up in their turn.",
+      })
   }
 
   // The routed job is selected once it's in the list (the prune below would undo it otherwise).
@@ -404,7 +408,8 @@
     removing = true
     await act(async () => {
       const r = await api.remove(ids, workDirs)
-      if (r.removed.length < ids.length) toast.info('Queued, running or indexing jobs were kept')
+      if (r.removed.length < ids.length)
+        toast.info('Jobs that are queued or running, indexing, or running a test encode or CRF search were kept')
       if (!workDirs && r.removed.length)
         toast.success(`Removed ${r.removed.length} job(s)`, {
           action: {
@@ -450,7 +455,9 @@
       await saves.flush()
       const r = await api.index(todo)
       const left = todo.length - r.taken.length
-      const out = left ? `${left} left out (queued, running, already indexing, or reusing an encode).` : ''
+      const out = left
+        ? `${left} left out: ${left > 1 ? "they're" : "it's"} queued or running, already indexing or waiting to, running a test encode or CRF search, or using an existing encode.`
+        : ''
       if (!r.taken.length) toast.info('Nothing to index', { description: [already, out].join(' ').trim() })
       else
         toast.info(`Indexing ${r.taken.length} job${r.taken.length > 1 ? 's' : ''}`, {
@@ -607,7 +614,7 @@
         side="right"
         class="my-2"
         text={layout.narrow && single !== null
-          ? 'Show the queue list (over the editor: the window is narrow)'
+          ? 'Show the queue list over the editor (the window is narrow)'
           : 'Show the queue list'}
       >
         <Button variant="ghost" size="icon" onclick={showList} aria-label="Show the queue list" aria-expanded={peek}>
@@ -712,8 +719,8 @@
           {#if app.queue.current}
             <Tip
               text={pausing
-                ? 'Stopping after pass 1: click to take that back'
-                : 'Stop the running job once its video pass 1 is done. It keeps what it finished, so VideoForge can be closed, and Run goes on with pass 2'}
+                ? 'The job stops after pass 1. Click to cancel that.'
+                : "Stops the running job when its video's pass 1 is done. It keeps what it finished, so you can close VideoForge. Running the job again goes on with pass 2."}
             >
               <Button variant={pausing ? 'default' : 'outline'} onclick={pauseAfterPass1}>
                 <PauseIcon />{pausing ? 'Pausing after pass 1' : 'Pause after pass 1'}
@@ -724,7 +731,7 @@
           <Tip
             text={startJobs.length
               ? `Run the ${startJobs.length} queued jobs, in queue order`
-              : 'Nothing is queued: tick the jobs to run (or Queue a selection)'}
+              : 'Nothing is queued. Tick the jobs to run, or select some and use Queue.'}
           >
             <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())}>
               <PlayIcon />Start queue ({startJobs.length})
@@ -733,18 +740,22 @@
         {/if}
         {#if working || app.queue.paused}
           {#if app.queue.paused}
-            <Tip text="Go on with the paused tools">
+            <Tip text="Resumes the paused tools.">
               <Button onclick={() => act(api.resume)}><PlayIcon /><span class="max-sm:sr-only">Resume</span></Button>
             </Tip>
           {:else}
-            <Tip text="Suspend the running job's tools and the index lane's (they use no CPU until resumed)">
+            <Tip
+              text="Suspends the running job's tools and any background indexing or test encode. They use no CPU until you resume."
+            >
               <Button variant="outline" onclick={() => act(api.pause)}>
                 <PauseIcon /><span class="max-sm:sr-only">Pause</span>
               </Button>
             </Tip>
           {/if}
           <DropdownMenu.Root>
-            <Tip text="Process priority of the running tools, for the rest of their run (Settings has the default)">
+            <Tip
+              text="Sets the process priority of the running job, and of any indexing or test encode running now, until each one finishes. Later jobs use the default in Settings › Queue & indexing."
+            >
               <DropdownMenu.Trigger disabled={!working}>
                 {#snippet child({ props })}
                   <Button {...props} variant="ghost" size="icon" aria-label="Process priority"><GaugeIcon /></Button>
@@ -752,7 +763,7 @@
               </DropdownMenu.Trigger>
             </Tip>
             <DropdownMenu.Content align="start" class="w-48">
-              <DropdownMenu.Label>Priority, this run</DropdownMenu.Label>
+              <DropdownMenu.Label>Priority until they finish</DropdownMenu.Label>
               <DropdownMenu.RadioGroup
                 value={app.queue.priority ?? ''}
                 onValueChange={(v) => act(() => api.priority((v || null) as Priority | null))}
@@ -771,17 +782,19 @@
           </Button>
         </Tip>
         {#if queueableSelected.length}
-          <Tip text="Queue the selected jobs: locked until they run, and the queue runs them (a running queue too)">
+          <Tip
+            text="Queues the selected jobs, so they can't be edited. Start queue runs them, or a running queue picks them up in their turn."
+          >
             <Button variant="outline" onclick={() => act(() => queue())}>Queue ({queueableSelected.length})</Button>
           </Tip>
         {/if}
         {#if waitingSelected.length}
-          <Tip text="Take the selected jobs out of the run, to edit them; their settings and files stay">
+          <Tip text="Takes the selected jobs out of the queue so you can edit them. Their settings and files stay.">
             <Button variant="outline" onclick={() => act(() => unqueue())}>Unqueue ({waitingSelected.length})</Button>
           </Tip>
         {/if}
         {#if indexing}
-          <Tip text="Stop indexing: cancel the job being indexed (or test encoded) and the ones waiting">
+          <Tip text="Cancels the indexing, test encode or CRF search that's running, and the ones waiting.">
             <Button variant="outline" onclick={() => act(() => app.stopIndexing())}>
               <DatabaseXIcon /><span class="max-sm:sr-only">Stop indexing</span>
             </Button>
@@ -798,9 +811,9 @@
           >
         </Tip>
         <Tip
-          text="Index {selected.length
+          text="Indexes {selected.length
             ? 'the selected jobs'
-            : 'every job'} not indexed yet ({toIndex}): one at a time, each gets its work folder, script and source index, and nothing else, so its video opens at once (runs next to the queue)"
+            : 'every job'} not indexed yet ({toIndex}), so their preview opens without waiting. Jobs are indexed one at a time in the background, beside the queue. Indexing makes only the work folder, the script and the source index."
         >
           <Button
             variant="ghost"
@@ -830,7 +843,7 @@
           >
         </Tip>
         <Tip
-          text="Duplicate: a copy of each selected job right after it, with a label of its own, to change a few settings for a second output"
+          text="Makes a copy of each selected job right after it, with its own label. Use it to make a second output with a few settings changed."
         >
           <Button
             variant="ghost"
@@ -841,7 +854,7 @@
           >
         </Tip>
         <Tip
-          text="Save job file: each selected job's whole setup in its work folder (a run does this too), to add it again later"
+          text="Saves each selected job's whole setup as a job file in its work folder, so you can add it again later. A run saves one too."
         >
           <Button
             variant="ghost"
@@ -856,13 +869,13 @@
             <FileUpIcon />
           </Button>
         </Tip>
-        <Tip text="Probe again">
+        <Tip text="Read the tracks again">
           <Button
             variant="ghost"
             size="icon"
             disabled={!selected.length}
             onclick={() => act(() => api.reprobe(selected))}
-            aria-label="Probe selected jobs again"
+            aria-label="Read the selected jobs' tracks again"
           >
             <RefreshCwIcon />
           </Button>
@@ -879,7 +892,7 @@
           </Tip>
           <DropdownMenu.Content align="end" class="w-auto">
             <DropdownMenu.Item onSelect={() => remove()}>Remove from the queue</DropdownMenu.Item>
-            <Tip class="block" side="left" text="Review the work folders before deleting their intermediate files">
+            <Tip class="block" side="left" text="Shows the work folders and their sizes before deleting them.">
               <DropdownMenu.Item onSelect={confirmRemoval}>Remove and delete work folders</DropdownMenu.Item>
             </Tip>
           </DropdownMenu.Content>
@@ -920,19 +933,20 @@
         </p>
         {#if selected.length}<Button variant="outline" size="sm" onclick={clearSelection}>Clear selection</Button>{/if}
         <p class="text-xs text-muted-foreground">
-          Ticked jobs are queued: locked, and the queue runs them. Selected actions include selections on other pages
-          and hidden by filters. Index uses {selected.length
+          A ticked job is queued and locked, so you can't edit it until you untick it. Start queue runs it. Actions on
+          the selection include jobs on other pages and jobs hidden by filters. Index uses {selected.length
             ? `${selected.length} selected jobs`
             : `all ${app.jobs.length} jobs`}.
         </p>
         <p id="queue-keys" class="text-xs text-muted-foreground pointer-coarse:hidden">
-          Arrows/Home/End navigate; Shift extends selection; Ctrl/Cmd+A selects matching jobs across pages.
+          Arrow keys, Home and End move through the list. Shift extends the selection, and Ctrl+A (Cmd+A) selects
+          matching jobs on every page.
         </p>
       </div>
 
       {#if saveError}
         <div role="alert" class="space-y-2 border-b p-3 text-sm text-destructive">
-          <p>Changes are not saved: {saveError}. Start is blocked until resolved.</p>
+          <p>Changes aren't saved: {saveError}. The queue can't start until you retry or discard them.</p>
           <Button size="sm" onclick={() => act(() => saves.retry())}>Retry saves</Button>
           <Button size="sm" variant="outline" onclick={() => saves.discard()}>Discard unsaved changes</Button>
         </div>
@@ -957,10 +971,10 @@
                 text={job.status === 'running'
                   ? 'Running'
                   : queued
-                    ? 'Queued: locked, the queue runs it (untick to edit)'
+                    ? 'Queued and locked. Untick it to make changes.'
                     : queueable(job.status)
-                      ? 'Tick to queue: locks it, and the queue runs it'
-                      : `Can't be queued while ${STATUS_LABEL[job.status].toLowerCase()}`}
+                      ? "Tick to queue it. It's locked while it's queued."
+                      : `Can't be queued while its status is ${STATUS_LABEL[job.status]}`}
               >
                 <Checkbox
                   bind:checked={() => queued, (on) => act(() => (on ? queue([job.id]) : unqueue([job.id])))}
@@ -1003,7 +1017,7 @@
                     <Tip
                       class="shrink-0"
                       text={name.endsWith('?')
-                        ? 'Dolby Vision profile 7: set dovi_tool (Settings, Tools) to read whether its enhancement layer is FEL or MEL; it decides the encode'
+                        ? "Dolby Vision profile 7. Set dovi_tool in Settings › Tools so VideoForge can read whether its enhancement layer is FEL or MEL, which decides how it's encoded."
                         : 'The source is ' + name}
                     >
                       <Badge
@@ -1025,7 +1039,7 @@
                 {/if}
                 <span>· {job.audio.length} audio · {job.subs} subs</span>
                 {#if job.indexed}
-                  <Tip class="ml-auto shrink-0 items-center" text="Indexed: the video opens at once"
+                  <Tip class="ml-auto shrink-0 items-center" text="Indexed, so the preview opens at once"
                     ><DatabaseCheckIcon class="size-3.5" /></Tip
                   >
                 {/if}
@@ -1055,8 +1069,11 @@
                 </div>
               {/if}
               {#if job.index_held && job.status === 'index-queued'}
-                <Tip class="mt-0.5 block truncate text-xs text-muted-foreground" text="Settings, Batch indexing">
-                  Waits: an encode is reading this disk
+                <Tip
+                  class="mt-0.5 block truncate text-xs text-muted-foreground"
+                  text="Settings › Queue & indexing › Wait while an encode reads the same disk"
+                >
+                  Waiting for the encode reading this disk
                 </Tip>
               {/if}
               {#if job.index_error && job.status !== 'indexing'}
@@ -1124,8 +1141,9 @@
         <div class="max-w-3xl space-y-6 p-6">
           <h2 class="text-lg font-semibold">{selected.length} jobs selected</h2>
           <p class="text-sm text-muted-foreground">
-            Settings here apply to every selected job (queued or running ones are skipped). Starting values are the
-            first job's. Audio and subtitle choices stay per job unless the template sets them.
+            Changes here apply to every selected job, except jobs that are queued, running, indexing, or running a test
+            encode or CRF search. The values shown are the first selected job's. Each job keeps its own audio and
+            subtitle choices unless the template sets them.
           </p>
           <div class="flex flex-wrap items-center gap-3">
             <Button variant="outline" disabled={!batchToIndex} onclick={() => index(selected)}>
@@ -1134,8 +1152,9 @@
                 : 'All indexed'}
             </Button>
             <span class="text-sm text-muted-foreground">
-              One at a time: the work folder, script and source index, nothing else. Their video then opens at once, and
-              the encode reuses the index.{batchToIndex && batchToIndex < selected.length
+              Makes only each job's work folder, script and source index, one job at a time in the background, beside
+              the queue. Their preview then opens at once, and their encode reuses the index.{batchToIndex &&
+              batchToIndex < selected.length
                 ? ` ${selected.length - batchToIndex} already indexed.`
                 : ''}
             </span>
@@ -1156,8 +1175,9 @@
                 >
               </div>
               <p class="text-xs text-muted-foreground">
-                Sets video, encoder, container, AutoQPF{picked?.data.audio ? ', audio' : ''}{picked?.data.crop_mode ===
-                'auto'
+                Sets video, encoder, AutoQPF{picked?.data.audio ? ', audio' : ''}{picked?.data.subs
+                  ? ', subtitles'
+                  : ''}, and the container with its options{picked?.data.crop_mode === 'auto'
                   ? '; the crop is detected for each job'
                   : picked?.data.crop_mode === 'fixed'
                     ? `; crop ${picked.data.video.crop.left}/${picked.data.video.crop.top}/${picked.data.video.crop.right}/${picked.data.video.crop.bottom} on every job`
@@ -1183,7 +1203,7 @@
                     >
                   {/each}
                 </ToggleGroup.Root>
-                <span class="text-xs text-muted-foreground">Each job keeps its extra muxer arguments.</span>
+                <span class="text-xs text-muted-foreground">Each job keeps its own extra arguments.</span>
               </Card.Root>
             {/if}
             <Card.Root class="p-4">
@@ -1212,8 +1232,8 @@
     <Dialog.Header>
       <Dialog.Title>Add jobs from job files</Dialog.Title>
       <Dialog.Description>
-        A <code>videoforge-job.json</code>, a job's folder, or a source's <code>_tmp</code> folder (every job in it). Each
-        job comes back exactly as it was saved, and its run reuses the files it finished.
+        A <code>videoforge-job.json</code>, a job's folder, or a source's <code>_tmp</code> folder (adds every job in it).
+        Each job comes back with the settings it was saved with, and when it runs you can reuse the encodes it finished.
       </Dialog.Description>
     </Dialog.Header>
     <PathSlot
@@ -1237,10 +1257,11 @@
 >
   <Dialog.Content>
     <Dialog.Header>
-      <Dialog.Title>Remove jobs and delete working files?</Dialog.Title>
+      <Dialog.Title>Remove the jobs and delete their work folders?</Dialog.Title>
       <Dialog.Description
-        >Records and logs are archived first. Indexes, scripts and intermediate encodes are permanently deleted; a rerun
-        must recreate them. Finished output files are kept.</Dialog.Description
+        >Each job's records and log are copied to the records folder in VideoForge's data folder first. Then the work
+        folder is deleted for good, with its index, scripts, encodes and job files. A job added again for the same
+        source starts from scratch. Finished files in the output folder are kept.</Dialog.Description
       >
     </Dialog.Header>
     <div class="max-h-64 space-y-3 overflow-auto text-sm">

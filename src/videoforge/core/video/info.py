@@ -58,9 +58,9 @@ def read(path: Path) -> ScriptInfo | None:
 
 def _out_of_step(script: float, source: float) -> str:
     return (
-        f"The script's video is {script:.3f} s long and the source's {source:.3f} s ({script - source:+.3f} s): "
-        "the source's audio, subtitles and chapters would be out of step with it (a trim, or a filter that "
-        "changes the speed)"
+        f"The script's video is {script:.3f} s long and the source's is {source:.3f} s ({script - source:+.3f} s). "
+        "The source's audio, subtitles and chapters would be out of step with it. A trim or a filter that changes "
+        "the speed causes this"
     )
 
 
@@ -71,8 +71,8 @@ def _vfr_warning(video: VideoInfo, frames: int, fps: Fraction | None) -> str:
         return ""
     rate = f"a constant {float(fps):.3f} fps" if fps else "the source's first frame duration (the script has no rate)"
     dropped = (
-        f"The script has {frames} frames and the source {video.frames}: the source's variable frame rate "
-        f"timestamps don't fit it, so it's muxed at {rate}"
+        f"The script has {frames} frames and the source has {video.frames}. The source's variable frame rate "
+        f"timestamps don't fit it, so the output uses {rate}"
     )
     if not fps or not video.duration_ms:
         return dropped

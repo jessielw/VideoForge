@@ -60,7 +60,8 @@ export async function checkPaths(paths: string[], rule: PathRule): Promise<strin
   for (const { path, kind } of kinds) {
     const name = basename(path) || path
     if (kind === 'missing') left.push(`${path}: not found`)
-    else if (kind === 'outside') left.push(`${name}: outside the browsable folders (Settings)`)
+    else if (kind === 'outside')
+      left.push(`${name}: outside the folders the folder browser can open (Settings › Files & folders)`)
     else if (rule.mode === 'folder') ok.push(kind === 'folder' ? path : path.replace(/[\\/][^\\/]*$/, ''))
     else if (kind === 'folder') {
       if (rule.mode === 'files') ok.push(path)
@@ -112,7 +113,7 @@ export const pathDrop: Action<HTMLElement, PathDropOptions> = (node, initial) =>
     if (!hasFiles(e) || opts.disabled) return
     e.preventDefault()
     clear()
-    toast.info('A browser keeps dropped files’ paths to itself', {
+    toast.info("A browser keeps dropped files' paths to itself", {
       description:
         'Paste the paths instead: in Explorer select the files, press Ctrl+Shift+C, then Ctrl+V here. Or use Browse…',
     })

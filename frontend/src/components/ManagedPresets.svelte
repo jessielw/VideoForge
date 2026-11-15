@@ -89,8 +89,8 @@
   <section class="col-span-full min-w-0 space-y-3">
     <h2 class="font-medium">Plugin presets</h2>
     <p class="text-xs text-muted-foreground">
-      Presets that come with a plugin are updated with it. One you edited is kept as you left it; Reset puts it back as
-      the plugin ships it.
+      Presets that come with a plugin update when the plugin does. A preset you edited stays as you left it, and Reset
+      puts it back as the plugin ships it.
     </p>
     <div class="divide-y rounded-md border">
       {#each plugins as { plugin, total, attention, removed } (plugin)}
@@ -143,7 +143,7 @@
       {/each}
     </div>
     {#each managed.problems as problem}<p class="text-xs text-destructive" role="alert">
-        Plugin presets not used: {problem}
+        A plugin's presets couldn't be read, so they aren't used: {problem}
       </p>{/each}
     {#if error}<p class="text-xs text-destructive" role="alert">{error}</p>{/if}
   </section>

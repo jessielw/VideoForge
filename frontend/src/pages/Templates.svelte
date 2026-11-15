@@ -339,8 +339,8 @@
         {:else}
           <Tip
             text={c.name === starred
-              ? `This template is the default for new jobs on Rule set: ${ruleSetName}`
-              : `Make this template the default for new jobs on Rule set: ${ruleSetName}`}
+              ? `This template is the default for new jobs with the ${ruleSetName} rule set`
+              : `Make this template the default for new jobs with the ${ruleSetName} rule set`}
           >
             <Button
               variant="ghost"
@@ -432,7 +432,7 @@
       <div class="space-y-4 p-6">
         <header class="flex flex-wrap items-center gap-2">
           {#if !readOnly}
-            <Tip text="Folder: use / for nested folders (Group / 1080p)">
+            <Tip text="The template's folder. Use / for a folder inside a folder, as in Group / 1080p.">
               <Input class="w-44" aria-label="Template folder" placeholder="No folder" bind:value={draftFolder} />
             </Tip>
             <span class="text-muted-foreground" aria-hidden="true">/</span>
@@ -505,10 +505,13 @@
                     <Input id="tcrop-{side}" type="number" step="2" min="0" bind:value={draft.video.crop[side]} />
                   {/each}
                 </div>
-                <p class="text-xs text-muted-foreground">The same crop on every job (one show, the same black bars).</p>
+                <p class="text-xs text-muted-foreground">
+                  Uses the same crop on every job, for sources that share their black bars, such as one show.
+                </p>
               {:else if draft.crop_mode === 'auto'}
                 <p class="text-xs text-muted-foreground">
-                  Each job's crop is detected after it's added (indexing the source takes a while the first time).
+                  Detects each job's crop after it's added. The source is indexed first, which takes a while the first
+                  time.
                 </p>
               {:else}
                 <p class="text-xs text-muted-foreground">Applying the template leaves each job's crop as it is.</p>
@@ -590,8 +593,8 @@
                 <span class="text-muted-foreground">Extra arguments</span>
                 <Input
                   class="font-mono text-xs"
-                  aria-label="Extra muxer arguments"
-                  placeholder="added to the muxer command as typed"
+                  aria-label="Extra arguments for {container?.tool ?? 'the output'}"
+                  placeholder="added to the {container?.tool ?? 'output'} command as typed"
                   bind:value={draft.mux.extra}
                 />
                 <NameSettings
@@ -623,7 +626,7 @@
           <span class="section-label">Audio</span>
           {#if !trackEditor}
             <p class="text-xs text-muted-foreground">
-              {ruleSetName}'s rules choose its jobs' audio: these settings apply to other rule sets' jobs.
+              {ruleSetName} picks its jobs' audio by its own rules, so these settings apply only to jobs with other rule sets.
             </p>
           {/if}
           <TemplateAudioEditor
@@ -637,7 +640,8 @@
           <span class="section-label">Subtitles</span>
           {#if !trackEditor}
             <p class="text-xs text-muted-foreground">
-              {ruleSetName}'s rules choose its jobs' subtitles: these settings apply to other rule sets' jobs.
+              {ruleSetName} picks its jobs' subtitles by its own rules, so these settings apply only to jobs with other rule
+              sets.
             </p>
           {/if}
           <TemplateSubsEditor

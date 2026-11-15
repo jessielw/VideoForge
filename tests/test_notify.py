@@ -111,6 +111,6 @@ def test_notifier_sends_to_who_wants_it_and_retries():
 
 
 def test_send_reports_why():
-    assert send("nope", queue_message([], 0)) == "Apprise doesn't recognise this URL"
+    assert send("nope", queue_message([], 0)) == "Apprise doesn't recognize this URL"
     error = send("json://127.0.0.1:9/", queue_message([], 0))  # nothing listens on the discard port
     assert error and "error" in error.lower()

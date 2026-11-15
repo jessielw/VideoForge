@@ -47,7 +47,9 @@ def remove_identified(request: Request, body: dict = Body(...)) -> dict:  # noqa
 def _allowed(request: Request) -> None:
     if not request.app.state.settings.can_manage_plugins:
         raise HTTPException(
-            403, "Plugin management is disabled. Start VideoForge with --plugin-management to enable it."
+            403,
+            "Installing and removing plugins is off on this server. "
+            "Start VideoForge with --plugin-management to turn it on",
         )
 
 

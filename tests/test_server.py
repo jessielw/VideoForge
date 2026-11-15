@@ -241,7 +241,7 @@ def test_batch_crop_continues_after_busy_and_preserves_other_video_settings(tmp_
         ).json()
         assert result["updated"] == [ids[1], ids[3]]
         assert ids[0] in result["skipped"]
-        assert result["skipped"][ids[2]] == "Uses an imported encode"
+        assert result["skipped"][ids[2]] == "Uses an existing encode, so there's nothing to crop"
         assert "missing" in result["failed"]
         after = client.get(f"/api/jobs/{ids[1]}").json()["spec"]["video"]
         assert after["crop"]["left"] == 2
@@ -652,7 +652,7 @@ def test_notifications(tmp_path):
         assert [d["name"] for d in saved] == ["Phone", "discord", "Off", "Down"]
         assert saved[1]["events"] == ["job_done", "job_failed", "queue_finished"]
         bad = client.put("/api/config", json={"notifications": [{"url": "nope"}]})
-        assert bad.status_code == 422 and "recognise" in bad.json()["detail"]
+        assert bad.status_code == 422 and "recognize" in bad.json()["detail"]
         assert (
             client.put("/api/config", json={"notifications": [{"url": "json://x", "events": ["x"]}]}).status_code == 422
         )
@@ -2462,7 +2462,7 @@ def test_an_invalid_jobs_issues_say_each_check_once():
         state = JobState(status=JobStatus.INVALID, error=error, issues=checks)
         return [i.code for i in issues(SimpleNamespace(probe_error="", state=state, plan=None))]
 
-    assert shown("Failed 1 output check. The file is kept as X.unpublished-1a2b3c4d.mkv, not published as X.mkv.") == [
+    assert shown("1 output check failed. The file is kept as X.unpublished-1a2b3c4d.mkv instead of X.mkv") == [
         "output.name.dual",
         "run.invalid",
         "output.a",

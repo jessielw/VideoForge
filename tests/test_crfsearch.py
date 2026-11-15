@@ -87,7 +87,7 @@ def test_tries_share_a_script_and_keep_their_own_files(tmp_path):
     key = crfsearch.search_key(spec, plan)
     assert crfsearch.search_key(replace(spec, encoder=replace(spec.encoder, crf=30)), plan) == key
     assert crfsearch.search_key(replace(spec, encoder=replace(spec.encoder, preset="slow")), plan) != key
-    with pytest.raises(ValueError, match="rate control at CRF"):
+    with pytest.raises(ValueError, match="rate control set to CRF"):
         crfsearch.check(replace(spec, encoder=replace(spec.encoder, rate_control=RateControl.ABR)))
 
 
@@ -158,7 +158,7 @@ def test_crf_search_runs_in_the_index_lane(tmp_path):
         abr = encoder | {"rate_control": "abr"}
         client.patch(f"/api/jobs/{job}", json={"encoder": abr})
         r = client.post("/api/queue/search", json=body)
-        assert r.status_code == 422 and "rate control at CRF" in r.json()["detail"]
+        assert r.status_code == 422 and "rate control set to CRF" in r.json()["detail"]
 
 
 @pytest.mark.skipif(

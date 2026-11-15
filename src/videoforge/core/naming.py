@@ -310,8 +310,16 @@ def issues(spec: JobSpec) -> list[Issue]:
     out = []
     for m in _TOKEN_RE.finditer(spec.mux.name_template):
         if m.group(2) not in _NAMES:
-            out.append(Issue(Severity.WARN, "name.token", f"Unknown token {m.group(0)} in the name template"))
+            out.append(
+                Issue(Severity.WARN, "name.token", f"{m.group(0)} isn't a token, so it stays in the name as typed")
+            )
         bad = [f.strip() for f in m.group(3).split("|") if f.strip() and f.strip() not in FILTERS]
         if bad:
-            out.append(Issue(Severity.WARN, "name.filter", f"Unknown filter {', '.join(bad)} in {m.group(0)}"))
+            out.append(
+                Issue(
+                    Severity.WARN,
+                    "name.filter",
+                    f"The name template skips {', '.join(bad)} in {m.group(0)}. Tokens lists the filters it can use",
+                )
+            )
     return out

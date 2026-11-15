@@ -139,7 +139,9 @@
           app.ruleSets = ruleSets
         }),
         app.loadEncoders(),
-      ]).catch(() => toast.error('Configuration imported. Reload the page to refresh available rule sets.'))
+      ]).catch(() =>
+        toast.error("Configuration imported, but the rule set and encoder lists didn't load. Reload the page."),
+      )
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {
@@ -156,8 +158,8 @@
   </p>
   <p class="text-xs text-muted-foreground">
     Includes tool paths, folder choices, notifications, actions, and plugin settings. Notification URLs, action targets,
-    and plugin settings may include credentials. Use Preset sharing for group distribution. Jobs, media, installed
-    tools, and plugin files are separate.
+    and plugin settings may include passwords or keys. To share presets with others, use Preset sharing. Jobs, media,
+    installed tools and plugin files aren't included.
   </p>
   <div class="flex flex-wrap gap-2">
     <Button variant="outline" disabled={disabled || busy} onclick={exportFile}
@@ -237,7 +239,7 @@
           <span
             >Switch to it after importing<span class="block text-xs text-muted-foreground"
               >{app.queue.running
-                ? 'Stop the queue to switch: its jobs use the active profile’s settings.'
+                ? "Stop the queue to switch, because its jobs use the active profile's settings."
                 : 'Its settings, templates and presets are used at once.'}</span
             ></span
           >
@@ -264,8 +266,8 @@
         <details class="min-w-0 space-y-2 text-xs">
           <summary class="cursor-pointer font-medium">Review included scripts and actions</summary>
           <p class="text-muted-foreground">
-            Scripts run when processing video. Enabled actions run on their selected job or queue events. Command
-            actions are {preview.bundle.application.allow_commands ? 'allowed' : 'disabled'} in this backup.
+            Scripts run when video is processed. Each action that's turned on runs on the job or queue events chosen for
+            it. Command actions are {preview.bundle.application.allow_commands ? 'allowed' : 'off'} in this backup.
           </p>
           {#each scripts as script, i (i)}<p class="font-medium">{script.name}</p>
             <pre class="max-h-40 overflow-auto rounded bg-muted p-2">{script.script}</pre>{/each}

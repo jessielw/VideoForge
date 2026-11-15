@@ -153,7 +153,11 @@ def issues(settings: EncoderSettings, plan: Plan, container: str) -> list[Issue]
     found = budget(settings.target_mb, plan, container, None)
     if found is None:
         return [
-            Issue(Severity.BLOCK, "video.target_length", "The source's length isn't known: set a bitrate, not a size")
+            Issue(
+                Severity.BLOCK,
+                "video.target_length",
+                "The source's length isn't known. Set a bitrate instead of a size",
+            )
         ]
     out = []
     if found.video <= 0:
@@ -162,7 +166,8 @@ def issues(settings: EncoderSettings, plan: Plan, container: str) -> list[Issue]
             Issue(
                 Severity.BLOCK,
                 "video.target_small",
-                f"The target size ({settings.target_mb} MB) leaves nothing for the video: the rest takes {rest:.0f} MB",
+                f"The target size ({settings.target_mb} MB) leaves nothing for the video. The other tracks and "
+                f"overhead take {rest:.0f} MB",
             )
         )
     if found.unknown:
@@ -170,8 +175,8 @@ def issues(settings: EncoderSettings, plan: Plan, container: str) -> list[Issue]
             Issue(
                 Severity.WARN,
                 "video.target_unknown",
-                f"The size of {', '.join(found.unknown)} isn't known: the target size counts it as nothing (an "
-                "encoded track's file is counted at pass 2)",
+                f"The size of {', '.join(found.unknown)} isn't known, so the target size counts it as nothing. An "
+                "encoded track's file is counted at pass 2",
             )
         )
     return out

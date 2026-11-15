@@ -49,13 +49,13 @@
 >
   <Dialog.Content class="sm:max-w-2xl">
     <Dialog.Header>
-      <Dialog.Title>Reuse finished files?</Dialog.Title>
+      <Dialog.Title>Reuse earlier encodes?</Dialog.Title>
       <Dialog.Description>
-        An earlier run already made these. Ticked ones are reused as they are; the others are made again.
-        {#if stale}Files marked <em>other settings</em> were made before the job was changed.{/if}
+        An earlier run already made these encodes. Ticked ones are reused as they are, and the others are encoded again.
+        {#if stale}Encodes marked <em>other settings</em> don't match the job's settings now, so they start unticked.{/if}
       </Dialog.Description>
     </Dialog.Header>
-    <div class="max-h-[60vh] space-y-4 overflow-y-auto pr-1" aria-label="Finished files">
+    <div class="max-h-[60vh] space-y-4 overflow-y-auto pr-1" aria-label="Earlier encodes">
       {#each jobs as job (job.id)}
         <section aria-label={job.name}>
           {#if jobs.length > 1}<h3 class="mb-1 text-sm font-medium">
@@ -75,7 +75,9 @@
                     <span class="flex items-center gap-2 text-sm">
                       <span class="truncate">{offer.label}</span>
                       {#if offer.origin}
-                        <Tip text="Made by the job in {offer.origin}/: linked into this job's folder">
+                        <Tip
+                          text="Made by the job in {offer.origin}/. If you reuse it, it's linked (or copied) into this job's folder."
+                        >
                           <Badge variant="outline">from {offer.origin}</Badge>
                         </Tip>
                       {/if}
@@ -106,7 +108,7 @@
     <Dialog.Footer class="gap-2 sm:justify-between">
       <div class="flex gap-2">
         <Button variant="ghost" size="sm" onclick={() => all(true)}>Reuse all</Button>
-        <Button variant="ghost" size="sm" onclick={() => all(false)}>Make all again</Button>
+        <Button variant="ghost" size="sm" onclick={() => all(false)}>Encode all again</Button>
       </div>
       <div class="flex gap-2">
         <Button variant="outline" onclick={() => reuseQuestion.answer(null)}>Cancel</Button>

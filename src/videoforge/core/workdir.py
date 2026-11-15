@@ -50,7 +50,7 @@ def remove_work_dir(source: Path) -> bool:
 def clean_work_dir(source: Path, records_dir: Path | None) -> dict[Path, Path]:
     """Archive provenance before deleting working files. An archive failure leaves the folder intact."""
     if records_dir is None:
-        raise OSError("No records folder configured; working files were kept")
+        raise OSError("No records folder is set, so the working files were kept")
     kept = keep_records(source, records_dir)
     remove_work_dir(source)
     return kept

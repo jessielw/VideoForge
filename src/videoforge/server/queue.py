@@ -502,7 +502,9 @@ class JobQueue:
                 left.append({"path": str(given), "reason": f"Not found ({ex.strerror or ex})"})
                 continue
             if not files:
-                left.append({"path": str(given), "reason": f"No {job_file.FILE_NAME} in it"})
+                left.append(
+                    {"path": str(given), "reason": f"No {job_file.FILE_NAME} in this folder or the folders in it"}
+                )
             for file in files:
                 try:
                     spec = job_file.read(file)
@@ -794,7 +796,7 @@ class JobQueue:
             if e.indexing:
                 raise Busy(f"{e.spec.name} is being indexed")
             if e.sampling:
-                raise Busy(f"{e.spec.name} is running its test encode")
+                raise Busy(f"{e.spec.name} is running a test encode or CRF search")
             s = e.spec
             if inputs is not None and inputs != s.inputs:
                 if inputs.source != s.inputs.source:
@@ -922,7 +924,7 @@ class JobQueue:
                 try:
                     entry = self.get(job_id)
                     if entry.spec.inputs.encode is not None:
-                        skipped[job_id] = "Uses an imported encode"
+                        skipped[job_id] = "Uses an existing encode, so there's nothing to crop"
                         continue
                     self.update(job_id, video=replace(entry.spec.video, crop=crop))
                     updated.append(job_id)
@@ -1579,7 +1581,7 @@ class JobQueue:
         if error and error != "Cancelled":
             logger.warning("%s: index failed: %s", e.spec.name, error)
         else:
-            logger.info("%s: index %s", e.spec.name, "cancelled" if error else "done")
+            logger.info("%s: index %s", e.spec.name, "canceled" if error else "done")
         self._queue_event("index.finished", e, error=error or None)
         if not self._closing:
             self.bus.emit(IndexFinished(_copy(e.spec), error or None))

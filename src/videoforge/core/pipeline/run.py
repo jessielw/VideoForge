@@ -42,10 +42,10 @@ def invalid_error(issues: list[Issue], rejected: Path | None, output: Path) -> s
     """An invalid run's error: how many checks failed and where the file is, not the checks again (they're its
     issues). A rejected candidate is kept under an unpublished name; a reused output stays where it is."""
     n = sum(1 for i in issues if i.severity is Severity.BLOCK)
-    failed = f"Failed {n} output check{'s' if n != 1 else ''}."
+    failed = f"{n} output check{'s' if n != 1 else ''} failed"
     if rejected is None:
         return failed
-    return f"{failed} The file is kept as {rejected.name}, not published as {output.name}."
+    return f"{failed}. The file is kept as {rejected.name} instead of {output.name}"
 
 
 def _identity(path: Path) -> tuple[int, int, int] | None:
@@ -122,10 +122,14 @@ def _run(
     if no_tools:
         return JobResult(plan, JobStatus.FAILED, error="; ".join(i.message for i in no_tools))
     if spec.output_dir is None:
-        return JobResult(plan, JobStatus.FAILED, error="No output folder set")
+        return JobResult(plan, JobStatus.FAILED, error="No output folder is set. Choose one on the Output tab")
     output = output_path(spec, plan, rule_set, spec.output_dir)
     if output.resolve() == spec.inputs.source.resolve():
-        return JobResult(plan, JobStatus.FAILED, error=f"Output would overwrite the source: {output}")
+        return JobResult(
+            plan,
+            JobStatus.FAILED,
+            error=f"The output would overwrite the source ({output}). Change the output name or folder",
+        )
 
     work = spec.job_dir
     encoded: dict[int, Path] = {}
@@ -144,7 +148,8 @@ def _run(
             if spec.output_policy is OutputPolicy.STOP:
                 return result(
                     JobStatus.FAILED,
-                    error=f"Output already exists: {output}. Choose Skip, Rename or Replace in Output.",
+                    error=f"The output already exists ({output}). Change Existing output on the Output tab to skip, "
+                    "rename or replace it",
                 )
             if spec.output_policy is OutputPolicy.SKIP:
                 return result(JobStatus.SKIPPED, error=f"Kept existing output: {output}")
@@ -182,7 +187,9 @@ def _run(
             try:
                 validate_output(candidate)
                 if _identity(target) != original:
-                    raise OSError(f"Output changed during the run; kept the existing file: {target}")
+                    raise OSError(
+                        f"The file at the output path appeared or changed during the run, so it was kept ({target})"
+                    )
                 if original is None:
                     # An exclusive publication: even a file appearing after the check cannot be overwritten.
                     if os.name == "nt":

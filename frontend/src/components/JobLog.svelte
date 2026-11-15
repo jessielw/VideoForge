@@ -102,7 +102,7 @@
     done: { icon: CheckIcon, tone: 'text-success', text: 'done' },
     reused: { icon: RefreshCwIcon, tone: 'text-success', text: 'reused' },
     failed: { icon: XIcon, tone: 'text-destructive', text: 'failed' },
-    cancelled: { icon: SquareIcon, tone: 'text-warning', text: 'cancelled' },
+    cancelled: { icon: SquareIcon, tone: 'text-warning', text: 'canceled' },
   }
 
   function outcome(s: StepRun): string {
@@ -235,7 +235,8 @@
                   >
                 {:else if !fresh && partial[s.id]}
                   <p class="text-xs text-muted-foreground">
-                    The last lines only (the full output is in the work folder's videoforge.log).
+                    The last lines only. The full output is in videoforge.log, in the job's folder inside the work
+                    folder.
                   </p>
                 {/if}
                 <!-- svelte-ignore a11y_no_noninteractive_tabindex (a scrolling region: keyboard users scroll it once focused) -->

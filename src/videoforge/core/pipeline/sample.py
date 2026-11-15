@@ -152,7 +152,7 @@ def sample_steps(
     step (prepare_steps) has run. where: the test encode's place by default."""
     found = info.read(spec.job_dir / info.SCRIPT_INFO)
     if found is None:
-        raise ValueError("The script's frames aren't known: its info step hasn't run")
+        raise ValueError("The script's frame count isn't known yet, because its info step hasn't run")
     where = where or place(spec)
     v, home = plan.source.video, where.home
     source_fps = frame_rate(v.default_duration_ns) if v is not None and v.default_duration_ns else None
@@ -277,7 +277,7 @@ def finish(
     to sample.json."""
     found = info.read(spec.job_dir / info.SCRIPT_INFO)
     if found is None:
-        raise ValueError("The script's frames aren't known: its info step hasn't run")
+        raise ValueError("The script's frame count isn't known yet, because its info step hasn't run")
     v = plan.source.video
     source_fps = frame_rate(v.default_duration_ns) if v is not None and v.default_duration_ns else None
     sel = selection(found, percent, source_fps)

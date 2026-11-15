@@ -107,7 +107,7 @@ def run_tray(app: Any, host: str, port: int, url: str, *, open_browser: bool = T
     def quit_app(*_: Any) -> None:
         logger.info("Tray: Quit (thread %s)", threading.current_thread().name)
         if app.state.queue.queue_state()["running"] and not _confirm_quit():
-            logger.info("Tray: Quit cancelled (a job is running)")
+            logger.info("Tray: Quit canceled (a job is running)")
             return
         server.should_exit = True
 

@@ -73,7 +73,9 @@
   <div class="flex items-center justify-between">
     <span class="section-label">Filters</span>
     <Popover.Root bind:open>
-      <Tip text="Add a built-in filter: it goes in its category's place">
+      <Tip
+        text="Adds a built-in filter after the other filters in its category. If the chain already has the same filter at another strength, the new one takes its place."
+      >
         <Popover.Trigger {disabled}>
           {#snippet child({ props })}
             <Button {...props} variant="outline" size="sm"><PlusIcon />Add filter</Button>

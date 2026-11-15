@@ -31,13 +31,13 @@ api_key = "YOUR_JELLYFIN_API_KEY"
 when = "queue"
 ```
 
-Saved form values override TOML values and take effect after restart. Leave a stored password unchanged to keep it. Use **Reset overrides** to return to TOML values or defaults.
+Saved form values override TOML values and take effect after restart. Leave a stored password unchanged to keep it. Use **Reset to defaults** to return to TOML values or defaults.
 
 ## Expected behavior
 
 With **Scan after** set to `queue`, finish at least one successful job and let the queue stop. The application log in the data folder's `logs/` directory should contain `Jellyfin: scanning`. With `job` selected, each successful job's Log tab should contain `Jellyfin: scanning`.
 
-Failed, invalid, skipped and cancelled jobs do not trigger a per-job scan. A queue without a successful job does not trigger a scan. A failed HTTP request is reported in the relevant log; it does not fail the encode. Requests have a 30-second timeout and are not retried by this example.
+Failed, invalid, skipped and canceled jobs do not trigger a per-job scan. A queue without a successful job does not trigger a scan. A failed HTTP request is reported in the relevant log; it does not fail the encode. Requests have a 30-second timeout and are not retried by this example.
 
 ## Read the source
 

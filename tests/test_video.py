@@ -342,9 +342,9 @@ def test_color_issues():
     assert issue.code == "video.color_source" and issue.severity is Severity.INFO
     assert "--colorprim bt709 (the source's: bt2020)" in issue.message and "--range" not in issue.message
     (issue,) = encoder_issues(replace(x265, color_override=True), sdr2020)
-    assert issue.code == "video.color_override" and "Override the source's colour is on" in issue.message
+    assert issue.code == "video.color_override" and "Override the source's color is on" in issue.message
     (issue,) = encoder_issues(replace(x265, source_color=False), sdr2020)
-    assert issue.code == "video.color_override" and "the source's colour is off" in issue.message
+    assert issue.code == "video.color_override" and "the source's color is off" in issue.message
     assert encoder_issues(replace(x265, options={"range": "limited"}), sdr2020) == []
     same = {"colorprim": "9", "transfer": "bt2020-10", "colormatrix": "BT2020NC"}
     assert encoder_issues(replace(x265, options=same), sdr2020) == []  # numbers and case: the same colour

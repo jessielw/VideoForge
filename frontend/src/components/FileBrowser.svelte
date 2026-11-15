@@ -225,7 +225,11 @@
           {/each}
           {#if !listing.dirs.length && !listing.files.length}
             <div class="p-4 text-center text-muted-foreground">
-              Nothing here{programs ? ' (programs)' : extensions.length ? ` (${extensions.join(' ')})` : ''}
+              {programs
+                ? 'No programs here'
+                : extensions.length
+                  ? `No ${extensions.join(' ')} files here`
+                  : 'Nothing here'}
             </div>
           {/if}
         {/if}
@@ -239,11 +243,11 @@
             ? `${picked.length} selected`
             : programs
               ? orFolder
-                ? 'Tick the program, or use this folder if it holds the split encoders'
+                ? "Tick the program, or use this folder for DEE's split encoders."
                 : 'Tick the program'
-              : 'Nothing ticked: the current folder is used'}
+              : "With nothing ticked, Add uses the folder you're in."}
         {:else}
-          Choose the folder you're in
+          Open the folder you want, then choose Use this folder.
         {/if}
       </span>
       <Button variant="outline" class="ml-auto" onclick={onclose}>Cancel</Button>

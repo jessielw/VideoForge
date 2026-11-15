@@ -1,6 +1,6 @@
 import { test, expect, type Page, type WebSocketRoute } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import type { JobDetail, JobSummary, Status } from '../../src/lib/types.ts'
+import type { JobDetail, JobSummary, Status, Template } from '../../src/lib/types.ts'
 
 async function queueFixture(
   page: Page,
@@ -482,3 +482,41 @@ for (const theme of ['light', 'dark']) {
     expect(results.violations).toEqual([])
   })
 }
+
+test('several jobs: the template line reads as one sentence when the template sets audio and subtitles', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 3)
+  // Only what the line reads: the template sets audio and subtitle rules and detects each job's crop.
+  const data = { qpf: true, crop_mode: 'auto', audio: { tracks: [] }, subs: { rules: [] } } as unknown as Template
+  await page.route('**/api/presets', (route) =>
+    route.fulfill({
+      json: {
+        video: [],
+        encoder: [],
+        audio: [],
+        template: [{ name: 'Full', data }],
+        template_defaults: {},
+        encoder_starters: [],
+      },
+    }),
+  )
+  await page.reload()
+  await expect(page.getByRole('status')).toContainText('3 of 3 jobs match')
+  await page.getByRole('button', { name: 'Select matching jobs', exact: true }).click()
+  await expect(page.getByText(/^Sets video, encoder/)).toHaveText(
+    "Sets video, encoder, AutoQPF, audio, subtitles, and the container with its options; the crop is detected for each job. Save templates from a job's Template menu.",
+  )
+  expect(errors).toEqual([])
+})
+
+test("Index on one job it can't take says why, about that one job", async ({ page }) => {
+  const { errors } = await queueFixture(page, 3)
+  await page.route('**/api/queue/index', (route) => route.fulfill({ json: { taken: [] } }))
+  await page.locator('[data-job="job-0"]').click()
+  await page.getByRole('button', { name: 'Index the selected jobs', exact: true }).click()
+  const why = page.getByText(/^1 left out: /)
+  await expect(why).toBeVisible()
+  expect(await why.textContent()).toContain("1 left out: it's queued or running") // read now: the toast closes
+  expect(errors).toEqual([])
+})

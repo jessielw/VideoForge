@@ -159,7 +159,7 @@
 </script>
 
 <Popover.Root bind:open>
-  <Tip class="ml-auto shrink-0" text="Apply or save a template: the whole run's settings">
+  <Tip class="ml-auto shrink-0" text="Applies a template to this job, or saves this job's settings as one">
     <Popover.Trigger {disabled}>
       {#snippet child({ props })}
         <Button {...props} variant="outline" size="sm" class="max-w-64">
@@ -223,7 +223,9 @@
         <option value="auto">Crop: detect it for each job</option>
       </NativeSelect>
       {#if keepsRules}
-        <p class="text-xs text-muted-foreground">Audio: {name.trim()}'s rules are kept.</p>
+        <p class="text-xs text-muted-foreground">
+          The audio rules already in {name.trim()} are kept, because a job can't make audio rules.
+        </p>
       {:else if audioKeys.length && trackEditor}
         <label class="flex items-center gap-2 text-xs text-muted-foreground">
           <Checkbox bind:checked={withAudio} />
@@ -232,7 +234,8 @@
       {/if}
     </form>
     <p class="text-xs text-muted-foreground">
-      Holds video, encoder, audio, subtitle rules, container and AutoQPF.
+      A template holds the video, encoder and audio settings, the subtitle rules, the container with its options, and
+      AutoQPF.
       <button class="underline underline-offset-2" onclick={() => router.go('templates')}>Edit templates…</button>
     </p>
     {#if error}<p class="text-xs text-destructive">{error}</p>{/if}

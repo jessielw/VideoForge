@@ -129,7 +129,8 @@
       if (!on) await api.dequeue([jobId])
       else if (reuse && !(await api.enqueue([jobId], reuse)).enqueued.length)
         toast.warning("Couldn't queue the job", {
-          description: 'It changed meanwhile: it is being probed or indexed, or is blocked.',
+          description:
+            "It changed in the meantime. A job can't be queued while VideoForge reads its tracks, indexes it, crops it or runs a test encode or CRF search, or while it's blocked.",
         })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
@@ -162,12 +163,12 @@
         <Tip
           class="shrink-0"
           text={job.status === 'running'
-            ? 'Running: locked until it finishes'
+            ? 'Running. You can edit it again when it finishes.'
             : queued
-              ? 'Queued: locked, and the queue runs it (a running queue too). Untick to edit it; the queue leaves it out.'
+              ? "Queued, so it can't be edited. Start queue runs it, or a running queue picks it up in its turn. Untick it to make changes, and the queue skips it."
               : queueable(job.status)
-                ? 'Tick when the job is set up: it locks, and the queue runs it'
-                : `Can't be queued while ${STATUS_LABEL[job.status].toLowerCase()}`}
+                ? "Tick it when the job is set up, to queue it. Start queue runs it, or a running queue picks it up in its turn. You can't edit it until you untick it."
+                : `Can't be queued while its status is ${STATUS_LABEL[job.status]}`}
         >
           <label
             class="flex items-center gap-2 rounded-md border px-2.5 py-1 text-sm font-medium has-disabled:opacity-60
@@ -216,7 +217,7 @@
           <span class="tabular-nums">
             {#if app.queue.paused}<span class="text-warning">Paused ·</span>{/if}
             {p.step} · {(p.fraction * 100).toFixed(1)}%{p.eta != null ? ` (${duration(p.eta)} left)` : ''}
-            <Tip text="The bar and this: the whole job, every step counted by its weight"
+            <Tip text="The bar and this number show the whole job. Each step counts for a set share of it."
               >· job {percent(p.overall)}</Tip
             >
             {#if p.fps != null}· {p.fps < 10 ? p.fps.toFixed(2) : p.fps.toFixed(1)} fps{/if}
@@ -281,7 +282,8 @@
       {#if tab === 'video'}
         {#if job.spec.inputs.encode}
           <p class="text-muted-foreground">
-            This job reuses an existing encode ({basename(job.spec.inputs.encode)}); there is no video step.
+            This job uses an existing encode ({basename(job.spec.inputs.encode)}), so VideoForge doesn't encode the
+            video and there's nothing to set here.
           </p>
         {:else}
           {#key job.id}<VideoTab {job} {editable} save={(video) => save({ video })} />{/key}
@@ -370,7 +372,7 @@
             <span class="text-muted-foreground">Output name</span>
             <Tip
               class="grid"
-              text="The output's file name, without its extension; empty = the name template's (when it names the file), else the rule set's (the source's). The label, the name suffix and the container's extension go after it"
+              text="The output's file name, without its extension. Leave it empty to use the name template when it names the file, or else the rule set's name, which is normally the source's. The label, the name suffix and the extension go after it, as in Show.S01E01.dubbed.mkv."
             >
               <Input
                 aria-label="Output name"
@@ -394,12 +396,16 @@
                 <option value="replace">Replace after validation</option>
               </NativeSelect>
               <p class="text-xs text-muted-foreground">
-                Applies to files outside this job's verified results. An output changed during a run is always kept.
+                This applies when the output file already exists and this job didn't make it. If a file appears or
+                changes there while the job runs, it isn't replaced. The job fails and keeps its new output beside it as
+                an .unpublished copy.
               </p>
             </div>
             <span class="text-muted-foreground">Label</span>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <Tip text="Tells runs of one source apart: added to the output name, and kept in the job record">
+              <Tip
+                text="Tells jobs from the same source apart. It's added to the output name and saved in the job record."
+              >
                 <Input
                   class="w-48"
                   aria-label="Label"
@@ -459,8 +465,8 @@
             <span class="text-muted-foreground">Extra arguments</span>
             <Input
               class="font-mono text-xs"
-              aria-label="Extra muxer arguments"
-              placeholder="added to the {container?.tool ?? 'muxer'} command as typed"
+              aria-label="Extra arguments for {container?.tool ?? 'the output'}"
+              placeholder="added to the {container?.tool ?? 'output'} command as typed"
               value={job.spec.mux.extra}
               disabled={!editable}
               onchange={(e) => save({ mux: { ...job!.spec.mux, extra: (e.target as HTMLInputElement).value.trim() } })}
@@ -520,7 +526,7 @@
           </div>
           {#if muxCommands.length}
             <div class="space-y-2">
-              <span class="section-label">Mux command</span>
+              <span class="section-label">Commands that build the output file</span>
               {#each muxCommands as c (c.id)}
                 <div class="rounded-lg border bg-muted/50 p-2">
                   <div class="text-xs text-primary">{c.label}</div>

@@ -173,7 +173,7 @@
             {#if held}
               <Tip
                 class="block truncate text-muted-foreground"
-                text="An encode is reading their disk (Settings, Batch indexing)"
+                text="An encode is reading their disk. Settings › Queue & indexing › Wait while an encode reads the same disk"
               >
                 {held} to index after the encode
               </Tip>

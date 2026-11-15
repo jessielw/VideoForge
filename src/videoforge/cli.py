@@ -156,7 +156,7 @@ _STATUS_STYLE = {
     "invalid": "[bold red]INVALID[/]",
     "failed": "[bold red]FAILED[/]",
     "skipped": "[yellow]SKIPPED[/]",
-    "cancelled": "[yellow]CANCELLED[/]",
+    "cancelled": "[yellow]CANCELED[/]",
     "paused": "[yellow]PAUSED[/]",
 }
 
@@ -342,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.set_defaults(func=cmd_validate)
 
-    p = sub.add_parser("plan", help="pair sources with encodes and show what would be muxed")
+    p = sub.add_parser("plan", help="pair sources with encodes and show what each output would hold")
     p.add_argument("paths", nargs="+", type=Path, help="MKV files or folders")
     p.add_argument("--orig-lang", help="original language for the batch (e.g. en, ja)")
     p.add_argument(
@@ -352,9 +352,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", type=Path, help="write the plans to this plan.json for `videoforge run`")
     p.set_defaults(func=cmd_plan)
 
-    p = sub.add_parser("run", help="encode and mux the plans in a plan.json, then validate each output")
+    p = sub.add_parser("run", help="encode and build the outputs in a plan.json, then check each one")
     p.add_argument("plan", type=Path, help="plan.json from `videoforge plan --out`")
-    p.add_argument("--out-dir", type=Path, required=True, help="folder for the muxed releases")
+    p.add_argument("--out-dir", type=Path, required=True, help="folder for the finished files")
     p.add_argument(
         "--existing-output",
         choices=("stop", "skip", "rename", "replace"),

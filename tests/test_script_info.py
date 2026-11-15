@@ -49,7 +49,7 @@ def test_a_vfr_source_checks_its_frames():
     assert length_warning(source, 240, Fraction(29875, 1122)) == ""  # BestSource's average rate
     assert length_warning(source, 240, None) == ""
     dropped = length_warning(source, 216, Fraction(24000, 1001))  # an IVTC to 23.976: 9.009 s, as long
-    assert "216 frames and the source 240" in dropped and "constant 23.976 fps" in dropped
+    assert "216 frames and the source has 240" in dropped and "constant 23.976 fps" in dropped
     assert "out of step" not in dropped
     trimmed = length_warning(source, 120, Fraction(24000, 1001))
     assert "constant 23.976 fps" in trimmed and "out of step" in trimmed

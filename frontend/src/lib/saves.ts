@@ -58,8 +58,7 @@ export class SaveQueue {
     do {
       this.pump()
       if (this.running) await this.running
-      if (this.error)
-        throw new Error(`Changes are not saved: ${this.error}. Retry or discard unsaved changes before starting.`)
+      if (this.error) throw new Error(`Changes aren't saved: ${this.error}. Retry or discard them first.`)
     } while (this.items.length)
   }
 

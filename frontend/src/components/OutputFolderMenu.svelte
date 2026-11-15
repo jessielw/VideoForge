@@ -111,7 +111,7 @@
       />
     {/if}
     {#if !folders.length}
-      <DropdownMenu.Label>Folders you add jobs to are saved here.</DropdownMenu.Label>
+      <DropdownMenu.Label>Output folders are saved here when you add jobs with them.</DropdownMenu.Label>
     {:else if !shown.length}
       <DropdownMenu.Label>No saved folder matches.</DropdownMenu.Label>
     {/if}
