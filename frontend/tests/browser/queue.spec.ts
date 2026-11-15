@@ -383,7 +383,9 @@ test('a CRF search lists its tries, marks the CRF found and puts it on the job',
   await expect(card).toContainText('CRF 20 is the highest that reaches SSIMULACRA2 80.')
   const rows = card.locator('tbody tr')
   await expect(rows).toHaveCount(4)
-  await expect(rows.first()).toContainText('18 ✓')
+  await expect(rows.first()).toContainText('18')
+  await expect(rows.first()).not.toContainText('✓')
+  await expect(rows.first().getByRole('img', { name: 'Reaches SSIMULACRA2 80' })).toBeVisible()
   await expect(rows.nth(1)).toContainText('2,000 kb/s')
   await card.screenshot({ path: testInfo.outputPath('crf-search.png') })
 
@@ -544,6 +546,18 @@ test('Encoder tab: the test encode and CRF search cards sit 16 px apart', async 
   const sample = await page.getByRole('region', { name: 'Test encode', exact: true }).boundingBox()
   const search = await page.getByRole('region', { name: 'CRF search', exact: true }).boundingBox()
   expect(search!.y - (sample!.y + sample!.height)).toBeGreaterThanOrEqual(16)
+  expect(errors).toEqual([])
+})
+
+test('the menu marks the running job with an icon, in both widths', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['running'])
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect(nav).toContainText('Episode 00000')
+  await expect(nav).not.toContainText('▶')
+  await expect(nav.locator('.text-info svg').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Collapse the menu', exact: true }).click()
+  await expect(nav).not.toContainText('▶')
+  await expect(nav.locator('.text-info svg').first()).toBeVisible()
   expect(errors).toEqual([])
 })
 

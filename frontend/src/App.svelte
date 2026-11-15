@@ -5,6 +5,7 @@
   import ListVideoIcon from '@lucide/svelte/icons/list-video'
   import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close'
   import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open'
+  import PlayIcon from '@lucide/svelte/icons/play'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import SettingsIcon from '@lucide/svelte/icons/settings'
   import TerminalIcon from '@lucide/svelte/icons/terminal'
@@ -144,7 +145,10 @@
               side="right"
               class="text-info"
               text="Running {running.name}{running.progress ? `: ${running.progress.step}` : ''}"
-              >{running.progress ? Math.round(running.progress.overall * 100) + '%' : '▶'}</Tip
+              >{#if running.progress}{Math.round(running.progress.overall * 100) + '%'}{:else}<PlayIcon
+                  class="size-3"
+                  aria-hidden="true"
+                />{/if}</Tip
             >
           {/if}
           <Tip
@@ -156,7 +160,9 @@
       {:else}
         <div class="h-(--bar-h) shrink-0 space-y-1 overflow-y-auto border-t px-5 py-1.5 text-xs text-muted-foreground">
           {#if running}
-            <Tip class="block truncate text-info" text={running.name}>▶ {running.name}</Tip>
+            <Tip class="block truncate text-info" text={running.name}
+              ><PlayIcon class="mr-1 inline size-3 align-[-1px]" aria-hidden="true" />{running.name}</Tip
+            >
             {#if running.progress}
               <div class="h-1.5 overflow-hidden rounded bg-muted">
                 <div class="h-full bg-info" style="width: {running.progress.overall * 100}%"></div>
