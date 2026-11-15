@@ -35,7 +35,16 @@ from videoforge.core.execute.audio import audio_command, measure_argv, measure_p
 from videoforge.core.execute.mux import MUXERS, MuxError, frame_rate, split_args
 from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
-from videoforge.core.models import Plan, PlannedAudio, SubFormat, SubTrack, VideoColor, VideoInfo
+from videoforge.core.models import (
+    AudioAction,
+    AudioCodec,
+    Plan,
+    PlannedAudio,
+    SubFormat,
+    SubTrack,
+    VideoColor,
+    VideoInfo,
+)
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.tools import locate
 from videoforge.core.video import burn as burn_in, hdr, info, remux, target, vfr
@@ -201,6 +210,39 @@ def mp4_subtitle_steps(plan: Plan, work: Path, app: AppConfig) -> tuple[list[Ste
         )
         subs[pos - 1] = replace(sub, source=replace(track, id=-1, external_path=out, extracted_from=None, delay_ms=0))
     return steps, replace(plan, subs=subs)
+
+
+def mp4_audio_steps(plan: Plan, work: Path, app: AppConfig) -> tuple[list[Step], Plan]:
+    """Extract a copied TrueHD track from a Matroska file (the source, or an added MKA) before MP4Box imports it.
+    MP4Box reads Matroska through FFmpeg, whose TrueHD packets skip its TrueHD reframer (the one that writes the
+    dmlp box): GPAC 26.07 refuses them ("Feature Not Supported"), 2.4 waits forever. A raw .thd it frames itself,
+    as it does a TS's TrueHD. The copy keeps its delay (the mux adds it back: MP4Box starts every track at 0), and
+    the mux's local plan alone changes, as for the subtitles. One extract per track, for its copies too."""
+    steps: list[Step] = []
+    audio = list(plan.audio)
+    extracted: dict[tuple[Path, int], Path] = {}
+    for pos, a in enumerate(audio):
+        track = a.source
+        file = track.external_path or plan.source.path
+        if a.action is not AudioAction.COPY or track.codec is not AudioCodec.TRUEHD or file is None:
+            continue
+        if remux.needed(file):  # not Matroska: MP4Box reads it itself
+            continue
+        out = extracted.get((file, track.id))
+        if out is None:
+            out = extracted[(file, track.id)] = work / f"truehd.{len(extracted) + 1}.thd"
+            steps.append(
+                Step(
+                    f"truehd.{len(extracted)}.extract",
+                    f"TrueHD {track.id} for MP4 (mkvextract)",
+                    argvs=((app.tools.mkvextract, "--ui-language", "en", "tracks", str(file), f"{track.id}:{out}"),),
+                    inputs=(file,),
+                    outputs=(out,),
+                    weight=0.5,
+                )
+            )
+        audio[pos] = replace(a, source=replace(track, id=0, external_path=out))
+    return steps, replace(plan, audio=audio)
 
 
 def index_steps(
@@ -651,6 +693,8 @@ def build_steps(
     if container == "mp4":
         subtitles, plan = mp4_subtitle_steps(plan, home, app)  # by the job's subtitle positions
         steps += subtitles
+        truehd, plan = mp4_audio_steps(plan, home, app)
+        steps += truehd
     if container == "mp4" and (chapters := mp4_chapters_step(plan, home)) is not None:
         steps.append(chapters)
         plan = replace(plan, chapters_path=chapters.outputs[0])

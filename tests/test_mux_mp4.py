@@ -23,7 +23,7 @@ from videoforge.core.models import (
     TrackOverride,
     VideoInfo,
 )
-from videoforge.core.pipeline.build import build_steps, mp4_subtitle_steps, output_path
+from videoforge.core.pipeline.build import build_steps, mp4_audio_steps, mp4_subtitle_steps, output_path
 from videoforge.core.video.color import ContainerColor
 from videoforge.rule_sets.manual import ManualRuleSet, output_matches_plan
 
@@ -136,6 +136,55 @@ def test_mp4_pipeline_extracts_source_srt_with_one_timing_shift(tmp_path, start_
     spec.mux.container = "mkv"
     mkv = build_steps(spec, plan, ManualRuleSet(), app, tmp_path / "out.mkv")
     assert not any(s.id.startswith("subs.") for s in mkv.steps)
+
+
+def test_mp4_extracts_a_copied_truehd_from_matroska(tmp_path):
+    """MP4Box can't take a TrueHD track out of a Matroska file (it reads one through FFmpeg, past its TrueHD
+    reframer: GPAC 26.07 refuses it, 2.4 hangs): mkvextract writes it raw first, once for a track copied twice. The
+    copy keeps its delay. A TS's TrueHD MP4Box reads itself; an MKV output, mkvmerge."""
+    from dataclasses import replace
+
+    app = load_app_config()
+    plan = mp4_plan()
+    for a in plan.audio:
+        a.source.codec = C.TRUEHD
+        a.action = AudioAction.COPY
+    plan.audio.append(replace(plan.audio[0], source=replace(plan.audio[0].source, copy=1)))  # a second copy
+    mka = tmp_path / "commentary.mka"
+    plan.audio[1].source.external_path, plan.audio[1].source.id = mka, 0
+
+    steps, prepared = mp4_audio_steps(plan, tmp_path, app)
+    first, second = tmp_path / "truehd.1.thd", tmp_path / "truehd.2.thd"
+    assert [(s.id, s.argvs[0][-2:], s.inputs, s.outputs) for s in steps] == [
+        ("truehd.1.extract", (str(plan.source.path), f"1:{first}"), (plan.source.path,), (first,)),
+        ("truehd.2.extract", (str(mka), f"0:{second}"), (mka,), (second,)),
+    ]
+    assert [a.source.external_path for a in prepared.audio] == [first, second, first]
+    assert not plan.audio[0].source.is_external  # the UI/validation plan keeps the source's track
+    argv = mp4box_command(prepared, {}, Path("out.mp4.partial"), "MP4Box", RAW)
+    assert adds(argv)[1:4] == [
+        f"{first}#trackID=1:lang=en:group=1:name=Main - 5.1:delay=-40",
+        f"{second}#trackID=1:lang=ja:group=1:disable:delay=25",
+        f"{first}#trackID=1:lang=en:group=1:name=Main - 5.1:delay=-40",
+    ]
+
+    # the job: extracted before the mux, which reads the .thd
+    spec = JobSpec(
+        inputs=JobInputs(plan.source.path, encode=plan.encode_path), rule_set="manual", mux=MuxSettings(container="mp4")
+    )
+    job = build_steps(spec, plan, ManualRuleSet(), app, tmp_path / "out.mp4")
+    assert "truehd.1.extract" in [s.id for s in job.steps]
+    assert spec.job_dir / "truehd.1.thd" in job.steps[-1].inputs
+    spec.mux.container = "mkv"
+    assert not any(
+        s.id.startswith("truehd.") for s in build_steps(spec, plan, ManualRuleSet(), app, tmp_path / "o.mkv").steps
+    )
+
+    ts = mp4_plan()
+    ts.source.path = Path("Movie.m2ts")
+    for a in ts.audio:
+        a.source.codec, a.action = C.TRUEHD, AudioAction.COPY
+    assert mp4_audio_steps(ts, tmp_path, app) == ([], ts)
 
 
 def test_mp4_leaves_external_srt_and_native_timed_text_inputs(tmp_path):

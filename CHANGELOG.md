@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- MP4 output: a TrueHD track copied from an MKV (or an added MKA) failed the mux. MP4Box 26.07, the bundled one, stopped with "Feature Not Supported", and the older 2.4 hung with no output until the job was cancelled. The track is now extracted with mkvextract first, and MP4Box takes the raw TrueHD. A TS's TrueHD was already fine.
 - An invalid job listed each failed check twice: once as a check and again, joined, as the run's error. The run's error now says how many checks failed and where the file is ("The file is kept as `<name>.unpublished-<id>.mkv`, not published as `<name>.mkv`"). The failed checks come first, so the queue row shows the reason. Notifications and the CLI no longer repeat the checks either. The Validate step in the Log still lists every failed check.
 - Screen readers: the job tabs announce the panel they show, and Settings checkboxes and palette choices read their name, then their help text as a description.
 - Track drag handles and the Rule set list on the Output tab no longer read as unnamed controls. Empty Sources and Output folder fields no longer read as empty lists.
