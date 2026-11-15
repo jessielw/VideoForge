@@ -38,6 +38,7 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import JobEditor from '../components/JobEditor.svelte'
+  import Kbd from '../components/Kbd.svelte'
   import ReuseDialog from '../components/ReuseDialog.svelte'
   import Tip from '../components/Tip.svelte'
   import { api } from '../lib/api'
@@ -948,8 +949,8 @@
             : `all ${app.jobs.length} jobs`}.
         </p>
         <p id="queue-keys" class="text-xs text-muted-foreground pointer-coarse:hidden">
-          Arrow keys, Home and End move through the list. Shift extends the selection, and Ctrl+A (Cmd+A) selects
-          matching jobs on every page.
+          Arrow keys, <Kbd>Home</Kbd> and <Kbd>End</Kbd> move through the list. <Kbd>Shift</Kbd> extends the selection, and
+          <Kbd>Ctrl+A</Kbd> (<Kbd>Cmd+A</Kbd>) selects matching jobs on every page.
         </p>
       </div>
 

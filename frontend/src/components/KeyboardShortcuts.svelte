@@ -5,6 +5,7 @@
   import KeyboardIcon from '@lucide/svelte/icons/keyboard'
   import { Button } from '$lib/components/ui/button'
   import * as Dialog from '$lib/components/ui/dialog'
+  import Kbd from './Kbd.svelte'
   import Tip from './Tip.svelte'
 
   let { compact = false }: { compact?: boolean } = $props()
@@ -99,7 +100,7 @@
                 <dt class="flex shrink-0 flex-wrap items-center gap-1">
                   {#each keys as key, i (i)}
                     {#if i}<span class="text-xs text-muted-foreground">+</span>{/if}
-                    <kbd class="rounded border bg-muted px-1.5 py-0.5 font-mono text-xs whitespace-nowrap">{key}</kbd>
+                    <Kbd>{key}</Kbd>
                   {/each}
                 </dt>
                 <dd class="text-right text-muted-foreground">{what}</dd>

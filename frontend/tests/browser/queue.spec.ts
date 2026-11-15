@@ -565,6 +565,13 @@ test('the menu marks the running job with an icon, in both widths', async ({ pag
   expect(errors).toEqual([])
 })
 
+test('the queue list hint shows its keys as keycaps', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3)
+  await expect(page.locator('#queue-keys kbd')).toHaveText(['Home', 'End', 'Shift', 'Ctrl+A', 'Cmd+A'])
+  await expect(page.locator('#queue-keys')).toContainText('Arrow keys, Home and End move through the list.')
+  expect(errors).toEqual([])
+})
+
 /** Visible text set under 12 px, in uppercase, or in italics: each as "<reason>: <text>". */
 const typeProblems = (page: Page) =>
   page.evaluate(() => {
