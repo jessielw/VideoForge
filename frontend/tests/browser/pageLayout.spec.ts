@@ -236,7 +236,7 @@ test("Templates says when Settings decides a rule set's naming instead of the te
   const errors = await layoutFixture(page, { file_name: 'off', title: 'template' })
   await page.goto('/#/templates')
   const note = page.getByText(
-    'Settings decides this for all Manual jobs: the file name is always off, whatever this template says.',
+    'Settings sets this for all Manual jobs, whatever this template says: the file is never named with it.',
   )
   await expect(note).toBeVisible()
   await expect(page.getByText('Not used until one of these is on.')).toBeVisible()
@@ -250,7 +250,7 @@ test('the name template links to the Settings that turns it on or off for every 
   await page.addInitScript(() => localStorage.setItem('videoforge.settingsTab', 'tools')) // last left elsewhere
   await page.goto('/#/templates')
   await expect(page.getByText('Settings can turn these on or off for all Manual jobs at once.')).toBeVisible()
-  await page.getByRole('button', { name: 'Settings → Output names' }).click()
+  await page.getByRole('button', { name: 'Settings › Output names' }).click()
   await expect(page).toHaveURL(/#\/settings$/)
   const heading = page.getByRole('heading', { name: 'Output names', exact: true })
   await expect(heading).toBeFocused()
@@ -315,7 +315,7 @@ test('Templates stacks editor columns when zoom leaves insufficient panel width'
   const video = await children.nth(0).boundingBox()
   const output = await children.nth(1).boundingBox()
   expect(output!.y).toBeGreaterThanOrEqual(video!.y + video!.height)
-  const extra = page.getByRole('textbox', { name: 'Extra muxer arguments', exact: true })
+  const extra = page.getByRole('textbox', { name: /^Extra arguments for \S+$/ })
   await extra.scrollIntoViewIfNeeded()
   await expect(extra).toBeInViewport()
   await page.screenshot({ path: testInfo.outputPath('templates-narrow.png') })

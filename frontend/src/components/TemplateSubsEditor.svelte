@@ -22,7 +22,7 @@
     flags,
     disabled = false,
     toggleLabel = 'Set the subtitle tracks',
-    offNote = "Off: applying the template leaves each job's subtitles as they are.",
+    offNote = "When this is off, applying the template leaves each job's subtitles as they are.",
     appliedNote = "Applying the template replaces a job's subtitle choices.",
   }: {
     value: TemplateSubs | null
@@ -94,8 +94,9 @@
     <p class="text-xs text-muted-foreground">{offNote}</p>
   {:else}
     <p class="text-xs text-muted-foreground">
-      Each subtitle track, added files too, takes the first rule it matches (empty = any). Kept tracks go in rule order;
-      a rule that sets Default gives it to the first track it reaches, and every other subtitle has it off. {appliedNote}
+      Each subtitle track, added files too, takes the first rule it matches, and an empty field matches anything. Kept
+      tracks go in rule order. A rule that sets Default gives it to the first track it reaches, and every other subtitle
+      has it off. {appliedNote}
     </p>
     {#each value.rules as r, i (i)}
       <div class="space-y-3 rounded-lg border p-3" role="group" aria-label="Rule {i + 1}">
@@ -117,7 +118,9 @@
           >
             <option value="keep">Keep</option>
             <option value="exclude">Leave out</option>
-            <option value="burn" title="Burned into the video instead of muxed: the first track a burn-in rule matches"
+            <option
+              value="burn"
+              title="Burns the first track a burn-in rule matches into the video, instead of keeping it as a track."
               >Burn in</option
             >
           </NativeSelect>
@@ -152,7 +155,7 @@
         </div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
           <span class="w-8 text-xs text-muted-foreground">Match</span>
-          <Tip text="Languages (en matches en-US too; es-419 only itself)">
+          <Tip text="Languages: en matches en-US too, and es-419 matches only itself">
             <LanguagePicker
               class="w-56"
               aria-label="Rule {i + 1}: languages"
