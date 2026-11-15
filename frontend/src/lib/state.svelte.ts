@@ -331,7 +331,7 @@ class AppState {
         const idle = !this.queue.indexing && !this.queue.index_queued && !this.queue.sampling
         if (event.type === 'queue' && was.indexing && idle) {
           if (this.#indexStopped) toast.info('Indexing stopped')
-          else toast.success('Indexing finished', { description: 'The indexed jobs open at once.' })
+          else toast.success('Indexing finished', { description: 'Their previews now open at once.' })
           this.#indexStopped = false
         }
         break

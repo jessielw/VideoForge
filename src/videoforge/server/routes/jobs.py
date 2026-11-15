@@ -356,7 +356,7 @@ def job_commands(request: Request, job_id: str) -> list[dict[str, Any]]:
     q = queue_of(request)
     e = _entry(q, job_id)
     if e.plan is None:
-        raise HTTPException(409, "The job hasn't been probed yet")
+        raise HTTPException(409, "VideoForge hasn't read the job's tracks yet")
     rule_set = q.rule_set(e)
     out_dir = e.spec.output_dir or Path("<output folder>")
     try:

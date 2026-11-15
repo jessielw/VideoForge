@@ -19,12 +19,12 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
 }
 
 export const STATUS_LABEL: Record<Status, string> = {
-  probing: 'Probing',
+  probing: 'Reading tracks',
   error: 'Error',
   cropping: 'Detecting crop',
   indexing: 'Indexing',
   sampling: 'Test encode',
-  'index-queued': 'Index queued',
+  'index-queued': 'Waiting to index',
   ready: 'Ready',
   warn: 'Warn',
   blocked: 'Blocked',

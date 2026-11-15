@@ -136,7 +136,7 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     if "rule_set" in body:
         rule_set = body["rule_set"] or None
         if rule_set is not None and rule_set not in s.rule_set_ids:
-            raise HTTPException(422, f"No rule set {rule_set!r} is installed")
+            raise HTTPException(422, f"The rule set {rule_set!r} isn't installed")
     waits = bool(body["index_waits_for_disk"]) if "index_waits_for_disk" in body else saved.index_waits_for_disk
     during_video = bool(body["index_during_video"]) if "index_during_video" in body else saved.index_during_video
     quality = bool(body["sample_quality"]) if "sample_quality" in body else saved.sample_quality

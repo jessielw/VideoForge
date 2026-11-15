@@ -122,6 +122,8 @@ def get_rule_set(rule_set_id: str) -> RuleSet:
     try:
         target = registry()[rule_set_id]
     except KeyError:
-        raise UnknownRuleSet(f"Unknown rule set {rule_set_id!r}; installed: {', '.join(registry())}") from None
+        raise UnknownRuleSet(
+            f"The rule set {rule_set_id!r} isn't installed. Installed rule sets: {', '.join(registry())}"
+        ) from None
     module, _, cls = target.partition(":")
     return getattr(importlib.import_module(module), cls)()

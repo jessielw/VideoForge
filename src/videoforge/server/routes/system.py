@@ -53,7 +53,7 @@ def list_dir(request: Request, path: str, extensions: str = "", programs: bool =
     folder = Path(path)
     allowed = request.app.state.settings.roots
     if allowed and not any(_under(folder, r) for r in allowed):
-        raise HTTPException(403, "Outside the browsable folders")
+        raise HTTPException(403, "Outside the folders the folder browser can open (Settings › Files & folders)")
     if not folder.is_dir():
         raise HTTPException(404, f"No folder {path}")
     wanted = {e.strip().lower() for e in extensions.split(",") if e.strip()}
@@ -98,7 +98,7 @@ def _browsable(request: Request, path: str) -> Path:
     p = Path(path)
     allowed = request.app.state.settings.roots
     if not p.is_absolute() or (allowed and not any(_under(p, r) for r in allowed)):
-        raise HTTPException(403, "Outside the browsable folders")
+        raise HTTPException(403, "Outside the folders the folder browser can open (Settings › Files & folders)")
     return p
 
 
