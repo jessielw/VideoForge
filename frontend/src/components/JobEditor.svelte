@@ -323,7 +323,7 @@
               <span class="section-label">Commands this job runs</span>
               {#each commands as c (c.id)}
                 <div class="rounded-lg border bg-muted/50 p-2">
-                  <div class="text-xs text-primary">{c.label}</div>
+                  <div class="text-xs font-medium text-foreground">{c.label}</div>
                   <code class="block text-[11px] break-all text-muted-foreground">{c.command}</code>
                 </div>
               {:else}
@@ -445,7 +445,7 @@
                 {#each containers as c (c.id)}
                   <ToggleGroup.Item
                     value={c.id}
-                    class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    class="px-4 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
                     >{c.label}</ToggleGroup.Item
                   >
                 {/each}
@@ -532,7 +532,7 @@
               <span class="section-label">Commands that build the output file</span>
               {#each muxCommands as c (c.id)}
                 <div class="rounded-lg border bg-muted/50 p-2">
-                  <div class="text-xs text-primary">{c.label}</div>
+                  <div class="text-xs font-medium text-foreground">{c.label}</div>
                   <code class="block text-[11px] break-all text-muted-foreground">{c.command}</code>
                 </div>
               {/each}

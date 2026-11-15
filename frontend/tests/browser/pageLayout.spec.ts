@@ -355,6 +355,21 @@ test('palette cards in one row start their name and swatch on one line', async (
   expect(errors).toEqual([])
 })
 
+test('a selected choice has its accent border on all four sides', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  await page.getByRole('checkbox', { name: 'Set the audio tracks' }).check()
+  const rules = page.getByText('By rules', { exact: true })
+  await rules.click()
+  await expect(rules).toHaveAttribute('data-state', 'on')
+  const sides = await rules.evaluate((el) => {
+    const cs = getComputedStyle(el)
+    return [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth]
+  })
+  expect(sides).toEqual(['1px', '1px', '1px', '1px'])
+  expect(errors).toEqual([])
+})
+
 test('Matched files shows no empty box before a source is added', async ({ page }) => {
   const errors = await layoutFixture(page)
   await page.goto('/#/new')

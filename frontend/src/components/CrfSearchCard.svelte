@@ -171,7 +171,7 @@
         {#each SAMPLE_PERCENTS as v (v)}<option value={v}>{v}%</option>{/each}
       </NativeSelect>
       <Tip text={editable ? 'Search with the job as it is now' : `Not while ${status}`}>
-        <Button onclick={run} disabled={!editable || starting || !job.plan}>
+        <Button variant="outline" onclick={run} disabled={!editable || starting || !job.plan}>
           <CrosshairIcon />{r ? 'Search again' : 'Search'}
         </Button>
       </Tip>

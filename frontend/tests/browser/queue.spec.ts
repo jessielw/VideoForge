@@ -547,6 +547,98 @@ test('Encoder tab: the test encode and CRF search cards sit 16 px apart', async 
   expect(errors).toEqual([])
 })
 
+/** A theme color as the browser computes it, read from a probe element with that Tailwind class. */
+const themeColor = (page: Page, cls: string, prop: 'backgroundColor' | 'color') =>
+  page.evaluate(
+    ([cls, prop]) => {
+      const probe = document.createElement('div')
+      probe.className = cls
+      document.body.append(probe)
+      const value = getComputedStyle(probe)[prop as 'color']
+      probe.remove()
+      return value
+    },
+    [cls, prop],
+  )
+
+test('the Encoder tab fills at most one control with the accent', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'CRF search', exact: true })).toBeVisible()
+  const primary = await themeColor(page, 'bg-primary', 'backgroundColor')
+  // A ticked checkbox is a selection, so it may stay gold; buttons and toggles may not, but for one.
+  const filled = await page
+    .locator('main')
+    .evaluate(
+      (main, primary) =>
+        [...main.querySelectorAll('button:not([role=checkbox]), [role=radio]')]
+          .filter((el) => getComputedStyle(el).backgroundColor === primary)
+          .map((el) => el.textContent?.trim()),
+      primary,
+    )
+  expect(filled.length, filled.join(', ')).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+test('a disabled Start queue is gray, not dimmed gold', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3, ['ready'])
+  const start = page.getByRole('button', { name: /^Start queue/ })
+  await expect(start).toBeDisabled()
+  const primary = await themeColor(page, 'bg-primary', 'backgroundColor')
+  expect(await start.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(primary)
+  expect(await start.evaluate((el) => getComputedStyle(el).opacity)).toBe('1')
+  expect(errors).toEqual([])
+})
+
+test('Dolby Vision tags read like the other format tags, and DV? keeps its warning', async ({ page }) => {
+  const hdr = [['DV 8.1', 'HDR10'], ['DV 7?']]
+  const { errors } = await queueFixture(page, 2, ['ready'], null, null, null, (i) => ({
+    resolution: '3840x2160',
+    duration_ms: 60_000,
+    hdr: hdr[i],
+    interlaced: false,
+  }))
+  const color = (name: string) => page.getByText(name, { exact: true }).evaluate((el) => getComputedStyle(el).color)
+  expect(await color('DV 8.1')).toBe(await color('HDR10'))
+  expect(await color('DV 7?')).toBe(await themeColor(page, 'text-warning', 'color'))
+  expect(errors).toEqual([])
+})
+
+for (const palette of ['gold', 'indigo', 'ocean', 'forest', 'ember', 'rose', 'slate'])
+  for (const mode of ['light', 'dark'])
+    test(`the selected encoder reads as selected: ${palette}, ${mode}`, async ({ page }) => {
+      await page.addInitScript(
+        ([palette, mode]) => {
+          localStorage.setItem('videoforge.palette', palette)
+          localStorage.setItem('videoforge.mode', mode)
+        },
+        [palette, mode],
+      )
+      const { errors } = await queueFixture(page, 1, ['ready'])
+      await page.goto('/#/queue/job-0')
+      await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+      const on = page.locator('main button[data-state=on]').filter({ hasText: /^(x264|x265|VP8|VP9|SVT-AV1)$/ })
+      // The selected toggle's border against the surface it sits on: WCAG 1.4.11 asks 3:1 for a state indicator.
+      const ratio = await on.evaluate((el) => {
+        const rgb = (c: string) => (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number)
+        const lum = ([r, g, b]: number[]) => {
+          const f = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+          return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+        }
+        let surface = el.parentElement
+        while (surface && ['transparent', 'rgba(0, 0, 0, 0)'].includes(getComputedStyle(surface).backgroundColor))
+          surface = surface.parentElement
+        const [a, b] = [
+          lum(rgb(getComputedStyle(el).borderTopColor)),
+          lum(rgb(getComputedStyle(surface!).backgroundColor)),
+        ]
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+      })
+      expect(ratio).toBeGreaterThanOrEqual(3)
+      expect(errors).toEqual([])
+    })
+
 test('queue row checkboxes line up with the search box', async ({ page }) => {
   const { errors } = await queueFixture(page, 3)
   const search = await page.getByPlaceholder('Search name or source path').boundingBox()

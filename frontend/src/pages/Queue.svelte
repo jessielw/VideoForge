@@ -1022,9 +1022,9 @@
                     >
                       <Badge
                         variant="outline"
-                        class="px-1 py-0 text-[10px] font-normal {name.startsWith('DV')
-                          ? 'border-info/40 text-info'
-                          : ''} {name.endsWith('?') ? 'border-warning/40 text-warning' : ''}">{name}</Badge
+                        class="px-1 py-0 text-[10px] font-normal {name.endsWith('?')
+                          ? 'border-warning/40 text-warning'
+                          : ''}">{name}</Badge
                       >
                     </Tip>
                   {/each}
@@ -1170,7 +1170,7 @@
                 >
                   {#each batchTemplates as c (`${c.builtin}:${c.name}`)}<option value={c.name}>{c.name}</option>{/each}
                 </NativeSelect>
-                <Button class="ml-auto" onclick={applyTemplate} disabled={!picked}
+                <Button variant="outline" class="ml-auto" onclick={applyTemplate} disabled={!picked}
                   ><LayoutTemplateIcon />Apply to {selected.length} jobs</Button
                 >
               </div>
@@ -1198,7 +1198,7 @@
                   {#each batchContainers as c (c.id)}
                     <ToggleGroup.Item
                       value={c.id}
-                      class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                      class="px-4 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
                       >{c.label}</ToggleGroup.Item
                     >
                   {/each}

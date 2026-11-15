@@ -114,7 +114,7 @@
         {#each SAMPLE_PERCENTS as v (v)}<option value={v}>{v}%</option>{/each}
       </NativeSelect>
       <Tip text={editable ? 'Encode the sample with the job as it is now' : `Not while ${status}`}>
-        <Button onclick={run} disabled={!editable || starting || !job.plan}>
+        <Button variant="outline" onclick={run} disabled={!editable || starting || !job.plan}>
           <FlaskConicalIcon />{s ? 'Run again' : 'Run test encode'}
         </Button>
       </Tip>

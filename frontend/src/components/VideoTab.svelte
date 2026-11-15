@@ -550,7 +550,9 @@
             ? "The script with only its crop, resize, IVTC or deinterlacing and burned-in subtitles, so its frames line up with the output's (C flips)"
             : "The encoder's input: the script's frame (C flips)"}
         >
-          <ToggleGroup.Item value="in" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          <ToggleGroup.Item
+            value="in"
+            class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
             >{names.toggle[0]}</ToggleGroup.Item
           >
         </Tip>
@@ -559,7 +561,9 @@
             ? 'The script with its filters: the output (C flips)'
             : 'The encoded frame (C flips)'}
         >
-          <ToggleGroup.Item value="out" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          <ToggleGroup.Item
+            value="out"
+            class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
             >{names.toggle[1]}</ToggleGroup.Item
           >
         </Tip>

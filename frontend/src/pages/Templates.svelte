@@ -494,7 +494,7 @@
                   {#each CROP_MODES as m (m.id)}
                     <ToggleGroup.Item
                       value={m.id}
-                      class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                      class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
                       >{m.label}</ToggleGroup.Item
                     >
                   {/each}
@@ -569,7 +569,7 @@
                     {#each containers as c (c.id)}
                       <ToggleGroup.Item
                         value={c.id}
-                        class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                        class="px-4 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
                         >{c.label}</ToggleGroup.Item
                       >
                     {/each}

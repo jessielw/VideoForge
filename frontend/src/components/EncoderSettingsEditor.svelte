@@ -329,7 +329,9 @@
       onValueChange={(v) => v && set('encoder', v as EncoderName)}
     >
       {#each ENCODERS as [enc, label] (enc)}
-        <ToggleGroup.Item value={enc} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+        <ToggleGroup.Item
+          value={enc}
+          class="px-4 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
           >{label}</ToggleGroup.Item
         >
       {/each}
