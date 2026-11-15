@@ -42,10 +42,10 @@ def invalid_error(issues: list[Issue], rejected: Path | None, output: Path) -> s
     """An invalid run's error: how many checks failed and where the file is, not the checks again (they're its
     issues). A rejected candidate is kept under an unpublished name; a reused output stays where it is."""
     n = sum(1 for i in issues if i.severity is Severity.BLOCK)
-    failed = f"Failed {n} output check{'s' if n != 1 else ''}."
+    failed = f"{n} output check{'s' if n != 1 else ''} failed"
     if rejected is None:
         return failed
-    return f"{failed} The file is kept as {rejected.name}, not published as {output.name}."
+    return f"{failed}. The file is kept as {rejected.name} instead of {output.name}"
 
 
 def _identity(path: Path) -> tuple[int, int, int] | None:

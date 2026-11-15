@@ -929,7 +929,7 @@
         {/if}
         {#if other && !splitSized}
           <span class="bg-black/70 px-2 py-1 text-white"
-            >No split: the two sides differ in size ({nat.w}×{nat.h} and {other.w}×{other.h}).</span
+            >Split can't show these two sides, because they're different sizes ({nat.w}×{nat.h} and {other.w}×{other.h}).</span
           >
         {/if}
         {#if unlined}

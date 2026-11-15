@@ -547,8 +547,9 @@
             <section class="col-span-full min-w-0 space-y-3" aria-labelledby="output-names">
               <h2 id="output-names" tabindex="-1" class="font-medium outline-none">Output names</h2>
               <p class="text-xs text-muted-foreground">
-                Whether a job is named from its template's name template, per rule set. Jobs take this when they're
-                added or a template is applied to them; a job's own Output tab can still change it.
+                For each rule set, whether its jobs name the file and set the MKV title with the name template. A job
+                takes this when it's added or a template is applied to it, and its Output tab can still change it. A
+                change here leaves jobs already added as they are.
               </p>
               <div class="space-y-3">
                 {#each config.rule_sets as r (r.id)}
@@ -568,7 +569,7 @@
                           <option value="template"
                             >As each template says{row.own === undefined
                               ? ''
-                              : ` (its defaults: ${row.own ? 'on' : 'off'})`}</option
+                              : ` (${r.name} defaults: ${row.own ? 'on' : 'off'})`}</option
                           >
                           <option value="on">Always on</option>
                           <option value="off">Always off</option>

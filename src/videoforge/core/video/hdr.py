@@ -395,7 +395,11 @@ def _dv_issues(
         them = "it" if len(missing) == 1 else "them"
         block("tools.missing", f"Dolby Vision needs {' and '.join(missing)}. Set {them} in Settings › Tools")
     if _lacks(settings, tools, "dolby-vision-rpu"):
-        block("hdr.svt_build", f"This {name} build takes no --dolby-vision-rpu (built without libdovi?)")
+        block(
+            "hdr.svt_build",
+            f"This {name} build can't carry Dolby Vision, because it has no --dolby-vision-rpu option (it may have "
+            "been built without libdovi). Set another build in Settings › Tools",
+        )
     return out
 
 
@@ -452,7 +456,8 @@ def _hdr10plus_issues(video: VideoInfo, settings: EncoderSettings, tools: Tools 
             Issue(
                 Severity.BLOCK,
                 "hdr.svt_build",
-                f"This {settings.encoder.label} build takes no --hdr10plus-json (built without hdr10plus?), {untick}",
+                f"This {settings.encoder.label} build can't carry HDR10+, because it has no --hdr10plus-json option "
+                f"(it may have been built without hdr10plus). Set another build in Settings › Tools, {untick}",
             )
         )
     return out
@@ -747,8 +752,8 @@ def output_issues(
         except (OSError, ValueError) as error:
             return [Issue(Severity.BLOCK, "hdr.av1_unread", f"The encode's HDR metadata couldn't be read: {error}")]
     if hdr10plus and (counts[1] < counts[0] if counts else not found.hdr10plus):
-        what = f" on {counts[1]} of its {counts[0]} frames" if counts and counts[1] else " metadata"
-        out.append(Issue(Severity.BLOCK, "hdr.hdr10plus_missing", f"The output has no HDR10+{what}"))
+        what = f"HDR10+ on only {counts[1]} of its {counts[0]} frames" if counts and counts[1] else "no HDR10+ metadata"
+        out.append(Issue(Severity.BLOCK, "hdr.hdr10plus_missing", f"The output has {what}"))
     want = dv_profile(video)
     if not dv:
         return out

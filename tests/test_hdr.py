@@ -342,7 +342,7 @@ def test_av1_output_check(tmp_path):
     assert hdr.output_issues(video, s, output(10), full) == []
     assert hdr.output_issues(video, s, output(10, 1), full) == []
     messages = [i.message for i in hdr.output_issues(video, s, output(10, 1), part)]
-    assert messages == ["The output has no HDR10+ on 1 of its 2 frames"]
+    assert messages == ["The output has HDR10+ on only 1 of its 2 frames"]
     messages = [i.message for i in hdr.output_issues(video, s, output(10, 0), full)]
     assert messages == ["The output has Dolby Vision 10.0, not 10.1 (8.1)"]
     assert [i.code for i in hdr.output_issues(video, s, output(0), full)] == ["hdr.dv_missing"]

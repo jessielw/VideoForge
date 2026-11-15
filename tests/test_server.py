@@ -2462,7 +2462,7 @@ def test_an_invalid_jobs_issues_say_each_check_once():
         state = JobState(status=JobStatus.INVALID, error=error, issues=checks)
         return [i.code for i in issues(SimpleNamespace(probe_error="", state=state, plan=None))]
 
-    assert shown("Failed 1 output check. The file is kept as X.unpublished-1a2b3c4d.mkv, not published as X.mkv.") == [
+    assert shown("1 output check failed. The file is kept as X.unpublished-1a2b3c4d.mkv instead of X.mkv") == [
         "output.name.dual",
         "run.invalid",
         "output.a",

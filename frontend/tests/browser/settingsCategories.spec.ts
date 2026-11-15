@@ -219,7 +219,7 @@ test('Output names: a rule set can name its jobs from the template always, never
   await page.goto('/#/settings')
   const fileName = page.getByRole('combobox', { name: 'Manual: File name from the name template' })
   await expect(fileName).toHaveValue('template')
-  await expect(fileName.locator('option[value="template"]')).toHaveText('As each template says (its defaults: off)')
+  await expect(fileName.locator('option[value="template"]')).toHaveText('As each template says (Manual defaults: off)')
   await fileName.selectOption('off')
   await expect.poll(() => sent).toEqual([{ naming: { manual: { file_name: 'off', title: 'template' } } }])
   expect(errors).toEqual([])

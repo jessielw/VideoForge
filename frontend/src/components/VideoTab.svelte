@@ -547,7 +547,7 @@
       >
         <Tip
           text={compare === 'filters'
-            ? 'The script without its filters: crop, resize and field matching only (C flips)'
+            ? "The script with only its crop, resize, IVTC or deinterlacing and burned-in subtitles, so its frames line up with the output's (C flips)"
             : "The encoder's input: the script's frame (C flips)"}
         >
           <ToggleGroup.Item value="in" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
@@ -564,7 +564,7 @@
           >
         </Tip>
       </ToggleGroup.Root>
-      <Tip text="Both sides at once, either side of a line you drag: the picked side on the left">
+      <Tip text="Shows both sides at once, on either side of a line you can drag. The side you picked is on the left">
         <Toggle
           pressed={vv.split}
           onPressedChange={(on) => (vv.split = on)}
