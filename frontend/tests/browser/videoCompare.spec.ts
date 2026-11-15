@@ -208,3 +208,35 @@ test('bookmarks mark frames on the scrub bar, and [ and ] go between them; a tim
   await expect(page.locator('[data-mark]')).toHaveCount(2)
   expect(errors).toEqual([])
 })
+
+test('the preview and the script check show their figures in the code font', async ({ page }) => {
+  const { errors } = await fixture(page)
+  // The script and a passing check, so the Video tab shows the check's grid of figures.
+  const script = { script: 'video.vpy', head: ['clip = src'], body: [], tail: ['clip.set_output()'], custom: false }
+  const info = { frames: 240, width: 64, height: 36, fps_num: 24, fps_den: 1, format: 'YUV420P10', bits: 10, fps: 24 }
+  await page.route('**/api/jobs/job-0/video/script', (route) => route.fulfill({ json: script }))
+  await page.route('**/api/jobs/job-0/video/check', (route) => route.fulfill({ json: { ok: true, info } }))
+  await page.reload()
+  const mono = /^"?Cascadia Mono/
+  const sizeLine = page.getByText(/^64×36 · \d+%/)
+  await expect(sizeLine).toHaveCSS('font-family', mono) // the frame's size and zoom
+  // The wider code font still fits the preview's toolbar at 1280 px.
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const fits = await sizeLine.evaluate((el) => {
+    const bar = el.parentElement!
+    return (
+      el.getBoundingClientRect().right <= bar.getBoundingClientRect().right + 1 && bar.scrollWidth <= bar.clientWidth
+    )
+  })
+  expect(fits).toBe(true)
+  await expect(page.getByText(/^\/ \d+ · /)).toHaveCSS('font-family', mono) // the frame count and time
+  // The script check (on the Script side tab): its values are figures, its labels stay in the normal font.
+  await page.getByRole('tab', { name: 'Script', exact: true }).click()
+  const label = page.getByText('Size', { exact: true })
+  const size = label.locator('xpath=..') // the label's row: "Size 64×36"
+  await expect(size).toContainText('64×36')
+  await expect(size.locator('.readout')).toHaveText('64×36')
+  await expect(size.locator('.readout')).toHaveCSS('font-family', mono)
+  await expect(label).not.toHaveCSS('font-family', mono)
+  expect(errors).toEqual([])
+})

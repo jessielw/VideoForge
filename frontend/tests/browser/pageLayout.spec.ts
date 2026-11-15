@@ -397,6 +397,9 @@ test('controls animate only color and movement, and a dialog does not blur the p
   )
   expect(animated.length).toBeGreaterThan(3)
   expect(animated.filter((p) => p.split(', ').includes('all'))).toEqual([])
+  // A pressed button moves down 1 px with `translate` (Tailwind 4's translate-y sets that property, not transform).
+  const button = page.getByRole('button', { name: 'Keyboard shortcuts', exact: true })
+  expect((await button.evaluate((el) => getComputedStyle(el).transitionProperty)).split(', ')).toContain('translate')
   await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
   await expect(page.locator('[data-slot=dialog-overlay]')).toHaveCSS('backdrop-filter', 'none')
   expect(errors).toEqual([])

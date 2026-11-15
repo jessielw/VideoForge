@@ -242,7 +242,7 @@
           <div class="h-1.5 flex-1 overflow-hidden rounded bg-muted max-sm:basis-full">
             <div class="h-full bg-info transition-[width]" style="width:{p.overall * 100}%"></div>
           </div>
-          <span class="tabular-nums">
+          <span class="readout">
             {#if app.queue.paused}<span class="text-warning">Paused ·</span>{/if}
             {p.step} · {(p.fraction * 100).toFixed(1)}%{p.eta != null ? ` (${duration(p.eta)} left)` : ''}
             <Tip text="The bar and this number show the whole job. Each step counts for a set share of it."

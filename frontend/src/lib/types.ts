@@ -480,7 +480,7 @@ export interface SampleResult {
   fps: number | null
   bytes: number // the encoded stream's
   seconds: number // the encode took
-  encoder: string // the rate it ran at: "x265 crf 18", "x264 8000 kb/s" (a 2-pass job's at its bitrate)
+  encoder: string // the rate it ran at: "x265 CRF 18", "x264 8000 kb/s" (a 2-pass job's at its bitrate)
   finished: string // ISO time
   kbps: number | null
   estimate_mb: number | null // the whole video's encode, decimal MB, no container overhead

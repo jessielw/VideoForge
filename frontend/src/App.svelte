@@ -112,8 +112,9 @@
               {#if count}
                 <Badge
                   variant="secondary"
-                  class="tabular-nums {navCollapsed ? 'absolute -top-1 -right-1 h-5 px-1 text-xs' : 'ml-auto'}"
-                  >{count}<span class="sr-only">{` ${counted}`}</span></Badge
+                  class="tabular-nums {navCollapsed
+                    ? 'absolute -top-1 -right-1 h-4 px-1 py-0 text-xs leading-none'
+                    : 'ml-auto'}">{count}<span class="sr-only">{` ${counted}`}</span></Badge
                 >
               {/if}
             </Button>

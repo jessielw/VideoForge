@@ -116,7 +116,7 @@
   }
 }
 
-/* Heading over a group of controls: the same look as the Settings group headings. */
+/* Heading over a group of controls: medium weight, sentence case and the normal text color, like the Settings headings. */
 @utility section-label {
   @apply text-sm font-medium;
 }
