@@ -1,7 +1,8 @@
 <script lang="ts">
   // A job's frames from the server (VapourSynth, lossless PNG): zoom (fit .. 800%, Ctrl+wheel and
   // double-click zoom at the pointer), drag to pan with a minimap, a boost view (dark levels stretched) for spotting
-  // borders, the crop lines, and frame stepping (←/→ 1, Shift 10, PgUp/PgDn 1 s, Home/End).
+  // borders, the crop lines, and frame stepping (←/→ 1, Shift 10, PgUp/PgDn 1 s, Home/End). The frame
+  // box takes a frame number or a time (`1:23.5`, `83.5s`).
   // The scrub bar is a native range (bits-ui's slider walks an array of every frame on each move): a
   // drag loads the frame where it rests a moment, and the one it's let go on.
   // Zoom counts screen (device) pixels: at 100% one frame pixel is one screen pixel, and from 100% up
@@ -25,7 +26,7 @@
   // AR toggle shows the stored pixels instead (one screen pixel per frame pixel both ways at 100%).
   import { tick, untrack, type Snippet } from 'svelte'
   import { api } from '../lib/api'
-  import { frameFilename } from '../lib/format'
+  import { frameFilename, parseSeek, timecode } from '../lib/format'
   import type { Crop, PreviewStage } from '../lib/types'
   import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left'
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
@@ -237,6 +238,16 @@
   function seek(n: number) {
     clearTimeout(scrubTimer)
     frame = Math.max(0, Math.min(frames - 1, Math.round(n)))
+  }
+
+  // The frame box: a frame number or a time. Anything else puts the shown frame's number back.
+  function goTo() {
+    const n = parseSeek(frameInput, fps)
+    if (n === null) frameInput = String(frame)
+    else {
+      seek(n)
+      frameInput = String(frame) // a time (or a frame past the end) shows as the frame it lands on
+    }
   }
 
   // A drag shows where it is at once; the frame follows once it rests (or on release, the range's change).
@@ -849,15 +860,17 @@
         ><ChevronsRightIcon /></Button
       >
     </Tip>
-    <Input
-      class="w-20 shrink-0 text-right font-mono"
-      aria-label="Frame number"
-      bind:value={frameInput}
-      onkeydown={(e) => e.key === 'Enter' && seek(+frameInput || 0)}
-      onblur={() => seek(+frameInput || 0)}
-    />
+    <Tip class="shrink-0" text="Go to a frame number, or a time: 1:23.5, 1:02:03 or 83.5s (Enter)">
+      <Input
+        class="w-24 text-right font-mono"
+        aria-label="Frame number or time"
+        bind:value={frameInput}
+        onkeydown={(e) => e.key === 'Enter' && goTo()}
+        onblur={goTo}
+      />
+    </Tip>
     <span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground tabular-nums"
-      >/ {frames - 1} · {(scrub / (fps || 24)).toFixed(2)} s</span
+      >/ {frames - 1} · {timecode(scrub / (fps || 24))}</span
     >
   </div>
 </div>
