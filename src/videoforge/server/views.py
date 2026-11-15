@@ -22,7 +22,7 @@ from videoforge.server.queue import Entry, JobQueue
 
 def encoder_label(enc: EncoderSettings) -> str:
     if enc.rate_control is RateControl.CRF:
-        rc = f"crf {enc.crf:g}"
+        rc = f"CRF {enc.crf:g}"
     elif target.applies(enc):
         rc = f"2-pass {enc.target_mb} MB"
     else:

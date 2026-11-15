@@ -1,4 +1,4 @@
-import { test, expect, type Page, type WebSocketRoute } from '@playwright/test'
+import { test, expect, type Locator, type Page, type WebSocketRoute } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import type { JobDetail, JobSummary, Status, Template } from '../../src/lib/types.ts'
 
@@ -9,6 +9,7 @@ async function queueFixture(
   sample: JobDetail['sample'] = null,
   search: JobDetail['search'] = null,
   made: JobDetail['made'] = null,
+  facts: (i: number) => JobSummary['source_facts'] = () => null,
 ) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
@@ -27,7 +28,7 @@ async function queueFixture(
     custom_script: false,
     pause_after_pass1: false,
     indexed: false,
-    source_facts: null,
+    source_facts: facts(i),
     index_error: '',
     index_held: false,
     sample_waiting: false,
@@ -302,8 +303,9 @@ test('a done job says what its run made', async ({ page }) => {
   const made = { output_bytes: 4.5 * 1024 ** 3, source_bytes: 18 * 1024 ** 3, seconds: 5025, reused: 2, kbps: 6120 }
   const fixture = await queueFixture(page, 1, ['done'], null, null, made)
   await page.goto('/#/queue/job-0')
-  await expect(page.getByText('Made 4.5 GB', { exact: false })).toContainText(
-    '25.0% of the source · 6,120 kb/s · took 1:23:45 (2 reused)',
+  // The job's facts line under its name (one box per figure, so it is read as a whole line).
+  await expect(page.locator('header .readout')).toContainText(
+    'Made 4.5 GB · 25.0% of the source · 6,120 kb/s · took 1:23:45 (2 reused)',
   )
   expect(fixture.errors).toEqual([])
 })
@@ -339,6 +341,8 @@ test('a test encode shows its quality score only when it has one', async ({ page
   await expect(card).toContainText('worst 5% 74.1')
   await expect(card).toContainText('XPSNR 44.1 dB')
   await expect(card).toContainText('90 visually lossless')
+  // Its figures read like every other technical figure: code font, fixed-width digits.
+  await expect(card.getByText('4,000 kb/s')).toHaveCSS('font-family', /^"?Cascadia Mono/)
   await card.screenshot({ path: testInfo.outputPath('sample-quality.png') })
 
   Object.assign(result, { ssimulacra2: null, ssimulacra2_p5: null, xpsnr: null }) // the setting was off
@@ -382,8 +386,11 @@ test('a CRF search lists its tries, marks the CRF found and puts it on the job',
   await expect(card).toContainText('CRF 20 is the highest that reaches SSIMULACRA2 80.')
   const rows = card.locator('tbody tr')
   await expect(rows).toHaveCount(4)
-  await expect(rows.first()).toContainText('18 ✓')
+  await expect(rows.first()).toContainText('18')
+  await expect(rows.first()).not.toContainText('✓')
+  await expect(rows.first().getByRole('img', { name: 'Reaches SSIMULACRA2 80' })).toBeVisible()
   await expect(rows.nth(1)).toContainText('2,000 kb/s')
+  await expect(rows.first()).toHaveCSS('font-family', /^"?Cascadia Mono/)
   await card.screenshot({ path: testInfo.outputPath('crf-search.png') })
 
   await card.getByRole('button', { name: 'Use CRF 20' }).click()
@@ -518,5 +525,379 @@ test("Index on one job it can't take says why, about that one job", async ({ pag
   const why = page.getByText(/^1 left out: /)
   await expect(why).toBeVisible()
   expect(await why.textContent()).toContain("1 left out: it's queued or running") // read now: the toast closes
+  expect(errors).toEqual([])
+})
+
+test('queue rows of one kind are one height, with or without format tags', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3, ['ready'], null, null, null, (i) => ({
+    resolution: '1920x1080',
+    duration_ms: 60_000,
+    hdr: i === 0 ? [] : ['HDR10'],
+    interlaced: false,
+  }))
+  const heights = await page
+    .locator('[data-job]')
+    .evaluateAll((rows) => rows.map((r) => r.parentElement!.getBoundingClientRect().height))
+  expect(heights).toHaveLength(3)
+  expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(0.5)
+  expect(errors).toEqual([])
+})
+
+test('Encoder tab: the test encode and CRF search cards sit 16 px apart', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  const sample = await page.getByRole('region', { name: 'Test encode', exact: true }).boundingBox()
+  const search = await page.getByRole('region', { name: 'CRF search', exact: true }).boundingBox()
+  expect(search!.y - (sample!.y + sample!.height)).toBeGreaterThanOrEqual(16)
+  expect(errors).toEqual([])
+})
+
+test('the menu marks the running job with an icon, in both widths', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['running'])
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect(nav).toContainText('Episode 00000')
+  await expect(nav).not.toContainText('▶')
+  await expect(nav.locator('.text-info svg').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Collapse the menu', exact: true }).click()
+  await expect(nav).not.toContainText('▶')
+  await expect(nav.locator('.text-info svg').first()).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('the queue list hint shows its keys as keycaps', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3)
+  await expect(page.locator('#queue-keys kbd')).toHaveText(['Home', 'End', 'Shift', 'Ctrl+A', 'Cmd+A'])
+  await expect(page.locator('#queue-keys')).toContainText('Arrow keys, Home and End move through the list.')
+  expect(errors).toEqual([])
+})
+
+/** Visible text set under 12 px, in uppercase, or in italics: each as "<reason>: <text>". */
+const typeProblems = (page: Page) =>
+  page.evaluate(() => {
+    const out: string[] = []
+    for (const el of document.querySelectorAll<HTMLElement>('body *')) {
+      const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent!.trim())
+      if (!own || el.closest('.sr-only, [data-sonner-toaster]')) continue
+      const r = el.getBoundingClientRect()
+      const cs = getComputedStyle(el)
+      if (r.width <= 1 || r.height <= 1 || cs.visibility === 'hidden') continue
+      const text = el.textContent!.trim().slice(0, 40)
+      if (parseFloat(cs.fontSize) < 12) out.push(`${cs.fontSize}: ${text}`)
+      if (cs.textTransform === 'uppercase') out.push(`uppercase: ${text}`)
+      if (cs.fontStyle === 'italic') out.push(`italic: ${text}`)
+    }
+    return [...new Set(out)]
+  })
+
+test('a placeholder that is a sentence uses the normal font, even in a code-font field', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await page.goto('/#/queue/job-0')
+  const placeholderFont = (field: Locator) => field.evaluate((el) => getComputedStyle(el, '::placeholder').fontFamily)
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  const extra = page.getByPlaceholder('added at the end, as typed')
+  expect(await placeholderFont(extra)).not.toMatch(/Cascadia Mono/)
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  // Until the field is focused, the name template's placeholder is a sentence, not a template.
+  const template = page.getByRole('textbox', { name: 'Name template', exact: true })
+  await expect(template).toHaveAttribute('placeholder', 'Empty uses the default template (see Tokens)')
+  expect(await placeholderFont(template)).not.toMatch(/Cascadia Mono/)
+  expect(errors).toEqual([])
+})
+
+test('encoder option names keep their case', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  expect(await page.getByText(/^Options \(/).innerText()).toContain('--name value')
+  expect(errors).toEqual([])
+})
+
+test('job tabs: no text under 12 px, no uppercase labels, no italics', async ({ page }) => {
+  const { errors } = await queueFixture(page, 2, ['ready'], null, null, null, () => ({
+    resolution: '3840x2160',
+    duration_ms: 60_000,
+    hdr: ['DV 8.1', 'HDR10'],
+    interlaced: false,
+  }))
+  await page.goto('/#/queue/job-0')
+  const problems: string[] = [...(await typeProblems(page)).map((p) => `Queue: ${p}`)]
+  for (const tab of ['Encoder', 'Audio', 'Subtitles', 'Output']) {
+    await page.getByRole('tab', { name: tab, exact: true }).click()
+    problems.push(...(await typeProblems(page)).map((p) => `${tab}: ${p}`))
+  }
+  expect([...new Set(problems)]).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('the collapsed menu keeps the queue count inside it', async ({ page }) => {
+  const { errors } = await queueFixture(page, 12)
+  await page.getByRole('button', { name: 'Collapse the menu', exact: true }).click()
+  const nav = (await page.getByRole('navigation', { name: 'Main navigation' }).boundingBox())!
+  const count = (await page.getByRole('button', { name: 'Queue 12 jobs' }).getByText('12').boundingBox())!
+  expect(count.x + count.width).toBeLessThanOrEqual(nav.x + nav.width)
+  expect(errors).toEqual([])
+})
+
+/** A theme color as the browser computes it, read from a probe element with that Tailwind class. */
+const themeColor = (page: Page, cls: string, prop: 'backgroundColor' | 'color') =>
+  page.evaluate(
+    ([cls, prop]) => {
+      const probe = document.createElement('div')
+      probe.className = cls
+      document.body.append(probe)
+      const value = getComputedStyle(probe)[prop as 'color']
+      probe.remove()
+      return value
+    },
+    [cls, prop],
+  )
+
+test('the Encoder tab fills at most one control with the accent', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'CRF search', exact: true })).toBeVisible()
+  const primary = await themeColor(page, 'bg-primary', 'backgroundColor')
+  // A ticked checkbox is a selection, so it may stay gold; buttons and toggles may not, but for one.
+  const filled = await page
+    .locator('main')
+    .evaluate(
+      (main, primary) =>
+        [...main.querySelectorAll('button:not([role=checkbox]), [role=radio]')]
+          .filter((el) => getComputedStyle(el).backgroundColor === primary)
+          .map((el) => el.textContent?.trim()),
+      primary,
+    )
+  expect(filled.length, filled.join(', ')).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+test('a disabled Start queue is gray, not dimmed gold', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3, ['ready'])
+  const start = page.getByRole('button', { name: /^Start queue/ })
+  await expect(start).toBeDisabled()
+  const primary = await themeColor(page, 'bg-primary', 'backgroundColor')
+  expect(await start.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(primary)
+  expect(await start.evaluate((el) => getComputedStyle(el).opacity)).toBe('1')
+  expect(errors).toEqual([])
+})
+
+test('Dolby Vision tags read like the other format tags, and DV? keeps its warning', async ({ page }) => {
+  const hdr = [['DV 8.1', 'HDR10'], ['DV 7?']]
+  const { errors } = await queueFixture(page, 2, ['ready'], null, null, null, (i) => ({
+    resolution: '3840x2160',
+    duration_ms: 60_000,
+    hdr: hdr[i],
+    interlaced: false,
+  }))
+  const color = (name: string) => page.getByText(name, { exact: true }).evaluate((el) => getComputedStyle(el).color)
+  expect(await color('DV 8.1')).toBe(await color('HDR10'))
+  expect(await color('DV 7?')).toBe(await themeColor(page, 'text-warning', 'color'))
+  expect(errors).toEqual([])
+})
+
+for (const palette of ['gold', 'indigo', 'ocean', 'forest', 'ember', 'rose', 'slate'])
+  for (const mode of ['light', 'dark'])
+    test(`the selected encoder reads as selected: ${palette}, ${mode}`, async ({ page }) => {
+      await page.addInitScript(
+        ([palette, mode]) => {
+          localStorage.setItem('videoforge.palette', palette)
+          localStorage.setItem('videoforge.mode', mode)
+        },
+        [palette, mode],
+      )
+      const { errors } = await queueFixture(page, 1, ['ready'])
+      await page.goto('/#/queue/job-0')
+      await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+      const on = page.locator('main button[data-state=on]').filter({ hasText: /^(x264|x265|VP8|VP9|SVT-AV1)$/ })
+      // The selected toggle's border against the surface it sits on: WCAG 1.4.11 asks 3:1 for a state indicator.
+      const ratio = await on.evaluate((el) => {
+        const rgb = (c: string) => (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number)
+        const lum = ([r, g, b]: number[]) => {
+          const f = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+          return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+        }
+        let surface = el.parentElement
+        while (surface && ['transparent', 'rgba(0, 0, 0, 0)'].includes(getComputedStyle(surface).backgroundColor))
+          surface = surface.parentElement
+        const [a, b] = [
+          lum(rgb(getComputedStyle(el).borderTopColor)),
+          lum(rgb(getComputedStyle(surface!).backgroundColor)),
+        ]
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+      })
+      expect(ratio).toBeGreaterThanOrEqual(3)
+      expect(errors).toEqual([])
+    })
+
+test('queue row checkboxes line up with the search box', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3)
+  const search = await page.getByPlaceholder('Search name or source path').boundingBox()
+  const tick = await page
+    .getByRole('checkbox', { name: /^Queued: / })
+    .first()
+    .boundingBox()
+  expect(Math.abs(tick!.x - search!.x)).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+/** Where the eye sees a button's left edge: its border or fill when it has one, else its first text. */
+async function visibleLeft(button: Locator): Promise<number> {
+  return button.evaluate((el) => {
+    const cs = getComputedStyle(el)
+    const clear = (c: string) => c === 'transparent' || c === 'rgba(0, 0, 0, 0)'
+    if (parseFloat(cs.borderLeftWidth) > 0 && !clear(cs.borderLeftColor)) return el.getBoundingClientRect().left
+    if (!clear(cs.backgroundColor)) return el.getBoundingClientRect().left
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    return range.getClientRects()[0]?.left ?? el.getBoundingClientRect().left
+  })
+}
+
+test('Edit the whole script lines up with the side panel controls', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await page.goto('/#/queue/job-0')
+  const edit = await visibleLeft(page.getByRole('button', { name: 'Edit the whole script…', exact: true }))
+  const preset = await visibleLeft(page.getByRole('complementary').getByRole('button').first()) // the preset menu
+  expect(Math.abs(edit - preset)).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+/** After queueFixture: serve the Manual rule set, with its name and containers, and open job-0 with it. */
+async function withRuleSet(page: Page) {
+  const containers = [
+    { id: 'mkv', label: 'MKV (mkvmerge)', extension: '.mkv', tool: 'mkvmerge' },
+    { id: 'mp4', label: 'MP4 (MP4Box)', extension: '.mp4', tool: 'MP4Box' },
+  ]
+  const spec = await page.evaluate(() =>
+    fetch('/api/jobs/job-0')
+      .then((r) => r.json())
+      .then((d) => d.spec),
+  )
+  const template = { ...spec, crop_mode: 'keep', audio: null, subs: null }
+  const defaults = { video: spec.video, encoder: spec.encoder, template }
+  await page.route('**/api/rule-sets', (route) =>
+    route.fulfill({
+      json: [
+        { id: 'manual', name: 'Manual', default: true, container: 'mkv', containers, defaults, track_editor: true },
+      ],
+    }),
+  )
+  await page.goto('/#/queue/job-0')
+  await page.reload()
+}
+
+test('the job header keeps the name on its line and the job facts on the line below', async ({ page }) => {
+  const made = { output_bytes: 4.5 * 1024 ** 3, source_bytes: 18 * 1024 ** 3, seconds: 5025, reused: 0, kbps: 6120 }
+  const { errors } = await queueFixture(page, 1, ['done'], null, null, made)
+  await withRuleSet(page)
+  const name = (await page.getByRole('heading', { name: 'Episode 00000' }).boundingBox())!
+  const facts = page.getByText(/^Manual · x265/)
+  await expect(facts).toContainText('Made 4.5 GB')
+  expect((await facts.boundingBox())!.y).toBeGreaterThanOrEqual(name.y + name.height)
+  const look = await facts.evaluate((el) => [getComputedStyle(el).fontFamily, getComputedStyle(el).fontVariantNumeric])
+  expect(look[0]).toMatch(/^"?Cascadia Mono/)
+  expect(look[1]).toContain('tabular-nums')
+  expect(errors).toEqual([])
+})
+
+test('at 390 px the job header breaks its facts between figures, never inside one', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const made = { output_bytes: 4.5 * 1024 ** 3, source_bytes: 18 * 1024 ** 3, seconds: 5025, reused: 2, kbps: 6120 }
+  const { errors } = await queueFixture(page, 1, ['done'], null, null, made)
+  // A narrow window opens a done job on its log.
+  await page.route('**/api/jobs/job-0/log-snapshot', (route) =>
+    route.fulfill({ json: { seq: 0, steps: [], lines: [] } }),
+  )
+  await page.goto('/#/queue/job-0')
+  const facts = page.locator('header .readout')
+  await expect(facts).toContainText('took 1:23:45')
+  const lineHeight = await facts.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight))
+  expect((await facts.boundingBox())!.height).toBeGreaterThan(lineHeight) // it does wrap at this width
+  const broken = await facts.evaluate((el, lh) => {
+    // Each figure is its own box; one taller than a line broke inside itself.
+    const parts = [...el.querySelectorAll(':scope > *')]
+    return parts.length < 4
+      ? ['one box']
+      : parts.filter((p) => p.getBoundingClientRect().height > lh + 1).map((p) => p.textContent)
+  }, lineHeight)
+  expect(broken).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('queue rows show sizes with a times sign, and at 390 px their figures stay inside the row', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const { errors } = await queueFixture(page, 3, ['ready'], null, null, null, () => ({
+    resolution: '3840x2076',
+    duration_ms: 5_400_000,
+    hdr: ['DV 7.6 FEL/MEL?', 'HDR10'], // the longest tag hdr.formats() makes: profile 7 before dovi_tool reads it
+    interlaced: false,
+  }))
+  // Rows as long as real ones: an encoder with its CRF, a crop, and track counts.
+  const jobs = await page.evaluate(() => fetch('/api/jobs').then((r) => r.json()))
+  for (const job of jobs)
+    Object.assign(job, {
+      encoder: 'x264 CRF 18',
+      crop: { left: 0, top: 42, right: 0, bottom: 42 },
+      audio: [{}, {}, {}],
+      subs: 4,
+    })
+  await page.route('**/api/jobs', (route) => route.fulfill({ json: jobs }))
+  await page.reload()
+  const rows = page.locator('[data-job]')
+  await expect(rows.first()).toContainText('3840×2076')
+  await expect(rows.first()).toContainText('crop 0/42/0/42')
+  // No figure is cut off, and none wraps inside itself: a figure is one line, or moves whole to the next.
+  const problems = await rows.evaluateAll((all) =>
+    all.flatMap((row) =>
+      [...row.querySelectorAll<HTMLElement>('.readout')].flatMap((line) => [
+        ...(line.scrollWidth > line.clientWidth + 1 ? [`cut off: ${line.textContent}`] : []),
+        ...[...line.children]
+          .filter((part) => part.getBoundingClientRect().height > 20)
+          .map((part) => `wraps: ${part.textContent?.trim()}`),
+      ]),
+    ),
+  )
+  expect(await rows.first().locator('.readout').count()).toBeGreaterThan(0)
+  expect([...new Set(problems)]).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('Output tab: every label lines up with the first control in its row', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  // The rule set's containers bring the Container and PGS compression rows (a checkbox first: no text baseline).
+  await withRuleSet(page)
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  await expect(page.getByText('PGS compression', { exact: true })).toBeVisible()
+  // Each label in the tab's label column against the first control on its row; a textarea counts by its first line.
+  const rows = await page.evaluate(() => {
+    const grid = [...document.querySelectorAll<HTMLElement>('main .grid')].find((g) =>
+      g.textContent?.includes('Existing output'),
+    )!
+    const control = 'input:not([type=hidden]), select, textarea, button, [role=checkbox]'
+    const out: { label: string; gap: number }[] = []
+    for (const label of [...grid.children] as HTMLElement[]) {
+      const cell = label.nextElementSibling as HTMLElement | null
+      const text = label.textContent?.trim()
+      if (!cell || !text || label.querySelector(control)) continue
+      if (cell.getBoundingClientRect().left <= label.getBoundingClientRect().right) continue
+      const first = [...cell.querySelectorAll<HTMLElement>(control)].find((c) => c.getBoundingClientRect().height > 1)
+      if (!first) continue
+      const r = first.getBoundingClientRect()
+      const cs = getComputedStyle(first)
+      const center =
+        first.tagName === 'TEXTAREA'
+          ? r.top + parseFloat(cs.borderTopWidth) + parseFloat(cs.paddingTop) + parseFloat(cs.lineHeight) / 2
+          : r.top + r.height / 2
+      const l = label.getBoundingClientRect()
+      out.push({ label: text, gap: Math.round(Math.abs(l.top + l.height / 2 - center)) })
+    }
+    return out
+  })
+  expect(rows.map((r) => r.label)).toEqual(
+    expect.arrayContaining(['Existing output', 'Name template', 'PGS compression']),
+  )
+  expect(rows.filter((r) => r.gap > 2)).toEqual([])
   expect(errors).toEqual([])
 })

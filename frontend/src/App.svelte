@@ -5,6 +5,7 @@
   import ListVideoIcon from '@lucide/svelte/icons/list-video'
   import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close'
   import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open'
+  import PlayIcon from '@lucide/svelte/icons/play'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import SettingsIcon from '@lucide/svelte/icons/settings'
   import TerminalIcon from '@lucide/svelte/icons/terminal'
@@ -82,12 +83,12 @@
       class="flex {navCollapsed ? 'w-14' : 'w-48'} shrink-0 flex-col overflow-y-auto border-r bg-card"
       aria-label="Main navigation"
     >
-      <div class="flex items-center gap-2 py-4 {navCollapsed ? 'justify-center' : 'px-4'}">
+      <div class="flex items-center gap-2 py-4 {navCollapsed ? 'justify-center' : 'px-5'}">
         <Tip side="right" text={app.version ? `VideoForge ${app.version}` : undefined}>
           <img src="/favicon.svg" alt="" class="size-6" />
         </Tip>
         {#if !navCollapsed}
-          <span class="text-base font-semibold tracking-wide">VideoForge</span>
+          <span class="text-base font-semibold">VideoForge</span>
           {#if app.version}<span class="text-xs text-muted-foreground tabular-nums">{app.version}</span>{/if}
         {/if}
       </div>
@@ -111,7 +112,7 @@
               {#if count}
                 <Badge
                   variant="secondary"
-                  class="tabular-nums {navCollapsed ? 'absolute -top-1 -right-1 h-4 px-1 text-[10px]' : 'ml-auto'}"
+                  class="tabular-nums {navCollapsed ? 'absolute -top-1 -right-1 h-5 px-1 text-xs' : 'ml-auto'}"
                   >{count}<span class="sr-only">{` ${counted}`}</span></Badge
                 >
               {/if}
@@ -144,7 +145,10 @@
               side="right"
               class="text-info"
               text="Running {running.name}{running.progress ? `: ${running.progress.step}` : ''}"
-              >{running.progress ? Math.round(running.progress.overall * 100) + '%' : '▶'}</Tip
+              >{#if running.progress}{Math.round(running.progress.overall * 100) + '%'}{:else}<PlayIcon
+                  class="size-3"
+                  aria-hidden="true"
+                />{/if}</Tip
             >
           {/if}
           <Tip
@@ -154,9 +158,11 @@
           >
         </div>
       {:else}
-        <div class="h-(--bar-h) shrink-0 space-y-1 overflow-y-auto border-t px-3 py-1.5 text-xs text-muted-foreground">
+        <div class="h-(--bar-h) shrink-0 space-y-1 overflow-y-auto border-t px-5 py-1.5 text-xs text-muted-foreground">
           {#if running}
-            <Tip class="block truncate text-info" text={running.name}>▶ {running.name}</Tip>
+            <Tip class="block truncate text-info" text={running.name}
+              ><PlayIcon class="mr-1 inline size-3 align-[-1px]" aria-hidden="true" />{running.name}</Tip
+            >
             {#if running.progress}
               <div class="h-1.5 overflow-hidden rounded bg-muted">
                 <div class="h-full bg-info" style="width: {running.progress.overall * 100}%"></div>

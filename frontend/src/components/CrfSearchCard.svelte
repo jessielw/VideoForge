@@ -171,7 +171,7 @@
         {#each SAMPLE_PERCENTS as v (v)}<option value={v}>{v}%</option>{/each}
       </NativeSelect>
       <Tip text={editable ? 'Search with the job as it is now' : `Not while ${status}`}>
-        <Button onclick={run} disabled={!editable || starting || !job.plan}>
+        <Button variant="outline" onclick={run} disabled={!editable || starting || !job.plan}>
           <CrosshairIcon />{r ? 'Search again' : 'Search'}
         </Button>
       </Tip>
@@ -212,7 +212,7 @@
     {/if}
     {#if tries.length}
       <div class="overflow-x-auto">
-        <table class="w-full text-sm tabular-nums">
+        <table class="readout w-full text-sm">
           <thead class="text-xs text-muted-foreground">
             <tr class="text-left">
               <th class="py-1 pr-3 font-normal">CRF</th>
@@ -230,7 +230,11 @@
               <tr class={t.crf === r.crf ? 'font-medium text-primary' : passes(t) ? '' : 'text-muted-foreground'}>
                 <td class="py-0.5 pr-3">
                   <Tip text={passes(t) ? `Reaches ${goal}` : `Below ${goal}`}>
-                    {t.crf}{passes(t) ? ' ✓' : ''}
+                    {t.crf}{#if passes(t)}<CheckIcon
+                        class="ml-1 inline size-3.5 align-[-2px]"
+                        role="img"
+                        aria-label={`Reaches ${goal}`}
+                      />{/if}
                   </Tip>
                 </td>
                 <td class="py-0.5 pr-3">{t.kbps != null ? `${Math.round(t.kbps).toLocaleString()} kb/s` : '—'}</td>

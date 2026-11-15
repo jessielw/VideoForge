@@ -185,15 +185,20 @@
     <ToggleGroup.Root
       type="single"
       variant="outline"
+      spacing={1}
       class="w-fit"
       {disabled}
       value={mode}
       onValueChange={(v) => v && v !== mode && setMode(v as TemplateAudio['mode'])}
     >
-      <ToggleGroup.Item value="position" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+      <ToggleGroup.Item
+        value="position"
+        class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
         >By position</ToggleGroup.Item
       >
-      <ToggleGroup.Item value="rules" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+      <ToggleGroup.Item
+        value="rules"
+        class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
         >By rules</ToggleGroup.Item
       >
     </ToggleGroup.Root>

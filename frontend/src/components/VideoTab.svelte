@@ -550,7 +550,9 @@
             ? "The script with only its crop, resize, IVTC or deinterlacing and burned-in subtitles, so its frames line up with the output's (C flips)"
             : "The encoder's input: the script's frame (C flips)"}
         >
-          <ToggleGroup.Item value="in" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          <ToggleGroup.Item
+            value="in"
+            class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
             >{names.toggle[0]}</ToggleGroup.Item
           >
         </Tip>
@@ -559,7 +561,9 @@
             ? 'The script with its filters: the output (C flips)'
             : 'The encoded frame (C flips)'}
         >
-          <ToggleGroup.Item value="out" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          <ToggleGroup.Item
+            value="out"
+            class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
             >{names.toggle[1]}</ToggleGroup.Item
           >
         </Tip>
@@ -927,7 +931,7 @@
           <section class="space-y-2">
             <div class="flex items-center justify-between">
               <span class="section-label">Crop</span>
-              <span class="text-xs text-muted-foreground">{src ? `${outW}×${outH}` : ''}</span>
+              <span class="readout text-xs text-muted-foreground">{src ? `${outW}×${outH}` : ''}</span>
             </div>
             <!-- Label, box, label, box: the labels get their own columns, so every box is the same width. -->
             <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">
@@ -1001,7 +1005,7 @@
                 <button class="underline underline-offset-2" onclick={useGenerated}>Back to generated</button>
               </p>
             {:else}
-              <Button variant="ghost" size="sm" onclick={openScript}>Edit the whole script…</Button>
+              <Button variant="outline" size="sm" onclick={openScript}>Edit the whole script…</Button>
             {/if}
           </section>
         </fieldset>

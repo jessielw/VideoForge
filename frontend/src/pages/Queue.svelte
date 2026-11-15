@@ -38,10 +38,20 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import JobEditor from '../components/JobEditor.svelte'
+  import Kbd from '../components/Kbd.svelte'
   import ReuseDialog from '../components/ReuseDialog.svelte'
   import Tip from '../components/Tip.svelte'
   import { api } from '../lib/api'
-  import { bytes, duration, percent, PRIORITY_LABEL, progressTimes, STATUS_LABEL, STATUS_TONE } from '../lib/format'
+  import {
+    bytes,
+    duration,
+    percent,
+    PRIORITY_LABEL,
+    progressTimes,
+    sizeLabel,
+    STATUS_LABEL,
+    STATUS_TONE,
+  } from '../lib/format'
   import { router } from '../lib/router.svelte'
   import { layout } from '../lib/layout.svelte'
   import { reuseQuestion } from '../lib/reuse.svelte'
@@ -623,7 +633,7 @@
       </Tip>
       <Tip
         side="right"
-        class="pb-1 text-[10px] text-muted-foreground"
+        class="pb-1 text-xs text-muted-foreground"
         text={`${matching.length} matching jobs of ${app.jobs.length}`}>{matching.length}</Tip
       >
       <div
@@ -939,8 +949,8 @@
             : `all ${app.jobs.length} jobs`}.
         </p>
         <p id="queue-keys" class="text-xs text-muted-foreground pointer-coarse:hidden">
-          Arrow keys, Home and End move through the list. Shift extends the selection, and Ctrl+A (Cmd+A) selects
-          matching jobs on every page.
+          Arrow keys, <Kbd>Home</Kbd> and <Kbd>End</Kbd> move through the list. <Kbd>Shift</Kbd> extends the selection, and
+          <Kbd>Ctrl+A</Kbd> (<Kbd>Cmd+A</Kbd>) selects matching jobs on every page.
         </p>
       </div>
 
@@ -965,7 +975,7 @@
               ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]'
               : 'hover:bg-accent'}"
           >
-            <div class="flex shrink-0 items-start pt-2.5 pl-3">
+            <div class="flex shrink-0 items-start pt-2.5 pl-2">
               <!-- Out of the tab order (the list is one stop): the keyboard queues a selection with Queue (N). -->
               <Tip
                 text={job.status === 'running'
@@ -1007,9 +1017,12 @@
               </div>
               {#if job.source_facts}
                 {@const f = job.source_facts}
-                <div class="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-muted-foreground">
+                <!-- min-h-5: a 20 px tag doesn't change the row's height; a narrow list wraps whole figures -->
+                <div
+                  class="readout mt-0.5 flex min-h-5 min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground"
+                >
                   <span class="shrink-0"
-                    >{f.resolution}{f.duration_ms ? ` · ${duration(f.duration_ms / 1000)}` : ''}{f.interlaced
+                    >{sizeLabel(f.resolution)}{f.duration_ms ? ` · ${duration(f.duration_ms / 1000)}` : ''}{f.interlaced
                       ? ' · interlaced'
                       : ''}</span
                   >
@@ -1022,15 +1035,18 @@
                     >
                       <Badge
                         variant="outline"
-                        class="px-1 py-0 text-[10px] font-normal {name.startsWith('DV')
-                          ? 'border-info/40 text-info'
-                          : ''} {name.endsWith('?') ? 'border-warning/40 text-warning' : ''}">{name}</Badge
+                        class="px-1 py-0 text-xs font-normal {name.endsWith('?')
+                          ? 'border-warning/40 text-warning'
+                          : ''}">{name}</Badge
                       >
                     </Tip>
                   {/each}
                 </div>
               {/if}
-              <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+              <!-- On a narrow list a figure moves whole to the next line instead of breaking inside itself. -->
+              <div
+                class="readout mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground *:whitespace-nowrap"
+              >
                 <span>{job.encoder}</span>
                 {#if job.custom_script}
                   <span>· custom script</span>
@@ -1170,7 +1186,7 @@
                 >
                   {#each batchTemplates as c (`${c.builtin}:${c.name}`)}<option value={c.name}>{c.name}</option>{/each}
                 </NativeSelect>
-                <Button class="ml-auto" onclick={applyTemplate} disabled={!picked}
+                <Button variant="outline" class="ml-auto" onclick={applyTemplate} disabled={!picked}
                   ><LayoutTemplateIcon />Apply to {selected.length} jobs</Button
                 >
               </div>
@@ -1198,7 +1214,7 @@
                   {#each batchContainers as c (c.id)}
                     <ToggleGroup.Item
                       value={c.id}
-                      class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                      class="px-4 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
                       >{c.label}</ToggleGroup.Item
                     >
                   {/each}

@@ -11,7 +11,7 @@
 </script>
 
 <table class="w-full text-sm">
-  <thead class="sticky top-0 bg-card text-left text-xs text-muted-foreground uppercase">
+  <thead class="sticky top-0 bg-card text-left text-xs text-muted-foreground">
     <tr><th class="px-4 py-2">Source</th><th>Video</th><th>Subtitles</th><th>Chapters</th></tr>
   </thead>
   <tbody>

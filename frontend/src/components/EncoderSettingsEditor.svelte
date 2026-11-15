@@ -315,7 +315,7 @@
 <fieldset class="@container/encoder min-w-0 space-y-4" {disabled}>
   <!-- Respond to the panel's width: template cards can be narrow even in a wide window. -->
   <div
-    class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-4 gap-y-3 @min-[32rem]/encoder:grid-cols-[9rem_minmax(0,1fr)]"
+    class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-x-4 gap-y-3 @min-[32rem]/encoder:grid-cols-[9rem_minmax(0,1fr)]"
   >
     <span class="section-label">Encoder</span>
     <ToggleGroup.Root
@@ -329,7 +329,9 @@
       onValueChange={(v) => v && set('encoder', v as EncoderName)}
     >
       {#each ENCODERS as [enc, label] (enc)}
-        <ToggleGroup.Item value={enc} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+        <ToggleGroup.Item
+          value={enc}
+          class="px-4 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
           >{label}</ToggleGroup.Item
         >
       {/each}
@@ -770,7 +772,7 @@
       <label class="block">
         <span class="section-label">Extra arguments</span>
         <Input
-          class="mt-1 w-full font-mono text-xs"
+          class="mt-1 w-full font-mono text-xs placeholder:font-sans"
           value={value.extra}
           placeholder="added at the end, as typed"
           onchange={(e) => set('extra', (e.target as HTMLInputElement).value)}

@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 import type { ConfigState, NamePolicy, RuleSet, Template } from '../../src/lib/types.ts'
 
 async function layoutFixture(page: Page, naming?: NamePolicy) {
@@ -319,5 +319,187 @@ test('Templates stacks editor columns when zoom leaves insufficient panel width'
   await extra.scrollIntoViewIfNeeded()
   await expect(extra).toBeInViewport()
   await page.screenshot({ path: testInfo.outputPath('templates-narrow.png') })
+  expect(errors).toEqual([])
+})
+
+test('the sidebar keeps one left edge: logo, icons and status', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/new')
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  const logo = await nav.locator('img').boundingBox()
+  const icon = await nav.getByRole('button', { name: 'New jobs' }).locator('svg').boundingBox()
+  const status = await nav.getByText('Idle', { exact: true }).boundingBox()
+  expect(Math.abs(logo!.x - icon!.x)).toBeLessThanOrEqual(1)
+  expect(Math.abs(status!.x - icon!.x)).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+test('palette cards in one row start their name and swatch on one line', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/settings')
+  await page.getByRole('button', { name: 'Appearance', exact: true }).click()
+  const cards = await page.getByRole('radiogroup', { name: 'Palette' }).evaluate((group) =>
+    [...group.querySelectorAll('[role=radio]')].map((card) => ({
+      top: Math.round(card.getBoundingClientRect().top),
+      name: card.querySelector('[id^=palette-]')!.getBoundingClientRect().top,
+      swatch: card.querySelector('div[aria-hidden=true]')!.getBoundingClientRect().bottom, // the mock, not the check icon
+    })),
+  )
+  const rows = new Map<number, typeof cards>()
+  for (const card of cards) rows.set(card.top, [...(rows.get(card.top) ?? []), card])
+  expect([...rows.values()].some((row) => row.length > 1)).toBe(true)
+  for (const row of rows.values()) {
+    expect(Math.max(...row.map((c) => c.name)) - Math.min(...row.map((c) => c.name))).toBeLessThanOrEqual(1)
+    expect(Math.max(...row.map((c) => c.swatch)) - Math.min(...row.map((c) => c.swatch))).toBeLessThanOrEqual(1)
+  }
+  expect(errors).toEqual([])
+})
+
+test('a selected choice has its accent border on all four sides', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  await page.getByRole('checkbox', { name: 'Set the audio tracks' }).check()
+  const rules = page.getByText('By rules', { exact: true })
+  await rules.click()
+  await expect(rules).toHaveAttribute('data-state', 'on')
+  const sides = await rules.evaluate((el) => {
+    const cs = getComputedStyle(el)
+    return [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth]
+  })
+  expect(sides).toEqual(['1px', '1px', '1px', '1px'])
+  expect(errors).toEqual([])
+})
+
+test('filter values read as figures', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  // The fixture's template has no filter steps: serve it with the crop and resize steps, whose rows show values.
+  const presets = await page.evaluate(() => fetch('/api/presets').then((r) => r.json()))
+  const step = (category: string, name: string) => ({ category, name, script: '', enabled: true })
+  presets.template[0].data.video.filters = [step('crop', 'Crop'), step('resize', 'Resize')]
+  await page.route('**/api/presets', (route) => route.fulfill({ json: presets }))
+  // The page saves its open draft as it unloads; drop it before the app starts, or the old draft comes back.
+  await page.addInitScript(() => sessionStorage.removeItem('videoforge.draft.templates'))
+  await page.reload()
+  const video = page.locator('[data-slot=card]').filter({ hasText: 'Source filter' })
+  await expect(video.getByText('off', { exact: true })).toHaveCSS('font-family', /^"?Cascadia Mono/)
+  expect(errors).toEqual([])
+})
+
+test('controls animate only color and movement, and a dialog does not blur the page', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  // Buttons, button groups and badges name what they animate instead of "all".
+  const animated = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-slot=button], [data-slot=toggle-group-item], [data-slot=badge]')].map(
+      (el) => getComputedStyle(el).transitionProperty,
+    ),
+  )
+  expect(animated.length).toBeGreaterThan(3)
+  expect(animated.filter((p) => p.split(', ').includes('all'))).toEqual([])
+  await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
+  await expect(page.locator('[data-slot=dialog-overlay]')).toHaveCSS('backdrop-filter', 'none')
+  expect(errors).toEqual([])
+})
+
+test('Matched files shows no empty box before a source is added', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/new')
+  const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
+  expect((await card.boundingBox())!.height).toBeLessThanOrEqual(48)
+  expect(errors).toEqual([])
+})
+
+/** Visible text set under 12 px, in uppercase, or in italics: each as "<reason>: <text>". */
+const typeProblems = (page: Page) =>
+  page.evaluate(() => {
+    const out: string[] = []
+    for (const el of document.querySelectorAll<HTMLElement>('body *')) {
+      const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent!.trim())
+      if (!own || el.closest('.sr-only, [data-sonner-toaster]')) continue
+      const r = el.getBoundingClientRect()
+      const cs = getComputedStyle(el)
+      if (r.width <= 1 || r.height <= 1 || cs.visibility === 'hidden') continue
+      const text = el.textContent!.trim().slice(0, 40)
+      if (parseFloat(cs.fontSize) < 12) out.push(`${cs.fontSize}: ${text}`)
+      if (cs.textTransform === 'uppercase') out.push(`uppercase: ${text}`)
+      if (cs.fontStyle === 'italic') out.push(`italic: ${text}`)
+    }
+    return [...new Set(out)]
+  })
+
+test('pages and Settings: no text under 12 px, no uppercase labels, no italics', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  const problems: string[] = []
+  for (const route of ['new', 'templates', 'log']) {
+    await page.goto(`/#/${route}`)
+    await expect(page.locator('main h1, main h2').first()).toBeVisible()
+    problems.push(...(await typeProblems(page)).map((p) => `${route}: ${p}`))
+  }
+  await page.goto('/#/settings')
+  const sections = page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button')
+  for (const name of await sections.allInnerTexts()) {
+    if (/shut down/i.test(name)) continue
+    await sections.filter({ hasText: name.trim() }).first().click()
+    problems.push(...(await typeProblems(page)).map((p) => `Settings ${name.trim()}: ${p}`))
+  }
+  expect([...new Set(problems)]).toEqual([])
+  expect(errors).toEqual([])
+})
+
+/** How far a label sits above or below the control beside it: the distance between their vertical centers, in px. */
+async function labelGap(label: Locator, control: Locator): Promise<number> {
+  const a = (await label.boundingBox())!
+  const b = (await control.boundingBox())!
+  return Math.abs(a.y + a.height / 2 - (b.y + b.height / 2))
+}
+
+for (const width of [1600, 1280]) {
+  test(`New jobs labels line up with their controls at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const errors = await layoutFixture(page)
+    await page.goto('/#/new')
+    const main = page.locator('main')
+    const ruleSet = main.getByRole('combobox', { name: 'Rule set', exact: true })
+    expect(await labelGap(main.getByText('Rule set', { exact: true }), ruleSet)).toBeLessThanOrEqual(2)
+    const preset = main.getByRole('button', { name: /^Encoder preset/ })
+    expect(await labelGap(main.getByText('Encoder preset', { exact: true }), preset)).toBeLessThanOrEqual(2)
+    expect(errors).toEqual([])
+  })
+}
+
+test('New jobs: After adding stays level with its checkboxes, ticked or not', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/new')
+  const label = page.getByText('After adding', { exact: true })
+  const index = page.getByRole('checkbox', { name: /^Index/ })
+  for (let i = 0; i < 2; i++) {
+    expect(await labelGap(label, index), `Index ${await index.getAttribute('aria-checked')}`).toBeLessThanOrEqual(2)
+    await index.click() // a checkbox's own baseline changes with its tick
+  }
+  expect(errors).toEqual([])
+})
+
+test('Settings › Tools: each tool name lines up with its path box', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/settings')
+  await page.getByRole('button', { name: 'Tools', exact: true }).click()
+  const path = page.getByRole('textbox', { name: 'ffmpeg path', exact: true })
+  // A 14 px name beside a 12 px path: their baselines meet, so their centers differ by a pixel or so.
+  expect(await labelGap(page.getByText('ffmpeg', { exact: true }), path)).toBeLessThanOrEqual(3)
+  expect(errors).toEqual([])
+})
+
+test('Templates › Video: Crop sits beside its choices, like Source filter', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  const video = page.locator('[data-slot=card]').filter({ hasText: 'Source filter' })
+  const crop = video.getByText('Crop', { exact: true }).first()
+  const keep = video.getByText("Keep each job's", { exact: true })
+  const source = await video.getByText('Source filter', { exact: true }).boundingBox()
+  const label = (await crop.boundingBox())!
+  expect(Math.abs(label.x - source!.x)).toBeLessThanOrEqual(1)
+  expect(label.x + label.width).toBeLessThan((await keep.boundingBox())!.x)
+  expect(await labelGap(crop, keep)).toBeLessThanOrEqual(2)
   expect(errors).toEqual([])
 })
