@@ -1,0 +1,102 @@
+name: Bug report
+description: Report a problem with VideoForge.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search [existing issues](https://github.com/jessielw/VideoForge/issues?q=is%3Aissue) before opening a new report. Report one problem per issue.
+
+        For setup help, check the [documentation](https://jessielw.github.io/VideoForge/).
+
+  - type: input
+    id: version
+    attributes:
+      label: VideoForge version
+      description: Copy the version shown in the sidebar. For a source checkout, include the branch and commit if available; for Docker, include the image tag.
+      placeholder: "Release version, commit, or Docker image tag"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation method
+      options:
+        - Windows portable ZIP
+        - Docker
+        - Source checkout
+        - Other / unsure
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and browser
+      description: Include OS and browser versions. For Docker, include the host OS; for a remote browser, include its OS too.
+      placeholder: "Windows 11, Firefox 145; or Ubuntu 24.04 Docker host, Chrome 142 on Windows 11"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened?
+      description: Describe the problem and include the exact error, if there is one. If this worked before, include the last working VideoForge version if known.
+      placeholder: "The job stops during muxing with the following error..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: "The job should finish and produce a playable MKV."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest sequence that shows the problem. Say whether it happens every time, with one source, or with multiple sources. If you cannot reproduce it reliably, describe what you were doing.
+      placeholder: |
+        1. Add a source file.
+        2. Select...
+        3. Run the job.
+        4. The job fails at...
+    validations:
+      required: true
+
+  - type: textarea
+    id: media-settings
+    attributes:
+      label: Source media and job settings
+      description: For media or job problems, include the source container, video/audio codecs, resolution, HDR/Dolby Vision details, selected encoder, filters, and output container as relevant. Mention custom tools, plugins, rule sets, or scripts if involved. MediaInfo text is useful; full media files are not needed initially.
+      placeholder: |
+        Source: MKV, HEVC, 3840x2160, HDR10, TrueHD audio
+        Video: x265, CRF 18, preset slow, no filters
+        Audio: Opus
+        Output: MKV
+        Custom tools/plugins/scripts: ...
+
+  - type: markdown
+    attributes:
+      value: |
+        **Finding logs:** For a job failure, use `videoforge.log` in the job's folder inside `<source>_tmp/`. Application logs are in `<data folder>/logs/` (Windows default: `%APPDATA%\VideoForge\logs\`). For Docker startup problems, use `docker compose logs videoforge`.
+
+        Paste the failing command and surrounding error lines below. Remove private paths and credentials before sharing. See [Storage and backups](https://jessielw.github.io/VideoForge/configuration/storage/) for custom data folders and archived job logs.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste text without Markdown fences. Leave blank if no log is available.
+      render: text
+
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Screenshots or additional context
+      description: Attach screenshots for UI or visual problems. If useful, include a minimal VapourSynth script or a small sample you have permission to share. Remove private details from attachments.

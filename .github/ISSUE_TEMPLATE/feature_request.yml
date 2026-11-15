@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest a new capability or an improvement to VideoForge.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search [existing issues](https://github.com/jessielw/VideoForge/issues?q=is%3Aissue) before suggesting a feature. If a matching request exists, add your use case there.
+
+        Describe one feature per issue. If an existing feature is failing, use the bug report form.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe what you are trying to do, where VideoForge gets in your way, and how often this comes up.
+      placeholder: "When I queue a season of episodes, I need to... Currently, I have to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What should VideoForge do?
+      description: Describe the behavior you want and give a concrete example of a successful result. An implementation proposal is optional.
+      placeholder: "Given a batch of jobs with..., I want to..., so each output..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Current workaround or alternatives
+      description: How do you handle this today? Mention templates, scripts, plugins, external tools, or other approaches you have tried and what is missing.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Relevant workflow or technical details
+      description: If relevant, include your install method, operating system, source/output formats, encoders, HDR requirements, or batch workflow. For a new tool or format, link to its official documentation.
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples or mockups
+      description: Attach a sketch, screenshot, or example input/output. Links to similar behavior in another application are useful. Remove private details before sharing.
