@@ -630,12 +630,42 @@ test('job tabs: no text under 12 px, no uppercase labels, no italics', async ({ 
   expect(errors).toEqual([])
 })
 
-test('the collapsed menu keeps the queue count inside it', async ({ page }) => {
-  const { errors } = await queueFixture(page, 12)
-  await page.getByRole('button', { name: 'Collapse the menu', exact: true }).click()
-  const nav = (await page.getByRole('navigation', { name: 'Main navigation' }).boundingBox())!
-  const count = (await page.getByRole('button', { name: 'Queue 12 jobs' }).getByText('12').boundingBox())!
-  expect(count.x + count.width).toBeLessThanOrEqual(nav.x + nav.width)
+for (const count of [12, 120])
+  test(`the collapsed menu keeps a count of ${count} jobs inside it, on the icon's top edge`, async ({ page }) => {
+    const { errors } = await queueFixture(page, count)
+    await page.getByRole('button', { name: 'Collapse the menu', exact: true }).click()
+    const queue = page.getByRole('button', { name: `Queue ${count} jobs` })
+    const nav = (await page.getByRole('navigation', { name: 'Main navigation' }).boundingBox())!
+    const badge = (await queue.locator('[data-slot=badge]').boundingBox())!
+    const icon = (await queue.locator('svg').first().boundingBox())!
+    expect(badge.x + badge.width).toBeLessThanOrEqual(nav.x + nav.width)
+    // It may sit on the icon's corner, but no lower than the old 10 px badge did: the icon's top 6 px.
+    expect(badge.y + badge.height - icon.y).toBeLessThanOrEqual(6)
+    expect(errors).toEqual([])
+  })
+
+test('a running job shows its progress figures in the code font', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['running'])
+  const jobs = await page.evaluate(() => fetch('/api/jobs').then((r) => r.json()))
+  jobs[0].progress = {
+    step: 'Video (x264)',
+    index: 4,
+    total: 7,
+    fraction: 0.42,
+    overall: 0.6,
+    reused: false,
+    fps: 12.5,
+    eta: 120,
+    elapsed: 300,
+    left: 400,
+  }
+  await page.route('**/api/jobs', (route) => route.fulfill({ json: jobs }))
+  await page.goto('/#/queue/job-0')
+  await page.reload()
+  const mono = /^"?Cascadia Mono/
+  await expect(page.getByText('12.5 fps · 5:00 · ~6:40 left', { exact: true })).toHaveCSS('font-family', mono) // queue row
+  await expect(page.getByText('Video (x264) · 42.0%', { exact: true })).toHaveCSS('font-family', mono) // queue row step
+  await expect(page.locator('header span', { hasText: 'job 60.0%' }).first()).toHaveCSS('font-family', mono) // job header
   expect(errors).toEqual([])
 })
 

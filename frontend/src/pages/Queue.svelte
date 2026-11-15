@@ -1061,16 +1061,16 @@
                 {/if}
               </div>
               {#if LIVE.includes(job.status) && job.progress}
-                <div class="mt-1.5 flex items-center gap-2 text-xs text-info">
+                <div class="readout mt-1.5 flex items-center gap-2 text-xs text-info">
                   <div class="h-1 flex-1 overflow-hidden rounded bg-muted">
                     <div class="h-full bg-info" style="width:{job.progress.overall * 100}%"></div>
                   </div>
                   {percent(job.progress.overall)}
                 </div>
                 <div class="flex gap-2 text-xs text-muted-foreground">
-                  <span class="truncate">{job.progress.step} · {percent(job.progress.fraction)}</span>
+                  <span class="readout truncate">{job.progress.step} · {percent(job.progress.fraction)}</span>
                   <Tip
-                    class="ml-auto shrink-0 tabular-nums"
+                    class="readout ml-auto shrink-0"
                     text="Encoder speed · time since the run started · the job's time left (a guess from its pace so far)"
                     >{progressTimes(job.progress)}</Tip
                   >

@@ -95,7 +95,7 @@
       <div class="h-1.5 flex-1 overflow-hidden rounded bg-muted">
         <div class="h-full bg-info transition-[width]" style="width:{(p?.overall ?? 0) * 100}%"></div>
       </div>
-      <span class="tabular-nums"
+      <span class="readout"
         >{#if !sampling}{status === 'indexing' ? 'Indexing first' : 'Waiting its turn'}{:else if p}{(
             p.overall * 100
           ).toFixed(0)}%{p.eta != null ? ` · ${duration(p.eta)} left` : ''}{p.fps != null

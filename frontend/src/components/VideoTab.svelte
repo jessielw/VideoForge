@@ -613,7 +613,7 @@
             <div class="h-2 flex-1 overflow-hidden rounded bg-muted">
               <div class="h-full bg-info transition-[width]" style="width:{(p?.fraction ?? 0) * 100}%"></div>
             </div>
-            <span class="w-14 text-right tabular-nums">{p ? `${(p.fraction * 100).toFixed(0)}%` : '…'}</span>
+            <span class="readout w-14 text-right">{p ? `${(p.fraction * 100).toFixed(0)}%` : '…'}</span>
           </div>
           <p class="max-w-md text-sm text-muted-foreground">
             You can't edit the job while its source is being indexed. The preview opens by itself when it's done.
@@ -856,11 +856,19 @@
             class="grid shrink-0 grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-4 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs"
           >
             <span class="text-success"><CheckIcon class="mr-1 inline size-3.5 align-[-2px]" />Runs</span>
-            <span><span class="text-muted-foreground">Frames</span> {i.frames}</span>
-            <span><span class="text-muted-foreground">Size</span> {i.width}×{i.height}</span>
-            <span><span class="text-muted-foreground">Format</span> {i.format}</span>
-            <span><span class="text-muted-foreground">FPS</span> {+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span>
-            <span><span class="text-muted-foreground">Length</span> {clipLength(i.frames, i.fps_num, i.fps_den)}</span>
+            <span><span class="text-muted-foreground">Frames</span> <span class="readout">{i.frames}</span></span>
+            <span
+              ><span class="text-muted-foreground">Size</span> <span class="readout">{i.width}×{i.height}</span></span
+            >
+            <span><span class="text-muted-foreground">Format</span> <span class="readout">{i.format}</span></span>
+            <span
+              ><span class="text-muted-foreground">FPS</span>
+              <span class="readout">{+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span></span
+            >
+            <span
+              ><span class="text-muted-foreground">Length</span>
+              <span class="readout">{clipLength(i.frames, i.fps_num, i.fps_den)}</span></span
+            >
             {#if i.length_warning}<span class="col-span-full text-warning">{i.length_warning}</span>{/if}
           </div>
         {/if}
