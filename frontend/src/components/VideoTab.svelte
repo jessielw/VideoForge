@@ -423,7 +423,7 @@
         ? ` · frame ${vv.sampleFrame} of the sample, ${scriptFrame(vv.sampleFrame, job.sample)} of the script`
         : ''
     const stale = compare === 'sample' && job.sample && !job.sample.current ? ' · made before the last changes' : ''
-    return { text: `${sides}${where}${stale} · C ${vv.split ? 'swaps' : 'flips'}`, tone: 'muted' as const }
+    return `${sides}${where}${stale} · C ${vv.split ? 'swaps' : 'flips'}`
   })
 
   // Bookmarks: frame n of the script marked or unmarked (kept in this browser, per job).
@@ -572,6 +572,10 @@
           <Columns2Icon />Split
         </Toggle>
       </Tip>
+      <!-- Which side is where, by the buttons: kept off the frame, so it covers none of the picture. -->
+      {#if compareNotice}
+        <span class="text-xs text-muted-foreground" aria-live="polite" data-compare-notice>{compareNotice}</span>
+      {/if}
     {/if}
   {/if}
 {/snippet}
@@ -656,7 +660,6 @@
         bind:zoom={vv.zoom}
         bind:boost={vv.boost}
         bind:scroll={vv.scroll}
-        notice={compareNotice}
         sar={previewShape(job.spec.video, source, 'output')}
         split={vv.split}
         bind:splitAt={vv.splitAt}

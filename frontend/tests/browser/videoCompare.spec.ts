@@ -162,6 +162,7 @@ test("the filters' compare flips and splits the frame before and after them", as
   // Split: the picked side left of the line, the other right of it, both at this frame.
   await page.getByRole('button', { name: 'Split', exact: true }).click()
   await expect(page.getByText('Left: Before filters · Right: After filters · C swaps')).toBeVisible()
+  await expect(page.getByRole('application').locator('[data-compare-notice]')).toHaveCount(0) // by the buttons, off the frame
   const line = page.getByRole('slider', { name: 'Split line', exact: true })
   await expect(line).toHaveAttribute('aria-valuenow', '50')
   await expect(page.getByRole('img', { name: 'The other side of frame 0' })).toBeVisible()

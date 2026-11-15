@@ -35,10 +35,10 @@ All bundled filters run on the CPU. Each filter still needs its compatible plugi
 **Compare** on the preview's toolbar (with the Settings panel) shows two versions of the same frames. A choice that isn't available yet says what it needs:
 
 - **Filters:** the script without its filters against the output, to see what a denoise, deband or grain filter does. The "before" side keeps the crop, resize, field filters (IVTC, deinterlacing) and burned-in subtitles, so both sides have the same frames and size. It needs an enabled filter in the chain; a custom script body has no chain to compare.
-- **Test encode:** the [test encode](encoders.md#test-encode)'s frames against the script's frames it encoded. The sample's blocks are back to back, so its frame numbers are its own; the overlay says which frame of the script each one is.
+- **Test encode:** the [test encode](encoders.md#test-encode)'s frames against the script's frames it encoded. The sample's blocks are back to back, so its frame numbers are its own; the label by the buttons says which frame of the script each one is.
 - **Encode:** a done job's output file against the script's output.
 
-The two buttons beside it (**Before** / **After**, or **Input** / **Encoded**), or **C**, flip between the sides at the same frame, zoom and scroll; the other side's frame is loaded beside each one, so a flip shows at once. **Split** shows both at once, either side of a line: the picked side on the left. Drag the line, or focus it and use ←/→ (Shift for 10%). Boost, zoom and Save work on either side. The encode opens through FFMS2, which indexes it the first time (its index goes in the job's folder). A rerun of the job or of the test encode frees the files the compare holds open.
+The two buttons beside it (**Before** / **After**, or **Input** / **Encoded**), or **C**, flip between the sides at the same frame, zoom and scroll; the other side's frame is loaded beside each one, so a flip shows at once. **Split** shows both at once, either side of a line: the picked side on the left. The label by the buttons says which side is which, so nothing covers the frame. Drag the line, or focus it and use ←/→ (Shift for 10%). Boost, zoom and Save work on either side. The encode opens through FFMS2, which indexes it the first time (its index goes in the job's folder). A rerun of the job or of the test encode frees the files the compare holds open.
 
 ## Bookmarks
 
