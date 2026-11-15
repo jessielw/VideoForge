@@ -1,4 +1,4 @@
-import { test, expect, type Page, type WebSocketRoute } from '@playwright/test'
+import { test, expect, type Locator, type Page, type WebSocketRoute } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import type { JobDetail, JobSummary, Status, Template } from '../../src/lib/types.ts'
 
@@ -518,6 +518,39 @@ test("Index on one job it can't take says why, about that one job", async ({ pag
   const why = page.getByText(/^1 left out: /)
   await expect(why).toBeVisible()
   expect(await why.textContent()).toContain("1 left out: it's queued or running") // read now: the toast closes
+  expect(errors).toEqual([])
+})
+
+test('queue row checkboxes line up with the search box', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3)
+  const search = await page.getByPlaceholder('Search name or source path').boundingBox()
+  const tick = await page
+    .getByRole('checkbox', { name: /^Queued: / })
+    .first()
+    .boundingBox()
+  expect(Math.abs(tick!.x - search!.x)).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+/** Where the eye sees a button's left edge: its border or fill when it has one, else its first text. */
+async function visibleLeft(button: Locator): Promise<number> {
+  return button.evaluate((el) => {
+    const cs = getComputedStyle(el)
+    const clear = (c: string) => c === 'transparent' || c === 'rgba(0, 0, 0, 0)'
+    if (parseFloat(cs.borderLeftWidth) > 0 && !clear(cs.borderLeftColor)) return el.getBoundingClientRect().left
+    if (!clear(cs.backgroundColor)) return el.getBoundingClientRect().left
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    return range.getClientRects()[0]?.left ?? el.getBoundingClientRect().left
+  })
+}
+
+test('Edit the whole script lines up with the side panel controls', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await page.goto('/#/queue/job-0')
+  const edit = await visibleLeft(page.getByRole('button', { name: 'Edit the whole script…', exact: true }))
+  const preset = await visibleLeft(page.getByRole('complementary').getByRole('button').first()) // the preset menu
+  expect(Math.abs(edit - preset)).toBeLessThanOrEqual(1)
   expect(errors).toEqual([])
 })
 

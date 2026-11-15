@@ -322,7 +322,7 @@
         {#if removePresets}
           <Tip class="shrink-0 self-start" text="Select saved presets to delete several at once">
             <Button
-              variant={selecting ? 'secondary' : 'ghost'}
+              variant={selecting ? 'secondary' : 'outline'}
               size="sm"
               aria-pressed={selecting}
               disabled={busy || (!selecting && !choices.some((c) => !c.builtin))}

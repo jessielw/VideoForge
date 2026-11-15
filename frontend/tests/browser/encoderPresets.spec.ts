@@ -205,3 +205,24 @@ test('import previews conflicts, imports selected presets, and preserves the ope
   await expect(manager.getByRole('button', { name: /Selected film \(2\)/ })).toBeVisible()
   expect(errors).toEqual([])
 })
+
+test('Select lines up with the buttons above it', async ({ page }) => {
+  const { manager, errors } = await fixture(page)
+  // The dialog zooms in as it opens: measure once it has settled.
+  await manager.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)))
+  // Where the eye sees each button's left edge: its border when it has one, else its first text.
+  const left = (name: string | RegExp) =>
+    manager
+      .getByRole('button', { name, exact: typeof name === 'string' })
+      .first()
+      .evaluate((el) => {
+        const cs = getComputedStyle(el)
+        if (parseFloat(cs.borderLeftWidth) > 0 && cs.borderLeftColor !== 'rgba(0, 0, 0, 0)')
+          return el.getBoundingClientRect().left
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        return range.getClientRects()[0]?.left ?? el.getBoundingClientRect().left
+      })
+  expect(Math.abs((await left('Select')) - (await left(/^Import/)))).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})

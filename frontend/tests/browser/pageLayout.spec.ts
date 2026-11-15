@@ -322,6 +322,18 @@ test('Templates stacks editor columns when zoom leaves insufficient panel width'
   expect(errors).toEqual([])
 })
 
+test('the sidebar keeps one left edge: logo, icons and status', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/new')
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  const logo = await nav.locator('img').boundingBox()
+  const icon = await nav.getByRole('button', { name: 'New jobs' }).locator('svg').boundingBox()
+  const status = await nav.getByText('Idle', { exact: true }).boundingBox()
+  expect(Math.abs(logo!.x - icon!.x)).toBeLessThanOrEqual(1)
+  expect(Math.abs(status!.x - icon!.x)).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
 /** How far a label sits above or below the control beside it: the distance between their vertical centers, in px. */
 async function labelGap(label: Locator, control: Locator): Promise<number> {
   const a = (await label.boundingBox())!

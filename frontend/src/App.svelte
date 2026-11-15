@@ -82,7 +82,7 @@
       class="flex {navCollapsed ? 'w-14' : 'w-48'} shrink-0 flex-col overflow-y-auto border-r bg-card"
       aria-label="Main navigation"
     >
-      <div class="flex items-center gap-2 py-4 {navCollapsed ? 'justify-center' : 'px-4'}">
+      <div class="flex items-center gap-2 py-4 {navCollapsed ? 'justify-center' : 'px-5'}">
         <Tip side="right" text={app.version ? `VideoForge ${app.version}` : undefined}>
           <img src="/favicon.svg" alt="" class="size-6" />
         </Tip>
@@ -154,7 +154,7 @@
           >
         </div>
       {:else}
-        <div class="h-(--bar-h) shrink-0 space-y-1 overflow-y-auto border-t px-3 py-1.5 text-xs text-muted-foreground">
+        <div class="h-(--bar-h) shrink-0 space-y-1 overflow-y-auto border-t px-5 py-1.5 text-xs text-muted-foreground">
           {#if running}
             <Tip class="block truncate text-info" text={running.name}>▶ {running.name}</Tip>
             {#if running.progress}

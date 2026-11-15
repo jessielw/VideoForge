@@ -1001,7 +1001,7 @@
                 <button class="underline underline-offset-2" onclick={useGenerated}>Back to generated</button>
               </p>
             {:else}
-              <Button variant="ghost" size="sm" onclick={openScript}>Edit the whole script…</Button>
+              <Button variant="outline" size="sm" onclick={openScript}>Edit the whole script…</Button>
             {/if}
           </section>
         </fieldset>

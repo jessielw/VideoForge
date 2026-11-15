@@ -965,7 +965,7 @@
               ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]'
               : 'hover:bg-accent'}"
           >
-            <div class="flex shrink-0 items-start pt-2.5 pl-3">
+            <div class="flex shrink-0 items-start pt-2.5 pl-2">
               <!-- Out of the tab order (the list is one stop): the keyboard queues a selection with Queue (N). -->
               <Tip
                 text={job.status === 'running'
