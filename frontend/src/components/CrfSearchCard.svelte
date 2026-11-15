@@ -212,7 +212,7 @@
     {/if}
     {#if tries.length}
       <div class="overflow-x-auto">
-        <table class="w-full text-sm tabular-nums">
+        <table class="readout w-full text-sm">
           <thead class="text-xs text-muted-foreground">
             <tr class="text-left">
               <th class="py-1 pr-3 font-normal">CRF</th>

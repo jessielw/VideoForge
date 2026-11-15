@@ -304,7 +304,7 @@ def test_add_inspect_and_edit(tmp_path):
         ids = add(client, tmp_path)
         assert len(ids) == 2
         job = wait_for(client, ids[0], "ready", "warn")
-        assert job["encoder"] == "x264 crf 18"  # the manual rule set's default encode
+        assert job["encoder"] == "x264 CRF 18"  # the manual rule set's default encode
         # The queue row's facts about the source: the fake probe's 1080p SDR, length not known.
         facts = {"resolution": job["plan"]["resolution"], "duration_ms": None, "hdr": [], "interlaced": False}
         assert job["source_facts"] == facts
@@ -334,7 +334,7 @@ def test_add_inspect_and_edit(tmp_path):
         # A batch edit: one encoder setting for both episodes.
         enc = edited["spec"]["encoder"] | {"rate_control": "crf", "crf": 17}
         assert client.post("/api/jobs/apply", json={"ids": ids, "encoder": enc}).json()["updated"] == ids
-        assert [j["encoder"] for j in client.get("/api/jobs").json()] == ["x264 crf 17", "x264 crf 17"]
+        assert [j["encoder"] for j in client.get("/api/jobs").json()] == ["x264 CRF 17", "x264 CRF 17"]
 
         commands = client.get(f"/api/jobs/{ids[0]}/commands").json()
         steps = ["script", "index", "script.info", "chapters", "video", "mux"]  # audio is copied

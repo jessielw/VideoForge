@@ -578,7 +578,7 @@
           {/if}
         </div>
         {#if details(t).length}
-          <div class="flex flex-wrap gap-x-3 text-xs text-muted-foreground tabular-nums" data-details>
+          <div class="readout flex flex-wrap gap-x-3 text-xs text-muted-foreground" data-details>
             {#each details(t) as d (d)}<span>{d}</span>{/each}
           </div>
         {/if}

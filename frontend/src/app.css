@@ -121,6 +121,12 @@
   @apply text-sm font-medium;
 }
 
+/* Technical figures (sizes, CRF, crop, bitrates, durations): one look wherever they appear. */
+@utility readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Number boxes: keep the value clear of the spin arrows (Chromium draws them inside the text area;
    Firefox beside it, where the value is left-aligned anyway). */
 input[type='number']::-webkit-inner-spin-button {

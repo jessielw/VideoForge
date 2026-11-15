@@ -137,7 +137,7 @@
                 class="truncate {fixed ? 'font-medium' : ''} {s.enabled ? '' : 'text-muted-foreground line-through'}"
                 >{s.name}</span
               >
-              <span class="ml-auto shrink-0 text-xs text-muted-foreground">{summary(s)}</span>
+              <span class="readout ml-auto shrink-0 text-xs text-muted-foreground">{summary(s)}</span>
             </button>
           </Tip>
           <Button

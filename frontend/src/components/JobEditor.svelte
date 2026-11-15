@@ -5,7 +5,16 @@
   import { api, type SpecChanges } from '../lib/api'
   import { reuseQuestion } from '../lib/reuse.svelte'
   import { saves } from '../lib/saves'
-  import { basename, bytes, duration, percent, SEVERITY_TONE, STATUS_LABEL, STATUS_TONE } from '../lib/format'
+  import {
+    basename,
+    bytes,
+    duration,
+    percent,
+    SEVERITY_TONE,
+    sizeLabel,
+    STATUS_LABEL,
+    STATUS_TONE,
+  } from '../lib/format'
   import { queueable } from '../lib/queueView'
   import { app } from '../lib/state.svelte'
   import { layout } from '../lib/layout.svelte'
@@ -187,9 +196,6 @@
         {#if job.label}<Tip class="shrink-0" text="Label (Output tab)"><Badge variant="outline">{job.label}</Badge></Tip
           >{/if}
         <span class="text-sm {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
-        <span class="text-sm text-muted-foreground"
-          >· {job.rule_set} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span
-        >
         {#if job.status === 'indexing' || job.status === 'sampling'}<Badge
             variant="outline"
             class="border-info/40 bg-info/10 text-info"
@@ -208,6 +214,28 @@
           <Button variant="outline" size="sm" onclick={() => (mediainfo = true)}><InfoIcon />MediaInfo</Button>
         </Tip>
       </div>
+      <!-- The job's facts under its name, so the name keeps the title row; then what a finished run made.
+           One box per figure: a narrow window breaks the line between figures, never inside one. -->
+      <div class="readout flex flex-wrap gap-x-1 text-xs text-muted-foreground *:whitespace-nowrap">
+        <span>{app.ruleSets.find((r) => r.id === job!.rule_set)?.name ?? job.rule_set}</span>
+        <span>· {job.encoder}</span>
+        {#if job.plan}<span>· {sizeLabel(job.plan.resolution)}</span>{/if}
+        {#if job.made && (job.status === 'done' || job.status === 'invalid')}
+          {@const m = job.made}
+          <span>· Made {bytes(m.output_bytes)}</span>
+          {#if m.source_bytes}<span
+              >· <Tip text="The source is {bytes(m.source_bytes)}"
+                >{percent(m.output_bytes / m.source_bytes)} of the source</Tip
+              ></span
+            >{/if}
+          {#if m.kbps != null}<span>· {m.kbps.toLocaleString()} kb/s</span>{/if}
+          <span
+            >· took {duration(m.seconds)}{#if m.reused}{' '}<Tip text="Steps taken from an earlier run, not made again"
+                >({m.reused} reused)</Tip
+              >{/if}</span
+          >
+        {/if}
+      </div>
       {#if live?.progress && ['running', 'indexing', 'sampling'].includes(live.status)}
         {@const p = live.progress}
         <div class="flex items-center gap-3 text-xs text-muted-foreground max-sm:flex-wrap max-sm:gap-y-1">
@@ -224,19 +252,6 @@
             {#if p.elapsed != null}· {duration(p.elapsed)} elapsed{/if}
             {#if p.left != null}<Tip text="A guess from the job's pace so far">· job ~{duration(p.left)} left</Tip>{/if}
           </span>
-        </div>
-      {/if}
-      {#if job.made && (job.status === 'done' || job.status === 'invalid')}
-        {@const m = job.made}
-        <div class="text-xs text-muted-foreground tabular-nums">
-          Made {bytes(m.output_bytes)}
-          {#if m.source_bytes}·
-            <Tip text="The source is {bytes(m.source_bytes)}"
-              >{percent(m.output_bytes / m.source_bytes)} of the source</Tip
-            >{/if}
-          {#if m.kbps != null}· {m.kbps.toLocaleString()} kb/s{/if}
-          · took {duration(m.seconds)}
-          {#if m.reused}<Tip text="Steps taken from an earlier run, not made again">({m.reused} reused)</Tip>{/if}
         </div>
       {/if}
       {#if problems.length}

@@ -370,6 +370,22 @@ test('a selected choice has its accent border on all four sides', async ({ page 
   expect(errors).toEqual([])
 })
 
+test('filter values read as figures', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  // The fixture's template has no filter steps: serve it with the crop and resize steps, whose rows show values.
+  const presets = await page.evaluate(() => fetch('/api/presets').then((r) => r.json()))
+  const step = (category: string, name: string) => ({ category, name, script: '', enabled: true })
+  presets.template[0].data.video.filters = [step('crop', 'Crop'), step('resize', 'Resize')]
+  await page.route('**/api/presets', (route) => route.fulfill({ json: presets }))
+  // The page saves its open draft as it unloads; drop it before the app starts, or the old draft comes back.
+  await page.addInitScript(() => sessionStorage.removeItem('videoforge.draft.templates'))
+  await page.reload()
+  const video = page.locator('[data-slot=card]').filter({ hasText: 'Source filter' })
+  await expect(video.getByText('off', { exact: true })).toHaveCSS('font-family', /^"?Cascadia Mono/)
+  expect(errors).toEqual([])
+})
+
 test('Matched files shows no empty box before a source is added', async ({ page }) => {
   const errors = await layoutFixture(page)
   await page.goto('/#/new')

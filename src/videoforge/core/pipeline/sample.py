@@ -112,8 +112,8 @@ def one_pass(enc: EncoderSettings, plan: Plan, container: str, found: ScriptInfo
 
 
 def describe(enc: EncoderSettings) -> str:
-    """The rate the sample ran at, for its result: "x265 crf 18", "x264 8000 kb/s"."""
-    rate = f"crf {enc.crf:g}" if enc.rate_control is RateControl.CRF else f"{enc.bitrate_kbps} kb/s"
+    """The rate the sample ran at, for its result: "x265 CRF 18", "x264 8000 kb/s"."""
+    rate = f"CRF {enc.crf:g}" if enc.rate_control is RateControl.CRF else f"{enc.bitrate_kbps} kb/s"
     return f"{enc.encoder.label} {rate}"
 
 

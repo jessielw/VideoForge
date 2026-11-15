@@ -130,15 +130,15 @@
   {#if s}
     <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
       <dt class="text-muted-foreground">Bitrate</dt>
-      <dd class="tabular-nums">{s.kbps != null ? `${Math.round(s.kbps).toLocaleString()} kb/s` : '—'}</dd>
+      <dd class="readout">{s.kbps != null ? `${Math.round(s.kbps).toLocaleString()} kb/s` : '—'}</dd>
       <dt class="text-muted-foreground">Whole video</dt>
-      <dd class="tabular-nums">
+      <dd class="readout">
         <Tip text="The video stream at the sample's bitrate, without container overhead">
           {s.estimate_mb != null ? `≈ ${gb(s.estimate_mb)}` : '—'}
         </Tip>
       </dd>
       <dt class="text-muted-foreground">Encode time</dt>
-      <dd class="tabular-nums">
+      <dd class="readout">
         <Tip text="At the sample's pace, one pass">
           {s.estimate_seconds != null ? `≈ ${duration(s.estimate_seconds)}` : '—'}{s.encode_fps != null
             ? ` (${s.encode_fps.toFixed(1)} fps)`
@@ -147,7 +147,7 @@
       </dd>
       {#if s.ssimulacra2 != null}
         <dt class="text-muted-foreground">Quality</dt>
-        <dd class="flex flex-wrap gap-x-3 tabular-nums">
+        <dd class="readout flex flex-wrap gap-x-3">
           <Tip text="SSIMULACRA2 against the encoder's input, the frames' mean">
             SSIMULACRA2 {s.ssimulacra2.toFixed(1)}
           </Tip>
@@ -165,7 +165,7 @@
         </dd>
       {/if}
       <dt class="text-muted-foreground">Sample</dt>
-      <dd class="tabular-nums">
+      <dd class="readout">
         {s.frames.toLocaleString()} of {s.total_frames.toLocaleString()} frames ({s.percent}%), {s.encoder}
       </dd>
     </dl>

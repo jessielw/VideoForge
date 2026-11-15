@@ -41,7 +41,16 @@
   import ReuseDialog from '../components/ReuseDialog.svelte'
   import Tip from '../components/Tip.svelte'
   import { api } from '../lib/api'
-  import { bytes, duration, percent, PRIORITY_LABEL, progressTimes, STATUS_LABEL, STATUS_TONE } from '../lib/format'
+  import {
+    bytes,
+    duration,
+    percent,
+    PRIORITY_LABEL,
+    progressTimes,
+    sizeLabel,
+    STATUS_LABEL,
+    STATUS_TONE,
+  } from '../lib/format'
   import { router } from '../lib/router.svelte'
   import { layout } from '../lib/layout.svelte'
   import { reuseQuestion } from '../lib/reuse.svelte'
@@ -1007,9 +1016,12 @@
               </div>
               {#if job.source_facts}
                 {@const f = job.source_facts}
-                <div class="mt-0.5 flex h-5 min-w-0 items-center gap-1.5 overflow-hidden text-xs text-muted-foreground">
+                <!-- min-h-5: a 20 px tag doesn't change the row's height; a narrow list wraps whole figures -->
+                <div
+                  class="readout mt-0.5 flex min-h-5 min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground"
+                >
                   <span class="shrink-0"
-                    >{f.resolution}{f.duration_ms ? ` · ${duration(f.duration_ms / 1000)}` : ''}{f.interlaced
+                    >{sizeLabel(f.resolution)}{f.duration_ms ? ` · ${duration(f.duration_ms / 1000)}` : ''}{f.interlaced
                       ? ' · interlaced'
                       : ''}</span
                   >
@@ -1030,7 +1042,10 @@
                   {/each}
                 </div>
               {/if}
-              <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+              <!-- On a narrow list a figure moves whole to the next line instead of breaking inside itself. -->
+              <div
+                class="readout mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground *:whitespace-nowrap"
+              >
                 <span>{job.encoder}</span>
                 {#if job.custom_script}
                   <span>· custom script</span>

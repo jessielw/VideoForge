@@ -931,7 +931,7 @@
           <section class="space-y-2">
             <div class="flex items-center justify-between">
               <span class="section-label">Crop</span>
-              <span class="text-xs text-muted-foreground">{src ? `${outW}×${outH}` : ''}</span>
+              <span class="readout text-xs text-muted-foreground">{src ? `${outW}×${outH}` : ''}</span>
             </div>
             <!-- Label, box, label, box: the labels get their own columns, so every box is the same width. -->
             <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">

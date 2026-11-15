@@ -303,8 +303,9 @@ test('a done job says what its run made', async ({ page }) => {
   const made = { output_bytes: 4.5 * 1024 ** 3, source_bytes: 18 * 1024 ** 3, seconds: 5025, reused: 2, kbps: 6120 }
   const fixture = await queueFixture(page, 1, ['done'], null, null, made)
   await page.goto('/#/queue/job-0')
-  await expect(page.getByText('Made 4.5 GB', { exact: false })).toContainText(
-    '25.0% of the source · 6,120 kb/s · took 1:23:45 (2 reused)',
+  // The job's facts line under its name (one box per figure, so it is read as a whole line).
+  await expect(page.locator('header .readout')).toContainText(
+    'Made 4.5 GB · 25.0% of the source · 6,120 kb/s · took 1:23:45 (2 reused)',
   )
   expect(fixture.errors).toEqual([])
 })
@@ -340,6 +341,8 @@ test('a test encode shows its quality score only when it has one', async ({ page
   await expect(card).toContainText('worst 5% 74.1')
   await expect(card).toContainText('XPSNR 44.1 dB')
   await expect(card).toContainText('90 visually lossless')
+  // Its figures read like every other technical figure: code font, fixed-width digits.
+  await expect(card.getByText('4,000 kb/s')).toHaveCSS('font-family', /^"?Cascadia Mono/)
   await card.screenshot({ path: testInfo.outputPath('sample-quality.png') })
 
   Object.assign(result, { ssimulacra2: null, ssimulacra2_p5: null, xpsnr: null }) // the setting was off
@@ -387,6 +390,7 @@ test('a CRF search lists its tries, marks the CRF found and puts it on the job',
   await expect(rows.first()).not.toContainText('✓')
   await expect(rows.first().getByRole('img', { name: 'Reaches SSIMULACRA2 80' })).toBeVisible()
   await expect(rows.nth(1)).toContainText('2,000 kb/s')
+  await expect(rows.first()).toHaveCSS('font-family', /^"?Cascadia Mono/)
   await card.screenshot({ path: testInfo.outputPath('crf-search.png') })
 
   await card.getByRole('button', { name: 'Use CRF 20' }).click()
@@ -753,9 +757,8 @@ test('Edit the whole script lines up with the side panel controls', async ({ pag
   expect(errors).toEqual([])
 })
 
-test('Output tab: every label lines up with the first control in its row', async ({ page }) => {
-  const { errors } = await queueFixture(page, 1, ['ready'])
-  // The rule set's containers bring the Container and PGS compression rows (a checkbox first: no text baseline).
+/** After queueFixture: serve the Manual rule set, with its name and containers, and open job-0 with it. */
+async function withRuleSet(page: Page) {
   const containers = [
     { id: 'mkv', label: 'MKV (mkvmerge)', extension: '.mkv', tool: 'mkvmerge' },
     { id: 'mp4', label: 'MP4 (MP4Box)', extension: '.mp4', tool: 'MP4Box' },
@@ -776,6 +779,88 @@ test('Output tab: every label lines up with the first control in its row', async
   )
   await page.goto('/#/queue/job-0')
   await page.reload()
+}
+
+test('the job header keeps the name on its line and the job facts on the line below', async ({ page }) => {
+  const made = { output_bytes: 4.5 * 1024 ** 3, source_bytes: 18 * 1024 ** 3, seconds: 5025, reused: 0, kbps: 6120 }
+  const { errors } = await queueFixture(page, 1, ['done'], null, null, made)
+  await withRuleSet(page)
+  const name = (await page.getByRole('heading', { name: 'Episode 00000' }).boundingBox())!
+  const facts = page.getByText(/^Manual · x265/)
+  await expect(facts).toContainText('Made 4.5 GB')
+  expect((await facts.boundingBox())!.y).toBeGreaterThanOrEqual(name.y + name.height)
+  const look = await facts.evaluate((el) => [getComputedStyle(el).fontFamily, getComputedStyle(el).fontVariantNumeric])
+  expect(look[0]).toMatch(/^"?Cascadia Mono/)
+  expect(look[1]).toContain('tabular-nums')
+  expect(errors).toEqual([])
+})
+
+test('at 390 px the job header breaks its facts between figures, never inside one', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const made = { output_bytes: 4.5 * 1024 ** 3, source_bytes: 18 * 1024 ** 3, seconds: 5025, reused: 2, kbps: 6120 }
+  const { errors } = await queueFixture(page, 1, ['done'], null, null, made)
+  // A narrow window opens a done job on its log.
+  await page.route('**/api/jobs/job-0/log-snapshot', (route) =>
+    route.fulfill({ json: { seq: 0, steps: [], lines: [] } }),
+  )
+  await page.goto('/#/queue/job-0')
+  const facts = page.locator('header .readout')
+  await expect(facts).toContainText('took 1:23:45')
+  const lineHeight = await facts.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight))
+  expect((await facts.boundingBox())!.height).toBeGreaterThan(lineHeight) // it does wrap at this width
+  const broken = await facts.evaluate((el, lh) => {
+    // Each figure is its own box; one taller than a line broke inside itself.
+    const parts = [...el.querySelectorAll(':scope > *')]
+    return parts.length < 4
+      ? ['one box']
+      : parts.filter((p) => p.getBoundingClientRect().height > lh + 1).map((p) => p.textContent)
+  }, lineHeight)
+  expect(broken).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('queue rows show sizes with a times sign, and at 390 px their figures stay inside the row', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const { errors } = await queueFixture(page, 3, ['ready'], null, null, null, () => ({
+    resolution: '3840x2076',
+    duration_ms: 5_400_000,
+    hdr: ['DV 7.6 FEL/MEL?', 'HDR10'], // the longest tag hdr.formats() makes: profile 7 before dovi_tool reads it
+    interlaced: false,
+  }))
+  // Rows as long as real ones: an encoder with its CRF, a crop, and track counts.
+  const jobs = await page.evaluate(() => fetch('/api/jobs').then((r) => r.json()))
+  for (const job of jobs)
+    Object.assign(job, {
+      encoder: 'x264 CRF 18',
+      crop: { left: 0, top: 42, right: 0, bottom: 42 },
+      audio: [{}, {}, {}],
+      subs: 4,
+    })
+  await page.route('**/api/jobs', (route) => route.fulfill({ json: jobs }))
+  await page.reload()
+  const rows = page.locator('[data-job]')
+  await expect(rows.first()).toContainText('3840×2076')
+  await expect(rows.first()).toContainText('crop 0/42/0/42')
+  // No figure is cut off, and none wraps inside itself: a figure is one line, or moves whole to the next.
+  const problems = await rows.evaluateAll((all) =>
+    all.flatMap((row) =>
+      [...row.querySelectorAll<HTMLElement>('.readout')].flatMap((line) => [
+        ...(line.scrollWidth > line.clientWidth + 1 ? [`cut off: ${line.textContent}`] : []),
+        ...[...line.children]
+          .filter((part) => part.getBoundingClientRect().height > 20)
+          .map((part) => `wraps: ${part.textContent?.trim()}`),
+      ]),
+    ),
+  )
+  expect(await rows.first().locator('.readout').count()).toBeGreaterThan(0)
+  expect([...new Set(problems)]).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('Output tab: every label lines up with the first control in its row', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  // The rule set's containers bring the Container and PGS compression rows (a checkbox first: no text baseline).
+  await withRuleSet(page)
   await page.getByRole('tab', { name: 'Output', exact: true }).click()
   await expect(page.getByText('PGS compression', { exact: true })).toBeVisible()
   // Each label in the tab's label column against the first control on its row; a textarea counts by its first line.

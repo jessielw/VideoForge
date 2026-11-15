@@ -103,6 +103,11 @@ export function bytes(n: number): string {
   return `${n.toFixed(i ? 1 : 0)} ${units[i]}`
 }
 
+/** A size as the server sends it ("1920x1040", or a rule set's class like "1080p"), with a times sign for display. */
+export function sizeLabel(resolution: string): string {
+  return resolution.replace(/^(\d+)x(\d+)$/, '$1×$2')
+}
+
 export function percent(fraction: number): string {
   return `${(fraction * 100).toFixed(1)}%`
 }

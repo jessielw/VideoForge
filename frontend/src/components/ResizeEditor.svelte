@@ -69,8 +69,7 @@
       <Checkbox checked={!!resize} {disabled} onCheckedChange={toggle} />
       <span class="section-label">Resize</span>
     </label>
-    {#if resize}<span class="text-xs text-muted-foreground tabular-nums"
-        >{resize.width}×{auto ? 'auto' : resize.height}</span
+    {#if resize}<span class="readout text-xs text-muted-foreground">{resize.width}×{auto ? 'auto' : resize.height}</span
       >{/if}
   </div>
   {#if !resize && input && anamorphic}
