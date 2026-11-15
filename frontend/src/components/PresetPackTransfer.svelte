@@ -175,11 +175,11 @@
 <section class="col-span-full space-y-3 rounded-xl border bg-card p-4" aria-label="Preset sharing">
   <h2 class="font-medium">Preset sharing</h2>
   <p class="text-sm text-muted-foreground">
-    Share selected templates and video or audio encoder presets with your group in one preset pack.
+    Puts the templates and presets you choose into one preset pack file that you can share.
   </p>
   <p class="text-xs text-muted-foreground">
-    App settings, tool paths, folder choices, notification URLs, actions, and plugin settings are excluded. Review any
-    custom scripts and extra arguments you added before sharing.
+    The pack leaves out app settings, tool paths, folder choices, notification URLs, actions and plugin settings. Check
+    any custom scripts and extra arguments you added before you share it.
   </p>
   <div class="flex flex-wrap gap-2">
     <Button variant="outline" disabled={disabled || busy || !available} onclick={() => open('export')}
@@ -212,9 +212,9 @@
       <Dialog.Description>
         {#if mode === 'export'}Choose the templates and presets to share. The file contains only their settings, display
           names, and folders.
-        {:else}Choose a VideoForge preset pack. A preset with the same name replaces yours (an encoder or audio preset:
-          in the same encoder and folder), unless you keep both; one that's already the same is left alone. Your app
-          settings and default selections stay the same.{/if}
+        {:else}Choose a VideoForge preset pack. A preset with the same name replaces yours unless you choose Keep both.
+          For encoder and audio presets, the encoder and folder must match too. A preset that's already the same is left
+          alone. Your app settings and default choices don't change.{/if}
       </Dialog.Description>
     </Dialog.Header>
     {#if mode === 'import'}
@@ -274,8 +274,8 @@
       {#if mode === 'import'}
         <p class="text-xs text-muted-foreground">
           {selectedActions.includes('copy')
-            ? 'Copy numbers may change with your selection or other library edits. '
-            : ''}Tools and plugins referenced by presets must be available on this computer.
+            ? 'The numbers given to copies may change if you select fewer presets or your presets change first. '
+            : ''}The tools and plugins these presets use must be set up on this computer.
         </p>
         {#if scripts.length}<details class="min-w-0 space-y-2 text-xs">
             <summary class="cursor-pointer font-medium">Review included scripts ({scripts.length})</summary>

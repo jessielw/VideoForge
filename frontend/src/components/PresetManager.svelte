@@ -100,7 +100,7 @@
       await removePresets(names)
       if (draft?.name && names.includes(draft.name)) startNew()
       stopSelecting()
-      notice = `Deleted ${names.length} preset${names.length === 1 ? '' : 's'}. Applied settings have not changed.`
+      notice = `Deleted ${names.length} preset${names.length === 1 ? '' : 's'}. Settings already applied from them stay as they are.`
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {
@@ -194,10 +194,10 @@
           parentOf(c.data) === parentOf(payload.data) &&
           canonical(c.group ?? []) === canonical(payload.group),
       )
-      if (!choice) throw new Error('The saved preset could not be found. Reopen the manager to refresh the library.')
+      if (!choice) throw new Error("The saved preset can't be found. Close and reopen the manager to refresh the list.")
       openChoice(choice)
       search = ''
-      notice = 'Preset saved. Current job or template settings have not changed.'
+      notice = "Preset saved. The job or template you're editing keeps its settings until you apply it."
       return true
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
@@ -238,7 +238,7 @@
     try {
       await removePreset(draft.name)
       startNew()
-      notice = 'Preset deleted. Applied settings have not changed.'
+      notice = 'Preset deleted. Settings already applied from it stay as they are.'
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {
@@ -268,8 +268,8 @@
       <Dialog.Title>{title} presets</Dialog.Title>
       <Dialog.Description
         >{manageOnly
-          ? 'Edit and save library presets here.'
-          : 'Edit and save library presets here. Apply settings separately to the current job or template.'}</Dialog.Description
+          ? 'Edit and save your presets here.'
+          : "Edit and save your presets here. To use one on the job or template you're editing, choose Apply settings."}</Dialog.Description
       >
       <Button
         variant="ghost"
@@ -416,7 +416,7 @@
       </div>
     {:else if deleting}
       <div class="flex shrink-0 flex-wrap items-center gap-2 border-t bg-muted/30 px-4 py-3 text-sm" role="alert">
-        <span class="mr-auto">Delete “{deleteLabel}” from the preset library?</span>
+        <span class="mr-auto">Delete "{deleteLabel}" from your presets?</span>
         <Button size="sm" variant="destructive" disabled={busy} onclick={remove}>Delete preset</Button>
         <Button size="sm" variant="ghost" disabled={busy} onclick={() => (deleting = false)}>Keep preset</Button>
       </div>
@@ -425,7 +425,7 @@
       <div class="shrink-0 border-t px-4 py-2 text-xs">
         {#if error}<p class="text-destructive" role="alert">{error}</p>{/if}
         {#if notice}<p class="text-muted-foreground" role="status">{notice}</p>{/if}
-        {#if applyProblem}<p class="text-warning">Cannot apply here: {applyProblem}</p>{/if}
+        {#if applyProblem}<p class="text-warning">Can't apply it here: {applyProblem}</p>{/if}
       </div>
     {/if}
     <footer class="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-muted/30 p-4">

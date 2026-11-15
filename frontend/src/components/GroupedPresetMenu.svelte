@@ -23,7 +23,7 @@
     editor,
     folderExample,
     nameExample,
-    folderHint = 'Use / for nested folders.',
+    folderHint = 'Use / for a folder inside a folder.',
     builtinLabel = 'built-in',
     problem = () => '',
     showTitle = false,
