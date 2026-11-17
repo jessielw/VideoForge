@@ -1031,7 +1031,7 @@ def test_real_plan_warns_on_an_unlisted_option(tmp_path):
     )
     plan = plan_spec(job, probe_spec(job, app), get_rule_set("manual"), app.tools)
     unknown = [i for i in plan.issues if i.code == "video.option_unknown"]
-    assert len(unknown) == 1 and "--bfrmaes: did you mean --bframes?" in unknown[0].message, plan.issues
+    assert len(unknown) == 1 and "--bfrmaes. Did you mean --bframes?" in unknown[0].message, plan.issues
 
 
 @needs_tools
