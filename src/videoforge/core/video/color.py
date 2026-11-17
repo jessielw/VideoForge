@@ -349,18 +349,30 @@ def source_wins(color: VideoColor | None, settings: EncoderSettings) -> dict[str
     return {n: v for n, v in _flags(color_args(color, settings), settings.encoder.libvpx).items() if n in names}
 
 
+# x265's HDR10 SEI switch, both forms (neither takes a value): an HDR10 source's --hdr10 wins over the job's, as
+# StaxRip's "Import VUI metadata" sets it, so a preset written for SDR sources (--no-hdr10) doesn't turn it off.
+_HDR10_SWITCH = frozenset({"hdr10", "no-hdr10"})
+
+
 def drop_source_flags(args: list[str], color: VideoColor | None, settings: EncoderSettings) -> list[str]:
-    """args (the job's options or extra arguments, as argv) less the colour flags the source's win over."""
-    wins = source_wins(color, settings)
-    if not wins:
+    """args (the job's options or extra arguments, as argv) less the colour flags the source's win over, and
+    x265's --hdr10 / --no-hdr10 when the source's HDR10 SEI is written (hdr10) unless settings.color_override."""
+    drop = set(source_wins(color, settings))
+    switch = not settings.color_override and hdr10(color, settings)
+    if switch:
+        drop |= _HDR10_SWITCH
+    if not drop:
         return args
     out, skip = [], False
     for i, arg in enumerate(args):
         if skip:
             skip = False
             continue
-        if flag_name(arg, settings.encoder.libvpx) in wins:
-            skip = "=" not in arg and i + 1 < len(args) and not args[i + 1].startswith("-")
+        name = flag_name(arg, settings.encoder.libvpx)
+        if name in drop:
+            skip = (
+                name not in _HDR10_SWITCH and "=" not in arg and i + 1 < len(args) and not args[i + 1].startswith("-")
+            )
             continue
         out.append(arg)
     return out

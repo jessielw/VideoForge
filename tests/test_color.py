@@ -94,13 +94,41 @@ def test_the_source_wins_unless_overridden():
     assert [argv[i + 1] for i, a in enumerate(argv) if a == "--colorprim"] == ["bt2020"]
     assert [argv[i + 1] for i, a in enumerate(argv) if a == "--transfer"] == ["smpte2084"]
     assert "--max-cll=500,100" not in argv and argv[argv.index("--max-cll") + 1] == "1000,657"
-    assert "--chromaloc" in argv and "--no-hdr10" in argv  # not the source's to decide
+    assert "--chromaloc" in argv  # not the source's to decide
+    assert "--no-hdr10" not in argv and "--hdr10" in argv  # the source's HDR10 SEI wins
     untagged = encoder_command("x265", enc, output=Path("v.hevc"), color=VideoColor(primaries="bt2020"))
     assert [untagged[i + 1] for i, a in enumerate(untagged) if a == "--transfer"] == ["bt709"]  # none of its own
 
     argv = encoder_command("x265", replace(enc, color_override=True), output=Path("v.hevc"), color=HDR10)
     assert [argv[i + 1] for i, a in enumerate(argv) if a == "--colorprim"] == ["bt2020", "bt709"]
     assert argv[-4] == "--no-hdr10" and "--max-cll=500,100" in argv
+
+
+def _flags_of(argv):
+    return [a for a in argv if a in ("--hdr10", "--no-hdr10")]
+
+
+def test_an_hdr10_source_wins_over_the_jobs_no_hdr10():
+    """As StaxRip's "Import VUI metadata": a preset written for SDR sources (--no-hdr10) on an HDR10 source gets
+    the source's --hdr10 and nothing contradicting it, from the options or the extra arguments."""
+    enc = EncoderSettings(Encoder.X265, depth=10, options={"no-hdr10": ""})
+    assert _flags_of(encoder_command("x265", enc, output=Path("v.hevc"), color=HDR10)) == ["--hdr10"]
+    enc = EncoderSettings(Encoder.X265, depth=10, extra="--no-hdr10 --hdr10-opt")
+    argv = encoder_command("x265", enc, output=Path("v.hevc"), color=HDR10)
+    assert _flags_of(argv) == ["--hdr10"] and "--hdr10-opt" in argv  # the tuning stays the job's
+
+
+def test_an_sdr_source_keeps_the_jobs_hdr10_switch():
+    sdr = VideoColor("bt709", "bt709", "bt709")
+    enc = EncoderSettings(Encoder.X265, depth=10, options={"no-hdr10": ""})
+    assert _flags_of(encoder_command("x265", enc, output=Path("v.hevc"), color=sdr)) == ["--no-hdr10"]
+    enc = EncoderSettings(Encoder.X265, depth=10, extra="--hdr10")
+    assert _flags_of(encoder_command("x265", enc, output=Path("v.hevc"), color=sdr)) == ["--hdr10"]
+
+
+def test_color_override_keeps_the_jobs_no_hdr10():
+    enc = EncoderSettings(Encoder.X265, depth=10, options={"no-hdr10": ""}, color_override=True)
+    assert _flags_of(encoder_command("x265", enc, output=Path("v.hevc"), color=HDR10)) == ["--hdr10", "--no-hdr10"]
 
 
 def test_the_options_turn_the_hdr10_flags_off():
