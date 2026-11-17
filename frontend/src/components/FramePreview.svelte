@@ -753,9 +753,9 @@
     </Tip>
     {#if anamorphic}
       <Tip
-        text="Anamorphic frame (pixels {+sar.toFixed(
+        text="Anamorphic frame ({+sar.toFixed(
           4,
-        )}:1). On: shown at the shape it plays at. Off: the stored pixels (exact at 100% and up)"
+        )}:1 pixels). On shows it at the shape it plays at. Off shows the stored pixels, one screen pixel per frame pixel at 100% zoom."
       >
         <Toggle
           pressed={shaped}
@@ -772,7 +772,7 @@
       </Button>
     </Tip>
     {@render tools?.()}
-    <span class="ml-auto text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+    <span class="readout ml-auto text-xs whitespace-nowrap text-muted-foreground">
       {W}×{H}{lined ? ` → ${outW}×${outH}` : ''}{anamorphic ? ` · plays ${((W * sar) / H).toFixed(2)}:1` : ''} · {Math.round(
         scale * 100,
       )}%
@@ -929,12 +929,13 @@
         {/if}
         {#if other && !splitSized}
           <span class="bg-black/70 px-2 py-1 text-white"
-            >No split: the two sides differ in size ({nat.w}×{nat.h} and {other.w}×{other.h}).</span
+            >Split can't show these two sides, because they're different sizes ({nat.w}×{nat.h} and {other.w}×{other.h}).</span
           >
         {/if}
         {#if unlined}
           <span class="bg-black/70 px-2 py-1 text-white"
-            >No crop lines: a filter after the crop changes the size, length or colors, so this is the output as it is.</span
+            >No crop lines. A filter after the crop changes the size, length or colors, so this shows the output as it
+            is.</span
           >
         {/if}
       </div>
@@ -1041,7 +1042,7 @@
         onblur={goTo}
       />
     </Tip>
-    <span class="shrink-0 text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+    <span class="readout shrink-0 text-xs whitespace-nowrap text-muted-foreground"
       >/ {frames - 1} · {timecode(scrub / (fps || 24))}</span
     >
   </div>

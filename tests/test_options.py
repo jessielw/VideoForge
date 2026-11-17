@@ -90,8 +90,8 @@ def test_option_issues(monkeypatch):
     s = EncoderSettings(Encoder.X265, options={"psy-rd": "2", "levle-idc": "5.1"}, extra="--no-sao --frobnicate")
     issues = option_issues(s, tools)
     assert [i.code for i in issues] == ["video.option_unknown"] * 2
-    assert "--levle-idc: did you mean --level-idc?" in issues[0].message
-    assert "--frobnicate: check its spelling." in issues[1].message
+    assert "--levle-idc. Did you mean --level-idc?" in issues[0].message
+    assert "--frobnicate. Check its spelling." in issues[1].message
     assert option_issues(s, None) == []  # no tools: nothing to check against
 
 

@@ -4,7 +4,7 @@ VideoForge writes what each job run did in a form other tools can read: NFO gene
 
 ## Where the files are
 
-Each source has a work folder next to it, `<source file name>_tmp/` (for `Show.S01E01.mkv`: `Show.S01E01.mkv_tmp/`), and each job a folder in that, named by its label: `main/` for a job without one, `dubbed/` for a job labelled `dubbed`. In the job's folder, named after the **output file**:
+Each source has a work folder next to it, `<source file name>_tmp/` (for `Show.S01E01.mkv`: `Show.S01E01.mkv_tmp/`), and each job a folder in that, named by its label: `main/` for a job without one, `dubbed/` for a job labeled `dubbed`. In the job's folder, named after the **output file**:
 
 | File | What |
 | --- | --- |
@@ -20,7 +20,7 @@ VideoForge also appends every job's events, plus the index lane's, to one stream
 
 ## Reading a record
 
-- **Completed** means: the record exists and `run.status` is `"done"`. `"invalid"` means the output was written but failed VideoForge's output check (`issues` says why). Nothing else is written as a record: a failed or cancelled run leaves the previous record (if any) in place, because the output file it describes is still the one there.
+- **Completed** means: the record exists and `run.status` is `"done"`. `"invalid"` means the output was written but failed VideoForge's output check (`issues` says why). Nothing else is written as a record: a failed or canceled run leaves the previous record (if any) in place, because the output file it describes is still the one there.
 - A later run to the same output **replaces** the record. The events file keeps every run.
 - Paths are absolute, as they were on the machine that ran the job. An output moved or renamed after the run is not followed: treat `output.path` as where it was written, and match by name, size or your own means if it moved.
 - Times are local ISO 8601 with the UTC offset (`2026-10-15T21:04:05.123+02:00`).

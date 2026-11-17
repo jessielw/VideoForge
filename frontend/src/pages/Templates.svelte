@@ -339,8 +339,8 @@
         {:else}
           <Tip
             text={c.name === starred
-              ? `This template is the default for new jobs on Rule set: ${ruleSetName}`
-              : `Make this template the default for new jobs on Rule set: ${ruleSetName}`}
+              ? `This template is the default for new jobs with the ${ruleSetName} rule set`
+              : `Make this template the default for new jobs with the ${ruleSetName} rule set`}
           >
             <Button
               variant="ghost"
@@ -432,7 +432,7 @@
       <div class="space-y-4 p-6">
         <header class="flex flex-wrap items-center gap-2">
           {#if !readOnly}
-            <Tip text="Folder: use / for nested folders (Group / 1080p)">
+            <Tip text="The template's folder. Use / for a folder inside a folder, as in Group / 1080p.">
               <Input class="w-44" aria-label="Template folder" placeholder="No folder" bind:value={draftFolder} />
             </Tip>
             <span class="text-muted-foreground" aria-hidden="true">/</span>
@@ -469,7 +469,7 @@
         >
           <Card.Root class="gap-4 p-4">
             <span class="section-label">Video</span>
-            <label class="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-2 text-sm">
+            <label class="grid grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-2 text-sm">
               <span class="text-muted-foreground">Source filter</span>
               <NativeSelect
                 class="w-full"
@@ -479,40 +479,45 @@
                 {#each SOURCE_FILTERS as f (f.id)}<option value={f.id} title={f.title}>{f.label}</option>{/each}
               </NativeSelect>
             </label>
-            <div class="space-y-2">
-              <span class="text-sm text-muted-foreground">Crop</span>
-              <ToggleGroup.Root
-                type="single"
-                variant="outline"
-                spacing={1}
-                class="w-fit max-w-full flex-wrap"
-                disabled={readOnly}
-                value={draft.crop_mode}
-                onValueChange={(v) => v && (draft!.crop_mode = v as CropMode)}
-              >
-                {#each CROP_MODES as m (m.id)}
-                  <ToggleGroup.Item
-                    value={m.id}
-                    class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                    >{m.label}</ToggleGroup.Item
-                  >
-                {/each}
-              </ToggleGroup.Root>
-              {#if draft.crop_mode === 'fixed'}
-                <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">
-                  {#each SIDES as side (side)}
-                    <label class="text-muted-foreground capitalize" for="tcrop-{side}">{side}</label>
-                    <Input id="tcrop-{side}" type="number" step="2" min="0" bind:value={draft.video.crop[side]} />
+            <div class="grid grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-2 text-sm">
+              <span class="text-muted-foreground">Crop</span>
+              <div class="min-w-0 space-y-2">
+                <ToggleGroup.Root
+                  type="single"
+                  variant="outline"
+                  spacing={1}
+                  class="w-fit max-w-full flex-wrap"
+                  disabled={readOnly}
+                  value={draft.crop_mode}
+                  onValueChange={(v) => v && (draft!.crop_mode = v as CropMode)}
+                >
+                  {#each CROP_MODES as m (m.id)}
+                    <ToggleGroup.Item
+                      value={m.id}
+                      class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
+                      >{m.label}</ToggleGroup.Item
+                    >
                   {/each}
-                </div>
-                <p class="text-xs text-muted-foreground">The same crop on every job (one show, the same black bars).</p>
-              {:else if draft.crop_mode === 'auto'}
-                <p class="text-xs text-muted-foreground">
-                  Each job's crop is detected after it's added (indexing the source takes a while the first time).
-                </p>
-              {:else}
-                <p class="text-xs text-muted-foreground">Applying the template leaves each job's crop as it is.</p>
-              {/if}
+                </ToggleGroup.Root>
+                {#if draft.crop_mode === 'fixed'}
+                  <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">
+                    {#each SIDES as side (side)}
+                      <label class="text-muted-foreground capitalize" for="tcrop-{side}">{side}</label>
+                      <Input id="tcrop-{side}" type="number" step="2" min="0" bind:value={draft.video.crop[side]} />
+                    {/each}
+                  </div>
+                  <p class="text-xs text-muted-foreground">
+                    Uses the same crop on every job, for sources that share their black bars, such as one show.
+                  </p>
+                {:else if draft.crop_mode === 'auto'}
+                  <p class="text-xs text-muted-foreground">
+                    Detects each job's crop after it's added. The source is indexed first, which takes a while the first
+                    time.
+                  </p>
+                {:else}
+                  <p class="text-xs text-muted-foreground">Applying the template leaves each job's crop as it is.</p>
+                {/if}
+              </div>
             </div>
             <ResizeEditor bind:resize={draft.video.resize} disabled={readOnly} />
             <FilterChain
@@ -546,7 +551,7 @@
             <Card.Root class="@container/output gap-3 p-4">
               <span class="section-label">Output</span>
               <div
-                class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 text-sm @min-[26rem]/output:grid-cols-[7rem_minmax(0,1fr)]"
+                class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-3 text-sm @min-[26rem]/output:grid-cols-[7rem_minmax(0,1fr)]"
               >
                 <span class="text-muted-foreground">Container</span>
                 {#if containers.length > 1}
@@ -564,7 +569,7 @@
                     {#each containers as c (c.id)}
                       <ToggleGroup.Item
                         value={c.id}
-                        class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                        class="px-4 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
                         >{c.label}</ToggleGroup.Item
                       >
                     {/each}
@@ -577,7 +582,8 @@
                   >
                 {/if}
                 {#if container?.id === 'mkv'}
-                  <span class="text-muted-foreground">PGS compression</span>
+                  <!-- self-start: the row starts with a checkbox, whose baseline moves with its tick; its first line is at the top -->
+                  <span class="self-start text-muted-foreground">PGS compression</span>
                   <label class="flex items-center gap-2">
                     <Checkbox
                       checked={draft.mux.pgs_zlib ?? false}
@@ -589,9 +595,9 @@
                 {/if}
                 <span class="text-muted-foreground">Extra arguments</span>
                 <Input
-                  class="font-mono text-xs"
-                  aria-label="Extra muxer arguments"
-                  placeholder="added to the muxer command as typed"
+                  class="font-mono text-xs placeholder:font-sans"
+                  aria-label="Extra arguments for {container?.tool ?? 'the output'}"
+                  placeholder="added to the {container?.tool ?? 'output'} command as typed"
                   bind:value={draft.mux.extra}
                 />
                 <NameSettings
@@ -623,7 +629,7 @@
           <span class="section-label">Audio</span>
           {#if !trackEditor}
             <p class="text-xs text-muted-foreground">
-              {ruleSetName}'s rules choose its jobs' audio: these settings apply to other rule sets' jobs.
+              {ruleSetName} picks its jobs' audio by its own rules, so these settings apply only to jobs with other rule sets.
             </p>
           {/if}
           <TemplateAudioEditor
@@ -637,7 +643,8 @@
           <span class="section-label">Subtitles</span>
           {#if !trackEditor}
             <p class="text-xs text-muted-foreground">
-              {ruleSetName}'s rules choose its jobs' subtitles: these settings apply to other rule sets' jobs.
+              {ruleSetName} picks its jobs' subtitles by its own rules, so these settings apply only to jobs with other rule
+              sets.
             </p>
           {/if}
           <TemplateSubsEditor

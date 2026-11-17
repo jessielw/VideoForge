@@ -185,14 +185,19 @@ class ManualRuleSet(RuleSet):
         issues: list[Issue] = []
         if encode is None:
             issues.append(
-                Issue(Severity.BLOCK, "input.no_video", "No video for this source: add an encode or encode it here")
+                Issue(
+                    Severity.BLOCK,
+                    "input.no_video",
+                    "No video for this source. Add an existing encode, or encode the video here",
+                )
             )
         if source.video and source.video.start_ms:
             issues.append(
                 Issue(
                     Severity.WARN,
                     "sync.video_start",
-                    f"Source video starts at {source.video.start_ms} ms; source tracks are shifted to match the encode",
+                    f"The source's video starts at {source.video.start_ms} ms, so the source's other tracks are "
+                    "shifted to match the encode",
                 )
             )
         video = (encode.video if encode else None) or source.video
@@ -218,7 +223,7 @@ class ManualRuleSet(RuleSet):
                     Issue(
                         Severity.WARN,
                         "audio.language",
-                        f"{t.external_path.name} has no language: set it in the track editor",
+                        f"{t.external_path.name} has no language. Set it in the track editor",
                     )
                 )
             audio.append(
@@ -244,7 +249,7 @@ class ManualRuleSet(RuleSet):
                     Issue(
                         Severity.WARN,
                         "subs.language",
-                        f"{t.external_path.name} has no language: set it in the track editor",
+                        f"{t.external_path.name} has no language. Set it in the track editor",
                     )
                 )
             subs.append(PlannedSub(source=t, slot="", language=language, title=title, **flags))

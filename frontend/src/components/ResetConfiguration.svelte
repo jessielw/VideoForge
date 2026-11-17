@@ -40,7 +40,7 @@
           app.ruleSets = ruleSets
         }),
         app.loadEncoders(),
-      ]).catch(() => toast.error('Reset done. Reload the page to refresh available rule sets.'))
+      ]).catch(() => toast.error("Reset done, but the rule set and encoder lists didn't load. Reload the page."))
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {

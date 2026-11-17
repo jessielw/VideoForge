@@ -438,6 +438,14 @@ test('the job tabs name their list and their panel', async ({ page }) => {
   expect(errors).toEqual([])
 })
 
+test("the Output tab's extra arguments box is named after its visible label", async ({ page }) => {
+  const { errors } = await fixture(page, 'light')
+  await page.goto('/#/queue/a11y')
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: /^Extra arguments for \S+$/ })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
 test('suggestion lists open when asked, not on focus, and are not a Tab stop', async ({ page }) => {
   const { errors } = await fixture(page, 'light')
   await page.goto('/#/new')
@@ -472,24 +480,24 @@ test('checkbox and palette names leave their help text to the description', asyn
   const settings = page.getByRole('navigation', { name: 'Settings sections' })
   await settings.getByRole('button', { name: 'Appearance', exact: true }).click()
   const gold = page.getByRole('radio', { name: 'Gold', exact: true })
-  await expect(gold).toHaveAccessibleDescription(/original look/)
+  await expect(gold).toHaveAccessibleDescription(/default look/)
   const black = page.getByRole('checkbox', { name: 'Pure black dark mode', exact: true })
   await expect(black).toHaveAccessibleDescription(/OLED/)
   for (const [category, name, help] of [
-    ['Queue & indexing', 'Index new jobs', /preview is ready/],
-    ['Queue & indexing', 'Auto-crop new jobs', /crop is detected/],
+    ['Queue & indexing', 'Index new jobs', /preview is then ready/],
+    ['Queue & indexing', 'Auto-crop new jobs', /Detects each new job's crop/],
     ['Queue & indexing', 'Wait while an encode reads the same disk', /jobs on other disks go first/],
     ['Queue & indexing', 'Index anyway while it only encodes video', /reads the source slowly/],
     ['Files & folders', "Delete a job's work folder once it's done", /deleted after the job succeeds/],
-    ['Jobs', 'Score its quality', /compare every frame/],
+    ['Jobs', 'Score its quality', /compares each of its frames/],
   ] as const) {
     await settings.getByRole('button', { name: category, exact: true }).click()
     await expect(page.getByRole('checkbox', { name, exact: true })).toHaveAccessibleDescription(help)
   }
   await page.goto('/#/queue/a11y')
   await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
-  await expect(page.getByRole('checkbox', { name: 'Colour from the source', exact: true })).toHaveAccessibleDescription(
-    /colour description/,
+  await expect(page.getByRole('checkbox', { name: 'Color from the source', exact: true })).toHaveAccessibleDescription(
+    /color description/,
   )
   expect(errors).toEqual([])
 })

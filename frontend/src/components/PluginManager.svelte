@@ -87,7 +87,7 @@
     if (
       await update(
         () => api.installPlugin(selected, checked.revision, !!checked.current),
-        'Plugin queued for the next restart',
+        'The plugin is installed when VideoForge starts again',
       )
     ) {
       installOpen = false
@@ -112,7 +112,7 @@
     if (
       await update(
         () => api.pluginSettings(plugin.id, patch, reset ? plugin.settings.map((s) => s.key) : []),
-        'Plugin settings saved for the next restart',
+        'Plugin settings saved. They take effect when VideoForge starts again.',
       )
     )
       editing = null
@@ -140,7 +140,8 @@
   {#if inventory}
     <p class="break-all text-xs text-muted-foreground">Plugin folder: <code>{inventory.folder}</code></p>
     {#if !inventory.management_enabled}<p class="text-xs text-muted-foreground">
-        Plugin management is disabled for this server. Enable it at startup with <code>--plugin-management</code>.
+        Installing and removing plugins is off on this server. Start VideoForge with <code>--plugin-management</code>
+        to turn it on.
       </p>{/if}
     <div class="divide-y divide-border/60 rounded-xl border bg-card">
       {#each inventory.items as plugin (plugin.id)}
@@ -158,11 +159,7 @@
                   : 'Not running'}
                 · {plugin.enabled ? 'Enabled on next start' : 'Disabled on next start'}
                 {#if plugin.pending}
-                  · {plugin.pending === 'install'
-                    ? 'Install'
-                    : plugin.pending === 'replace'
-                      ? 'Replacement'
-                      : 'Removal'} pending restart{/if}
+                  · {`${plugin.pending === 'install' ? 'Installed' : plugin.pending === 'replace' ? 'Replaced' : 'Removed'} on next start`}{/if}
               </p>
             </div>
             <label class="flex items-center gap-2 text-xs"
@@ -174,7 +171,7 @@
                   const enabled = e.currentTarget.checked
                   void update(
                     () => api.enablePlugin(plugin.id, enabled),
-                    'Plugin preference saved for the next restart',
+                    'Saved. It takes effect when VideoForge starts again.',
                   )
                 }}
               />Enabled</label
@@ -182,7 +179,7 @@
           </div>
           {#if plugin.description}<p class="text-xs">{plugin.description}</p>{/if}
           {#if plugin.events.length}<p class="text-xs text-muted-foreground">
-              Handles: {plugin.events.join(', ')}
+              Runs on: {plugin.events.join(', ')}
             </p>{/if}
           {#if plugin.error}<p class="text-xs text-destructive" role="alert">{plugin.error}</p>{/if}
           <details class="text-xs">
@@ -205,7 +202,7 @@
                   }}>Remove {plugin.name}…</Button
                 >{/if}
               {#if !plugin.removable && !plugin.pending}<span class="text-muted-foreground"
-                  >Files are managed outside VideoForge.</span
+                  >This plugin is loaded from outside the plugin folder, so VideoForge can't remove it.</span
                 >{/if}
             </div>
           </details>
@@ -236,7 +233,7 @@
   >
     <Dialog.Header
       ><Dialog.Title>Install plugin</Dialog.Title><Dialog.Description
-        >Choose a VideoForge plugin ZIP. It will load after you restart the app.</Dialog.Description
+        >Choose a VideoForge plugin ZIP file. The plugin loads when VideoForge starts again.</Dialog.Description
       ></Dialog.Header
     >
     <label class="space-y-2 text-sm"
@@ -254,13 +251,14 @@
         <p class="text-xs text-muted-foreground">{preview.plugin.id} · Plugin API {preview.plugin.api_version}</p>
         {#if preview.plugin.description}<p>{preview.plugin.description}</p>{/if}
         {#if preview.current}<p>
-            Replace installed version {preview.current.version || '(unspecified)'} with {preview.plugin.version}.
-            Settings and plugin data will be kept.
+            Replaces version {preview.current.version || '(unspecified)'} with {preview.plugin.version}. Its settings
+            and data are kept.
           </p>{/if}
       </div>
       <label class="flex items-start gap-2 text-sm"
         ><input type="checkbox" bind:checked={trusted} disabled={busy} class="mt-1" /><span
-          >I trust this plugin. Its Python code can access files and the network as VideoForge’s user.</span
+          >I trust this plugin. Its Python code can read and change files and use the network, with the same access as
+          VideoForge.</span
         ></label
       >
     {/if}
@@ -292,7 +290,7 @@
   >
     <Dialog.Header
       ><Dialog.Title>Configure {editing?.name}</Dialog.Title><Dialog.Description
-        >Settings apply after restart. Leave a stored password unchanged to keep it.</Dialog.Description
+        >Settings take effect when VideoForge starts again. To keep a saved password, leave its box as it is.</Dialog.Description
       ></Dialog.Header
     >
     {#if editing}
@@ -333,7 +331,7 @@
               autocomplete={setting.type === 'password' ? 'new-password' : 'off'}
               value={String(values[setting.key] ?? '')}
               placeholder={setting.type === 'password' && editing.configured_passwords.includes(setting.key)
-                ? 'Stored password (unchanged)'
+                ? 'Saved password (unchanged)'
                 : ''}
               disabled={busy}
               oninput={(e) => field(setting.key, e.currentTarget.value)}
@@ -345,7 +343,7 @@
     {/if}
     {#if dialogError}<p class="text-sm text-destructive" role="alert">{dialogError}</p>{/if}
     <Dialog.Footer
-      ><Button variant="outline" disabled={busy} onclick={() => saveSettings(true)}>Reset overrides</Button><Button
+      ><Button variant="outline" disabled={busy} onclick={() => saveSettings(true)}>Reset to defaults</Button><Button
         variant="outline"
         disabled={busy}
         onclick={() => (editing = null)}>Cancel</Button
@@ -371,7 +369,7 @@
   >
     <Dialog.Header
       ><Dialog.Title>Remove {removing?.name}?</Dialog.Title><Dialog.Description
-        >Plugin files will be removed on the next restart. Saved settings and plugin data will be kept.</Dialog.Description
+        >The plugin's files are removed when VideoForge starts again. Its saved settings and data are kept.</Dialog.Description
       ></Dialog.Header
     >
     {#if dialogError}<p class="text-sm text-destructive" role="alert">{dialogError}</p>{/if}
@@ -385,7 +383,7 @@
           if (
             await update(
               () => api.removePlugin(plugin.id, plugin.revision),
-              'Plugin removal queued for the next restart',
+              'The plugin is removed when VideoForge starts again',
             )
           )
             removing = null

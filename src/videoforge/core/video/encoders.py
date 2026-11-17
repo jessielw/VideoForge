@@ -353,19 +353,19 @@ def _color_issues(settings: EncoderSettings, video: VideoInfo | None) -> list[Is
                 Issue(
                     Severity.INFO,
                     "video.color_source",
-                    f"The source's colour is used over the encoder options' {listed}. If the source's tags are "
-                    "wrong, or the script converts the colour, turn on Override the source's colour",
+                    f"The source's color wins over the encoder options' {listed}. If the source's tags are "
+                    "wrong, or the script converts the color, turn on Override the source's color",
                 )
             )
         else:
-            why = "Override the source's colour is on" if settings.source_color else "the source's colour is off"
+            why = "Override the source's color is on" if settings.source_color else "the source's color is off"
             out.append(
                 Issue(
                     Severity.INFO,
                     "video.color_override",
-                    f"The encode is tagged with the encoder options' {listed} ({why}). The flags only label the "
-                    "picture: unless the source's tags are wrong or the script converts it, a player shows the "
-                    "colours wrong",
+                    f"The encode is tagged with the encoder options' {listed} ({why}). These flags only label the "
+                    "picture. Unless the source's tags are wrong or the script converts the color, a player shows "
+                    "the colors wrong",
                 )
             )
     missing = untagged(video.color, settings)
@@ -374,8 +374,8 @@ def _color_issues(settings: EncoderSettings, video: VideoInfo | None) -> list[Is
             Issue(
                 Severity.INFO,
                 "video.color_untagged",
-                f"The source doesn't describe its colour and the encoder options don't set it ({', '.join(missing)}):"
-                " the encode is untagged there and a player guesses",
+                f"The source doesn't describe its color, and the encoder options don't set it ({', '.join(missing)})."
+                " The encode is left untagged there, so a player guesses",
             )
         )
     return out
@@ -395,13 +395,14 @@ def issues(settings: EncoderSettings, video: VideoInfo | None, chapters: bool = 
         return tags
     name, out = settings.encoder.label, []
     if settings.encoder is Encoder.VP8 and settings.depth != 8:
-        out.append(Issue(Severity.BLOCK, "video.vp8_depth", "VP8 is 8-bit only: set the bit depth to 8"))
+        out.append(Issue(Severity.BLOCK, "video.vp8_depth", "VP8 is 8-bit only. Set the bit depth to 8"))
     if settings.preset and not settings.preset.removeprefix("-").isdigit():
         out.append(
             Issue(
                 Severity.BLOCK,
                 "video.vpx_preset",
-                f"{name}'s preset is ffmpeg's -cpu-used, a number (0 slowest): {settings.preset!r} isn't one",
+                f"{name}'s preset is ffmpeg's -cpu-used, a number where 0 is slowest. {settings.preset!r} isn't a "
+                "number",
             )
         )
     elif settings.encoder is Encoder.VP8 and settings.preset and int(settings.preset) >= 4:
@@ -409,8 +410,8 @@ def issues(settings: EncoderSettings, video: VideoInfo | None, chapters: bool = 
             Issue(
                 Severity.WARN,
                 "video.vp8_speed",
-                f"VP8 at -cpu-used {settings.preset} puts a keyframe on every 2nd-3rd frame after a scene cut: "
-                "3 or below keeps them to the cuts",
+                f"VP8 at -cpu-used {settings.preset} puts a keyframe on every 2nd or 3rd frame after a scene cut. "
+                "At 3 or below, keyframes stay on the cuts",
             )
         )
     color = video.color if video is not None else None
@@ -419,8 +420,8 @@ def issues(settings: EncoderSettings, video: VideoInfo | None, chapters: bool = 
             Issue(
                 Severity.WARN,
                 "video.vpx_hdr10",
-                f"{name} doesn't carry the source's HDR10 mastering display and light levels yet: the encode is "
-                "tagged with its transfer and primaries only",
+                f"{name} doesn't carry the source's HDR10 mastering display and light levels yet. The encode is "
+                "tagged with only its transfer and primaries",
             )
         )
     return out + tags
@@ -434,7 +435,13 @@ def svt_presets(encoder: Encoder) -> range:
 def _svtav1_issues(settings: EncoderSettings, chapters: bool) -> list[Issue]:
     name, presets, out = settings.encoder.label, svt_presets(settings.encoder), []
     if settings.depth not in (8, 10):
-        out.append(Issue(Severity.BLOCK, "video.svtav1_depth", f"{name} encodes 8 or 10-bit: set the bit depth to one"))
+        out.append(
+            Issue(
+                Severity.BLOCK,
+                "video.svtav1_depth",
+                f"{name} encodes only 8 or 10-bit. Set the bit depth to one of those",
+            )
+        )
     try:
         preset_ok = not settings.preset or int(settings.preset) in presets
     except ValueError:
@@ -444,21 +451,25 @@ def _svtav1_issues(settings: EncoderSettings, chapters: bool) -> list[Issue]:
             Issue(
                 Severity.BLOCK,
                 "video.svtav1_preset",
-                f"{name}'s preset is a number from {presets.start} to {presets.stop - 1} (13 fastest): "
-                f"{settings.preset!r} isn't one",
+                f"{name}'s preset is a number from {presets.start} to {presets.stop - 1}, where 13 is fastest. "
+                f"{settings.preset!r} isn't one of those",
             )
         )
     low, high = SVTAV1_CRF
     if settings.rate_control is RateControl.CRF and not low <= settings.crf <= high:
         out.append(
-            Issue(Severity.BLOCK, "video.svtav1_crf", f"{name}'s CRF goes from {low} to {high}: {settings.crf:g} isn't")
+            Issue(
+                Severity.BLOCK,
+                "video.svtav1_crf",
+                f"{name}'s CRF goes from {low} to {high}. {settings.crf:g} is outside that range",
+            )
         )
     if chapters and not forces_keyframes(settings):
         out.append(
             Issue(
                 Severity.WARN,
                 "video.svtav1_keyframes",
-                f"{name} forces keyframes in CRF only: with a bitrate, the chapters don't start on one",
+                f"{name} forces keyframes only in CRF mode. With a bitrate, the chapters don't start on a keyframe",
             )
         )
     return out

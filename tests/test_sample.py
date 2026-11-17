@@ -69,7 +69,7 @@ def test_two_pass_samples_one_pass_at_its_bitrate(tmp_path):
     assert sample.one_pass(two, plan, "mkv", found) == replace(two, rate_control=RateControl.ABR)
     sized = sample.one_pass(replace(two, target_mb=100), plan, "mkv", found)
     assert sized.rate_control is RateControl.ABR and sized.bitrate_kbps != 6000  # the size's bitrate
-    assert sample.describe(crf) == "x265 crf 20" and sample.describe(two) == "x265 6000 kb/s"
+    assert sample.describe(crf) == "x265 CRF 20" and sample.describe(two) == "x265 6000 kb/s"
 
 
 def test_steps_encode_the_sample_and_mux_it(tmp_path):
@@ -114,7 +114,7 @@ def test_result_and_its_estimates(tmp_path):
     from videoforge.core.job import StepRecord
 
     result = sample.finish(spec, plan, "mkv", 5, {"sample.video": StepRecord("sample.video", "f", seconds=12.0)})
-    assert (result.frames, result.total_frames, result.encoder) == (144, 2400, "x264 crf 18")
+    assert (result.frames, result.total_frames, result.encoder) == (144, 2400, "x264 CRF 18")
     assert result.kbps == pytest.approx(300_000 * 8 / 1000 / (144 / float(NTSC)))
     assert result.estimate_mb == pytest.approx(result.kbps * 2400 / float(NTSC) / 8 / 1000)
     assert result.estimate_seconds == pytest.approx(200.0) and result.encode_fps == pytest.approx(12.0)

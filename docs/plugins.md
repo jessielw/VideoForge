@@ -148,7 +148,7 @@ default = "queue"
 
 Types are `text` (the default), `password`, `checkbox` (a boolean), `integer`, and `choice` (one of its string `choices`). Keys are unique Python identifiers; labels default to their key. `help`, `default` and `required` are optional. Required strings must be non-empty. There can be up to 100 fields.
 
-Values arrive through `ctx.settings`. Precedence is manifest defaults, then `[plugins.<id>]` from the effective application configuration, then saved UI overrides. Undeclared TOML keys are preserved. **Reset overrides** restores the lower layers. Saves and resets take effect after restarting. Missing or invalid required settings prevent setup and event callbacks; configure the plugin and restart.
+Values arrive through `ctx.settings`. Precedence is manifest defaults, then `[plugins.<id>]` from the effective application configuration, then saved UI overrides. Undeclared TOML keys are preserved. **Reset to defaults** restores the lower layers. Saves and resets take effect after restarting. Missing or invalid required settings prevent setup and event callbacks; configure the plugin and restart.
 
 Password fields are blank in the form; leaving them unchanged preserves their stored value. Clearing a password saves an empty value (and is rejected when required). Passwords are stored with the app's configuration, not encrypted; private configuration backups include them. Ordinary plugin inventory and settings responses do not return password values.
 
@@ -176,7 +176,7 @@ For a package module, supply its directory instead of the `.py` file; include `v
 | `on_queue_finished` | `QueueFinished(statuses, seconds, left)`, `ctx` | the queue's worker stops |
 | `on_index_finished` | `IndexFinished(spec, error)`, `ctx` | the index lane finished a source |
 
-A job cancelled by shutting VideoForge down sends no `JobFinished`, because it resumes on the next start.
+A job canceled by shutting VideoForge down sends no `JobFinished`, because it resumes on the next start.
 
 `JobFinished.record` is the path of the job record (`<output>.videoforge.json`, see [job-record.md](job-record.md)): every track, where it came from, the encode settings, the tools' versions. Read that instead of digging into `spec` and `result`.
 

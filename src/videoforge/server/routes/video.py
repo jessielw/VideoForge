@@ -67,7 +67,9 @@ def _loading(e: Entry, preview: Preview, script: str, slot: str) -> AbstractCont
 
 def _indexed(e: Entry) -> None:
     if e.indexing or not indexed(e.spec, e.source_video, e.burn):
-        raise HTTPException(409, "The source isn't indexed yet: index it first (Video tab, or Index in the queue)")
+        raise HTTPException(
+            409, "The source isn't indexed yet. Index it with Index now on the Video tab, or Index on the Queue"
+        )
 
 
 def _info_json(e: Entry, i: ClipInfo, stage: Stage) -> dict[str, Any]:
@@ -94,7 +96,9 @@ def script_for(e: Entry, stage: Stage) -> str:
         except OSError as ex:
             raise HTTPException(409, f"The test encode's script can't be read: {ex}") from None
     if stage == "unfiltered" and not compares_filters(e.spec.video):
-        raise HTTPException(409, "The job has no filters to compare: the chain has none enabled, or a custom body")
+        raise HTTPException(
+            409, "The job has no filters to compare, because none are on or it uses a custom script body"
+        )
     return _script(e.spec, cast(BuiltStage, stage), baked_el(e.spec, e.source_video), e.burn)
 
 

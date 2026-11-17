@@ -571,15 +571,14 @@
           >
           {#if !isAudio(t) && t.title && t.title_from != null}
             <Tip
-              text="The file has no title of its own: its name (_trackN_) matches input track #{t.title_from}, so it took that track's title and Forced/SDH flags"
+              text="This file has no title of its own. The _trackN_ in its name matches input track #{t.title_from}, so it takes that track's title and its Forced and SDH flags."
             >
-              <span class="text-xs text-muted-foreground italic">(title inferred from input track #{t.title_from})</span
-              >
+              <span class="text-xs text-muted-foreground">(title inferred from input track #{t.title_from})</span>
             </Tip>
           {/if}
         </div>
         {#if details(t).length}
-          <div class="flex flex-wrap gap-x-3 text-xs text-muted-foreground tabular-nums" data-details>
+          <div class="readout flex flex-wrap gap-x-3 text-xs text-muted-foreground" data-details>
             {#each details(t) as d (d)}<span>{d}</span>{/each}
           </div>
         {/if}
@@ -588,8 +587,8 @@
       {#if !isAudio(t) && (canBurn(t) || ov?.burn)}
         <Tip
           text={burned
-            ? 'Burned into the video (not muxed): image subtitles before the crop, text after it'
-            : 'Burn this track into the video instead of muxing it (one per job)'}
+            ? 'Burned into the video instead of kept as a track. Image subtitles go in before the crop, and text ones after it.'
+            : 'Burn this track into the video instead of keeping it as a track. Only one track per job can be burned in.'}
         >
           <Toggle
             variant="outline"
@@ -684,7 +683,7 @@
             </Tip>
           {/each}
           {#if !setsDefault && plannedDefault(t)}
-            <Tip text="Default in the output: the rule set picks it, so it isn't set here">
+            <Tip text="The rule set makes this the default track in the output. You can't change that here.">
               <Badge
                 variant="outline"
                 class="h-6 rounded-full border-dashed border-primary/50 px-2 text-xs font-normal text-primary"
@@ -768,9 +767,10 @@
             </Tip>
           {/if}
           <Tip
-            text="Total delay relative to video: + later, − earlier. Detected delay: {t.delay_ms > 0
+            text="The track's total delay against the video. Plus plays it later, minus earlier. Detected delay: {t.delay_ms >
+            0
               ? '+'
-              : ''}{t.delay_ms} ms. Clear to restore the detected delay. Only the mux changes: an encode isn't made again."
+              : ''}{t.delay_ms} ms. Clear the box to go back to it. A change only rebuilds the output file, without encoding again."
           >
             <label class="flex items-center gap-1.5 text-muted-foreground">
               Delay
@@ -851,7 +851,7 @@
 
 {#if !tracks || !plan}
   <div class="p-6 text-muted-foreground">
-    {job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}
+    {job.status === 'probing' ? "Reading the source's tracks…" : "No tracks. The source couldn't be read."}
   </div>
 {:else}
   <!-- min-w-0: a fieldset is as wide as its widest content by default, so a long title ran past the panel. -->
@@ -870,7 +870,7 @@
       <div class="ml-auto flex flex-wrap gap-2">
         {#if kind === 'audio'}
           <DropdownMenu.Root>
-            <Tip text="Use a track again: another output track with its own encode, title and flags">
+            <Tip text="Adds another output track from a source track, with its own encode, title and flags.">
               <DropdownMenu.Trigger disabled={!editable}>
                 {#snippet child({ props })}
                   <Button {...props} variant="outline"><CopyPlusIcon />Add a track from…</Button>
@@ -918,7 +918,7 @@
           >{rows.filter((t) => !isOff(t)).length} of {rows.length} in the output</span
         >
         <span class="ml-auto text-xs text-muted-foreground"
-          >Drag a track by its handle to reorder; paste file paths here to add them; every change saves.</span
+          >Drag a track by its handle to reorder it. Paste file paths here to add them. Every change is saved.</span
         >
       </div>
       {#if kind === 'sub'}

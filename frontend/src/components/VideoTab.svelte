@@ -119,7 +119,8 @@
     try {
       await saves.flush()
       const r = await api.index([jobId], true)
-      if (!r.taken.length) toast.info('Not indexed', { description: 'A queued or running job is indexed by its run.' })
+      if (!r.taken.length)
+        toast.info('Not indexed', { description: 'A queued or running job is indexed when its run starts.' })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     }
@@ -469,11 +470,11 @@
   const current = $derived(info[stage] ?? info[stage === 'crop' ? 'output' : 'crop'])
   const notice = $derived.by(() => {
     if (!scripting)
-      return stale ? { text: 'Changed: F5 or Refresh to see it on this frame', tone: 'muted' as const } : null
+      return stale ? { text: 'Changed. Press F5 or Refresh to see it on this frame.', tone: 'muted' as const } : null
     if (running) return { text: 'Running the script…', tone: 'muted' as const }
     if (vv.checked && !vv.checked.ok)
       return {
-        text: `The script failed${vv.checked.line ? ` (line ${vv.checked.line})` : ''}: this is the last good frame.`,
+        text: `The script failed${vv.checked.line ? ` (line ${vv.checked.line})` : ''}. The frame shown is from the last run that worked.`,
         tone: 'bad' as const,
       }
     return null
@@ -546,10 +547,12 @@
       >
         <Tip
           text={compare === 'filters'
-            ? 'The script without its filters: crop, resize and field matching only (C flips)'
+            ? "The script with only its crop, resize, IVTC or deinterlacing and burned-in subtitles, so its frames line up with the output's (C flips)"
             : "The encoder's input: the script's frame (C flips)"}
         >
-          <ToggleGroup.Item value="in" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          <ToggleGroup.Item
+            value="in"
+            class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
             >{names.toggle[0]}</ToggleGroup.Item
           >
         </Tip>
@@ -558,12 +561,14 @@
             ? 'The script with its filters: the output (C flips)'
             : 'The encoded frame (C flips)'}
         >
-          <ToggleGroup.Item value="out" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          <ToggleGroup.Item
+            value="out"
+            class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
             >{names.toggle[1]}</ToggleGroup.Item
           >
         </Tip>
       </ToggleGroup.Root>
-      <Tip text="Both sides at once, either side of a line you drag: the picked side on the left">
+      <Tip text="Shows both sides at once, on either side of a line you can drag. The side you picked is on the left">
         <Toggle
           pressed={vv.split}
           onPressedChange={(on) => (vv.split = on)}
@@ -608,20 +613,21 @@
             <div class="h-2 flex-1 overflow-hidden rounded bg-muted">
               <div class="h-full bg-info transition-[width]" style="width:{(p?.fraction ?? 0) * 100}%"></div>
             </div>
-            <span class="w-14 text-right tabular-nums">{p ? `${(p.fraction * 100).toFixed(0)}%` : '…'}</span>
+            <span class="readout w-14 text-right">{p ? `${(p.fraction * 100).toFixed(0)}%` : '…'}</span>
           </div>
           <p class="max-w-md text-sm text-muted-foreground">
-            The job is locked until it's done; the preview opens by itself after.
+            You can't edit the job while its source is being indexed. The preview opens by itself when it's done.
           </p>
           <Button variant="outline" onclick={() => api.stopIndex([jobId])}><SquareIcon />Stop</Button>
         {:else if indexStatus === 'index-queued'}
           <div class="text-base font-medium">Waiting to be indexed</div>
           <p class="max-w-md text-sm text-muted-foreground">
             {#if live?.index_held}
-              An encode is reading this source's disk: it waits until that's done (Settings, Batch indexing). Index this
-              one next doesn't wait.
+              An encode is reading this source's disk, so indexing waits for it to finish. Index this one next moves it
+              to the front and skips that wait. It still waits while another job of this source runs. You can turn the
+              disk wait off in Settings › Queue & indexing.
             {:else}
-              Sources are indexed one at a time. The preview opens by itself after.
+              Sources are indexed one at a time. The preview opens by itself when this one is done.
             {/if}
           </p>
           <div class="flex gap-2">
@@ -631,10 +637,10 @@
         {:else}
           <div class="text-base font-medium">The source isn't indexed yet</div>
           <p class="max-w-md text-sm text-muted-foreground">
-            The preview, auto-crop and the script's Run need the source's index ({SOURCE_FILTERS.find(
-              (f) => f.id === job.spec.video.source_filter,
-            )?.label}). Indexing reads the whole file once (minutes on a large remux), one source at a time; the job is
-            locked while it runs. Crop, resize and filters can be set meanwhile.
+            Indexing lets the preview, auto-crop and the script's Run open the source. It reads the whole file once with
+            {SOURCE_FILTERS.find((f) => f.id === job.spec.video.source_filter)?.label}, which takes minutes on a large
+            remux. Sources are indexed one at a time. You can set crop, resize and filters before indexing starts, but
+            not while it runs.
           </p>
           {#if live?.index_error}<p class="max-w-md text-sm text-destructive">
               The last index failed: {live.index_error}
@@ -671,9 +677,9 @@
     {:else if compare !== 'off'}
       <div class="flex flex-1 flex-col items-center justify-center gap-3 border p-6 text-center text-muted-foreground">
         {#if pairError}
-          <p class="max-w-md text-sm text-destructive">No compare: {pairError}</p>
+          <p class="max-w-md text-sm text-destructive">Can't compare: {pairError}</p>
         {:else}
-          <p class="text-sm">Opening the encode… (FFMS2 indexes it the first time)</p>
+          <p class="text-sm">Opening the encode… The first time, it's indexed before it opens.</p>
         {/if}
         <Button variant="outline" onclick={() => (vv.compare = 'off')}>Back to the preview</Button>
       </div>
@@ -708,8 +714,8 @@
           {#if vv.panel === 'settings'}
             <Tip
               text={canCrop
-                ? 'Crop lines: the output with the cropped-off margins shown (a resize after the crop is left out). Off: the output as encoded'
-                : 'A custom script body is in use: it has no crop step to show'}
+                ? "Shows the output with the cropped-off margins put back around it, so you can see and drag the crop lines. A resize after the crop is left out. Turn it off to see the output as it's encoded."
+                : "A custom script body is in use, so there's no crop step to show."}
             >
               <Toggle
                 pressed={stage === 'crop'}
@@ -720,7 +726,9 @@
                 <CropIcon />Crop
               </Toggle>
             </Tip>
-            <Tip text="Auto refresh: each change renders the frame again. Off: the frame waits for F5 or Refresh">
+            <Tip
+              text="On, each saved change renders the frame again. Off, the frame updates only when you press F5 or Refresh, or move to another frame."
+            >
               <Toggle
                 pressed={auto}
                 onPressedChange={setAuto}
@@ -741,7 +749,7 @@
       </FramePreview>
     {:else if scripting}
       <div class="flex flex-1 items-center justify-center border text-muted-foreground">
-        {running ? 'Running the script…' : 'No frames: the script failed.'}
+        {running ? 'Running the script…' : "The script failed, so there's no frame to show."}
       </div>
     {:else}
       <div class="flex flex-1 items-center justify-center border text-muted-foreground">
@@ -810,7 +818,9 @@
             <Button variant="outline" onclick={saveScript} disabled={!vv.parts}><DownloadIcon />Save</Button>
           </Tip>
           {#if vv.parts?.custom}
-            <Tip text="Drop the custom body: crop, resize and filters make the script again">
+            <Tip
+              text="Discards your edits to the script body. The script is built from the crop, resize and filter settings again."
+            >
               <Button variant="outline" onclick={useGenerated} disabled={!editable || running}>Back to generated</Button
               >
             </Tip>
@@ -846,11 +856,19 @@
             class="grid shrink-0 grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-4 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs"
           >
             <span class="text-success"><CheckIcon class="mr-1 inline size-3.5 align-[-2px]" />Runs</span>
-            <span><span class="text-muted-foreground">Frames</span> {i.frames}</span>
-            <span><span class="text-muted-foreground">Size</span> {i.width}×{i.height}</span>
-            <span><span class="text-muted-foreground">Format</span> {i.format}</span>
-            <span><span class="text-muted-foreground">FPS</span> {+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span>
-            <span><span class="text-muted-foreground">Length</span> {clipLength(i.frames, i.fps_num, i.fps_den)}</span>
+            <span><span class="text-muted-foreground">Frames</span> <span class="readout">{i.frames}</span></span>
+            <span
+              ><span class="text-muted-foreground">Size</span> <span class="readout">{i.width}×{i.height}</span></span
+            >
+            <span><span class="text-muted-foreground">Format</span> <span class="readout">{i.format}</span></span>
+            <span
+              ><span class="text-muted-foreground">FPS</span>
+              <span class="readout">{+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span></span
+            >
+            <span
+              ><span class="text-muted-foreground">Length</span>
+              <span class="readout">{clipLength(i.frames, i.fps_num, i.fps_den)}</span></span
+            >
             {#if i.length_warning}<span class="col-span-full text-warning">{i.length_warning}</span>{/if}
           </div>
         {/if}
@@ -875,8 +893,8 @@
               <span class="section-label">Scan</span>
               <p class="text-sm">{v?.scan_type}{v?.scan_order ? ` · ${v.scan_order}` : ''}</p>
               <p class="text-xs text-muted-foreground">
-                Stored as fields: add IVTC or a deinterlacer from the Field filters, unless the preview shows no
-                combing.
+                The source is stored as fields. Add IVTC or a deinterlacer from the Field filters, unless the preview
+                shows no combing.
               </p>
             </section>
           {/if}
@@ -888,19 +906,19 @@
                 {@const dv = job.tracks.video.hdr}
                 {#if dv.dv_profile === 5}
                   <p class="text-xs text-muted-foreground">
-                    Dolby Vision goes into an x265 encode as profile 5 (Encoder tab: Dolby Vision from the source), its
-                    active area following the crop and resize. Its base layer isn't HDR10: the preview's colours look
-                    off (green / purple), the encode's play right through the RPU.
+                    With Encoder › Dolby Vision from the source on, an x265 encode keeps this Dolby Vision as profile 5.
+                    Its active area follows the crop and resize. The base layer isn't HDR10, so the preview's colors
+                    look off (green or purple). The encode's colors play correctly through the RPU.
                   </p>
                 {:else if (dv.dv_profile === 8 && dv.dv_compat !== 4) || (dv.dv_profile === 7 && (dv.dv_el === 'MEL' || dv.dv_el === 'FEL'))}
                   <p class="text-xs text-muted-foreground">
-                    Dolby Vision goes into an x265 encode as 8.1 (Encoder tab: Dolby Vision from the source), its active
-                    area following the crop and resize.
+                    With Encoder › Dolby Vision from the source on, an x265 encode keeps this Dolby Vision as profile
+                    8.1. Its active area follows the crop and resize.
                   </p>
                   {#if dv.dv_el === 'FEL'}
                     <p class="text-xs text-muted-foreground">
-                      The FEL's enhancement layer is baked into the picture: the preview shows it baked, auto crop reads
-                      the base layer.
+                      When the Dolby Vision is kept, the FEL's enhancement layer is baked into the picture. The preview
+                      then shows the baked picture, and auto-crop reads the base layer.
                     </p>
                   {/if}
                 {:else}
@@ -912,7 +930,8 @@
               {/if}
               {#if job.tracks?.video?.hdr?.hdr10plus}
                 <p class="text-xs text-muted-foreground">
-                  HDR10+ goes into an x265 encode (Encoder tab: HDR10+ from the source).
+                  With Encoder › HDR10+ from the source on, an x265 encode keeps HDR10+. It's left out when a FEL is
+                  baked in.
                 </p>
               {/if}
             </section>
@@ -920,7 +939,7 @@
           <section class="space-y-2">
             <div class="flex items-center justify-between">
               <span class="section-label">Crop</span>
-              <span class="text-xs text-muted-foreground">{src ? `${outW}×${outH}` : ''}</span>
+              <span class="readout text-xs text-muted-foreground">{src ? `${outW}×${outH}` : ''}</span>
             </div>
             <!-- Label, box, label, box: the labels get their own columns, so every box is the same width. -->
             <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">
@@ -994,7 +1013,7 @@
                 <button class="underline underline-offset-2" onclick={useGenerated}>Back to generated</button>
               </p>
             {:else}
-              <Button variant="ghost" size="sm" onclick={openScript}>Edit the whole script…</Button>
+              <Button variant="outline" size="sm" onclick={openScript}>Edit the whole script…</Button>
             {/if}
           </section>
         </fieldset>

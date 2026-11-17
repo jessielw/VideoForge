@@ -77,7 +77,7 @@
           aria-checked={on}
           aria-labelledby="palette-{p.id}"
           aria-describedby="palette-{p.id}-help"
-          class={choice(on)}
+          class={cn(choice(on), 'flex flex-col')}
           onclick={() => (appearance.palette = p.id)}
         >
           <div class="flex items-start justify-between gap-2">
@@ -90,10 +90,10 @@
               </span>
             {/if}
           </div>
-          <p id="palette-{p.id}-help" class="mt-1 text-xs text-muted-foreground">{p.description}</p>
-          <!-- A tiny mock of the app: page, card, accent button. -->
+          <p id="palette-{p.id}-help" class="mt-1 pb-3 text-xs text-muted-foreground">{p.description}</p>
+          <!-- A tiny mock of the app: page, card, accent button. At the bottom, so the mocks in a row line up. -->
           <div
-            class="mt-3 flex items-center gap-2 rounded-md p-2 ring-1 ring-border"
+            class="mt-auto flex items-center gap-2 rounded-md p-2 ring-1 ring-border"
             style="background-color: {sw[0]}"
             aria-hidden="true"
           >

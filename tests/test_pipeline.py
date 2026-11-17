@@ -238,7 +238,7 @@ def test_missing_encoder_tool_fails_before_running(rule_set, tmp_path):
     app = replace(APP, tools=replace(APP.tools, qaac=str(tmp_path / "qaac64.exe")))
     runner = FakeRunner()
     result = run_plan(plan, tmp_path / "out", rule_set, app, runner=runner)
-    assert result.status is JobStatus.FAILED and result.error == "AAC (qaac) needs qaac: set it in Settings"
+    assert result.status is JobStatus.FAILED and result.error == "AAC (qaac) needs qaac. Set it in Settings › Tools"
     assert not runner.calls
 
 
@@ -2122,8 +2122,8 @@ def test_invalid_replacement_preserves_good_output(rule_set, tmp_path):
     # the error says where the file went; the checks are the issues (and the Validate step's error), not repeated
     n = sum(1 for i in result.issues if i.severity is Severity.BLOCK)
     assert result.error == (
-        f"Failed {n} output check{'s' if n != 1 else ''}. "
-        f"The file is kept as {result.output.name}, not published as Show.S01E01.mkv."
+        f"{n} output check{'s' if n != 1 else ''} failed. "
+        f"The file is kept as {result.output.name} instead of Show.S01E01.mkv"
     )
     assert not any(i.message in result.error for i in result.issues)
 

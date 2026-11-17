@@ -147,9 +147,9 @@ def search_key(spec: JobSpec, plan: Plan) -> str:
 def check(spec: JobSpec) -> None:
     """ValueError when the job can't be searched: it reuses an encode, or doesn't encode at a CRF."""
     if not spec.encodes_video:
-        raise ValueError("The job reuses an encode: there's no CRF to search")
+        raise ValueError("The job uses an existing encode, so there's no CRF to search")
     if spec.encoder.rate_control is not RateControl.CRF:
-        raise ValueError("A CRF search needs the encoder's rate control at CRF")
+        raise ValueError("A CRF search needs the rate control set to CRF")
 
 
 def try_steps(spec: JobSpec, plan: Plan, app: AppConfig, container: str, percent: int, crf: int) -> list[Step]:
@@ -235,7 +235,7 @@ def search(
     check(spec)
     found = info.read(spec.job_dir / info.SCRIPT_INFO)
     if found is None:
-        raise ValueError("The script's frames aren't known: its info step hasn't run")
+        raise ValueError("The script's frame count isn't known yet, because its info step hasn't run")
     v = plan.source.video
     source_fps = frame_rate(v.default_duration_ns) if v is not None and v.default_duration_ns else None
     sel = sample.selection(found, percent, source_fps)
@@ -257,7 +257,9 @@ def search(
         run(try_steps(spec, plan, app, container, percent, crf), len(result.tries))
         t = _read_try(spec, crf, result.frames, found.frames, fps, records)
         if t.score(target.metric) is None:
-            raise ValueError(f"{target.metric.label} can't be measured on this script (it needs YUV, even size)")
+            raise ValueError(
+                f"{target.metric.label} can't be measured on this script, because it needs YUV video with an even size"
+            )
         result.tries.append(t)
         rate = f"{t.kbps:.0f} kb/s" if t.kbps is not None else "no bitrate"
         verdict = "reaches" if passes(t, target) else "is below"

@@ -43,7 +43,10 @@ def read_preset_pack(doc: Any, *, keep_keys: bool = False) -> dict[str, Any]:
                 raise ValueError(f"{kind}: unexpected preset fields")
             key = entry.get("key")
             if key is not None and (not isinstance(key, str) or not KEY.fullmatch(key) or key in pack_keys[kind]):
-                raise ValueError(f"{kind}: a preset key is unique, lowercase letters, digits, . _ -, up to 64")
+                raise ValueError(
+                    f"{kind}: a preset key must be unique, with up to 64 lowercase letters, digits, dots, underscores "
+                    "or hyphens"
+                )
             pack_keys[kind].append(key)
             entry = {k: v for k, v in entry.items() if k != "key"}
             validated[kind].append({**entry, "name": str(i)} if grouped else entry)

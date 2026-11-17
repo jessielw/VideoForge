@@ -165,8 +165,8 @@
       <Dialog.Description>
         {#if mode === 'export'}Choose saved presets to share with their folders. Use Export current settings to include
           unsaved edits.
-        {:else}Choose a VideoForge audio preset file. Names and folders are preserved; a preset with the same name in
-          the same encoder and folder replaces yours, unless you keep both.{/if}
+        {:else}Choose a VideoForge audio preset file. Names and folders are kept. A preset with the same name, encoder
+          and folder replaces yours unless you choose Keep both.{/if}
       </Dialog.Description>
     </Dialog.Header>
     {#if mode === 'export'}
@@ -234,7 +234,8 @@
           {/each}
         </div>
         {#if actions.includes('copy')}<p class="text-xs text-muted-foreground">
-            Copy numbers may change if you select fewer presets or another browser saves a matching name.
+            The numbers given to copies may change if you select fewer presets, or if another browser saves one with the
+            same name first.
           </p>{/if}
       {/if}
     {/if}

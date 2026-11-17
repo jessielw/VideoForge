@@ -47,8 +47,12 @@
   // what Settings decides instead of this template, as words
   const overridden = $derived(
     [
-      policy && policy.file_name !== 'template' ? `the file name is always ${policy.file_name}` : '',
-      mkv && policy && policy.title !== 'template' ? `the MKV title is always ${policy.title}` : '',
+      policy && policy.file_name !== 'template'
+        ? `the file is ${policy.file_name === 'on' ? 'always' : 'never'} named with it`
+        : '',
+      mkv && policy && policy.title !== 'template'
+        ? `the MKV title is ${policy.title === 'on' ? 'always' : 'never'} set with it`
+        : '',
     ].filter(Boolean),
   )
 
@@ -98,7 +102,7 @@
   <div class="flex items-start gap-2">
     <Textarea
       bind:ref={field}
-      class="min-h-14 flex-1 resize-none font-mono text-xs"
+      class="min-h-14 flex-1 resize-none font-mono text-xs {info ? '' : 'placeholder:font-sans'}"
       rows={2}
       aria-label="Name template"
       placeholder={info?.default_template ?? 'Empty uses the default template (see Tokens)'}
@@ -175,14 +179,14 @@
   </div>
   <p class="text-xs text-muted-foreground">
     {#if overridden.length}
-      Settings decides this for {whose}: {overridden.join(' and ')}, whatever this template says.
+      Settings sets this for {whose}, whatever this template says: {overridden.join(' and ')}.
     {:else}
       Settings can turn these on or off for {whose} at once.
     {/if}
     <button
       type="button"
       class="underline underline-offset-2 hover:text-foreground"
-      onclick={() => openSettings('jobs', 'output-names')}>Settings → Output names</button
+      onclick={() => openSettings('jobs', 'output-names')}>Settings › Output names</button
     >
   </p>
   {#if !used}
@@ -196,7 +200,7 @@
 <span class="text-muted-foreground">Name suffix</span>
 <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
   <Input
-    class="w-32 font-mono text-xs"
+    class="w-32 font-mono text-xs placeholder:font-sans"
     aria-label="Name suffix"
     placeholder="e.g. vf"
     value={mux.name_suffix}
