@@ -14,6 +14,7 @@ const defaults: EncoderSettings = {
   options: {},
   extra: '',
   source_color: true,
+  color_override: false,
   hdr10plus: false,
   dolby_vision: false,
 }
@@ -39,7 +40,15 @@ async function fixture(page: Page) {
       custom: null,
     },
     encoder: defaults,
-    mux: { container: 'mkv', extra: '', pgs_zlib: false },
+    mux: {
+      container: 'mkv',
+      extra: '',
+      pgs_zlib: false,
+      name_template: '',
+      template_file_name: false,
+      template_title: false,
+      name_suffix: '',
+    },
     qpf: true,
     crop_mode: 'keep',
     audio: null,
@@ -101,7 +110,7 @@ async function fixture(page: Page) {
     }
   })
   await page.goto('/#/templates')
-  await page.getByRole('button', { name: 'Encoder presets', exact: true }).click()
+  await page.getByRole('button', { name: /^Encoder preset: / }).click()
   await page.getByRole('button', { name: 'Manage presets…' }).click()
   const manager = page.getByRole('dialog', { name: 'Encoder presets', exact: true })
   await expect(manager).toBeVisible()
@@ -194,5 +203,26 @@ test('import previews conflicts, imports selected presets, and preserves the ope
   await expect(manager.getByRole('spinbutton', { name: 'CRF', exact: true })).toHaveValue('21')
   await manager.getByRole('textbox', { name: 'Search encoder presets' }).fill('Selected film (2)')
   await expect(manager.getByRole('button', { name: /Selected film \(2\)/ })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('Select lines up with the buttons above it', async ({ page }) => {
+  const { manager, errors } = await fixture(page)
+  // The dialog zooms in as it opens: measure once it has settled.
+  await manager.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)))
+  // Where the eye sees each button's left edge: its border when it has one, else its first text.
+  const left = (name: string | RegExp) =>
+    manager
+      .getByRole('button', { name, exact: typeof name === 'string' })
+      .first()
+      .evaluate((el) => {
+        const cs = getComputedStyle(el)
+        if (parseFloat(cs.borderLeftWidth) > 0 && cs.borderLeftColor !== 'rgba(0, 0, 0, 0)')
+          return el.getBoundingClientRect().left
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        return range.getClientRects()[0]?.left ?? el.getBoundingClientRect().left
+      })
+  expect(Math.abs((await left('Select')) - (await left(/^Import/)))).toBeLessThanOrEqual(1)
   expect(errors).toEqual([])
 })

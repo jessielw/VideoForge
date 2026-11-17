@@ -87,13 +87,14 @@ export interface VideoSettings {
   custom: string | null
 }
 
-export type EncoderName = 'x264' | 'x265' | 'vp8' | 'vp9' | 'svtav1'
+export type EncoderName = 'x264' | 'x265' | 'vp8' | 'vp9' | 'svtav1' | 'svtav1hdr'
 export const ENCODERS: [EncoderName, string][] = [
   ['x264', 'x264'],
   ['x265', 'x265'],
   ['vp8', 'VP8'],
   ['vp9', 'VP9'],
   ['svtav1', 'SVT-AV1'],
+  ['svtav1hdr', 'SVT-AV1-HDR'],
 ]
 export type RateControl = 'crf' | 'abr' | '2pass'
 
@@ -109,6 +110,7 @@ export interface EncoderSettings {
   options: Record<string, string>
   extra: string
   source_color: boolean // tag the encode with the source's colour description (and HDR10 metadata on x265 / SVT-AV1)
+  color_override: boolean // the options' colour flags win over the source's (off: the source's do, as StaxRip)
   hdr10plus: boolean // carry a source's HDR10+ metadata into an x265 encode
   dolby_vision: boolean // carry a source's Dolby Vision (as profile 8.1) into an x265 encode
 }
@@ -282,11 +284,30 @@ export interface JobSpec {
   id: string
 }
 
-// The job's muxer: container ('' = the rule set's), extra arguments and MKV PGS compression.
+// The job's muxer: container ('' = the rule set's), extra arguments and MKV PGS compression; and the output's
+// naming (core/naming.py): a name template, whether it names the file and the MKV title, a suffix before the extension.
 export interface MuxSettings {
   container: string
   extra: string
   pgs_zlib: boolean
+  name_template: string // '' = the default template (NameTokens.default_template)
+  template_file_name: boolean // the file is named from the template (a name typed for the job still wins)
+  template_title: boolean // an MKV's segment title is the template's name
+  name_suffix: string // before the extension, after the label: <name>.<label>.<suffix>.mkv
+}
+
+// Settings' word, per rule set, on the name template's switches: 'template' = as each template says.
+export type NameUse = 'template' | 'on' | 'off'
+export interface NamePolicy {
+  file_name: NameUse
+  title: NameUse
+}
+
+// The name template's tokens (GET /api/name-tokens).
+export interface NameTokens {
+  default_template: string
+  tokens: { name: string; description: string }[]
+  filters: string[]
 }
 
 export interface AudioTrack {
@@ -441,11 +462,12 @@ export interface JobDetail extends JobSummary {
   plan: Plan | null
   tracks: Tracks | null
   output_name: string | null // the file the run will write (null until planned)
+  output_title: string | null // the MKV segment title from the name template (null when it gives none)
   color_args: string[] | null // the source's colour flags for this encoder (null until probed)
   target: SizeBudget | null // where a 2-pass target size goes (null without one, or until planned)
   sample: SampleResult | null // the last test encode (core/pipeline/sample.py)
   search: SearchResult | null // the last CRF search, or the one running (core/pipeline/crfsearch.py)
-  compare: { encode: boolean; sample: boolean } // what the Video tab can compare the script's frames with
+  compare: { encode: boolean; sample: boolean; filters: boolean } // what the Video tab can compare the script's frames with (filters: without them)
 }
 
 // A test encode: the job's script and encoder on `length` frames of every `cycle` (POST /api/queue/sample)
@@ -458,7 +480,7 @@ export interface SampleResult {
   fps: number | null
   bytes: number // the encoded stream's
   seconds: number // the encode took
-  encoder: string // the rate it ran at: "x265 crf 18", "x264 8000 kb/s" (a 2-pass job's at its bitrate)
+  encoder: string // the rate it ran at: "x265 CRF 18", "x264 8000 kb/s" (a 2-pass job's at its bitrate)
   finished: string // ISO time
   kbps: number | null
   estimate_mb: number | null // the whole video's encode, decimal MB, no container overhead
@@ -507,8 +529,9 @@ export interface SearchResult {
 }
 
 // The preview's clips: the crop view and the output; to compare encoder input and output, the output and the
-// encode a done run wrote, or a test encode's script and its encode (numbered by the sample's frames).
-export type PreviewStage = 'crop' | 'output' | 'encode' | 'sample-in' | 'sample'
+// encode a done run wrote, or a test encode's script and its encode (numbered by the sample's frames); to compare
+// the filters' work, the output without its filters (unfiltered) and the output.
+export type PreviewStage = 'crop' | 'output' | 'unfiltered' | 'encode' | 'sample-in' | 'sample'
 
 // A target size's bytes: the video gets what the rest leaves (core/video/target.py)
 export interface SizeBudget {
@@ -565,6 +588,7 @@ export interface RuleSet {
   picks_tracks?: boolean // its own rules pick the tracks: Settings' default subtitle rules don't apply
   defaults: { video: VideoSettings; encoder: EncoderSettings; template: Template }
   default: boolean
+  naming?: NamePolicy // Settings' word on the name template's switches for its jobs (absent: as templates say)
 }
 
 // A profile: a whole configuration (Settings, templates, presets); one is active, the queue is shared.
@@ -844,6 +868,7 @@ export interface ConfigState {
   sample_quality: boolean // a test encode measures its quality (SSIMULACRA2, XPSNR) after it
   auto_index: boolean // a new job goes in the index lane once probed
   auto_crop: boolean // ... and its crop is detected (after the index)
+  naming: Record<string, NamePolicy> // rule set id -> the name template's switches; left out = as templates say
   parallel_audio: number // audio encodes at once beside a job's video; 0 = one by one
   parallel_audio_default: number // videoforge.toml's
   delete_work_dir: boolean // delete a done job's <source>_tmp/ (records and log copied to records_dir first)
@@ -854,6 +879,7 @@ export interface ConfigState {
   tool_priority_default: Priority // videoforge.toml's
   priorities: Priority[]
   records_dir: string
+  data_dir: string // the server's data folder: database, logs, kept job records, plugins
   notifications: NotificationDestination[]
   notification_events: { id: NotificationEvent; label: string; default: boolean }[]
   actions: ActionSetting[]

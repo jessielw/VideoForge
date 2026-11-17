@@ -1,16 +1,15 @@
 <script lang="ts">
-  // Settings: where each tool is (found or not, and its version), what the folder browser
-  // may show, the rule set new jobs start with, whether batch indexing waits for an encode's disk, where
-  // notifications go (Apprise URLs), the actions run after a job or the queue ends, and which plugins load.
-  // Each change saves at once and is used by
-  // new jobs and runs; Reset goes back to the server's configuration defaults.
-  import { onMount } from 'svelte'
+  // Settings, in ten tabs: Jobs, Queue & indexing, Presets, Files & folders | Tools, Plugins, Automation |
+  // Appearance, Profiles, Import & export. Each change saves at once and is used by new jobs and runs;
+  // Reset (under Profiles) goes back to the server's configuration defaults.
+  import { onMount, tick } from 'svelte'
   import AppearanceSettings from '../components/AppearanceSettings.svelte'
   import FileBrowser from '../components/FileBrowser.svelte'
   import ConfigurationTransfer from '../components/ConfigurationTransfer.svelte'
   import PresetPackTransfer from '../components/PresetPackTransfer.svelte'
   import ResetConfiguration from '../components/ResetConfiguration.svelte'
   import ProfileManager from '../components/ProfileManager.svelte'
+  import SavedOutputFolders from '../components/SavedOutputFolders.svelte'
   import PluginManager from '../components/PluginManager.svelte'
   import ManagedPresets from '../components/ManagedPresets.svelte'
   import AudioPresetMenu from '../components/AudioPresetMenu.svelte'
@@ -34,14 +33,18 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import { api } from '../lib/api'
   import { configDraft } from '../lib/configDraft'
+  import { SETTINGS_TAB_KEY, takeSettingsSection } from '../lib/settingsLink'
   import { saves } from '../lib/saves'
   import { PRIORITY_LABEL } from '../lib/format'
   import { app } from '../lib/state.svelte'
+  import { router } from '../lib/router.svelte'
   import { browserNotify } from '../lib/browserNotify.svelte'
   import type {
     ActionKind,
     ActionSetting,
     ConfigState,
+    NamePolicy,
+    NameUse,
     NotificationDestination,
     NotificationEvent,
     Priority,
@@ -87,10 +90,27 @@
       error = e instanceof Error ? e.message : String(e)
       return
     }
+    const section = takeSettingsSection() // a link elsewhere asked for it: shown and focused
+    if (section) {
+      await tick()
+      const target = document.getElementById(section)
+      target?.scrollIntoView({ block: 'start' })
+      target?.focus({ preventScroll: true })
+    }
     draft.events = defaultEvents()
     checkAll()
     void app.loadProfiles()
   })
+
+  // One rule set's naming policy; "as templates say" for both is stored as nothing. The rule sets carry the
+  // policies too (the Templates page's note), so they're read again.
+  async function setNaming(ruleSet: string, policy: NamePolicy) {
+    if (!config) return
+    const naming = { ...config.naming }
+    if (policy.file_name === 'template' && policy.title === 'template') delete naming[ruleSet]
+    else naming[ruleSet] = policy
+    if (await change({ naming })) app.ruleSets = await api.ruleSets().catch(() => app.ruleSets)
+  }
 
   async function change(changes: Parameters<typeof api.saveConfig>[0]): Promise<boolean> {
     if (!config) return false
@@ -230,7 +250,7 @@
       await api.testNotification(url.trim())
       toast.success('Test notification sent')
     } catch (e) {
-      toast.error("The test notification didn't go", { description: e instanceof Error ? e.message : String(e) })
+      toast.error("Couldn't send the test notification", { description: e instanceof Error ? e.message : String(e) })
     } finally {
       testing = { ...testing, [key]: false }
     }
@@ -311,24 +331,76 @@
     }
   }
 
-  // The sections are grouped into tabs; the last one open is remembered.
-  const TABS = [
-    { id: 'general', label: 'General' },
-    { id: 'tools', label: 'Tools' },
-    { id: 'encoding', label: 'Encoding' },
-    { id: 'presets', label: 'Presets' },
-    { id: 'automation', label: 'Automation' },
-    { id: 'plugins', label: 'Plugins' },
-    { id: 'backup', label: 'Backup & reset' },
+  // The sections are tabs in three groups (your work, setup and add-ons, the app itself); the last one open is
+  // remembered, and an old one that is gone (general, encoding, backup) opens Jobs.
+  // `about` opens the tab and is its description for screen readers.
+  const GROUPS = [
+    [
+      {
+        id: 'jobs',
+        label: 'Jobs',
+        about:
+          'The rule set, output names and subtitle rules new jobs start with, and whether test encodes measure their quality.',
+      },
+      {
+        id: 'queue',
+        label: 'Queue & indexing',
+        about:
+          'When jobs are indexed, how many audio encodes run beside the video, and how encodes share the CPU with other programs.',
+      },
+      {
+        id: 'presets',
+        label: 'Presets',
+        about: 'Saved encoder and audio settings you can pick in any job or template. Templates have their own page.',
+      },
+      {
+        id: 'files',
+        label: 'Files & folders',
+        about:
+          "Saved output folders, work folder cleanup, what the folder browser can open, and VideoForge's data folder.",
+      },
+    ],
+    [
+      {
+        id: 'tools',
+        label: 'Tools',
+        about: 'The programs VideoForge uses for each step, and where each one is installed.',
+      },
+      {
+        id: 'plugins',
+        label: 'Plugins',
+        about: 'A plugin can add rule sets, templates and presets, and can run its own code when jobs start or finish.',
+      },
+      {
+        id: 'automation',
+        label: 'Automation',
+        about: 'Send notifications and run actions when a job ends or the queue finishes.',
+      },
+    ],
+    [
+      { id: 'appearance', label: 'Appearance', about: 'How VideoForge looks in this browser.' },
+      {
+        id: 'profiles',
+        label: 'Profiles',
+        about: 'Switch between whole sets of settings, templates and presets, or reset the active one to its defaults.',
+      },
+      {
+        id: 'transfer',
+        label: 'Import & export',
+        about:
+          'Back up your settings, templates and presets, move them to another computer, or share presets with others.',
+      },
+    ],
   ] as const
+  const TABS = GROUPS.flat()
   type TabId = (typeof TABS)[number]['id']
-  const TAB_KEY = 'videoforge.settingsTab'
+  const TAB_KEY = SETTINGS_TAB_KEY
   function readTab(): TabId {
     try {
       const saved = localStorage.getItem(TAB_KEY)
-      return TABS.find((t) => t.id === saved)?.id ?? 'general'
+      return TABS.find((t) => t.id === saved)?.id ?? 'jobs'
     } catch {
-      return 'general' // storage blocked
+      return 'jobs' // storage blocked
     }
   }
   let tab = $state<TabId>(readTab())
@@ -346,7 +418,7 @@
   <div class="flex min-w-0 flex-col gap-6">
     <header class="col-span-full flex flex-wrap items-center gap-3">
       <h1 class="text-xl font-semibold">Settings</h1>
-      <span class="text-sm text-muted-foreground">Saved as you go; used by new jobs and runs.</span>
+      <span class="text-sm text-muted-foreground">Changes are saved as you make them. New jobs and runs use them.</span>
       {#if pending}<span class="text-sm text-muted-foreground">{saveError ? 'Unsaved changes' : 'Saving…'}</span>{/if}
     </header>
 
@@ -357,7 +429,7 @@
       </div>{/if}
     {#if saveError}
       <div role="alert" class="col-span-full space-y-2 text-sm text-destructive">
-        <p>Changes are not saved: {saveError}</p>
+        <p>Changes aren't saved: {saveError}</p>
         <Button onclick={() => recoverSaves()}>Retry saves</Button>
         <Button variant="outline" onclick={() => recoverSaves(true)}>Discard unsaved changes</Button>
       </div>
@@ -371,19 +443,55 @@
         class="flex gap-1 overflow-x-auto @min-[48rem]/settings:w-44 @min-[48rem]/settings:shrink-0 @min-[48rem]/settings:flex-col"
         aria-label="Settings sections"
       >
-        {#each TABS as t (t.id)}
-          <button
-            type="button"
-            class="shrink-0 rounded-md px-3 py-1.5 text-left text-sm whitespace-nowrap hover:bg-muted/60 {tab === t.id
-              ? 'bg-muted font-medium'
-              : 'text-muted-foreground'}"
-            aria-current={tab === t.id ? 'page' : undefined}
-            onclick={() => openTab(t.id)}>{t.label}</button
-          >
+        {#snippet divider()}
+          <div
+            class="w-px shrink-0 self-stretch bg-border @min-[48rem]/settings:my-1 @min-[48rem]/settings:h-px @min-[48rem]/settings:w-auto"
+            aria-hidden="true"
+          ></div>
+        {/snippet}
+        {#each GROUPS as group, i (i)}
+          {#if i}{@render divider()}{/if}
+          {#each group as t (t.id)}
+            <button
+              type="button"
+              id="settings-tab-{t.id}"
+              class="shrink-0 rounded-md px-3 py-1.5 text-left text-sm whitespace-nowrap hover:bg-muted/60 {tab === t.id
+                ? 'bg-muted font-medium'
+                : 'text-muted-foreground'}"
+              aria-current={tab === t.id ? 'page' : undefined}
+              onclick={() => openTab(t.id)}>{t.label}</button
+            >
+          {/each}
         {/each}
+        {@render divider()}
+        <div class="flex shrink-0 items-center gap-2 @min-[48rem]/settings:flex-col @min-[48rem]/settings:items-start">
+          {#if app.version}<span class="px-3 text-xs whitespace-nowrap text-muted-foreground tabular-nums"
+              >VideoForge {app.version}</span
+            >{/if}
+          <Button
+            variant="outline"
+            class="text-destructive hover:text-destructive"
+            onclick={() => (confirmStop = true)}
+          >
+            <PowerIcon />Shut down…
+          </Button>
+        </div>
       </nav>
 
-      <div class="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8 @min-[90rem]/settings:grid-cols-2">
+      <div
+        class="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8 @min-[90rem]/settings:grid-cols-2"
+        role="group"
+        aria-labelledby="settings-tab-{tab}"
+        aria-describedby="settings-about"
+      >
+        <div class="col-span-full -mb-4 space-y-1">
+          <p id="settings-about" class="text-sm text-muted-foreground">{TABS.find((t) => t.id === tab)?.about}</p>
+          {#if tab === 'presets'}
+            <button type="button" class="text-sm underline underline-offset-2" onclick={() => router.go('templates')}
+              >Open Templates</button
+            >
+          {/if}
+        </div>
         <!-- the events a notification or an action wants (skip: ones it can't have) -->
         {#snippet eventChoices(
           events: NotificationEvent[],
@@ -402,99 +510,267 @@
             {/each}
           </div>
         {/snippet}
-        {#if tab === 'general'}
-          <ProfileManager
-            disabled={pending > 0 || !!saveError}
-            onswitched={(value) => {
-              config = value
-              pluginRefresh++
-              checks = {}
-              checkAll()
-            }}
-          />
-
-          <AppearanceSettings />
-
-          <section class="col-span-full min-w-0 space-y-3">
-            <h2 class="font-medium">VideoForge</h2>
-            <div class="flex flex-wrap items-center gap-3 text-sm">
-              <Button
-                variant="outline"
-                class="text-destructive hover:text-destructive"
-                onclick={() => (confirmStop = true)}
-              >
-                <PowerIcon />Shut down…
-              </Button>
-              <span class="text-muted-foreground">
-                Stops the server; start it again with <code class="text-xs">videoforge serve</code> (or VideoForge.exe).
-              </span>
-            </div>
-          </section>
-        {:else if tab === 'tools'}
+        {#if tab === 'jobs'}
           {#if config}
-            <section class="col-span-full min-w-0 space-y-3">
-              <div class="flex items-center gap-3">
-                <h2 class="font-medium">Tools</h2>
-                <span class="text-xs text-muted-foreground">A bare name (e.g. ffmpeg) is looked up on PATH.</span>
-                <Button
-                  variant="outline"
-                  class="ml-auto"
-                  onclick={checkAll}
-                  disabled={Object.values(checking).some(Boolean)}
-                >
-                  <RefreshCwIcon />Check again
-                </Button>
-              </div>
-              <div class="divide-y divide-border/60 rounded-xl border bg-card">
-                {#each config.tools as t (t.name)}
-                  {@const c = checks[t.name]}
-                  {@const look = c ? LOOK[c.status] : null}
-                  <div class="grid grid-cols-[12rem_1fr] gap-x-4 gap-y-1.5 px-4 py-3">
-                    <div>
-                      <div class="text-sm font-medium">{t.label}</div>
-                      <div class="text-xs text-muted-foreground">{t.purpose}</div>
-                    </div>
-                    <div class="flex min-w-0 items-center gap-2">
-                      <Input
-                        class="min-w-0 flex-1 font-mono text-xs {t.custom ? 'border-primary/60' : ''}"
-                        value={t.custom ?? t.default}
-                        placeholder={t.default || 'not set'}
-                        aria-label="{t.label} path"
-                        onchange={(e) => setTool(t, e.currentTarget.value)}
-                      />
-                      <Button variant="outline" onclick={() => (browse = { kind: 'tool', tool: t })}
-                        ><FolderOpenIcon />Browse…</Button
-                      >
-                      <Tip text="Back to the default: {t.default || '(none)'}">
-                        <Button variant="ghost" size="sm" disabled={!t.custom} onclick={() => setTool(t, '')}
-                          >Reset</Button
+            <section class="space-y-3">
+              <h2 class="font-medium">Rule set</h2>
+              <label class="flex items-center gap-3 text-sm">
+                <span class="text-muted-foreground">New jobs start with</span>
+                <NativeSelect value={config.rule_set} onchange={(e) => setRuleSet(e.currentTarget.value)}>
+                  {#each config.rule_sets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+                </NativeSelect>
+                <span class="text-xs text-muted-foreground">Default: {config.rule_set_default}</span>
+              </label>
+            </section>
+
+            <section class="space-y-3">
+              <h2 class="font-medium">Test encode</h2>
+              <label class="flex items-start gap-3 text-sm">
+                <Checkbox
+                  class="mt-0.5"
+                  checked={config.sample_quality}
+                  aria-labelledby="sample-quality"
+                  aria-describedby="sample-quality-help"
+                  onCheckedChange={(v) => change({ sample_quality: v })}
+                />
+                <span>
+                  <span id="sample-quality">Score its quality</span>
+                  <span id="sample-quality-help" class="block text-xs text-muted-foreground">
+                    After a test encode, VideoForge compares each of its frames with the encoder's input and shows the
+                    SSIMULACRA2 and XPSNR scores (from vszip) beside its bitrate. Both are decoded again, so the test
+                    encode takes longer.
+                  </span>
+                </span>
+              </label>
+            </section>
+
+            <section class="col-span-full min-w-0 space-y-3" aria-labelledby="output-names">
+              <h2 id="output-names" tabindex="-1" class="font-medium outline-none">Output names</h2>
+              <p class="text-xs text-muted-foreground">
+                For each rule set, whether its jobs name the file and set the MKV title with the name template. A job
+                takes this when it's added or a template is applied to it, and its Output tab can still change it. A
+                change here leaves jobs already added as they are.
+              </p>
+              <div class="space-y-3">
+                {#each config.rule_sets as r (r.id)}
+                  {@const policy = config.naming[r.id] ?? { file_name: 'template', title: 'template' }}
+                  {@const own = app.ruleSets.find((x) => x.id === r.id)?.defaults.template.mux}
+                  <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                    <span class="w-full font-medium sm:w-32 sm:shrink-0">{r.name}</span>
+                    {#each [{ key: 'file_name', label: 'File name', own: own?.template_file_name }, { key: 'title', label: 'MKV title', own: own?.template_title }] as const as row (row.key)}
+                      <label class="flex min-w-0 items-center gap-2">
+                        <span class="text-muted-foreground">{row.label}</span>
+                        <NativeSelect
+                          class="min-w-0"
+                          aria-label="{r.name}: {row.label} from the name template"
+                          value={policy[row.key]}
+                          onchange={(e) => setNaming(r.id, { ...policy, [row.key]: e.currentTarget.value as NameUse })}
                         >
-                      </Tip>
-                    </div>
-                    <div></div>
-                    <div class="flex min-w-0 items-center gap-2 text-xs">
-                      {#if checking[t.name]}
-                        <span class="text-muted-foreground">checking…</span>
-                      {:else if c && look}
-                        <span class="flex shrink-0 items-center gap-1 {look.tone}"
-                          ><look.icon class="size-3.5" />{look.text}</span
-                        >
-                        {#if c.version}<Tip class="block truncate" text={c.version}>{c.version}</Tip>{/if}
-                        {#if c.detail}<Tip class="block truncate text-muted-foreground" text={c.detail}>{c.detail}</Tip
-                          >{/if}
-                        {#if c.found && c.found !== t.path}<Tip
-                            class="block truncate text-muted-foreground"
-                            text={c.found}>· {c.found}</Tip
-                          >{/if}
-                      {/if}
-                    </div>
+                          <option value="template"
+                            >As each template says{row.own === undefined
+                              ? ''
+                              : ` (${r.name} defaults: ${row.own ? 'on' : 'off'})`}</option
+                          >
+                          <option value="on">Always on</option>
+                          <option value="off">Always off</option>
+                        </NativeSelect>
+                      </label>
+                    {/each}
                   </div>
                 {/each}
               </div>
+            </section>
+
+            <section class="col-span-full min-w-0 space-y-3" aria-label="Default subtitles">
+              <h2 class="font-medium">Default subtitles</h2>
+              {#if !defaultRuleSet?.track_editor || defaultRuleSet.picks_tracks}
+                <p class="text-xs text-muted-foreground">
+                  {defaultRuleSet?.name} picks its jobs' subtitles by its own rules, so these apply only to jobs with other
+                  rule sets.
+                </p>
+              {/if}
+              <TemplateSubsEditor
+                value={subsDefault}
+                flags={subFlags}
+                toggleLabel="Choose every new job's subtitles by rules"
+                offNote="When this is off, new jobs keep every subtitle track unless their template sets subtitle rules."
+                appliedNote="New jobs get these rules unless their template sets its own. Jobs already in the queue keep theirs."
+                onchange={setSubsDefault}
+              />
+            </section>
+          {:else}
+            <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
+          {/if}
+        {:else if tab === 'queue'}
+          {#if config}
+            <section class="space-y-3">
+              <h2 class="font-medium">Batch indexing</h2>
+              <label class="flex items-start gap-3 text-sm">
+                <Checkbox
+                  class="mt-0.5"
+                  checked={config.auto_index}
+                  aria-labelledby="auto-index"
+                  aria-describedby="auto-index-help"
+                  onCheckedChange={(v) => change({ auto_index: v })}
+                />
+                <span>
+                  <span id="auto-index">Index new jobs</span>
+                  <span id="auto-index-help" class="block text-xs text-muted-foreground">
+                    Indexes each new job in the background, beside the queue, as soon as its tracks are read. Its
+                    preview is then ready when you open it.
+                  </span>
+                </span>
+              </label>
+              <label class="flex items-start gap-3 text-sm">
+                <Checkbox
+                  class="mt-0.5"
+                  checked={config.auto_crop}
+                  aria-labelledby="auto-crop"
+                  aria-describedby="auto-crop-help"
+                  onCheckedChange={(v) => change({ auto_crop: v })}
+                />
+                <span>
+                  <span id="auto-crop">Auto-crop new jobs</span>
+                  <span id="auto-crop-help" class="block text-xs text-muted-foreground">
+                    Detects each new job's crop once it's indexed, and indexes the job for this even with Index new jobs
+                    off. A template with a fixed crop keeps its crop, and a crop you set by hand always wins.
+                  </span>
+                </span>
+              </label>
+              <label class="flex items-start gap-3 text-sm">
+                <Checkbox
+                  class="mt-0.5"
+                  checked={config.index_waits_for_disk}
+                  aria-labelledby="index-waits"
+                  aria-describedby="index-waits-help"
+                  onCheckedChange={(v) => change({ index_waits_for_disk: v })}
+                />
+                <span>
+                  <span id="index-waits">Wait while an encode reads the same disk</span>
+                  <span id="index-waits-help" class="block text-xs text-muted-foreground">
+                    Indexing a job waits while the running job uses the disk its source is on, and jobs on other disks
+                    go first. Index now on a job never waits.
+                  </span>
+                </span>
+              </label>
+              <label class="ml-7 flex items-start gap-3 text-sm">
+                <Checkbox
+                  class="mt-0.5"
+                  checked={config.index_during_video}
+                  aria-labelledby="index-during-video"
+                  aria-describedby="index-during-video-help"
+                  disabled={!config.index_waits_for_disk}
+                  onCheckedChange={(v) => change({ index_during_video: v })}
+                />
+                <span class={config.index_waits_for_disk ? '' : 'opacity-60'}>
+                  <span id="index-during-video">Index anyway while it only encodes video</span>
+                  <span id="index-during-video-help" class="block text-xs text-muted-foreground">
+                    The video encode reads the source slowly, so an index beside it costs little. The wait still holds
+                    while the job extracts tracks, encodes audio, indexes, or builds the output file.
+                  </span>
+                </span>
+              </label>
+            </section>
+
+            <section class="space-y-3">
+              <h2 class="font-medium">Audio encodes</h2>
+              <label class="flex items-start gap-3 text-sm">
+                <Input
+                  type="number"
+                  min="0"
+                  max="8"
+                  class="w-20"
+                  value={config.parallel_audio}
+                  aria-labelledby="parallel-audio"
+                  aria-describedby="parallel-audio-help"
+                  onchange={(e) => setParallelAudio(e.currentTarget)}
+                />
+                <span>
+                  <span id="parallel-audio">At once, beside the video encode</span>
+                  <span id="parallel-audio-help" class="block text-xs text-muted-foreground">
+                    A job's audio encodes start once its source is indexed and run while the video encodes. The output
+                    file is built when they're done. 0 encodes them one at a time, before the video. Default: {config.parallel_audio_default}
+                  </span>
+                </span>
+              </label>
+            </section>
+
+            <section class="space-y-3">
+              <h2 class="font-medium">Process priority</h2>
+              {#each [{ key: 'encoder_priority', label: 'Video encode', hint: 'the encoder (x264, x265, ffmpeg for VP8 / VP9, SvtAv1EncApp) and the vspipe feeding it' }, { key: 'tool_priority', label: 'Other tools', hint: 'audio encodes, building the output file, indexing' }] as const as row (row.key)}
+                <label class="flex items-center gap-3 text-sm">
+                  <span class="w-28 shrink-0 text-muted-foreground">{row.label}</span>
+                  <NativeSelect
+                    class="shrink-0"
+                    value={config[row.key]}
+                    onchange={(e) => {
+                      const v = e.currentTarget.value as Priority
+                      change({ [row.key]: v === config?.[`${row.key}_default`] ? null : v })
+                    }}
+                  >
+                    {#each config.priorities as p (p)}<option value={p}>{PRIORITY_LABEL[p]}</option>{/each}
+                  </NativeSelect>
+                  <span class="text-xs text-muted-foreground">
+                    {row.hint}. Default: {PRIORITY_LABEL[config[`${row.key}_default`]]}
+                  </span>
+                </label>
+              {/each}
               <p class="text-xs text-muted-foreground">
-                Dolby Encoding Engine and qaac's CoreAudioToolbox can't be shipped with VideoForge: install them and
-                point at them here. DDP needs DeeZy + DEE (+ truehdd for Atmos); AAC needs ffmpeg + qaac.
+                A change here applies to jobs, indexing and test encodes that start after you make it. To change the
+                ones already running, use the priority menu on the Queue's toolbar. On Linux, Above normal and High need
+                the CAP_SYS_NICE permission, and so does raising a running tool's priority again. Without it, the tool
+                keeps its lower priority.
               </p>
+            </section>
+          {:else}
+            <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
+          {/if}
+        {:else if tab === 'presets'}
+          <section class="col-span-full space-y-3">
+            <h2 class="font-medium">Encoder presets</h2>
+            <div class="flex flex-wrap gap-2">
+              {#if app.defaultRuleSet}
+                <EncoderPresetMenu
+                  ruleSet={app.defaultRuleSet.id}
+                  current={app.defaultRuleSet.defaults.encoder}
+                  apply={() => {}}
+                  manageOnly
+                />
+              {/if}
+              <AudioPresetMenu
+                current={{ action: 'copy', layout: null, bitrate_kbps: null, options: {} }}
+                apply={() => {}}
+                manageOnly
+              />
+            </div>
+          </section>
+          {#if config}
+            <ManagedPresets disabled={pending > 0 || !!saveError} refreshKey={pluginRefresh} />
+          {/if}
+        {:else if tab === 'files'}
+          {#if config}
+            <SavedOutputFolders />
+
+            <section class="space-y-3">
+              <h2 class="font-medium">Work folders</h2>
+              <label class="flex items-start gap-3 text-sm">
+                <Checkbox
+                  class="mt-0.5"
+                  checked={config.delete_work_dir}
+                  aria-labelledby="delete-work-dir"
+                  aria-describedby="delete-work-dir-help"
+                  onCheckedChange={(v) => change({ delete_work_dir: v === config?.delete_work_dir_default ? null : v })}
+                />
+                <span>
+                  <span id="delete-work-dir">Delete a job's work folder once it's done</span>
+                  <span id="delete-work-dir-help" class="block text-xs text-muted-foreground">
+                    The <code>&lt;source&gt;_tmp</code> folder next to the source (index, encodes, log) is deleted after
+                    the job succeeds; its job records and log are copied to {config.records_dir} first (the newest 100 kept).
+                    A job that fails or is canceled keeps it, to resume from. Default:
+                    {config.delete_work_dir_default ? 'on' : 'off'}
+                  </span>
+                </span>
+              </label>
             </section>
 
             <section class="space-y-3">
@@ -541,206 +817,98 @@
                 <Button variant="outline" onclick={() => (browse = { kind: 'root' })}><FolderOpenIcon />Browse…</Button>
               </div>
             </section>
-          {:else}
-            <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
-          {/if}
-        {:else if tab === 'encoding'}
-          {#if config}
-            <section class="space-y-3">
-              <h2 class="font-medium">Rule set</h2>
-              <label class="flex items-center gap-3 text-sm">
-                <span class="text-muted-foreground">New jobs start with</span>
-                <NativeSelect value={config.rule_set} onchange={(e) => setRuleSet(e.currentTarget.value)}>
-                  {#each config.rule_sets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-                </NativeSelect>
-                <span class="text-xs text-muted-foreground">Default: {config.rule_set_default}</span>
-              </label>
-            </section>
 
-            <section class="space-y-3">
-              <h2 class="font-medium">Batch indexing</h2>
-              <label class="flex items-start gap-3 text-sm">
-                <Checkbox
-                  class="mt-0.5"
-                  checked={config.auto_index}
-                  onCheckedChange={(v) => change({ auto_index: v })}
-                />
-                <span>
-                  Index new jobs
-                  <span class="block text-xs text-muted-foreground">
-                    A job is put in the index lane as soon as it is probed, so its preview is ready when you open it.
-                  </span>
-                </span>
-              </label>
-              <label class="flex items-start gap-3 text-sm">
-                <Checkbox class="mt-0.5" checked={config.auto_crop} onCheckedChange={(v) => change({ auto_crop: v })} />
-                <span>
-                  Auto-crop new jobs
-                  <span class="block text-xs text-muted-foreground">
-                    The crop is detected after the job is indexed (it indexes the job even with the option above off). A
-                    template with a fixed crop keeps it; a crop set by hand always wins.
-                  </span>
-                </span>
-              </label>
-              <label class="flex items-start gap-3 text-sm">
-                <Checkbox
-                  class="mt-0.5"
-                  checked={config.index_waits_for_disk}
-                  onCheckedChange={(v) => change({ index_waits_for_disk: v })}
-                />
-                <span>
-                  Wait while an encode reads the same disk
-                  <span class="block text-xs text-muted-foreground">
-                    A job in the index lane whose source is on the disk the running encode reads waits for it to finish;
-                    jobs on other disks go first. Index now on a job never waits.
-                  </span>
-                </span>
-              </label>
-              <label class="ml-7 flex items-start gap-3 text-sm">
-                <Checkbox
-                  class="mt-0.5"
-                  checked={config.index_during_video}
-                  disabled={!config.index_waits_for_disk}
-                  onCheckedChange={(v) => change({ index_during_video: v })}
-                />
-                <span class={config.index_waits_for_disk ? '' : 'opacity-60'}>
-                  Index anyway while it only encodes video
-                  <span class="block text-xs text-muted-foreground">
-                    The video encode reads the source slowly, so an index beside it costs little. The wait still holds
-                    while the job extracts, encodes audio, indexes or muxes.
-                  </span>
-                </span>
-              </label>
-            </section>
-
-            <section class="space-y-3">
-              <h2 class="font-medium">Audio encodes</h2>
-              <label class="flex items-start gap-3 text-sm">
-                <Input
-                  type="number"
-                  min="0"
-                  max="8"
-                  class="w-20"
-                  value={config.parallel_audio}
-                  onchange={(e) => setParallelAudio(e.currentTarget)}
-                />
-                <span>
-                  At once, beside the video encode
-                  <span class="block text-xs text-muted-foreground">
-                    A job's audio encodes start once its source is indexed and run while the video encodes; the mux
-                    waits for them. 0 encodes them one by one, before the video. Default: {config.parallel_audio_default}
-                  </span>
-                </span>
-              </label>
-            </section>
-
-            <section class="space-y-3">
-              <h2 class="font-medium">Process priority</h2>
-              {#each [{ key: 'encoder_priority', label: 'Video encode', hint: 'the encoder (x264, x265, ffmpeg for VP8 / VP9, SvtAv1EncApp) and the vspipe feeding it' }, { key: 'tool_priority', label: 'Other tools', hint: 'audio encodes, the mux, indexing' }] as const as row (row.key)}
-                <label class="flex items-center gap-3 text-sm">
-                  <span class="w-28 shrink-0 text-muted-foreground">{row.label}</span>
-                  <NativeSelect
-                    class="shrink-0"
-                    value={config[row.key]}
-                    onchange={(e) => {
-                      const v = e.currentTarget.value as Priority
-                      change({ [row.key]: v === config?.[`${row.key}_default`] ? null : v })
-                    }}
-                  >
-                    {#each config.priorities as p (p)}<option value={p}>{PRIORITY_LABEL[p]}</option>{/each}
-                  </NativeSelect>
-                  <span class="text-xs text-muted-foreground">
-                    {row.hint}. Default: {PRIORITY_LABEL[config[`${row.key}_default`]]}
-                  </span>
-                </label>
-              {/each}
+            <section class="min-w-0 space-y-2">
+              <h2 class="font-medium">Data folder</h2>
+              <code class="block font-mono text-xs break-all">{config.data_dir}</code>
               <p class="text-xs text-muted-foreground">
-                For jobs started from now on; the Queue's toolbar changes the running one's. On Linux it's a nice value,
-                and raising one back needs CAP_SYS_NICE.
+                VideoForge stores its database, logs, job records and plugins here.
               </p>
             </section>
-
-            <section class="space-y-3">
-              <h2 class="font-medium">Work folders</h2>
-              <label class="flex items-start gap-3 text-sm">
-                <Checkbox
-                  class="mt-0.5"
-                  checked={config.delete_work_dir}
-                  onCheckedChange={(v) => change({ delete_work_dir: v === config?.delete_work_dir_default ? null : v })}
-                />
-                <span>
-                  Delete a job's work folder once it's done
-                  <span class="block text-xs text-muted-foreground">
-                    The <code>&lt;source&gt;_tmp</code> folder next to the source (index, encodes, log) is deleted after
-                    the job succeeds; its job records and log are copied to {config.records_dir} first (the newest 100 kept).
-                    A job that fails or is cancelled keeps it, to resume from. Default:
-                    {config.delete_work_dir_default ? 'on' : 'off'}
-                  </span>
-                </span>
-              </label>
-            </section>
-
-            <section class="space-y-3">
-              <h2 class="font-medium">Test encode</h2>
-              <label class="flex items-start gap-3 text-sm">
-                <Checkbox
-                  class="mt-0.5"
-                  checked={config.sample_quality}
-                  onCheckedChange={(v) => change({ sample_quality: v })}
-                />
-                <span>
-                  Score its quality
-                  <span class="block text-xs text-muted-foreground">
-                    After a test encode, compare every frame with the encoder's input (SSIMULACRA2 and XPSNR, vszip) and
-                    show the scores beside its bitrate. It decodes both once more, so the test encode takes longer.
-                  </span>
-                </span>
-              </label>
-            </section>
-
-            <section class="col-span-full min-w-0 space-y-3" aria-label="Default subtitles">
-              <h2 class="font-medium">Default subtitles</h2>
-              {#if !defaultRuleSet?.track_editor || defaultRuleSet.picks_tracks}
-                <p class="text-xs text-muted-foreground">
-                  {defaultRuleSet?.name}'s rules choose its jobs' subtitles; these apply to other rule sets' jobs.
-                </p>
-              {/if}
-              <TemplateSubsEditor
-                value={subsDefault}
-                flags={subFlags}
-                toggleLabel="Choose every new job's subtitles by rules"
-                offNote="Off: new jobs keep every subtitle track, unless their template sets subtitle rules."
-                appliedNote="New jobs get these rules unless their template sets its own; jobs already in the queue keep theirs."
-                onchange={setSubsDefault}
-              />
+          {:else}
+            <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
+          {/if}
+        {:else if tab === 'tools'}
+          {#if config}
+            <section class="col-span-full min-w-0 space-y-3">
+              <div class="flex items-center gap-3">
+                <h2 class="font-medium">Tools</h2>
+                <span class="text-xs text-muted-foreground"
+                  >A name without a folder, like ffmpeg, is looked up on PATH.</span
+                >
+                <Button
+                  variant="outline"
+                  class="ml-auto"
+                  onclick={checkAll}
+                  disabled={Object.values(checking).some(Boolean)}
+                >
+                  <RefreshCwIcon />Check again
+                </Button>
+              </div>
+              <div class="divide-y divide-border/60 rounded-xl border bg-card">
+                {#each config.tools as t (t.name)}
+                  {@const c = checks[t.name]}
+                  {@const look = c ? LOOK[c.status] : null}
+                  <div class="grid grid-cols-[12rem_1fr] items-baseline gap-x-4 gap-y-1.5 px-4 py-3">
+                    <div>
+                      <div class="text-sm font-medium">{t.label}</div>
+                      <div class="text-xs text-muted-foreground">{t.purpose}</div>
+                    </div>
+                    <div class="flex min-w-0 items-center gap-2">
+                      <Input
+                        class="min-w-0 flex-1 font-mono text-xs {t.custom ? 'border-primary/60' : ''}"
+                        value={t.custom ?? t.default}
+                        placeholder={t.default || 'not set'}
+                        aria-label="{t.label} path"
+                        onchange={(e) => setTool(t, e.currentTarget.value)}
+                      />
+                      <Button variant="outline" onclick={() => (browse = { kind: 'tool', tool: t })}
+                        ><FolderOpenIcon />Browse…</Button
+                      >
+                      <Tip text="Back to the default: {t.default || '(none)'}">
+                        <Button variant="ghost" size="sm" disabled={!t.custom} onclick={() => setTool(t, '')}
+                          >Reset</Button
+                        >
+                      </Tip>
+                    </div>
+                    <div></div>
+                    <div class="flex min-w-0 items-center gap-2 text-xs">
+                      {#if checking[t.name]}
+                        <span class="text-muted-foreground">checking…</span>
+                      {:else if c && look}
+                        <span class="flex shrink-0 items-center gap-1 {look.tone}"
+                          ><look.icon class="size-3.5" />{look.text}</span
+                        >
+                        {#if c.version}<Tip class="block truncate" text={c.version}>{c.version}</Tip>{/if}
+                        {#if c.detail}<Tip class="block truncate text-muted-foreground" text={c.detail}>{c.detail}</Tip
+                          >{/if}
+                        {#if c.found && c.found !== t.path}<Tip
+                            class="block truncate text-muted-foreground"
+                            text={c.found}>· {c.found}</Tip
+                          >{/if}
+                      {/if}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+              <p class="text-xs text-muted-foreground">
+                VideoForge can't include Dolby Encoding Engine or qaac's CoreAudioToolbox, so install them yourself and
+                set them here. DDP encodes need DeeZy and DEE, plus truehdd for Atmos. AAC encodes need ffmpeg and qaac.
+              </p>
             </section>
           {:else}
             <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
           {/if}
-        {:else if tab === 'presets'}
-          <section class="col-span-full space-y-3">
-            <h2 class="font-medium">Encoder presets</h2>
-            <p class="text-sm text-muted-foreground">
-              Create, edit, organize, import, and export presets without opening a job or template.
-            </p>
-            <div class="flex flex-wrap gap-2">
-              {#if app.defaultRuleSet}
-                <EncoderPresetMenu
-                  ruleSet={app.defaultRuleSet.id}
-                  current={app.defaultRuleSet.defaults.encoder}
-                  apply={() => {}}
-                  manageOnly
-                />
-              {/if}
-              <AudioPresetMenu
-                current={{ action: 'copy', layout: null, bitrate_kbps: null, options: {} }}
-                apply={() => {}}
-                manageOnly
-              />
-            </div>
-          </section>
+        {:else if tab === 'plugins'}
           {#if config}
-            <ManagedPresets disabled={pending > 0 || !!saveError} refreshKey={pluginRefresh} />
+            <PluginManager
+              refreshKey={pluginRefresh}
+              onupdated={(value) => {
+                config = value
+              }}
+            />
+          {:else}
+            <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
           {/if}
         {:else if tab === 'automation'}
           {#if config}
@@ -768,12 +936,12 @@
                 </label>
                 <p class="pl-6 text-xs text-muted-foreground">
                   {#if !browserNotify.supported}
-                    Browsers allow these on https or localhost only; this page is on plain http.
+                    Browsers allow these only on https or localhost, and this page is on plain http.
                   {:else if browserNotify.permission === 'denied'}
-                    This browser blocks notifications from VideoForge: allow them in its site settings.
+                    This browser blocks notifications from VideoForge. Allow them in the browser's site settings.
                   {:else}
-                    Only while VideoForge isn't the tab in front; in front, each job's own toast says it. Just this
-                    browser.
+                    Shown only when VideoForge isn't the tab in front. When it is, each job's toast tells you instead.
+                    This setting is for this browser only.
                   {/if}
                 </p>
               </div>
@@ -781,7 +949,7 @@
                 {#each config.notifications as d, i (i)}
                   <div class="space-y-2 px-4 py-3 {d.enabled ? '' : 'opacity-60'}">
                     <div class="flex min-w-0 items-center gap-2">
-                      <Tip text={d.enabled ? 'On' : 'Off: nothing is sent here'}>
+                      <Tip text={d.enabled ? 'On' : 'Off, so nothing is sent here'}>
                         <Checkbox
                           checked={d.enabled}
                           aria-label="Send to {d.name}"
@@ -846,14 +1014,16 @@
               <div class="flex items-center gap-3">
                 <h2 class="font-medium">Actions</h2>
                 <span class="text-xs text-muted-foreground">
-                  After a job ends or the queue finishes: move or copy the output, run a command, or call a webhook. A
-                  job's actions run in this order; after a move, the ones below it see the new path.
+                  After a job ends or the queue finishes, actions can move or copy the output, run a command, call a
+                  webhook, or shut down or sleep the computer. A job's actions run in this order, and after a move, the
+                  ones below it get the new path.
                 </span>
               </div>
               {#if !config.allow_commands}
                 <p class="text-xs text-warning">
-                  Command actions are disabled by the current server configuration (the page has no login, so only if no
-                  one else can reach it).
+                  Command actions are off in this server's configuration. To turn them on, set commands = true under
+                  [actions] in videoforge.toml. Do this only if no one else can reach this page, because it has no
+                  login.
                 </p>
               {/if}
               {#snippet actionRow(
@@ -863,7 +1033,7 @@
               )}
                 <div class="flex min-w-0 items-center gap-2">
                   {#if index !== 'draft'}
-                    <Tip text={a.enabled ? 'On' : 'Off: it never runs'}>
+                    <Tip text={a.enabled ? 'On' : "Off, so it doesn't run"}>
                       <Checkbox
                         checked={a.enabled}
                         aria-label="Run {a.name}"
@@ -923,7 +1093,7 @@
                       Queue finished
                     </label>
                     <span class="text-xs text-muted-foreground">
-                      Only when the queue ran out of jobs (not when stopped). Put it last.
+                      Runs only when the queue runs out of jobs, not when it's stopped. Put it last.
                     </span>
                   {:else}
                     {@render eventChoices(
@@ -974,18 +1144,30 @@
           {:else}
             <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
           {/if}
-        {:else if tab === 'plugins'}
+        {:else if tab === 'appearance'}
+          <AppearanceSettings />
+        {:else if tab === 'profiles'}
+          <ProfileManager
+            disabled={pending > 0 || !!saveError}
+            onswitched={(value) => {
+              config = value
+              pluginRefresh++
+              checks = {}
+              checkAll()
+            }}
+          />
           {#if config}
-            <PluginManager
-              refreshKey={pluginRefresh}
-              onupdated={(value) => {
+            <ResetConfiguration
+              disabled={pending > 0 || !!saveError || app.queue.running}
+              onreset={(value) => {
                 config = value
+                pluginRefresh++
+                checks = {}
+                checkAll()
               }}
             />
-          {:else}
-            <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
           {/if}
-        {:else if tab === 'backup'}
+        {:else if tab === 'transfer'}
           {#if config}
             <ConfigurationTransfer
               disabled={pending > 0 || !!saveError}
@@ -997,15 +1179,24 @@
               }}
             />
             <PresetPackTransfer disabled={pending > 0 || !!saveError} />
-            <ResetConfiguration
-              disabled={pending > 0 || !!saveError || app.queue.running}
-              onreset={(value) => {
-                config = value
-                pluginRefresh++
-                checks = {}
-                checkAll()
-              }}
-            />
+
+            <section class="col-span-full space-y-3">
+              <h2 class="font-medium">Templates and plugins</h2>
+              <div class="flex flex-wrap items-center gap-3 text-sm">
+                <span class="text-muted-foreground">Import and export templates on the Templates page.</span>
+                <Button variant="outline" onclick={() => router.go('templates')}>Open Templates</Button>
+              </div>
+              <div class="flex flex-wrap items-center gap-3 text-sm">
+                <span class="text-muted-foreground">Install a plugin from its ZIP file under Plugins.</span>
+                <Button
+                  variant="outline"
+                  onclick={() => {
+                    openTab('plugins')
+                    document.getElementById('settings-tab-plugins')?.focus() // this button goes with its tab
+                  }}>Open Plugins</Button
+                >
+              </div>
+            </section>
           {:else}
             <p class="text-muted-foreground">{error ? '' : 'Loading…'}</p>
           {/if}
@@ -1021,11 +1212,12 @@
       <Dialog.Title>Shut down VideoForge?</Dialog.Title>
       <Dialog.Description>
         {#if app.queue.running}
-          A job is running: it is cancelled. Started again, it skips the steps it finished.
+          The running job is canceled. When it runs again, it skips the steps it finished.
         {:else}
           No job is running.
         {/if}
         {#if app.queue.queued}{app.queue.queued} queued job(s) stay in the queue.{/if}
+        Start VideoForge again with <code class="text-xs">videoforge serve</code> (or VideoForge.exe).
       </Dialog.Description>
     </Dialog.Header>
     <Dialog.Footer>
@@ -1037,7 +1229,11 @@
 
 {#if browse}
   <FileBrowser
-    title={browse.kind === 'tool' ? browse.tool.label : browse.kind === 'action' ? 'The folder' : 'Add a folder'}
+    title={browse.kind === 'tool'
+      ? browse.tool.label
+      : browse.kind === 'action'
+        ? 'Destination folder'
+        : 'Add a folder'}
     mode={browse.kind !== 'tool' || browse.tool.folder ? 'folder' : 'files'}
     programs={browse.kind === 'tool' && !browse.tool.folder}
     orFolder={browse.kind === 'tool' && browse.tool.name === 'dee'}

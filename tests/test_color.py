@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -79,13 +80,55 @@ def test_flags_per_encoder():
     assert color_args(None, x265) == []
 
 
-def test_the_users_option_wins():
-    """The colour flags go before the options and extra arguments: the encoder takes the last one."""
-    enc = EncoderSettings(Encoder.X265, depth=10, options={"colorprim": "bt709"}, extra="--max-cll 500,100")
+def test_the_source_wins_unless_overridden():
+    """As StaxRip's "Import VUI metadata": a colour flag in the options or extra arguments for a value the source
+    has is dropped; one the source has no value for, and the chroma location, stay. With color_override the job's
+    come after the source's, and the encoder takes the last one."""
+    enc = EncoderSettings(
+        Encoder.X265,
+        depth=10,
+        options={"colorprim": "bt709", "chromaloc": "0"},
+        extra="--max-cll=500,100 --transfer bt709 --no-hdr10",
+    )
     argv = encoder_command("x265", enc, output=Path("v.hevc"), color=HDR10)
-    prims = [i for i, a in enumerate(argv) if a == "--colorprim"]
-    assert [argv[i + 1] for i in prims] == ["bt2020", "bt709"]
-    assert argv[len(argv) - 1 - argv[::-1].index("--max-cll") + 1] == "500,100"
+    assert [argv[i + 1] for i, a in enumerate(argv) if a == "--colorprim"] == ["bt2020"]
+    assert [argv[i + 1] for i, a in enumerate(argv) if a == "--transfer"] == ["smpte2084"]
+    assert "--max-cll=500,100" not in argv and argv[argv.index("--max-cll") + 1] == "1000,657"
+    assert "--chromaloc" in argv  # not the source's to decide
+    assert "--no-hdr10" not in argv and "--hdr10" in argv  # the source's HDR10 SEI wins
+    untagged = encoder_command("x265", enc, output=Path("v.hevc"), color=VideoColor(primaries="bt2020"))
+    assert [untagged[i + 1] for i, a in enumerate(untagged) if a == "--transfer"] == ["bt709"]  # none of its own
+
+    argv = encoder_command("x265", replace(enc, color_override=True), output=Path("v.hevc"), color=HDR10)
+    assert [argv[i + 1] for i, a in enumerate(argv) if a == "--colorprim"] == ["bt2020", "bt709"]
+    assert argv[-4] == "--no-hdr10" and "--max-cll=500,100" in argv
+
+
+def _flags_of(argv):
+    return [a for a in argv if a in ("--hdr10", "--no-hdr10")]
+
+
+def test_an_hdr10_source_wins_over_the_jobs_no_hdr10():
+    """As StaxRip's "Import VUI metadata": a preset written for SDR sources (--no-hdr10) on an HDR10 source gets
+    the source's --hdr10 and nothing contradicting it, from the options or the extra arguments."""
+    enc = EncoderSettings(Encoder.X265, depth=10, options={"no-hdr10": ""})
+    assert _flags_of(encoder_command("x265", enc, output=Path("v.hevc"), color=HDR10)) == ["--hdr10"]
+    enc = EncoderSettings(Encoder.X265, depth=10, extra="--no-hdr10 --hdr10-opt")
+    argv = encoder_command("x265", enc, output=Path("v.hevc"), color=HDR10)
+    assert _flags_of(argv) == ["--hdr10"] and "--hdr10-opt" in argv  # the tuning stays the job's
+
+
+def test_an_sdr_source_keeps_the_jobs_hdr10_switch():
+    sdr = VideoColor("bt709", "bt709", "bt709")
+    enc = EncoderSettings(Encoder.X265, depth=10, options={"no-hdr10": ""})
+    assert _flags_of(encoder_command("x265", enc, output=Path("v.hevc"), color=sdr)) == ["--no-hdr10"]
+    enc = EncoderSettings(Encoder.X265, depth=10, extra="--hdr10")
+    assert _flags_of(encoder_command("x265", enc, output=Path("v.hevc"), color=sdr)) == ["--hdr10"]
+
+
+def test_color_override_keeps_the_jobs_no_hdr10():
+    enc = EncoderSettings(Encoder.X265, depth=10, options={"no-hdr10": ""}, color_override=True)
+    assert _flags_of(encoder_command("x265", enc, output=Path("v.hevc"), color=HDR10)) == ["--hdr10", "--no-hdr10"]
 
 
 def test_the_options_turn_the_hdr10_flags_off():
@@ -120,6 +163,7 @@ def test_effective_svt_color_uses_last_override(source_color):
     settings = EncoderSettings(
         Encoder.SVTAV1,
         source_color=source_color,
+        color_override=True,
         options={"color-primaries": "1", "color-range": "0"},
         extra='--color-primaries "9" --color-range 1 --content-light 500,100',
     )
@@ -133,6 +177,7 @@ def test_effective_svt_color_uses_last_override(source_color):
 def test_effective_vpx_color_names_codes_and_stream_specifiers():
     settings = EncoderSettings(
         Encoder.VP9,
+        color_override=True,
         options={"color_primaries": "bt709"},
         extra="-color_primaries:v:0 9 -color_trc gamma22 -colorspace rgb -color_range pc",
     )
@@ -158,7 +203,9 @@ def test_pipeline_mux_uses_effective_color(tmp_path, rule_set, container):
 
     plan = make_plan(tmp_path)
     job = video_job(plan, tmp_path)
-    job.encoder = EncoderSettings(Encoder.SVTAV1, preset="12", extra="--color-primaries 9 --color-range 1")
+    job.encoder = EncoderSettings(
+        Encoder.SVTAV1, preset="12", extra="--color-primaries 9 --color-range 1", color_override=True
+    )
     plan.source.video.color = VideoColor("bt709", "bt709", "bt709", "limited")
     plan.encode_path = job.video_output
     job.mux = MuxSettings(container=container)

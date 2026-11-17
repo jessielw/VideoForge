@@ -17,7 +17,7 @@ import time
 from conftest import audio, plan_for, simulate_output, source, sub
 import pytest
 
-from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools
+from videoforge.core.config import PROJECT_ROOT, AppConfig, Tools, mkv_ui
 from videoforge.core.execute import process
 from videoforge.core.execute.control import Priority
 from videoforge.core.execute.mux import MuxSettings
@@ -52,6 +52,7 @@ def fake_tool_files(*names: str) -> dict[str, str]:
 
 
 _TOOLS = fake_tool_files("mkvmerge", "deezy", "dee", "truehdd", "qaac64", "ffmpeg")
+UI = mkv_ui("mkvextract")  # "en" on Windows, "en_US" elsewhere
 APP = AppConfig(
     tools=Tools(
         mkvmerge=_TOOLS["mkvmerge"],
@@ -237,7 +238,7 @@ def test_missing_encoder_tool_fails_before_running(rule_set, tmp_path):
     app = replace(APP, tools=replace(APP.tools, qaac=str(tmp_path / "qaac64.exe")))
     runner = FakeRunner()
     result = run_plan(plan, tmp_path / "out", rule_set, app, runner=runner)
-    assert result.status is JobStatus.FAILED and result.error == "AAC (qaac) needs qaac: set it in Settings"
+    assert result.status is JobStatus.FAILED and result.error == "AAC (qaac) needs qaac. Set it in Settings › Tools"
     assert not runner.calls
 
 
@@ -448,6 +449,122 @@ def test_a_job_pauses_after_pass_1_and_goes_on_with_pass_2(rule_set, tmp_path):
     assert tools_called(again).count("x264") == 1  # pass 2 only: pass 1 was reused
 
 
+USER_OGM = "\ufeffCHAPTER01=00:00:00.000\r\nCHAPTER01NAME=Intro\r\n\r\nCHAPTER02=00:00:01.502\r\nCHAPTER02NAME=Part\r\n"
+USER_XML = """<?xml version="1.0"?>
+<Chapters><EditionEntry>
+<ChapterAtom><ChapterTimeStart>00:00:00.000000000</ChapterTimeStart><ChapterDisplay><ChapterString>Intro</ChapterString></ChapterDisplay></ChapterAtom>
+<ChapterAtom><ChapterTimeStart>00:00:01.502000000</ChapterTimeStart><ChapterDisplay><ChapterString>Part</ChapterString></ChapterDisplay></ChapterAtom>
+</EditionEntry></Chapters>
+"""
+
+
+def user_chapters_job(plan, tmp_path, name="user.txt", text=USER_OGM, encoder=None, qpf=True):
+    """A video job with the user's chapter file: the plan muxes that file (as plan_spec plans it)."""
+    chapters = tmp_path / name
+    chapters.write_bytes(text.encode("utf-8"))  # as given: no newline translation
+    job = video_job(plan, tmp_path)
+    job.inputs.chapters, job.qpf = chapters, qpf
+    if encoder is not None:
+        job.encoder = encoder
+        plan.encode_path = job.video_output
+    plan.chapters_path = chapters
+    return job, chapters
+
+
+@pytest.mark.parametrize("encoder", [Encoder.X264, Encoder.X265])
+def test_the_users_chapters_make_the_qpfile(rule_set, tmp_path, encoder):
+    """qpf on with the user's chapter file: AutoQPF makes the qpfile from it (an OGM file with a BOM, CRLF and a
+    blank line, written out in AutoQPF's strict form first), the encoder gets it, and the mux takes the user's
+    file."""
+    plan = make_plan(tmp_path)
+    job, chapters = user_chapters_job(plan, tmp_path, encoder=EncoderSettings(encoder))
+    assert job.makes_qpfile and not job.makes_chapters
+    steps = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    step = steps["chapters"]
+    qpfile = job.job_dir / "chapters.qpf"
+    assert step.inputs == (chapters,) and step.outputs[0] == qpfile
+    assert job.job_dir / "chapters_chapters.txt" not in step.outputs  # AutoQPF writes no chapters of its own
+    video = steps["video"].argvs[1]
+    assert video[video.index("--qpfile") + 1] == str(qpfile) and qpfile in steps["video"].inputs
+    mux = steps["mux"].argvs[0]
+    assert mux[mux.index("--chapters") + 1] == str(chapters)
+
+    job.job_dir.mkdir(parents=True)
+    step.call(print)
+    assert qpfile.read_text(encoding="utf-8").split() == ["0", "K", "36", "K"]  # 1.502 s at 23.976 fps
+    assert chapters.read_bytes() == USER_OGM.encode("utf-8")  # the user's file untouched
+
+
+def test_a_chapter_xml_makes_the_qpfile_too(rule_set, tmp_path):
+    """AutoQPF reads OGM text only: a Matroska chapter XML is written out as OGM for it."""
+    plan = make_plan(tmp_path)
+    job, chapters = user_chapters_job(plan, tmp_path, "user.xml", USER_XML)
+    steps = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    job.job_dir.mkdir(parents=True)
+    steps["chapters"].call(print)
+    assert (job.job_dir / "chapters.qpf").read_text(encoding="utf-8").split() == ["0", "K", "36", "K"]
+    mux = steps["mux"].argvs[0]
+    assert mux[mux.index("--chapters") + 1] == str(chapters)
+
+
+def test_an_unreadable_chapter_file_fails_the_qpfile_step(rule_set, tmp_path):
+    plan = make_plan(tmp_path)
+    job, _ = user_chapters_job(plan, tmp_path, text="not chapters\n")
+    steps = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    job.job_dir.mkdir(parents=True)
+    with pytest.raises(ToolError, match="No chapters could be read from user.txt"):
+        steps["chapters"].call(print)
+    assert not (job.job_dir / "chapters.qpf").exists()
+
+
+def test_qpf_off_with_the_users_chapters_makes_no_qpfile(rule_set, tmp_path):
+    plan = make_plan(tmp_path)
+    job, chapters = user_chapters_job(plan, tmp_path, qpf=False)
+    assert not job.makes_qpfile and not job.makes_chapters
+    steps = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    assert "chapters" not in steps and "--qpfile" not in steps["video"].argvs[1]
+    mux = steps["mux"].argvs[0]
+    assert mux[mux.index("--chapters") + 1] == str(chapters)
+
+
+def test_qpf_on_without_chapters_still_runs_autoqpf(rule_set, tmp_path):
+    plan = make_plan(tmp_path)
+    job = video_job(plan, tmp_path)
+    job.qpf = True
+    assert job.makes_qpfile and job.makes_chapters
+    steps = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    step = steps["chapters"]
+    assert step.label == "Chapters and qpfile (AutoQPF)" and step.inputs == (plan.source.path,)
+    assert step.outputs == (job.job_dir / "chapters.qpf", job.job_dir / "chapters_chapters.txt")
+
+
+def test_the_users_chapters_force_vp9_keyframes(rule_set, tmp_path):
+    """VP8 / VP9 (and SVT-AV1 in CRF) take the qpfile's frames as keyframes (forces_keyframes): the user's
+    chapters' qpfile too."""
+    plan = make_plan(tmp_path)
+    vp9 = EncoderSettings(Encoder.VP9, rate_control=RateControl.CRF, crf=30, preset="4")
+    job, _ = user_chapters_job(plan, tmp_path, encoder=vp9)
+    steps = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    job.job_dir.mkdir(parents=True)
+    steps["chapters"].call(print)
+    argv = steps["video"].refresh().argvs[1]
+    assert argv[argv.index("-force_key_frames") + 1] == "expr:eq(n,0)+eq(n,36)"
+
+
+def test_the_record_names_the_users_chapters_and_the_qpfile(tmp_path):
+    from videoforge.core.record import _chapters
+
+    plan = make_plan(tmp_path)
+    job, chapters = user_chapters_job(plan, tmp_path)
+    assert _chapters(job, plan) == {
+        "from": "file",
+        "path": str(chapters),
+        "qpfile": str(job.job_dir / "chapters.qpf"),
+    }
+    job.qpf = False
+    assert _chapters(job, plan) == {"from": "file", "path": str(chapters)}
+
+
 def test_the_encode_is_timed_by_the_scripts_frame_rate(rule_set, tmp_path):
     """An IVTC of a 29.97 source: the mux and AutoQPF take the script's 23.976 (vspipe --info), not the source's."""
     plan = make_plan(tmp_path)
@@ -493,7 +610,7 @@ def test_a_vfr_source_keeps_its_timestamps(rule_set, tmp_path):
     ids = [s.id for s in built.steps]
     stamps = job.work_dir / "timestamps.txt"
     raw_stamps = job.work_dir / "timestamps.source.txt"
-    argv = ("mkvextract", "--ui-language", "en", "timestamps_v2", str(plan.source.path), f"0:{raw_stamps}")
+    argv = ("mkvextract", *UI, "timestamps_v2", str(plan.source.path), f"0:{raw_stamps}")
     assert step["timestamps"].argvs == (argv,) and step["timestamps"].outputs == (raw_stamps,)
     assert ids.index("script.info") < ids.index("timestamps") < ids.index("video")
     mux = step["mux"].argvs[0]
@@ -538,9 +655,9 @@ def test_a_vfr_mp4_source_is_copied_into_an_mkv_for_its_timestamps(rule_set, tmp
     mkv, stamps = job.work_dir / "timestamps.mkv", job.work_dir / "timestamps.source.txt"
     assert ids.index("timestamps.remux") + 1 == ids.index("timestamps")
     remux = step["timestamps.remux"].argvs[0]
-    assert remux[:5] == (APP.tools.mkvmerge, "--ui-language", "en", "--output", str(mkv))
+    assert remux[:5] == (APP.tools.mkvmerge, *mkv_ui(APP.tools.mkvmerge), "--output", str(mkv))
     assert remux[5:8] == ("--video-tracks", "0", "--no-subtitles") and remux[-1] == str(mp4)
-    argv = ("mkvextract", "--ui-language", "en", "timestamps_v2", str(mkv), f"0:{stamps}")
+    argv = ("mkvextract", *UI, "timestamps_v2", str(mkv), f"0:{stamps}")
     assert step["timestamps"].argvs == (argv,) and step["timestamps"].inputs == (mkv,)
 
 
@@ -914,7 +1031,7 @@ def test_real_plan_warns_on_an_unlisted_option(tmp_path):
     )
     plan = plan_spec(job, probe_spec(job, app), get_rule_set("manual"), app.tools)
     unknown = [i for i in plan.issues if i.code == "video.option_unknown"]
-    assert len(unknown) == 1 and "--bfrmaes: did you mean --bframes?" in unknown[0].message, plan.issues
+    assert len(unknown) == 1 and "--bfrmaes. Did you mean --bframes?" in unknown[0].message, plan.issues
 
 
 @needs_tools
@@ -975,6 +1092,54 @@ def test_real_anamorphic_job_keeps_its_shape(tmp_path, keep_ar, container):
     assert result.output.suffix == f".{container}"
     shape = Fraction(out.width, out.height) * out.sar
     assert abs(shape / (Fraction(704, 480) * Fraction(32, 27)) - 1) < Fraction(1, 200)
+
+
+@needs_tools
+def test_real_mp4_job_copies_truehd_out_of_an_mkv(tmp_path):
+    """A TrueHD track copied from an MKV into an MP4: MP4Box can't read it there (GPAC 26.07: "Feature Not
+    Supported"; 2.4 hangs), so it's extracted first and the MP4 holds it."""
+    ffprobe = shutil.which("ffprobe")
+    if shutil.which("MP4Box") is None or ffprobe is None:
+        pytest.skip("needs MP4Box (GPAC) and ffprobe on PATH")
+    from videoforge.core.config import load_app_config
+    from videoforge.core.execute.mux import MuxSettings
+    from videoforge.core.job import plan_spec, probe_spec
+    from videoforge.core.video import vs as vsx
+    from videoforge.rule_sets import get_rule_set
+
+    app = load_app_config()
+    vsx.configure(app.tools.vs_plugins)
+    vsx.ensure_vspipe(app.tools.vspipe)
+    src = tmp_path / "Movie.2001.mkv"
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=1:size=320x240:rate=24",
+         "-f", "lavfi", "-i", "sine=duration=1:sample_rate=48000", "-map", "0:v", "-map", "1:a", "-c:v", "libx264",
+         "-pix_fmt", "yuv420p", "-c:a", "truehd", "-strict", "-2", "-ac", "2", "-metadata:s:a:0", "language=eng",
+         "-y", str(src)],
+        check=True,
+    )  # fmt: skip
+    job = JobSpec(
+        inputs=JobInputs(src),
+        rule_set="manual",
+        output_dir=tmp_path / "out",
+        encoder=EncoderSettings(preset="ultrafast", crf=30),
+        qpf=False,
+        mux=MuxSettings(container="mp4"),
+    )
+    rule_set = get_rule_set("manual")
+    plan = plan_spec(job, probe_spec(job, app), rule_set)
+    assert not plan.blocked, plan.issues
+    assert [(a.source.codec, a.action) for a in plan.audio] == [(C.TRUEHD, AudioAction.COPY)]
+    lines: list[str] = []
+    result = run_job(job, plan, rule_set, app, log=lines.append)
+    assert result.status is JobStatus.DONE, (result.error, result.issues, lines[-15:])
+    assert any("TrueHD 1 for MP4 (mkvextract)" in line for line in lines)
+    probe = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "stream=codec_name", "-of", "csv=p=0",
+         str(result.output)],
+        capture_output=True, text=True, check=True,
+    )  # fmt: skip
+    assert probe.stdout.split() == ["h264", "truehd"]
 
 
 @needs_tools
@@ -1633,6 +1798,9 @@ def test_hdr10plus_is_carried_into_x265(rule_set, tmp_path, monkeypatch):
         (Encoder.X265, 8, True, ["hdr.hdr10plus_depth"]),
         (Encoder.X265, 10, False, []),
         (Encoder.X265, 10, True, []),
+        (Encoder.SVTAV1, 10, True, ["hdr.hdr10plus_x264"]),
+        (Encoder.SVTAV1HDR, 8, True, ["hdr.hdr10plus_depth"]),
+        (Encoder.SVTAV1HDR, 10, True, []),
     ],
 )
 def test_hdr10plus_plan(rule_set, tmp_path, encoder, depth, on, codes):
@@ -1644,7 +1812,7 @@ def test_hdr10plus_plan(rule_set, tmp_path, encoder, depth, on, codes):
     tools = replace(APP.tools, hdr10plus_tool=fake_tool_files("hdr10plus_tool")["hdr10plus_tool"])
     assert [i.code for i in hdr.issues(plan.source.video, job.encoder, tools)] == codes
     built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
-    carried = encoder is Encoder.X265 and on
+    carried = encoder in (Encoder.X265, Encoder.SVTAV1HDR) and on
     assert ("hdr10plus" in [s.id for s in built.steps]) is carried
     missing = replace(APP.tools, hdr10plus_tool=str(tmp_path / "nope.exe"))
     found = [i.code for i in hdr.issues(plan.source.video, job.encoder, missing)]
@@ -1808,6 +1976,17 @@ def test_dolby_vision_profile_5_stays_profile_5(rule_set, tmp_path, monkeypatch)
         ({"dv_profile": 7, "dv_compat": 6, "dv_el": "MEL"}, {}, []),
         ({"dv_profile": 7, "dv_compat": 6, "dv_el": "FEL"}, {}, []),
         ({"dv_profile": 7, "dv_compat": 6, "dv_el": ""}, {}, ["hdr.dv_el"]),
+        # SVT-AV1-HDR: no VBV, the mastering display by its own flag; SVT-AV1 carries none
+        ({}, {"encoder": Encoder.SVTAV1HDR, "options": {}}, []),
+        ({}, {"encoder": Encoder.SVTAV1HDR, "options": {}, "depth": 8}, ["hdr.dv_depth"]),
+        ({}, {"encoder": Encoder.SVTAV1HDR, "source_color": False}, ["hdr.dv_master"]),
+        ({}, {"encoder": Encoder.SVTAV1HDR, "source_color": False, "extra": "--mastering-display G(0.265,0.69)"}, []),
+        ({}, {"encoder": Encoder.SVTAV1HDR, "source_color": False, "extra": "--master-display x"}, ["hdr.dv_master"]),
+        ({"dv_profile": 5, "dv_compat": None}, {"encoder": Encoder.SVTAV1HDR}, []),
+        ({"dv_profile": 7, "dv_compat": 6, "dv_el": "FEL"}, {"encoder": Encoder.SVTAV1HDR}, []),
+        ({"dv_compat": 4}, {"encoder": Encoder.SVTAV1HDR}, ["hdr.dv_hlg"]),
+        ({}, {"encoder": Encoder.SVTAV1, "depth": 10}, ["hdr.dv_x264"]),
+        ({"dv_profile": 5, "dv_compat": None}, {"encoder": Encoder.SVTAV1, "depth": 10}, ["hdr.dv_profile5"]),
     ],
 )
 def test_dolby_vision_plan(rule_set, tmp_path, hdr_info, encoder, codes):
@@ -1821,6 +2000,42 @@ def test_dolby_vision_plan(rule_set, tmp_path, hdr_info, encoder, codes):
     assert ("tools.missing" in [i.code for i in hdr.issues(video, job.encoder, missing)]) is (
         hdr.keeps_dv(video, job.encoder)
     )
+
+
+@pytest.mark.parametrize(("profile", "compat"), [(8, 1), (5, None)])
+def test_dolby_vision_and_hdr10plus_into_svtav1hdr(rule_set, tmp_path, profile, compat):
+    """SVT-AV1-HDR takes the edited RPU and the HDR10+ JSON as x265 does (--dolby-vision-rpu, --hdr10plus-json),
+    with no --dolby-vision-profile (the RPU says it) or VBV. A profile 5 encode's colour is x265's for it: H.273's
+    unspecified in full range, last on the command line and on the container's tags."""
+    plan = make_plan(tmp_path)
+    job = dv_job(plan, tmp_path, encoder=Encoder.SVTAV1HDR, options={})
+    job.encoder.preset = "4"
+    video = plan.source.video
+    video.hdr = replace(video.hdr, dv_profile=profile, dv_compat=compat, hdr10plus=profile == 8)
+    video.color = replace(video.color, primaries="bt2020", transfer="smpte2084", matrix="bt2020nc", range="limited")
+    built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    step = {s.id: s for s in built.steps}
+    assert step["dovi.edit"].label == f"Dolby Vision RPU: crop, resize, profile {'8.1' if profile == 8 else '5'}"
+    argv = step["video"].argvs[1]
+    assert argv[0] == "SvtAv1EncApp-HDR" and argv[argv.index("--dolby-vision-rpu") + 1] == str(
+        job.job_dir / "dv_rpu.bin"
+    )
+    assert "--dolby-vision-profile" not in argv and "--vbv-maxrate" not in argv
+    assert ("--hdr10plus-json" in argv) is (profile == 8)
+    tail = argv[argv.index("--output") - 8 : argv.index("--output")]
+    forced = ("--color-primaries", "2", "--transfer-characteristics", "2", "--matrix-coefficients", "2")
+    assert (tail == (*forced, "--color-range", "1")) is (profile == 5)
+    mux = step["mux"].argvs[0]
+    assert not any("dvp" in a for a in mux)  # mkvmerge finds it in the stream
+    job.mux = replace(job.mux, container="mp4")
+    mp4 = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mp4").steps}
+    want = ":dvp=10.1" if profile == 8 else ":dvp=10.0"
+    assert any(want in a for a in mp4["mux"].argvs[0])
+    if profile == 5:  # the container says the same as the stream
+        assert mux[mux.index("--colour-primaries") + 1].endswith(":2")
+        assert mux[mux.index("--colour-range") + 1].endswith(":2")  # mkvmerge's 2 is full
+    else:
+        assert mux[mux.index("--colour-primaries") + 1].endswith(":9")
 
 
 def test_dolby_vision_custom_script_blocks(tmp_path):
@@ -1940,6 +2155,28 @@ def test_fel_is_baked_into_the_encode(rule_set, tmp_path, monkeypatch, source_fi
     assert "x265" not in tools_called(runner)
 
 
+def test_a_baked_fel_into_svtav1hdr_tags_the_rpus_hdr10(rule_set, tmp_path, monkeypatch):
+    """SVT-AV1-HDR bakes a FEL as x265 does, and the container's HDR10 tags (mkvmerge doesn't copy an AV1 stream's)
+    follow the encode's: the RPU's values, read when the mux's turn comes, not the source's."""
+    plan = make_plan(tmp_path)
+    job = fel_job(plan, tmp_path, encoder=Encoder.SVTAV1HDR, options={})
+    job.encoder.preset = "4"
+    monkeypatch.setattr(hdr, "edit_rpu", lambda _d, _s, dst, *_a: dst.write_bytes(b"rpu"))
+    monkeypatch.setattr(hdr, "script_frames", lambda *_: 240)
+    monkeypatch.setattr(hdr, "rpu_frames", lambda *_: 240)
+    monkeypatch.setattr(hdr, "rpu_summary", lambda *_: SUMMARY.format(l1="0.01", l1f="0.00"))
+    monkeypatch.setattr(hdr, "av1_metadata", lambda _ivf: (240, 0, 240))  # the fake encode is no IVF
+    runner = FakeRunner()
+    carried = replace(simulate_output(plan), video=replace(plan.source.video, hdr=VideoHdr(dv_profile=10)))
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=runner, prober=lambda *_: carried)
+    assert result.status is JobStatus.DONE, result.error
+    svt = next(c[-1] for c in runner.calls if Path(c[-1][0]).stem == "SvtAv1EncApp-HDR")
+    assert svt[svt.index("--content-light") + 1] == "2573,684"
+    mkvmerge = next(c[-1] for c in runner.calls if Path(c[-1][0]).stem == "mkvmerge" and "--max-content-light" in c[-1])
+    assert mkvmerge[mkvmerge.index("--max-content-light") + 1] == "0:2573"
+    assert mkvmerge[mkvmerge.index("--max-frame-light") + 1] == "0:684"
+
+
 def test_a_uhd_bluray_m2ts_bakes_its_second_track(rule_set, tmp_path):
     """A UHD Blu-ray M2TS's enhancement layer is a video track of its own (hdr.dual_layer): the RPU and the layer
     come from it (copied out, no demux), the HDR10+ and the picture from the first."""
@@ -1998,6 +2235,13 @@ def test_invalid_replacement_preserves_good_output(rule_set, tmp_path):
     assert out.read_bytes() == b"previous good output"
     assert result.output != out and result.output.is_file()
     assert ".unpublished-" in result.output.name
+    # the error says where the file went; the checks are the issues (and the Validate step's error), not repeated
+    n = sum(1 for i in result.issues if i.severity is Severity.BLOCK)
+    assert result.error == (
+        f"{n} output check{'s' if n != 1 else ''} failed. "
+        f"The file is kept as {result.output.name} instead of Show.S01E01.mkv"
+    )
+    assert not any(i.message in result.error for i in result.issues)
 
 
 @pytest.mark.parametrize("existing", [False, True])

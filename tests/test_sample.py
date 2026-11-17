@@ -69,7 +69,7 @@ def test_two_pass_samples_one_pass_at_its_bitrate(tmp_path):
     assert sample.one_pass(two, plan, "mkv", found) == replace(two, rate_control=RateControl.ABR)
     sized = sample.one_pass(replace(two, target_mb=100), plan, "mkv", found)
     assert sized.rate_control is RateControl.ABR and sized.bitrate_kbps != 6000  # the size's bitrate
-    assert sample.describe(crf) == "x265 crf 20" and sample.describe(two) == "x265 6000 kb/s"
+    assert sample.describe(crf) == "x265 CRF 20" and sample.describe(two) == "x265 6000 kb/s"
 
 
 def test_steps_encode_the_sample_and_mux_it(tmp_path):
@@ -114,7 +114,7 @@ def test_result_and_its_estimates(tmp_path):
     from videoforge.core.job import StepRecord
 
     result = sample.finish(spec, plan, "mkv", 5, {"sample.video": StepRecord("sample.video", "f", seconds=12.0)})
-    assert (result.frames, result.total_frames, result.encoder) == (144, 2400, "x264 crf 18")
+    assert (result.frames, result.total_frames, result.encoder) == (144, 2400, "x264 CRF 18")
     assert result.kbps == pytest.approx(300_000 * 8 / 1000 / (144 / float(NTSC)))
     assert result.estimate_mb == pytest.approx(result.kbps * 2400 / float(NTSC) / 8 / 1000)
     assert result.estimate_seconds == pytest.approx(200.0) and result.encode_fps == pytest.approx(12.0)
@@ -245,7 +245,7 @@ def test_test_encode_runs_in_the_index_lane(tmp_path):
         found = done["sample"]
         assert (found["percent"], found["frames"], found["total_frames"], found["current"]) == (5, 144, 2400, True)
         assert found["estimate_mb"] == pytest.approx(found["kbps"] * 2400 / float(NTSC) / 8000)
-        assert done["compare"] == {"encode": False, "sample": True}
+        assert done["compare"] == {"encode": False, "sample": True, "filters": False}
         e = client.app.state.queue.get(job)
         assert e.state.status is None  # a test encode is no run
         assert any("Test encode: 144 frames of 2400" in line for line in e.log)
@@ -308,11 +308,12 @@ def test_compare_stages_need_their_encodes(tmp_path):
     make_files(tmp_path)
     with make_client(tmp_path) as client:
         (job,) = add(client, tmp_path)
-        wait_for(client, job, "ready", "warn")
+        ready = wait_for(client, job, "ready", "warn")
+        assert ready["compare"] == {"encode": False, "sample": False, "filters": False}
         e = client.app.state.queue.get(job)
         e.spec.work_dir.mkdir(exist_ok=True)
         (e.spec.work_dir / "Show.S01E01.mkv.ffindex").write_bytes(b"index")  # indexed
-        for stage in ("sample-in", "sample", "encode"):
+        for stage in ("sample-in", "sample", "encode", "unfiltered"):  # unfiltered: the chain has no filters
             r = client.get(f"/api/jobs/{job}/video/info", params={"stage": stage})
             assert r.status_code == 409, stage
 

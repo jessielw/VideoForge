@@ -241,7 +241,7 @@ class AppState {
   #finished(job: JobSummary): void {
     const open = { label: 'Open', onClick: () => (location.hash = `#/queue/${encodeURIComponent(job.id)}`) }
     if (job.status === 'done') toast.success(`${job.name} is done`, { action: open })
-    else if (job.status === 'cancelled') toast.warning(`${job.name} was cancelled`, { action: open })
+    else if (job.status === 'cancelled') toast.warning(`${job.name} was canceled`, { action: open })
     else if (job.status === 'paused')
       toast.info(`${job.name} paused after pass 1`, {
         description: 'Run it again to go on with pass 2, even after closing VideoForge.',
@@ -331,7 +331,7 @@ class AppState {
         const idle = !this.queue.indexing && !this.queue.index_queued && !this.queue.sampling
         if (event.type === 'queue' && was.indexing && idle) {
           if (this.#indexStopped) toast.info('Indexing stopped')
-          else toast.success('Indexing finished', { description: 'The indexed jobs open at once.' })
+          else toast.success('Indexing finished', { description: 'Their previews now open at once.' })
           this.#indexStopped = false
         }
         break

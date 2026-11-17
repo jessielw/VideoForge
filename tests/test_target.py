@@ -92,5 +92,6 @@ def test_issues(tmp_path):
 
 
 def test_encoder_label():
+    assert encoder_label(EncoderSettings()) == "x264 CRF 18"  # the rate control's own name, as the encoders write it
     assert encoder_label(EncoderSettings(rate_control=RateControl.TWO_PASS, target_mb=4700)) == "x264 2-pass 4700 MB"
     assert encoder_label(EncoderSettings(rate_control=RateControl.ABR, target_mb=4700)) == "x264 10000 kb/s"

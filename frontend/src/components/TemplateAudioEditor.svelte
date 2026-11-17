@@ -178,28 +178,36 @@
     Set the audio tracks
   </label>
   {#if value === null}
-    <p class="text-xs text-muted-foreground">Off: applying the template leaves each job's audio as it is.</p>
+    <p class="text-xs text-muted-foreground">
+      When this is off, applying the template leaves each job's audio as it is.
+    </p>
   {:else}
     <ToggleGroup.Root
       type="single"
       variant="outline"
+      spacing={1}
       class="w-fit"
       {disabled}
       value={mode}
       onValueChange={(v) => v && v !== mode && setMode(v as TemplateAudio['mode'])}
     >
-      <ToggleGroup.Item value="position" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+      <ToggleGroup.Item
+        value="position"
+        class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
         >By position</ToggleGroup.Item
       >
-      <ToggleGroup.Item value="rules" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+      <ToggleGroup.Item
+        value="rules"
+        class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
         >By rules</ToggleGroup.Item
       >
     </ToggleGroup.Root>
     {#if mode === 'position'}
       <p class="text-xs text-muted-foreground">
-        By position: track 1 is the source's first audio track. A source with fewer tracks skips the rest; added audio
-        files keep their own settings. A slot asking for more than its track has gets the best that fits (2.0 stays 2.0,
-        DDP Atmos needs a TrueHD Atmos track). Applying the template replaces a job's audio choices.
+        Audio track 1 is the source's first audio track, and so on. Settings for tracks a source doesn't have are
+        skipped, and added audio files keep their own settings. When a setting asks for more than its track has, the
+        track gets the closest that fits: 2.0 stays 2.0, and DDP Atmos needs a TrueHD Atmos track. Applying the template
+        replaces a job's audio choices.
       </p>
       {#each value.slots as slot, i (i)}
         <div class="space-y-3 rounded-lg border p-3">
@@ -265,10 +273,10 @@
       </div>
     {:else}
       <p class="text-xs text-muted-foreground">
-        Each source audio track takes the first rule it matches (empty = any); added audio files keep their own
-        settings. "Only the first": the first matching track takes the rule, the others go on to the next rules. Kept
-        tracks go in rule order; a rule that sets Default gives it to the first track it reaches, and every other one
-        has it off. Outputs are fitted to each track as with slots.
+        Each source audio track takes the first rule it matches, and an empty field matches anything. Added audio files
+        keep their own settings. With Only the first, the first matching track takes the rule and the others go on to
+        the next rules. Kept tracks go in rule order. A rule that sets Default gives it to the first track it reaches,
+        and every other track has it off. Outputs are fitted to each track, as in By position.
       </p>
       {#each rules as r, i (i)}
         <div class="space-y-3 rounded-lg border p-3" role="group" aria-label="Audio rule {i + 1}">
@@ -328,7 +336,7 @@
           </div>
           <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
             <span class="w-8 text-xs text-muted-foreground">Match</span>
-            <Tip text="Languages (en matches en-US too; es-419 only itself)">
+            <Tip text="Languages: en matches en-US too, and es-419 matches only itself">
               <LanguagePicker
                 class="w-56"
                 aria-label="Audio rule {i + 1}: languages"

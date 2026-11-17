@@ -24,7 +24,7 @@ The same setting can be supplied in `videoforge.local.toml`:
 prefix = "My plugin"
 ```
 
-Saved form values override TOML values. Use **Reset overrides** to return to the TOML value or default.
+Saved form values override TOML values. Use **Reset to defaults** to return to the TOML value or default.
 
 ## Try the events
 

@@ -13,7 +13,8 @@
 </script>
 
 <script lang="ts">
-  // Encoder settings (x264 / x265, VP8 / VP9 through ffmpeg, SVT-AV1): rate control, preset, tune, bit depth, options, extra args.
+  // Encoder settings (x264 / x265, VP8 / VP9 through ffmpeg, SVT-AV1 and SVT-AV1-HDR): rate control, preset, tune,
+  // bit depth, options, extra args.
   // Emits a fresh copy on every change; the parent decides when to save.
   import {
     ENCODERS,
@@ -60,6 +61,7 @@
     dv?: VideoHdr | false | null
     budget?: SizeBudget | null
   } = $props()
+  const uid = $props.id() // the editor can show twice (job and preset manager): ids of its own
 
   // StaxRip's size menu (MB) and its default target size
   const SIZES: [number, string][] = [
@@ -122,6 +124,11 @@
     return missing.flatMap((f) => [`--${f}`, String(rate)])
   })
 
+  // what a profile 5 SVT-AV1-HDR encode's colour is forced to, last on its command line (color.SVT_DV5_ARGS)
+  const SVT_DV5 = [
+    ...['--color-primaries', '2', '--transfer-characteristics', '2'],
+    ...['--matrix-coefficients', '2', '--color-range', '1'],
+  ]
   const HDR_TRANSFERS = ['smpte2084', 'arib-std-b67'] // PQ, HLG
   const hdr = $derived(
     !!colorArgs &&
@@ -135,7 +142,13 @@
   const encoderLabel = $derived(ENCODERS.find(([e]) => e === value.encoder)?.[1] ?? value.encoder)
   // VP8 / VP9 run through ffmpeg (libvpx), as StaxRip's ffmpeg encoder does: its speed list is -cpu-used
   const vpx = $derived(value.encoder === 'vp8' || value.encoder === 'vp9')
-  const svt = $derived(value.encoder === 'svtav1')
+  // SvtAv1EncApp: SVT-AV1, or the SVT-AV1-HDR build (the same command line, presets from -3, HDR10+ and Dolby Vision)
+  const isSvt = (enc: EncoderName) => enc === 'svtav1' || enc === 'svtav1hdr'
+  const svt = $derived(isSvt(value.encoder))
+  const svtHdr = $derived(value.encoder === 'svtav1hdr')
+  // the encoders that carry HDR10+ and Dolby Vision (hdr.DYNAMIC_HDR)
+  const carriesHdr = $derived(value.encoder === 'x265' || svtHdr)
+  const hdr10plusFlag = $derived(svtHdr ? '--hdr10plus-json' : '--dhdr10-info')
   // SvtAv1EncApp's CRF range, in quarter steps (encoders.SVTAV1_CRF)
   const SVT_CRF: [number, number] = [1, 70]
   const X26X_PRESETS: [string, string][] = [
@@ -178,12 +191,20 @@
   ]
     .map((name, n): [string, string] => [String(n), `${n} - ${name}`])
     .reverse()
+  // SVT-AV1-HDR's below 0 are "for research purposes" (its help): slower still
+  const SVT_HDR_PRESETS: [string, string][] = [
+    ...SVT_PRESETS,
+    ['-1', '-1 - Research'],
+    ['-2', '-2 - Research'],
+    ['-3', '-3 - Research'],
+  ]
   const PRESETS: Record<EncoderName, [string, string][]> = {
     x264: X26X_PRESETS,
     x265: X26X_PRESETS,
     vp8: VPX_PRESETS,
     vp9: VPX_PRESETS,
     svtav1: SVT_PRESETS,
+    svtav1hdr: SVT_HDR_PRESETS,
   }
   const DEFAULT_PRESET: Record<EncoderName, string> = {
     x264: 'slower',
@@ -191,8 +212,17 @@
     vp8: '1',
     vp9: '1',
     svtav1: '4',
+    svtav1hdr: '4',
   }
   const named = (names: string[]) => names.map((t): [string, string] => [t, t])
+  const SVT_TUNES: [string, string][] = [
+    ['0', '0 - VQ'],
+    ['1', '1 - PSNR'],
+    ['2', '2 - SSIM'],
+    ['3', '3 - Image quality'],
+    ['4', '4 - MS-SSIM / SSIMULACRA2'],
+    ['5', '5 - VMAF'],
+  ]
   // [value, label]
   const TUNES: Record<EncoderName, [string, string][]> = {
     x264: named(['film', 'animation', 'grain', 'stillimage', 'psnr', 'ssim', 'fastdecode', 'zerolatency']),
@@ -200,14 +230,9 @@
     vp8: [],
     vp9: [],
     // SvtAv1EncApp's --tune (1, PSNR, is its default)
-    svtav1: [
-      ['0', '0 - VQ'],
-      ['1', '1 - PSNR'],
-      ['2', '2 - SSIM'],
-      ['3', '3 - Image quality'],
-      ['4', '4 - MS-SSIM / SSIMULACRA2'],
-      ['5', '5 - VMAF'],
-    ],
+    svtav1: SVT_TUNES,
+    // and its film grain tune (VQ with the filters that smear grain off, as its README sets it)
+    svtav1hdr: [...SVT_TUNES, ['6', '6 - Film grain']],
   }
   const DEPTHS: Record<EncoderName, number[]> = {
     x264: [8, 10],
@@ -215,6 +240,7 @@
     vp8: [8],
     vp9: [8, 10, 12],
     svtav1: [8, 10],
+    svtav1hdr: [8, 10],
   }
   // what encoders.VP9_DEFAULTS writes before the options (StaxRip's, plus row-mt)
   const VP9_DEFAULTS = '-tile-columns 6 -frame-parallel 1 -auto-alt-ref 1 -lag-in-frames 25 -row-mt 1'
@@ -257,7 +283,7 @@
       if (!DEPTHS[enc].includes(next.depth)) next.depth = 8
       if (next.preset && !PRESETS[enc].some(([p]) => p === next.preset)) next.preset = DEFAULT_PRESET[enc]
       if (enc === 'vp8' || enc === 'vp9') next.crf = Math.min(63, Math.round(next.crf))
-      if (enc === 'svtav1') next.crf = Math.min(SVT_CRF[1], Math.max(SVT_CRF[0], Math.round(next.crf * 4) / 4))
+      if (isSvt(enc)) next.crf = Math.min(SVT_CRF[1], Math.max(SVT_CRF[0], Math.round(next.crf * 4) / 4))
     }
     onchange(next)
   }
@@ -278,7 +304,7 @@
     const { pairs, skipped } = parseOptions(newKey, dashes)
     if (pairs.length === 1 && !pairs[0][1]) pairs[0][1] = newValue.trim()
     notAdded = skipped.length
-      ? `Not added: ${skipped.join(' ')} (short flags and values with no option: Extra arguments)`
+      ? `Not added: ${skipped.join(' ')}. Short flags and values without an option go in Extra arguments.`
       : ''
     if (!pairs.length) return
     onchange({ ...value, options: { ...value.options, ...Object.fromEntries(pairs) } })
@@ -289,7 +315,7 @@
 <fieldset class="@container/encoder min-w-0 space-y-4" {disabled}>
   <!-- Respond to the panel's width: template cards can be narrow even in a wide window. -->
   <div
-    class="grid grid-cols-[minmax(0,1fr)] items-center gap-x-4 gap-y-3 @min-[32rem]/encoder:grid-cols-[9rem_minmax(0,1fr)]"
+    class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-x-4 gap-y-3 @min-[32rem]/encoder:grid-cols-[9rem_minmax(0,1fr)]"
   >
     <span class="section-label">Encoder</span>
     <ToggleGroup.Root
@@ -303,7 +329,9 @@
       onValueChange={(v) => v && set('encoder', v as EncoderName)}
     >
       {#each ENCODERS as [enc, label] (enc)}
-        <ToggleGroup.Item value={enc} class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+        <ToggleGroup.Item
+          value={enc}
+          class="px-4 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
           >{label}</ToggleGroup.Item
         >
       {/each}
@@ -378,8 +406,8 @@
     {#if sized}
       <span class="hidden @min-[32rem]/encoder:block"></span>
       <div class="text-xs text-muted-foreground">
-        The video gets what the size leaves: less the audio, subtitles, attachments, HDR metadata and container
-        overhead, over the length (StaxRip's sum). Pass 2 counts the encoded audio's files.
+        The video gets what's left of the size after the audio, subtitles, attachments, HDR metadata and container
+        overhead, spread over the length. Pass 1 uses the audio's planned sizes, and pass 2 the encoded audio files.
         {#if budget === null}
           <span class="block">Worked out once the job is planned.</span>
         {:else if budget}
@@ -443,56 +471,75 @@
           class="mt-0.5"
           checked={value.source_color}
           {disabled}
+          aria-labelledby="{uid}-color"
+          aria-describedby="{uid}-color-help {uid}-color-state"
           onCheckedChange={(v) => set('source_color', v)}
         />
         <span class="min-w-0">
-          Colour from the source
-          <span class="block text-xs text-muted-foreground">
-            Tags the encode with the source's colour description{value.encoder === 'x265' || svt
-              ? ' and HDR10 metadata'
-              : ''}
-            (vspipe passes none on){value.encoder === 'x265'
-              ? ', with --repeat-headers --hrd --aud for HDR10 as StaxRip sets them'
-              : ''}.
-            {#if vpx}
+          <span id="{uid}-color">Color from the source</span>
+          <span id="{uid}-color-help" class="block text-xs text-muted-foreground">
+            Copies the source's color description{value.encoder === 'x265' || svt ? ' and HDR10 metadata' : ''} into the encode.
+            {#if value.encoder === 'x265'}
+              With HDR10 values it also adds --hdr10 --repeat-headers --hrd --aud. A --no- option below turns one of
+              those off, such as --no-hrd.
+            {:else if vpx}
               {value.encoder === 'vp9'
-                ? 'VP9 holds the matrix and range in the stream'
-                : 'VP8 holds none in the stream'}: the mux tags the container with the colour (and the pixel aspect). An
-              HDR10 mastering display and light levels aren't carried yet.
+                ? 'VP9 holds the matrix and range in the stream, and'
+                : 'VP8 holds none of it in the stream, so'} the output file is tagged with the color and the pixel aspect.
+              An HDR10 mastering display and light levels aren't carried yet.
             {:else if svt}
-              AV1 holds them in the stream; the mux tags an MKV's track with them too (mkvmerge doesn't copy them), and
-              the pixel aspect. An option below with the same flag wins.
-            {:else}
-              An option below with the same flag wins (--no-hrd turns one off).
+              AV1 holds them in the stream, and an MKV's video track is tagged with them too, along with the pixel
+              aspect.
             {/if}
-            Untick it when the script changes the colours.
+            Untick it when the script changes the colors.
           </span>
-          {#if colorArgs !== undefined}
-            {#if colorArgs === null}
-              <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
-            {:else if !colorArgs.length}
-              <span class="block text-xs text-muted-foreground">The source doesn't describe its colours.</span>
-            {:else}
-              <code
-                class="mt-1 block font-mono text-xs break-all {value.source_color
-                  ? ''
-                  : 'text-muted-foreground line-through'}">{colorArgs.join(' ')}</code
-              >
+          <span id="{uid}-color-state" class="block">
+            {#if colorArgs !== undefined}
+              {#if colorArgs === null}
+                <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
+              {:else if !colorArgs.length}
+                <span class="block text-xs text-muted-foreground">The source doesn't describe its colors.</span>
+              {:else}
+                <code
+                  class="mt-1 block font-mono text-xs break-all {value.source_color
+                    ? ''
+                    : 'text-muted-foreground line-through'}">{colorArgs.join(' ')}</code
+                >
+              {/if}
+              {#if hdr && value.source_color && value.depth < 10}
+                <span class="mt-1 block text-xs text-warning">An HDR source: encode it at 10-bit.</span>
+              {/if}
             {/if}
-            {#if hdr && value.source_color && value.depth < 10}
-              <span class="mt-1 block text-xs text-warning">An HDR source: encode it at 10-bit.</span>
-            {/if}
-          {/if}
+          </span>
         </span>
       </label>
 
-      <!-- only x265 carries HDR10+ and Dolby Vision (hdr.keeps_hdr10plus / keeps_dv): other encoders just say what
-           the source loses -->
-      {#if value.encoder !== 'x265'}
+      <label class="flex items-start gap-3 text-sm {value.source_color ? '' : 'opacity-60'}">
+        <Checkbox
+          class="mt-0.5"
+          checked={value.color_override}
+          disabled={disabled || !value.source_color}
+          aria-labelledby="{uid}-override"
+          aria-describedby="{uid}-override-help"
+          onCheckedChange={(v) => set('color_override', v)}
+        />
+        <span class="min-w-0">
+          <span id="{uid}-override">Override the source's color</span>
+          <span id="{uid}-override-help" class="block text-xs text-muted-foreground">
+            Your color flags in the options and extra arguments win over the source's. Use it when the source's tags are
+            wrong. Off, a flag the source has a value for is left out, and a flag it has no value for still applies. The
+            chroma location always comes from the options.
+          </span>
+        </span>
+      </label>
+
+      <!-- only x265 and SVT-AV1-HDR carry HDR10+ and Dolby Vision (hdr.keeps_hdr10plus / keeps_dv): other encoders
+           just say what the source loses -->
+      {#if !carriesHdr}
         {#if dv && dv.dv_profile === 5}
           <p class="text-xs text-warning">
-            The source is Dolby Vision profile 5, which has no HDR10 layer: without its RPU (x265 only) the encode's
-            colours look wrong, unless the script maps them.
+            The source is Dolby Vision profile 5, which has no HDR10 layer. Only x265 and SVT-AV1-HDR can carry its RPU.
+            Without it, the encode's colors look wrong unless the script maps them.
           </p>
         {:else if (dv && dv.dv_profile) || hdr10plus}
           <p class="text-xs text-warning">
@@ -500,7 +547,7 @@
               ? hdr10plus
                 ? 'Dolby Vision and HDR10+'
                 : 'Dolby Vision'
-              : 'HDR10+'}: pick x265 to keep it.
+              : 'HDR10+'}. Pick x265 or SVT-AV1-HDR to keep it.
           </p>
         {/if}
       {:else}
@@ -509,9 +556,9 @@
           <span class="min-w-0">
             HDR10+ from the source
             <span class="block text-xs text-muted-foreground">
-              x265: carries a source's HDR10+ metadata into the encode (hdr10plus_tool reads it, x265's --dhdr10-info
-              writes it). Needs a 10-bit encode and a script that keeps every frame (no trims). Left out when a Dolby
-              Vision FEL is baked in.
+              Keeps the source's HDR10+ metadata in the encode. hdr10plus_tool reads it, and {encoderLabel}'s
+              {hdr10plusFlag} writes it. Needs a 10-bit encode and a script that keeps every frame (no trims). Left out when
+              a Dolby Vision FEL is baked in.
             </span>
             {#if hdr10plus !== undefined}
               {#if hdr10plus === null}
@@ -520,19 +567,19 @@
                 <span class="block text-xs text-muted-foreground">The source has no HDR10+.</span>
               {:else if value.dolby_vision && dv && dv.dv_profile === 7 && dv.dv_el === 'FEL'}
                 <code class="mt-1 block font-mono text-xs break-all text-muted-foreground line-through"
-                  >--dhdr10-info hdr10plus.json</code
+                  >{hdr10plusFlag} hdr10plus.json</code
                 >
                 {#if value.hdr10plus}
                   <span class="mt-1 block text-xs text-warning"
-                    >Left out: it describes the base layer, not the picture with the FEL baked in. The Dolby Vision RPU
-                    and the HDR10 values come from the baked picture.</span
+                    >Left out, because it describes the base layer and not the picture with the FEL baked in. The Dolby
+                    Vision RPU and the HDR10 values come from the baked picture.</span
                   >
                 {/if}
               {:else}
                 <code
                   class="mt-1 block font-mono text-xs break-all {value.hdr10plus
                     ? ''
-                    : 'text-muted-foreground line-through'}">--dhdr10-info hdr10plus.json</code
+                    : 'text-muted-foreground line-through'}">{hdr10plusFlag} hdr10plus.json</code
                 >
                 {#if value.hdr10plus && value.depth < 10}
                   <span class="mt-1 block text-xs text-warning">HDR10+ needs a 10-bit encode.</span>
@@ -552,10 +599,18 @@
           <span class="min-w-0">
             Dolby Vision from the source
             <span class="block text-xs text-muted-foreground">
-              x265: carries a source's Dolby Vision into the encode as profile 8.1, or a profile 5 as 5 (dovi_tool reads
-              the RPU and moves its active area with the crop and resize). Needs a 10-bit encode, --vbv-maxrate and
-              --vbv-bufsize (or --level-idc, whose max bitrate fills the ones not set), and a script that keeps every
-              frame. A FEL's enhancement layer is baked into the picture first (felbaker). 8.4 (HLG) isn't carried yet.
+              {#if svtHdr}
+                Keeps the source's Dolby Vision in the encode, as AV1 profile 10.1, or as profile 10.0 for a profile 5
+                source (its color tagged unspecified and full range, as x265 tags it). dovi_tool reads the RPU and moves
+                its active area with the crop and resize. Needs a 10-bit encode and a script that keeps every frame. A
+                FEL's enhancement layer is baked into the picture first. Dolby Vision 8.4 (HLG) isn't carried yet.
+              {:else}
+                Keeps the source's Dolby Vision in the encode, as profile 8.1, or as profile 5 for a profile 5 source.
+                dovi_tool reads the RPU and moves its active area with the crop and resize. Needs a 10-bit encode,
+                --vbv-maxrate and --vbv-bufsize (or --level-idc, whose max bitrate fills in the ones not set), and a
+                script that keeps every frame. A FEL's enhancement layer is baked into the picture first. Dolby Vision
+                8.4 (HLG) isn't carried yet.
+              {/if}
             </span>
             {#if dv !== undefined}
               {#if dv === null}
@@ -564,7 +619,7 @@
                 <span class="block text-xs text-muted-foreground">The source has no Dolby Vision.</span>
               {:else if dv.dv_profile === 5 && !value.dolby_vision}
                 <span class="mt-1 block text-xs text-warning"
-                  >Profile 5 has no HDR10 layer: without its RPU the encode's colours look wrong, unless the script maps
+                  >Profile 5 has no HDR10 layer. Without its RPU, the encode's colors look wrong unless the script maps
                   them.</span
                 >
               {:else}
@@ -572,33 +627,35 @@
                   class="mt-1 block font-mono text-xs break-all {value.dolby_vision
                     ? ''
                     : 'text-muted-foreground line-through'}"
-                  >--dolby-vision-profile {dv.dv_profile === 5 ? '5' : '8.1'} --dolby-vision-rpu dv_rpu.bin{levelVbv?.length
-                    ? ' ' + levelVbv.join(' ')
-                    : ''}</code
+                  >{#if svtHdr}--dolby-vision-rpu dv_rpu.bin{dv.dv_profile === 5
+                      ? ' ' + SVT_DV5.join(' ')
+                      : ''}{:else}--dolby-vision-profile {dv.dv_profile === 5 ? '5' : '8.1'} --dolby-vision-rpu dv_rpu.bin{levelVbv?.length
+                      ? ' ' + levelVbv.join(' ')
+                      : ''}{/if}</code
                 >
                 {#if value.dolby_vision}
                   {#if dv.dv_compat === 4}
                     <span class="mt-1 block text-xs text-warning"
-                      >Dolby Vision 8.4 (HLG) isn't carried yet: untick it to keep the HLG layer.</span
+                      >Dolby Vision 8.4 (HLG) isn't carried yet. Untick it to keep the HLG layer.</span
                     >
                   {/if}
                   {#if dv.dv_profile === 7 && dv.dv_el === 'FEL'}
                     <span class="mt-1 block text-xs text-muted-foreground"
-                      >FEL: its enhancement layer is baked into the picture (FFMS2 or L-SMASH), and the HDR10 values
-                      come from the RPU.</span
+                      >FEL: its enhancement layer is baked into the picture, which needs FFMS2 or L-SMASH as the source
+                      filter. The HDR10 values come from the RPU.</span
                     >
                   {:else if dv.dv_profile === 7 && dv.dv_el !== 'MEL'}
                     <span class="mt-1 block text-xs text-warning"
-                      >The enhancement layer's kind (FEL or MEL) couldn't be read: untick it to keep the base layer.</span
+                      >The enhancement layer's kind (FEL or MEL) couldn't be read. Untick it to keep the base layer.</span
                     >
                   {/if}
                   {#if value.depth !== 10}
                     <span class="mt-1 block text-xs text-warning">Dolby Vision needs a 10-bit encode.</span>
                   {/if}
-                  {#if levelVbv === null}
+                  {#if levelVbv === null && !svtHdr}
                     <span class="mt-1 block text-xs text-warning"
-                      >Add --vbv-maxrate and --vbv-bufsize below, or --level-idc to fill them with its max bitrate (x265
-                      needs VBV for Dolby Vision).</span
+                      >x265 needs VBV for Dolby Vision. Add --vbv-maxrate and --vbv-bufsize below, or --level-idc to
+                      fill them in from its max bitrate.</span
                     >
                   {/if}
                 {/if}
@@ -612,7 +669,7 @@
         <div class="section-label mb-2">Options ({dashes}name value, in order; an empty value is a flag)</div>
         {#if value.encoder === 'vp9'}
           <p class="mb-2 text-xs text-muted-foreground">
-            ffmpeg's libvpx-vp9 options. Before them, StaxRip's VP9 defaults (one set here wins): <code
+            ffmpeg's libvpx-vp9 options. These defaults go before them, and an option set here wins: <code
               class="font-mono">{VP9_DEFAULTS}</code
             >
           </p>
@@ -620,10 +677,10 @@
           <p class="mb-2 text-xs text-muted-foreground">ffmpeg's libvpx options.</p>
         {:else if svt}
           <p class="mb-2 text-xs text-muted-foreground">
-            SvtAv1EncApp's options (--enable-variance-boost 1, --film-grain 8, ...). Before them, <code
+            SvtAv1EncApp's options (--enable-variance-boost 1, --film-grain 8, ...). VideoForge puts <code
               class="font-mono">--progress 2</code
             >
-            (the progress the queue reads). The chapters' keyframes are forced in CRF only.
+            before them to show the encode's progress. Keyframes at chapter starts are forced in CRF mode only.
           </p>
         {/if}
         <div class="overflow-hidden rounded-lg border">
@@ -675,7 +732,10 @@
             class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 bg-muted/50 px-2 py-1"
           >
             <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
-            <Tip class="grid min-w-0" text="One option name, or a whole command line: Enter adds a row for each option">
+            <Tip
+              class="grid min-w-0"
+              text="Type one option name, or paste a whole command line. Enter adds a row for each option."
+            >
               <SuggestInput
                 class="font-mono text-xs"
                 placeholder="name, or paste {dashes}ref 4 {dashes}bframes 8"
@@ -712,9 +772,9 @@
       <label class="block">
         <span class="section-label">Extra arguments</span>
         <Input
-          class="mt-1 w-full font-mono text-xs"
+          class="mt-1 w-full font-mono text-xs placeholder:font-sans"
           value={value.extra}
-          placeholder="appended as typed"
+          placeholder="added at the end, as typed"
           onchange={(e) => set('extra', (e.target as HTMLInputElement).value)}
         />
         {#each extraHints as warn (warn)}<span class="mt-1 block text-xs text-warning">{warn}</span>{/each}

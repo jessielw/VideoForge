@@ -44,7 +44,9 @@
         value={value.title ?? ''}
         onchange={(e) => set({ title: e.currentTarget.value.trim() || null })}
       />
-      <span class="block">Optional. A custom title is restored whenever this preset is selected.</span>
+      <span class="block"
+        >Optional. Picking this preset gives the track this title. Leave it empty to keep the track's own title.</span
+      >
     </label>
   {/if}
   <div class="flex flex-wrap items-end gap-3">

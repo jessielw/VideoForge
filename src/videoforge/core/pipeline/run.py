@@ -18,7 +18,7 @@ from videoforge.core.config import AppConfig
 from videoforge.core.execute import process
 from videoforge.core.execute.process import Cancelled, CancelToken, LogFn, ToolError
 from videoforge.core.job import JobResult, JobSpec, JobState, JobStatus, OutputPolicy, StepRecord, StepRun, StepStatus
-from videoforge.core.models import JobInputs, Plan, Severity, SourceInfo
+from videoforge.core.models import Issue, JobInputs, Plan, Severity, SourceInfo
 from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.pipeline.share import Sharing
 from videoforge.core.pipeline.steps import Held, ProgressFn, Runner, run_steps
@@ -36,6 +36,16 @@ PASS1 = "video.pass1"  # the step JobState.pause_after_pass1 stops after (a 2-pa
 
 class _InvalidOutput(Exception):
     pass
+
+
+def invalid_error(issues: list[Issue], rejected: Path | None, output: Path) -> str:
+    """An invalid run's error: how many checks failed and where the file is, not the checks again (they're its
+    issues). A rejected candidate is kept under an unpublished name; a reused output stays where it is."""
+    n = sum(1 for i in issues if i.severity is Severity.BLOCK)
+    failed = f"{n} output check{'s' if n != 1 else ''} failed"
+    if rejected is None:
+        return failed
+    return f"{failed}. The file is kept as {rejected.name} instead of {output.name}"
 
 
 def _identity(path: Path) -> tuple[int, int, int] | None:
@@ -112,10 +122,14 @@ def _run(
     if no_tools:
         return JobResult(plan, JobStatus.FAILED, error="; ".join(i.message for i in no_tools))
     if spec.output_dir is None:
-        return JobResult(plan, JobStatus.FAILED, error="No output folder set")
+        return JobResult(plan, JobStatus.FAILED, error="No output folder is set. Choose one on the Output tab")
     output = output_path(spec, plan, rule_set, spec.output_dir)
     if output.resolve() == spec.inputs.source.resolve():
-        return JobResult(plan, JobStatus.FAILED, error=f"Output would overwrite the source: {output}")
+        return JobResult(
+            plan,
+            JobStatus.FAILED,
+            error=f"The output would overwrite the source ({output}). Change the output name or folder",
+        )
 
     work = spec.job_dir
     encoded: dict[int, Path] = {}
@@ -134,7 +148,8 @@ def _run(
             if spec.output_policy is OutputPolicy.STOP:
                 return result(
                     JobStatus.FAILED,
-                    error=f"Output already exists: {output}. Choose Skip, Rename or Replace in Output.",
+                    error=f"The output already exists ({output}). Change Existing output on the Output tab to skip, "
+                    "rename or replace it",
                 )
             if spec.output_policy is OutputPolicy.SKIP:
                 return result(JobStatus.SKIPPED, error=f"Kept existing output: {output}")
@@ -156,7 +171,7 @@ def _run(
             found = replace(prober(path, app.tools.mkvmerge), path=output, name=output.name)
             issues = rule_set.validate_output(plan, found)
             if spec.encodes_video:
-                issues += hdr.output_issues(plan.source.video, spec.encoder, found)
+                issues += hdr.output_issues(plan.source.video, spec.encoder, found, spec.video_output)
                 issues += info.length_issues(plan.source.video, info.read(work / info.SCRIPT_INFO))
             blocking = [i.message for i in issues if i.severity is Severity.BLOCK]
             for issue in issues:
@@ -172,7 +187,9 @@ def _run(
             try:
                 validate_output(candidate)
                 if _identity(target) != original:
-                    raise OSError(f"Output changed during the run; kept the existing file: {target}")
+                    raise OSError(
+                        f"The file at the output path appeared or changed during the run, so it was kept ({target})"
+                    )
                 if original is None:
                     # An exclusive publication: even a file appearing after the check cannot be overwritten.
                     if os.name == "nt":
@@ -220,7 +237,10 @@ def _run(
             validate_output(output)
         return result(JobStatus.DONE, output=output, issues=issues)
     except _InvalidOutput:
-        return result(JobStatus.INVALID, output=rejected or output, issues=issues, error=validate.error)
+        # The issues say why (and the Validate step's error lists them); the error says what became of the file.
+        return result(
+            JobStatus.INVALID, output=rejected or output, issues=issues, error=invalid_error(issues, rejected, output)
+        )
     except Held:
         state.pause_after_pass1 = False  # the next run goes on with pass 2
         return result(JobStatus.PAUSED)

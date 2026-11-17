@@ -102,7 +102,7 @@
     done: { icon: CheckIcon, tone: 'text-success', text: 'done' },
     reused: { icon: RefreshCwIcon, tone: 'text-success', text: 'reused' },
     failed: { icon: XIcon, tone: 'text-destructive', text: 'failed' },
-    cancelled: { icon: SquareIcon, tone: 'text-warning', text: 'cancelled' },
+    cancelled: { icon: SquareIcon, tone: 'text-warning', text: 'canceled' },
   }
 
   function outcome(s: StepRun): string {
@@ -168,7 +168,11 @@
   </div>
 
   {#if view === 'full'}
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex (a scrolling region: keyboard users scroll it once focused) -->
     <pre
+      tabindex="0"
+      role="region"
+      aria-label="Job log"
       class="min-h-0 flex-1 overflow-auto rounded-lg border bg-card p-3 font-mono text-xs leading-relaxed max-sm:p-2 max-sm:wrap-anywhere max-sm:whitespace-pre-wrap"
       use:follow={fullLines.length}>{fullLines.join('\n') || 'No output yet.'}</pre>
   {:else if !steps.length}
@@ -208,7 +212,7 @@
             <div class="space-y-2 border-t p-3">
               {#if s.command}
                 <div class="flex items-start gap-2">
-                  <code class="min-w-0 flex-1 rounded-md bg-muted px-2 py-1 font-mono text-[11px] break-all"
+                  <code class="min-w-0 flex-1 rounded-md bg-muted px-2 py-1 font-mono text-xs break-all"
                     >{s.command}</code
                   >
                   <Tip class="shrink-0" text="Copy the command line">
@@ -231,11 +235,16 @@
                   >
                 {:else if !fresh && partial[s.id]}
                   <p class="text-xs text-muted-foreground">
-                    The last lines only (the full output is in the work folder's videoforge.log).
+                    The last lines only. The full output is in videoforge.log, in the job's folder inside the work
+                    folder.
                   </p>
                 {/if}
+                <!-- svelte-ignore a11y_no_noninteractive_tabindex (a scrolling region: keyboard users scroll it once focused) -->
                 <pre
-                  class="max-h-96 overflow-auto rounded-lg border bg-background p-2 font-mono text-[11px] leading-relaxed max-sm:wrap-anywhere max-sm:whitespace-pre-wrap"
+                  tabindex="0"
+                  role="region"
+                  aria-label="{s.label} output"
+                  class="max-h-96 overflow-auto rounded-lg border bg-background p-2 font-mono text-xs leading-relaxed max-sm:wrap-anywhere max-sm:whitespace-pre-wrap"
                   use:follow={lines.length}>{shown.join('\n')}</pre>
               {:else if s.status !== 'pending'}
                 <p class="text-xs text-muted-foreground">No output.</p>

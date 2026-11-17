@@ -207,6 +207,13 @@ class Encoder(StrEnum):
     VP8 = "vp8"  # ffmpeg's libvpx, as StaxRip encodes VP8 / VP9
     VP9 = "vp9"
     SVTAV1 = "svtav1"  # SvtAv1EncApp, as StaxRip's SVT-AV1 encoder
+    # juliobbv-p's SVT-AV1-HDR fork (also SvtAv1EncApp): SVT-AV1's command line, plus HDR10+ and Dolby Vision
+    SVTAV1HDR = "svtav1hdr"
+
+    @property
+    def svt(self) -> bool:
+        """An SvtAv1EncApp build: SVT-AV1 or SVT-AV1-HDR, which share its command line and its IVF output."""
+        return self in (Encoder.SVTAV1, Encoder.SVTAV1HDR)
 
     @property
     def libvpx(self) -> bool:
@@ -217,12 +224,12 @@ class Encoder(StrEnum):
     @property
     def label(self) -> str:
         """The name messages and the UI show."""
-        return {"vp8": "VP8", "vp9": "VP9", "svtav1": "SVT-AV1"}.get(self.value, self.value)
+        return {"vp8": "VP8", "vp9": "VP9", "svtav1": "SVT-AV1", "svtav1hdr": "SVT-AV1-HDR"}.get(self.value, self.value)
 
     @property
     def ivf(self) -> bool:
         """Writes an IVF (VP8, VP9, AV1), whose stream has no pixel aspect: the mux tags it, with the colour."""
-        return self.libvpx or self is Encoder.SVTAV1
+        return self.libvpx or self.svt
 
 
 class RateControl(StrEnum):
@@ -239,15 +246,20 @@ class EncoderSettings:
     bitrate_kbps: int = 10000
     # 2-pass: the output file's size in MB (decimal), which sets the bitrate instead (core/video/target.py)
     target_mb: int | None = None
-    preset: str = "slower"  # VP8 / VP9: ffmpeg's -cpu-used (0 slowest); SVT-AV1: --preset (-1 to 13, 13 fastest)
+    # VP8 / VP9: ffmpeg's -cpu-used (0 slowest); SVT-AV1: --preset (-1 to 13, 13 fastest; SVT-AV1-HDR from -3)
+    preset: str = "slower"
     tune: str = ""  # x264 / x265; SVT-AV1: --tune's number
     depth: int = 8  # output bit depth; the script converts to it
     # --name value pairs, in order; an empty value is a bare flag (e.g. "no-fast-pskip": "").
     options: dict[str, str] = field(default_factory=dict)
     extra: str = ""  # raw arguments appended last
     source_color: bool = True  # tag the encode with the source's colour description and HDR10 metadata (color.py)
-    hdr10plus: bool = True  # carry a source's HDR10+ metadata into an x265 encode (hdr.py)
-    dolby_vision: bool = True  # carry a source's Dolby Vision (as profile 8.1, or 5) into an x265 encode (hdr.py)
+    # the options' and extra arguments' colour flags win over the source's (a source whose tags are wrong); off, a
+    # flag the source has a value for is dropped from them, as StaxRip's "Import VUI metadata" replaces its profile's
+    color_override: bool = False
+    hdr10plus: bool = True  # carry a source's HDR10+ metadata into an x265 or SVT-AV1-HDR encode (hdr.py)
+    # carry a source's Dolby Vision (as profile 8.1, or 5) into an x265 or SVT-AV1-HDR encode (hdr.py)
+    dolby_vision: bool = True
 
     @property
     def passes(self) -> int:

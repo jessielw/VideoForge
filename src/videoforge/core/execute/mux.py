@@ -146,6 +146,7 @@ def mux_command(
     sar: Fraction | None = None,
     color: ContainerColor | None = None,
     pgs_zlib: bool = False,
+    title: str = "",
 ) -> list[str]:
     """mkvmerge argv for a plan. encoded_audio maps plan.audio positions to their encoded files;
     extra (the user's arguments) goes before the first input. fps is a raw encode's frame rate (the script's,
@@ -153,7 +154,8 @@ def mux_command(
     core/video/vfr.py) time the encode instead. sar and color tag an encode whose stream doesn't hold them (VP8 /
     VP9), or whose stream mkvmerge doesn't read them from (AV1): its pixel aspect, its colour as H.273 code points,
     and an AV1 encode's HDR10 mastering display and light levels. pgs_zlib enables lossless zlib compression
-    for PGS subtitles; otherwise their compression is explicitly disabled."""
+    for PGS subtitles; otherwise their compression is explicitly disabled. title is the segment title (none when
+    empty)."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
     video = plan.source.video
@@ -161,7 +163,7 @@ def mux_command(
     external_chapters = plan.chapters_path is not None
 
     # An empty --title stops mkvmerge taking an input's; the user's own --title (in extra) still wins.
-    argv: list[str] = [mkvmerge, "--output", str(output), "--title", "", *(extra or [])]
+    argv: list[str] = [mkvmerge, "--output", str(output), "--title", title, *(extra or [])]
     order: list[str] = ["0:0"]
 
     # 0: the encode, video only.
@@ -341,10 +343,12 @@ def mp4box_command(
     *,
     sar: Fraction | None = None,
     color: ContainerColor | None = None,
+    dvp: str | None = None,
 ) -> list[str]:
     """MP4Box argv for a plan (the same inputs, timing, fps, sar and color as mux_command). chapters_path must
     be OGM text; source SRTs are extracted/aligned by build.mp4_subtitle_steps before import so the final
-    cue keeps its duration. extra goes just before -new."""
+    cue keeps its duration. extra goes just before -new. dvp is an AV1 encode's Dolby Vision profile ("10.1"):
+    MP4Box writes its dvvC from the stream's RPU only when it's told the profile (an HEVC one's it finds)."""
     if plan.encode_path is None or plan.source.path is None:
         raise MuxError("Plan has no encode or no source file")
     video = plan.source.video
@@ -364,6 +368,8 @@ def mp4box_command(
         )
     if sar is not None and sar != 1:
         opts = f":par={sar.numerator}:{sar.denominator}" + opts
+    if dvp:
+        opts = f":dvp={dvp}" + opts
     if plan.encode_path.suffix.lower() in raw_extensions:
         argv += ["-add", f"{plan.encode_path}:fps={_raw_rate(video, fps)}{opts}"]
     else:
@@ -396,11 +402,17 @@ def mp4box_command(
 
 @dataclass(slots=True)
 class MuxSettings:
-    """A job's muxer: container ("" = the rule set's), extra arguments and MKV PGS compression."""
+    """A job's muxer: container ("" = the rule set's), extra arguments and MKV PGS compression; and the output's
+    naming (core/naming.py): a name template, whether it names the file and the MKV title, and a suffix before
+    the extension."""
 
     container: str = ""
     extra: str = ""
     pgs_zlib: bool = False
+    name_template: str = ""  # "" = naming.DEFAULT_TEMPLATE
+    template_file_name: bool = False  # the file is named from name_template (a name typed for the job still wins)
+    template_title: bool = False  # an MKV's segment title is name_template's name (none otherwise)
+    name_suffix: str = ""  # goes before the extension, after the label: <name>.<label>.<suffix>.mkv
 
 
 class Muxer(Protocol):
@@ -425,10 +437,14 @@ class Muxer(Protocol):
         sar: Fraction | None = None,
         color: ContainerColor | None = None,
         pgs_zlib: bool = False,
+        title: str = "",
+        dvp: str | None = None,
     ) -> list[str]:
         """fps: a raw encode's frame rate (the script's); None for the source's. timestamps: a VFR source's,
         which time the encode instead (an MKV's; MP4Box takes none). sar and color: the pixel aspect and colour
-        an encode's stream doesn't hold (VP8 / VP9) or the muxer doesn't copy (AV1), for the container to tag."""
+        an encode's stream doesn't hold (VP8 / VP9) or the muxer doesn't copy (AV1), for the container to tag.
+        title: the file's title (MKV's segment title; MP4Box writes none). dvp: an AV1 encode's Dolby Vision profile
+        ("10.1", "10.0"), which MP4Box doesn't find in the stream (mkvmerge does)."""
         ...
 
     def issues(self, plan: Plan) -> list[Issue]:
@@ -460,6 +476,8 @@ class MkvMerge:
         sar: Fraction | None = None,
         color: ContainerColor | None = None,
         pgs_zlib: bool = False,
+        title: str = "",
+        dvp: str | None = None,
     ) -> list[str]:
         return mux_command(
             plan,
@@ -473,6 +491,7 @@ class MkvMerge:
             sar=sar,
             color=color,
             pgs_zlib=pgs_zlib,
+            title=title,
         )
 
     def issues(self, plan: Plan) -> list[Issue]:
@@ -504,6 +523,8 @@ class Mp4Box:
         sar: Fraction | None = None,
         color: ContainerColor | None = None,
         pgs_zlib: bool = False,
+        title: str = "",
+        dvp: str | None = None,
     ) -> list[str]:
         return mp4box_command(
             plan,
@@ -515,6 +536,7 @@ class Mp4Box:
             fps,
             sar=sar,
             color=color,
+            dvp=dvp,
         )
 
     def issues(self, plan: Plan) -> list[Issue]:
@@ -524,8 +546,8 @@ class Mp4Box:
                 Issue(
                     Severity.WARN,
                     "mux.mp4_vfr",
-                    "The source has a variable frame rate: MP4Box takes no timestamps file, so the MP4 is muxed "
-                    "at a constant rate (MKV keeps the source's timestamps)",
+                    "The source has a variable frame rate, but the MP4 is written at a constant rate. Use MKV to keep "
+                    "the source's timestamps",
                 )
             )
         for i, a in enumerate(plan.audio, 1):
@@ -534,8 +556,8 @@ class Mp4Box:
                     Issue(
                         Severity.BLOCK,
                         "mux.mp4_core",
-                        f"Audio {i} is the AC-3 core of a TrueHD track: MP4Box can't copy it apart from the TrueHD; "
-                        "encode it or use MKV",
+                        f"Audio {i} is the AC-3 core of a TrueHD track, and it can't be copied into MP4 on its own. "
+                        "Encode it, or use MKV",
                     )
                 )
             elif a.out_codec in (AudioCodec.LPCM, AudioCodec.VORBIS, AudioCodec.OTHER):
@@ -543,7 +565,7 @@ class Mp4Box:
                     Issue(
                         Severity.BLOCK,
                         "mux.mp4_audio",
-                        f"Audio {i} ({a.out_codec.value}) can't go into MP4: encode it (e.g. FLAC) or use MKV",
+                        f"Audio {i} ({a.out_codec.value}) can't go into MP4. Encode it (to FLAC, for example), or use MKV",
                     )
                 )
         for i, s in enumerate(plan.subs, 1):
@@ -552,8 +574,8 @@ class Mp4Box:
                     Issue(
                         Severity.BLOCK,
                         "mux.mp4_subs",
-                        f"Subtitle {i} ({s.source.format.value}) can't go into MP4 (SRT and VobSub can): "
-                        "leave it out or use MKV",
+                        f"Subtitle {i} ({s.source.format.value}) can't go into MP4, which takes only SRT and VobSub. "
+                        "Leave it out, or use MKV",
                     )
                 )
         kinds: tuple[tuple[str, list[PlannedAudio] | list[PlannedSub]], ...] = (
@@ -574,7 +596,7 @@ class Mp4Box:
                         Issue(
                             Severity.WARN,
                             "mux.mp4_flags",
-                            f"{label} {i}: MP4 has no {', '.join(dropped)} flag; left out",
+                            f"{label} {i}: MP4 has no {', '.join(dropped)} flag, so it's left out",
                         )
                     )
                 if lang.primary(t.language) != lang.normalize(t.language):
@@ -582,7 +604,7 @@ class Mp4Box:
                         Issue(
                             Severity.WARN,
                             "mux.mp4_language",
-                            f"{label} {i}: MP4 holds a 3-letter language code; {t.language} is written as "
+                            f"{label} {i}: MP4 holds only a 3-letter language code, so {t.language} is written as "
                             f"{lang.primary(t.language)}",
                         )
                     )
@@ -591,7 +613,8 @@ class Mp4Box:
                         Issue(
                             Severity.WARN,
                             "mux.mp4_title",
-                            f"{label} {i}: MP4Box can't write ':' in a title; written as '{_mp4_title(t.title)}'",
+                            f"{label} {i}: VideoForge can't write ':' in an MP4 title, so it's written as "
+                            f"'{_mp4_title(t.title)}'",
                         )
                     )
         return issues

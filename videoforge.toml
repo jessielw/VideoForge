@@ -19,6 +19,8 @@ x264 = "tools/x264/x264.exe"
 x265 = "tools/x265/x265.exe"
 # SVT-AV1 (StaxRip takes Patman86's builds of SvtAv1EncApp).
 svtav1 = "tools/SvtAv1EncApp/SvtAv1EncApp.exe"
+# SVT-AV1-HDR (juliobbv-p's fork, built with Dolby Vision and HDR10+): its exe is SvtAv1EncApp too.
+svtav1hdr = "tools/SvtAv1EncApp-HDR/SvtAv1EncApp.exe"
 # MP4 output (GPAC). All free Windows tools come from scripts/fetch_tools.py.
 mp4box = "tools/GPAC/mp4box.exe"
 # Dolby Vision and HDR10+ metadata.

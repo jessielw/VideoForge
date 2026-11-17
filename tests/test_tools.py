@@ -68,7 +68,7 @@ def test_missing_broken_and_unknown(tmp_path):
 
 def test_a_folder_or_a_file_that_cant_run_says_why(tmp_path):
     c = check(INFO["dee"], str(tmp_path))
-    assert (c.status, c.detail) == (ToolStatus.MISSING, "A folder: point at the program in it")
+    assert (c.status, c.detail) == (ToolStatus.MISSING, "This is a folder. Choose the program in it")
     exe = tmp_path / "dee"
     exe.write_bytes(b"")
 
@@ -157,7 +157,7 @@ def test_encodes_need_their_tools(tmp_path):
     plan.audio[0].action, plan.audio[1].action = AudioAction.AAC, AudioAction.DDP
     issues = tool_issues(plan, tools)
     assert [(i.severity, i.code) for i in issues] == [(Severity.BLOCK, "tools.missing")]
-    assert issues[0].message == "DDP (DEE) needs Dolby Encoding Engine: set it in Settings"
+    assert issues[0].message == "DDP (DEE) needs Dolby Encoding Engine. Set it in Settings › Tools"
     plan.audio[1].action = AudioAction.COPY
     assert tool_issues(plan, tools) == []
 

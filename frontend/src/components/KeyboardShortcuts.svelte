@@ -5,6 +5,7 @@
   import KeyboardIcon from '@lucide/svelte/icons/keyboard'
   import { Button } from '$lib/components/ui/button'
   import * as Dialog from '$lib/components/ui/dialog'
+  import Kbd from './Kbd.svelte'
   import Tip from './Tip.svelte'
 
   let { compact = false }: { compact?: boolean } = $props()
@@ -35,13 +36,15 @@
         [['Home / End'], 'The first or last frame'],
         [['+ / -'], 'Zoom in or out'],
         [['S'], 'Save the frame as a PNG'],
+        [['M'], 'Bookmark the frame, or remove its bookmark'],
+        [['[ / ]'], 'The previous or next bookmark'],
       ],
     },
     {
       title: 'Video tab',
       keys: [
         [['F5'], 'Refresh the preview (in the script editor: run the script)'],
-        [['C'], 'Compare: flip between Input and Encoded'],
+        [['C'], 'Compare: flip between the two sides (with Split on: swap them)'],
         [['Esc'], 'Leave the expanded view'],
       ],
     },
@@ -97,7 +100,7 @@
                 <dt class="flex shrink-0 flex-wrap items-center gap-1">
                   {#each keys as key, i (i)}
                     {#if i}<span class="text-xs text-muted-foreground">+</span>{/if}
-                    <kbd class="rounded border bg-muted px-1.5 py-0.5 font-mono text-xs whitespace-nowrap">{key}</kbd>
+                    <Kbd>{key}</Kbd>
                   {/each}
                 </dt>
                 <dd class="text-right text-muted-foreground">{what}</dd>

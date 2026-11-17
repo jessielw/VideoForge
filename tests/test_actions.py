@@ -49,8 +49,11 @@ def test_from_json_checks_what_it_can():
         ({"kind": "move", "target": " "}, "needs a folder"),
         ({"kind": "move", "target": "D:/x", "events": ["queue_finished"]}, "not when the queue finishes"),
         ({"kind": "command", "target": "x {outptu}"}, "Unknown token {outptu}"),
-        ({"kind": "command", "target": "x {output}", "events": ["queue_finished"]}, "has no job"),
-        ({"kind": "command", "target": "x {output}", "events": ["job_done", "queue_finished"]}, "only use {status}"),
+        ({"kind": "command", "target": "x {output}", "events": ["queue_finished"]}, "there's no job"),
+        (
+            {"kind": "command", "target": "x {output}", "events": ["job_done", "queue_finished"]},
+            "can use only {status}",
+        ),
         ({"kind": "command", "target": "x {"}, "literal brace"),
         ({"kind": "webhook", "target": "ftp://x"}, "http://"),
         ({"kind": "command", "target": "x", "events": ["nope"]}, "Unknown action event"),
@@ -80,7 +83,7 @@ def test_place_file_moves_copies_and_wont_overwrite(tmp_path):
     assert copied.error is None and copied.output is None and (tmp_path / "lib" / "f.mkv").read_bytes() == b"1"
     assert src.exists()
     again = place_file(src, tmp_path / "lib", move=False, overwrite=False)
-    assert again.error and "Already there" in again.error
+    assert again.error and "A file is already there" in again.error
     src.write_bytes(b"2")
     moved = place_file(src, tmp_path / "lib", move=True, overwrite=True)
     assert moved.output == tmp_path / "lib" / "f.mkv" and moved.output.read_bytes() == b"2"  # pyright: ignore[reportOptionalMemberAccess]

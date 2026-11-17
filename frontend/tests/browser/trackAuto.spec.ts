@@ -89,10 +89,19 @@ async function fixture(page: Page) {
     options: {},
     extra: '',
     source_color: true,
+    color_override: false,
     hdr10plus: false,
     dolby_vision: false,
   }
-  const mux = { container: 'mkv', extra: '', pgs_zlib: false }
+  const mux = {
+    container: 'mkv',
+    extra: '',
+    pgs_zlib: false,
+    name_template: '',
+    template_file_name: false,
+    template_title: false,
+    name_suffix: '',
+  }
   const job: JobDetail = {
     id: 'auto',
     name: 'Rules',
@@ -165,11 +174,12 @@ async function fixture(page: Page) {
       rule_set: 'group',
     },
     output_name: null,
+    output_title: null,
     color_args: null,
     target: null,
     sample: null,
     search: null,
-    compare: { encode: false, sample: false },
+    compare: { encode: false, sample: false, filters: false },
     tracks: { video: null, audio: [audio], subs, has_chapters: false, count: 3 },
     spec: {
       id: 'auto',

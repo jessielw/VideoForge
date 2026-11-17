@@ -6,6 +6,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
+from videoforge.core import naming
 from videoforge.core.job import JobStatus, track_defaults
 from videoforge.core.models import AudioTrack, Issue, Severity, SubTrack, track_key, with_copies
 from videoforge.core.pipeline import crfsearch
@@ -14,13 +15,14 @@ from videoforge.core.pipeline.sample import MKV, read_result, sample_dir, sample
 from videoforge.core.plan_io import to_json
 from videoforge.core.video import hdr, info, target
 from videoforge.core.video.color import color_args
+from videoforge.core.video.script import compares_filters
 from videoforge.core.video.settings import EncoderSettings, RateControl
 from videoforge.server.queue import Entry, JobQueue
 
 
 def encoder_label(enc: EncoderSettings) -> str:
     if enc.rate_control is RateControl.CRF:
-        rc = f"crf {enc.crf:g}"
+        rc = f"CRF {enc.crf:g}"
     elif target.applies(enc):
         rc = f"2-pass {enc.target_mb} MB"
     else:
@@ -53,11 +55,18 @@ def issues(e: Entry) -> list[Issue]:
     out: list[Issue] = []
     if e.probe_error:
         out.append(Issue(Severity.BLOCK, "probe", e.probe_error))
+    checks = [Issue(i.severity, "output." + i.code, i.message) for i in e.state.issues]
+    run = None
     if e.state.error:
-        out.append(
-            Issue(Severity.BLOCK, f"run.{e.state.status.value if e.state.status else 'interrupted'}", e.state.error)
-        )
-    out += [Issue(i.severity, "output." + i.code, i.message) for i in e.state.issues]
+        run = Issue(Severity.BLOCK, f"run.{e.state.status.value if e.state.status else 'interrupted'}", e.state.error)
+    if e.state.status is JobStatus.INVALID:
+        # The failed checks first (the queue row shows the first), then where the file went. A job that ran before
+        # the summary has the checks joined as its error: nothing more than the checks.
+        if run is not None and run.message == "; ".join(i.message for i in checks if i.severity is Severity.BLOCK):
+            run = None
+        out += checks + ([run] if run else [])
+    else:
+        out += ([run] if run else []) + checks
     if e.plan is not None:
         out += e.plan.issues
     order = {Severity.BLOCK: 0, Severity.WARN: 1, Severity.INFO: 2}
@@ -118,19 +127,26 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     out["made"] = made(e)  # the last run that wrote the output: sizes, time, bitrate
     out["plan"] = None
     out["output_name"] = None
+    out["output_title"] = None  # the MKV segment title the name template gives it, when it gives one
     out["tracks"] = None
     out["color_args"] = None  # the source's colour flags for this encoder (added unless source_color is off)
     out["target"] = None  # where a 2-pass target size goes, and the bitrate it leaves the video
     out["sample"] = None  # the last test encode (core/pipeline/sample.py)
     out["search"] = None  # the last CRF search, or the one running (core/pipeline/crfsearch.py)
-    # What the Video tab can compare the script's frames with: the encoded output (a done run's) or the sample.
-    out["compare"] = {"encode": encode_compare(e) is not None, "sample": False}
+    # What the Video tab can compare the script's frames with: the encoded output (a done run's), the sample, or
+    # the script without its filters.
+    out["compare"] = {
+        "encode": encode_compare(e) is not None,
+        "sample": False,
+        "filters": compares_filters(e.spec.video),
+    }
     if e.plan is not None:
         plan = to_json(e.plan)
         for key in ("source", "inputs", "overrides"):  # sent elsewhere
             plan.pop(key, None)
         out["plan"] = plan
         out["output_name"] = output_path(e.spec, e.plan, rule_set, Path()).name
+        out["output_title"] = naming.title(e.spec, e.plan) or None
         enc = e.spec.encoder
         if e.spec.encodes_video and target.applies(enc) and enc.target_mb is not None:
             found = target.budget(

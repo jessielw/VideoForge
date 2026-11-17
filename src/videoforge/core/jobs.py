@@ -85,7 +85,7 @@ def external_tracks(source: SourceInfo, paths: list[Path]) -> tuple[list[SubTrac
                 Issue(
                     Severity.WARN,
                     "subs.external_name",
-                    f"Ignored {path.name}: no language in the file name (e.g. .en.srt)",
+                    f"Ignored {path.name}, because its file name has no language (for example .en.srt)",
                 )
             )
         origin = by_number.get(track.extracted_from) if track.extracted_from else None
@@ -109,7 +109,9 @@ def external_audio_tracks(paths: list[Path], mkvmerge: str) -> tuple[list[AudioT
     for path in paths:
         info = probe(path, mkvmerge)
         if not info.audio:
-            issues.append(Issue(Severity.WARN, "audio.external_none", f"Ignored {path.name}: it has no audio track"))
+            issues.append(
+                Issue(Severity.WARN, "audio.external_none", f"Ignored {path.name}, because it has no audio track")
+            )
         delay = name_delay_ms(path.stem)
         for t in info.audio:
             language = t.language if t.language != "und" else (name_language(name_without_delay(path.stem)) or "und")
@@ -182,7 +184,8 @@ def apply_sync(plan: Plan, overrides: Overrides) -> list[Issue]:
                 Issue(
                     Severity.WARN,
                     "audio.delay",
-                    f"{a.title or a.language}: a delay of {delay:+d} ms to the video is unusually high: check its sync",
+                    f"{a.title or a.language}: its delay of {delay:+d} ms against the video is unusually high. "
+                    "Check its sync",
                 )
             )
     return issues

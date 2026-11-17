@@ -39,8 +39,9 @@ def low_space(folders: Iterable[Path], minimum_gb: float) -> str:
             continue
         if free < minimum_gb * GB:
             return (
-                f"Only {free / GB:.1f} GB free on the disk of {folder}, under the {minimum_gb:g} GB minimum "
-                "([pipeline] min_free_gb in videoforge.toml; 0 turns the check off): free some space first"
+                f"Only {free / GB:.1f} GB is free on the disk of {folder}, below the {minimum_gb:g} GB minimum. "
+                "Free some space first. The minimum is [pipeline] min_free_gb in videoforge.toml, and 0 turns the "
+                "check off"
             )
     return ""
 

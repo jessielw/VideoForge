@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
+from videoforge.core.config import mkv_ui
 from videoforge.core.models import Issue, Overrides, Severity, SubFormat, SubTrack, VideoInfo, track_key
 
 # What SubText reads, and the extension mkvextract's file takes (VobSub: it writes the .idx and its .sub).
@@ -74,7 +75,7 @@ def shift_ms(track: SubTrack, source: Path, video: VideoInfo | None) -> int:
 
 def extract_argv(mkvextract: str, source: Path, track: SubTrack, out: Path) -> tuple[str, ...]:
     """mkvextract writes the source's subtitle track to out."""
-    return (mkvextract, "--ui-language", "en", "tracks", str(source), f"{track.id}:{out}")
+    return (mkvextract, *mkv_ui(mkvextract), "tracks", str(source), f"{track.id}:{out}")
 
 
 def files(path: Path, image_pair: bool = False) -> tuple[Path, ...]:

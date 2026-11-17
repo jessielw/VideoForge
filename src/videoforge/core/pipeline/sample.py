@@ -37,7 +37,7 @@ from videoforge.core.video import burn as burn_in, info, metrics, target
 from videoforge.core.video.encoders import TOOLS, encoder_command, output_name, vspipe_command
 from videoforge.core.video.info import ScriptInfo
 from videoforge.core.video.script import ffms2_index
-from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
+from videoforge.core.video.settings import EncoderSettings, RateControl
 
 SAMPLE_DIR = "sample"  # in the job's folder
 SCRIPT = "sample.vpy"
@@ -112,8 +112,8 @@ def one_pass(enc: EncoderSettings, plan: Plan, container: str, found: ScriptInfo
 
 
 def describe(enc: EncoderSettings) -> str:
-    """The rate the sample ran at, for its result: "x265 crf 18", "x264 8000 kb/s"."""
-    rate = f"crf {enc.crf:g}" if enc.rate_control is RateControl.CRF else f"{enc.bitrate_kbps} kb/s"
+    """The rate the sample ran at, for its result: "x265 CRF 18", "x264 8000 kb/s"."""
+    rate = f"CRF {enc.crf:g}" if enc.rate_control is RateControl.CRF else f"{enc.bitrate_kbps} kb/s"
     return f"{enc.encoder.label} {rate}"
 
 
@@ -152,7 +152,7 @@ def sample_steps(
     step (prepare_steps) has run. where: the test encode's place by default."""
     found = info.read(spec.job_dir / info.SCRIPT_INFO)
     if found is None:
-        raise ValueError("The script's frames aren't known: its info step hasn't run")
+        raise ValueError("The script's frame count isn't known yet, because its info step hasn't run")
     where = where or place(spec)
     v, home = plan.source.video, where.home
     source_fps = frame_rate(v.default_duration_ns) if v is not None and v.default_duration_ns else None
@@ -171,7 +171,7 @@ def sample_steps(
         getattr(app.tools, TOOLS[enc.encoder]),
         enc,
         output=out,
-        frames=sel.frames(found.frames) if enc.encoder is Encoder.SVTAV1 else None,
+        frames=sel.frames(found.frames) if enc.encoder.svt else None,
         sar=spec.video.output_sar(v.width, v.height, v.sar) if v is not None else None,
         color=v.color if v is not None else None,
     )
@@ -277,7 +277,7 @@ def finish(
     to sample.json."""
     found = info.read(spec.job_dir / info.SCRIPT_INFO)
     if found is None:
-        raise ValueError("The script's frames aren't known: its info step hasn't run")
+        raise ValueError("The script's frame count isn't known yet, because its info step hasn't run")
     v = plan.source.video
     source_fps = frame_rate(v.default_duration_ns) if v is not None and v.default_duration_ns else None
     sel = selection(found, percent, source_fps)

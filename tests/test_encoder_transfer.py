@@ -34,6 +34,7 @@ def test_round_trip_preview_and_restart(tmp_path):
             "HDR", ["2160p"], encoder="x265", depth=10, hdr10plus=True, dolby_vision=True, options={"level-idc": "5.1"}
         ),
         entry("Target", encoder="svtav1", preset="4", rate_control="2pass", target_mb=25000),
+        entry("HDR AV1", ["2160p"], encoder="svtav1hdr", preset="-2", tune="6", depth=10, dolby_vision=True),
     )
     with make_client(tmp_path) as client:
         for action in ("export", "preview"):
@@ -45,7 +46,7 @@ def test_round_trip_preview_and_restart(tmp_path):
         assert result.status_code == 200, result.text
         assert result.json()["names"] == [e["label"] for e in doc["encoders"]]
         saved = result.json()["presets"]["encoder"]
-        assert len({e["name"] for e in saved}) == 3
+        assert len({e["name"] for e in saved}) == 4
     with make_client(tmp_path) as client:
         saved = client.get("/api/presets").json()["encoder"]
         portable = [{k: e[k] for k in ("label", "group", "data")} for e in saved]

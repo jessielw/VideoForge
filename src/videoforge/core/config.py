@@ -42,6 +42,7 @@ class Tools:
     x264: str = "x264"
     x265: str = "x265"
     svtav1: str = "SvtAv1EncApp"
+    svtav1hdr: str = "SvtAv1EncApp-HDR"  # SVT-AV1-HDR's SvtAv1EncApp, under its own name beside the mainline one
     opusenc: str = "opusenc"
     mp4box: str = "MP4Box"
     dovi_tool: str = "dovi_tool"  # Dolby Vision RPU extract / edit
@@ -107,6 +108,14 @@ def wine_target(path: str) -> str:
     except OSError:
         return ""
     return match.group(1) if match else ""
+
+
+def mkv_ui(tool: str) -> tuple[str, str]:
+    """MKVToolNix's --ui-language for English, so its messages and progress lines read the same everywhere. It
+    names English by the platform it was built for: "en" on Windows (Wine too), "en_US" anywhere else, which
+    refuses "en" ("There is no translation available for 'en'")."""
+    windows = sys.platform == "win32" or bool(wine_target(shutil.which(tool) or tool)) or tool.lower().endswith(".exe")
+    return ("--ui-language", "en" if windows else "en_US")
 
 
 # Where the Docker image's /tools folder keeps a tool, for one that isn't on PATH (added after the container

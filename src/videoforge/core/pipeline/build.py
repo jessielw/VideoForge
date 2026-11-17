@@ -28,17 +28,27 @@ from pathlib import Path
 import sys
 from typing import TYPE_CHECKING
 
-from videoforge.core.config import AppConfig
+from videoforge.core import naming
+from videoforge.core.config import AppConfig, mkv_ui
 from videoforge.core.execute import chapters as ogm, loudness
 from videoforge.core.execute.audio import audio_command, measure_argv, measure_path, needs_measure
 from videoforge.core.execute.mux import MUXERS, MuxError, frame_rate, split_args
 from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
-from videoforge.core.models import Plan, PlannedAudio, SubFormat, SubTrack, VideoColor, VideoInfo
+from videoforge.core.models import (
+    AudioAction,
+    AudioCodec,
+    Plan,
+    PlannedAudio,
+    SubFormat,
+    SubTrack,
+    VideoColor,
+    VideoInfo,
+)
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.tools import locate
 from videoforge.core.video import burn as burn_in, hdr, info, remux, target, vfr
-from videoforge.core.video.color import effective_container_color
+from videoforge.core.video.color import ContainerColor, effective_container_color
 from videoforge.core.video.encoders import (
     TOOLS,
     analysis_file,
@@ -48,9 +58,9 @@ from videoforge.core.video.encoders import (
     stats_path,
     vspipe_command,
 )
-from videoforge.core.video.qpf import make_qpf, qpf_paths
+from videoforge.core.video.qpf import given_chapters_path, make_qpf, qpf_from_chapters, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
-from videoforge.core.video.settings import Crop, Encoder, EncoderSettings, SourceFilter
+from videoforge.core.video.settings import Crop, EncoderSettings, SourceFilter
 from videoforge.core.workdir import finished_files
 
 if TYPE_CHECKING:
@@ -65,10 +75,10 @@ class JobSteps:
 
 
 def output_path(spec: JobSpec, plan: Plan, rule_set: RuleSet, out_dir: Path) -> Path:
-    """The job's output in out_dir: its own name if it has one, else the rule set's, with the job's label
-    (if any) after it: `<name>.<label>.mkv`."""
-    stem = (spec.output_name or rule_set.output_stem(plan)) + (f".{spec.label}" if spec.label else "")
-    return out_dir / (stem + MUXERS[spec.container(rule_set)].extension)
+    """The job's output in out_dir: its own name if it has one, else its name template's (when that names the
+    file), else the rule set's; then the job's label and name suffix, if any: `<name>.<label>.<suffix>.mkv`
+    (naming.file_stem)."""
+    return out_dir / (naming.file_stem(spec, plan, rule_set) + MUXERS[spec.container(rule_set)].extension)
 
 
 def job_output(spec: JobSpec, plan: Plan, rule_set: RuleSet) -> Path | None:
@@ -200,6 +210,41 @@ def mp4_subtitle_steps(plan: Plan, work: Path, app: AppConfig) -> tuple[list[Ste
         )
         subs[pos - 1] = replace(sub, source=replace(track, id=-1, external_path=out, extracted_from=None, delay_ms=0))
     return steps, replace(plan, subs=subs)
+
+
+def mp4_audio_steps(plan: Plan, work: Path, app: AppConfig) -> tuple[list[Step], Plan]:
+    """Extract a copied TrueHD track from a Matroska file (the source, or an added MKA) before MP4Box imports it.
+    MP4Box reads Matroska through FFmpeg, whose TrueHD packets skip its TrueHD reframer (the one that writes the
+    dmlp box): GPAC 26.07 refuses them ("Feature Not Supported"), 2.4 waits forever. A raw .thd it frames itself,
+    as it does a TS's TrueHD. The copy keeps its delay (the mux adds it back: MP4Box starts every track at 0), and
+    the mux's local plan alone changes, as for the subtitles. One extract per track, for its copies too."""
+    steps: list[Step] = []
+    audio = list(plan.audio)
+    extracted: dict[tuple[Path, int], Path] = {}
+    for pos, a in enumerate(audio):
+        track = a.source
+        file = track.external_path or plan.source.path
+        if a.action is not AudioAction.COPY or track.codec is not AudioCodec.TRUEHD or file is None:
+            continue
+        if remux.needed(file):  # not Matroska: MP4Box reads it itself
+            continue
+        out = extracted.get((file, track.id))
+        if out is None:
+            out = extracted[(file, track.id)] = work / f"truehd.{len(extracted) + 1}.thd"
+            steps.append(
+                Step(
+                    f"truehd.{len(extracted)}.extract",
+                    f"TrueHD {track.id} for MP4 (mkvextract)",
+                    argvs=(
+                        (app.tools.mkvextract, *mkv_ui(app.tools.mkvextract), "tracks", str(file), f"{track.id}:{out}"),
+                    ),
+                    inputs=(file,),
+                    outputs=(out,),
+                    weight=0.5,
+                )
+            )
+        audio[pos] = replace(a, source=replace(track, id=0, external_path=out))
+    return steps, replace(plan, audio=audio)
 
 
 def index_steps(
@@ -368,8 +413,9 @@ def video_steps(
     info_file = home / info.SCRIPT_INFO
     steps.append(info_step(spec, app, text))
     qpfile = None
-    if spec.makes_chapters:
+    if spec.makes_qpfile:
         files = qpf_paths(home)
+        given = spec.inputs.chapters  # the user's chapter file: the qpfile alone, from it (the mux takes the file)
         video = plan.source.video
         source_fps = frame_rate(video.default_duration_ns) if video and video.default_duration_ns else None
 
@@ -380,15 +426,39 @@ def video_steps(
                 if fps is None:
                     raise ToolError("Neither the source nor the script has a frame rate to place chapters by")
                 if make_qpf(source, home, fps) is None:
-                    raise ToolError("AutoQPF could not read or generate chapters for the source")
+                    raise ToolError("AutoQPF couldn't read or make chapters for the source")
                 log(f"Chapters and qpfile written ({fps} fps)")
 
+            def make_qpfile(log: LogFn) -> None:
+                if fps is None:
+                    raise ToolError("Neither the source nor the script has a frame rate to place chapters by")
+                if given is None:  # only this step's call when a chapter file is given
+                    raise ValueError("No chapter file to make the qpfile from")
+                count = qpf_from_chapters(given, home, fps)
+                if not count:
+                    raise ToolError(f"No chapters could be read from {given.name} to make the qpfile from")
+                log(f"Qpfile written from {given.name}: {count} chapters ({fps} fps)")
+
+            if given is None:
+                label, call, outputs, inputs = (
+                    "Chapters and qpfile (AutoQPF)",
+                    make_chapters,
+                    (files.qpfile, files.chapters),
+                    (source,),
+                )
+            else:
+                label, call, outputs, inputs = (
+                    "Qpfile from the chapter file (AutoQPF)",
+                    make_qpfile,
+                    (files.qpfile, given_chapters_path(home)),
+                    (given,),
+                )
             return Step(
                 "chapters",
-                "Chapters and qpfile (AutoQPF)",
-                call=make_chapters,
-                outputs=(files.qpfile, files.chapters),
-                inputs=(source,),
+                label,
+                call=call,
+                outputs=outputs,
+                inputs=inputs,
                 key=str(fps),
                 weight=0.1,
                 refresh=lambda: chapters_step(script_fps(spec) or source_fps),
@@ -485,7 +555,7 @@ def video_steps(
     keyframes = qpfile is not None and forces_keyframes(enc)
     # SvtAv1EncApp doesn't know a pipe's length (its pass 2 printed no total): it's given the script's frames, as
     # StaxRip gives them, once the info step has read them.
-    counts = enc.encoder is Encoder.SVTAV1
+    counts = enc.encoder.svt
 
     def encodes(color: VideoColor | None) -> list[Step]:
         found = info.read(info_file) if counts else None
@@ -650,6 +720,8 @@ def build_steps(
     if container == "mp4":
         subtitles, plan = mp4_subtitle_steps(plan, home, app)  # by the job's subtitle positions
         steps += subtitles
+        truehd, plan = mp4_audio_steps(plan, home, app)
+        steps += truehd
     if container == "mp4" and (chapters := mp4_chapters_step(plan, home)) is not None:
         steps.append(chapters)
         plan = replace(plan, chapters_path=chapters.outputs[0])
@@ -660,6 +732,7 @@ def build_steps(
     mux_inputs += [s.source.external_path for s in plan.subs if s.source.external_path is not None]
     mux_inputs += list(dict.fromkeys(a.source.external_path for a in plan.audio if a.source.external_path is not None))
     muxer, extra = MUXERS[container], split_args(spec.mux.extra)
+    title = naming.title(spec, plan)
 
     # The job's encode is timed by the script's frame rate, once the info step has read it (before a run, the
     # source's); a reused encode by the source's. A VFR source's timestamps time it instead, while they fit the
@@ -672,16 +745,41 @@ def build_steps(
 
     # A VP8 / VP9 / AV1 encode's stream has no pixel aspect, and VP8 / VP9's little colour: the mux tags the track
     # with them. An AV1 stream's colour and HDR10 are tagged too, which mkvmerge doesn't copy from it.
-    sar, tags = None, None
-    if spec.encodes_video and spec.encoder.encoder.ivf and video is not None:
+    # An AV1 encode's Dolby Vision (profile 5's colour is forced: color.SVT_DV5_ARGS) is named to MP4Box, which
+    # doesn't find it in the stream; a baked FEL's HDR10 is the RPU's (hdr.fel_color, as the encode's), read when
+    # the mux's turn comes.
+    sar, dvp, carried = None, None, None
+    ivf = spec.encodes_video and spec.encoder.encoder.ivf and video is not None
+    if ivf and video is not None:
         sar = spec.video.output_sar(video.width, video.height, video.sar)
-        tags = effective_container_color(video.color, spec.encoder)
+        carried = hdr.dv_profile(video) if hdr.keeps_dv(video, spec.encoder) else None
+        dvp = {"8.1": "10.1", "5": "10.0"}.get(carried or "") if spec.encoder.encoder.svt else None
+    baked_rpu = work / hdr.DV_SOURCE_RPU if baked_el(spec, video) is not None else None
 
-    def mux_step(fps: Fraction | None, stamps: Path | None) -> Step:
+    def tags(final: bool) -> ContainerColor | None:
+        if not ivf or video is None:
+            return None
+        color = video.color
+        if final and color is not None and baked_rpu is not None and baked_rpu.is_file():
+            color = hdr.fel_color(color, hdr.rpu_summary(app.tools.dovi_tool, baked_rpu))
+        return effective_container_color(color, spec.encoder, carried)
+
+    def mux_step(fps: Fraction | None, stamps: Path | None, final: bool = False) -> Step:
         try:
             argv = tuple(
                 muxer.command(
-                    plan, encoded, unfinished, app, extra, fps, stamps, sar=sar, color=tags, pgs_zlib=spec.mux.pgs_zlib
+                    plan,
+                    encoded,
+                    unfinished,
+                    app,
+                    extra,
+                    fps,
+                    stamps,
+                    sar=sar,
+                    color=tags(final),
+                    pgs_zlib=spec.mux.pgs_zlib,
+                    title=title,
+                    dvp=dvp,
                 )
             )
         except MuxError:
@@ -697,7 +795,7 @@ def build_steps(
             inputs=(*mux_inputs, *((stamps,) if stamps else ())),
             finalize=lambda: publish(unfinished, output) if publish else unfinished.replace(output),
             weight=3,
-            refresh=(lambda: mux_step(*timing())) if spec.encodes_video else None,
+            refresh=(lambda: mux_step(*timing(), final=True)) if spec.encodes_video else None,
         )
 
     steps.append(mux_step(None, timestamps))

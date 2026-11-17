@@ -3,14 +3,25 @@
   // Changes save straight away (the server replans); a queued, running or indexing job is read-only.
   // Queue (top left, and the tick on its queue row) locks the job for the run: the queue runs it.
   import { api, type SpecChanges } from '../lib/api'
+  import { reuseQuestion } from '../lib/reuse.svelte'
   import { saves } from '../lib/saves'
-  import { basename, bytes, duration, percent, SEVERITY_TONE, STATUS_LABEL, STATUS_TONE } from '../lib/format'
+  import {
+    basename,
+    bytes,
+    duration,
+    percent,
+    SEVERITY_TONE,
+    sizeLabel,
+    STATUS_LABEL,
+    STATUS_TONE,
+  } from '../lib/format'
   import { queueable } from '../lib/queueView'
   import { app } from '../lib/state.svelte'
   import { layout } from '../lib/layout.svelte'
   import type { CommandStep, JobDetail } from '../lib/types'
   import EncoderPanel from './EncoderPanel.svelte'
   import OutputFolderMenu from './OutputFolderMenu.svelte'
+  import NameSettings from './NameSettings.svelte'
   import SampleCard from './SampleCard.svelte'
   import CrfSearchCard from './CrfSearchCard.svelte'
   import { videoView } from '../lib/videoView.svelte'
@@ -122,10 +133,13 @@
   async function setQueued(on: boolean) {
     try {
       await saves.flush()
+      // A running queue takes it at once: ask about an earlier run's files first (null: cancelled).
+      const reuse = on ? await reuseQuestion.ask([jobId], 'queue') : {}
       if (!on) await api.dequeue([jobId])
-      else if (!(await api.enqueue([jobId])).enqueued.length)
+      else if (reuse && !(await api.enqueue([jobId], reuse)).enqueued.length)
         toast.warning("Couldn't queue the job", {
-          description: 'It changed meanwhile: it is being probed or indexed, or is blocked.',
+          description:
+            "It changed in the meantime. A job can't be queued while VideoForge reads its tracks, indexes it, crops it or runs a test encode or CRF search, or while it's blocked.",
         })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
@@ -158,21 +172,20 @@
         <Tip
           class="shrink-0"
           text={job.status === 'running'
-            ? 'Running: locked until it finishes'
+            ? 'Running. You can edit it again when it finishes.'
             : queued
-              ? 'Queued: locked, and the queue runs it (a running queue too). Untick to edit it; the queue leaves it out.'
+              ? "Queued, so it can't be edited. Start queue runs it, or a running queue picks it up in its turn. Untick it to make changes, and the queue skips it."
               : queueable(job.status)
-                ? 'Tick when the job is set up: it locks, and the queue runs it'
-                : `Can't be queued while ${STATUS_LABEL[job.status].toLowerCase()}`}
+                ? "Tick it when the job is set up, to queue it. Start queue runs it, or a running queue picks it up in its turn. You can't edit it until you untick it."
+                : `Can't be queued while its status is ${STATUS_LABEL[job.status]}`}
         >
           <label
             class="flex items-center gap-2 rounded-md border px-2.5 py-1 text-sm font-medium has-disabled:opacity-60
               {queued ? 'border-info/40 bg-info/10 text-info' : 'border-border'}"
           >
             <Checkbox
-              checked={queued}
+              bind:checked={() => queued, setQueued}
               disabled={job.status === 'running' || (!queued && !queueable(job.status))}
-              onCheckedChange={setQueued}
             />
             {queued ? 'Queued · locked' : 'Queue'}
           </label>
@@ -183,9 +196,6 @@
         {#if job.label}<Tip class="shrink-0" text="Label (Output tab)"><Badge variant="outline">{job.label}</Badge></Tip
           >{/if}
         <span class="text-sm {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
-        <span class="text-sm text-muted-foreground"
-          >· {job.rule_set} · {job.encoder}{job.plan ? ` · ${job.plan.resolution}` : ''}</span
-        >
         {#if job.status === 'indexing' || job.status === 'sampling'}<Badge
             variant="outline"
             class="border-info/40 bg-info/10 text-info"
@@ -204,35 +214,44 @@
           <Button variant="outline" size="sm" onclick={() => (mediainfo = true)}><InfoIcon />MediaInfo</Button>
         </Tip>
       </div>
+      <!-- The job's facts under its name, so the name keeps the title row; then what a finished run made.
+           One box per figure: a narrow window breaks the line between figures, never inside one. -->
+      <div class="readout flex flex-wrap gap-x-1 text-xs text-muted-foreground *:whitespace-nowrap">
+        <span>{app.ruleSets.find((r) => r.id === job!.rule_set)?.name ?? job.rule_set}</span>
+        <span>· {job.encoder}</span>
+        {#if job.plan}<span>· {sizeLabel(job.plan.resolution)}</span>{/if}
+        {#if job.made && (job.status === 'done' || job.status === 'invalid')}
+          {@const m = job.made}
+          <span>· Made {bytes(m.output_bytes)}</span>
+          {#if m.source_bytes}<span
+              >· <Tip text="The source is {bytes(m.source_bytes)}"
+                >{percent(m.output_bytes / m.source_bytes)} of the source</Tip
+              ></span
+            >{/if}
+          {#if m.kbps != null}<span>· {m.kbps.toLocaleString()} kb/s</span>{/if}
+          <span
+            >· took {duration(m.seconds)}{#if m.reused}{' '}<Tip text="Steps taken from an earlier run, not made again"
+                >({m.reused} reused)</Tip
+              >{/if}</span
+          >
+        {/if}
+      </div>
       {#if live?.progress && ['running', 'indexing', 'sampling'].includes(live.status)}
         {@const p = live.progress}
         <div class="flex items-center gap-3 text-xs text-muted-foreground max-sm:flex-wrap max-sm:gap-y-1">
           <div class="h-1.5 flex-1 overflow-hidden rounded bg-muted max-sm:basis-full">
             <div class="h-full bg-info transition-[width]" style="width:{p.overall * 100}%"></div>
           </div>
-          <span class="tabular-nums">
+          <span class="readout">
             {#if app.queue.paused}<span class="text-warning">Paused ·</span>{/if}
             {p.step} · {(p.fraction * 100).toFixed(1)}%{p.eta != null ? ` (${duration(p.eta)} left)` : ''}
-            <Tip text="The bar and this: the whole job, every step counted by its weight"
+            <Tip text="The bar and this number show the whole job. Each step counts for a set share of it."
               >· job {percent(p.overall)}</Tip
             >
             {#if p.fps != null}· {p.fps < 10 ? p.fps.toFixed(2) : p.fps.toFixed(1)} fps{/if}
             {#if p.elapsed != null}· {duration(p.elapsed)} elapsed{/if}
             {#if p.left != null}<Tip text="A guess from the job's pace so far">· job ~{duration(p.left)} left</Tip>{/if}
           </span>
-        </div>
-      {/if}
-      {#if job.made && (job.status === 'done' || job.status === 'invalid')}
-        {@const m = job.made}
-        <div class="text-xs text-muted-foreground tabular-nums">
-          Made {bytes(m.output_bytes)}
-          {#if m.source_bytes}·
-            <Tip text="The source is {bytes(m.source_bytes)}"
-              >{percent(m.output_bytes / m.source_bytes)} of the source</Tip
-            >{/if}
-          {#if m.kbps != null}· {m.kbps.toLocaleString()} kb/s{/if}
-          · took {duration(m.seconds)}
-          {#if m.reused}<Tip text="Steps taken from an earlier run, not made again">({m.reused} reused)</Tip>{/if}
         </div>
       {/if}
       {#if problems.length}
@@ -257,19 +276,29 @@
       <Tabs.List
         bind:ref={tabList}
         variant="line"
+        aria-label="Job sections"
         class="-mx-2 h-9 max-sm:max-w-[calc(100%+1rem)] max-sm:justify-start max-sm:overflow-x-auto max-sm:[scrollbar-width:none]"
       >
         {#each TABS as t (t.id)}
-          <Tabs.Trigger value={t.id} class="px-3">{t.label}</Tabs.Trigger>
+          <Tabs.Trigger value={t.id} id="job-tab-{t.id}" aria-controls="job-tab-panel" class="px-3"
+            >{t.label}</Tabs.Trigger
+          >
         {/each}
       </Tabs.List>
     </header>
 
-    <div class="min-h-0 flex-1 overflow-auto p-5 max-sm:p-3">
+    <!-- One panel for every tab (the tabs swap what's in it), named by the tab that shows. -->
+    <div
+      id="job-tab-panel"
+      role="tabpanel"
+      aria-labelledby="job-tab-{tab}"
+      class="min-h-0 flex-1 overflow-auto p-5 max-sm:p-3"
+    >
       {#if tab === 'video'}
         {#if job.spec.inputs.encode}
           <p class="text-muted-foreground">
-            This job reuses an existing encode ({basename(job.spec.inputs.encode)}); there is no video step.
+            This job uses an existing encode ({basename(job.spec.inputs.encode)}), so VideoForge doesn't encode the
+            video and there's nothing to set here.
           </p>
         {:else}
           {#key job.id}<VideoTab {job} {editable} save={(video) => save({ video })} />{/key}
@@ -288,7 +317,7 @@
               onchange={(encoder) => save({ encoder })}
             />
           </div>
-          <div class="space-y-2">
+          <div class="space-y-4">
             {#if !job.spec.inputs.encode}
               <SampleCard
                 {job}
@@ -305,15 +334,17 @@
                 onapply={(crf) => job && save({ encoder: { ...job.spec.encoder, crf } })}
               />
             {/if}
-            <span class="section-label">Commands this job runs</span>
-            {#each commands as c (c.id)}
-              <div class="rounded-lg border bg-muted/50 p-2">
-                <div class="text-xs text-primary">{c.label}</div>
-                <code class="block text-[11px] break-all text-muted-foreground">{c.command}</code>
-              </div>
-            {:else}
-              <p class="text-sm text-muted-foreground">Available once the source is probed.</p>
-            {/each}
+            <div class="space-y-2">
+              <span class="section-label">Commands this job runs</span>
+              {#each commands as c (c.id)}
+                <div class="rounded-lg border bg-muted/50 p-2">
+                  <div class="text-xs font-medium text-foreground">{c.label}</div>
+                  <code class="block text-xs break-all text-muted-foreground">{c.command}</code>
+                </div>
+              {:else}
+                <p class="text-sm text-muted-foreground">Available once the source is probed.</p>
+              {/each}
+            </div>
           </div>
         </div>
       {:else if tab === 'audio' || tab === 'subs'}
@@ -331,7 +362,7 @@
         {/if}
       {:else if tab === 'output'}
         <div class="max-w-3xl space-y-5">
-          <div class="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 text-sm">
+          <div class="grid grid-cols-[8rem_minmax(0,1fr)] items-baseline gap-3 text-sm">
             <span class="text-muted-foreground">Output folder</span>
             <div
               class="-m-1 flex gap-2 rounded-lg p-1 outline-none"
@@ -358,7 +389,7 @@
             <span class="text-muted-foreground">Output name</span>
             <Tip
               class="grid"
-              text="The output's file name, without its extension; empty = the rule set's name for it (the source's). The label and the container's extension go after it"
+              text="The output's file name, without its extension. Leave it empty to use the name template when it names the file, or else the rule set's name, which is normally the source's. The label, the name suffix and the extension go after it, as in Show.S01E01.dubbed.mkv."
             >
               <Input
                 aria-label="Output name"
@@ -382,12 +413,16 @@
                 <option value="replace">Replace after validation</option>
               </NativeSelect>
               <p class="text-xs text-muted-foreground">
-                Applies to files outside this job's verified results. An output changed during a run is always kept.
+                This applies when the output file already exists and this job didn't make it. If a file appears or
+                changes there while the job runs, it isn't replaced. The job fails and keeps its new output beside it as
+                an .unpublished copy.
               </p>
             </div>
             <span class="text-muted-foreground">Label</span>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <Tip text="Tells runs of one source apart: added to the output name, and kept in the job record">
+              <Tip
+                text="Tells jobs from the same source apart. It's added to the output name and saved in the job record."
+              >
                 <Input
                   class="w-48"
                   aria-label="Label"
@@ -403,6 +438,14 @@
                 >
               {/if}
             </div>
+            <NameSettings
+              mux={job.spec.mux}
+              mkv={container?.id === 'mkv'}
+              disabled={!editable}
+              title={job.output_title}
+              ruleSetName={app.ruleSets.find((r) => r.id === job?.rule_set)?.name}
+              onchange={(mux) => save({ mux })}
+            />
             <span class="text-muted-foreground">Container</span>
             {#if containers.length > 1}
               <ToggleGroup.Root
@@ -417,7 +460,7 @@
                 {#each containers as c (c.id)}
                   <ToggleGroup.Item
                     value={c.id}
-                    class="px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    class="px-4 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
                     >{c.label}</ToggleGroup.Item
                   >
                 {/each}
@@ -426,7 +469,8 @@
               <span>{container?.label ?? job.spec.mux.container}</span>
             {/if}
             {#if container?.id === 'mkv'}
-              <span class="text-muted-foreground">PGS compression</span>
+              <!-- self-start: the row starts with a checkbox, whose baseline moves with its tick; its first line is at the top -->
+              <span class="self-start text-muted-foreground">PGS compression</span>
               <label class="flex items-center gap-2">
                 <Checkbox
                   checked={job.spec.mux.pgs_zlib ?? false}
@@ -438,9 +482,9 @@
             {/if}
             <span class="text-muted-foreground">Extra arguments</span>
             <Input
-              class="font-mono text-xs"
-              aria-label="Extra muxer arguments"
-              placeholder="added to the {container?.tool ?? 'muxer'} command as typed"
+              class="font-mono text-xs placeholder:font-sans"
+              aria-label="Extra arguments for {container?.tool ?? 'the output'}"
+              placeholder="added to the {container?.tool ?? 'output'} command as typed"
               value={job.spec.mux.extra}
               disabled={!editable}
               onchange={(e) => save({ mux: { ...job!.spec.mux, extra: (e.target as HTMLInputElement).value.trim() } })}
@@ -486,6 +530,7 @@
             <span class="text-muted-foreground">Rule set</span>
             <NativeSelect
               class="w-48"
+              aria-label="Rule set"
               value={job.rule_set}
               disabled={!editable}
               onchange={(e) => save({ rule_set: e.currentTarget.value })}
@@ -499,11 +544,11 @@
           </div>
           {#if muxCommands.length}
             <div class="space-y-2">
-              <span class="section-label">Mux command</span>
+              <span class="section-label">Commands that build the output file</span>
               {#each muxCommands as c (c.id)}
                 <div class="rounded-lg border bg-muted/50 p-2">
-                  <div class="text-xs text-primary">{c.label}</div>
-                  <code class="block text-[11px] break-all text-muted-foreground">{c.command}</code>
+                  <div class="text-xs font-medium text-foreground">{c.label}</div>
+                  <code class="block text-xs break-all text-muted-foreground">{c.command}</code>
                 </div>
               {/each}
             </div>

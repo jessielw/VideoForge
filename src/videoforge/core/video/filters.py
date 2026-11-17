@@ -32,9 +32,9 @@ def field_issues(video: VideoInfo | None, settings: VideoSettings) -> list[Issue
         Issue(
             Severity.WARN,
             "video.interlaced",
-            f"The source is interlaced{f' ({how})' if how else ''} and the filter chain doesn't deinterlace it: add IVTC (telecined "
-            "film) or a deinterlacer (QTGMC, Bwdif) from the Field filters, or check the preview for combing "
-            "(some progressive video is stored as interlaced)",
+            f"The source is interlaced{f' ({how})' if how else ''}, and the filter chain doesn't deinterlace it. "
+            "Add IVTC (for telecined film) or a deinterlacer (QTGMC, Bwdif) from the Field filters, or check the "
+            "preview for combing first. Some progressive video is stored as interlaced",
         )
     ]
 
@@ -106,7 +106,7 @@ PRESETS: list[FilterPreset] = [
         "Burn in subtitles",
         "",
         "clip = core.sub.TextFile(clip, file=r'')  # an SRT or ASS file; style='...' restyles an SRT",
-        "Draw an SRT or ASS file on the video (SubText); PGS: burn a track in from the Subtitles tab",
+        "Draws an SRT or ASS file on the video (SubText). For PGS, burn a track in from the Subtitles tab",
         fill_in=True,
     ),
     # Restoration

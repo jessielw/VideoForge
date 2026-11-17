@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # VideoForge in a container: the server and its free tools. The native ones (FFmpeg, MP4Box, x264, the
-# VapourSynth plugins) come from the plugins image (vsplugins/), built rarely; x265 (with HDR10+) and SVT-AV1 are
-# built here; MKVToolNix and opus-tools from Debian; DeeZy, truehdd, dovi_tool and hdr10plus_tool from their
+# VapourSynth plugins) come from the plugins image (vsplugins/), built rarely; x265 (with HDR10+), SVT-AV1 and
+# SVT-AV1-HDR (with Dolby Vision and HDR10+) are built here; MKVToolNix and opus-tools from Debian; DeeZy, truehdd, dovi_tool and hdr10plus_tool from their
 # releases; Wine for Windows tools. DEE, qaac and other tools of your own go in /tools (docker/entrypoint.sh).
 # See README "Docker".
 #   docker build -t videoforge .                      (with the published plugins image)
@@ -17,12 +17,22 @@ ARG X265_COMMIT=1e85ca6eb
 ARG X265_SHA256=bc603457c7e4de3b0349a92a4af50e597d3cd9f2c6dd687c1fc2e753627175db
 # SVT-AV1's SvtAv1EncApp from its tag (Debian's is older)
 ARG SVTAV1_VERSION=v4.2.0
-ARG TRUEHDD_VERSION=0.6.2
+# juliobbv-p's SVT-AV1-HDR at the commit the Windows build is (scripts/tools.toml; its releases are rolling
+# "pgo-build-<date>-<commit>" tags), with Rust for its Dolby Vision and HDR10+ libraries and cargo-c to build them
+ARG SVTAV1HDR_COMMIT=a46bc2d59774785f4db7341003fa23dbeb473b5a
+ARG SVTAV1HDR_SHA256=dcd9e7247c1044f1730ada6786a3cf4da4e15e01eb7808fd4176481fbd42e150
+ARG RUST_IMAGE=rust:1.98-slim-trixie
+ARG CARGO_C_VERSION=0.10.26
+ARG CARGO_C_SHA256=685fab5a2e1539c5075cea21c42469ee5a489d877dbdbf7adccf4bb631d77545
+ARG TRUEHDD_VERSION=0.6.3
 # quietvoid's Dolby Vision / HDR10+ tools (MIT): the versions scripts/fetch_tools.py takes for Windows
 ARG DOVI_TOOL_VERSION=2.3.4
 ARG DOVI_TOOL_SHA256=1844258e13c26607b32224bf1fa82b595d3b35949f5467405fda560daad32b3f
 ARG HDR10PLUS_TOOL_VERSION=1.7.2
 ARG HDR10PLUS_TOOL_SHA256=06385f37a639d61ba21d4be3150c863846933bc3b58110e094d8fc8f1c2249f2
+# Their sources at the same tags: SVT-AV1-HDR links their libraries (libdovi, hdr10plus)
+ARG DOVI_TOOL_SRC_SHA256=15b5cb68b3598e51ca968316443c9fb9597b6230e9d692cb4e641d54505a97ec
+ARG HDR10PLUS_TOOL_SRC_SHA256=cc917e769bad85323c7f596179798cc96ac878a01ddfd53b210fecae4c891849
 
 FROM ${PLUGINS_IMAGE} AS plugins
 
@@ -81,6 +91,52 @@ RUN git clone -q --depth 1 --branch "${SVTAV1_VERSION}" https://gitlab.com/AOMed
     && cmake --build /src/b -j"$(nproc)" \
     && install -m 0755 /src/svtav1/Bin/Release/SvtAv1EncApp /SvtAv1EncApp
 
+# --- SVT-AV1-HDR ---------------------------------------------------------------------------------------
+# Its SvtAv1EncApp with Dolby Vision and HDR10+: quietvoid's libdovi (dovi_tool's dolby_vision crate) and hdr10plus
+# (hdr10plus_tool's) as static C libraries (cargo-c), linked as its own release builds link them, by the defines and
+# pkg-config's flags (its CMake options for them are made for Windows). From source rather than its Linux release,
+# which needs AVX2 (x86-64-v3). Without git its version is CMake's (v4.2.0). The flags show in --help only when
+# built with the libraries: the stage stops if they don't (hdr.py's hdr.svt_build reads the same).
+FROM ${RUST_IMAGE} AS svtav1hdr
+ARG SVTAV1HDR_COMMIT
+ARG SVTAV1HDR_SHA256
+ARG CARGO_C_VERSION
+ARG CARGO_C_SHA256
+ARG DOVI_TOOL_VERSION
+ARG DOVI_TOOL_SRC_SHA256
+ARG HDR10PLUS_TOOL_VERSION
+ARG HDR10PLUS_TOOL_SRC_SHA256
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl cmake nasm g++ make pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN curl -fsSL -o cargo-c.tar.gz \
+        "https://github.com/lu-zero/cargo-c/releases/download/v${CARGO_C_VERSION}/cargo-c-x86_64-unknown-linux-musl.tar.gz" \
+    && echo "${CARGO_C_SHA256}  cargo-c.tar.gz" | sha256sum -c - \
+    && tar -xzf cargo-c.tar.gz -C /usr/local/cargo/bin
+RUN for t in "dovi_tool ${DOVI_TOOL_VERSION} ${DOVI_TOOL_SRC_SHA256} dolby_vision" \
+             "hdr10plus_tool ${HDR10PLUS_TOOL_VERSION} ${HDR10PLUS_TOOL_SRC_SHA256} hdr10plus"; do \
+        set -- $t; \
+        curl -fsSL -o "$1.tar.gz" "https://github.com/quietvoid/$1/archive/refs/tags/$2.tar.gz" \
+        && echo "$3  $1.tar.gz" | sha256sum -c - \
+        && mkdir "$1" && tar -xzf "$1.tar.gz" -C "$1" --strip-components=1 \
+        && (cd "$1/$4" && cargo cinstall --release --library-type staticlib --prefix /opt/deps --libdir /opt/deps/lib) \
+        || exit 1; \
+    done
+RUN curl -fsSL -o svt.tar.gz "https://github.com/juliobbv-p/svt-av1-hdr/archive/${SVTAV1HDR_COMMIT}.tar.gz" \
+    && echo "${SVTAV1HDR_SHA256}  svt.tar.gz" | sha256sum -c - \
+    && mkdir svt && tar -xzf svt.tar.gz -C svt --strip-components=1
+RUN export PKG_CONFIG_PATH=/opt/deps/lib/pkgconfig \
+    && cflags="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static dovi hdr10plus-rs)" \
+    && cmake -S svt -B b -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+        -DCMAKE_C_FLAGS="$cflags" -DCMAKE_C_STANDARD_LIBRARIES="$(pkg-config --libs --static dovi hdr10plus-rs)" \
+    && cmake --build b -j"$(nproc)" \
+    && install -m 0755 svt/Bin/Release/SvtAv1EncApp /SvtAv1EncApp-HDR
+RUN { /SvtAv1EncApp-HDR --help > help.txt 2>&1 || true; } \
+    && head -n 1 help.txt \
+    && if ! grep -q -- --dolby-vision-rpu help.txt || ! grep -q -- --hdr10plus-json help.txt; then \
+        echo "SVT-AV1-HDR was built without Dolby Vision or HDR10+"; exit 1; fi
+
 # --- release binaries ---------------------------------------------------------------------------------
 FROM ${PYTHON_IMAGE} AS downloads
 ARG DEEZY_VERSION
@@ -124,6 +180,7 @@ COPY --from=downloads /out/deezy-bin /usr/local/bin/deezy
 COPY --from=downloads /out/truehdd-bin /usr/local/bin/truehdd
 COPY --from=x265 /x265 /usr/local/bin/x265
 COPY --from=svtav1 /SvtAv1EncApp /usr/local/bin/SvtAv1EncApp
+COPY --from=svtav1hdr /SvtAv1EncApp-HDR /usr/local/bin/SvtAv1EncApp-HDR
 COPY --from=downloads /out/dovi_tool-bin /usr/local/bin/dovi_tool
 COPY --from=downloads /out/hdr10plus_tool-bin /usr/local/bin/hdr10plus_tool
 # Wine for the Windows tools in /tools/wine (qaac, DEE's Windows build). Its DLLs lose their debug info

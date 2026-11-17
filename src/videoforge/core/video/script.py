@@ -16,6 +16,9 @@ Layout of every script:
 `stage="crop"` is the crop editor's view: the output, less a resize after the crop, with the cropped-off
 margins stacked back on (vs.crop_view), so the crop lines sit on the uncropped frame's pixels while the
 picture between them is the real output. Only the preview worker runs it (it imports VideoForge).
+`stage="unfiltered"` is the output without its filters (the compare's "before filters" side): the same crop,
+resize, field filters (IVTC, deinterlacing), burned-in subtitles and depth, so its frames line up with the
+output's and differ only by what the restoration, noise, line, deband, grain and custom filters do.
 """
 
 from __future__ import annotations
@@ -28,7 +31,9 @@ from videoforge.core.models import SubTrack
 from videoforge.core.video import burn as burn_in
 from videoforge.core.video.settings import DEFAULT_KERNEL, KERNELS, FilterCategory, SourceFilter, VideoSettings
 
-Stage = Literal["source", "crop", "output"]
+Stage = Literal["source", "crop", "output", "unfiltered"]
+# The filters the "unfiltered" stage keeps: they change the frames (field matching) or burn subtitles in.
+KEPT_UNFILTERED = (FilterCategory.FIELD, FilterCategory.SUBTITLE)
 
 
 def _q(path: Path | str) -> str:
@@ -96,11 +101,16 @@ def index_exists(source: Path, source_filter: SourceFilter, index_dir: Path) -> 
 
 
 def processing_lines(
-    settings: VideoSettings, *, crop_view: bool = False, burn: SubTrack | None = None, work: Path | None = None
+    settings: VideoSettings,
+    *,
+    crop_view: bool = False,
+    burn: SubTrack | None = None,
+    work: Path | None = None,
+    filters: bool = True,
 ) -> list[str]:
     """The body's lines. crop_view keeps the clip before the crop (`_vf_pre`), leaves out a resize after
     it and ends with the crop view (see the module docstring). burn: a subtitle track drawn on the video, its
-    file in (or extracted to) work."""
+    file in (or extracted to) work. filters off leaves out the filters but KEPT_UNFILTERED (stage "unfiltered")."""
     sub = burn_in.lines(burn, work or Path()) if burn is not None else []
     if settings.custom is not None:
         lines = settings.custom.splitlines()
@@ -130,7 +140,7 @@ def processing_lines(
             if r is not None and not cropped:
                 kernel = r.kernel if r.kernel in KERNELS else DEFAULT_KERNEL
                 lines.append(f"clip = core.resize.{kernel}(clip, width={r.width}, height={r.height})")
-        elif step.enabled and step.script.strip():
+        elif step.enabled and step.script.strip() and (filters or step.category in KEPT_UNFILTERED):
             lines += step.script.strip().splitlines()
     if cropped:
         lines += [
@@ -138,6 +148,17 @@ def processing_lines(
             f"clip = _vf_crop_view(_vf_pre, clip, left={c.left}, top={c.top}, right={c.right}, bottom={c.bottom})",
         ]
     return lines
+
+
+def compares_filters(settings: VideoSettings) -> bool:
+    """The "unfiltered" stage differs from the output: the chain has an enabled filter it leaves out (a custom
+    body has no chain to leave one out of)."""
+    return settings.custom is None and any(
+        s.enabled
+        and s.script.strip()
+        and s.category not in (FilterCategory.CROP, FilterCategory.RESIZE, *KEPT_UNFILTERED)
+        for s in settings.filters
+    )
 
 
 def script_parts(
@@ -175,7 +196,10 @@ def script_parts(
             ),
         ]
     tail.append("clip.set_output()")
-    return head, processing_lines(settings, crop_view=stage == "crop", burn=burn, work=index_dir), tail
+    body = processing_lines(
+        settings, crop_view=stage == "crop", burn=burn, work=index_dir, filters=stage != "unfiltered"
+    )
+    return head, body, tail
 
 
 def build_script(

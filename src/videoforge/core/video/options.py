@@ -20,6 +20,7 @@ from videoforge.core.arguments import split_args
 from videoforge.core.config import Tools
 from videoforge.core.models import Issue, Severity
 from videoforge.core.tools import locate
+from videoforge.core.video.encoders import TOOLS
 from videoforge.core.video.settings import Encoder, EncoderSettings
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,7 @@ def _run(argv: list[str]) -> str:
 def _read(encoder: Encoder, exe: str, _size: int, _mtime: int) -> dict[str, str]:
     if encoder is Encoder.X264 or encoder is Encoder.X265:
         return parse_dashdash(_run([exe, "--fullhelp"]))
-    if encoder is Encoder.SVTAV1:
+    if encoder.svt:
         return parse_dashdash(_run([exe, "--help"]))
     lib = "libvpx-vp9" if encoder is Encoder.VP9 else "libvpx"
     own = parse_ffmpeg(_run([exe, "-hide_banner", "-h", f"encoder={lib}"]), encoder_options=True)
@@ -111,7 +112,7 @@ def _read(encoder: Encoder, exe: str, _size: int, _mtime: int) -> dict[str, str]
 def _exe(encoder: Encoder, tools: Tools) -> str:
     if encoder.libvpx:
         return tools.ffmpeg
-    return tools.x264 if encoder is Encoder.X264 else tools.x265 if encoder is Encoder.X265 else tools.svtav1
+    return getattr(tools, TOOLS[encoder])
 
 
 def known_options(encoder: Encoder, tools: Tools) -> dict[str, str]:
@@ -151,13 +152,13 @@ def option_issues(settings: EncoderSettings, tools: Tools | None) -> list[Issue]
         if name in known:
             continue
         near = difflib.get_close_matches(name, list(known), n=1, cutoff=0.75)
-        hint = f": did you mean {d}{near[0]}?" if near else ": check its spelling."
+        hint = f". Did you mean {d}{near[0]}?" if near else ". Check its spelling."
         out.append(
             Issue(
                 Severity.WARN,
                 "video.option_unknown",
-                f"{settings.encoder.label}'s help doesn't list {d}{name}{hint} An option it doesn't take fails the "
-                "encode when it runs",
+                f"{settings.encoder.label}'s help doesn't list {d}{name}{hint} An option the encoder doesn't take "
+                "makes the encode fail",
             )
         )
     return out

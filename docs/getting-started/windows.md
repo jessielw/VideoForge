@@ -8,7 +8,7 @@ Use the portable ZIP to run VideoForge without a separate Python or Node.js inst
 2. Extract it to a folder where you can write files.
 3. Run **VideoForge.exe** and check the tool status on **Settings**.
 
-The ZIP includes Python, the built web app, VapourSynth and plugins, MKVToolNix, FFmpeg/ffprobe, MP4Box, x264, x265, SVT-AV1, opusenc, DeeZy, truehdd, qaac's frontend, HDR metadata tools and app-local Microsoft C++ runtime DLLs. See `tools/THIRD_PARTY.md` for versions, sources and licenses.
+The ZIP includes Python, the built web app, VapourSynth and plugins, MKVToolNix, FFmpeg/ffprobe, MP4Box, x264, x265, SVT-AV1, SVT-AV1-HDR (needs an AVX2 CPU), opusenc, DeeZy, truehdd, qaac's frontend, HDR metadata tools and app-local Microsoft C++ runtime DLLs. See `tools/THIRD_PARTY.md` for versions, sources and licenses.
 
 <!-- prettier-ignore -->
 !!! tip "Optional user-supplied components"

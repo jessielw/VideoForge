@@ -73,6 +73,7 @@ from videoforge.core.models import (
     VideoInfo,
     track_key,
 )
+from videoforge.core.naming import NamePolicy
 from videoforge.core.notify import Sender, send as notify_send
 from videoforge.core.pipeline import crfsearch
 from videoforge.core.pipeline.build import auto_crop, index_steps, job_output
@@ -307,6 +308,14 @@ class JobQueue:
         self.sample_quality = False  # a test encode measures its quality (SSIMULACRA2, XPSNR) after it
         self.auto_index = True  # a new job goes in the index lane once probed
         self.auto_crop = True  # ... and its crop is detected (after the index; a template's fixed crop stays)
+        # Settings' word on the name template's switches, by rule set id (NamePolicy): what a job takes with a
+        # template or its rule set's defaults; its own Output tab edits come after.
+        self.name_policies: dict[str, NamePolicy] = {}
+
+    def _name_by_policy(self, spec: JobSpec) -> None:
+        """The job's naming switches as Settings has them for its rule set, over its template's."""
+        if (policy := self.name_policies.get(spec.rule_set)) is not None:
+            spec.mux = policy.apply(spec.mux)
 
     # --- state ---------------------------------------------------------------------
 
@@ -446,6 +455,7 @@ class JobQueue:
                 )
                 if template is not None:
                     template.apply(spec)
+                self._name_by_policy(spec)
                 if (
                     crop_new
                     and not video
@@ -492,7 +502,9 @@ class JobQueue:
                 left.append({"path": str(given), "reason": f"Not found ({ex.strerror or ex})"})
                 continue
             if not files:
-                left.append({"path": str(given), "reason": f"No {job_file.FILE_NAME} in it"})
+                left.append(
+                    {"path": str(given), "reason": f"No {job_file.FILE_NAME} in this folder or the folders in it"}
+                )
             for file in files:
                 try:
                     spec = job_file.read(file)
@@ -784,7 +796,7 @@ class JobQueue:
             if e.indexing:
                 raise Busy(f"{e.spec.name} is being indexed")
             if e.sampling:
-                raise Busy(f"{e.spec.name} is running its test encode")
+                raise Busy(f"{e.spec.name} is running a test encode or CRF search")
             s = e.spec
             if inputs is not None and inputs != s.inputs:
                 if inputs.source != s.inputs.source:
@@ -799,6 +811,7 @@ class JobQueue:
                 s.rule_set = rule_set
             if template is not None:
                 template.apply(s)
+                self._name_by_policy(s)
             if video is not None:
                 if video.crop != s.video.crop:
                     s.autocrop = False  # a crop set by hand wins over a pending detection
@@ -911,7 +924,7 @@ class JobQueue:
                 try:
                     entry = self.get(job_id)
                     if entry.spec.inputs.encode is not None:
-                        skipped[job_id] = "Uses an imported encode"
+                        skipped[job_id] = "Uses an existing encode, so there's nothing to crop"
                         continue
                     self.update(job_id, video=replace(entry.spec.video, crop=crop))
                     updated.append(job_id)
@@ -927,6 +940,9 @@ class JobQueue:
                 e = self._entries.get(job_id)
                 if e is not None and e.queued:
                     e.queued = False
+                    # Its settings can change now: queued or started again, it's asked again.
+                    e.state.keep = []
+                    e.state.redo = []
                     self._save(e)
                     self._changed(e)
         self._queue_changed()
@@ -950,6 +966,11 @@ class JobQueue:
         except (ToolError, OSError, ValueError) as ex:
             logger.warning("%s: no reuse offers (%s)", e.spec.name, ex)
             return []
+
+    @staticmethod
+    def reuse_answered(e: Entry) -> bool:
+        """Whether e is queued with its reuse question answered (on Queue), not yet used up by a run."""
+        return e.queued and bool(e.state.keep or e.state.redo)
 
     def choose_reuse(self, choices: dict[str, Iterable[str]]) -> None:
         """The user's answer to the reuse question, per job: the sections to reuse (offer ids). Those are
@@ -1560,7 +1581,7 @@ class JobQueue:
         if error and error != "Cancelled":
             logger.warning("%s: index failed: %s", e.spec.name, error)
         else:
-            logger.info("%s: index %s", e.spec.name, "cancelled" if error else "done")
+            logger.info("%s: index %s", e.spec.name, "canceled" if error else "done")
         self._queue_event("index.finished", e, error=error or None)
         if not self._closing:
             self.bus.emit(IndexFinished(_copy(e.spec), error or None))

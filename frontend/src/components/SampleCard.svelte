@@ -57,7 +57,10 @@
       await saves.flush()
       const r = await api.sample(job.id, percent)
       if (!r.taken)
-        toast.info('No test encode', { description: 'The job is queued, running or being indexed, or not probed yet.' })
+        toast.info('No test encode', {
+          description:
+            "A test encode can't start while the job is queued, running, being indexed or already testing, or before its tracks are read.",
+        })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     } finally {
@@ -78,11 +81,12 @@
       >{/if}
   </div>
   <p class="text-xs text-muted-foreground">
-    Encodes {percent}% of the video (2 s of every {every} s) with this script and these settings: the bitrate it gives, the
-    whole encode's size and time, and frames to compare with the encoder's input.{twoPass
+    Estimates the whole encode's bitrate, size and time from {percent}% of the video (2 s of every {every} s), encoded with
+    this script and these settings. It also gives frames to compare with the encoder's input.{twoPass
       ? ' A 2-pass encode is tested as one pass at its bitrate.'
       : ''}
-    It runs in the index lane, beside the queue{job.indexed ? '' : ', and indexes the source first'}.
+    It runs in the background, beside the queue{job.indexed ? '' : ', and indexes the source first'}. The job can't be
+    edited while it runs.
   </p>
 
   {#if sampling || waiting}
@@ -91,8 +95,8 @@
       <div class="h-1.5 flex-1 overflow-hidden rounded bg-muted">
         <div class="h-full bg-info transition-[width]" style="width:{(p?.overall ?? 0) * 100}%"></div>
       </div>
-      <span class="tabular-nums"
-        >{#if !sampling}{status === 'indexing' ? 'Indexing first' : 'Waiting in the index lane'}{:else if p}{(
+      <span class="readout"
+        >{#if !sampling}{status === 'indexing' ? 'Indexing first' : 'Waiting its turn'}{:else if p}{(
             p.overall * 100
           ).toFixed(0)}%{p.eta != null ? ` · ${duration(p.eta)} left` : ''}{p.fps != null
             ? ` · ${p.fps.toFixed(1)} fps`
@@ -110,7 +114,7 @@
         {#each SAMPLE_PERCENTS as v (v)}<option value={v}>{v}%</option>{/each}
       </NativeSelect>
       <Tip text={editable ? 'Encode the sample with the job as it is now' : `Not while ${status}`}>
-        <Button onclick={run} disabled={!editable || starting || !job.plan}>
+        <Button variant="outline" onclick={run} disabled={!editable || starting || !job.plan}>
           <FlaskConicalIcon />{s ? 'Run again' : 'Run test encode'}
         </Button>
       </Tip>
@@ -126,15 +130,15 @@
   {#if s}
     <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
       <dt class="text-muted-foreground">Bitrate</dt>
-      <dd class="tabular-nums">{s.kbps != null ? `${Math.round(s.kbps).toLocaleString()} kb/s` : '—'}</dd>
+      <dd class="readout">{s.kbps != null ? `${Math.round(s.kbps).toLocaleString()} kb/s` : '—'}</dd>
       <dt class="text-muted-foreground">Whole video</dt>
-      <dd class="tabular-nums">
+      <dd class="readout">
         <Tip text="The video stream at the sample's bitrate, without container overhead">
           {s.estimate_mb != null ? `≈ ${gb(s.estimate_mb)}` : '—'}
         </Tip>
       </dd>
       <dt class="text-muted-foreground">Encode time</dt>
-      <dd class="tabular-nums">
+      <dd class="readout">
         <Tip text="At the sample's pace, one pass">
           {s.estimate_seconds != null ? `≈ ${duration(s.estimate_seconds)}` : '—'}{s.encode_fps != null
             ? ` (${s.encode_fps.toFixed(1)} fps)`
@@ -143,7 +147,7 @@
       </dd>
       {#if s.ssimulacra2 != null}
         <dt class="text-muted-foreground">Quality</dt>
-        <dd class="flex flex-wrap gap-x-3 tabular-nums">
+        <dd class="readout flex flex-wrap gap-x-3">
           <Tip text="SSIMULACRA2 against the encoder's input, the frames' mean">
             SSIMULACRA2 {s.ssimulacra2.toFixed(1)}
           </Tip>
@@ -161,7 +165,7 @@
         </dd>
       {/if}
       <dt class="text-muted-foreground">Sample</dt>
-      <dd class="tabular-nums">
+      <dd class="readout">
         {s.frames.toLocaleString()} of {s.total_frames.toLocaleString()} frames ({s.percent}%), {s.encoder}
       </dd>
     </dl>

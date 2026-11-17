@@ -10,7 +10,7 @@ from test_server import add, make_client, make_files, wait_for
 
 from videoforge.core.config import AppConfig
 from videoforge.core.plan_io import from_json
-from videoforge.server.configuration import MAX_BYTES, read_configuration
+from videoforge.server.configuration import MAX_BYTES, VERSION, read_configuration
 from videoforge.server.store import FIRST_PROFILE, Store
 
 
@@ -46,6 +46,7 @@ def seed(client, tmp_path):
             }
         ],
         "disabled_plugins": ["missing-plugin"],
+        "naming": {"manual": {"file_name": "on", "title": "off"}},
     }
     response = client.put("/api/config", json=settings)
     assert response.status_code == 200, response.text
@@ -123,6 +124,7 @@ def test_a_version_2_backup_has_no_default_subtitle_rules(tmp_path):
             old["settings"]["auto_index"],
             old["settings"]["auto_crop"],
             old["settings"]["index_during_video"],
+            old["settings"]["naming"],
         )
         assert read_configuration(old)["subs_default"] is None
         assert client.post("/api/configuration/import", json=old).json()["presets"]["subs_default"] is None
@@ -132,7 +134,7 @@ def test_a_version_3_backup_has_no_quality_score_setting(tmp_path):
     with make_client(tmp_path) as client:
         seed(client, tmp_path)
         old = export(client)
-        assert old["version"] == 8 and old["settings"]["sample_quality"] is True
+        assert old["version"] == VERSION and old["settings"]["sample_quality"] is True
         old["version"] = 3
         del old["profile"]  # version 6
         with pytest.raises(ValueError, match="missing or unknown fields"):
@@ -142,6 +144,7 @@ def test_a_version_3_backup_has_no_quality_score_setting(tmp_path):
             old["settings"]["auto_index"],
             old["settings"]["auto_crop"],
             old["settings"]["index_during_video"],
+            old["settings"]["naming"],
         )
         assert read_configuration(old)["settings"]["sample_quality"] is False
         assert client.post("/api/configuration/import", json=old).json()["config"]["sample_quality"] is False
@@ -157,6 +160,7 @@ def test_a_version_4_backup_names_the_rule_set_profile(tmp_path):
             old["settings"]["auto_index"],
             old["settings"]["auto_crop"],
             old["settings"]["index_during_video"],
+            old["settings"]["naming"],
         )  # version 7
         del old["profile"]  # version 6
         for section in ("application", "settings"):
@@ -177,12 +181,27 @@ def test_a_version_5_backup_has_no_profile_name(tmp_path):
             old["settings"]["auto_index"],
             old["settings"]["auto_crop"],
             old["settings"]["index_during_video"],
+            old["settings"]["naming"],
         )  # version 7
         with pytest.raises(ValueError, match="missing or unknown fields"):
             read_configuration(old)
         del old["profile"]
         assert read_configuration(old)["profile"] is None
         assert client.post("/api/configuration/import", json=old).status_code == 200
+
+
+def test_a_version_8_backup_has_no_naming_policies(tmp_path):
+    with make_client(tmp_path) as client:
+        seed(client, tmp_path)
+        old = export(client)
+        assert old["settings"]["naming"] == {"manual": {"file_name": "on", "title": "off"}}
+        old["version"] = 8
+        with pytest.raises(ValueError, match="missing or unknown fields"):
+            read_configuration(old)  # version 8 had no naming
+        del old["settings"]["naming"]
+        assert read_configuration(old)["settings"]["naming"] == {}
+        assert client.post("/api/configuration/import", json=old).json()["config"]["naming"] == {}
+        assert client.app.state.queue.name_policies == {}
 
 
 def test_restore_empty_libraries_preserves_jobs_and_queue_bookkeeping(tmp_path):
@@ -208,7 +227,7 @@ def test_restore_empty_libraries_preserves_jobs_and_queue_bookkeeping(tmp_path):
     "location,value",
     [
         (("version",), True),
-        (("version",), 9),
+        (("version",), VERSION + 1),
         (("settings", "index_during_video"), "true"),
         (("profile",), ""),
         (("profile",), "x" * 81),

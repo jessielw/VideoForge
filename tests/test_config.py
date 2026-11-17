@@ -58,3 +58,18 @@ def test_wine_launcher_shows_the_exe_and_tools_folder_is_found(tmp_path, monkeyp
     assert launcher != "qaac"
     assert config.wine_target(launcher) == str(exe)
     assert config.wine_target(str(exe)) == ""
+
+
+def test_mkvtoolnix_english_is_named_by_its_platform(tmp_path, monkeypatch):
+    from videoforge.core import config
+
+    monkeypatch.setattr(config.sys, "platform", "linux")
+    monkeypatch.setattr(config.shutil, "which", lambda name: None)
+    assert config.mkv_ui("/usr/bin/mkvextract") == ("--ui-language", "en_US")  # native Linux refuses "en"
+    assert config.mkv_ui("/tools/wine/mkvextract.exe") == ("--ui-language", "en")
+    launcher = tmp_path / "videoforge-wine-1000" / "mkvextract"
+    launcher.parent.mkdir()
+    launcher.write_text('#!/bin/sh\nexec wine "C:/MKVToolNix/mkvextract.exe" "$@"\n')
+    assert config.mkv_ui(str(launcher)) == ("--ui-language", "en")  # a Windows build under Wine
+    monkeypatch.setattr(config.sys, "platform", "win32")
+    assert config.mkv_ui("mkvextract") == ("--ui-language", "en")

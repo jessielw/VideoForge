@@ -13,10 +13,12 @@
   // that only change when the content does; otherwise each save would remount the preview.
   // Opening a job never indexes its source: until it's indexed the preview is an index panel (Index
   // now puts the job first in the queue's index lane, one job at a time; it's locked meanwhile).
-  // Compare (with Settings, once there's something to compare): the encoder's input against its output, the
-  // script's frame and the encoded one, flipped with C (each flip's other side is loaded beside it). A done run's
+  // Compare (with Settings; a choice it can't make yet says what it needs): the script without its filters against
+  // the output, or the encoder's input against its output, the script's frame and the encoded one, flipped with C
+  // (each flip's other side is loaded beside it), or both at once either side of a line (Split). A done run's
   // encode has the output's frames; a test encode its own (the sample's blocks back to back), so its frame is kept
   // apart (sampleFrame) and the notice says which frame of the script it is.
+  // Bookmarks (vv.marks, lib/marks.ts) are in the script's frames; the test encode's compare maps them to its own.
   import { onDestroy, untrack } from 'svelte'
   import { saves } from '../lib/saves'
   import { toast } from 'svelte-sonner'
@@ -25,6 +27,7 @@
   import { layout } from '../lib/layout.svelte'
   import { videoView } from '../lib/videoView.svelte'
   import { clipLength, hdrFormats } from '../lib/format'
+  import { sampleMarks, scriptFrame, toggleMark, writeMarks } from '../lib/marks'
   import { fitted, previewShape, resizeInput, type Geometry } from '../lib/resize'
   import {
     SOURCE_FILTERS,
@@ -37,6 +40,7 @@
   } from '../lib/types'
   import FramePreview from './FramePreview.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
+  import Columns2Icon from '@lucide/svelte/icons/columns-2'
   import CopyIcon from '@lucide/svelte/icons/copy'
   import DownloadIcon from '@lucide/svelte/icons/download'
   import CropIcon from '@lucide/svelte/icons/crop'
@@ -73,9 +77,18 @@
   const compare = $derived(
     vv.panel === 'settings' && vv.compare !== 'off' && job.compare[vv.compare] ? vv.compare : 'off',
   )
-  const pair = $derived<[PreviewStage, PreviewStage] | null>(
-    compare === 'sample' ? ['sample-in', 'sample'] : compare === 'encode' ? ['output', 'encode'] : null,
-  )
+  const PAIRS = {
+    sample: ['sample-in', 'sample'],
+    encode: ['output', 'encode'],
+    filters: ['unfiltered', 'output'],
+  } as const satisfies Record<string, [PreviewStage, PreviewStage]>
+  // Each side's name: [in, out] for the notice, and for the toggle that picks one.
+  const NAMES = {
+    sample: { notice: ['Input (the script)', 'Test encode'], toggle: ['Input', 'Encoded'] },
+    encode: { notice: ['Input (the script)', 'Encode'], toggle: ['Input', 'Encoded'] },
+    filters: { notice: ['Before filters', 'After filters'], toggle: ['Before', 'After'] },
+  } as const
+  const pair = $derived<readonly [PreviewStage, PreviewStage] | null>(compare === 'off' ? null : PAIRS[compare])
   let pairInfo = $state<[ClipInfo, ClipInfo] | null>(null)
   let pairError = $state('')
   let infoError = $state('')
@@ -106,7 +119,8 @@
     try {
       await saves.flush()
       const r = await api.index([jobId], true)
-      if (!r.taken.length) toast.info('Not indexed', { description: 'A queued or running job is indexed by its run.' })
+      if (!r.taken.length)
+        toast.info('Not indexed', { description: 'A queued or running job is indexed when its run starts.' })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     }
@@ -374,7 +388,9 @@
   }
 
   // The compare's two clips (the same frames): again for a new sample or output.
-  const pairKey = $derived(`${compare} ${job.sample?.finished ?? ''} ${job.output ?? ''} ${ready}`)
+  const pairKey = $derived(
+    `${compare} ${job.sample?.finished ?? ''} ${job.output ?? ''} ${ready} ${compare === 'filters' ? scriptKey : ''}`,
+  )
   $effect(() => {
     void pairKey
     const both = pair
@@ -398,21 +414,31 @@
       frames: Math.min(pairInfo[0].frames, pairInfo[1].frames),
     }
   })
-  // The test encode's frame n is the script's: its block's start, plus how far into the block it is.
-  function scriptFrame(n: number): number {
-    const s = job.sample
-    return s ? Math.floor(n / s.length) * s.cycle + (n % s.length) : n
-  }
   const compareNotice = $derived.by(() => {
-    if (!compared) return null
-    const side = vv.shows === 'in' ? 'Input (the script)' : compare === 'sample' ? 'Test encode' : 'Encode'
+    if (!compared || compare === 'off') return null
+    const [input, output] = NAMES[compare].notice
+    const [shown, other] = vv.shows === 'in' ? [input, output] : [output, input]
+    const sides = vv.split ? `Left: ${shown} · Right: ${other}` : shown
     const where =
-      compare === 'sample'
-        ? ` · frame ${vv.sampleFrame} of the sample, ${scriptFrame(vv.sampleFrame)} of the script`
+      compare === 'sample' && job.sample
+        ? ` · frame ${vv.sampleFrame} of the sample, ${scriptFrame(vv.sampleFrame, job.sample)} of the script`
         : ''
     const stale = compare === 'sample' && job.sample && !job.sample.current ? ' · made before the last changes' : ''
-    return { text: `${side}${where}${stale} · C flips`, tone: 'muted' as const }
+    return `${sides}${where}${stale} · C ${vv.split ? 'swaps' : 'flips'}`
   })
+
+  // Bookmarks: frame n of the script marked or unmarked (kept in this browser, per job).
+  function mark(n: number) {
+    vv.marks = toggleMark(vv.marks, n)
+    writeMarks(jobId, vv.marks)
+  }
+  // The compare's bookmarks in its clip's frames: a test encode's own numbers hold the marks inside its blocks.
+  const compareMarks = $derived(
+    compare === 'sample' && job.sample && compared ? sampleMarks(vv.marks, job.sample, compared.frames) : vv.marks,
+  )
+  function compareMark(n: number) {
+    mark(compare === 'sample' && job.sample ? scriptFrame(n, job.sample) : n)
+  }
 
   // Crop edits from the side panel show the lines (the picture only shows them in the crop view).
   function setCrop(side: keyof Crop, value: number) {
@@ -444,11 +470,11 @@
   const current = $derived(info[stage] ?? info[stage === 'crop' ? 'output' : 'crop'])
   const notice = $derived.by(() => {
     if (!scripting)
-      return stale ? { text: 'Changed: F5 or Refresh to see it on this frame', tone: 'muted' as const } : null
+      return stale ? { text: 'Changed. Press F5 or Refresh to see it on this frame.', tone: 'muted' as const } : null
     if (running) return { text: 'Running the script…', tone: 'muted' as const }
     if (vv.checked && !vv.checked.ok)
       return {
-        text: `The script failed${vv.checked.line ? ` (line ${vv.checked.line})` : ''}: this is the last good frame.`,
+        text: `The script failed${vv.checked.line ? ` (line ${vv.checked.line})` : ''}. The frame shown is from the last run that worked.`,
         tone: 'bad' as const,
       }
     return null
@@ -484,8 +510,12 @@
 <svelte:window {onkeydown} />
 
 {#snippet compareTools()}
-  {#if vv.panel === 'settings' && (job.compare.sample || job.compare.encode)}
-    <Tip text="Compare the encoder's input (the script's frames) with what it encoded">
+  {#if vv.panel === 'settings'}
+    <Tip
+      text={job.compare.filters || job.compare.sample || job.compare.encode
+        ? "Compare two sides of the same frames: the script without and with its filters, or the encoder's input and what it encoded (C flips)"
+        : 'Nothing to compare yet: add a filter to the chain, run a test encode (Encoder tab), or run the job'}
+    >
       <NativeSelect
         aria-label="Compare"
         value={compare}
@@ -495,11 +525,19 @@
         }}
       >
         <option value="off">Compare: off</option>
-        {#if job.compare.sample}<option value="sample">Compare: test encode</option>{/if}
-        {#if job.compare.encode}<option value="encode">Compare: encode</option>{/if}
+        <option value="filters" disabled={!job.compare.filters}
+          >Compare: filters{job.compare.filters ? '' : ' (none in the chain)'}</option
+        >
+        <option value="sample" disabled={!job.compare.sample}
+          >Compare: test encode{job.compare.sample ? '' : ' (run one on the Encoder tab)'}</option
+        >
+        <option value="encode" disabled={!job.compare.encode}
+          >Compare: encode{job.compare.encode ? '' : ' (once the job is done)'}</option
+        >
       </NativeSelect>
     </Tip>
     {#if compare !== 'off'}
+      {@const names = NAMES[compare]}
       <ToggleGroup.Root
         type="single"
         variant="outline"
@@ -507,17 +545,42 @@
         value={vv.shows}
         onValueChange={(v) => v && (vv.shows = v as 'in' | 'out')}
       >
-        <Tip text="The encoder's input: the script's frame (C flips)">
-          <ToggleGroup.Item value="in" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-            >Input</ToggleGroup.Item
+        <Tip
+          text={compare === 'filters'
+            ? "The script with only its crop, resize, IVTC or deinterlacing and burned-in subtitles, so its frames line up with the output's (C flips)"
+            : "The encoder's input: the script's frame (C flips)"}
+        >
+          <ToggleGroup.Item
+            value="in"
+            class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
+            >{names.toggle[0]}</ToggleGroup.Item
           >
         </Tip>
-        <Tip text="The encoded frame (C flips)">
-          <ToggleGroup.Item value="out" class="px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-            >Encoded</ToggleGroup.Item
+        <Tip
+          text={compare === 'filters'
+            ? 'The script with its filters: the output (C flips)'
+            : 'The encoded frame (C flips)'}
+        >
+          <ToggleGroup.Item
+            value="out"
+            class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
+            >{names.toggle[1]}</ToggleGroup.Item
           >
         </Tip>
       </ToggleGroup.Root>
+      <Tip text="Shows both sides at once, on either side of a line you can drag. The side you picked is on the left">
+        <Toggle
+          pressed={vv.split}
+          onPressedChange={(on) => (vv.split = on)}
+          class="data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
+        >
+          <Columns2Icon />Split
+        </Toggle>
+      </Tip>
+      <!-- Which side is where, by the buttons: kept off the frame, so it covers none of the picture. -->
+      {#if compareNotice}
+        <span class="text-xs text-muted-foreground" aria-live="polite" data-compare-notice>{compareNotice}</span>
+      {/if}
     {/if}
   {/if}
 {/snippet}
@@ -550,20 +613,21 @@
             <div class="h-2 flex-1 overflow-hidden rounded bg-muted">
               <div class="h-full bg-info transition-[width]" style="width:{(p?.fraction ?? 0) * 100}%"></div>
             </div>
-            <span class="w-14 text-right tabular-nums">{p ? `${(p.fraction * 100).toFixed(0)}%` : '…'}</span>
+            <span class="readout w-14 text-right">{p ? `${(p.fraction * 100).toFixed(0)}%` : '…'}</span>
           </div>
           <p class="max-w-md text-sm text-muted-foreground">
-            The job is locked until it's done; the preview opens by itself after.
+            You can't edit the job while its source is being indexed. The preview opens by itself when it's done.
           </p>
           <Button variant="outline" onclick={() => api.stopIndex([jobId])}><SquareIcon />Stop</Button>
         {:else if indexStatus === 'index-queued'}
           <div class="text-base font-medium">Waiting to be indexed</div>
           <p class="max-w-md text-sm text-muted-foreground">
             {#if live?.index_held}
-              An encode is reading this source's disk: it waits until that's done (Settings, Batch indexing). Index this
-              one next doesn't wait.
+              An encode is reading this source's disk, so indexing waits for it to finish. Index this one next moves it
+              to the front and skips that wait. It still waits while another job of this source runs. You can turn the
+              disk wait off in Settings › Queue & indexing.
             {:else}
-              Sources are indexed one at a time. The preview opens by itself after.
+              Sources are indexed one at a time. The preview opens by itself when this one is done.
             {/if}
           </p>
           <div class="flex gap-2">
@@ -573,10 +637,10 @@
         {:else}
           <div class="text-base font-medium">The source isn't indexed yet</div>
           <p class="max-w-md text-sm text-muted-foreground">
-            The preview, auto-crop and the script's Run need the source's index ({SOURCE_FILTERS.find(
-              (f) => f.id === job.spec.video.source_filter,
-            )?.label}). Indexing reads the whole file once (minutes on a large remux), one source at a time; the job is
-            locked while it runs. Crop, resize and filters can be set meanwhile.
+            Indexing lets the preview, auto-crop and the script's Run open the source. It reads the whole file once with
+            {SOURCE_FILTERS.find((f) => f.id === job.spec.video.source_filter)?.label}, which takes minutes on a large
+            remux. Sources are indexed one at a time. You can set crop, resize and filters before indexing starts, but
+            not while it runs.
           </p>
           {#if live?.index_error}<p class="max-w-md text-sm text-destructive">
               The last index failed: {live.index_error}
@@ -602,17 +666,20 @@
         bind:zoom={vv.zoom}
         bind:boost={vv.boost}
         bind:scroll={vv.scroll}
-        notice={compareNotice}
         sar={previewShape(job.spec.video, source, 'output')}
+        split={vv.split}
+        bind:splitAt={vv.splitAt}
+        marks={compareMarks}
+        onmark={compareMark}
       >
         {#snippet tools()}{@render compareTools()}{/snippet}
       </FramePreview>
     {:else if compare !== 'off'}
       <div class="flex flex-1 flex-col items-center justify-center gap-3 border p-6 text-center text-muted-foreground">
         {#if pairError}
-          <p class="max-w-md text-sm text-destructive">No compare: {pairError}</p>
+          <p class="max-w-md text-sm text-destructive">Can't compare: {pairError}</p>
         {:else}
-          <p class="text-sm">Opening the encode… (FFMS2 indexes it the first time)</p>
+          <p class="text-sm">Opening the encode… The first time, it's indexed before it opens.</p>
         {/if}
         <Button variant="outline" onclick={() => (vv.compare = 'off')}>Back to the preview</Button>
       </div>
@@ -633,6 +700,8 @@
         bind:scroll={vv.scroll}
         {notice}
         sar={shape}
+        marks={vv.marks}
+        onmark={mark}
         oncrop={editable && stage === 'crop'
           ? (c) => {
               video.crop = c
@@ -645,23 +714,25 @@
           {#if vv.panel === 'settings'}
             <Tip
               text={canCrop
-                ? 'Crop lines: the output with the cropped-off margins shown (a resize after the crop is left out). Off: the output as encoded'
-                : 'A custom script body is in use: it has no crop step to show'}
+                ? "Shows the output with the cropped-off margins put back around it, so you can see and drag the crop lines. A resize after the crop is left out. Turn it off to see the output as it's encoded."
+                : "A custom script body is in use, so there's no crop step to show."}
             >
               <Toggle
                 pressed={stage === 'crop'}
                 disabled={!canCrop}
                 onPressedChange={(on) => (vv.cropView = on)}
-                class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+                class="data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
               >
                 <CropIcon />Crop
               </Toggle>
             </Tip>
-            <Tip text="Auto refresh: each change renders the frame again. Off: the frame waits for F5 or Refresh">
+            <Tip
+              text="On, each saved change renders the frame again. Off, the frame updates only when you press F5 or Refresh, or move to another frame."
+            >
               <Toggle
                 pressed={auto}
                 onPressedChange={setAuto}
-                class="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+                class="data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
               >
                 Auto
               </Toggle>
@@ -678,7 +749,7 @@
       </FramePreview>
     {:else if scripting}
       <div class="flex flex-1 items-center justify-center border text-muted-foreground">
-        {running ? 'Running the script…' : 'No frames: the script failed.'}
+        {running ? 'Running the script…' : "The script failed, so there's no frame to show."}
       </div>
     {:else}
       <div class="flex flex-1 items-center justify-center border text-muted-foreground">
@@ -747,7 +818,9 @@
             <Button variant="outline" onclick={saveScript} disabled={!vv.parts}><DownloadIcon />Save</Button>
           </Tip>
           {#if vv.parts?.custom}
-            <Tip text="Drop the custom body: crop, resize and filters make the script again">
+            <Tip
+              text="Discards your edits to the script body. The script is built from the crop, resize and filter settings again."
+            >
               <Button variant="outline" onclick={useGenerated} disabled={!editable || running}>Back to generated</Button
               >
             </Tip>
@@ -783,11 +856,19 @@
             class="grid shrink-0 grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-4 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs"
           >
             <span class="text-success"><CheckIcon class="mr-1 inline size-3.5 align-[-2px]" />Runs</span>
-            <span><span class="text-muted-foreground">Frames</span> {i.frames}</span>
-            <span><span class="text-muted-foreground">Size</span> {i.width}×{i.height}</span>
-            <span><span class="text-muted-foreground">Format</span> {i.format}</span>
-            <span><span class="text-muted-foreground">FPS</span> {+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span>
-            <span><span class="text-muted-foreground">Length</span> {clipLength(i.frames, i.fps_num, i.fps_den)}</span>
+            <span><span class="text-muted-foreground">Frames</span> <span class="readout">{i.frames}</span></span>
+            <span
+              ><span class="text-muted-foreground">Size</span> <span class="readout">{i.width}×{i.height}</span></span
+            >
+            <span><span class="text-muted-foreground">Format</span> <span class="readout">{i.format}</span></span>
+            <span
+              ><span class="text-muted-foreground">FPS</span>
+              <span class="readout">{+i.fps.toFixed(3)} ({i.fps_num}/{i.fps_den})</span></span
+            >
+            <span
+              ><span class="text-muted-foreground">Length</span>
+              <span class="readout">{clipLength(i.frames, i.fps_num, i.fps_den)}</span></span
+            >
             {#if i.length_warning}<span class="col-span-full text-warning">{i.length_warning}</span>{/if}
           </div>
         {/if}
@@ -812,8 +893,8 @@
               <span class="section-label">Scan</span>
               <p class="text-sm">{v?.scan_type}{v?.scan_order ? ` · ${v.scan_order}` : ''}</p>
               <p class="text-xs text-muted-foreground">
-                Stored as fields: add IVTC or a deinterlacer from the Field filters, unless the preview shows no
-                combing.
+                The source is stored as fields. Add IVTC or a deinterlacer from the Field filters, unless the preview
+                shows no combing.
               </p>
             </section>
           {/if}
@@ -825,19 +906,19 @@
                 {@const dv = job.tracks.video.hdr}
                 {#if dv.dv_profile === 5}
                   <p class="text-xs text-muted-foreground">
-                    Dolby Vision goes into an x265 encode as profile 5 (Encoder tab: Dolby Vision from the source), its
-                    active area following the crop and resize. Its base layer isn't HDR10: the preview's colours look
-                    off (green / purple), the encode's play right through the RPU.
+                    With Encoder › Dolby Vision from the source on, an x265 encode keeps this Dolby Vision as profile 5.
+                    Its active area follows the crop and resize. The base layer isn't HDR10, so the preview's colors
+                    look off (green or purple). The encode's colors play correctly through the RPU.
                   </p>
                 {:else if (dv.dv_profile === 8 && dv.dv_compat !== 4) || (dv.dv_profile === 7 && (dv.dv_el === 'MEL' || dv.dv_el === 'FEL'))}
                   <p class="text-xs text-muted-foreground">
-                    Dolby Vision goes into an x265 encode as 8.1 (Encoder tab: Dolby Vision from the source), its active
-                    area following the crop and resize.
+                    With Encoder › Dolby Vision from the source on, an x265 encode keeps this Dolby Vision as profile
+                    8.1. Its active area follows the crop and resize.
                   </p>
                   {#if dv.dv_el === 'FEL'}
                     <p class="text-xs text-muted-foreground">
-                      The FEL's enhancement layer is baked into the picture: the preview shows it baked, auto crop reads
-                      the base layer.
+                      When the Dolby Vision is kept, the FEL's enhancement layer is baked into the picture. The preview
+                      then shows the baked picture, and auto-crop reads the base layer.
                     </p>
                   {/if}
                 {:else}
@@ -849,7 +930,8 @@
               {/if}
               {#if job.tracks?.video?.hdr?.hdr10plus}
                 <p class="text-xs text-muted-foreground">
-                  HDR10+ goes into an x265 encode (Encoder tab: HDR10+ from the source).
+                  With Encoder › HDR10+ from the source on, an x265 encode keeps HDR10+. It's left out when a FEL is
+                  baked in.
                 </p>
               {/if}
             </section>
@@ -857,7 +939,7 @@
           <section class="space-y-2">
             <div class="flex items-center justify-between">
               <span class="section-label">Crop</span>
-              <span class="text-xs text-muted-foreground">{src ? `${outW}×${outH}` : ''}</span>
+              <span class="readout text-xs text-muted-foreground">{src ? `${outW}×${outH}` : ''}</span>
             </div>
             <!-- Label, box, label, box: the labels get their own columns, so every box is the same width. -->
             <div class="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 text-sm">
@@ -931,7 +1013,7 @@
                 <button class="underline underline-offset-2" onclick={useGenerated}>Back to generated</button>
               </p>
             {:else}
-              <Button variant="ghost" size="sm" onclick={openScript}>Edit the whole script…</Button>
+              <Button variant="outline" size="sm" onclick={openScript}>Edit the whole script…</Button>
             {/if}
           </section>
         </fieldset>

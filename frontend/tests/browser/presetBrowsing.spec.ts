@@ -24,6 +24,7 @@ const video: EncoderSettings = {
   options: {},
   extra: '',
   source_color: true,
+  color_override: false,
   hdr10plus: false,
   dolby_vision: false,
 }
@@ -46,7 +47,15 @@ async function fixture(page: Page, empty = false) {
       custom: null,
     },
     encoder: video,
-    mux: { container: 'mkv', extra: '', pgs_zlib: false },
+    mux: {
+      container: 'mkv',
+      extra: '',
+      pgs_zlib: false,
+      name_template: '',
+      template_file_name: false,
+      template_title: false,
+      name_suffix: '',
+    },
     qpf: true,
     crop_mode: 'keep',
     subs: null,
@@ -167,11 +176,12 @@ async function fixture(page: Page, empty = false) {
       rule_set: 'manual',
     },
     output_name: null,
+    output_title: null,
     color_args: null,
     target: null,
     sample: null,
     search: null,
-    compare: { encode: false, sample: false },
+    compare: { encode: false, sample: false, filters: false },
     tracks: { video: null, audio: [source], subs: [], has_chapters: false, count: 1 },
     spec: {
       id: 'presets',
@@ -238,6 +248,7 @@ async function fixture(page: Page, empty = false) {
     sample_quality: false,
     auto_index: true,
     auto_crop: true,
+    naming: {},
     parallel_audio: 2,
     parallel_audio_default: 2,
     delete_work_dir: false,
@@ -248,6 +259,7 @@ async function fixture(page: Page, empty = false) {
     tool_priority_default: 'normal',
     priorities: ['normal'],
     records_dir: 'D:/records',
+    data_dir: 'D:/VideoForge',
     notifications: [],
     notification_events: [],
     actions: [],
@@ -286,7 +298,7 @@ async function fixture(page: Page, empty = false) {
 for (const { title, target, other, label, codec } of variants) {
   test(`${title}: saved presets and folders open above built-ins across encoders`, async ({ page }, testInfo) => {
     const errors = await fixture(page)
-    const trigger = page.getByRole('button', { name: `${title} presets`, exact: true })
+    const trigger = page.getByRole('button', { name: new RegExp(`^${title} preset: `) })
     await trigger.click()
     const menu = page.locator('[data-slot="popover-content"]')
     await expect(menu.getByRole('combobox')).toHaveValue('')
@@ -324,7 +336,7 @@ for (const { title, target, other, label, codec } of variants) {
     page,
   }) => {
     const errors = await fixture(page)
-    await page.getByRole('button', { name: `${title} presets`, exact: true }).click()
+    await page.getByRole('button', { name: new RegExp(`^${title} preset: `) }).click()
     const menu = page.locator('[data-slot="popover-content"]')
     const search = menu.getByRole('textbox')
     const filter = menu.getByRole('combobox')
@@ -363,7 +375,7 @@ for (const { title, target, other, label, codec } of variants) {
 
   test(`${title}: manager starts at the root and retains the browsing context while selecting`, async ({ page }) => {
     const errors = await fixture(page)
-    await page.getByRole('button', { name: `${title} presets`, exact: true }).click()
+    await page.getByRole('button', { name: new RegExp(`^${title} preset: `) }).click()
     await page.getByRole('button', { name: 'Manage presets…', exact: true }).click()
     const manager = page.getByRole('dialog', { name: `${title} presets`, exact: true })
     const filter = manager.getByRole('combobox', { name: `Filter ${title.toLowerCase()} presets by encoder` })
@@ -410,7 +422,7 @@ for (const { title, target, other, label, codec } of variants) {
 test('empty custom libraries omit My presets and keep built-ins available', async ({ page }) => {
   const errors = await fixture(page, true)
   for (const { title } of variants) {
-    await page.getByRole('button', { name: `${title} presets`, exact: true }).click()
+    await page.getByRole('button', { name: new RegExp(`^${title} preset: `) }).click()
     const menu = page.locator('[data-slot="popover-content"]')
     await expect(menu.getByRole('heading', { name: 'My presets', exact: true })).toHaveCount(0)
     await expect(menu.getByRole('heading', { name: 'Built-in', exact: true })).toBeVisible()
@@ -432,7 +444,7 @@ test('audio preset picker reflows at 400px and supports keyboard access without 
   const errors = await fixture(page)
   await page.setViewportSize({ width: 400, height: 700 })
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' })
-  await page.getByRole('button', { name: 'Audio presets', exact: true }).click()
+  await page.getByRole('button', { name: /^Audio preset: / }).click()
   const menu = page.locator('[data-slot="popover-content"]')
   await expect(menu.getByRole('textbox')).toBeFocused()
   await page.keyboard.press('Tab')
@@ -455,9 +467,9 @@ test('audio preset picker reflows at 400px and supports keyboard access without 
 test('New jobs can apply a preset for a different video encoder directly', async ({ page }) => {
   const errors = await fixture(page)
   await page.goto('/#/new')
-  await page.getByRole('button', { name: 'Encoder presets', exact: true }).click()
+  await page.getByRole('button', { name: /^Encoder preset: / }).click()
   await page.getByRole('button', { name: /Film HEVC/ }).click()
-  await expect(page.getByRole('button', { name: 'Encoder presets', exact: true })).toContainText('Film HEVC')
+  await expect(page.getByRole('button', { name: /^Encoder preset: / })).toContainText('Film HEVC')
   expect(errors).toEqual([])
 })
 
@@ -467,7 +479,7 @@ test('job audio shows saved presets from Copy and keeps incompatible choices dis
   const errors = await fixture(page)
   await page.goto('/#/queue/presets')
   await page.getByRole('tab', { name: 'Audio', exact: true }).click()
-  await page.getByRole('button', { name: 'Audio presets', exact: true }).click()
+  await page.getByRole('button', { name: /^Audio preset: / }).click()
   const menu = page.locator('[data-slot="popover-content"]')
   await expect(menu.getByRole('combobox')).toHaveValue('')
   const surround = menu.getByRole('button', { name: /Surround mix/ })

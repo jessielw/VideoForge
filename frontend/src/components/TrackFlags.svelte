@@ -37,7 +37,7 @@
         variant="outline"
         size="sm"
         class="h-6 rounded-full px-2 text-xs font-normal text-muted-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/15
-          data-[state=on]:text-primary {state === false ? 'line-through decoration-destructive' : ''}"
+          data-[state=on]:text-foreground {state === false ? 'line-through decoration-destructive' : ''}"
         pressed={state === true}
         {disabled}
         onPressedChange={() => cycle(f.key)}

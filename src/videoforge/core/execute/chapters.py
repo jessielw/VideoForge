@@ -1,6 +1,6 @@
 """Chapters as OGM text (CHAPTER01=00:00:00.000 / CHAPTER01NAME=...), the form MP4Box takes.
 
-From a Matroska chapter XML file, or from a source's own chapters (MediaInfo's menu track).
+From a Matroska chapter XML file, an OGM file, or a source's own chapters (MediaInfo's menu track).
 """
 
 from __future__ import annotations
@@ -34,6 +34,34 @@ def from_xml(path: Path) -> list[Chapter]:
         if start:
             out.append((_ms(start), (atom.findtext("ChapterDisplay/ChapterString") or "").strip()))
     return out
+
+
+_OGM_LINE = re.compile(r"^CHAPTER(\d+)(NAME)?=(.*)$", re.IGNORECASE)
+
+
+def from_ogm(path: Path) -> list[Chapter]:
+    """An OGM chapter file's chapters (CHAPTER01=00:00:00.000 / CHAPTER01NAME=...), in start order; blank lines, a
+    BOM and lines that aren't a chapter's are skipped, as is a chapter whose start can't be read."""
+    starts: dict[int, int] = {}
+    names: dict[int, str] = {}
+    for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+        m = _OGM_LINE.match(line.strip())
+        if m is None:
+            continue
+        n, value = int(m.group(1)), m.group(3).strip()
+        if m.group(2):
+            names[n] = value
+            continue
+        try:
+            starts[n] = _ms(value)
+        except ValueError:
+            continue
+    return sorted((ms, names.get(n, "")) for n, ms in starts.items())
+
+
+def from_file(path: Path) -> list[Chapter]:
+    """A chapter file's chapters: Matroska XML (.xml) or OGM text (anything else)."""
+    return from_xml(path) if path.suffix.lower() == ".xml" else from_ogm(path)
 
 
 def from_source(path: Path) -> list[Chapter]:

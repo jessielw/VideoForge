@@ -19,12 +19,12 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
 }
 
 export const STATUS_LABEL: Record<Status, string> = {
-  probing: 'Probing',
+  probing: 'Reading tracks',
   error: 'Error',
   cropping: 'Detecting crop',
   indexing: 'Indexing',
   sampling: 'Test encode',
-  'index-queued': 'Index queued',
+  'index-queued': 'Waiting to index',
   ready: 'Ready',
   warn: 'Warn',
   blocked: 'Blocked',
@@ -34,7 +34,7 @@ export const STATUS_LABEL: Record<Status, string> = {
   invalid: 'Invalid',
   failed: 'Failed',
   skipped: 'Skipped',
-  cancelled: 'Cancelled',
+  cancelled: 'Canceled',
   paused: 'Paused after pass 1',
 }
 
@@ -76,6 +76,7 @@ export function basename(path: string | null | undefined): string {
 const STAGE_MARK: Record<PreviewStage, string> = {
   crop: ' (crop view)',
   output: '',
+  unfiltered: ' (unfiltered)',
   encode: ' (encode)',
   'sample-in': ' (test encode input)',
   sample: ' (test encode)',
@@ -100,6 +101,11 @@ export function bytes(n: number): string {
     i++
   }
   return `${n.toFixed(i ? 1 : 0)} ${units[i]}`
+}
+
+/** A size as the server sends it ("1920x1040", or a rule set's class like "1080p"), with a times sign for display. */
+export function sizeLabel(resolution: string): string {
+  return resolution.replace(/^(\d+)x(\d+)$/, '$1×$2')
 }
 
 export function percent(fraction: number): string {
@@ -299,6 +305,30 @@ export function hdrFormats(color: VideoColor, hdr: VideoHdr | undefined): string
     out.push(`Dolby Vision ${name}${hdr.dv_layers ? ` (${hdr.dv_layers})` : ''}`)
   }
   return out
+}
+
+// A time in seconds as h:mm:ss.mmm (the frame preview's position).
+export function timecode(seconds: number): string {
+  const ms = Math.max(0, Math.round(seconds * 1000))
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
+  return `${Math.floor(ms / 3_600_000)}:${pad(Math.floor(ms / 60_000) % 60)}:${pad(Math.floor(ms / 1000) % 60)}.${pad(ms % 1000, 3)}`
+}
+
+// What the frame preview's box was given, as a frame: a frame number (`1234`), or a time as
+// [[h:]m:]s (`1:23.5`, `1:02:03.250`) or seconds (`83.5s`). The time's frame is the one it rounds to,
+// so a time shown by `timecode` comes back as its own frame. Null when it's neither.
+export function parseSeek(text: string, fps: number): number | null {
+  const t = text.trim().replace(',', '.')
+  if (/^\d+$/.test(t)) return +t
+  let seconds: number
+  const secs = /^(\d+(?:\.\d*)?|\.\d+)\s*s$/i.exec(t)
+  if (secs) seconds = +secs[1]
+  else if (/^\d+(:\d+){1,2}(\.\d*)?$/.test(t)) {
+    const parts = t.split(':').map(Number)
+    if (parts.slice(1).some((p) => p >= 60)) return null
+    seconds = parts.reduce((total, p) => total * 60 + p, 0)
+  } else return null
+  return Math.round(seconds * (fps || 24))
 }
 
 // A clip's running time (frames / fps) as h:mm:ss.mmm.

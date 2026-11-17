@@ -9,7 +9,8 @@ chapters) forces keyframes at chapter starts. VP8 / VP9 go through ffmpeg's libv
 (timed by the y4m's frame rate); the chapters' keyframes become -force_key_frames, and the mux writes the pixel
 aspect and the colour the stream doesn't hold. SVT-AV1 (SvtAv1EncApp, as StaxRip runs it) writes an IVF too; its
 keyframes are --force-key-frames (CRF only: SvtAv1EncApp refuses it with a bitrate), and the mux writes the pixel
-aspect, and the colour mkvmerge doesn't copy from the stream.
+aspect, and the colour mkvmerge doesn't copy from the stream. SVT-AV1-HDR (juliobbv-p's fork, its own Tools path)
+runs the same command line (Encoder.svt), with presets from -3.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import re
 
 from videoforge.core.arguments import split_args
 from videoforge.core.models import Issue, Severity, VideoColor, VideoInfo
-from videoforge.core.video.color import MATRIX_CODE, PRIMARIES_CODE, TRANSFER_CODE, color_args, hdr10
+from videoforge.core.video.color import SVT_DV5_ARGS, color_args, color_choices, drop_source_flags, hdr10, untagged
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
 
 EXTENSIONS = {
@@ -30,6 +31,7 @@ EXTENSIONS = {
     Encoder.VP8: ".ivf",
     Encoder.VP9: ".ivf",
     Encoder.SVTAV1: ".ivf",
+    Encoder.SVTAV1HDR: ".ivf",
 }
 # The Tools field that runs each encoder
 TOOLS = {
@@ -38,6 +40,7 @@ TOOLS = {
     Encoder.VP8: "ffmpeg",
     Encoder.VP9: "ffmpeg",
     Encoder.SVTAV1: "svtav1",
+    Encoder.SVTAV1HDR: "svtav1hdr",
 }
 LIBVPX = {Encoder.VP8: "libvpx", Encoder.VP9: "libvpx-vp9"}
 # StaxRip's ffmpeg VP9 defaults (ffmpegEnc.vb), plus row-based threading; the job's options come after them, and win
@@ -45,8 +48,9 @@ VP9_DEFAULTS = {"tile-columns": "6", "frame-parallel": "1", "auto-alt-ref": "1",
 # VP8's CRF ceiling. ffmpeg runs VP8 -crf as constrained quality and reads -b:v 0 as its 256 kbit/s default (VP9
 # alone has a true constant quality); a Fallout 1080p sample at -crf 20 came out the same with 100M and 1000M
 VP8_CRF_CAP = "100M"
-# SvtAv1EncApp's --preset and --crf ranges (13 fastest; CRF in quarter steps)
+# SvtAv1EncApp's --preset and --crf ranges (13 fastest; CRF in quarter steps); SVT-AV1-HDR's presets go to -3
 SVTAV1_PRESETS = range(-1, 14)
+SVTAV1HDR_PRESETS = range(-3, 14)
 SVTAV1_CRF = (1, 70)
 SVTAV1_UNDERSHOOT = "5"  # a 2-pass encode's --undershoot-pct (svtav1_command)
 _PERCENT = re.compile(r"\[\s*(\d+(?:\.\d+)?)%\]")  # both encoders: "[ 12.3%] 1234/10000 frames, ..."
@@ -85,7 +89,7 @@ def output_name(settings: EncoderSettings) -> str:
 def forces_keyframes(settings: EncoderSettings) -> bool:
     """Whether the chapters' keyframes go in as a list of frames (keyframes), not a qpfile: VP8 / VP9, and SVT-AV1
     in CRF (SvtAv1EncApp: "Force key frames is not supported for VBR mode")."""
-    return settings.encoder.libvpx or (settings.encoder is Encoder.SVTAV1 and settings.rate_control is RateControl.CRF)
+    return settings.encoder.libvpx or (settings.encoder.svt and settings.rate_control is RateControl.CRF)
 
 
 def stats_path(work: Path, settings: EncoderSettings) -> Path:
@@ -178,12 +182,13 @@ def encoder_command(
 ) -> list[str]:
     """One encoder run reading y4m from stdin. pass_number is 1 or 2 for a two-pass encode. sar is the
     encode's pixel aspect ratio (vspipe's y4m carries none), written when it isn't square; color is the
-    source's colour description (color.color_args); hdr10plus an x265 encode's HDR10+ metadata and dolby_vision
-    its RPU, written as dv_profile (8.1, or 5: hdr.dv_profile); with that RPU or HDR10, the VBV (HRD) is filled from --level-idc (level_vbv), as
-    StaxRip does. A --sar or colour flag in the options or extra arguments comes after them, and wins. VP8 / VP9
-    (ffmpeg_command) and SVT-AV1 (svtav1_command) take keyframes (qpfile_frames) instead of the qpfile, and no
-    sar."""
-    if settings.encoder is Encoder.SVTAV1:
+    source's colour description (color.color_args); hdr10plus an x265 or SVT-AV1-HDR encode's HDR10+ metadata and
+    dolby_vision its RPU, written as dv_profile (8.1, or 5: hdr.dv_profile); with that RPU or HDR10, x265's VBV
+    (HRD) is filled from --level-idc (level_vbv), as StaxRip does. A --sar in the options or extra arguments comes
+    after it, and wins; a colour flag for a value the source has is dropped from them unless settings.color_override
+    (color.source_wins). VP8 / VP9 (ffmpeg_command) and SVT-AV1 (svtav1_command) take keyframes (qpfile_frames)
+    instead of the qpfile, and no sar."""
+    if settings.encoder.svt:
         return svtav1_command(
             exe,
             settings,
@@ -192,6 +197,9 @@ def encoder_command(
             pass_number=pass_number,
             stats=stats,
             color=color,
+            hdr10plus=hdr10plus,
+            dolby_vision=dolby_vision,
+            dv_profile=dv_profile,
             keyframes=keyframes,
         )
     if settings.encoder.libvpx:
@@ -229,13 +237,13 @@ def encoder_command(
         argv += ["--dolby-vision-profile", dv_profile, "--dolby-vision-rpu", str(dolby_vision)]
     if x265 and (dolby_vision is not None or hdr10(color, settings)):
         argv += level_vbv(settings) or []
-    argv += _options(settings.options)
+    argv += drop_source_flags(_options(settings.options), color, settings)
     if pass_number and stats is not None and (analysis := analysis_file(settings, stats)) is not None:
         argv += ["--analysis-reuse-file", str(analysis)]
     if qpfile is not None:
         argv += ["--qpfile", str(qpfile)]
     if settings.extra.strip():
-        argv += split_args(settings.extra)
+        argv += drop_source_flags(split_args(settings.extra), color, settings)
     argv += ["--output", str(output), "-"]
     return argv
 
@@ -273,9 +281,9 @@ def ffmpeg_command(
     if keyframes and not first:
         argv += ["-force_key_frames", "expr:" + "+".join(f"eq(n,{n})" for n in keyframes)]
     argv += _options(VP9_DEFAULTS if settings.encoder is Encoder.VP9 else {}, "-")
-    argv += _options(settings.options, "-")
+    argv += drop_source_flags(_options(settings.options, "-"), color, settings)
     if settings.extra.strip():
-        argv += split_args(settings.extra)
+        argv += drop_source_flags(split_args(settings.extra), color, settings)
     argv += ["-an", "-f", "null" if first else "ivf", str(output)]
     return argv
 
@@ -289,6 +297,9 @@ def svtav1_command(
     pass_number: int | None = None,
     stats: Path | None = None,
     color: VideoColor | None = None,
+    hdr10plus: Path | None = None,
+    dolby_vision: Path | None = None,
+    dv_profile: str = "8.1",
     keyframes: Sequence[int] = (),
 ) -> list[str]:
     """A SvtAv1EncApp run reading y4m from stdin, as StaxRip's SVT-AV1 encoder writes it: --rc 0 --crf for
@@ -296,7 +307,9 @@ def svtav1_command(
     progress lines progress() reads). The y4m gives the size, frame rate and bit depth. keyframes (the chapters')
     are forced in CRF only (forces_keyframes). Two passes get --undershoot-pct 5 unless the options or extra
     arguments set it: at its default (25) a Fallout sample came in 26% under --tbr (8 minutes of it, 33%), at 5
-    within 5.5%."""
+    within 5.5%. SVT-AV1-HDR takes an HDR10+ JSON (--hdr10plus-json) and a Dolby Vision RPU (--dolby-vision-rpu),
+    which it writes as metadata OBUs (AV1's profile 10: 8.1 -> 10.1, 5 -> 10.0, the RPU tells it); a profile 5
+    encode's colour is forced last (SVT_DV5_ARGS), as x265 forces it."""
     argv = [exe, "--input", "-"]
     argv += ["--frames", str(frames)] if frames else []
     argv += ["--preset", settings.preset] if settings.preset else []
@@ -311,96 +324,85 @@ def svtav1_command(
         argv += ["--pass", str(pass_number), "--stats", str(stats)]
         argv += ["--undershoot-pct", SVTAV1_UNDERSHOOT] if _setting(settings, "undershoot-pct") is None else []
     argv += color_args(color, settings)
+    argv += ["--hdr10plus-json", str(hdr10plus)] if hdr10plus is not None else []
+    argv += ["--dolby-vision-rpu", str(dolby_vision)] if dolby_vision is not None else []
     if keyframes and forces_keyframes(settings):
         argv += ["--force-key-frames", ",".join(f"{n}f" for n in keyframes)]
     argv += ["--progress", "2"]
-    argv += _options(settings.options)
+    argv += drop_source_flags(_options(settings.options), color, settings)
     if settings.extra.strip():
-        argv += split_args(settings.extra)
+        argv += drop_source_flags(split_args(settings.extra), color, settings)
+    argv += SVT_DV5_ARGS if dolby_vision is not None and dv_profile == "5" else ()
     argv += ["--output", str(output)]
     return argv
 
 
-# x264 / x265's colour flags: (flag, the VideoColor field it tags, its H.273 code points)
-_COLOR_FLAGS = (
-    ("colorprim", "primaries", PRIMARIES_CODE),
-    ("transfer", "transfer", TRANSFER_CODE),
-    ("colormatrix", "matrix", MATRIX_CODE),
-)
-_RANGES = {"limited": "limited", "full": "full", "tv": "limited", "pc": "full"}  # x265's names, x264's
-
-
-def _color_name(value: str, codes: dict[str, int]) -> str:
-    """A colour flag's value as x264 / x265's name (both take the H.273 number too)."""
-    value = value.strip().lower()
-    if value.isdigit():
-        return next((name for name, code in codes.items() if code == int(value)), value)
-    return value
-
-
 def _color_issues(settings: EncoderSettings, video: VideoInfo | None) -> list[Issue]:
-    """x264 / x265: the options or extra arguments tag the encode with another colour than the source's (the flags
-    only label the picture, so unless the script converts it a player shows it wrong: a BT.2020 SDR source tagged
-    BT.709 comes out oversaturated); and, with the source's colour on, a UHD source that doesn't describe its colour
-    where the options don't either (the encode is untagged there and a player guesses, BT.709 or BT.2020; below UHD
-    it guesses as it did for the source, so that's left alone)."""
+    """The job's colour flags (options or extra arguments) that differ from the source's (color.color_choices):
+    dropped for the source's unless color_override is on, and then they tag the encode (the flags only label the
+    picture: a BT.2020 SDR source tagged BT.709 plays oversaturated unless the script converts it). And, with the
+    source's colour on, a UHD source that doesn't describe its colour where the job doesn't either (the encode is
+    untagged there and a player guesses, BT.709 or BT.2020; below UHD it guesses as it did for the source)."""
     if video is None or video.color is None:
         return []
-    color = video.color
-    retag, untagged = [], []
-    for flag, field, codes in _COLOR_FLAGS:
-        source, value = getattr(color, field), _setting(settings, flag)
-        if not value:
-            if not source:
-                untagged.append(f"--{flag}")
-        elif source and _color_name(value, codes) != source:
-            retag.append(f"--{flag} {value} (the source is {source})")
-    value = _setting(settings, "range")
-    tagged = _RANGES.get((value or "").strip().lower())
-    if tagged and color.range and tagged != color.range:
-        retag.append(f"--range {value} (the source is {color.range})")
     out = []
-    if retag:
-        out.append(
-            Issue(
-                Severity.WARN,
-                "video.color_retag",
-                f"The encoder options tag the encode {', '.join(retag)}: the flags only label the picture, so unless "
-                "the script converts it a player shows the colours wrong. Remove them to keep the source's colour",
+    if choices := color_choices(video.color, settings):
+        listed = ", ".join(f"{c.flag} {c.value} (the source's: {c.source})" for c in choices)
+        if settings.source_color and not settings.color_override:
+            out.append(
+                Issue(
+                    Severity.INFO,
+                    "video.color_source",
+                    f"The source's color wins over the encoder options' {listed}. If the source's tags are "
+                    "wrong, or the script converts the color, turn on Override the source's color",
+                )
             )
-        )
-    if untagged and settings.source_color and (video.width >= 3840 or video.height >= 2160):
+        else:
+            why = "Override the source's color is on" if settings.source_color else "the source's color is off"
+            out.append(
+                Issue(
+                    Severity.INFO,
+                    "video.color_override",
+                    f"The encode is tagged with the encoder options' {listed} ({why}). These flags only label the "
+                    "picture. Unless the source's tags are wrong or the script converts the color, a player shows "
+                    "the colors wrong",
+                )
+            )
+    missing = untagged(video.color, settings)
+    if missing and (video.width >= 3840 or video.height >= 2160):
         out.append(
             Issue(
                 Severity.INFO,
                 "video.color_untagged",
-                f"The source doesn't describe its colour and the encoder options don't set it ({', '.join(untagged)}):"
-                " the encode is untagged there and a player guesses",
+                f"The source doesn't describe its color, and the encoder options don't set it ({', '.join(missing)})."
+                " The encode is left untagged there, so a player guesses",
             )
         )
     return out
 
 
 def issues(settings: EncoderSettings, video: VideoInfo | None, chapters: bool = False) -> list[Issue]:
-    """What an encode can't do as set. x264 / x265: options that re-tag the source's colour, or a source with
-    none (_color_issues). VP8 / VP9: VP8 is 8-bit only, the preset is -cpu-used (a
+    """What an encode can't do as set, and how its colour is tagged (every encoder: options that differ from the
+    source's colour, or a UHD source with none: _color_issues). VP8 / VP9: VP8 is 8-bit only, the preset is -cpu-used (a
     number), VP8 at -cpu-used 4 and up puts keyframes on every 2nd-3rd frame after a scene cut (a Fallout sample:
     69-73 of 200 at 4-5, 3 at 0-3), and an HDR10 source's mastering display and light levels aren't carried (the
     transfer and primaries are). SVT-AV1: 8 or 10-bit, its preset and CRF ranges, and with chapters (the job makes
     them) a bitrate can't force their keyframes."""
-    if settings.encoder is Encoder.SVTAV1:
-        return _svtav1_issues(settings, chapters)
+    tags = _color_issues(settings, video)
+    if settings.encoder.svt:
+        return _svtav1_issues(settings, chapters) + tags
     if not settings.encoder.libvpx:
-        return _color_issues(settings, video)
+        return tags
     name, out = settings.encoder.label, []
     if settings.encoder is Encoder.VP8 and settings.depth != 8:
-        out.append(Issue(Severity.BLOCK, "video.vp8_depth", "VP8 is 8-bit only: set the bit depth to 8"))
+        out.append(Issue(Severity.BLOCK, "video.vp8_depth", "VP8 is 8-bit only. Set the bit depth to 8"))
     if settings.preset and not settings.preset.removeprefix("-").isdigit():
         out.append(
             Issue(
                 Severity.BLOCK,
                 "video.vpx_preset",
-                f"{name}'s preset is ffmpeg's -cpu-used, a number (0 slowest): {settings.preset!r} isn't one",
+                f"{name}'s preset is ffmpeg's -cpu-used, a number where 0 is slowest. {settings.preset!r} isn't a "
+                "number",
             )
         )
     elif settings.encoder is Encoder.VP8 and settings.preset and int(settings.preset) >= 4:
@@ -408,8 +410,8 @@ def issues(settings: EncoderSettings, video: VideoInfo | None, chapters: bool = 
             Issue(
                 Severity.WARN,
                 "video.vp8_speed",
-                f"VP8 at -cpu-used {settings.preset} puts a keyframe on every 2nd-3rd frame after a scene cut: "
-                "3 or below keeps them to the cuts",
+                f"VP8 at -cpu-used {settings.preset} puts a keyframe on every 2nd or 3rd frame after a scene cut. "
+                "At 3 or below, keyframes stay on the cuts",
             )
         )
     color = video.color if video is not None else None
@@ -418,19 +420,30 @@ def issues(settings: EncoderSettings, video: VideoInfo | None, chapters: bool = 
             Issue(
                 Severity.WARN,
                 "video.vpx_hdr10",
-                f"{name} doesn't carry the source's HDR10 mastering display and light levels yet: the encode is "
-                "tagged with its transfer and primaries only",
+                f"{name} doesn't carry the source's HDR10 mastering display and light levels yet. The encode is "
+                "tagged with only its transfer and primaries",
             )
         )
-    return out
+    return out + tags
+
+
+def svt_presets(encoder: Encoder) -> range:
+    """The --preset range of an SvtAv1EncApp build: SVT-AV1-HDR's starts at -3, SVT-AV1's at -1."""
+    return SVTAV1HDR_PRESETS if encoder is Encoder.SVTAV1HDR else SVTAV1_PRESETS
 
 
 def _svtav1_issues(settings: EncoderSettings, chapters: bool) -> list[Issue]:
-    out = []
+    name, presets, out = settings.encoder.label, svt_presets(settings.encoder), []
     if settings.depth not in (8, 10):
-        out.append(Issue(Severity.BLOCK, "video.svtav1_depth", "SVT-AV1 encodes 8 or 10-bit: set the bit depth to one"))
+        out.append(
+            Issue(
+                Severity.BLOCK,
+                "video.svtav1_depth",
+                f"{name} encodes only 8 or 10-bit. Set the bit depth to one of those",
+            )
+        )
     try:
-        preset_ok = not settings.preset or int(settings.preset) in SVTAV1_PRESETS
+        preset_ok = not settings.preset or int(settings.preset) in presets
     except ValueError:
         preset_ok = False
     if not preset_ok:
@@ -438,14 +451,17 @@ def _svtav1_issues(settings: EncoderSettings, chapters: bool) -> list[Issue]:
             Issue(
                 Severity.BLOCK,
                 "video.svtav1_preset",
-                f"SVT-AV1's preset is a number from -1 to 13 (13 fastest): {settings.preset!r} isn't one",
+                f"{name}'s preset is a number from {presets.start} to {presets.stop - 1}, where 13 is fastest. "
+                f"{settings.preset!r} isn't one of those",
             )
         )
     low, high = SVTAV1_CRF
     if settings.rate_control is RateControl.CRF and not low <= settings.crf <= high:
         out.append(
             Issue(
-                Severity.BLOCK, "video.svtav1_crf", f"SVT-AV1's CRF goes from {low} to {high}: {settings.crf:g} isn't"
+                Severity.BLOCK,
+                "video.svtav1_crf",
+                f"{name}'s CRF goes from {low} to {high}. {settings.crf:g} is outside that range",
             )
         )
     if chapters and not forces_keyframes(settings):
@@ -453,7 +469,7 @@ def _svtav1_issues(settings: EncoderSettings, chapters: bool) -> list[Issue]:
             Issue(
                 Severity.WARN,
                 "video.svtav1_keyframes",
-                "SVT-AV1 forces keyframes in CRF only: with a bitrate, the chapters don't start on one",
+                f"{name} forces keyframes only in CRF mode. With a bitrate, the chapters don't start on a keyframe",
             )
         )
     return out

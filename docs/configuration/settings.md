@@ -2,6 +2,8 @@
 
 Use **Settings** for tool paths, the default rule set, folder browser roots, indexing behavior, the test encode's [quality score](../usage/encoders.md#quality-score), parallel audio, priorities, cleanup, notifications, actions, and plugin switches. Changes save immediately to the application database.
 
+Settings has ten tabs in three groups: **Jobs**, **Queue & indexing**, **Presets** and **Files & folders** for your work; **Tools**, **Plugins** and **Automation** for setup and add-ons; **Appearance**, **Profiles** and **Import & export** for the app itself. Each tab starts with a sentence saying what it's for. The version and **Shut down** are below the list.
+
 ## Profiles
 
 A profile is a whole configuration: every **Settings** value, the templates, the encoder and video processing presets, and the default template selections. **Settings → Profiles** lists them: create, rename, switch to, or delete one. A new profile starts as a fresh install does, from `videoforge.toml`, or as a copy of the active profile. One profile is active at a time; the first one, made from an existing installation's configuration, is named **Default**.

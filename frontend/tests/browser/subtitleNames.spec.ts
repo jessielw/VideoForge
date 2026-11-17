@@ -20,7 +20,7 @@ const sub = (id: number, language: string, title: string, flags: Partial<SubTrac
   ...flags,
 })
 
-async function fixture(page: Page) {
+async function fixture(page: Page, extra: SubTrack[] = []) {
   const errors: string[] = []
   const saves: Overrides[] = []
   page.on('pageerror', (error) => errors.push(error.message))
@@ -29,6 +29,7 @@ async function fixture(page: Page) {
     sub(3, 'en', '', { forced: true }),
     sub(4, 'es-419', 'Spanish', { hearing_impaired: true }),
     sub(5, 'fr-CA', ''), // left out: not named
+    ...extra,
   ]
   const video = {
     source_filter: 'ffms2' as const,
@@ -49,10 +50,19 @@ async function fixture(page: Page) {
     options: {},
     extra: '',
     source_color: true,
+    color_override: false,
     hdr10plus: false,
     dolby_vision: false,
   }
-  const mux = { container: 'mkv', extra: '', pgs_zlib: false }
+  const mux = {
+    container: 'mkv',
+    extra: '',
+    pgs_zlib: false,
+    name_template: '',
+    template_file_name: false,
+    template_title: false,
+    name_suffix: '',
+  }
   const job: JobDetail = {
     id: 'names',
     name: 'Subtitle names',
@@ -103,11 +113,12 @@ async function fixture(page: Page) {
       rule_set: 'manual',
     },
     output_name: null,
+    output_title: null,
     color_args: null,
     target: null,
     sample: null,
     search: null,
-    compare: { encode: false, sample: false },
+    compare: { encode: false, sample: false, filters: false },
     tracks: { video: null, audio: [], subs, has_chapters: false, count: 4 },
     spec: {
       id: 'names',
@@ -209,5 +220,17 @@ test('Name subtitles titles the untitled kept tracks, then all of them, from lan
       'id:4': 'Spanish (Latin America) (SDH)',
       'id:5': null,
     })
+  expect(errors).toEqual([])
+})
+
+test('a subtitle file named _trackN_ says which input track it took its title from', async ({ page }) => {
+  // MKV: the file's _trackN_ is the track number, mkvmerge id + 1, so input track #2 is _track3_
+  const { errors } = await fixture(page, [
+    sub(6, 'en', 'English (Forced)', { external_path: 'D:/Show_track3_[eng].srt', title_from: 2, forced: true }),
+  ])
+  await page.getByText('(title inferred from input track #2)').hover()
+  const tip = page.locator('[data-slot="tooltip-content"]')
+  await expect(tip).toContainText('The _trackN_ in its name matches input track #2')
+  await expect(tip).not.toContainText('_track2_')
   expect(errors).toEqual([])
 })

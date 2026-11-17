@@ -47,7 +47,7 @@ class Event(StrEnum):
 EVENT_LABELS: dict[Event, str] = {
     Event.JOB_DONE: "Job done",
     Event.JOB_FAILED: "Job failed",
-    Event.JOB_CANCELLED: "Job cancelled",
+    Event.JOB_CANCELLED: "Job canceled",
     Event.QUEUE_FINISHED: "Queue finished",
 }
 DEFAULT_EVENTS = frozenset({Event.JOB_DONE, Event.JOB_FAILED, Event.QUEUE_FINISHED})
@@ -64,7 +64,7 @@ _JOB_TITLES: dict[JobStatus, str] = {
     JobStatus.INVALID: "Invalid output",
     JobStatus.FAILED: "Failed",
     JobStatus.SKIPPED: "Skipped",
-    JobStatus.CANCELLED: "Cancelled",
+    JobStatus.CANCELLED: "Canceled",
 }
 
 
@@ -83,7 +83,7 @@ class Destination:
         if not url:
             raise ValueError("A notification needs an Apprise URL")
         if not apprise.Apprise().add(url):
-            raise ValueError(f"Apprise doesn't recognise this URL: {url.split('://', 1)[0]}://...")
+            raise ValueError(f"Apprise doesn't recognize this URL: {url.split('://', 1)[0]}://...")
         events = data.get("events")
         try:
             chosen = DEFAULT_EVENTS if events is None else frozenset(Event(e) for e in events)
@@ -206,7 +206,7 @@ def send(url: str, message: Message) -> str | None:
     """Send one message to one Apprise URL: None when it went, else why it didn't (Apprise's own words)."""
     ap = apprise.Apprise(asset=_ASSET)
     if not ap.add(url):
-        return "Apprise doesn't recognise this URL"
+        return "Apprise doesn't recognize this URL"
     said: list[str] = []
 
     def heard(entry, _plugin) -> None:

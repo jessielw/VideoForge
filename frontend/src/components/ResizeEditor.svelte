@@ -69,15 +69,13 @@
       <Checkbox checked={!!resize} {disabled} onCheckedChange={toggle} />
       <span class="section-label">Resize</span>
     </label>
-    {#if resize}<span class="text-xs text-muted-foreground tabular-nums"
-        >{resize.width}×{auto ? 'auto' : resize.height}</span
+    {#if resize}<span class="readout text-xs text-muted-foreground">{resize.width}×{auto ? 'auto' : resize.height}</span
       >{/if}
   </div>
   {#if !resize && input && anamorphic}
     <p class="text-xs text-muted-foreground tabular-nums">
-      Anamorphic source (pixels {input.sarNum}:{input.sarDen}): the encode keeps them and plays at {ratio(
-        displayAspect(input),
-      )}.
+      Anamorphic source ({input.sarNum}:{input.sarDen} pixels). Without a resize, the encode keeps that pixel shape and plays
+      at {ratio(displayAspect(input))}.
     </p>
   {/if}
   {#if resize}
@@ -94,11 +92,11 @@
       />
       ×
       {#if auto}
-        <Tip class="grid" text="Each job's: the width at the source's aspect ratio">
+        <Tip class="grid" text="Each job works out its height from this width and its cropped source's aspect ratio.">
           <Input aria-label="Height" disabled value="auto" />
         </Tip>
       {:else}
-        <Tip class="grid" text={r.keep_ar ? 'Typing a height sets the width that makes it' : undefined}>
+        <Tip class="grid" text={r.keep_ar ? 'Typing a height changes the width to keep the aspect ratio.' : undefined}>
           <Input
             type="number"
             step={r.mod}
@@ -136,7 +134,7 @@
       >
         {#each KERNELS as k (k)}<option value={k}>{k}</option>{/each}
       </NativeSelect>
-      <Tip text="Both sides a multiple of this">
+      <Tip text="Width and height are rounded to a multiple of this.">
         <NativeSelect
           aria-label="Mod"
           {disabled}
@@ -166,7 +164,7 @@
         → {r.width}×{r.height} with {ratio(shape)} pixels (anamorphic), playing at {ratio((r.width / r.height) * shape)}
       </p>
       {#if upscale}<p class="text-xs text-warning">
-          Upscaling: bigger than the {input.width}×{input.height} going in.
+          The output is bigger than the {input.width}×{input.height} cropped picture, so this upscales.
         </p>{/if}
     {:else if input}
       <p class="text-xs text-muted-foreground tabular-nums">
@@ -180,7 +178,7 @@
         {/if}
       </p>
       {#if upscale}<p class="text-xs text-warning">
-          Upscaling: bigger than the {input.width}×{input.height} going in.
+          The output is bigger than the {input.width}×{input.height} cropped picture, so this upscales.
         </p>{/if}
     {:else if r.keep_ar}
       <p class="text-xs text-muted-foreground">The height is fitted to each job's source and crop.</p>

@@ -16,6 +16,8 @@ Select an installed filter. Changing the source reader can require a new index. 
 
 ## Crop and resize
 
+To go to a frame, type its number in the box under the preview, or a time such as `1:23.5`, `1:02:03` or `83.5s`, and press Enter. The position shows beside it as h:mm:ss.mmm.
+
 Use the frame preview's zoom and crop overlay to inspect borders. **Auto crop** samples the source and proposes crop values. Check bright and dark scenes, credits, and any changing aspect ratios before accepting a fixed crop for the whole file.
 
 For a Dolby Vision source the job carries, auto crop takes the bars from the RPU's L5 active area instead: indexing extracts the RPU too (the encode reuses it). Each side is the smallest bar of the presets in use, so a film whose aspect changes (IMAX scenes) keeps every frame's picture, and the RPU's per-scene presets carry the rest. Presets only in the first or last 1000 frames (a full-frame logo) don't count. An odd bar rounds down: 277 crops 276, and the encode's L5 names the line left. The L5 is checked against the detected borders: where the picture shows more than 4 px inside a bar, that side takes the detected value. An L5 with no bars (or no RPU) leaves the detected borders. The editor (under the button) and the job log say where the crop came from. The crop stays yours to change; the RPU follows any crop.
@@ -28,14 +30,19 @@ The chain contains crop and resize steps plus the filters you add. Order affects
 
 All bundled filters run on the CPU. Each filter still needs its compatible plugin or Python script. For the shipped set and API compatibility, see the [plugin list](../configuration/tools.md#bundled-vapoursynth-plugins).
 
-## Compare encoded frames
+## Compare frames
 
-**Compare** on the preview's toolbar (with the Settings panel) shows the encoder's input and what it made of it, frame for frame:
+**Compare** on the preview's toolbar (with the Settings panel) shows two versions of the same frames. A choice that isn't available yet says what it needs:
 
-- **Test encode:** the [test encode](encoders.md#test-encode)'s frames against the script's frames it encoded. The sample's blocks are back to back, so its frame numbers are its own; the overlay says which frame of the script each one is.
+- **Filters:** the script without its filters against the output, to see what a denoise, deband or grain filter does. The "before" side keeps the crop, resize, field filters (IVTC, deinterlacing) and burned-in subtitles, so both sides have the same frames and size. It needs an enabled filter in the chain; a custom script body has no chain to compare.
+- **Test encode:** the [test encode](encoders.md#test-encode)'s frames against the script's frames it encoded. The sample's blocks are back to back, so its frame numbers are its own; the label by the buttons says which frame of the script each one is.
 - **Encode:** a done job's output file against the script's output.
 
-**Input** and **Encoded** (or **C**) flip between the two at the same frame, zoom and scroll; the other side's frame is loaded beside each one, so a flip shows at once. Boost, zoom and Save work on either side. The encode opens through FFMS2, which indexes it the first time (its index goes in the job's folder). A rerun of the job or of the test encode frees the files the compare holds open.
+The two buttons beside it (**Before** / **After**, or **Input** / **Encoded**), or **C**, flip between the sides at the same frame, zoom and scroll; the other side's frame is loaded beside each one, so a flip shows at once. **Split** shows both at once, either side of a line: the picked side on the left. The label by the buttons says which side is which, so nothing covers the frame. Drag the line, or focus it and use ←/→ (Shift for 10%). Boost, zoom and Save work on either side. The encode opens through FFMS2, which indexes it the first time (its index goes in the job's folder). A rerun of the job or of the test encode frees the files the compare holds open.
+
+## Bookmarks
+
+Press **M** in the preview (or the bookmark button under it) to mark the frame, and again to remove the mark. Marks show as ticks on the scrub bar; **[** and **]** (or the buttons either side of the bookmark) go to the previous and next one. They're the same frames in the crop view, the output and every compare; a test encode's compare shows the marks that fall inside its blocks. Bookmarks are kept in this browser, per job, until the job leaves the queue.
 
 ## Interlaced sources
 

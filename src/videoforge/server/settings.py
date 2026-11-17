@@ -11,8 +11,9 @@ import string
 from videoforge.core.actions import Action, load_actions
 from videoforge.core.config import PROJECT_ROOT, AppConfig, app_data_dir, with_tools
 from videoforge.core.execute.control import Priority
+from videoforge.core.naming import NamePolicy
 from videoforge.core.notify import Destination, load_destinations
-from videoforge.core.plan_io import to_json
+from videoforge.core.plan_io import from_json, to_json
 
 MAX_PARALLEL_AUDIO = 8  # the Settings page's limit on audio encodes at once
 
@@ -88,6 +89,7 @@ class SavedSettings:
     auto_index: bool = True  # a new job is put in the index lane as soon as it's probed
     auto_crop: bool = True  # ... and its crop detected (which indexes it first)
     index_during_video: bool = True  # index_waits_for_disk lets a job go while the encode is only encoding video
+    naming: dict[str, NamePolicy] = field(default_factory=dict)  # rule set id -> the name template's switches
 
     @classmethod
     def load(cls, store) -> SavedSettings:
@@ -109,6 +111,7 @@ class SavedSettings:
             auto_index=bool(store.get_setting("auto_index", True)),
             auto_crop=bool(store.get_setting("auto_crop", True)),
             index_during_video=bool(store.get_setting("index_during_video", True)),
+            naming=load_naming(store.get_setting("naming")),
         )
 
     def save(self, store) -> None:
@@ -126,6 +129,17 @@ class SavedSettings:
         if self.tool_priority is not None:
             cfg = replace(cfg, tool_priority=self.tool_priority)
         return cfg
+
+
+def load_naming(value: object) -> dict[str, NamePolicy]:
+    """Saved naming policies; a broken one (hand-edited, or from a newer version) is left out."""
+    out: dict[str, NamePolicy] = {}
+    for rule_set, policy in (value if isinstance(value, dict) else {}).items():
+        try:
+            out[str(rule_set)] = from_json(NamePolicy, policy)
+        except (ValueError, TypeError, KeyError):
+            continue
+    return out
 
 
 def _priority(value: object) -> Priority | None:

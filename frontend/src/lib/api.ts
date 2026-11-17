@@ -18,6 +18,8 @@ import type {
   EncoderSettings,
   EncoderBundle,
   FilterPreset,
+  NamePolicy,
+  NameTokens,
   JobDetail,
   JobSpec,
   JobSummary,
@@ -154,6 +156,7 @@ export const api = {
   importTemplates: (bundle: TemplateBundle, keepBoth = false) =>
     post<{ presets: Presets } & ImportPlan>(`/api/presets/templates/import${keep(keepBoth)}`, bundle),
   filterPresets: () => get<FilterPreset[]>('/api/filter-presets'),
+  nameTokens: () => get<NameTokens>('/api/name-tokens'),
   savePreset: (kind: PresetKind, name: string, data: unknown) =>
     request<Presets>('PUT', `/api/presets/${kind}/${encodeURIComponent(name)}`, data),
   saveEncoderPreset: (preset: { name?: string; label: string; group: string[]; data: EncoderSettings }) =>
@@ -222,6 +225,7 @@ export const api = {
     sample_quality?: boolean
     auto_index?: boolean
     auto_crop?: boolean
+    naming?: Record<string, NamePolicy>
     parallel_audio?: number | null
     delete_work_dir?: boolean | null
     encoder_priority?: Priority | null
@@ -314,7 +318,8 @@ export const api = {
   start: (ids?: string[], reuse?: Record<string, string[]>) =>
     post<QueueState>('/api/queue/start', { ...(ids ? { ids } : {}), ...(reuse ? { reuse } : {}) }),
   reuse: (ids?: string[]) => post<{ jobs: ReuseJob[] }>('/api/queue/reuse', ids ? { ids } : {}),
-  enqueue: (ids: string[]) => post<QueueState & { enqueued: string[] }>('/api/queue/enqueue', { ids }),
+  enqueue: (ids: string[], reuse?: Record<string, string[]>) =>
+    post<QueueState & { enqueued: string[] }>('/api/queue/enqueue', { ids, ...(reuse ? { reuse } : {}) }),
   dequeue: (ids: string[]) => post<QueueState>('/api/queue/dequeue', { ids }),
   stop: () => post<QueueState>('/api/queue/stop'),
   cancel: () => post<QueueState>('/api/queue/cancel'),

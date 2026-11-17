@@ -141,7 +141,7 @@
 
 {#if !tracks || !plan}
   <div class="p-6 text-muted-foreground">
-    {job.status === 'probing' ? 'Probing the source…' : 'No tracks: the source could not be read.'}
+    {job.status === 'probing' ? "Reading the source's tracks…" : "No tracks. The source couldn't be read."}
   </div>
 {:else}
   <!-- min-w-0: a fieldset is as wide as its widest content by default, so a long title ran past the panel. -->
@@ -157,7 +157,7 @@
           onchange={(v: string) => setLanguageOriginal(v)}
         />
       </label>
-      <Button variant="outline" class="ml-auto" onclick={reset}><RefreshCwIcon />Reset overrides</Button>
+      <Button variant="outline" class="ml-auto" onclick={reset}><RefreshCwIcon />Reset my changes</Button>
     </div>
 
     {#if kind === 'audio'}
@@ -175,7 +175,7 @@
           </Button>
         </div>
         <table class="w-full text-sm">
-          <thead class="text-left text-xs text-muted-foreground uppercase">
+          <thead class="text-left text-xs text-muted-foreground">
             <tr
               ><th class="w-10"></th><th>Source</th><th>Lang</th><th>Title</th><th>Output</th><th class="w-16"></th></tr
             >
@@ -224,7 +224,7 @@
           <SubtitleSelectionMenu tracks={subRows} {overrides} disabled={!editable} onselect={selectSubs} />
         </div>
         <table class="w-full text-sm">
-          <thead class="text-left text-xs text-muted-foreground uppercase">
+          <thead class="text-left text-xs text-muted-foreground">
             <tr>
               <th class="w-10"></th><th>Source</th><th>Format</th><th>Lang</th>
               {#each flags as f (f.key)}<th><Tip text={f.help}>{f.label}</Tip></th>{/each}
@@ -260,7 +260,7 @@
                 </td>
                 {#each flags as f (f.key)}
                   <td>
-                    <Tip text={flagPinned(t, f.key) ? 'Set by override' : 'As detected'}>
+                    <Tip text={flagPinned(t, f.key) ? 'Set by you' : 'As detected'}>
                       <Checkbox
                         class={flagPinned(t, f.key) ? 'ring-2 ring-warning/70' : ''}
                         aria-label={f.label}

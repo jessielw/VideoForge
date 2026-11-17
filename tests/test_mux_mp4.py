@@ -23,7 +23,7 @@ from videoforge.core.models import (
     TrackOverride,
     VideoInfo,
 )
-from videoforge.core.pipeline.build import build_steps, mp4_subtitle_steps, output_path
+from videoforge.core.pipeline.build import build_steps, mp4_audio_steps, mp4_subtitle_steps, output_path
 from videoforge.core.video.color import ContainerColor
 from videoforge.rule_sets.manual import ManualRuleSet, output_matches_plan
 
@@ -77,6 +77,9 @@ def test_mp4box_vpx_encode_is_tagged():
     av1 = ContainerColor(9, 16, 9, False, max_cll=1000, max_fall=400)
     argv = mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW, color=av1)
     assert adds(argv)[0] == "video.ivf#video:colr=nclx,9,16,9,0:lang=en-US:name="
+    # an AV1 encode's Dolby Vision: MP4Box writes its dvvC only when told the profile
+    argv = mp4box_command(plan, {}, Path("out.mp4.partial"), "MP4Box", RAW, color=av1, dvp="10.1")
+    assert adds(argv)[0] == "video.ivf#video:dvp=10.1:colr=nclx,9,16,9,0:lang=en-US:name="
 
 
 def test_mp4box_command():
@@ -135,6 +138,55 @@ def test_mp4_pipeline_extracts_source_srt_with_one_timing_shift(tmp_path, start_
     assert not any(s.id.startswith("subs.") for s in mkv.steps)
 
 
+def test_mp4_extracts_a_copied_truehd_from_matroska(tmp_path):
+    """MP4Box can't take a TrueHD track out of a Matroska file (it reads one through FFmpeg, past its TrueHD
+    reframer: GPAC 26.07 refuses it, 2.4 hangs): mkvextract writes it raw first, once for a track copied twice. The
+    copy keeps its delay. A TS's TrueHD MP4Box reads itself; an MKV output, mkvmerge."""
+    from dataclasses import replace
+
+    app = load_app_config()
+    plan = mp4_plan()
+    for a in plan.audio:
+        a.source.codec = C.TRUEHD
+        a.action = AudioAction.COPY
+    plan.audio.append(replace(plan.audio[0], source=replace(plan.audio[0].source, copy=1)))  # a second copy
+    mka = tmp_path / "commentary.mka"
+    plan.audio[1].source.external_path, plan.audio[1].source.id = mka, 0
+
+    steps, prepared = mp4_audio_steps(plan, tmp_path, app)
+    first, second = tmp_path / "truehd.1.thd", tmp_path / "truehd.2.thd"
+    assert [(s.id, s.argvs[0][-2:], s.inputs, s.outputs) for s in steps] == [
+        ("truehd.1.extract", (str(plan.source.path), f"1:{first}"), (plan.source.path,), (first,)),
+        ("truehd.2.extract", (str(mka), f"0:{second}"), (mka,), (second,)),
+    ]
+    assert [a.source.external_path for a in prepared.audio] == [first, second, first]
+    assert not plan.audio[0].source.is_external  # the UI/validation plan keeps the source's track
+    argv = mp4box_command(prepared, {}, Path("out.mp4.partial"), "MP4Box", RAW)
+    assert adds(argv)[1:4] == [
+        f"{first}#trackID=1:lang=en:group=1:name=Main - 5.1:delay=-40",
+        f"{second}#trackID=1:lang=ja:group=1:disable:delay=25",
+        f"{first}#trackID=1:lang=en:group=1:name=Main - 5.1:delay=-40",
+    ]
+
+    # the job: extracted before the mux, which reads the .thd
+    spec = JobSpec(
+        inputs=JobInputs(plan.source.path, encode=plan.encode_path), rule_set="manual", mux=MuxSettings(container="mp4")
+    )
+    job = build_steps(spec, plan, ManualRuleSet(), app, tmp_path / "out.mp4")
+    assert "truehd.1.extract" in [s.id for s in job.steps]
+    assert spec.job_dir / "truehd.1.thd" in job.steps[-1].inputs
+    spec.mux.container = "mkv"
+    assert not any(
+        s.id.startswith("truehd.") for s in build_steps(spec, plan, ManualRuleSet(), app, tmp_path / "o.mkv").steps
+    )
+
+    ts = mp4_plan()
+    ts.source.path = Path("Movie.m2ts")
+    for a in ts.audio:
+        a.source.codec, a.action = C.TRUEHD, AudioAction.COPY
+    assert mp4_audio_steps(ts, tmp_path, app) == ([], ts)
+
+
 def test_mp4_leaves_external_srt_and_native_timed_text_inputs(tmp_path):
     plan = mp4_plan([sub(F.TX3G, "en")])
     plan.subs[0].source.format = F.TX3G
@@ -151,15 +203,17 @@ def test_mp4_issues():
     issues = mux_issues(plan, "mp4")
     blocks = [i.message for i in issues if i.severity is Severity.BLOCK]
     warns = [i.message for i in issues if i.severity is Severity.WARN]
-    assert blocks == ["Subtitle 1 (pgs) can't go into MP4 (SRT and VobSub can): leave it out or use MKV"]
-    assert "Audio 2: MP4 has no commentary flag; left out" in warns
-    assert "Subtitle 2: MP4 has no hearing impaired flag; left out" in warns  # forced is carried on an SRT
+    assert blocks == ["Subtitle 1 (pgs) can't go into MP4, which takes only SRT and VobSub. Leave it out, or use MKV"]
+    assert "Audio 2: MP4 has no commentary flag, so it's left out" in warns
+    assert "Subtitle 2: MP4 has no hearing impaired flag, so it's left out" in warns  # forced is carried on an SRT
     assert any("written as 'Main - 5.1'" in w for w in warns)
     assert plan.audio[0].original and not any("original" in w for w in warns)  # the source's own flag: no warning
     assert mux_issues(plan, "mkv") == []
 
     plan = mp4_plan(overrides=Overrides(tracks={"id:1": TrackOverride(flags={"original": True})}))
-    assert "Audio 1: MP4 has no original flag; left out" in [i.message for i in mux_issues(plan, "mp4")]  # set by hand
+    assert "Audio 1: MP4 has no original flag, so it's left out" in [
+        i.message for i in mux_issues(plan, "mp4")
+    ]  # set by hand
 
 
 def test_a_vfr_source_into_mp4_warns():
@@ -205,9 +259,9 @@ def test_mp4_languages_are_3_letter_codes():
     plan = mp4_plan([sub(F.SRT, t, index=n) for n, t in enumerate(tags)])
     warns = [i.message for i in mux_issues(plan, "mp4") if i.code == "mux.mp4_language"]
     assert warns == [
-        "Subtitle 1: MP4 holds a 3-letter language code; es-419 is written as es",
-        "Subtitle 3: MP4 holds a 3-letter language code; nb is written as no",
-        "Subtitle 4: MP4 holds a 3-letter language code; zh-Hant is written as zh",
+        "Subtitle 1: MP4 holds only a 3-letter language code, so es-419 is written as es",
+        "Subtitle 3: MP4 holds only a 3-letter language code, so nb is written as no",
+        "Subtitle 4: MP4 holds only a 3-letter language code, so zh-Hant is written as zh",
     ]
     out = simulate_output(plan, "Movie.mp4")
     for t in [*out.audio, *out.subs]:

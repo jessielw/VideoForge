@@ -345,7 +345,8 @@ def _chapters(spec: JobSpec, plan: Plan) -> dict[str, Any]:
         files = qpf_paths(spec.job_dir)
         return {"from": "autoqpf", "path": str(files.chapters), "qpfile": str(files.qpfile)}
     if plan.chapters_path is not None:
-        return {"from": "file", "path": str(plan.chapters_path)}
+        found = {"from": "file", "path": str(plan.chapters_path)}
+        return {**found, "qpfile": str(qpf_paths(spec.job_dir).qpfile)} if spec.makes_qpfile else found
     if plan.source.has_chapters:
         return {"from": "source", "path": None}
     return {"from": None, "path": None}

@@ -15,6 +15,7 @@ const data: EncoderSettings = {
   options: { ref: '4' },
   extra: '--no-dct-decimate',
   source_color: true,
+  color_override: false,
   hdr10plus: false,
   dolby_vision: false,
 }

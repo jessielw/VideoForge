@@ -13,6 +13,7 @@ The **Encoder** tab controls the video encoder, rate control, preset, bit depth,
 | VP8 | `ffmpeg` with libvpx | Intermediate IVF stream |
 | VP9 | `ffmpeg` with libvpx-vp9 | Intermediate IVF stream |
 | SVT-AV1 | `SvtAv1EncApp` | AV1; intermediate IVF stream |
+| SVT-AV1-HDR | `SvtAv1EncApp` ([juliobbv-p's build](https://github.com/juliobbv-p/svt-av1-hdr)) | AV1 with HDR10+ and Dolby Vision; presets down to -3, tunes for film grain and still images; intermediate IVF stream |
 
 VideoForge muxes the encoded stream into the chosen MKV or MP4 container. Encoder availability depends on the tool paths and installed builds; inspect **Settings** if an encoder is unavailable.
 
@@ -23,7 +24,7 @@ Use **Encoder preset** in a job's Encoder tab, the template editor, or New jobs 
 The compact picker opens with **My presets** and your folders above the built-in configurations, across all encoders. Select a preset to apply its encoder and settings together. Search by name, folder, encoder, or settings across the library, or use the **Encoder** filter to narrow the results. The manager uses the same browser. Choose **Manage presets…** to open the larger editor:
 
 1. Select a preset on the left, or choose **New from current settings**.
-2. Edit its name, folder, encoder, quality, speed, and bit depth on the right. Expand **Advanced settings** (**Advanced settings and HDR** for x265 and SVT-AV1) for structured options, extra arguments, and metadata settings. The HDR10+ and Dolby Vision boxes show for x265 only, the one encoder that carries them.
+2. Edit its name, folder, encoder, quality, speed, and bit depth on the right. Expand **Advanced settings** (**Advanced settings and HDR** for x265 and the SVT-AV1 encoders) for structured options, extra arguments, and metadata settings. The HDR10+ and Dolby Vision boxes show for x265 and SVT-AV1-HDR only, the encoders that carry them.
 3. Choose **Save preset** to update the library, or **Save new preset** to create a copy of a built-in configuration. Use `/` in the folder field for nesting, such as `1080p / SDR`.
 
 Saving does not change the current job or template. **Apply encoder settings** applies the edited configuration and closes the dialog; it does not save library changes. **Cancel** discards the open draft. Switching presets with unsaved edits offers Save, Discard, or Keep editing.
@@ -40,8 +41,10 @@ Built-in choices are marked **rule set** (the rule set's own defaults) or **star
 | x265 HDR10 / HDR10+ | CRF 18, `slow`; Dolby Vision off |
 | x265 Dolby Vision | CRF 18, `slow`, `--level-idc 5.1`: the level fills the VBV that Dolby Vision requires |
 | SVT-AV1 | CRF 30, preset 4 |
+| SVT-AV1-HDR 10-bit, VQ | CRF 30, preset 4, `--tune 0` (visual quality) |
+| SVT-AV1-HDR film grain | CRF 30, preset 4, `--tune 6` (film grain) |
 
-A starter's name says what it is tuned for. Source color and HDR10 metadata are carried whenever **Colour from the source** is on, whichever preset is picked. Save a starter as your own preset to change it.
+A starter's name says what it is tuned for. Source color and HDR10 metadata are carried whenever **Color from the source** is on, whichever preset is picked. Save a starter as your own preset to change it.
 
 Start New jobs with a template, then optionally select an encoder preset. This changes only the encoder settings; resize, filters, audio, subtitles, and container remain as configured by the template or job. A folder named `1080p` does not resize video, and a folder named `Dolby Vision` does not enable metadata preservation: configure those settings explicitly. **Use template settings** clears the encoder override. Selecting a different template starts with that template's encoder settings.
 
@@ -64,11 +67,11 @@ Two-pass target size uses **decimal MB**. VideoForge budgets for audio, subtitle
 - the whole encode's time at the sample's pace, and the encoder's fps,
 - with **Settings → Test encode → Score its quality** on (off by default), its quality against the encoder's input.
 
-A two-pass job is tested as one pass at its bitrate (a target size's, as its first pass works it out). HDR10+ and Dolby Vision metadata and the chapters' keyframes are left out of the sample; the source colour and HDR10 go in as they do for the job.
+A two-pass job is tested as one pass at its bitrate (a target size's, as its first pass works it out). HDR10+ and Dolby Vision metadata and the chapters' keyframes are left out of the sample; the source color and HDR10 go in as they do for the job.
 
 The test encode runs in the index lane, beside the queue: it indexes the source first if it has to, and jobs waiting to be indexed wait for it. The job is locked meanwhile, but its preview opens. **Stop** (or Stop indexing on the Queue toolbar) cancels it. The result stays with the job until a settings change marks it out of date ("settings changed since"); running the same sample again reuses it. Its files are in the job's folder, under `sample/` (`sample.mkv` plays in any player).
 
-**Compare** opens the sample's frames on the Video tab, against the encoder's input (see [Compare encoded frames](video.md#compare-encoded-frames)).
+**Compare** opens the sample's frames on the Video tab, against the encoder's input (see [Compare frames](video.md#compare-frames)).
 
 ### Quality score
 
@@ -87,11 +90,11 @@ Each try is a test encode at one CRF with its [quality score](#quality-score) (w
 
 Each try shows as it ends: its CRF, bitrate, the whole video's size at that bitrate, and its scores. **Use CRF N** sets the job's CRF to the answer; the result stays current after that, and shows "settings changed since" once the script or another encoder setting changes. The search runs in the index lane like the test encode (**Stop** cancels it, keeping the tries so far). The tries are kept in `sample/search/crf-<n>/`, so searching again, for another target too, reuses each CRF already encoded at the same settings.
 
-A short sample scores differently from the whole video, and the scores compare with the encoder's input, not the source, so treat the CRF found as a starting point and check the encode by eye ([Compare](video.md#compare-encoded-frames)).
+A short sample scores differently from the whole video, and the scores compare with the encoder's input, not the source, so treat the CRF found as a starting point and check the encode by eye ([Compare](video.md#compare-frames)).
 
 ## Options and extra arguments
 
-Structured options and extra arguments are applied after generated defaults. Overrides can change the color metadata carried by the encoded stream and container. Inspect the generated command when using advanced flags.
+Structured options and extra arguments are applied after generated defaults. Their color flags are the exception: the source's color wins over them unless **Override the source's color** is on (see [HDR10 and color](#hdr10-and-color)). Inspect the generated command when using advanced flags.
 
 The option name field suggests the names the configured encoder lists in its own help (x264 and x265 `--fullhelp`, SvtAv1EncApp `--help`, ffmpeg's libvpx and codec options) and shows what each one does. A name the encoder doesn't list, in the options or the extra arguments, shows a warning with the nearest listed name, and the job gets an `video.option_unknown` warning before it runs. It is a warning only: some builds take options their help leaves out. Short flags (`-p`) aren't checked.
 
@@ -109,19 +112,27 @@ Backslashes remain literal except before a double quote. Use `\"` for a literal 
 
 VideoForge reads source color information and supplies encoder flags because the VapourSynth Y4M pipe does not carry that information. It also supplies container color tags for IVF-based encoders. Source tags do not replace the need for correct color processing in a custom script.
 
+The source's values win over the same flags in the options and extra arguments, as StaxRip's **Import VUI metadata** does: a `--colorprim bt709` in a preset is left out of the command for a BT.2020 source, so the encode isn't mislabeled (a BT.2020 picture tagged BT.709 plays oversaturated). A flag for a value the source doesn't have still applies, and the chroma location is always the options'. The job notes a flag it left out (`video.color_source`).
+
+For x265, an HDR10 source's `--hdr10` wins the same way: a preset written for SDR sources with `--no-hdr10` doesn't turn the HDR10 signalling off on an HDR10 source, because the job's `--hdr10` / `--no-hdr10` are left out of the command. On an SDR source the preset's `--no-hdr10` stays. `--hdr10-opt` is tuning, not metadata, so it stays the preset's choice.
+
+Turn on **Override the source's color** (under **Color from the source**) when the source's tags are wrong, or the script converts the color: the options' and extra arguments' flags then win (`--no-hdr10` included), and the job notes them (`video.color_override`). Unticking **Color from the source** leaves the source's tags out altogether. A UHD source with no color description, and no flags in the options to fill it in, gets a note too (`video.color_untagged`).
+
 ## HDR10+ and Dolby Vision
 
-Supported metadata preservation uses **x265** with the relevant option enabled:
+Supported metadata preservation uses **x265** or **SVT-AV1-HDR** with the relevant option enabled:
 
 | Source | Supported treatment |
 | --- | --- |
-| HDR10+ | Extract metadata with `hdr10plus_tool` and pass it to x265 |
-| Dolby Vision profile 8.1 | Carry as profile 8.1 |
-| Dolby Vision profile 7 MEL | Convert to profile 8.1 |
-| Dolby Vision profile 7 FEL | Bake the enhancement layer into the picture and carry profile 8.1 metadata; HDR10+ is left out |
-| Dolby Vision profile 5 | Carry as profile 5 |
+| HDR10+ | Extract metadata with `hdr10plus_tool` and pass it to the encoder |
+| Dolby Vision profile 8.1 | Carry as profile 8.1 (10.1 in AV1) |
+| Dolby Vision profile 7 MEL | Convert to profile 8.1 (10.1 in AV1) |
+| Dolby Vision profile 7 FEL | Bake the enhancement layer into the picture and carry profile 8.1 metadata (10.1 in AV1); HDR10+ is left out |
+| Dolby Vision profile 5 | Carry as profile 5 (10.0 in AV1) |
 | Dolby Vision profile 8.4 (HLG) | Not supported for Dolby Vision preservation |
 
-Dolby Vision requires a **10-bit encode** and x265 VBV values. Set `--vbv-maxrate` and `--vbv-bufsize`, or use a supported `--level-idc` to fill the missing values. FEL processing uses FFMS2 or L-SMASH. A UHD Blu-ray's `.m2ts` keeps its enhancement layer in a second video track that MediaInfo reports as plain HDR10; VideoForge reads that track's RPU (dovi_tool is needed for this) and takes the RPU and the enhancement layer from it. A FEL source's HDR10+ is left out of the encode: it was measured on the base layer, so its values don't fit the picture with the enhancement layer baked in, which can be brighter. The Dolby Vision RPU and the HDR10 values describe the baked picture. Crop and resize adjust the RPU's active-area information, and auto crop reads it (see [Crop and resize](video.md#crop-and-resize)).
+Dolby Vision requires a **10-bit encode**, and profile 8.1 an HDR10 mastering display. x265 also needs VBV values: set `--vbv-maxrate` and `--vbv-bufsize`, or use a supported `--level-idc` to fill the missing values. SVT-AV1-HDR needs none.
+
+SVT-AV1-HDR writes HDR10+ and the Dolby Vision RPU into the AV1 stream with `--hdr10plus-json` and `--dolby-vision-rpu`. A build without its HDR libraries leaves those flags out of its `--help`, and the job is blocked (`hdr.svt_build`). An MP4 gets the Dolby Vision profile from MP4Box's `:dvp=10.1` (or `10.0`), and mkvmerge finds it in the stream. MediaInfo can't see HDR10+ in AV1, so the validate step counts the HDR10+ and RPU metadata on each frame of the encode instead. A profile 5 encode is tagged as unspecified color with full range, the same as x265 writes for it, because its base layer isn't BT.2020 PQ. FEL processing uses FFMS2 or L-SMASH. A UHD Blu-ray's `.m2ts` keeps its enhancement layer in a second video track that MediaInfo reports as plain HDR10; VideoForge reads that track's RPU (dovi_tool is needed for this) and takes the RPU and the enhancement layer from it. A FEL source's HDR10+ is left out of the encode: it was measured on the base layer, so its values don't fit the picture with the enhancement layer baked in, which can be brighter. The Dolby Vision RPU and the HDR10 values describe the baked picture. Crop and resize adjust the RPU's active-area information, and auto crop reads it (see [Crop and resize](video.md#crop-and-resize)).
 
 Changes to frame count or frame rate can make dynamic metadata incompatible with the output. Resolve the job's HDR planning issues before starting. Selecting another encoder does not preserve Dolby Vision metadata; review the warning and intended base-layer output in the editor.

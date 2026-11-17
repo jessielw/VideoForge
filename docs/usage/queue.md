@@ -15,7 +15,7 @@ Each job gets its own settings. Changing one job does not silently change the ot
 
 ## Duplicate a job
 
-To make a second output from the same source with a few settings changed, select the job and use **Duplicate** (the copy icon on the Queue toolbar). The copy appears right after the original with the same settings and a label of its own (`v2`, `v3`, and so on, or `dubbed-2` for a job labelled `dubbed`), so it writes its own file. Change what you need in its tabs; the label and output name are on the **Output** tab. Duplicating several selected jobs copies each one.
+To make a second output from the same source with a few settings changed, select the job and use **Duplicate** (the copy icon on the Queue toolbar). The copy appears right after the original with the same settings and a label of its own (`v2`, `v3`, and so on, or `dubbed-2` for a job labeled `dubbed`), so it writes its own file. Change what you need in its tabs; the label and output name are on the **Output** tab. Duplicating several selected jobs copies each one.
 
 Each job keeps its files in its own folder in the source's work folder, named by its label, so set the label before the first run. The copy's run reuses what the two jobs share: the source index, and any video or audio encode whose settings did not change, linked into its folder. The log says `made by the job in dubbed/, reused` for those. Jobs on one source share the index, so one is never indexed while another runs; the second waits and its log says so.
 
@@ -35,11 +35,11 @@ On small windows, opening one job collapses the list to a rail. **Show the queue
 
 A job runs only once it's queued. Queue it when its settings are final: tick its box in the queue list or **Queue** at the top of its editor (they're the same switch), or select several jobs and use **Queue (N)** on the toolbar. A queued job is locked: its settings are read-only and its preview doesn't change, so what the queue will encode is what you see. Untick it (or **Unqueue (N)**) to edit it again; the queue leaves it out until it's queued again.
 
-A job queued while the queue runs is picked up in its turn, in queue order. Queueing a completed, failed or cancelled job runs it again; unticking it before it runs keeps its last result. A job can't be queued while it's being probed, indexed or crop-detected, or while it's blocked.
+A job queued while the queue runs is picked up in its turn, in queue order. Queueing a completed, failed or canceled job runs it again; unticking it before it runs keeps its last result. A job can't be queued while it's being probed, indexed or crop-detected, or while it's blocked.
 
 ## Start a run
 
-**Start queue** runs the queued jobs; with none queued it's disabled. **Run selected** queues the selected jobs and starts, including completed jobs and failed or cancelled runs to rerun or retry. Start and Index wait for pending editor saves. Failed saves offer **Retry saves** or **Discard unsaved changes** before work can start. Batch crop reports updated, skipped and failed jobs; imported encodes and busy jobs are skipped without stopping later eligible jobs. For episodes with different track orders, prefer template rules over track positions.
+**Start queue** runs the queued jobs; with none queued it's disabled. **Run selected** queues the selected jobs and starts, including completed jobs and failed or canceled runs to rerun or retry. Start and Index wait for pending editor saves. Failed saves offer **Retry saves** or **Discard unsaved changes** before work can start. Batch crop reports updated, skipped and failed jobs; imported encodes and busy jobs are skipped without stopping later eligible jobs. For episodes with different track orders, prefer template rules over track positions.
 
 ## Batch indexing
 
@@ -55,17 +55,17 @@ BestSource's first index decodes the whole video and can take substantially long
 
 Pause and resume control the running tools. The Queue toolbar also changes the running job's process priority. Default priorities for later runs are on **Settings**.
 
-Stopping the queue after the current job leaves the remaining jobs queued. Cancelling interrupts the running work. When VideoForge shuts down, its child tools stop too; a partially encoded stream is not a finished reusable step.
+Stopping the queue after the current job leaves the remaining jobs queued. Canceling interrupts the running work. When VideoForge shuts down, its child tools stop too; a partially encoded stream is not a finished reusable step.
 
 Untick a queued job, or use **Unqueue** on selected queued jobs, to unlock their settings without removing the jobs or files. This does not cancel a running job.
 
 ## Pause after pass 1
 
-A 2-pass encode can be stopped between its passes. **Pause after pass 1** in the Queue toolbar (while the job runs, or click it again to take it back) lets pass 1 finish, then ends the run as **Paused**. Nothing is cancelled and the finished steps stay recorded, so you can close VideoForge. Run the job again, even after a restart, and it reuses pass 1 and goes on with pass 2. Audio encodes still running beside the video when the job pauses are stopped and made again on the next run. A job that is not a 2-pass encode has no pass 1 to stop after.
+A 2-pass encode can be stopped between its passes. **Pause after pass 1** in the Queue toolbar (while the job runs, or click it again to take it back) lets pass 1 finish, then ends the run as **Paused**. Nothing is canceled and the finished steps stay recorded, so you can close VideoForge. Run the job again, even after a restart, and it reuses pass 1 and goes on with pass 2. Audio encodes still running beside the video when the job pauses are stopped and made again on the next run. A job that is not a 2-pass encode has no pass 1 to stop after.
 
 ## Job files
 
-Every job's whole setup (source, tracks, video and encoder settings, mux and output options) is saved as `videoforge-job.json` in the job's folder in the source's `_tmp` folder when it runs. **Save job file** writes it for the selected jobs at any time. **Add jobs from job files** (Queue toolbar) takes the file, a job's folder, or a source's `_tmp` folder (every job in it) and adds each job exactly as it was saved: no template or profile default is applied. A job whose source already has a job with that label is left out. The work folder is where it was, so the run reuses the steps it already finished.
+Every job's whole setup (source, tracks, video and encoder settings, mux and output options) is saved as `videoforge-job.json` in the job's folder in the source's `_tmp` folder when it runs. **Save job file** writes it for the selected jobs at any time. **Add jobs from job files** (Queue toolbar) takes the file, a job's folder, or a source's `_tmp` folder (every job in it), pasted or picked with **Browse…**, and adds each job exactly as it was saved: no template or profile default is applied. A job whose source already has a job with that label is left out. The work folder is where it was, so the run reuses the steps it already finished.
 
 ## Reuse completed work
 
@@ -81,7 +81,7 @@ Intermediate files and `finished-steps.json` live in the job's folder in the sou
 | Invalid | Candidate failed an output check; existing finished output was kept | Inspect issues and the unpublished file |
 | Failed | A tool or pipeline step failed | Read the last failed step in Log |
 | Skipped | The job was skipped by planning or its existing-output policy | Review planning issues and the Output tab |
-| Cancelled | The run was interrupted | Rerun and review reuse choices |
+| Canceled | The run was interrupted | Rerun and review reuse choices |
 
 A done (or invalid) job's header says what its last run made: the output's size, that as a share of the source, its overall bitrate, how long the run took and how many steps it reused. It's taken as the run ends, so it stays after an action moves the file or the work folder is deleted.
 

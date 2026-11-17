@@ -260,8 +260,8 @@
           onchange={setKeepBoth}
         />
         <p class="text-xs text-muted-foreground">
-          Tools, plugins and files referenced by scripts must be available on this computer. Review included Python
-          before using it; scripts run when processing video.
+          The tools, plugins and files these scripts use must be on this computer. Read the included Python before you
+          use it, because scripts run when video is processed.
         </p>
         <div class="max-h-[45vh] space-y-2 overflow-auto">
           {#each bundle.templates as entry, i (i)}
@@ -290,7 +290,8 @@
           {/each}
         </div>
         {#if actions.includes('copy')}<p class="text-xs text-muted-foreground">
-            Copy numbers may change if you select fewer templates or another browser saves a matching name.
+            The numbers given to copies may change if you select fewer templates, or if another browser saves one with
+            the same name first.
           </p>{/if}
       </div>
     {/if}

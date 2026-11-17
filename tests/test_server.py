@@ -31,6 +31,7 @@ from videoforge.core.job import JobResult, JobSpec, JobStatus, StepRecord, StepR
 from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioCodec as C, SubFormat as F, VideoInfo
 from videoforge.core.pipeline.steps import Step, StepProgress
+from videoforge.core.plan_io import to_json
 from videoforge.core.video.settings import Crop
 from videoforge.core.workdir import keep_records, note_finished, work_dir
 from videoforge.rule_sets.manual import ManualRuleSet
@@ -193,7 +194,6 @@ def test_a_job_is_added_again_from_its_file_exactly_as_it_was(tmp_path):
 
 
 def test_pause_after_pass_1_is_set_for_two_pass_jobs_only(tmp_path):
-    from videoforge.core.plan_io import to_json
     from videoforge.core.video.settings import EncoderSettings, RateControl
 
     make_files(tmp_path)
@@ -241,7 +241,7 @@ def test_batch_crop_continues_after_busy_and_preserves_other_video_settings(tmp_
         ).json()
         assert result["updated"] == [ids[1], ids[3]]
         assert ids[0] in result["skipped"]
-        assert result["skipped"][ids[2]] == "Uses an imported encode"
+        assert result["skipped"][ids[2]] == "Uses an existing encode, so there's nothing to crop"
         assert "missing" in result["failed"]
         after = client.get(f"/api/jobs/{ids[1]}").json()["spec"]["video"]
         assert after["crop"]["left"] == 2
@@ -304,7 +304,7 @@ def test_add_inspect_and_edit(tmp_path):
         ids = add(client, tmp_path)
         assert len(ids) == 2
         job = wait_for(client, ids[0], "ready", "warn")
-        assert job["encoder"] == "x264 crf 18"  # the manual rule set's default encode
+        assert job["encoder"] == "x264 CRF 18"  # the manual rule set's default encode
         # The queue row's facts about the source: the fake probe's 1080p SDR, length not known.
         facts = {"resolution": job["plan"]["resolution"], "duration_ms": None, "hdr": [], "interlaced": False}
         assert job["source_facts"] == facts
@@ -334,7 +334,7 @@ def test_add_inspect_and_edit(tmp_path):
         # A batch edit: one encoder setting for both episodes.
         enc = edited["spec"]["encoder"] | {"rate_control": "crf", "crf": 17}
         assert client.post("/api/jobs/apply", json={"ids": ids, "encoder": enc}).json()["updated"] == ids
-        assert [j["encoder"] for j in client.get("/api/jobs").json()] == ["x264 crf 17", "x264 crf 17"]
+        assert [j["encoder"] for j in client.get("/api/jobs").json()] == ["x264 CRF 17", "x264 CRF 17"]
 
         commands = client.get(f"/api/jobs/{ids[0]}/commands").json()
         steps = ["script", "index", "script.info", "chapters", "video", "mux"]  # audio is copied
@@ -652,7 +652,7 @@ def test_notifications(tmp_path):
         assert [d["name"] for d in saved] == ["Phone", "discord", "Off", "Down"]
         assert saved[1]["events"] == ["job_done", "job_failed", "queue_finished"]
         bad = client.put("/api/config", json={"notifications": [{"url": "nope"}]})
-        assert bad.status_code == 422 and "recognise" in bad.json()["detail"]
+        assert bad.status_code == 422 and "recognize" in bad.json()["detail"]
         assert (
             client.put("/api/config", json={"notifications": [{"url": "json://x", "events": ["x"]}]}).status_code == 422
         )
@@ -823,6 +823,30 @@ def test_reuse_question(tmp_path):
         q.wait(5)
         assert run.seen[-1] == ([], set())
         assert client.post("/api/queue/reuse", json={"ids": [two]}).json() == {"jobs": []}
+
+
+def test_reuse_answered_on_queue(tmp_path):
+    """A running queue takes a job as soon as it's queued, so /enqueue takes the reuse answer too. Start queue
+    doesn't ask about it again; unqueued, it's asked again."""
+    make_files(tmp_path, "S01E01")
+    with make_client(tmp_path, run=KeepSpyRun()) as client:
+        (one,) = add(client, tmp_path)
+        wait_for(client, one, "ready", "warn")
+        q = client.app.state.queue
+        video = q.get(one).spec.video_output
+        video.parent.mkdir(parents=True)
+        video.write_bytes(b"264")
+        note_finished(video.parent, "video", "made with other settings", [video], 12.0)
+        assert [j["id"] for j in client.post("/api/queue/reuse", json={"ids": [one]}).json()["jobs"]] == [one]
+
+        assert client.post("/api/queue/enqueue", json={"ids": [one], "reuse": {one: ["video"]}}).json()["enqueued"]
+        assert q.get(one).state.keep == ["video"]
+        assert client.post("/api/queue/reuse", json={}).json() == {"jobs": []}  # answered on Queue
+
+        client.post("/api/queue/dequeue", json={"ids": [one]})
+        assert q.get(one).state.keep == []
+        client.post("/api/queue/enqueue", json={"ids": [one]})
+        assert [j["id"] for j in client.post("/api/queue/reuse", json={}).json()["jobs"]] == [one]
 
 
 def test_work_folders(tmp_path):
@@ -1047,6 +1071,7 @@ def test_settings_page_config(tmp_path):
         tools = {t["name"]: t for t in cfg["tools"]}
         assert tools["x264"]["path"] == "x264" and tools["x264"]["custom"] is None
         assert cfg["rule_set"] == "manual" and not cfg["roots_custom"] and cfg["restart"] == []
+        assert cfg["data_dir"] == str(tmp_path / "data")  # shown under Settings › Files & folders
 
         changed = client.put("/api/config", json={"tools": {"x264": sys.executable}, "roots": [str(folder)]}).json()
         assert {t["name"]: t for t in changed["tools"]}["x264"]["path"] == sys.executable
@@ -1086,7 +1111,14 @@ def test_presets(tmp_path):
     with make_client(tmp_path) as client:
         listed = client.get("/api/presets").json()
         starters = listed.pop("encoder_starters")
-        assert [s["name"] for s in starters] == ["x265-sdr", "x265-hdr10", "x265-dv", "svtav1-10bit"]
+        assert [s["name"] for s in starters] == [
+            "x265-sdr",
+            "x265-hdr10",
+            "x265-dv",
+            "svtav1-10bit",
+            "svtav1hdr-vq",
+            "svtav1hdr-grain",
+        ]
         assert starters[2]["data"]["options"] == {"level-idc": "5.1"} and starters[2]["data"]["dolby_vision"]
         assert listed == {
             "video": [],
@@ -1289,7 +1321,7 @@ def test_templates(tmp_path):
             assert job["status"] != "blocked", job["issues"] if "issues" in job else job["plan"]["issues"]
             spec = job["spec"]
             assert spec["encoder"]["encoder"] == "x265" and spec["encoder"]["crf"] == 16
-            assert spec["mux"] == {"container": "mkv", "extra": "-x", "pgs_zlib": False} and spec["qpf"] is False
+            assert spec["mux"] == to_json(MuxSettings(container="mkv", extra="-x")) and spec["qpf"] is False
             assert [(f["category"], f["script"]) for f in spec["video"]["filters"]] == [  # the old text, upgraded
                 ("crop", ""),
                 ("resize", ""),
@@ -1308,8 +1340,8 @@ def test_templates(tmp_path):
         client.patch(f"/api/jobs/{ids[0]}", json={"mux": {"container": "mp4", "extra": "-y"}})
         client.post("/api/jobs/apply", json={"ids": ids, "container": "mkv"})
         assert [client.get(f"/api/jobs/{i}").json()["spec"]["mux"] for i in ids] == [
-            {"container": "mkv", "extra": "-y", "pgs_zlib": False},
-            {"container": "mkv", "extra": "-x", "pgs_zlib": False},
+            to_json(MuxSettings(container="mkv", extra="-y")),
+            to_json(MuxSettings(container="mkv", extra="-x")),
         ]
 
         # Auto again, held: the job shows it, can't be queued, and a hand crop meanwhile wins.
@@ -1525,7 +1557,7 @@ def test_new_jobs_start_on_the_rule_sets_mux_defaults(tmp_path, monkeypatch):
     make_files(tmp_path, "S01E01")
     with make_client(tmp_path) as client:
         defaults = client.get("/api/rule-sets").json()[0]["defaults"]["template"]["mux"]
-        assert defaults == {"container": "", "extra": "--chapter-language und", "pgs_zlib": True}
+        assert defaults == to_json(MuxSettings(extra="--chapter-language und", pgs_zlib=True))
         (job_id,) = add(client, tmp_path)
         assert client.get(f"/api/jobs/{job_id}").json()["spec"]["mux"] == defaults
 
@@ -2413,3 +2445,26 @@ def test_mediainfo_reports_on_the_jobs_own_files_only(tmp_path, monkeypatch):
         Path(source).unlink()
         gone = client.get(f"/api/jobs/{job_id}/mediainfo")
         assert gone.status_code == 404 and "Can't find" in gone.json()["detail"]
+
+
+def test_an_invalid_jobs_issues_say_each_check_once():
+    """The failed checks first (the queue row shows the first), then the run's summary of where the file went; a
+    job saved before the summary has the checks joined as its error, which isn't shown a second time."""
+    from types import SimpleNamespace
+
+    from videoforge.core.job import JobState
+    from videoforge.core.models import Issue, Severity
+    from videoforge.server.views import issues
+
+    checks = [Issue(Severity.BLOCK, "name.dual", "Name must not mention dual audio: X"), Issue(Severity.WARN, "a", "w")]
+
+    def shown(error: str) -> list[str]:
+        state = JobState(status=JobStatus.INVALID, error=error, issues=checks)
+        return [i.code for i in issues(SimpleNamespace(probe_error="", state=state, plan=None))]
+
+    assert shown("1 output check failed. The file is kept as X.unpublished-1a2b3c4d.mkv instead of X.mkv") == [
+        "output.name.dual",
+        "run.invalid",
+        "output.a",
+    ]
+    assert shown("Name must not mention dual audio: X") == ["output.name.dual", "output.a"]  # saved before

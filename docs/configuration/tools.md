@@ -15,6 +15,7 @@ On macOS or Linux ARM64, supply native tools and plugins and override the Window
 | [MKVToolNix](https://mkvtoolnix.download/) | `tools/MKVToolNix/mkvmerge.exe` | reading sources, MKV output |
 | x264, x265 | `tools/x264/x264.exe`, `tools/x265/x265.exe` | the video encode |
 | SvtAv1EncApp (SVT-AV1) | `tools/SvtAv1EncApp/SvtAv1EncApp.exe` | AV1 encodes ([Patman86's builds](https://github.com/Patman86/SVT-AV1-Mods-by-Patman/releases), as StaxRip ships, or [SVT-AV1](https://gitlab.com/AOMediaCodec/SVT-AV1)'s own) |
+| SvtAv1EncApp (SVT-AV1-HDR) | `tools/SvtAv1EncApp-HDR/SvtAv1EncApp.exe` | AV1 encodes with HDR10+ and Dolby Vision ([juliobbv-p's builds](https://github.com/juliobbv-p/svt-av1-hdr/releases); bundled; the Windows build needs an AVX2 CPU. A build without libdovi and hdr10plus encodes, but can't carry the metadata) |
 | VapourSynth plugins | `tools/vs-plugins/` | source filters (FFMS2, the default; L-SMASH; BestSource) and any filters your scripts use: see [VapourSynth plugins](#bundled-vapoursynth-plugins) |
 | [MP4Box](https://gpac.io/) (GPAC) | `tools/GPAC/mp4box.exe` | MP4 output |
 | ffmpeg | `tools/ffmpeg/bin/ffmpeg.exe` | FLAC / Opus / AAC / AC-3 / E-AC-3 / MP3 / Vorbis encodes, and decoding for the other audio encoders |

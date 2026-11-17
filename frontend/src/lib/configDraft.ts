@@ -14,6 +14,7 @@ export function configDraft(config: ConfigState, changes: ConfigChanges): Config
     'sample_quality',
     'auto_index',
     'auto_crop',
+    'naming',
   ] as const) {
     if (changes[key] !== undefined) Object.assign(next, { [key]: changes[key] })
   }

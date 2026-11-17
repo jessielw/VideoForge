@@ -13,6 +13,7 @@ const video: EncoderSettings = {
   options: { ref: '4' },
   extra: '',
   source_color: true,
+  color_override: false,
   hdr10plus: false,
   dolby_vision: false,
 }
@@ -29,7 +30,15 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
       custom: null,
     },
     encoder: video,
-    mux: { container: 'mkv', extra: '', pgs_zlib: false },
+    mux: {
+      container: 'mkv',
+      extra: '',
+      pgs_zlib: false,
+      name_template: '',
+      template_file_name: false,
+      template_title: false,
+      name_suffix: '',
+    },
     qpf: true,
     crop_mode: 'keep',
     audio: null,
@@ -68,6 +77,7 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
     sample_quality: false,
     auto_index: true,
     auto_crop: true,
+    naming: {},
     parallel_audio: 2,
     parallel_audio_default: 2,
     delete_work_dir: false,
@@ -78,6 +88,7 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
     tool_priority_default: 'normal',
     priorities: ['normal'],
     records_dir: 'D:/records',
+    data_dir: 'D:/VideoForge',
     notifications: [],
     notification_events: [],
     actions: [],
@@ -156,6 +167,24 @@ async function paste(page: Page, text: string) {
   }, text)
 }
 
+test('Matched files keeps its size while the sources match again', async ({ page }) => {
+  const { errors, sources } = await fixture(page, [])
+  await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
+  const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
+  await expect(card).toContainText('2 job(s)')
+  const before = (await card.boundingBox())!.height
+  // Hold the next match, so the page stays in "Matching…" while it is measured.
+  let release!: () => void
+  const held = new Promise<void>((resolve) => (release = resolve))
+  await page.route('**/api/match', async (route) => (await held, await route.fallback()))
+  await paste(page, '"D:/Media/Show.S01E03.mkv"')
+  await expect(card).toContainText('Matching…')
+  expect((await card.boundingBox())!.height).toBeGreaterThanOrEqual(Math.min(before, 192)) // no collapse to one line
+  release()
+  await expect(page.getByText('Show.S01E03.mkv')).toBeVisible()
+  expect(errors).toEqual([])
+})
+
 test('pasted paths land on New jobs; the bottom bar says what Add will do and then offers the queue', async ({
   page,
 }) => {
@@ -178,6 +207,9 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
 
   await page.getByRole('checkbox', { name: 'Auto-crop' }).click()
   await expect(bar).toContainText('will index ·')
+  await expect(page.getByRole('checkbox', { name: 'Index', exact: true })).toHaveAccessibleDescription(
+    '(indexes each job in the background for its preview)',
+  )
   await page.getByRole('checkbox', { name: 'Index', exact: true }).click()
   await expect(bar).toContainText('will neither index nor crop')
   await bar.getByRole('button', { name: /Add 2 jobs/ }).click()
@@ -189,7 +221,7 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
   expect(posted[0].sources).toEqual(sources)
 
   await bar.getByRole('button', { name: 'Add more' }).click() // a clean form for the next batch
-  await expect(bar).toContainText('Paste file paths anywhere')
+  await expect(bar).toContainText('Paste file paths on any page, or Browse')
   await expect(page.getByText('Show.S01E02.mkv')).toHaveCount(0)
 
   await paste(page, sources[0])
