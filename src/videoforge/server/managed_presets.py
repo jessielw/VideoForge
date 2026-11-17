@@ -249,13 +249,13 @@ def _enforce(
     occupant = None if reserved_name else _occupant(db, profile, e)
     if occupant is not None:  # the user's own preset where this one belongs: it becomes the plugin's
         target, record = occupant
-        if current is not None and name != target:  # the plugin's numbered copy beside it goes
+        if name is not None and current is not None and name != target:  # the plugin's numbered copy beside it goes
             db.execute("DELETE FROM presets WHERE profile = ? AND kind = ? AND name = ?", (profile, e.kind, name))
             _moved(db, profile, e.kind, name, target)
         if digest(record) != e.digest:
             _put(db, profile, e.kind, target, e.record)
         return target, "took over"
-    if current is None:
+    if name is None or current is None:
         target, _ = _add(db, profile, e, reserved)
         if name is not None:
             _moved(db, profile, e.kind, name, target)
