@@ -114,7 +114,9 @@ VideoForge reads source color information and supplies encoder flags because the
 
 The source's values win over the same flags in the options and extra arguments, as StaxRip's **Import VUI metadata** does: a `--colorprim bt709` in a preset is left out of the command for a BT.2020 source, so the encode isn't mislabeled (a BT.2020 picture tagged BT.709 plays oversaturated). A flag for a value the source doesn't have still applies, and the chroma location is always the options'. The job notes a flag it left out (`video.color_source`).
 
-Turn on **Override the source's color** (under **Color from the source**) when the source's tags are wrong, or the script converts the color: the options' and extra arguments' flags then win, and the job notes them (`video.color_override`). Unticking **Color from the source** leaves the source's tags out altogether. A UHD source with no color description, and no flags in the options to fill it in, gets a note too (`video.color_untagged`).
+For x265, an HDR10 source's `--hdr10` wins the same way: a preset written for SDR sources with `--no-hdr10` doesn't turn the HDR10 signalling off on an HDR10 source, because the job's `--hdr10` / `--no-hdr10` are left out of the command. On an SDR source the preset's `--no-hdr10` stays. `--hdr10-opt` is tuning, not metadata, so it stays the preset's choice.
+
+Turn on **Override the source's color** (under **Color from the source**) when the source's tags are wrong, or the script converts the color: the options' and extra arguments' flags then win (`--no-hdr10` included), and the job notes them (`video.color_override`). Unticking **Color from the source** leaves the source's tags out altogether. A UHD source with no color description, and no flags in the options to fill it in, gets a note too (`video.color_untagged`).
 
 ## HDR10+ and Dolby Vision
 

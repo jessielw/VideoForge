@@ -45,7 +45,8 @@ src/videoforge/
                          fps, the encoder's eta); a VP8 / VP9 / SVT-AV1 job's issues
       color.py           The source's colour (MediaInfo -> VideoInfo.color) -> --colorprim/--transfer/... and
                          x265's HDR10 SEI with StaxRip's --repeat-headers --hrd --aud (and the VBV from --level-idc),
-                         before the job's options (vspipe's y4m carries no colour; a --no- option turns one off);
+                         before the job's options (vspipe's y4m carries no colour; a --no- option turns one off,
+                         except --no-hdr10, which an HDR10 source's --hdr10 wins over unless color_override);
                          ffmpeg's -color_* for VP8 / VP9, SvtAv1EncApp's H.273 codes and HDR10 (in plain
                          numbers), and the H.273 codes (AV1's HDR10 too) the mux tags their container with
                          (effective_container_color resolves defaults, options, and extra arguments in encoder
@@ -56,7 +57,8 @@ src/videoforge/
                          FEL's enhancement layer (demux, MKV) and its HDR10 values from the RPU; their frame checks;
                          a UHD Blu-ray M2TS's second video track (its enhancement layer, dual_layer); an AV1
                          encode's HDR10+ and RPU counted from its IVF's metadata OBUs (av1_metadata)
-      qpf.py             AutoQPF: chapters -> qpf + chapter file
+      qpf.py             AutoQPF: chapters -> qpf + chapter file (JobSpec.makes_chapters); the user's chapter
+                         file (OGM or XML, rewritten as strict OGM) -> qpf alone (JobSpec.makes_qpfile)
       vfr.py             A VFR source's timestamps (mkvextract timestamps_v2) onto an MKV's encode, while they fit
       remux.py           One track of an MP4 / TS source copied into an MKV (mkvmerge), for mkvextract
       burn.py            A subtitle track burned into the video (SubText's TextFile / ImageFile; a source track

@@ -170,7 +170,7 @@ Subtitle entries have `format` (`"srt"`, `"pgs"`, `"ass"`, `"tx3g"`, ...: as the
 
 ### `chapters`
 
-`from` is `"autoqpf"` (generated from the source, with the `qpfile` the encoder placed keyframes by), `"file"` (a chapter file the user gave: `path`), `"source"` (the source's own chapters) or `null` (none).
+`from` is `"autoqpf"` (generated from the source, with the `qpfile` the encoder placed keyframes by), `"file"` (a chapter file the user gave: `path`, with the `qpfile` made from it when AutoQPF is on), `"source"` (the source's own chapters) or `null` (none).
 
 ### `steps[]` and `issues[]`
 

@@ -56,7 +56,12 @@ Two jobs that would write the same file are both blocked until one gets a label,
 
 ## Chapters and AutoQPF
 
-Jobs can use source chapters, an added chapter file, or AutoQPF-generated chapters. AutoQPF generates a chapter file and a QP file so supported encoders place keyframes at chapter starts. A reused video encode has already chosen its keyframes.
+Jobs can use source chapters, an added chapter file, or AutoQPF-generated chapters. With AutoQPF on, the encoder gets a QP file that places keyframes at the chapter starts, so the chapters land on clean cuts. The QP file is made from the chapters that get muxed:
+
+- **No chapter file:** AutoQPF reads the source's chapters (or adds one every 5% of the runtime), writes them as the job's chapter file, and makes the QP file from them.
+- **A chapter file you added** (OGM `.txt` or Matroska `.xml`): the output gets your file as it is, and AutoQPF makes only the QP file from it. A file with no chapters VideoForge can read fails the job's chapters step.
+
+With AutoQPF off, the encoder gets no QP file, and an added chapter file is still muxed. VP8, VP9 and SVT-AV1 (in CRF) take the QP file's frames as forced keyframes. A reused video encode has already chosen its keyframes, and a test encode leaves them out.
 
 The completed [job record](../job-record.md#chapters) states where the chapters came from.
 
