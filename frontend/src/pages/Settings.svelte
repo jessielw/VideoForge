@@ -33,7 +33,7 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import { api } from '../lib/api'
   import { configDraft } from '../lib/configDraft'
-  import { SETTINGS_TAB_KEY, takeSettingsSection } from '../lib/settingsLink'
+  import { SETTINGS_TAB_KEY, peekSettingsSection, takeSettingsSection } from '../lib/settingsLink'
   import { saves } from '../lib/saves'
   import { PRIORITY_LABEL } from '../lib/format'
   import { app } from '../lib/state.svelte'
@@ -90,12 +90,15 @@
       error = e instanceof Error ? e.message : String(e)
       return
     }
-    const section = takeSettingsSection() // a link elsewhere asked for it: shown and focused
+    const section = peekSettingsSection() // a link elsewhere asked for it: shown and focused
     if (section) {
       await tick()
       const target = document.getElementById(section)
-      target?.scrollIntoView({ block: 'start' })
-      target?.focus({ preventScroll: true })
+      if (target) {
+        takeSettingsSection() // one not shown yet (it loads its own data) takes it itself
+        target.scrollIntoView({ block: 'start' })
+        target.focus({ preventScroll: true })
+      }
     }
     draft.events = defaultEvents()
     checkAll()

@@ -347,7 +347,7 @@ class Store:
     def managed_presets(self) -> list[dict]:
         """The active profile's managed presets and where each stands."""
         with self._lock:
-            return managed_presets.status(self._db, self._profile)
+            return managed_presets.status(self._db, self._profile, self._packs)
 
     def reset_managed(self, plugin: str, kind: str, key: str) -> str:
         """Put one managed preset back as its plugin ships it; its name. KeyError: no such preset."""

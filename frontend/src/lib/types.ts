@@ -688,9 +688,13 @@ export interface ManagedPreset {
   name: string // storage identity
   label: string // what to show
   group: string[]
-  state: 'current' | 'edited' | 'removed'
+  // replaced: deleted, and a preset of the user's own sits where it would go
+  state: 'current' | 'edited' | 'removed' | 'replaced'
   retired: boolean // the plugin no longer ships it
   update_available: boolean // the plugin has a newer version, and this one was edited so it was kept
+  replaced_by?: string | null // state replaced: the user's preset in its place (absent from older servers)
+  shipping?: string | null // digest of the version the plugin ships now
+  stale?: boolean // the preset in use isn't that version: edited with an update waiting, or replaced
 }
 export interface ManagedPresets {
   presets: ManagedPreset[]
@@ -772,6 +776,8 @@ export interface Presets {
   template_defaults: Record<string, string> // rule set id -> its default template's name
   subs_default?: TemplateSubs | null // Settings: subtitle rules for new jobs whose template has none
   encoder_starters: Preset<EncoderSettings>[] // built in for every rule set (core/video/starters.py)
+  // plugin presets that differ from what their plugin ships, which the next start puts back (absent: older server)
+  plugin_stale?: { plugin: string; kind: PresetKind; key: string; shipping?: string | null }[]
 }
 export type PresetKind = 'video' | 'encoder' | 'audio' | 'template'
 

@@ -1127,6 +1127,7 @@ def test_presets(tmp_path):
             "template": [],
             "template_defaults": {},
             "subs_default": None,
+            "plugin_stale": [],
         }
         saved = client.put(
             "/api/presets/encoder/Fast x265", json={"encoder": "x265", "crf": 20, "preset": "fast"}

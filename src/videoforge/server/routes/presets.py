@@ -52,6 +52,10 @@ def _all(request: Request) -> dict[str, Any]:
     default_subs = subs_default(store)
     out["subs_default"] = to_json(default_subs) if default_subs else None
     out["encoder_starters"] = [{"name": s.name, "label": s.label, "data": to_json(s.settings)} for s in starters()]
+    # plugin presets the next start puts back (server/managed_presets.py): the app-wide notice reads these
+    out["plugin_stale"] = [
+        {k: m[k] for k in ("plugin", "kind", "key", "shipping")} for m in store.managed_presets() if m["stale"]
+    ]
     return out
 
 

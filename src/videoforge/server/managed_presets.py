@@ -1,23 +1,27 @@
-"""Presets a plugin ships and keeps up to date, without overwriting what a user changed.
+"""Presets a plugin ships, kept exactly as the plugin ships them: the pack is the truth.
 
 A plugin names a preset pack in its manifest (`presets = "presets/pack.json"`, the preset pack format with
-a `key` on every entry). At every start, and when a profile is created, each profile is brought in line with
-the packs of the plugins installed. A shipped preset is *managed*: the profile remembers its key and a
-digest of the record as shipped, which tells an untouched preset from one the user edited.
+a `key` on every entry). At every start, and when a profile is created, imported or reset, each profile is
+brought in line with the packs of the plugins installed (and enabled). A shipped preset is *managed*: the
+profile remembers its key, where it is stored and a digest of the record as shipped.
 
-    new key                  -> added (a taken name gets a numbered copy)
-    untouched, pack changed  -> updated in place (same storage name, so a default template stays one)
-    edited by the user       -> left alone; `update_available` says the pack has a newer version
-    deleted by the user      -> stays deleted (`reset` brings it back)
-    key gone from the pack   -> kept, marked retired
-    renamed by the user      -> a template or video preset is its name, so this is a delete: the managed
-                                one stays gone and the renamed one is the user's own
+    new key                  -> added; a preset of the user's own with its name is taken over (overwritten),
+                                so the plugin's never sits beside an older copy as "Name (2)"
+    pack changed             -> updated in place (same storage name, so a default template stays one)
+    edited by the user       -> put back as shipped
+    deleted by the user      -> put back
+    the user's own preset under its name (a "Name (2)" deleted as a duplicate, an import of an older pack)
+                             -> taken over; a numbered copy of the plugin's beside it goes
+    key gone from the pack   -> kept, marked retired; no longer kept in line
 
+Between starts `status` says which ones differ from the pack (`stale`), and `reset` puts one back at once.
+A template the user renamed is a new preset of theirs, and the managed one is put back under its name.
 Encoder and audio presets are stored under a random id with a label and folder, so renaming one is an edit.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 import hashlib
 import json
@@ -155,6 +159,33 @@ def _identical(db: sqlite3.Connection, profile: str, e: Shipped) -> str | None:
     return None
 
 
+def _occupant(db: sqlite3.Connection, profile: str, e: Shipped) -> tuple[str, Any] | None:
+    """The user's own preset where a shipped one would go, which no plugin manages: (its stored name, its record).
+    A template or video preset is found by its name; an encoder or audio preset by its encoder (or action), folder
+    and label."""
+    managed = {
+        name
+        for (name,) in db.execute("SELECT name FROM managed_presets WHERE profile = ? AND kind = ?", (profile, e.kind))
+    }
+    if e.kind not in GROUPED:
+        record = None if e.name in managed else _stored(db, profile, e.kind, e.name)
+        return None if record is None else (e.name, record)
+    parent = "encoder" if e.kind == "encoder" else "action"
+    rows = db.execute("SELECT name, data FROM presets WHERE profile = ? AND kind = ? ORDER BY name", (profile, e.kind))
+    for name, raw in rows:
+        if name in managed:
+            continue
+        record = json.loads(raw)
+        settings = record.get("settings", record)
+        if (
+            record.get("label") == e.name
+            and tuple(record.get("group", ())) == e.group
+            and settings.get(parent) == e.data[parent]
+        ):
+            return name, record
+    return None
+
+
 def _numbered(base: str, used: Any) -> str:
     label, i = base, 2
     while used(label):
@@ -185,68 +216,108 @@ def _add(db: sqlite3.Connection, profile: str, e: Shipped, reserved: tuple[str, 
     return name, "new" if label == e.name else "copy"
 
 
+def _put(db: sqlite3.Connection, profile: str, kind: str, name: str, record: Any) -> None:
+    db.execute(
+        "UPDATE presets SET data = ? WHERE profile = ? AND kind = ? AND name = ?",
+        (json.dumps(record), profile, kind, name),
+    )
+
+
+def _moved(db: sqlite3.Connection, profile: str, kind: str, old: str, new: str) -> None:
+    """A template now stored as `new` instead of `old`: a rule set's default that named it follows it."""
+    if kind != "template" or old == new:
+        return
+    row = db.execute(
+        "SELECT value FROM settings WHERE profile = ? AND key = 'template_defaults'", (profile,)
+    ).fetchone()
+    defaults = json.loads(row[0]) if row else None
+    if isinstance(defaults, dict) and old in defaults.values():
+        defaults = {rule_set: new if name == old else name for rule_set, name in defaults.items()}
+        db.execute(
+            "UPDATE settings SET value = ? WHERE profile = ? AND key = 'template_defaults'",
+            (json.dumps(defaults), profile),
+        )
+
+
+def _enforce(
+    db: sqlite3.Connection, profile: str, e: Shipped, name: str | None, reserved: tuple[str, ...]
+) -> tuple[str, str | None]:
+    """Make the profile hold exactly what the plugin ships for `e`, managed under `name` (None: not yet).
+    (Where it is stored now, what was done: 'new', 'took over', 'restored', 'updated', or None.)"""
+    current = None if name is None else _stored(db, profile, e.kind, name)
+    reserved_name = e.kind not in GROUPED and e.name in reserved
+    occupant = None if reserved_name else _occupant(db, profile, e)
+    if occupant is not None:  # the user's own preset where this one belongs: it becomes the plugin's
+        target, record = occupant
+        if name is not None and current is not None and name != target:  # the plugin's numbered copy beside it goes
+            db.execute("DELETE FROM presets WHERE profile = ? AND kind = ? AND name = ?", (profile, e.kind, name))
+            _moved(db, profile, e.kind, name, target)
+        if digest(record) != e.digest:
+            _put(db, profile, e.kind, target, e.record)
+        return target, "took over"
+    if name is None or current is None:
+        target, _ = _add(db, profile, e, reserved)
+        if name is not None:
+            _moved(db, profile, e.kind, name, target)
+        return target, "new" if name is None else "restored"
+    if e.kind not in GROUPED and name != e.name and not reserved_name and _stored(db, profile, e.kind, e.name) is None:
+        # a numbered template or video preset whose own name is free again: back under it
+        db.execute("DELETE FROM presets WHERE profile = ? AND kind = ? AND name = ?", (profile, e.kind, name))
+        db.execute(
+            "INSERT INTO presets (profile, kind, name, data) VALUES (?, ?, ?, ?)",
+            (profile, e.kind, e.name, json.dumps(e.record)),
+        )
+        _moved(db, profile, e.kind, name, e.name)
+        return e.name, "updated"
+    if digest(current) != e.digest:
+        _put(db, profile, e.kind, name, e.record)
+        return name, "updated"
+    return name, None
+
+
 def sync(
     db: sqlite3.Connection, profile: str, packs: list[Pack], reserved: dict[str, tuple[str, ...]]
 ) -> list[dict[str, str]]:
     """Bring one profile in line with the packs; what happened to each preset that changed."""
     report: list[dict[str, str]] = []
 
-    def note(e_plugin: str, kind: str, key: str, name: str, action: str) -> None:
-        report.append({"plugin": e_plugin, "kind": kind, "key": key, "name": name, "action": action})
-
     db.execute("BEGIN")
     try:
-        if not db.execute("SELECT 1 FROM presets WHERE profile = ? LIMIT 1", (profile,)).fetchone():
-            # No preset of any kind: a library reset or replaced by an older build (or another install's
-            # database), not someone deleting them one by one. Ship the packs again.
-            forget_missing(db, profile)
         for pack in packs:
             known = {
-                (kind, key): (name, shipped, available)
-                for kind, key, name, shipped, available in db.execute(
-                    "SELECT kind, key, name, shipped, available FROM managed_presets WHERE profile = ? AND plugin = ?",
+                (kind, key): name
+                for kind, key, name in db.execute(
+                    "SELECT kind, key, name FROM managed_presets WHERE profile = ? AND plugin = ?",
                     (profile, pack.plugin),
                 )
             }
             for e in pack.entries:
-                row = known.pop((e.kind, e.key), None)
-                if row is None:
-                    name, action = _add(db, profile, e, reserved.get(e.kind, ()))
+                had = (e.kind, e.key) in known
+                name = known.pop((e.kind, e.key), None)
+                stored, action = _enforce(db, profile, e, name, reserved.get(e.kind, ()))
+                if had:
+                    db.execute(
+                        "UPDATE managed_presets SET name = ?, shipped = ?, available = NULL, retired = 0"
+                        " WHERE profile = ? AND plugin = ? AND kind = ? AND key = ?",
+                        (stored, e.digest, profile, pack.plugin, e.kind, e.key),
+                    )
+                else:
                     db.execute(
                         "INSERT INTO managed_presets (profile, plugin, kind, key, name, shipped) VALUES (?, ?, ?, ?, ?, ?)",
-                        (profile, pack.plugin, e.kind, e.key, name, e.digest),
+                        (profile, pack.plugin, e.kind, e.key, stored, e.digest),
                     )
-                    note(pack.plugin, e.kind, e.key, name, action)
-                    continue
-                name, shipped, flagged = row
-                current = _stored(db, profile, e.kind, name)
-                newer = e.digest != shipped
-                if current is not None and digest(current) == shipped and newer:
-                    db.execute(
-                        "UPDATE presets SET data = ? WHERE profile = ? AND kind = ? AND name = ?",
-                        (json.dumps(e.record), profile, e.kind, name),
+                if action is not None:
+                    report.append(
+                        {"plugin": pack.plugin, "kind": e.kind, "key": e.key, "name": stored, "action": action}
                     )
-                    db.execute(
-                        "UPDATE managed_presets SET shipped = ?, available = NULL, retired = 0"
-                        " WHERE profile = ? AND plugin = ? AND kind = ? AND key = ?",
-                        (e.digest, profile, pack.plugin, e.kind, e.key),
-                    )
-                    note(pack.plugin, e.kind, e.key, name, "updated")
-                    continue
-                db.execute(
-                    "UPDATE managed_presets SET available = ?, retired = 0"
-                    " WHERE profile = ? AND plugin = ? AND kind = ? AND key = ?",
-                    (e.digest if newer and current is not None else None, profile, pack.plugin, e.kind, e.key),
-                )
-                if current is not None and newer and flagged != e.digest:  # said once, then the flag stays
-                    note(pack.plugin, e.kind, e.key, name, "kept")
-            for (kind, key), (name, _, _) in known.items():  # shipped before, not in this pack
+            for (kind, key), name in known.items():  # shipped before, not in this pack
                 db.execute(
                     "UPDATE managed_presets SET retired = 1, available = NULL"
-                    " WHERE profile = ? AND plugin = ? AND kind = ? AND key = ?",
+                    " WHERE profile = ? AND plugin = ? AND kind = ? AND key = ? AND retired = 0",
                     (profile, pack.plugin, kind, key),
                 )
-                note(pack.plugin, kind, key, name, "retired")
+                if db.execute("SELECT changes()").fetchone()[0]:
+                    report.append({"plugin": pack.plugin, "kind": kind, "key": key, "name": name, "action": "retired"})
         db.execute("COMMIT")
     except Exception:
         db.execute("ROLLBACK")
@@ -262,8 +333,11 @@ def forget_missing(db: sqlite3.Connection, profile: str) -> None:
             db.execute("DELETE FROM managed_presets WHERE profile = ? AND kind = ? AND name = ?", (profile, kind, name))
 
 
-def status(db: sqlite3.Connection, profile: str) -> list[dict[str, Any]]:
-    """Every managed preset of a profile: where it stands against what its plugin shipped."""
+def status(db: sqlite3.Connection, profile: str, packs: Sequence[Pack] = ()) -> list[dict[str, Any]]:
+    """Every managed preset of a profile: where it stands against what its plugin ships. A deleted one whose
+    place the user's own preset took (found through `packs`) is `replaced`, `replaced_by` naming that preset.
+    Sync puts every one back, so anything but `current` is a change since the last start."""
+    shipping = {(e.plugin, e.kind, e.key): e for p in packs for e in p.entries}
     out = []
     rows = db.execute(
         "SELECT plugin, kind, key, name, shipped, available, retired FROM managed_presets WHERE profile = ?"
@@ -275,6 +349,13 @@ def status(db: sqlite3.Connection, profile: str) -> list[dict[str, Any]]:
         state = "removed" if current is None else "current" if digest(current) == shipped else "edited"
         label = current["label"] if current is not None and kind in GROUPED else name if kind not in GROUPED else key
         group = current.get("group", []) if current is not None and kind in GROUPED else []
+        replaced_by = None
+        e = shipping.get((plugin, kind, key))
+        if current is None and not retired and e is not None:
+            label, group = e.name, list(e.group)
+            occupant = _occupant(db, profile, e)
+            if occupant is not None:
+                state, replaced_by = "replaced", occupant[0] if kind not in GROUPED else occupant[1]["label"]
         out.append(
             {
                 "plugin": plugin,
@@ -286,29 +367,27 @@ def status(db: sqlite3.Connection, profile: str) -> list[dict[str, Any]]:
                 "state": state,
                 "retired": bool(retired),
                 "update_available": available is not None,
+                "replaced_by": replaced_by,  # state "replaced": the user's preset in its place
+                # the version the plugin ships now (its digest), and whether the preset in use isn't it
+                "shipping": e.digest if e is not None else None,
+                # the next start (or `reset`) puts it back: edited, deleted or replaced since the last one
+                "stale": state != "current" and not retired,
             }
         )
     return out
 
 
 def reset(db: sqlite3.Connection, profile: str, e: Shipped, reserved: tuple[str, ...]) -> str:
-    """Put a managed preset back as its plugin ships it, edited or removed; its name."""
+    """Put a managed preset back as its plugin ships it now, as the next start would; its name."""
     row = db.execute(
         "SELECT name FROM managed_presets WHERE profile = ? AND plugin = ? AND kind = ? AND key = ?",
         (profile, e.plugin, e.kind, e.key),
     ).fetchone()
     if row is None:
         raise KeyError(e.key)
-    name = row[0]
     db.execute("BEGIN")
     try:
-        if _stored(db, profile, e.kind, name) is None:
-            name, _ = _add(db, profile, e, reserved)
-        else:
-            db.execute(
-                "UPDATE presets SET data = ? WHERE profile = ? AND kind = ? AND name = ?",
-                (json.dumps(e.record), profile, e.kind, name),
-            )
+        name, _ = _enforce(db, profile, e, row[0], reserved)
         db.execute(
             "UPDATE managed_presets SET name = ?, shipped = ?, available = NULL, retired = 0"
             " WHERE profile = ? AND plugin = ? AND kind = ? AND key = ?",
