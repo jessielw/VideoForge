@@ -655,7 +655,7 @@ def test_a_vfr_mp4_source_is_copied_into_an_mkv_for_its_timestamps(rule_set, tmp
     mkv, stamps = job.work_dir / "timestamps.mkv", job.work_dir / "timestamps.source.txt"
     assert ids.index("timestamps.remux") + 1 == ids.index("timestamps")
     remux = step["timestamps.remux"].argvs[0]
-    assert remux[:5] == (APP.tools.mkvmerge, *UI, "--output", str(mkv))
+    assert remux[:5] == (APP.tools.mkvmerge, *mkv_ui(APP.tools.mkvmerge), "--output", str(mkv))
     assert remux[5:8] == ("--video-tracks", "0", "--no-subtitles") and remux[-1] == str(mp4)
     argv = ("mkvextract", *UI, "timestamps_v2", str(mkv), f"0:{stamps}")
     assert step["timestamps"].argvs == (argv,) and step["timestamps"].inputs == (mkv,)
