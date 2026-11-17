@@ -2,6 +2,8 @@ import { test, expect, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import type { ConfigState, ManagedPlugin, ManagedPreset, PluginInventory } from '../../src/lib/types.ts'
 
+const EMPTY_PRESETS = { video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] }
+
 async function fixture(
   page: Page,
   options: { installed?: boolean; enabled?: boolean; id?: string; managed?: ManagedPreset[] } = {},
@@ -58,6 +60,13 @@ async function fixture(
     error: null,
   }
   const managed: ManagedPreset[] = options.managed ?? []
+  // what /api/presets says the next start puts back, as the server derives it from the managed list
+  const presets = () => ({
+    ...EMPTY_PRESETS,
+    plugin_stale: managed
+      .filter((m) => m.stale)
+      .map(({ plugin, kind, key, shipping }) => ({ plugin, kind, key, shipping })),
+  })
   const inventory: PluginInventory = {
     folder: 'plugins',
     items: options.installed ? [plugin] : [],
@@ -108,11 +117,11 @@ async function fixture(
       const body = request.postDataJSON()
       calls.push({ path, body })
       const found = managed.find((m) => m.key === body.key)!
-      Object.assign(found, { state: 'current', update_available: false })
+      Object.assign(found, { state: 'current', update_available: false, stale: false })
       await route.fulfill({
         json: {
           name: found.name,
-          presets: { video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] },
+          presets: presets(),
         },
       })
       return
@@ -160,7 +169,7 @@ async function fixture(
       '/api/rule-sets': [],
       '/api/health': { ok: true, version: 'test' },
       '/api/profiles': { profiles: [{ id: 'default', name: 'Default' }], active: 'default' },
-      '/api/presets': { video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] },
+      '/api/presets': presets(),
       '/api/filter-presets': [],
       '/api/config/encoders': [],
       '/api/config/video-options/x264': { dashes: '--', options: [] },
@@ -296,63 +305,56 @@ test('event logger controls work when privacy filters block its name in request 
   expect(errors).toEqual([])
 })
 
-test('presets a plugin ships: an edited one is kept and reset needs a second click', async ({ page }) => {
+test('presets a plugin ships: what the next start puts back, and putting one back now', async ({ page }) => {
   const shipped = {
     plugin: 'example',
     kind: 'template',
     group: [] as string[],
     retired: false,
+    update_available: false,
   } as const
   const managed: ManagedPreset[] = [
+    { ...shipped, key: 'remux', name: 'Example remux', label: 'Example remux', state: 'edited', stale: true },
+    { ...shipped, key: 'extra', name: 'Example extra', label: 'Example extra', state: 'removed', stale: true },
     {
       ...shipped,
-      key: 'remux',
-      name: 'Example remux',
-      label: 'Example remux',
-      state: 'edited',
-      update_available: true,
+      key: 'mine',
+      name: 'Example mine (2)',
+      label: 'Example mine',
+      state: 'replaced',
+      replaced_by: 'Example mine',
+      stale: true,
     },
-    {
-      ...shipped,
-      key: 'extra',
-      name: 'Example extra',
-      label: 'Example extra',
-      state: 'removed',
-      update_available: false,
-    },
-    {
-      ...shipped,
-      key: 'plain',
-      name: 'Example plain',
-      label: 'Example plain',
-      state: 'current',
-      update_available: false,
-    },
+    { ...shipped, key: 'plain', name: 'Example plain', label: 'Example plain', state: 'current', stale: false },
   ]
   const { calls, errors } = await fixture(page, { installed: true, managed })
   await page.getByRole('button', { name: 'Presets', exact: true }).click()
   const section = page.getByRole('heading', { name: 'Plugin presets' }).locator('..')
-  await expect(section).toContainText('3 presets, 2 to look at')
-  await expect(section).toContainText('Example remux')
-  await expect(section).toContainText('Edited · newer version available')
+  await expect(section).toContainText('4 presets, 3 to look at')
+  await expect(section).toContainText('edited; the next start puts it back as shipped')
+  await expect(section).toContainText('deleted; the next start puts it back')
+  await expect(section).toContainText('your own “Example mine” has its name')
   await expect(section).not.toContainText('Example plain') // as shipped: nothing to do
-  await section.getByRole('button', { name: 'Restore' }).click() // a deleted one needs no confirmation
+  const row = (label: string) => section.locator('div.text-xs', { hasText: label })
+  await row('Example extra').getByRole('button', { name: 'Put back now' }).click() // nothing of yours: no question
   expect(calls.at(-1)).toEqual({
     path: '/api/preset-packs/managed/reset',
     body: { plugin: 'example', kind: 'template', key: 'extra' },
   })
-  await section.getByRole('button', { name: 'Reset' }).click()
+  await row('Example remux').getByRole('button', { name: 'Put back now' }).click()
   expect(calls.filter((c) => c.path.endsWith('/reset'))).toHaveLength(1) // the first click only asks
-  await section.getByRole('button', { name: 'Discard my edits?' }).click()
-  await expect(section).toContainText('3 presets, all as shipped')
+  await row('Example remux').getByRole('button', { name: 'Discard my edits?' }).click()
   expect(calls.at(-1)).toEqual({
     path: '/api/preset-packs/managed/reset',
     body: { plugin: 'example', kind: 'template', key: 'remux' },
   })
+  await row('Example mine').getByRole('button', { name: 'Put back now' }).click()
+  await row('Example mine').getByRole('button', { name: 'Overwrite my preset?' }).click()
+  await expect(section).toContainText('4 presets, all as shipped')
   expect(errors).toEqual([])
 })
 
-test('presets a plugin ships: Restore all brings back every deleted one', async ({ page }) => {
+test('presets a plugin ships: Put all back now brings back every deleted one at once', async ({ page }) => {
   const managed: ManagedPreset[] = ['a', 'b', 'c'].map((key) => ({
     plugin: 'example',
     kind: 'template',
@@ -363,13 +365,64 @@ test('presets a plugin ships: Restore all brings back every deleted one', async 
     label: `Example ${key}`,
     state: 'removed',
     update_available: false,
+    stale: true,
   }))
   const { calls, errors } = await fixture(page, { installed: true, managed })
   await page.getByRole('button', { name: 'Presets', exact: true }).click()
   const section = page.getByRole('heading', { name: 'Plugin presets' }).locator('..')
-  await section.getByRole('button', { name: 'Restore all deleted (3)' }).click()
+  await section.getByRole('button', { name: 'Put all back now (3)' }).click()
   await expect
     .poll(() => calls.filter((c) => c.path.endsWith('/reset')).map((c) => c.body))
     .toEqual(['a', 'b', 'c'].map((key) => ({ plugin: 'example', kind: 'template', key })))
+  expect(errors).toEqual([])
+})
+
+test('presets a plugin ships: Put all back now asks before overwriting edits', async ({ page }) => {
+  const managed: ManagedPreset[] = ['a', 'b'].map((key) => ({
+    plugin: 'example',
+    kind: 'template',
+    group: [],
+    retired: false,
+    key,
+    name: `Example ${key}`,
+    label: `Example ${key}`,
+    state: 'edited',
+    update_available: false,
+    stale: true,
+  }))
+  const { calls, errors } = await fixture(page, { installed: true, managed })
+  await page.getByRole('button', { name: 'Presets', exact: true }).click()
+  const section = page.getByRole('heading', { name: 'Plugin presets' }).locator('..')
+  await section.getByRole('button', { name: 'Put all back now (2)' }).click()
+  expect(calls.filter((c) => c.path.endsWith('/reset'))).toHaveLength(0)
+  await section.getByRole('button', { name: 'Overwrite my changes to 2?' }).click()
+  await expect.poll(() => calls.filter((c) => c.path.endsWith('/reset')).length).toBe(2)
+  expect(errors).toEqual([])
+})
+
+test('presets a plugin ships: a notice outside Settings while some differ, linking to them', async ({ page }) => {
+  const managed: ManagedPreset[] = [
+    {
+      plugin: 'example',
+      kind: 'template',
+      group: [],
+      retired: false,
+      key: 'remux',
+      name: 'Example remux',
+      label: 'Example remux',
+      state: 'edited',
+      update_available: false,
+      stale: true,
+      shipping: 'abc',
+    },
+  ]
+  const { errors } = await fixture(page, { installed: true, managed })
+  const notice = page.getByRole('status').filter({ hasText: 'differs from what the plugin ships' })
+  await expect(notice).toHaveCount(0) // not on Settings, which lists them itself
+  await page.getByRole('button', { name: 'Log', exact: true }).click()
+  await expect(notice).toContainText('example: 1 preset differs from what the plugin ships')
+  await notice.getByRole('button', { name: 'Review' }).click()
+  await expect(page.getByRole('heading', { name: 'Plugin presets' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Plugin presets' }).locator('..')).toBeFocused()
   expect(errors).toEqual([])
 })

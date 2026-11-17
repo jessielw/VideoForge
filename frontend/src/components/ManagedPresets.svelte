@@ -2,22 +2,34 @@
   import { toast } from 'svelte-sonner'
   import { Button } from '$lib/components/ui/button'
   import { api } from '../lib/api'
+  import { tick } from 'svelte'
   import { app } from '../lib/state.svelte'
+  import { peekSettingsSection, takeSettingsSection } from '../lib/settingsLink'
   import type { ManagedPreset, ManagedPresets } from '../lib/types'
 
-  // The presets plugins ship. A plugin keeps the ones you haven't touched up to date; one you edited is
-  // left alone (and says when the plugin has a newer version), one you deleted stays deleted. Reset puts
-  // either back as the plugin ships it.
+  // The presets plugins ship, which VideoForge keeps exactly as shipped: every start puts back one you edited
+  // or deleted, and overwrites a preset of your own under its name (replaced). Between starts this lists those
+  // (stale) and puts them back at once; StalePluginPresets says so across the app.
   let { disabled = false, refreshKey = 0 }: { disabled?: boolean; refreshKey?: number } = $props()
   let managed = $state<ManagedPresets | null>(null)
   let error = $state('')
   let busy = $state(false)
-  let confirming = $state('') // the row whose reset would discard edits
+  let confirming = $state('') // the row (or "all:<plugin>") whose put-back would overwrite something of yours
 
   async function refresh() {
     try {
       managed = await api.managedPresets()
       error = ''
+      if (peekSettingsSection() === 'plugin-presets') {
+        // the app's stale-presets notice links here; the section shows only once this has loaded
+        await tick()
+        const target = document.getElementById('plugin-presets')
+        if (target) {
+          takeSettingsSection()
+          target.scrollIntoView({ block: 'start' })
+          target.focus({ preventScroll: true })
+        }
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     }
@@ -39,24 +51,34 @@
         plugin,
         total: all.length,
         attention,
-        removed: attention.filter((p) => p.state === 'removed' && !p.retired),
+        stale: attention.filter((p) => p.stale),
       }
     }),
   )
 
   function describe(p: ManagedPreset) {
-    if (p.state === 'removed') return 'Deleted by you'
-    if (p.state === 'edited') return p.update_available ? 'Edited · newer version available' : 'Edited'
-    return 'No longer shipped by the plugin'
+    if (p.retired) return 'no longer shipped by the plugin, so no longer kept as shipped'
+    if (p.state === 'replaced')
+      return `your own “${p.replaced_by ?? p.label}” has its name; the next start overwrites it with the plugin's`
+    if (p.state === 'removed') return 'deleted; the next start puts it back'
+    return 'edited; the next start puts it back as shipped'
   }
 
-  async function restoreAll(plugin: string, removed: ManagedPreset[]) {
+  // Something of yours is overwritten: an edit, or your own preset under the name.
+  const overwrites = (ps: ManagedPreset[]) => ps.some((p) => p.state === 'edited' || p.state === 'replaced')
+
+  async function restoreAll(plugin: string, stale: ManagedPreset[]) {
+    if (overwrites(stale) && confirming !== `all:${plugin}`) {
+      confirming = `all:${plugin}`
+      return
+    }
+    confirming = ''
     busy = true
     try {
       let result
-      for (const p of removed) result = await api.resetManagedPreset({ plugin, kind: p.kind, key: p.key })
+      for (const p of stale) result = await api.resetManagedPreset({ plugin, kind: p.kind, key: p.key })
       if (result) app.presets = result.presets
-      toast.success(`${removed.length} presets are back as ${plugin} ships them`)
+      toast.success(`${stale.length} presets are back as ${plugin} ships them`)
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {
@@ -66,7 +88,7 @@
   }
 
   async function reset(p: ManagedPreset) {
-    if (p.state === 'edited' && confirming !== id(p)) {
+    if (overwrites([p]) && confirming !== id(p)) {
       confirming = id(p)
       return
     }
@@ -86,14 +108,15 @@
 </script>
 
 {#if managed && (managed.presets.length || managed.problems.length)}
-  <section class="col-span-full min-w-0 space-y-3">
+  <section id="plugin-presets" tabindex="-1" class="col-span-full min-w-0 scroll-mt-6 space-y-3 outline-none">
     <h2 class="font-medium">Plugin presets</h2>
     <p class="text-xs text-muted-foreground">
-      Presets that come with a plugin update when the plugin does. A preset you edited stays as you left it, and Reset
-      puts it back as the plugin ships it.
+      Presets that come with a plugin are kept exactly as the plugin ships them. Each time VideoForge starts, it puts
+      back any you edited or deleted, and overwrites a preset of your own with the same name. To keep changes, save them
+      as a preset under a new name.
     </p>
     <div class="divide-y rounded-md border">
-      {#each plugins as { plugin, total, attention, removed } (plugin)}
+      {#each plugins as { plugin, total, attention, stale } (plugin)}
         <div class="space-y-2 px-4 py-3 text-sm">
           <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span class="min-w-0 flex-1">
@@ -104,12 +127,15 @@
                   : ', all as shipped'}
               </span>
             </span>
-            {#if removed.length > 1}
+            {#if stale.length > 1}
               <Button
                 size="sm"
-                variant="outline"
+                variant={confirming === `all:${plugin}` ? 'destructive' : 'outline'}
                 disabled={busy || disabled}
-                onclick={() => restoreAll(plugin, removed)}>Restore all deleted ({removed.length})</Button
+                onclick={() => restoreAll(plugin, stale)}
+                >{confirming === `all:${plugin}`
+                  ? `Overwrite my changes to ${stale.length}?`
+                  : `Put all back now (${stale.length})`}</Button
               >
             {/if}
           </p>
@@ -122,17 +148,17 @@
                     {[...p.group, p.label].join(' / ')}
                     <span class="text-muted-foreground">— {describe(p)}</span>
                   </span>
-                  {#if p.state !== 'current' && !p.retired}
+                  {#if p.stale}
                     <Button
                       size="sm"
                       variant={confirming === id(p) ? 'destructive' : 'outline'}
                       disabled={busy || disabled}
                       onclick={() => reset(p)}
                       >{confirming === id(p)
-                        ? 'Discard my edits?'
-                        : p.state === 'removed'
-                          ? 'Restore'
-                          : 'Reset'}</Button
+                        ? p.state === 'replaced'
+                          ? 'Overwrite my preset?'
+                          : 'Discard my edits?'
+                        : 'Put back now'}</Button
                     >
                   {/if}
                 </div>

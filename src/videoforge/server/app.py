@@ -116,7 +116,14 @@ def create_app(
     bus.subscribe(actions.on_event, JobFinished, QueueFinished, name="actions")
     packs, pack_problems = managed_presets.load_packs(settings.plugins_dir, saved.disabled_plugins)
     defaults_names = tuple(f"{job_queue.rule_sets(pid).name} defaults" for pid in ids)  # a built-in template's name
-    store.use_packs(packs, {"template": defaults_names, "video": defaults_names})
+    changes = store.use_packs(packs, {"template": defaults_names, "video": defaults_names})
+    put_back: dict[tuple[str, str], int] = {}  # a plugin's presets are what it ships: say what this start changed
+    for change in changes:
+        if change["action"] in ("updated", "restored", "took over"):
+            key = (change["profile"], change["plugin"])
+            put_back[key] = put_back.get(key, 0) + 1
+    for (profile_id, plugin), n in put_back.items():
+        logger.info("Profile %s: %d %s preset(s) set to what the plugin ships", profile_id, n, plugin)
     plugin_report = load_plugins(settings.plugins_dir, saved.disabled_plugins)
     plugin_settings = plugin_manager.effective_settings(base.plugins, saved.plugin_settings)
     plugins = PluginHost(

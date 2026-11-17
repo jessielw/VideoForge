@@ -64,18 +64,6 @@ def test_an_untouched_preset_follows_the_pack_in_place(store):
     assert template_row(store)["state"] == "current"
 
 
-def test_an_edited_preset_is_kept_and_flags_the_update(store):
-    store.use_packs([pack()], {})
-    mine = {**templates(store)["Acme remux"], "qpf": "mine"}
-    store.save_preset("template", "Acme remux", mine)
-    assert [c["action"] for c in store.use_packs([pack(doc(2))], {})] == ["kept"]
-    assert templates(store)["Acme remux"] == mine
-    assert (template_row(store)["state"], template_row(store)["update_available"]) == ("edited", True)
-    # the same pack again says nothing new, and the flag stays
-    assert store.use_packs([pack(doc(2))], {}) == []
-    assert template_row(store)["update_available"]
-
-
 def test_reset_restores_the_shipped_version(store):
     store.use_packs([pack()], {})
     store.save_preset("template", "Acme remux", {"qpf": "mine"})
@@ -85,40 +73,11 @@ def test_reset_restores_the_shipped_version(store):
     assert (template_row(store)["state"], template_row(store)["update_available"]) == ("current", False)
 
 
-def test_a_deleted_preset_stays_deleted_until_reset(store):
-    store.use_packs([pack()], {})
-    store.delete_preset("template", "Acme remux")
-    store.use_packs([pack(doc(2))], {})
-    assert "Acme remux" not in templates(store)
-    assert template_row(store)["state"] == "removed"
-    store.reset_managed("acme", "template", "remux")
-    assert "Acme remux" in templates(store)
-
-
 def test_a_key_dropped_from_the_pack_is_retired_not_deleted(store):
     store.use_packs([pack(doc(templates=("remux", "extra")))], {})
     assert [c["action"] for c in store.use_packs([pack(doc(templates=("remux",)))], {})] == ["retired"]
     assert "Acme extra" in templates(store)
     assert next(m for m in store.managed_presets() if m["key"] == "extra")["retired"]
-
-
-def test_a_name_the_user_already_has_gets_a_numbered_copy(store):
-    store.save_preset("template", "Acme remux", {"qpf": "theirs"})
-    assert sorted(c["action"] for c in store.use_packs([pack()], {})) == ["copy", "new"]
-    assert templates(store)["Acme remux"] == {"qpf": "theirs"}
-    assert "Acme remux (2)" in templates(store)
-
-
-def test_an_identical_preset_the_user_already_has_is_adopted_not_copied(store):
-    d = doc()
-    store.save_preset("template", "Acme remux", d["presets"]["template"][0]["data"])
-    store.import_encoder_presets(
-        [{"label": "UHD", "group": ["Acme"], "data": d["presets"]["encoder"][0]["data"]}], max_name=80
-    )
-    assert sorted(c["action"] for c in store.use_packs([pack(d)], {})) == ["new", "new"]
-    assert list(templates(store)) == ["Acme remux"]
-    assert len(store.presets("encoder")) == 1
-    assert {m["name"] for m in store.managed_presets() if m["kind"] == "template"} == {"Acme remux"}
 
 
 def test_an_identical_numbered_copy_is_adopted_too(store):
@@ -227,16 +186,131 @@ def test_a_reset_or_replaced_library_gets_the_plugins_presets_back(store):
     assert len(store.presets("encoder")) == 1
 
 
-def test_a_settings_only_reset_keeps_a_deleted_preset_deleted(store):
-    store.use_packs([pack()], {})
-    store.delete_preset("template", "Acme remux")
-    store.reset_configuration(("rule_set",), ())
-    assert "Acme remux" not in templates(store)
-
-
 def test_a_library_emptied_by_an_older_build_gets_the_presets_back(store):
     store.use_packs([pack()], {})
     store._db.execute("DELETE FROM presets")  # what a reset did before it forgot the managed rows
     store.use_packs([pack()], {})
     assert list(templates(store)) == ["Acme remux"]
     assert len(store.presets("encoder")) == 1
+
+
+def row(store, kind="template"):
+    return next(m for m in store.managed_presets() if m["kind"] == kind)
+
+
+def shipped_template(version=1):
+    return doc(version)["presets"]["template"][0]["data"]
+
+
+def test_an_edited_preset_is_put_back_at_the_next_start(store):
+    store.use_packs([pack()], {})
+    store.save_preset("template", "Acme remux", {"qpf": "mine"})
+    assert (template_row(store)["state"], template_row(store)["stale"]) == ("edited", True)
+    assert [c["action"] for c in store.use_packs([pack()], {})] == ["updated"]
+    assert templates(store)["Acme remux"] == shipped_template()
+    assert (template_row(store)["state"], template_row(store)["stale"]) == ("current", False)
+
+
+def test_an_edited_preset_takes_a_newer_pack_too(store):
+    store.use_packs([pack()], {})
+    store.save_preset("template", "Acme remux", {"qpf": "mine"})
+    store.use_packs([pack(doc(2))], {})
+    assert templates(store)["Acme remux"] == shipped_template(2)
+
+
+def test_a_deleted_preset_comes_back(store):
+    store.use_packs([pack()], {})
+    store.delete_preset("template", "Acme remux")
+    assert (template_row(store)["state"], template_row(store)["stale"]) == ("removed", True)
+    assert [c["action"] for c in store.use_packs([pack()], {})] == ["restored"]
+    assert templates(store)["Acme remux"] == shipped_template()
+
+
+def test_reset_puts_one_back_before_the_next_start(store):
+    store.use_packs([pack()], {})
+    store.delete_preset("template", "Acme remux")
+    assert store.reset_managed("acme", "template", "remux") == "Acme remux"
+    assert template_row(store)["state"] == "current"
+
+
+def test_the_users_preset_with_its_name_is_taken_over_not_numbered(store):
+    store.save_preset("template", "Acme remux", {"qpf": "theirs"})
+    actions = {c["kind"]: c["action"] for c in store.use_packs([pack()], {})}
+    assert actions == {"template": "took over", "encoder": "new"}
+    assert templates(store) == {"Acme remux": shipped_template()}
+    assert template_row(store)["name"] == "Acme remux"
+
+
+def test_an_identical_preset_the_user_already_has_is_taken_over_silently(store):
+    d = doc()
+    store.save_preset("template", "Acme remux", d["presets"]["template"][0]["data"])
+    store.import_encoder_presets(
+        [{"label": "UHD", "group": ["Acme"], "data": d["presets"]["encoder"][0]["data"]}], max_name=80
+    )
+    store.use_packs([pack(d)], {})
+    assert list(templates(store)) == ["Acme remux"]
+    assert len(store.presets("encoder")) == 1
+    assert {m["state"] for m in store.managed_presets()} == {"current"}
+
+
+def test_a_numbered_copy_beside_the_users_preset_folds_into_it(store):
+    # what an older VideoForge left: the plugin's as "(2)" beside the user's own older copy, the default on the copy
+    store.use_packs([pack()], {"template": ("Acme remux",)})
+    assert list(templates(store)) == ["Acme remux (2)"]
+    store.set_setting("template_defaults", {"acme": "Acme remux (2)"})
+    store.save_preset("template", "Acme remux", {"qpf": "theirs"})
+    assert [c["action"] for c in store.use_packs([pack(doc(2))], {}) if c["kind"] == "template"] == ["took over"]
+    assert templates(store) == {"Acme remux": shipped_template(2)}
+    assert store.get_setting("template_defaults") == {"acme": "Acme remux"}
+
+
+def test_a_deleted_numbered_copy_beside_the_users_preset_takes_the_users_over(store):
+    # the trap the plugin pack fell into: "(2)" deleted as a duplicate, the user's older copy left in use
+    store.use_packs([pack()], {"template": ("Acme remux",)})
+    store.delete_preset("template", "Acme remux (2)")
+    store.save_preset("template", "Acme remux", {"qpf": "theirs"})
+    r = template_row(store)
+    assert (r["state"], r["replaced_by"], r["stale"]) == ("replaced", "Acme remux", True)
+    store.use_packs([pack(doc(2))], {})
+    assert templates(store) == {"Acme remux": shipped_template(2)}
+    assert (template_row(store)["name"], template_row(store)["state"]) == ("Acme remux", "current")
+
+
+def test_a_numbered_copy_goes_back_under_its_name_once_free(store):
+    store.use_packs([pack()], {"template": ("Acme remux",)})
+    store.use_packs([pack()], {})
+    assert list(templates(store)) == ["Acme remux"]
+    assert template_row(store)["name"] == "Acme remux"
+
+
+def test_the_users_encoder_preset_in_its_folder_and_label_is_taken_over(store):
+    d = doc()
+    mine = {**d["presets"]["encoder"][0]["data"], "bitrate_kbps": 1}
+    store.import_encoder_presets([{"label": "UHD", "group": ["Acme"], "data": mine}], max_name=80)
+    (before,) = store.presets("encoder")
+    store.use_packs([pack(d)], {})
+    assert list(store.presets("encoder")) == [before]
+    assert store.presets("encoder")[before]["settings"] == d["presets"]["encoder"][0]["data"]
+    managed = next(m for m in store.managed_presets() if m["kind"] == "encoder")
+    store.delete_presets("encoder", [managed["name"]])
+    store.import_encoder_presets([{"label": "UHD", "group": ["Acme"], "data": mine}], max_name=80)
+    managed = next(m for m in store.managed_presets() if m["kind"] == "encoder")
+    assert (managed["state"], managed["replaced_by"], managed["group"]) == ("replaced", "UHD", ["Acme"])
+    store.use_packs([pack(d)], {})
+    assert len(store.presets("encoder")) == 1
+
+
+def test_a_settings_only_reset_puts_a_deleted_preset_back(store):
+    store.use_packs([pack()], {})
+    store.delete_preset("template", "Acme remux")
+    store.reset_configuration(("rule_set",), ())
+    assert "Acme remux" in templates(store)
+
+
+def test_a_retired_preset_is_no_longer_kept_in_line(store):
+    store.use_packs([pack(doc(templates=("remux", "extra")))], {})
+    store.use_packs([pack(doc(templates=("remux",)))], {})
+    store.save_preset("template", "Acme extra", {"qpf": "mine"})
+    assert store.use_packs([pack(doc(templates=("remux",)))], {}) == []
+    assert templates(store)["Acme extra"] == {"qpf": "mine"}
+    assert not next(m for m in store.managed_presets() if m["key"] == "extra")["stale"]

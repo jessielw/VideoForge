@@ -16,6 +16,12 @@ export function openSettings(tab: string, section: string | null = null): void {
   router.go('settings')
 }
 
+// The section a link asked for, without taking it: a section that renders later (after its own fetch) checks
+// this and takes it once it is on screen.
+export function peekSettingsSection(): string | null {
+  return pendingSection
+}
+
 // The section a link asked for (an element id), once; null when none.
 export function takeSettingsSection(): string | null {
   const section = pendingSection

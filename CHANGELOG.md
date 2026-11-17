@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **A plugin's presets are kept exactly as the plugin ships them.** Every start (and every profile import or reset) puts back a plugin preset you edited or deleted. It also overwrites a preset of your own that has a plugin preset's name, and that preset follows the plugin from then on. Before this, VideoForge kept your edits and deletions, so a plugin update could leave presets on old settings without saying so. To keep a change, save it under a new name: a template's or video preset's name, or an encoder or audio preset's label or folder. A preset the plugin no longer ships (retired) is left as it is, and so are a disabled plugin's.
+- **Settings → Presets → Plugin presets** lists what the next start will put back: edited, deleted, or replaced by one of your own presets. **Put back now** fixes one preset, and **Put all back now** fixes all of them. Either asks first when it would overwrite something of yours. Each start logs how many presets it set to what each plugin ships. `GET /api/preset-packs/managed` adds the `replaced` state with `replaced_by`, plus `shipping` and `stale` for each preset, and `GET /api/presets` lists the stale ones as `plugin_stale`. `update_available` is always false now.
+
+### Added
+
+- A notice on every page except Settings while a plugin's presets differ from what it ships, with **Review** to go to Plugin presets.
+
+### Fixed
+
+- A plugin's new settings now reach its presets even if you imported them by hand before installing the plugin. The plugin used to add its own as numbered copies (`… (2)`). Deleting those as duplicates left your older copies in use, and they never got the plugin's changes. For example, x265 options a plugin update added never reached its x265 presets. The plugin now takes over a preset of yours with the same name instead of adding a copy. The next start folds existing numbered copies back into the plain name, and a rule set default that pointed at a copy moves with it.
+
 ## [0.1.9] - 2026-11-17
 
 ### Added
@@ -427,7 +442,9 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 - **Bundled VapourSynth plugins.** Source filters (BestSource, L-SMASH-Works, FFMS2, d2vsource) and common filters (EdgeFixer, FillBorders, MVTools, znedi3, dfttest2, BM3D, zsmooth, vszip, fmtconv, descale, ...) plus havsfunc, mvsfunc and awsmfunc, from one list (`vsplugins/manifest.toml`): built from source in the Docker image, downloaded (pinned, checked) for the portable build or a source install (`scripts/fetch_plugins.py`).
 - **Profiles.** The built-in `manual` profile; other profiles (a release group's rules) install as separate packages under the `videoforge.profiles` entry point group.
 
-[Unreleased]: https://github.com/jessielw/VideoForge/compare/0.1.7...HEAD
+[Unreleased]: https://github.com/jessielw/VideoForge/compare/0.1.9...HEAD
+[0.1.9]: https://github.com/jessielw/VideoForge/releases/tag/0.1.9
+[0.1.8]: https://github.com/jessielw/VideoForge/releases/tag/0.1.8
 [0.1.7]: https://github.com/jessielw/VideoForge/releases/tag/0.1.7
 [0.1.6]: https://github.com/jessielw/VideoForge/releases/tag/0.1.6
 [0.1.5]: https://github.com/jessielw/VideoForge/releases/tag/0.1.5

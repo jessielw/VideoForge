@@ -107,19 +107,22 @@ The pack is the ordinary preset pack format with one addition: **every entry has
 }
 ```
 
-At every start, and when a profile is created, each profile is brought in line with the packs of the plugins installed. A shipped preset is _managed_: VideoForge remembers its key and what it looked like as shipped.
+A plugin's pack is the truth for the presets it ships. At every start, and when a profile is created, imported or reset, each profile is brought in line with the packs of the installed, enabled plugins. A shipped preset is _managed_: VideoForge remembers its key, where it is stored and what it looked like as shipped.
 
 | Situation | What happens |
 | --- | --- |
-| New key | The preset is added. A name already in use gets a numbered copy. |
-| Not edited, pack changed | Updated in place (a default template stays the default). |
-| Edited by the user | Left alone. The preset is marked "update available". |
-| Deleted by the user | Stays deleted. |
-| Key gone from the pack | Kept, marked retired. |
+| New key | Added. If one of the user's own presets has its name, the plugin takes it over (overwrites it) instead of adding a numbered copy. A reserved name, such as a rule set's built-in `<rule set> defaults` template, still gets a numbered copy. |
+| Pack changed | Updated in place, so a default template stays the default. |
+| Edited by the user | Put back as shipped. |
+| Deleted by the user | Put back. |
+| One of the user's own presets has its name | Taken over. A numbered copy of the plugin's beside it is removed, and a rule set default that named the copy follows it. |
+| Key gone from the pack | Kept and marked retired. It is no longer kept as shipped. |
 
-The user can put a managed preset back as shipped (`POST /api/preset-packs/managed/reset`, `{"plugin", "kind", "key"}`), which discards edits or restores a deleted one. `GET /api/preset-packs/managed` lists each managed preset's state (`current`, `edited` or `removed`), `update_available`, `retired`, and any pack that couldn't be read. The installer rejects a ZIP whose pack is missing or invalid.
+To keep a change to a plugin's preset, the user saves it under a new name. A template or video preset is stored under its name, so a renamed one is the user's own, and the plugin's is put back under its own name. Encoder and audio presets are stored under an id with a label and folder. Renaming one is an edit and is put back, so a copy needs a new label or folder. A disabled plugin's presets are left as they are.
 
-A template or video preset is stored under its name, so a template renamed by the user counts as deleted and a new one is the user's own. A later version of the plugin that changes a managed preset's name keeps the name the profile has. Encoder and audio presets are stored under an id, so renaming one is an edit.
+Between starts, `GET /api/preset-packs/managed` lists each managed preset's state: `current`, `edited`, `removed`, or `replaced` (deleted, with one of the user's own presets under its name, named in `replaced_by`). It also gives `retired`, `shipping` (a digest of the version the plugin ships now), `stale` (not current and not retired, so the next start changes it), and any pack that couldn't be read. `POST /api/preset-packs/managed/reset` (`{"plugin", "kind", "key"}`) does for one preset what the next start would. The installer rejects a ZIP whose pack is missing or invalid.
+
+`GET /api/presets` carries the stale ones too, as `plugin_stale` (`plugin`, `kind`, `key`, `shipping`). While any preset is stale, every page except Settings shows a notice. **Review** opens **Settings → Presets → Plugin presets**, where **Put back now** fixes one preset and **Put all back now** fixes all of them. Either asks first when it would overwrite an edit or one of the user's own presets. Each start logs how many presets it set to what each plugin ships.
 
 ## Declare settings
 

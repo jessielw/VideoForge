@@ -14,6 +14,7 @@
   import { Toaster } from '$lib/components/ui/sonner'
   import * as Tooltip from '$lib/components/ui/tooltip'
   import KeyboardShortcuts from './components/KeyboardShortcuts.svelte'
+  import StalePluginPresets from './components/StalePluginPresets.svelte'
   import ThemeToggle from './components/ThemeToggle.svelte'
   import Tip from './components/Tip.svelte'
   import { onWindowPaste } from './lib/incoming.svelte'
@@ -194,26 +195,30 @@
       {/if}
     </nav>
 
-    <main id="main" tabindex="-1" class="min-w-0 flex-1 overflow-hidden outline-none">
+    <main id="main" tabindex="-1" class="flex min-w-0 flex-1 flex-col overflow-hidden outline-none">
       {#if app.connectionError}
-        <div class="m-6 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
+        <div class="m-6 shrink-0 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
           Couldn't reach the VideoForge server: {app.connectionError}
           <Button class="ml-3" variant="outline" disabled={app.connection === 'retrying'} onclick={() => app.start()}
             >Retry now</Button
           >
         </div>
       {/if}
-      {#if router.page === 'new'}
-        <NewJobs />
-      {:else if router.page === 'queue'}
-        <Queue />
-      {:else if router.page === 'templates'}
-        <Templates />
-      {:else if router.page === 'settings'}
-        <Settings />
-      {:else}
-        <Log />
-      {/if}
+      <StalePluginPresets />
+      <!-- The pages fill what the notices above leave. -->
+      <div class="min-h-0 flex-1">
+        {#if router.page === 'new'}
+          <NewJobs />
+        {:else if router.page === 'queue'}
+          <Queue />
+        {:else if router.page === 'templates'}
+          <Templates />
+        {:else if router.page === 'settings'}
+          <Settings />
+        {:else}
+          <Log />
+        {/if}
+      </div>
     </main>
   </div>
 </Tooltip.Provider>
