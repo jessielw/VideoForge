@@ -1,6 +1,6 @@
 [project]
 name = "videoforge"
-version = "0.1.8"
+version = "0.1.9"
 description = "Encode and mux job queue in the browser: VapourSynth, x264/x265, audio, subtitles, MKV / MP4"
 authors = [
     { name = "jessielw", email = "jessielw4049@gmail.com" }
@@ -12,10 +12,10 @@ requires-python = ">=3.12"
 dependencies = [
     "apprise>=2.2.0",
     "autoqpf>=0.2.5",
-    "fastapi>=0.162.5",
+    "fastapi>=0.163.2",
     "guessit>=4.5.1",
     "niquests>=3.21.3",
-    "numpy>=2.5.4",
+    "numpy>=2.5.5",
     "pillow>=13.0.0",
     "pymediainfo>=7.0.1",
     "rich>=15.0.0",
