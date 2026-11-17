@@ -58,7 +58,7 @@ from videoforge.core.video.encoders import (
     stats_path,
     vspipe_command,
 )
-from videoforge.core.video.qpf import make_qpf, qpf_paths
+from videoforge.core.video.qpf import given_chapters_path, make_qpf, qpf_from_chapters, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
 from videoforge.core.video.settings import Crop, EncoderSettings, SourceFilter
 from videoforge.core.workdir import finished_files
@@ -413,8 +413,9 @@ def video_steps(
     info_file = home / info.SCRIPT_INFO
     steps.append(info_step(spec, app, text))
     qpfile = None
-    if spec.makes_chapters:
+    if spec.makes_qpfile:
         files = qpf_paths(home)
+        given = spec.inputs.chapters  # the user's chapter file: the qpfile alone, from it (the mux takes the file)
         video = plan.source.video
         source_fps = frame_rate(video.default_duration_ns) if video and video.default_duration_ns else None
 
@@ -428,12 +429,36 @@ def video_steps(
                     raise ToolError("AutoQPF couldn't read or make chapters for the source")
                 log(f"Chapters and qpfile written ({fps} fps)")
 
+            def make_qpfile(log: LogFn) -> None:
+                if fps is None:
+                    raise ToolError("Neither the source nor the script has a frame rate to place chapters by")
+                if given is None:  # only this step's call when a chapter file is given
+                    raise ValueError("No chapter file to make the qpfile from")
+                count = qpf_from_chapters(given, home, fps)
+                if not count:
+                    raise ToolError(f"No chapters could be read from {given.name} to make the qpfile from")
+                log(f"Qpfile written from {given.name}: {count} chapters ({fps} fps)")
+
+            if given is None:
+                label, call, outputs, inputs = (
+                    "Chapters and qpfile (AutoQPF)",
+                    make_chapters,
+                    (files.qpfile, files.chapters),
+                    (source,),
+                )
+            else:
+                label, call, outputs, inputs = (
+                    "Qpfile from the chapter file (AutoQPF)",
+                    make_qpfile,
+                    (files.qpfile, given_chapters_path(home)),
+                    (given,),
+                )
             return Step(
                 "chapters",
-                "Chapters and qpfile (AutoQPF)",
-                call=make_chapters,
-                outputs=(files.qpfile, files.chapters),
-                inputs=(source,),
+                label,
+                call=call,
+                outputs=outputs,
+                inputs=inputs,
                 key=str(fps),
                 weight=0.1,
                 refresh=lambda: chapters_step(script_fps(spec) or source_fps),

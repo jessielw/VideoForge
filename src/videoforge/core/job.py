@@ -83,7 +83,8 @@ class JobSpec:
     overrides: Overrides = field(default_factory=Overrides)  # incl. the original language
     video: VideoSettings = field(default_factory=VideoSettings)
     encoder: EncoderSettings = field(default_factory=EncoderSettings)
-    qpf: bool = True  # chapters from AutoQPF (keyframes on chapter starts) unless chapters are given
+    # Keyframes on the chapter starts (a qpfile): the chapters from AutoQPF, or from the chapter file when given
+    qpf: bool = True
     output_dir: Path | None = None
     mux: MuxSettings = field(default_factory=MuxSettings)
     # Detect the crop once the source can be read, then clear (a template's auto crop).
@@ -131,7 +132,14 @@ class JobSpec:
 
     @property
     def makes_chapters(self) -> bool:
-        return self.encodes_video and self.qpf and self.inputs.chapters is None
+        """Whether AutoQPF writes the chapters the job muxes (from the source's, or generated): no chapter file."""
+        return self.makes_qpfile and self.inputs.chapters is None
+
+    @property
+    def makes_qpfile(self) -> bool:
+        """Whether the encode gets a qpfile (keyframes on the chapter starts), from the chapters the job muxes:
+        the user's chapter file when given, else AutoQPF's."""
+        return self.encodes_video and self.qpf
 
     def container(self, rule_set: RuleSet) -> str:
         """The job's container: its own pick when the rule set offers it, else the rule set's."""
@@ -289,7 +297,7 @@ def plan_spec(spec: JobSpec, probed: ProbedInputs, rule_set: RuleSet, tools: Too
     plan.issues += mux_issues(plan, spec.container(rule_set))
     plan.issues += naming.issues(spec)
     if spec.encodes_video:
-        plan.issues += encoders.issues(spec.encoder, probed.source.video, spec.makes_chapters)
+        plan.issues += encoders.issues(spec.encoder, probed.source.video, spec.makes_qpfile)
         plan.issues += options.option_issues(spec.encoder, tools)
         plan.issues += hdr.issues(probed.source.video, spec.encoder, tools, spec.video)
         plan.issues += filters.field_issues(probed.source.video, spec.video)

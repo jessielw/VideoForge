@@ -5,7 +5,8 @@ when there are none) into an OGM chapter file, then writes the qpfile: one
 "<frame> K" line per chapter start, so the encoder puts a keyframe there and the
 chapters land on clean cuts. A TS's program shows in MediaInfo as a menu with no
 chapters in it, which AutoQPF can't read: the chapters are generated here instead,
-and AutoQPF makes the qpfile from that chapter file.
+and AutoQPF makes the qpfile from that chapter file. With the user's chapter file, the
+qpfile alone is made, from it (qpf_from_chapters): the mux takes the user's file.
 """
 
 from __future__ import annotations
@@ -51,6 +52,30 @@ def make_qpf(source: Path, work_dir: Path, fps: Fraction, chunk_percent: float =
     except (NoChapterDataError, ImproperChapterError, ChapterIndexError):
         return None
     return files if files.qpfile.is_file() and files.chapters.is_file() else None
+
+
+def given_chapters_path(work_dir: Path) -> Path:
+    """The user's chapter file as OGM text, which AutoQPF makes the qpfile from (the mux keeps the user's file)."""
+    return work_dir / "chapters_given.txt"
+
+
+def qpf_from_chapters(chapters: Path, work_dir: Path, fps: Fraction) -> int:
+    """Write the qpfile from the user's chapter file (Matroska XML or OGM text): AutoQPF reads OGM text only, and
+    only in its strict form, so the chapters are written out as OGM first (given_chapters_path). The number of
+    chapters; 0 when none could be read (no qpfile is written)."""
+    from auto_qpf.qpf import QpfGenerator
+
+    from videoforge.core.execute.chapters import from_file, ogm_text
+
+    found = from_file(chapters)
+    if not found:
+        return 0
+    text = given_chapters_path(work_dir)
+    text.write_text(ogm_text(found), encoding="utf-8")
+    QpfGenerator().generate_qpf(
+        file_input=text, file_output=qpf_paths(work_dir).qpfile, fps=float(fps), auto_detect_fps=False
+    )
+    return len(found)
 
 
 def _generate_chapters(source: Path, out: Path, chunk_percent: float) -> bool:

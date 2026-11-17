@@ -449,6 +449,122 @@ def test_a_job_pauses_after_pass_1_and_goes_on_with_pass_2(rule_set, tmp_path):
     assert tools_called(again).count("x264") == 1  # pass 2 only: pass 1 was reused
 
 
+USER_OGM = "\ufeffCHAPTER01=00:00:00.000\r\nCHAPTER01NAME=Intro\r\n\r\nCHAPTER02=00:00:01.502\r\nCHAPTER02NAME=Part\r\n"
+USER_XML = """<?xml version="1.0"?>
+<Chapters><EditionEntry>
+<ChapterAtom><ChapterTimeStart>00:00:00.000000000</ChapterTimeStart><ChapterDisplay><ChapterString>Intro</ChapterString></ChapterDisplay></ChapterAtom>
+<ChapterAtom><ChapterTimeStart>00:00:01.502000000</ChapterTimeStart><ChapterDisplay><ChapterString>Part</ChapterString></ChapterDisplay></ChapterAtom>
+</EditionEntry></Chapters>
+"""
+
+
+def user_chapters_job(plan, tmp_path, name="user.txt", text=USER_OGM, encoder=None, qpf=True):
+    """A video job with the user's chapter file: the plan muxes that file (as plan_spec plans it)."""
+    chapters = tmp_path / name
+    chapters.write_bytes(text.encode("utf-8"))  # as given: no newline translation
+    job = video_job(plan, tmp_path)
+    job.inputs.chapters, job.qpf = chapters, qpf
+    if encoder is not None:
+        job.encoder = encoder
+        plan.encode_path = job.video_output
+    plan.chapters_path = chapters
+    return job, chapters
+
+
+@pytest.mark.parametrize("encoder", [Encoder.X264, Encoder.X265])
+def test_the_users_chapters_make_the_qpfile(rule_set, tmp_path, encoder):
+    """qpf on with the user's chapter file: AutoQPF makes the qpfile from it (an OGM file with a BOM, CRLF and a
+    blank line, written out in AutoQPF's strict form first), the encoder gets it, and the mux takes the user's
+    file."""
+    plan = make_plan(tmp_path)
+    job, chapters = user_chapters_job(plan, tmp_path, encoder=EncoderSettings(encoder))
+    assert job.makes_qpfile and not job.makes_chapters
+    steps = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    step = steps["chapters"]
+    qpfile = job.job_dir / "chapters.qpf"
+    assert step.inputs == (chapters,) and step.outputs[0] == qpfile
+    assert job.job_dir / "chapters_chapters.txt" not in step.outputs  # AutoQPF writes no chapters of its own
+    video = steps["video"].argvs[1]
+    assert video[video.index("--qpfile") + 1] == str(qpfile) and qpfile in steps["video"].inputs
+    mux = steps["mux"].argvs[0]
+    assert mux[mux.index("--chapters") + 1] == str(chapters)
+
+    job.job_dir.mkdir(parents=True)
+    step.call(print)
+    assert qpfile.read_text(encoding="utf-8").split() == ["0", "K", "36", "K"]  # 1.502 s at 23.976 fps
+    assert chapters.read_bytes() == USER_OGM.encode("utf-8")  # the user's file untouched
+
+
+def test_a_chapter_xml_makes_the_qpfile_too(rule_set, tmp_path):
+    """AutoQPF reads OGM text only: a Matroska chapter XML is written out as OGM for it."""
+    plan = make_plan(tmp_path)
+    job, chapters = user_chapters_job(plan, tmp_path, "user.xml", USER_XML)
+    steps = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    job.job_dir.mkdir(parents=True)
+    steps["chapters"].call(print)
+    assert (job.job_dir / "chapters.qpf").read_text(encoding="utf-8").split() == ["0", "K", "36", "K"]
+    mux = steps["mux"].argvs[0]
+    assert mux[mux.index("--chapters") + 1] == str(chapters)
+
+
+def test_an_unreadable_chapter_file_fails_the_qpfile_step(rule_set, tmp_path):
+    plan = make_plan(tmp_path)
+    job, _ = user_chapters_job(plan, tmp_path, text="not chapters\n")
+    steps = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    job.job_dir.mkdir(parents=True)
+    with pytest.raises(ToolError, match="No chapters could be read from user.txt"):
+        steps["chapters"].call(print)
+    assert not (job.job_dir / "chapters.qpf").exists()
+
+
+def test_qpf_off_with_the_users_chapters_makes_no_qpfile(rule_set, tmp_path):
+    plan = make_plan(tmp_path)
+    job, chapters = user_chapters_job(plan, tmp_path, qpf=False)
+    assert not job.makes_qpfile and not job.makes_chapters
+    steps = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    assert "chapters" not in steps and "--qpfile" not in steps["video"].argvs[1]
+    mux = steps["mux"].argvs[0]
+    assert mux[mux.index("--chapters") + 1] == str(chapters)
+
+
+def test_qpf_on_without_chapters_still_runs_autoqpf(rule_set, tmp_path):
+    plan = make_plan(tmp_path)
+    job = video_job(plan, tmp_path)
+    job.qpf = True
+    assert job.makes_qpfile and job.makes_chapters
+    steps = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    step = steps["chapters"]
+    assert step.label == "Chapters and qpfile (AutoQPF)" and step.inputs == (plan.source.path,)
+    assert step.outputs == (job.job_dir / "chapters.qpf", job.job_dir / "chapters_chapters.txt")
+
+
+def test_the_users_chapters_force_vp9_keyframes(rule_set, tmp_path):
+    """VP8 / VP9 (and SVT-AV1 in CRF) take the qpfile's frames as keyframes (forces_keyframes): the user's
+    chapters' qpfile too."""
+    plan = make_plan(tmp_path)
+    vp9 = EncoderSettings(Encoder.VP9, rate_control=RateControl.CRF, crf=30, preset="4")
+    job, _ = user_chapters_job(plan, tmp_path, encoder=vp9)
+    steps = {s.id: s for s in build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv").steps}
+    job.job_dir.mkdir(parents=True)
+    steps["chapters"].call(print)
+    argv = steps["video"].refresh().argvs[1]
+    assert argv[argv.index("-force_key_frames") + 1] == "expr:eq(n,0)+eq(n,36)"
+
+
+def test_the_record_names_the_users_chapters_and_the_qpfile(tmp_path):
+    from videoforge.core.record import _chapters
+
+    plan = make_plan(tmp_path)
+    job, chapters = user_chapters_job(plan, tmp_path)
+    assert _chapters(job, plan) == {
+        "from": "file",
+        "path": str(chapters),
+        "qpfile": str(job.job_dir / "chapters.qpf"),
+    }
+    job.qpf = False
+    assert _chapters(job, plan) == {"from": "file", "path": str(chapters)}
+
+
 def test_the_encode_is_timed_by_the_scripts_frame_rate(rule_set, tmp_path):
     """An IVTC of a 29.97 source: the mux and AutoQPF take the script's 23.976 (vspipe --info), not the source's."""
     plan = make_plan(tmp_path)
