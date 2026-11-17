@@ -43,7 +43,7 @@ The GitHub Pages site contains the docs build only. Publishing these docs does n
 
 ## Application releases
 
-Application releases use version tags without a leading `v`, such as `0.1.0` or `0.1.0-beta`. The Release workflow builds the Windows ZIP and individual example plugin ZIPs, then creates a draft release using the matching section of `CHANGELOG.md`; publishing the draft is a separate release action.
+Application releases use version tags without a leading `v`, such as `0.1.0` or `0.1.0-beta`. The Release workflow builds the Windows ZIP and individual example plugin ZIPs, then creates a draft release titled with the tag. Its notes are the matching section of `CHANGELOG.md`, a rule, then GitHub's generated notes (merged pull requests and the Full Changelog link); publishing the draft is a separate release action.
 
 Example plugins remain readable under `examples/plugins/`, with setup instructions in each README. `python scripts/build_plugin_examples.py` packages their READMEs, manifests and declared Python modules into `build/plugin-examples/VideoForge-plugin-<id>-<version>.zip`. The packaging job needs only Python 3.12 and does not import plugins or install app dependencies. Release assets are generated from that checkout. Manual workflow runs without a tag upload the ZIPs as Actions artifacts without creating a release.
 

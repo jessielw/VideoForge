@@ -1,7 +1,7 @@
 name: Release
 
-# A version tag (0.1.0, as in pyproject.toml; no "v") builds the portable and example plugin ZIPs and opens a draft release with
-# the version's CHANGELOG.md section. Publishing the draft is done by hand.
+# A version tag (0.1.0, as in pyproject.toml; no "v") builds the portable and example plugin ZIPs and opens a draft release titled with
+# the tag: the version's CHANGELOG.md section, a rule, then GitHub's generated notes. Publishing the draft is done by hand.
 on:
   push:
     tags:
@@ -122,6 +122,9 @@ jobs:
             echo "::error::CHANGELOG.md has no section for $TAG or ${TAG%%-*}"
             exit 1
           fi
+          # A rule between the CHANGELOG section and GitHub's generated notes (PR list, Full Changelog link),
+          # which the release step appends. The blank line keeps the dashes from turning the last line into a heading.
+          printf '\n\n---------------\n\n' >> notes.md
           cat notes.md
 
       - name: Download release assets
@@ -134,8 +137,9 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ env.TAG }}
-          name: VideoForge ${{ env.TAG }}
+          name: ${{ env.TAG }}
           body_path: notes.md
+          generate_release_notes: true
           draft: true
           prerelease: ${{ contains(env.TAG, '-') }}
           files: artifacts/*
