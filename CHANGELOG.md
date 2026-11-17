@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Linux (and the Docker image): mkvextract and mkvmerge failed with "There is no translation available for 'en'" when VideoForge ran them itself. That covers a VFR source's timestamps, a burned-in subtitle's extract, the remux of an MP4 or TS for those, and a TrueHD extract for MP4. MKVToolNix calls English `en` on Windows but `en_US` on Linux, so VideoForge now passes the name each build expects (`en` for a Windows build under Wine).
 - Video tab compare: only the first flip between the two sides showed at once. Each flip threw away the frames it had kept, so every later flip loaded its frame again. Both sides now stay kept until the compare ends or changes.
 - MP4 output: a TrueHD track copied from an MKV (or an added MKA) failed the mux. MP4Box 26.07, the bundled one, stopped with "Feature Not Supported", and the older 2.4 hung with no output until the job was cancelled. The track is now extracted with mkvextract first, and MP4Box takes the raw TrueHD. A TS's TrueHD was already fine.
 - An invalid job listed each failed check twice: once as a check and again, joined, as the run's error. The run's error now says how many checks failed and where the file is ("The file is kept as `<name>.unpublished-<id>.mkv`, not published as `<name>.mkv`"). The failed checks come first, so the queue row shows the reason. Notifications and the CLI no longer repeat the checks either. The Validate step in the Log still lists every failed check.

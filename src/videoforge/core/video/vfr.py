@@ -12,6 +12,7 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
+from videoforge.core.config import mkv_ui
 from videoforge.core.models import VideoInfo
 
 TIMESTAMPS = "timestamps.txt"  # in the work folder
@@ -34,7 +35,7 @@ def normalize(source: Path, output: Path) -> None:
 
 def extract_argv(mkvextract: str, source: Path, track: int, out: Path) -> tuple[str, ...]:
     """mkvextract writes the source video's timestamps (v2) to out."""
-    return (mkvextract, "--ui-language", "en", "timestamps_v2", str(source), f"{track}:{out}")
+    return (mkvextract, *mkv_ui(mkvextract), "timestamps_v2", str(source), f"{track}:{out}")
 
 
 def count(path: Path) -> int | None:

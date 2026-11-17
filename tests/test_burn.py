@@ -8,7 +8,7 @@ import subprocess
 from conftest import source, sub
 import pytest
 
-from videoforge.core.config import AppConfig, Tools
+from videoforge.core.config import AppConfig, Tools, mkv_ui
 from videoforge.core.job import JobSpec
 from videoforge.core.jobs import ProbedInputs, plan_job
 from videoforge.core.models import (
@@ -31,6 +31,7 @@ from videoforge.core.video.settings import Crop, VideoSettings
 from videoforge.rule_sets.manual import ManualRuleSet
 
 BURN = TrackOverride(burn=True)
+UI = mkv_ui("mkvextract")  # "en" on Windows, "en_US" elsewhere
 
 
 def probed(*subs, encode: Path | None = None, external=()) -> ProbedInputs:
@@ -96,7 +97,7 @@ def test_a_source_track_is_extracted_with_the_index(tmp_path):
     steps = index_steps(job, app, None, track)
     assert [s.id for s in steps] == ["script", "burn.extract", "index"]
     out = job.work_dir / "burn.13.ass"
-    assert steps[1].argvs == (("mkvextract", "--ui-language", "en", "tracks", str(src), f"13:{out}"),)
+    assert steps[1].argvs == (("mkvextract", *UI, "tracks", str(src), f"13:{out}"),)
     assert repr(str(out)) in (steps[0].key or "")  # the script draws the extracted file
 
     # The preview waits for it like the index; an added file is read where it is.
@@ -120,10 +121,10 @@ def test_a_track_of_an_m2ts_is_copied_into_an_mks_for_mkvextract(tmp_path):
     assert [s.id for s in steps] == ["script", "burn.remux", "burn.extract", "index"]
     mks, out = job.work_dir / "burn.14.mks", job.work_dir / "burn.14.sup"
     assert steps[1].argvs == (
-        ("mkvmerge", "--ui-language", "en", "--output", str(mks), "--no-video", "--subtitle-tracks", "14",
+        ("mkvmerge", *UI, "--output", str(mks), "--no-video", "--subtitle-tracks", "14",
          "--no-audio", "--no-chapters", "--no-attachments", "--no-global-tags", "--no-track-tags", str(src)),
     )  # fmt: skip
-    assert steps[2].argvs == (("mkvextract", "--ui-language", "en", "tracks", str(mks), f"0:{out}"),)
+    assert steps[2].argvs == (("mkvextract", *UI, "tracks", str(mks), f"0:{out}"),)
     assert steps[2].inputs == (mks,)
 
 

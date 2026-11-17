@@ -29,7 +29,7 @@ import sys
 from typing import TYPE_CHECKING
 
 from videoforge.core import naming
-from videoforge.core.config import AppConfig
+from videoforge.core.config import AppConfig, mkv_ui
 from videoforge.core.execute import chapters as ogm, loudness
 from videoforge.core.execute.audio import audio_command, measure_argv, measure_path, needs_measure
 from videoforge.core.execute.mux import MUXERS, MuxError, frame_rate, split_args
@@ -235,7 +235,9 @@ def mp4_audio_steps(plan: Plan, work: Path, app: AppConfig) -> tuple[list[Step],
                 Step(
                     f"truehd.{len(extracted)}.extract",
                     f"TrueHD {track.id} for MP4 (mkvextract)",
-                    argvs=((app.tools.mkvextract, "--ui-language", "en", "tracks", str(file), f"{track.id}:{out}"),),
+                    argvs=(
+                        (app.tools.mkvextract, *mkv_ui(app.tools.mkvextract), "tracks", str(file), f"{track.id}:{out}"),
+                    ),
                     inputs=(file,),
                     outputs=(out,),
                     weight=0.5,

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from videoforge.core.config import mkv_ui
+
 MATROSKA = (".mkv", ".mka", ".mks", ".webm")
 
 
@@ -25,4 +27,4 @@ def argv(mkvmerge: str, source: Path, kind: str, track: int, out: Path, shift_ms
     }[kind]
     rest = ("--no-audio", "--no-chapters", "--no-attachments", "--no-global-tags", "--no-track-tags")
     sync = ("--sync", f"{track}:{shift_ms}") if shift_ms else ()
-    return (mkvmerge, "--ui-language", "en", "--output", str(out), *pick, *rest, *sync, str(source))
+    return (mkvmerge, *mkv_ui(mkvmerge), "--output", str(out), *pick, *rest, *sync, str(source))
