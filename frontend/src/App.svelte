@@ -41,7 +41,7 @@
     void app.start()
   })
 
-  const navCollapsed = $derived(layout.navCollapsed || layout.small)
+  const navCollapsed = $derived(layout.navCollapsed || layout.compact)
   const running = $derived(app.jobs.find((j) => j.status === 'running'))
 
   // The tab's title follows the running job, so a background tab shows how far the queue is.
@@ -126,7 +126,7 @@
       <div class="mt-auto flex flex-col gap-0.5 px-2 pb-1 {navCollapsed ? 'items-center' : ''}">
         <KeyboardShortcuts compact={navCollapsed} />
         <ThemeToggle compact={navCollapsed} />
-        <Tip side="right" class="grid max-sm:hidden" text={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}>
+        <Tip side="right" class="grid max-lg:hidden" text={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}>
           <Button
             variant="ghost"
             size={navCollapsed ? 'icon' : 'default'}

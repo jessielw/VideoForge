@@ -258,30 +258,36 @@ test('the name template links to the Settings that turns it on or off for every 
   expect(errors).toEqual([])
 })
 
-for (const route of ['templates', 'settings']) {
-  test(`${route} uses the available editor width on large windows`, async ({ page }, testInfo) => {
-    await page.setViewportSize({ width: 1920, height: 1000 })
-    const errors = await layoutFixture(page)
-    await page.goto(`/#/${route}`)
-    if (route === 'settings') await page.getByRole('button', { name: 'Tools', exact: true }).click()
-    const content =
-      route === 'templates'
-        ? page.locator('fieldset').first()
-        : page.getByRole('textbox', { name: 'ffmpeg path', exact: true }).locator('xpath=../../../..')
-    await expect(content).toBeVisible()
-    const bounds = await content.boundingBox()
-    expect(bounds!.x + bounds!.width).toBeGreaterThan(1920 - 40)
-    if (route === 'settings') {
-      await page.getByRole('button', { name: 'Queue & indexing', exact: true }).click()
-      const indexing = await page.getByRole('heading', { name: 'Batch indexing', exact: true }).boundingBox()
-      const audio = await page.getByRole('heading', { name: 'Audio encodes', exact: true }).boundingBox()
-      expect(Math.abs(audio!.y - indexing!.y)).toBeLessThan(2)
-      expect(audio!.x).toBeGreaterThan(1000)
-    }
-    await page.screenshot({ path: testInfo.outputPath(`${route}-wide.png`) })
-    expect(errors).toEqual([])
-  })
-}
+test('templates uses the available editor width on large windows', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  const content = page.locator('fieldset').first()
+  await expect(content).toBeVisible()
+  const bounds = await content.boundingBox()
+  expect(bounds!.x + bounds!.width).toBeGreaterThan(1920 - 40)
+  await expect(page.getByRole('button', { name: 'All templates' })).toHaveCount(0) // the list stays beside the editor
+  await page.screenshot({ path: testInfo.outputPath('templates-wide.png') })
+  expect(errors).toEqual([])
+})
+
+test('settings keeps one readable column on large windows', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  const errors = await layoutFixture(page)
+  await page.goto('/#/settings')
+  for (const tab of ['Tools', 'Queue & indexing']) {
+    await page.getByRole('button', { name: tab, exact: true }).click()
+    const content = await page.getByRole('group', { name: tab, exact: true }).boundingBox()
+    expect(content!.width, tab).toBeLessThanOrEqual(896) // 56rem
+  }
+  // groups go one under another, so a short one never sits beside a tall one
+  const indexing = await page.getByRole('heading', { name: 'Batch indexing', exact: true }).boundingBox()
+  const audio = await page.getByRole('heading', { name: 'Audio encodes', exact: true }).boundingBox()
+  expect(audio!.y).toBeGreaterThan(indexing!.y)
+  expect(Math.abs(audio!.x - indexing!.x)).toBeLessThan(2)
+  await page.screenshot({ path: testInfo.outputPath('settings-wide.png') })
+  expect(errors).toEqual([])
+})
 
 for (const width of [960, 800]) {
   test(`New jobs scrolls at ${width} CSS pixels without clipping its form`, async ({ page }, testInfo) => {
@@ -319,6 +325,83 @@ test('Templates stacks editor columns when zoom leaves insufficient panel width'
   await extra.scrollIntoViewIfNeeded()
   await expect(extra).toBeInViewport()
   await page.screenshot({ path: testInfo.outputPath('templates-narrow.png') })
+  expect(errors).toEqual([])
+})
+
+test('Templates on a 320 px window shows the list or the editor, and All templates goes back', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  const list = page.getByRole('list', { name: 'Templates' })
+  const row = list.getByRole('button', { name: 'Film 1080p CEL', exact: true })
+  const name = page.getByRole('textbox', { name: 'Template name' })
+  const back = page.getByRole('button', { name: 'All templates' })
+  await expect(list).toBeVisible()
+  await expect(name).toBeHidden()
+
+  await row.click()
+  await expect(list).toBeHidden()
+  await expect(name).toBeFocused()
+  const editor = page.locator('[class*="@container/template-editor"]')
+  expect(await editor.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
+  await back.click()
+  await expect(list).toBeVisible()
+  await expect(name).toBeHidden()
+  await expect(row).toBeFocused()
+
+  // leaving an edited template this way asks first, like any other way out
+  await row.click()
+  await name.fill('Film 1080p CEL edited')
+  await back.click()
+  await expect(page.getByRole('dialog')).toContainText('Save changes to Film 1080p CEL edited?')
+  await page.getByRole('button', { name: 'Stay', exact: true }).click()
+  await expect(name).toBeVisible()
+  await back.click()
+  await page.getByRole('button', { name: 'Discard', exact: true }).click()
+  await expect(list).toBeVisible()
+  await expect(row).toBeFocused()
+
+  // a built-in's name can't be edited, so focus goes to All templates
+  await list.getByRole('button', { name: /^Manual defaults/ }).click()
+  await expect(back).toBeFocused()
+  expect(errors).toEqual([])
+})
+
+test('Templates on a 320 px window: Stay reaches an edit kept from before a reload', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  const list = page.getByRole('list', { name: 'Templates' })
+  const name = page.getByRole('textbox', { name: 'Template name' })
+  await list.getByRole('button', { name: 'Film 1080p CEL', exact: true }).click()
+  await name.fill('Film 1080p CEL edited')
+  await page.reload() // the draft survives it, but the window opens on the list
+  await expect(list).toBeVisible()
+  await list.getByRole('button', { name: 'Film 1080p CEL', exact: true }).click()
+  await page.getByRole('button', { name: 'Stay', exact: true }).click()
+  await expect(name).toBeFocused()
+  await expect(name).toHaveValue('Film 1080p CEL edited')
+  expect(errors).toEqual([])
+})
+
+test('Templates on a 320 px window: after Delete, focus is in the list', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  const errors = await layoutFixture(page)
+  await page.route('**/api/presets/template/*', (route) =>
+    route.fulfill({
+      json: { video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] },
+    }),
+  )
+  await page.goto('/#/templates')
+  const list = page.getByRole('list', { name: 'Templates' })
+  await list.getByRole('button', { name: 'Film 1080p CEL', exact: true }).click()
+  const remove = page.getByRole('button', { name: 'Delete', exact: true })
+  await remove.click()
+  await page.getByRole('button', { name: 'Confirm?', exact: true }).click()
+  await expect(list).toBeVisible()
+  await expect(list.getByRole('button', { name: 'Film 1080p CEL', exact: true })).toHaveCount(0)
+  // on the open template's name, not on a row's star, where Enter would change the default
+  await expect(list.locator(':focus')).toHaveAttribute('aria-current', 'true')
   expect(errors).toEqual([])
 })
 
@@ -383,6 +466,34 @@ test('filter values read as figures', async ({ page }) => {
   await page.reload()
   const video = page.locator('[data-slot=card]').filter({ hasText: 'Source filter' })
   await expect(video.getByText('off', { exact: true })).toHaveCSS('font-family', /^"?Cascadia Mono/)
+  expect(errors).toEqual([])
+})
+
+test('Templates at 320 px: a filter step shows its whole name, with its value beside or below it', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  const presets = await page.evaluate(() => fetch('/api/presets').then((r) => r.json()))
+  const step = (category: string, name: string) => ({ category, name, script: '', enabled: true })
+  presets.template[0].data.video.filters = [step('crop', 'Crop'), step('resize', 'Resize')]
+  await page.route('**/api/presets', (route) => route.fulfill({ json: presets }))
+  await page.addInitScript(() => sessionStorage.removeItem('videoforge.draft.templates'))
+  await page.reload()
+  await page
+    .getByRole('list', { name: 'Templates' })
+    .getByRole('button', { name: 'Film 1080p CEL', exact: true })
+    .click()
+  const steps = page.locator('[data-slot=card]').filter({ hasText: 'Source filter' }).locator('ol > li')
+  for (const name of ['Crop', 'Resize']) {
+    const label = steps.getByText(name, { exact: true })
+    expect(await label.evaluate((el) => el.scrollWidth - el.clientWidth), name).toBeLessThanOrEqual(0)
+    // the value goes below the name only when the row has no room for both
+    const value = (await steps.filter({ hasText: name }).locator('.readout').boundingBox())!
+    const box = (await label.boundingBox())!
+    expect(value.x >= box.x + box.width || value.y >= box.y + box.height - 1, `${name}'s value clear of it`).toBe(true)
+  }
+  const crop = (await steps.getByText('Crop', { exact: true }).boundingBox())!
+  expect((await steps.filter({ hasText: 'Crop' }).locator('.readout').boundingBox())!.y).toBeGreaterThan(crop.y) // "per job" moved below
   expect(errors).toEqual([])
 })
 

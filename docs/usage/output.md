@@ -46,7 +46,7 @@ A **name suffix** goes before the extension, after the label: `<name>.<label>.vf
 
 The template, both switches and the suffix are saved in templates. The Output tab shows the resulting file name and title.
 
-**Settings → Jobs → Output names** decides the two switches for all of a rule set's jobs: **As each template says** (the default), **Always on** or **Always off**. A job takes it when it's added or a template is applied to it, so one setting turns template naming off for every template a rule set has, including a plugin's. The job's own Output tab can still change it afterwards, and the Templates page notes when Settings overrides a template's switch. A rule set's built-in defaults can start with naming on; "its defaults" in the list shows which.
+**Settings → Jobs → Output names** decides the two switches for all of a rule set's jobs: **As each template says** (the default), **Always on** or **Always off**. A job takes it when it's added or a template is applied to it, so one setting turns template naming off for every template a rule set has, including a plugin's. The job's own Output tab can still change it afterwards, and the Templates page notes when Settings overrides a template's switch. A rule set's built-in defaults can start with naming on; the note beside each menu, such as "Manual defaults: off", shows which.
 
 ## PGS compression
 

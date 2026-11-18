@@ -6,10 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Settings shows its groups in one column at every width. On wide windows, short groups no longer sit beside tall ones with empty space under them.
+- The menu collapses to icons on windows narrower than 1024 px (it was 640 px). At 200% zoom it no longer takes a quarter of the window.
+- The job's name gets its own line when the job header is narrow, instead of shrinking to a few letters.
+- The Video tab puts the preview above its settings when the tab is narrower than about 700 px, so the preview stays big enough to judge a crop.
+
 ### Fixed
 
 - The preview's frame controls no longer run past the preview into the filter panel when the preview is narrow. A narrow preview stacks them: the previous and next arrows sit either side of the slider, with the bookmark, frame box and frame count centred below. First and last frame and the bookmark jumps show once there's room for them, and their keys work either way. The time after the frame count shows once there's room for it.
 - The queue's key hints no longer crowd each other across lines, and read "Ctrl+A or Cmd+A". The selection hint says "1 selected job", not "1 selected jobs".
+- Settings fits a 320 px wide window on every tab. Rows that ran off the side (process priority, the folder browser, tool paths, automation, presets, appearance) now wrap.
+- The Rule set list on Settings › Jobs and the Output names menus show their whole choice on a narrow window. Output names now shows the rule set's own default, such as "Manual defaults: off", beside each menu instead of inside it.
+- Templates works on a narrow window: below 640 px the list and the editor take turns, where before the editor never showed.
+- Beside the Rule set list, Settings › Jobs shows the default rule set's name ("Manual") where it showed its id ("manual").
 
 ## [0.1.10] - 2026-11-17
 

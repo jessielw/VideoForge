@@ -4,7 +4,8 @@
   // make it the rule set's default (New jobs starts on it). A job's Template menu saves one from a job.
   // A template's folder is part of its name ("Group / 1080p / Film"); the list shows them as a tree.
   import { toast } from 'svelte-sonner'
-  import { onDestroy } from 'svelte'
+  import { onDestroy, tick } from 'svelte'
+  import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left'
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
   import CopyIcon from '@lucide/svelte/icons/copy'
   import FolderIcon from '@lucide/svelte/icons/folder'
@@ -32,6 +33,7 @@
   import Tip from '../components/Tip.svelte'
   import { api } from '../lib/api'
   import { drafts } from '../lib/drafts'
+  import { layout } from '../lib/layout.svelte'
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
   import { buildTree, joinName, SEP, splitName, type TreeNode } from '../lib/templateFolders'
@@ -172,7 +174,32 @@
   }
 
   function pick(c: Choice) {
-    request(() => open(c))
+    request(() => {
+      open(c)
+      void showEditor()
+    })
+  }
+
+  // Below 640 px the list and the editor take turns: opening a template shows the editor, All templates the list.
+  let editing = $state(false)
+  let nameField = $state<HTMLInputElement | null>(null)
+  let backButton = $state<HTMLButtonElement | null>(null)
+  let listEl = $state<HTMLUListElement | null>(null)
+  async function showEditor() {
+    editing = true
+    if (!layout.small) return
+    await tick()
+    ;(readOnly ? backButton : nameField)?.focus()
+  }
+  async function toList() {
+    editing = false
+    await tick()
+    // the open template's row, else the first name or folder (a row's star, aria-pressed, would change the default)
+    const rows = listEl?.querySelectorAll<HTMLElement>('[aria-current="true"], button:not([aria-pressed])')
+    ;([...(rows ?? [])].find((b) => b.getAttribute('aria-current')) ?? rows?.[0])?.focus()
+  }
+  function showList() {
+    request(toList)
   }
 
   function unique(base: string): string {
@@ -234,6 +261,9 @@
       app.presets = await api.deletePreset('template', name)
       toast.success(`Deleted ${name}`)
       opened = null // the effect opens the rule set's default
+      // below 640 px the Delete button that had focus is gone with the editor, so focus goes to the list
+      if (layout.small) await toList()
+      else editing = false
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     }
@@ -251,6 +281,8 @@
     const next = pending
     if (action === 'stay' || !next) {
       pending = null
+      // below 640 px the edit may be out of sight (restored after a reload, or the window narrowed): show it
+      if (action === 'stay' && !editing) void showEditor()
       return
     }
     if (action === 'save' && !(await save())) return
@@ -280,7 +312,7 @@
 />
 
 <div class="flex h-full">
-  <section class="flex w-72 shrink-0 flex-col border-r">
+  <section class="flex shrink-0 flex-col {layout.small ? (editing ? 'hidden' : 'w-full') : 'w-72 border-r'}">
     <div class="space-y-3 border-b p-4">
       <div class="flex items-center justify-between gap-2">
         <h1 class="text-xl font-semibold">Templates</h1>
@@ -356,7 +388,11 @@
             </Button>
           </Tip>
           <Tip class="flex min-w-0 flex-1" text={c.name}>
-            <button class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm" onclick={() => pick(c)}>
+            <button
+              class="min-w-0 flex-1 truncate py-1.5 pr-2 text-left text-sm"
+              aria-current={active ? 'true' : undefined}
+              onclick={() => pick(c)}
+            >
               {label}{#if c.builtin}<span class="ml-2 text-xs opacity-75">built in</span>{/if}
             </button>
           </Tip>
@@ -397,7 +433,7 @@
         {/if}
       {/each}
     {/snippet}
-    <ul class="min-h-0 flex-1 overflow-auto p-2" aria-label="Templates">
+    <ul bind:this={listEl} class="min-h-0 flex-1 overflow-auto p-2" aria-label="Templates">
       {#each choices.filter((c) => c.builtin) as c (`${c.builtin}:${c.name}`)}{@render row(c, c.name, 0)}{/each}
       {@render nodes(tree, 0)}
     </ul>
@@ -421,15 +457,28 @@
           </div>
         {/if}
       {:else}
-        <Button variant="outline" class="w-full" onclick={() => request(startNew)}><PlusIcon />New template</Button>
+        <Button
+          variant="outline"
+          class="w-full"
+          onclick={() =>
+            request(() => {
+              startNew()
+              void showEditor()
+            })}><PlusIcon />New template</Button
+        >
         <TemplateTransfer current={draft ? { name: draftName.trim(), data: draft } : null} disabled={busy} />
       {/if}
     </div>
   </section>
 
-  <section class="@container/template-editor min-w-0 flex-1 overflow-auto">
+  <section class="@container/template-editor min-w-0 flex-1 overflow-auto {layout.small && !editing ? 'hidden' : ''}">
     {#if draft && opened}
-      <div class="space-y-4 p-6">
+      <div class="space-y-4 p-4 sm:p-6">
+        {#if layout.small}
+          <Button bind:ref={backButton} variant="ghost" size="sm" class="-ml-2" onclick={showList}
+            ><ArrowLeftIcon />All templates</Button
+          >
+        {/if}
         <header class="flex flex-wrap items-center gap-2">
           {#if !readOnly}
             <Tip text="The template's folder. Use / for a folder inside a folder, as in Group / 1080p.">
@@ -438,6 +487,7 @@
             <span class="text-muted-foreground" aria-hidden="true">/</span>
           {/if}
           <Input
+            bind:ref={nameField}
             class="max-w-sm text-base font-semibold"
             aria-label="Template name"
             bind:value={draftLabel}
@@ -446,7 +496,7 @@
           {#if dirty}<span class="text-xs text-warning"
               >{opened.name === null ? 'Not saved yet' : 'Unsaved changes'}</span
             >{/if}
-          <div class="ml-auto flex gap-2">
+          <div class="ml-auto flex flex-wrap gap-2">
             {#if !readOnly}<Button onclick={save} disabled={busy || !dirty}><SaveIcon />Save</Button>{/if}
             <Button variant="outline" onclick={duplicate}
               ><CopyIcon />{readOnly ? 'Duplicate to change it' : 'Duplicate'}</Button
@@ -467,9 +517,11 @@
           disabled={readOnly}
           class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 @min-[56rem]/template-editor:grid-cols-2"
         >
-          <Card.Root class="gap-4 p-4">
+          <Card.Root class="@container/video gap-4 p-4">
             <span class="section-label">Video</span>
-            <label class="grid grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-2 text-sm">
+            <label
+              class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-2 text-sm @min-[24rem]/video:grid-cols-[7rem_minmax(0,1fr)]"
+            >
               <span class="text-muted-foreground">Source filter</span>
               <NativeSelect
                 class="w-full"
@@ -479,7 +531,9 @@
                 {#each SOURCE_FILTERS as f (f.id)}<option value={f.id} title={f.title}>{f.label}</option>{/each}
               </NativeSelect>
             </label>
-            <div class="grid grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-2 text-sm">
+            <div
+              class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-2 text-sm @min-[24rem]/video:grid-cols-[7rem_minmax(0,1fr)]"
+            >
               <span class="text-muted-foreground">Crop</span>
               <div class="min-w-0 space-y-2">
                 <ToggleGroup.Root
