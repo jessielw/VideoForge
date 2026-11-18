@@ -46,7 +46,7 @@
   const r = $derived(job.search)
   const crfMode = $derived(job.spec.encoder.rate_control === 'crf')
   const rInfo = $derived(r ? (METRICS.find((m) => m.value === r.metric) ?? METRICS[0]) : null)
-  const tries = $derived(r ? [...r.tries].sort((a, b) => a.crf - b.crf) : [])
+  const tries = $derived(r ? r.tries.toSorted((a, b) => a.crf - b.crf) : [])
 
   function readSaved(): Saved {
     const fallback: Saved = { metric: 'ssimulacra2', percent: 2, targets: {} }

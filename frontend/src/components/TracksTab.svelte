@@ -84,7 +84,7 @@
     ),
   )
   const subRows = $derived(
-    [...(tracks?.subs ?? [])].sort(
+    (tracks?.subs ?? []).toSorted(
       (a, b) => (plannedSubs.get(a.key)?.pos ?? 999) - (plannedSubs.get(b.key)?.pos ?? 999),
     ),
   )
