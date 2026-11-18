@@ -956,95 +956,105 @@
     {/if}
   </div>
 
-  <div class="@container flex items-center gap-1 @lg:gap-2">
-    <Tip class="hidden shrink-0 @md:inline-flex" text="First (Home)">
-      <Button variant="ghost" size="icon" onclick={() => seek(0)} aria-label="First frame"><ChevronsLeftIcon /></Button>
-    </Tip>
-    <Tip class="shrink-0" text="Previous (←)">
-      <Button variant="ghost" size="icon" onclick={() => seek(frame - 1)} aria-label="Previous frame"
-        ><ChevronLeftIcon /></Button
-      >
-    </Tip>
-    <div class="relative mx-2 flex min-w-10 flex-1 items-center">
-      <input
-        type="range"
-        class="scrub w-full"
-        min={0}
-        max={Math.max(0, frames - 1)}
-        step={1}
-        bind:value={scrub}
-        style="--p:{frames > 1 ? scrub / (frames - 1) : 0}"
-        oninput={onscrub}
-        onchange={() => seek(scrub)}
-        aria-label="Frame"
-      />
-      <!-- The bookmarks, where the thumb's centre stands at each (it travels half a thumb in from either end). -->
-      {#each marks ?? [] as m (m)}
-        {#if m < frames}
-          <span
-            class="pointer-events-none absolute top-1/2 h-2.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-warning"
-            style="left:calc(0.375rem + (100% - 0.75rem) * {frames > 1 ? m / (frames - 1) : 0})"
-            data-mark={m}
-          ></span>
-        {/if}
-      {/each}
-    </div>
-    <Tip class="shrink-0" text="Next (→)">
-      <Button variant="ghost" size="icon" onclick={() => seek(frame + 1)} aria-label="Next frame"
-        ><ChevronRightIcon /></Button
-      >
-    </Tip>
-    <Tip class="hidden shrink-0 @md:inline-flex" text="Last (End)">
-      <Button variant="ghost" size="icon" onclick={() => seek(frames - 1)} aria-label="Last frame"
-        ><ChevronsRightIcon /></Button
-      >
-    </Tip>
-    {#if marks}
-      <Tip class="hidden shrink-0 @md:inline-flex" text="Previous bookmark ([)">
-        <Button
-          variant="ghost"
-          size="icon"
-          onclick={() => toMark(prevMark(marks, frame))}
-          disabled={prevMark(marks, frame) === null}
-          aria-label="Previous bookmark"><StepBackIcon /></Button
+  <!-- The controls never overflow. Below @md they stack: previous, the slider and next on the first line
+       (the slider's basis leaves room for just the two arrows, so the rest wraps), the bookmark, frame box
+       and readout centred under it, with the timecode from @xs. @md puts it all on one line, and @2xl
+       (~610px needed) adds first/last and the bookmark jumps, which keep their keys when hidden. -->
+  <div class="@container">
+    <div class="flex flex-wrap items-center justify-center gap-1 @md:flex-nowrap @lg:gap-2">
+      <Tip class="hidden shrink-0 @2xl:inline-flex" text="First (Home)">
+        <Button variant="ghost" size="icon" onclick={() => seek(0)} aria-label="First frame"
+          ><ChevronsLeftIcon /></Button
         >
       </Tip>
-      {#if onmark}
-        <Tip
-          class="shrink-0"
-          text={marked ? `Remove the bookmark on frame ${frame} (M)` : `Bookmark frame ${frame} (M)`}
+      <Tip class="shrink-0 @max-md:order-first" text="Previous (←)">
+        <Button variant="ghost" size="icon" onclick={() => seek(frame - 1)} aria-label="Previous frame"
+          ><ChevronLeftIcon /></Button
         >
+      </Tip>
+      <div
+        class="relative mx-2 flex min-w-10 flex-1 items-center @max-md:order-first @max-md:basis-[calc(100%-6rem)] @max-md:py-1"
+      >
+        <input
+          type="range"
+          class="scrub w-full"
+          min={0}
+          max={Math.max(0, frames - 1)}
+          step={1}
+          bind:value={scrub}
+          style="--p:{frames > 1 ? scrub / (frames - 1) : 0}"
+          oninput={onscrub}
+          onchange={() => seek(scrub)}
+          aria-label="Frame"
+        />
+        <!-- The bookmarks, where the thumb's centre stands at each (it travels half a thumb in from either end). -->
+        {#each marks ?? [] as m (m)}
+          {#if m < frames}
+            <span
+              class="pointer-events-none absolute top-1/2 h-2.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-warning"
+              style="left:calc(0.375rem + (100% - 0.75rem) * {frames > 1 ? m / (frames - 1) : 0})"
+              data-mark={m}
+            ></span>
+          {/if}
+        {/each}
+      </div>
+      <Tip class="shrink-0 @max-md:order-first" text="Next (→)">
+        <Button variant="ghost" size="icon" onclick={() => seek(frame + 1)} aria-label="Next frame"
+          ><ChevronRightIcon /></Button
+        >
+      </Tip>
+      <Tip class="hidden shrink-0 @2xl:inline-flex" text="Last (End)">
+        <Button variant="ghost" size="icon" onclick={() => seek(frames - 1)} aria-label="Last frame"
+          ><ChevronsRightIcon /></Button
+        >
+      </Tip>
+      {#if marks}
+        <Tip class="hidden shrink-0 @2xl:inline-flex" text="Previous bookmark ([)">
           <Button
             variant="ghost"
             size="icon"
-            onclick={() => onmark(frame)}
-            aria-label="Bookmark this frame"
-            aria-pressed={marked}><BookmarkIcon class={marked ? 'fill-warning text-warning' : ''} /></Button
+            onclick={() => toMark(prevMark(marks, frame))}
+            disabled={prevMark(marks, frame) === null}
+            aria-label="Previous bookmark"><StepBackIcon /></Button
+          >
+        </Tip>
+        {#if onmark}
+          <Tip
+            class="shrink-0"
+            text={marked ? `Remove the bookmark on frame ${frame} (M)` : `Bookmark frame ${frame} (M)`}
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              onclick={() => onmark(frame)}
+              aria-label="Bookmark this frame"
+              aria-pressed={marked}><BookmarkIcon class={marked ? 'fill-warning text-warning' : ''} /></Button
+            >
+          </Tip>
+        {/if}
+        <Tip class="hidden shrink-0 @2xl:inline-flex" text="Next bookmark (])">
+          <Button
+            variant="ghost"
+            size="icon"
+            onclick={() => toMark(nextMark(marks, frame))}
+            disabled={nextMark(marks, frame) === null}
+            aria-label="Next bookmark"><StepForwardIcon /></Button
           >
         </Tip>
       {/if}
-      <Tip class="hidden shrink-0 @md:inline-flex" text="Next bookmark (])">
-        <Button
-          variant="ghost"
-          size="icon"
-          onclick={() => toMark(nextMark(marks, frame))}
-          disabled={nextMark(marks, frame) === null}
-          aria-label="Next bookmark"><StepForwardIcon /></Button
-        >
+      <Tip class="shrink-0" text="Go to a frame number, or a time: 1:23.5, 1:02:03 or 83.5s (Enter)">
+        <Input
+          class="w-24 text-right font-mono"
+          aria-label="Frame number or time"
+          bind:value={frameInput}
+          onkeydown={(e) => e.key === 'Enter' && goTo()}
+          onblur={goTo}
+        />
       </Tip>
-    {/if}
-    <Tip class="shrink-0" text="Go to a frame number, or a time: 1:23.5, 1:02:03 or 83.5s (Enter)">
-      <Input
-        class="w-24 text-right font-mono"
-        aria-label="Frame number or time"
-        bind:value={frameInput}
-        onkeydown={(e) => e.key === 'Enter' && goTo()}
-        onblur={goTo}
-      />
-    </Tip>
-    <span class="readout shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-      >/ {frames - 1} · {timecode(scrub / (fps || 24))}</span
-    >
+      <span class="readout shrink-0 text-xs whitespace-nowrap text-muted-foreground"
+        >/ {frames - 1}<span class="hidden @xs:inline">{` · ${timecode(scrub / (fps || 24))}`}</span></span
+      >
+    </div>
   </div>
 </div>
 

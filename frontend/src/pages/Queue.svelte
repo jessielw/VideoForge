@@ -945,12 +945,13 @@
         <p class="text-xs text-muted-foreground">
           A ticked job is queued and locked, so you can't edit it until you untick it. Start queue runs it. Actions on
           the selection include jobs on other pages and jobs hidden by filters. Index uses {selected.length
-            ? `${selected.length} selected jobs`
+            ? `${selected.length} selected ${selected.length === 1 ? 'job' : 'jobs'}`
             : `all ${app.jobs.length} jobs`}.
         </p>
-        <p id="queue-keys" class="text-xs text-muted-foreground pointer-coarse:hidden">
+        <!-- leading-6 leaves room for the keycaps, which stand taller than a text-xs line. -->
+        <p id="queue-keys" class="text-xs leading-6 text-muted-foreground pointer-coarse:hidden">
           Arrow keys, <Kbd>Home</Kbd> and <Kbd>End</Kbd> move through the list. <Kbd>Shift</Kbd> extends the selection, and
-          <Kbd>Ctrl+A</Kbd> (<Kbd>Cmd+A</Kbd>) selects matching jobs on every page.
+          <Kbd>Ctrl+A</Kbd> or <Kbd>Cmd+A</Kbd> selects matching jobs on every page.
         </p>
       </div>
 
