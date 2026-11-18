@@ -49,7 +49,8 @@
 
   <div class="space-y-2">
     <p class="section-label">Mode</p>
-    <div class="grid max-w-md grid-cols-3 gap-2" role="radiogroup" aria-label="Mode">
+    <!-- each row of choices keeps its columns while they're 8rem or wider, and wraps onto more rows when they aren't -->
+    <div class="grid max-w-md grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2" role="radiogroup" aria-label="Mode">
       {#each MODES as m (m.id)}
         {@const on = userPrefersMode.current === m.id}
         <button
@@ -129,7 +130,11 @@
 
   <div class="space-y-2">
     <p class="section-label">Density</p>
-    <div class="grid max-w-md grid-cols-3 gap-2" role="radiogroup" aria-label="Density">
+    <div
+      class="grid max-w-md grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2"
+      role="radiogroup"
+      aria-label="Density"
+    >
       {#each DENSITIES as d (d.id)}
         {@const on = appearance.density === d.id}
         <button
@@ -163,7 +168,11 @@
 
   <div class="space-y-2">
     <p class="section-label">Corners</p>
-    <div class="grid max-w-2xl grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Corners">
+    <div
+      class="grid max-w-2xl grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2"
+      role="radiogroup"
+      aria-label="Corners"
+    >
       {#each RADII as r (r.id)}
         {@const on = appearance.radius === r.id}
         <button
