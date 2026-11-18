@@ -400,7 +400,7 @@
       const next = ZOOMS.find((z) => z > cur + 0.5)
       if (next) setZoom(next, cx, cy)
     } else if (zoom) {
-      const next = [...ZOOMS].reverse().find((z) => z < cur - 0.5)
+      const next = ZOOMS.findLast((z) => z < cur - 0.5)
       setZoom(next && next > fitScale * 100 + 0.5 ? next : 0, cx, cy)
     }
   }

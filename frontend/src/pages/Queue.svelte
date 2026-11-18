@@ -337,7 +337,7 @@
   async function move(step: number) {
     const ids = app.jobs.map((j) => j.id)
     const sel = new Set(selected)
-    const order = step < 0 ? ids : [...ids].reverse()
+    const order = step < 0 ? ids : ids.toReversed()
     for (let i = 1; i < order.length; i++) {
       if (sel.has(order[i]) && !sel.has(order[i - 1])) [order[i - 1], order[i]] = [order[i], order[i - 1]]
     }
