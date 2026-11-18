@@ -29,7 +29,7 @@ Search matches job names, labels and source paths, ignoring case. Every word mus
 
 Selections survive filters and live status changes. The count identifies jobs hidden by filters; **Clear selection** clears all selected jobs. **Run selected**, Index with a selection, and the other selected-job actions include selections on other pages and hidden by filters. **Start queue** runs every queued job, and Index without a selection uses all jobs. Move up/down changes positions in the full queue, including across filtered-out neighbors.
 
-On small windows, opening one job collapses the list to a rail. **Show the queue list** opens search and filters over the editor; Escape closes it and restores focus to the opener. At widths below 640 CSS pixels, navigation also collapses and the list fills the available width. Short windows allow scrolling to reach queue controls.
+On small windows, opening one job collapses the list to a rail. **Show the queue list** opens search and filters over the editor; Escape closes it and restores focus to the opener. Below 1024 CSS pixels, the menu also collapses to icons. Below 640 CSS pixels, the list fills the available width. Short windows allow scrolling to reach queue controls.
 
 ## Queue jobs
 
