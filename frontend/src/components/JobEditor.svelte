@@ -167,8 +167,11 @@
   <div class="p-6 text-muted-foreground">{error || 'Loading…'}</div>
 {:else}
   <Tabs.Root bind:value={tab} class="h-full min-h-0 gap-0">
-    <header class="space-y-2 border-b px-5 pt-3 max-sm:px-3">
-      <div class="flex items-center gap-3 max-sm:flex-wrap max-sm:gap-x-2 max-sm:gap-y-1">
+    <!-- A narrow header (a phone, or 200% zoom) gives the job's name a line of its own. -->
+    <header class="@container/job-header space-y-2 border-b px-5 pt-3 max-sm:px-3">
+      <div
+        class="flex items-center gap-3 @max-[44rem]/job-header:flex-wrap @max-[44rem]/job-header:gap-x-2 @max-[44rem]/job-header:gap-y-1"
+      >
         <Tip
           class="shrink-0"
           text={job.status === 'running'
@@ -190,7 +193,7 @@
             {queued ? 'Queued · locked' : 'Queue'}
           </label>
         </Tip>
-        <Tip class="min-w-0 max-sm:order-first max-sm:basis-full" text={job.source}>
+        <Tip class="min-w-0 @max-[44rem]/job-header:order-first @max-[44rem]/job-header:basis-full" text={job.source}>
           <h2 class="truncate text-lg font-semibold">{job.name}</h2>
         </Tip>
         {#if job.label}<Tip class="shrink-0" text="Label (Output tab)"><Badge variant="outline">{job.label}</Badge></Tip
@@ -292,7 +295,7 @@
       id="job-tab-panel"
       role="tabpanel"
       aria-labelledby="job-tab-{tab}"
-      class="min-h-0 flex-1 overflow-auto p-5 max-sm:p-3"
+      class="@container/job-tab min-h-0 flex-1 overflow-auto p-5 max-sm:p-3"
     >
       {#if tab === 'video'}
         {#if job.spec.inputs.encode}
