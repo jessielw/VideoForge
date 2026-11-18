@@ -266,6 +266,7 @@ test('templates uses the available editor width on large windows', async ({ page
   await expect(content).toBeVisible()
   const bounds = await content.boundingBox()
   expect(bounds!.x + bounds!.width).toBeGreaterThan(1920 - 40)
+  await expect(page.getByRole('button', { name: 'All templates' })).toHaveCount(0) // the list stays beside the editor
   await page.screenshot({ path: testInfo.outputPath('templates-wide.png') })
   expect(errors).toEqual([])
 })
@@ -324,6 +325,83 @@ test('Templates stacks editor columns when zoom leaves insufficient panel width'
   await extra.scrollIntoViewIfNeeded()
   await expect(extra).toBeInViewport()
   await page.screenshot({ path: testInfo.outputPath('templates-narrow.png') })
+  expect(errors).toEqual([])
+})
+
+test('Templates on a 320 px window shows the list or the editor, and All templates goes back', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  const list = page.getByRole('list', { name: 'Templates' })
+  const row = list.getByRole('button', { name: 'Film 1080p CEL', exact: true })
+  const name = page.getByRole('textbox', { name: 'Template name' })
+  const back = page.getByRole('button', { name: 'All templates' })
+  await expect(list).toBeVisible()
+  await expect(name).toBeHidden()
+
+  await row.click()
+  await expect(list).toBeHidden()
+  await expect(name).toBeFocused()
+  const editor = page.locator('[class*="@container/template-editor"]')
+  expect(await editor.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
+  await back.click()
+  await expect(list).toBeVisible()
+  await expect(name).toBeHidden()
+  await expect(row).toBeFocused()
+
+  // leaving an edited template this way asks first, like any other way out
+  await row.click()
+  await name.fill('Film 1080p CEL edited')
+  await back.click()
+  await expect(page.getByRole('dialog')).toContainText('Save changes to Film 1080p CEL edited?')
+  await page.getByRole('button', { name: 'Stay', exact: true }).click()
+  await expect(name).toBeVisible()
+  await back.click()
+  await page.getByRole('button', { name: 'Discard', exact: true }).click()
+  await expect(list).toBeVisible()
+  await expect(row).toBeFocused()
+
+  // a built-in's name can't be edited, so focus goes to All templates
+  await list.getByRole('button', { name: /^Manual defaults/ }).click()
+  await expect(back).toBeFocused()
+  expect(errors).toEqual([])
+})
+
+test('Templates on a 320 px window: Stay reaches an edit kept from before a reload', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  const list = page.getByRole('list', { name: 'Templates' })
+  const name = page.getByRole('textbox', { name: 'Template name' })
+  await list.getByRole('button', { name: 'Film 1080p CEL', exact: true }).click()
+  await name.fill('Film 1080p CEL edited')
+  await page.reload() // the draft survives it, but the window opens on the list
+  await expect(list).toBeVisible()
+  await list.getByRole('button', { name: 'Film 1080p CEL', exact: true }).click()
+  await page.getByRole('button', { name: 'Stay', exact: true }).click()
+  await expect(name).toBeFocused()
+  await expect(name).toHaveValue('Film 1080p CEL edited')
+  expect(errors).toEqual([])
+})
+
+test('Templates on a 320 px window: after Delete, focus is in the list', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  const errors = await layoutFixture(page)
+  await page.route('**/api/presets/template/*', (route) =>
+    route.fulfill({
+      json: { video: [], encoder: [], audio: [], template: [], template_defaults: {}, encoder_starters: [] },
+    }),
+  )
+  await page.goto('/#/templates')
+  const list = page.getByRole('list', { name: 'Templates' })
+  await list.getByRole('button', { name: 'Film 1080p CEL', exact: true }).click()
+  const remove = page.getByRole('button', { name: 'Delete', exact: true })
+  await remove.click()
+  await page.getByRole('button', { name: 'Confirm?', exact: true }).click()
+  await expect(list).toBeVisible()
+  await expect(list.getByRole('button', { name: 'Film 1080p CEL', exact: true })).toHaveCount(0)
+  // on the open template's name, not on a row's star, where Enter would change the default
+  await expect(list.locator(':focus')).toHaveAttribute('aria-current', 'true')
   expect(errors).toEqual([])
 })
 
