@@ -258,30 +258,35 @@ test('the name template links to the Settings that turns it on or off for every 
   expect(errors).toEqual([])
 })
 
-for (const route of ['templates', 'settings']) {
-  test(`${route} uses the available editor width on large windows`, async ({ page }, testInfo) => {
-    await page.setViewportSize({ width: 1920, height: 1000 })
-    const errors = await layoutFixture(page)
-    await page.goto(`/#/${route}`)
-    if (route === 'settings') await page.getByRole('button', { name: 'Tools', exact: true }).click()
-    const content =
-      route === 'templates'
-        ? page.locator('fieldset').first()
-        : page.getByRole('textbox', { name: 'ffmpeg path', exact: true }).locator('xpath=../../../..')
-    await expect(content).toBeVisible()
-    const bounds = await content.boundingBox()
-    expect(bounds!.x + bounds!.width).toBeGreaterThan(1920 - 40)
-    if (route === 'settings') {
-      await page.getByRole('button', { name: 'Queue & indexing', exact: true }).click()
-      const indexing = await page.getByRole('heading', { name: 'Batch indexing', exact: true }).boundingBox()
-      const audio = await page.getByRole('heading', { name: 'Audio encodes', exact: true }).boundingBox()
-      expect(Math.abs(audio!.y - indexing!.y)).toBeLessThan(2)
-      expect(audio!.x).toBeGreaterThan(1000)
-    }
-    await page.screenshot({ path: testInfo.outputPath(`${route}-wide.png`) })
-    expect(errors).toEqual([])
-  })
-}
+test('templates uses the available editor width on large windows', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  const content = page.locator('fieldset').first()
+  await expect(content).toBeVisible()
+  const bounds = await content.boundingBox()
+  expect(bounds!.x + bounds!.width).toBeGreaterThan(1920 - 40)
+  await page.screenshot({ path: testInfo.outputPath('templates-wide.png') })
+  expect(errors).toEqual([])
+})
+
+test('settings keeps one readable column on large windows', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  const errors = await layoutFixture(page)
+  await page.goto('/#/settings')
+  for (const tab of ['Tools', 'Queue & indexing']) {
+    await page.getByRole('button', { name: tab, exact: true }).click()
+    const content = await page.getByRole('group', { name: tab, exact: true }).boundingBox()
+    expect(content!.width, tab).toBeLessThanOrEqual(896) // 56rem
+  }
+  // groups go one under another, so a short one never sits beside a tall one
+  const indexing = await page.getByRole('heading', { name: 'Batch indexing', exact: true }).boundingBox()
+  const audio = await page.getByRole('heading', { name: 'Audio encodes', exact: true }).boundingBox()
+  expect(audio!.y).toBeGreaterThan(indexing!.y)
+  expect(Math.abs(audio!.x - indexing!.x)).toBeLessThan(2)
+  await page.screenshot({ path: testInfo.outputPath('settings-wide.png') })
+  expect(errors).toEqual([])
+})
 
 for (const width of [960, 800]) {
   test(`New jobs scrolls at ${width} CSS pixels without clipping its form`, async ({ page }, testInfo) => {

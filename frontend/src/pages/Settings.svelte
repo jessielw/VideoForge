@@ -482,7 +482,7 @@
       </nav>
 
       <div
-        class="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8 @min-[90rem]/settings:grid-cols-2"
+        class="grid max-w-4xl min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8"
         role="group"
         aria-labelledby="settings-tab-{tab}"
         aria-describedby="settings-about"
