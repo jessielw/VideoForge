@@ -469,6 +469,34 @@ test('filter values read as figures', async ({ page }) => {
   expect(errors).toEqual([])
 })
 
+test('Templates at 320 px: a filter step shows its whole name, with its value beside or below it', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  const presets = await page.evaluate(() => fetch('/api/presets').then((r) => r.json()))
+  const step = (category: string, name: string) => ({ category, name, script: '', enabled: true })
+  presets.template[0].data.video.filters = [step('crop', 'Crop'), step('resize', 'Resize')]
+  await page.route('**/api/presets', (route) => route.fulfill({ json: presets }))
+  await page.addInitScript(() => sessionStorage.removeItem('videoforge.draft.templates'))
+  await page.reload()
+  await page
+    .getByRole('list', { name: 'Templates' })
+    .getByRole('button', { name: 'Film 1080p CEL', exact: true })
+    .click()
+  const steps = page.locator('[data-slot=card]').filter({ hasText: 'Source filter' }).locator('ol > li')
+  for (const name of ['Crop', 'Resize']) {
+    const label = steps.getByText(name, { exact: true })
+    expect(await label.evaluate((el) => el.scrollWidth - el.clientWidth), name).toBeLessThanOrEqual(0)
+    // the value goes below the name only when the row has no room for both
+    const value = (await steps.filter({ hasText: name }).locator('.readout').boundingBox())!
+    const box = (await label.boundingBox())!
+    expect(value.x >= box.x + box.width || value.y >= box.y + box.height - 1, `${name}'s value clear of it`).toBe(true)
+  }
+  const crop = (await steps.getByText('Crop', { exact: true }).boundingBox())!
+  expect((await steps.filter({ hasText: 'Crop' }).locator('.readout').boundingBox())!.y).toBeGreaterThan(crop.y) // "per job" moved below
+  expect(errors).toEqual([])
+})
+
 test('controls animate only color and movement, and a dialog does not blur the page', async ({ page }) => {
   const errors = await layoutFixture(page)
   await page.goto('/#/templates')
