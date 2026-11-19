@@ -160,6 +160,91 @@ def test_partial_and_zero_imports_explain_kept_jobs(tmp_path):
         assert len(again["kept"]) == 2
 
 
+def test_match_suggests_sources_and_takes_files_matched_by_hand(tmp_path):
+    make_files(tmp_path, "S01E01", "S01E02")
+    stray = tmp_path / "English.srt"
+    stray.write_text("subtitle", encoding="utf-8")
+    e1, e2 = (str(tmp_path / "src" / f"Show.S01E0{n}.mkv") for n in (1, 2))
+    near1 = str(tmp_path / "src" / "Show.S01E01.en.srt")
+    body = {"sources": [str(tmp_path / "src")], "subtitles": [str(stray)]}
+    with make_client(tmp_path) as client:
+        preview = client.post("/api/match", json=body).json()
+        assert preview["unmatched"] == [str(stray)] and preview["held"] == []
+        assert preview["suggestions"] == {str(stray): []}  # nothing in its name to go on
+        first = next(j for j in preview["jobs"] if j["source"] == e1)
+        assert first["matches"] == {near1: "name"}
+
+        # The stray to E02, and E01's own subtitle (found beside it) to no source.
+        matched = client.post("/api/match", json=body | {"assign": {str(stray): e2, near1: None}}).json()
+        assert matched["unmatched"] == [near1] and matched["held"] == [near1]
+        second = next(j for j in matched["jobs"] if j["source"] == e2)
+        assert second["matches"][str(stray)] == "manual"
+        assert str(tmp_path / "src" / "Show.S01E02.en.srt") in second["subtitles"]  # its own stay
+        assert next(j for j in matched["jobs"] if j["source"] == e1)["subtitles"] == []
+        assert client.post("/api/match", json=body | {"assign": [str(stray)]}).status_code == 422
+
+        added = client.post(
+            "/api/jobs", json=body | {"assign": {str(stray): e2, near1: None}, "output_dir": str(tmp_path / "out")}
+        ).json()
+        assert len(added["added"]) == 2 and added["unmatched"] == []  # set to no source on purpose
+
+
+def test_match_timing_flags_subtitles_that_dont_fit_their_source(tmp_path, monkeypatch):
+    from videoforge.core import sub_timing
+
+    monkeypatch.setattr(sub_timing, "source_length_ms", lambda p, _mkvmerge: {"A.mkv": 24 * 60_000}.get(p.name))
+
+    def srt(name, end):
+        p = tmp_path / name
+        p.write_text(f"1\n00:00:01,000 --> {end}\nx\n", encoding="utf-8")
+        return str(p)
+
+    a = str(tmp_path / "A.mkv")
+    fits, late, early = srt("fits.srt", "00:22:30,000"), srt("late.srt", "00:44:00,000"), srt("early.srt", "00:05:00,0")
+    forced = srt("early.forced.srt", "00:05:00,000")
+    body = {"pairs": {fits: a, late: a, early: a, forced: a, srt("other.srt", "00:01:00,0"): str(tmp_path / "B.mkv")}}
+    (tmp_path / "x.sup").write_bytes(b"PG")
+    body["pairs"][str(tmp_path / "x.sup")] = a
+    with make_client(tmp_path) as client:
+        out = client.post("/api/match/timing", json=body).json()
+        assert {k: v["verdict"] for k, v in out.items()} == {fits: None, late: "late", early: "early", forced: None}
+        assert out[late] == {"verdict": "late", "last_ms": 44 * 60_000, "source_ms": 24 * 60_000}
+        assert client.post("/api/match/timing", json={"pairs": [fits]}).status_code == 422
+
+
+def test_a_set_matched_by_hand_is_remembered_on_add_and_can_be_forgotten(tmp_path):
+    make_files(tmp_path, "S01E01", "S01E02", "S01E03", "S01E04")
+    subs = [tmp_path / f"t{n}_c{n + 1}.srt" for n in (1, 2, 3)]
+    for s in subs:
+        s.write_text("subtitle", encoding="utf-8")
+    src = [str(tmp_path / "src" / f"Show.S01E0{n}.mkv") for n in (1, 2, 3, 4)]
+    body = {"sources": [str(tmp_path / "src")], "subtitles": [str(s) for s in subs]}
+    with make_client(tmp_path) as client:
+        before = client.post("/api/match", json=body).json()
+        assert len(before["unmatched"]) == 3  # two numbers change in step: nothing to go on
+        taught = {str(subs[0]): src[1], str(subs[1]): src[2]}
+        preview = client.post("/api/match", json=body | {"assign": taught}).json()
+        assert preview["suggestions"][str(subs[2])][0] == {
+            "source": src[3],
+            "why": "pattern",
+            "detail": "Named like t1_c2.srt, which you matched",
+        }
+        client.post("/api/jobs", json=body | {"assign": taught, "output_dir": str(tmp_path / "out")})
+        (pattern,) = client.get("/api/match/patterns").json()
+        assert pattern["example"] == "t1_c2.srt" and pattern["position"] == 1
+
+        after = client.post("/api/match", json=body).json()  # taught: no assign needed now
+        assert after["unmatched"] == []
+        last = next(j for j in after["jobs"] if j["source"] == src[3])
+        assert last["matches"][str(subs[2])] == "learned"
+        assert last["details"][str(subs[2])] == "Named like t1_c2.srt, which you matched before"
+        assert last["patterns"] == {str(subs[2]): pattern["shape"]}
+
+        assert client.post("/api/match/patterns/forget", json={"shape": pattern["shape"]}).json() == {"forgotten": 1}
+        assert client.get("/api/match/patterns").json() == []
+        assert len(client.post("/api/match", json=body).json()["unmatched"]) == 3
+
+
 def test_a_job_is_added_again_from_its_file_exactly_as_it_was(tmp_path):
     from videoforge.core import job_file
 

@@ -24,6 +24,7 @@ import type {
   JobSpec,
   JobSummary,
   MatchResult,
+  SubtitleTiming,
   NotificationDestination,
   PathKind,
   PresetKind,
@@ -106,6 +107,7 @@ export interface InputSlots {
   subtitles: string[]
   chapters: string[]
   rule_set: string
+  assign?: Record<string, string | null> // file -> source (null: no source), matched by hand
 }
 
 // A job's files, each replaced when given (a folder adds its files of that kind).
@@ -256,6 +258,12 @@ export const api = {
   removeDir: (path: string) => post<{ path: string }>('/api/fs/rmdir', { path }), // empty folders only
 
   match: (slots: InputSlots) => post<MatchResult>('/api/match', slots),
+  // Whether each text subtitle's last line fits its source's length ({subtitle: source}); slow on a share.
+  matchTiming: (pairs: Record<string, string>) => post<Record<string, SubtitleTiming>>('/api/match/timing', { pairs }),
+  // Name patterns remembered from sets matched by hand; forget one (by shape) or all.
+  matchPatterns: () => get<{ shape: string; position: number; example: string }[]>('/api/match/patterns'),
+  forgetMatchPatterns: (shape?: string) =>
+    post<{ forgotten: number }>('/api/match/patterns/forget', shape === undefined ? {} : { shape }),
   addJobs: (
     body: InputSlots & {
       original_language: string | null

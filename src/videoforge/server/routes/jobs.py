@@ -2,23 +2,35 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Request
 
+from videoforge.core import sub_timing
 from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import ToolError
 from videoforge.core.job import OutputPolicy
+from videoforge.core.match_names import shape
 from videoforge.core.models import JobInputs, Overrides
-from videoforge.core.pairing import AUDIO_EXTENSIONS, SUB_FORMATS, match_files, slot_files, subtitle_label
+from videoforge.core.pairing import (
+    AUDIO_EXTENSIONS,
+    SUB_FORMATS,
+    MatchResult,
+    learn_patterns,
+    match_files,
+    match_reason,
+    slot_files,
+    subtitle_label,
+)
 from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.probe import mediainfo_report
 from videoforge.core.template import Template
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.core.workdir import work_dir_size
-from videoforge.server import output_folders
+from videoforge.server import match_patterns, output_folders
 from videoforge.server.queue import LOG_LINES, Busy, JobQueue
 from videoforge.server.routes.presets import default_template, subs_default
 from videoforge.server.views import detail, summary
@@ -52,27 +64,102 @@ def _match(request: Request, body: dict[str, Any]):
         _paths(body, "chapters"),
         rules,
     )
-    return match_files(sets, rules)
+    return match_files(sets, rules, _assign(body), match_patterns.load(request.app.state.store))
+
+
+def _assign(body: dict[str, Any]) -> dict[Path, Path | None]:
+    """{file: source, or null for no source}: files the user matched by hand in Matched files."""
+    assign = body.get("assign") or {}
+    if not isinstance(assign, dict) or not all(
+        isinstance(k, str) and (v is None or isinstance(v, str)) for k, v in assign.items()
+    ):
+        raise HTTPException(422, "assign must map file paths to source paths or null")
+    return {Path(k): Path(v) if v else None for k, v in assign.items()}
+
+
+def _unmatched(result: MatchResult) -> list[Path]:
+    left = result.unmatched
+    return left.encodes + left.subtitles + left.chapters
 
 
 @router.post("/match")
 def match(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    """Preview what Add would create from the given files and folders."""
+    """Preview what Add would create from the given files and folders. Each job says how each of its files matched
+    (matches: {path: reason}) and, for a guess, what it went on (details: {path: words}). Each unmatched file has
+    sources to offer (suggestions: {path: [{source, why, detail}]}); held lists the unmatched files the user set to
+    no source, and spare those left out because their source already has one of their kind ({path: source})."""
     result = _match(request, body)
-    left = result.unmatched
     q = queue_of(request)
+    unmatched = _unmatched(result)
+
+    def files(j: JobInputs) -> list[Path]:
+        return [f for f in (j.encode, j.chapters) if f] + j.subtitles
+
     return {
         "jobs": [
             to_json(j)
             | {
                 "existing_id": existing.id if (existing := q._find_source(j.source)) else None,
                 "existing_status": existing.status if existing else None,
-                "subtitle_info": [subtitle_label(p, j.source) for p in j.subtitles],
+                "subtitle_info": [subtitle_label(p, j.source, result.how.get(p)) for p in j.subtitles],
+                "matches": {str(f): result.how.get(f) or match_reason(f, j.source) for f in files(j)},
+                "details": {str(f): result.detail[f] for f in files(j) if f in result.detail},
+                # the remembered pattern each "learned" file went by, to forget it
+                "patterns": {str(f): shape(f.stem) for f in files(j) if result.how.get(f) == "learned"},
             }
             for j in result.jobs
         ],
-        "unmatched": [str(p) for p in left.encodes + left.subtitles + left.chapters],
+        "unmatched": [str(p) for p in unmatched],
+        "held": [str(p) for p in unmatched if result.how.get(p) == "manual"],
+        "spare": {str(p): str(s) for p, s in result.spare.items()},
+        "suggestions": {
+            str(p): [{"source": str(s), "why": why, "detail": d} for s, why, d in result.suggestions.get(p, [])]
+            for p in unmatched
+        },
     }
+
+
+@router.post("/match/timing")
+def match_timing(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """{pairs: {subtitle: source}}: whether each text subtitle's last cue fits its source's length (sub_timing).
+    Returns {subtitle: {verdict: "late" | "early" | null, last_ms, source_ms}}, leaving out the ones that can't be
+    read (image subtitles, no cues, no source length). Reading a source's length is slow on a share: the caller
+    asks only when someone looks."""
+    pairs = body.get("pairs") or {}
+    if not isinstance(pairs, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in pairs.items()):
+        raise HTTPException(422, "pairs must map subtitle paths to source paths")
+    mkvmerge = queue_of(request).app.tools.mkvmerge
+    subs = {Path(s): Path(src) for s, src in pairs.items() if Path(s).suffix.lower() in sub_timing.TEXT_FORMATS}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        lasts = dict(zip(subs, pool.map(sub_timing.last_cue_ms, subs), strict=True))
+        wanted = sorted({src for s, src in subs.items() if lasts[s] is not None}, key=str)
+        lengths = dict(zip(wanted, pool.map(lambda p: sub_timing.source_length_ms(p, mkvmerge), wanted), strict=True))
+    out: dict[str, Any] = {}
+    for s, src in subs.items():
+        last, length = lasts[s], lengths.get(src)
+        if last is None or not length:
+            continue
+        forced = "forced" in subtitle_label(s)["tags"]
+        out[str(s)] = {"verdict": sub_timing.verdict(last, length, forced=forced), "last_ms": last, "source_ms": length}
+    return out
+
+
+@router.get("/match/patterns")
+def list_match_patterns(request: Request) -> list[dict[str, Any]]:
+    """Name patterns remembered from sets the user matched by hand (match_patterns), newest first."""
+    return [
+        {"shape": p.shape, "position": p.position, "example": p.example}
+        for p in match_patterns.load(request.app.state.store)
+    ]
+
+
+@router.post("/match/patterns/forget")
+def forget_match_patterns(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """{shape}: forget that pattern, or every one when shape is left out. Returns {forgotten: count}."""
+    shape = body.get("shape")
+    if shape is not None and not isinstance(shape, str):
+        raise HTTPException(422, "shape must be text")
+    return {"forgotten": match_patterns.forget(request.app.state.store, shape)}
 
 
 def _optional_bool(body: dict[str, Any], key: str) -> bool | None:
@@ -115,7 +202,8 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         auto_index=_optional_bool(body, "auto_index"),
         auto_crop=_optional_bool(body, "auto_crop"),
     )
-    left = result.unmatched
+    if added:  # sets the user matched by hand teach later batches
+        match_patterns.remember(request.app.state.store, learn_patterns(_assign(body), [j.source for j in result.jobs]))
     added_sources = {e.spec.inputs.source for e in added}
     kept = []
     for inputs in result.jobs:
@@ -137,7 +225,8 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         "added": [e.id for e in added],
         "skipped": skipped,
         "kept": kept,
-        "unmatched": [str(p) for p in left.encodes + left.subtitles + left.chapters],
+        # not those the user set to no source: they meant to leave them out
+        "unmatched": [str(p) for p in _unmatched(result) if result.how.get(p) != "manual"],
     }
 
 

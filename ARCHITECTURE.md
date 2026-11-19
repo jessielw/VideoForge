@@ -9,6 +9,9 @@ src/videoforge/
   core/                  The engine. Imports no web framework and no rule set (a test enforces it).
     models.py            Tracks, Plan (the rules' output), Overrides, Issue
     probe.py, classify.py, lang.py, mediainfo_text.py, pairing.py
+    match_names.py       Reading names for pairing: episode spellings, a name's words and shape, the number that
+                         tells a set of names apart. pairing.match_files ranks the tiers (by hand, name, SxxEyy,
+                         episode number, numbered set, closest name) and suggests sources for what's left
     config.py            Tool paths (mkvmerge, x264, x265, vspipe, VS plugin folder, ...); mkvpropedit / mkvextract
                          found next to mkvmerge and ffprobe next to ffmpeg unless set
     arguments.py         Extra tool arguments: Windows double-quote/backslash rules on every platform,
@@ -102,6 +105,8 @@ src/videoforge/
     settings.py          Port, data folder, browsable roots
     store.py             SQLite (app data): jobs (spec + state JSON, order), shared; profiles, each with its own
                          settings and presets (video, encoder, template), one active (routes/profiles.py)
+    match_patterns.py    Name patterns taught by matching a set by hand (pairing.learn_patterns), saved on Add in
+                         the profile's settings and passed to match_files for later batches
     queue.py             The queue: one worker thread runs jobs in order; start/stop/cancel, pause/resume, priority;
                          the index lane (its own thread: work folder, script, source index; nothing else)
     events.py            Progress, log lines and job changes -> WebSocket /api/events

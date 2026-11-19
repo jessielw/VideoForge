@@ -15,6 +15,7 @@ from videoforge.core.pairing import (
     external_sub_track,
     match_files,
     match_reason,
+    rank_sources,
     slot_files,
     subtitle_label,
 )
@@ -231,3 +232,165 @@ def test_matching_never_resolves_a_path(tmp_path, monkeypatch):
     sets = slot_files([src_dir, src_dir / "Show.S01E01.mkv"], [work], [src_dir / "subs"], [], RULES)
     assert [p.name for p in sets.sources] == ["Show.S01E01.mkv", "Show.S01E02.mkv", "Show.S01E03.mkv"]  # no twin
     assert len(match_files(sets, RULES).jobs) == 3
+
+
+def test_extracted_subtitle_named_after_its_source_with_an_underscore(tmp_path):
+    # gMKVExtract: "<source>_track7_[eng].forced.srt"; "_" right after SxxEyy used to hide the episode.
+    sources = [tmp_path / f"Show.S01E0{n}.mkv" for n in (1, 2)]
+    subs = [tmp_path / "forced" / f"Show.S01E0{n}_track7_[eng].forced.srt" for n in (2, 1)]
+    found = match_files(FileSets(sources, [], subs), MatchRules(scan_source_folder=False))
+    assert [[p.name for p in j.subtitles] for j in found.jobs] == [
+        ["Show.S01E01_track7_[eng].forced.srt"],
+        ["Show.S01E02_track7_[eng].forced.srt"],
+    ]
+    assert found.unmatched.subtitles == []
+    assert match_reason(subs[1], sources[0]) == "name"
+    assert match_reason(Path("Other_S01E01_x.srt"), sources[0]) == "episode"
+
+
+def test_subtitle_goes_to_the_source_its_name_is_closest_to(tmp_path):
+    a, b = tmp_path / "Movie.One.2001.1080p.BluRay.mkv", tmp_path / "Other.Film.1999.1080p.BluRay.mkv"
+    close, unclear = tmp_path / "movie one 2001 en.srt", tmp_path / "1080p.en.srt"
+    found = match_files(FileSets([a, b], [], [close, unclear]), MatchRules(scan_source_folder=False))
+    first = next(j for j in found.jobs if j.source == a)
+    assert first.subtitles == [close]
+    assert found.how == {close: "similar"}
+    assert found.unmatched.subtitles == [unclear]  # only words every source has: no guess
+    assert subtitle_label(close, a, found.how.get(close))["match"] == "similar"
+
+
+def test_files_matched_by_hand_win_over_names(tmp_path):
+    a, b = tmp_path / "Show.S01E01.mkv", tmp_path / "Show.S01E02.mkv"
+    stray, named = tmp_path / "English.srt", tmp_path / "Show.S01E01.en.srt"
+    chapters, encode = tmp_path / "chapters.txt", tmp_path / "Show.S01E01_job.h264"
+    assign = {stray: b, named: b, chapters: a, encode: b, tmp_path / "x.srt": tmp_path / "Not.In.Batch.mkv"}
+    found = match_files(FileSets([a, b], [encode], [stray, named], [chapters]), RULES, assign)
+    first, second = found.jobs
+    assert (first.encode, first.subtitles, first.chapters) == (None, [], chapters)
+    assert (second.encode, second.subtitles) == (encode, [stray, named])
+    assert found.how == dict.fromkeys([encode, stray, named, chapters], "manual")
+    assert found.unmatched == FileSets()
+
+
+def test_rank_sources_skips_another_episode():
+    sources = [Path("Show.S01E01.mkv"), Path("Show.S01E02.mkv"), Path("Show.S01E03.mkv")]
+    assert rank_sources(Path("Show.S01E02.en.srt"), sources) == [(sources[1], 1.0)]
+    assert rank_sources(Path("English.srt"), sources) == []
+
+
+def test_episode_number_alone_points_to_its_source(tmp_path):
+    sources = [tmp_path / f"Show.S01E{n:02d}.1080p.mkv" for n in (1, 2, 12)]
+    anime, word = tmp_path / "[Group] Show - 12 [ABCD1234].ass", tmp_path / "Show Episode 2.srt"
+    found = match_files(FileSets(sources, [], [anime, word]), MatchRules(scan_source_folder=False))
+    assert found.jobs[1].subtitles == [word] and found.jobs[2].subtitles == [anime]
+    assert found.how == {anime: "episode", word: "episode"}
+    assert rank_sources(Path("Show - 2.ass"), sources)[0][0] == sources[1]
+
+
+def test_episode_number_alone_is_not_enough_across_seasons(tmp_path):
+    sources = [tmp_path / "Show.S01E01.mkv", tmp_path / "Show.S02E01.mkv"]
+    found = match_files(FileSets(sources, [], [tmp_path / "Show - 01.ass"]), MatchRules(scan_source_folder=False))
+    assert [p.name for p in found.unmatched.subtitles] == ["Show - 01.ass"]
+
+
+def test_a_numbered_set_lines_up_with_the_sources(tmp_path):
+    # Nothing in these names says "episode": the number that changes from file to file lines up with the
+    # sources' episodes. The track number changes too, but only between two values.
+    sources = [tmp_path / f"Show.S01E{n:02d}.mkv" for n in (1, 2, 3)]
+    subs = [tmp_path / f"disc1_title{n:02d}_track{t}.srt" for n, t in ((1, 3), (2, 4), (3, 3))]
+    found = match_files(FileSets(sources, [], subs), MatchRules(scan_source_folder=False))
+    assert [j.subtitles for j in found.jobs] == [[s] for s in subs]
+    assert set(found.how.values()) == {"number"}
+
+
+def test_one_file_matched_by_hand_suggests_the_rest_of_its_set(tmp_path):
+    # Two numbers change in step (1-3 and 2-4), both could be episodes: the user matches one file, and the
+    # rest of its set is offered the same way (the second number is the episode).
+    sources = [tmp_path / f"Show.S01E{n:02d}.mkv" for n in (1, 2, 3, 4)]
+    subs = [tmp_path / f"t{n}_c{n + 1}.srt" for n in (1, 2, 3)]
+    rules = MatchRules(scan_source_folder=False)
+    found = match_files(FileSets(sources, [], subs), rules)
+    assert found.unmatched.subtitles == subs
+    found = match_files(FileSets(sources, [], subs), rules, {subs[0]: sources[1]})
+    assert found.jobs[1].subtitles == [subs[0]]
+    assert {p: offer[0][:2] for p, offer in found.suggestions.items()} == {
+        subs[1]: (sources[2], "pattern"),
+        subs[2]: (sources[3], "pattern"),
+    }
+
+
+def test_a_file_set_to_no_source_stays_unmatched_and_a_found_one_can_move(tmp_path):
+    a, b = tmp_path / "Show.S01E01.mkv", tmp_path / "Show.S01E02.mkv"
+    for f in (a, b, tmp_path / "Show.S01E01.en.srt", tmp_path / "Show.S01E02.en.srt"):
+        f.write_bytes(b"x")
+    found_a, found_b = tmp_path / "Show.S01E01.en.srt", tmp_path / "Show.S01E02.en.srt"
+    chapters = tmp_path / "Show.S01E01.chapters.txt"
+    found = match_files(FileSets([a, b], [], [], [chapters]), MatchRules(), {found_a: b, chapters: None})
+    first, second = found.jobs
+    assert first.subtitles == [] and first.chapters is None
+    assert second.subtitles == [found_a, found_b]  # moved here, beside its own
+    assert found.how == {found_a: "manual", chapters: "manual"}
+    assert found.unmatched.chapters == [chapters]
+
+
+def test_names_read_episodes_however_they_are_spelled():
+    from videoforge.core.match_names import episode_of, episode_token, numbering
+
+    assert [episode_token(n) for n in ("Show.S1E2", "Show.S01.E02", "Show 1x02", "Show_S01E02_x")] == ["S01E02"] * 4
+    assert episode_token("Movie.1920x1080") is None and episode_token("DD5.1x264") is None
+    assert episode_of("Show - 07v2 [1080p]") == (None, 7) and episode_of("Show.Ep.07") == (None, 7)
+    assert episode_of("Show.E-AC3.mkv") is None
+    assert numbering(["[G] Show - 01 [AB12]", "[G] Show - 02 [AB12]"]) == [1, 2]
+    assert numbering(["Movie.One.2001", "Other.1999"]) is None
+
+
+def test_a_second_chapters_file_or_encode_is_left_over_not_dropped(tmp_path):
+    a, b = tmp_path / "Show.S01E01.mkv", tmp_path / "Show.S01E02.mkv"
+    named, by_episode = tmp_path / "Show.S01E01.chapters.txt", tmp_path / "chapters_S01E01.xml"
+    e1, e2 = tmp_path / "x1.h264", tmp_path / "x2.h264"
+    sets = FileSets([a, b], [e1, e2], [], [by_episode, named])
+    found = match_files(sets, RULES, {e1: a, e2: a})
+    first = found.jobs[0]
+    assert first.chapters == named  # the name match beats the episode match
+    assert first.encode == e1
+    assert found.spare == {by_episode: a, e2: a}
+    assert found.unmatched.chapters == [by_episode] and found.unmatched.encodes == [e2]
+
+
+def test_guesses_say_what_they_went_on(tmp_path):
+    movies = [tmp_path / "Movie.One.2001.1080p.mkv", tmp_path / "Other.Film.1999.1080p.mkv"]
+    close = tmp_path / "movie one 2001 en.srt"
+    found = match_files(FileSets(movies, [], [close]), MatchRules(scan_source_folder=False))
+    assert found.detail[close] == "Shares 2001, movie and one with the source's name"
+
+    shows = [tmp_path / f"Show.S01E{n:02d}.mkv" for n in (1, 2, 3)]
+    ep, sets = tmp_path / "Show - 02.ass", [tmp_path / f"disc1_title{n:02d}_track3.srt" for n in (1, 2, 3)]
+    found = match_files(FileSets(shows, [], [ep, *sets]), MatchRules(scan_source_folder=False))
+    assert found.detail[ep] == "Episode 2 in its name"
+    assert found.detail[sets[2]] == "Its number 3 lines up with the source's, in a set of 3"
+
+
+def test_an_unmatched_encode_is_offered_its_episode_but_never_matched_by_it(tmp_path):
+    shows = [tmp_path / f"Show.S01E{n:02d}.mkv" for n in (1, 2)]
+    encode = tmp_path / "Episode 02 final.hevc"
+    found = match_files(FileSets(shows, [encode]), MatchRules(encode_extensions=(".hevc",), scan_source_folder=False))
+    assert found.unmatched.encodes == [encode]
+    assert found.suggestions[encode][0] == (shows[1], "episode", "Episode 2 in its name")
+
+
+def test_a_set_matched_by_hand_is_remembered_for_the_next_batch(tmp_path):
+    from videoforge.core.pairing import learn_patterns
+
+    rules = MatchRules(scan_source_folder=False)
+    season1 = [tmp_path / f"Show.S01E{n:02d}.mkv" for n in (1, 2, 3, 4)]
+    taught = {tmp_path / "t1_c2.srt": season1[1], tmp_path / "t2_c3.srt": season1[2]}
+    (pattern,) = learn_patterns(taught, season1)
+    assert (pattern.position, pattern.example) == (1, "t1_c2.srt")
+    assert learn_patterns({tmp_path / "t1_c2.srt": season1[1]}, season1) == []  # one file isn't a set
+
+    season2 = [tmp_path / f"Show.S02E{n:02d}.mkv" for n in (1, 2, 3, 4)]
+    subs = [tmp_path / f"t{n}_c{n + 1}.srt" for n in (1, 2, 3)]
+    found = match_files(FileSets(season2, [], subs), rules, patterns=[pattern])
+    assert [j.subtitles for j in found.jobs] == [[], [subs[0]], [subs[1]], [subs[2]]]
+    assert set(found.how.values()) == {"learned"}
+    assert found.detail[subs[0]] == "Named like t1_c2.srt, which you matched before"

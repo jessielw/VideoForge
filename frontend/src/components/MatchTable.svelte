@@ -3,37 +3,47 @@
   // A source already in the queue is kept unless it is ticked to be replaced. Each subtitle is a line: an
   // icon for how sure its match is, a short tag (language, format, name tags) and its file name, the part
   // it shares with the source dimmed. Clicking it unticks it from its job; a job with a different number of
-  // subtitles than most is flagged.
-  import CheckIcon from '@lucide/svelte/icons/check'
-  import CheckCheckIcon from '@lucide/svelte/icons/check-check'
-  import CircleQuestionMarkIcon from '@lucide/svelte/icons/circle-question-mark'
+  // subtitles than most is flagged. A file no source claimed can be matched by hand (assign), its closest
+  // sources offered first; one matched by hand has an undo button. Clicking any file's match icon opens Review
+  // matches (onreview) on that file, to move it to another source or none; its tooltip says what a guess went
+  // on. A second chapters file or encode for one source is left over, and subtitles that look like the same
+  // track twice are flagged, as is one whose last line doesn't fit its source's length (timing).
+  import SparklesIcon from '@lucide/svelte/icons/sparkles'
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
+  import XIcon from '@lucide/svelte/icons/x'
+  import { Button } from '$lib/components/ui/button'
   import { Checkbox } from '$lib/components/ui/checkbox'
+  import { NativeSelect } from '$lib/components/ui/native-select'
   import { basename } from '../lib/format'
   import { MATCH_NOTE, nameParts, type OddSubtitles } from '../lib/matchCheck'
+  import { MATCH_ICONS, matchTone } from '../lib/matchIcons'
+  import { duplicateSubtitles, kindOf, timingGap, timingKey } from '../lib/matchReview'
   import { router } from '../lib/router.svelte'
-  import type { MatchResult, SubtitleLabel } from '../lib/types'
+  import type { MatchResult, SubtitleLabel, SubtitleMatch, SubtitleTiming } from '../lib/types'
   import Tip from './Tip.svelte'
-
-  // Shapes as well as colours: two ticks for a name match, one for the episode, a question for a guess.
-  const ICONS = {
-    name: CheckCheckIcon,
-    episode: CheckIcon,
-    only_source: CircleQuestionMarkIcon,
-    other_episode: TriangleAlertIcon,
-  }
 
   let {
     result,
     replacements = $bindable([]),
     excluded = $bindable([]),
+    assign = $bindable({}),
     odd = new Map(),
+    timing = {},
+    onreview,
   }: {
     result: MatchResult
     replacements?: string[]
     excluded?: string[]
+    assign?: Record<string, string | null>
     odd?: ReadonlyMap<string, OddSubtitles>
+    timing?: Record<string, SubtitleTiming> // subtitle timing checks, by timingKey
+    onreview?: (path: string) => void // open Review matches on this file
   } = $props()
+
+  const sources = $derived(result.jobs.map((j) => j.source))
+  const held = $derived(new Set(result.held ?? []))
+  // Unmatched files with a best guess, for "Use the suggestions".
+  const suggested = $derived(result.unmatched.filter((p) => !held.has(p) && result.suggestions?.[p]?.length))
 
   function tag(s: SubtitleLabel): string {
     return [s.language, s.format, ...s.tags, s.track === null ? '' : `track ${s.track}`].filter(Boolean).join(' · ')
@@ -41,24 +51,114 @@
   function toggle(path: string) {
     excluded = excluded.includes(path) ? excluded.filter((p) => p !== path) : [...excluded, path]
   }
+  function matchTo(path: string, source: string) {
+    assign = { ...assign, [path]: source }
+  }
+  function unmatch(path: string) {
+    const { [path]: _, ...rest } = assign
+    assign = rest
+  }
+  function matchSuggested() {
+    assign = { ...assign, ...Object.fromEntries(suggested.map((p) => [p, result.suggestions[p][0].source])) }
+  }
 </script>
+
+<!-- How a file matched; a button that opens Review matches on it. -->
+{#snippet how(path: string, match: SubtitleMatch | null | undefined, detail = '', off = false)}
+  {#if match}
+    {@const note = MATCH_NOTE[match]}
+    {@const Icon = MATCH_ICONS[match]}
+    <Tip text="{note.text}.{detail ? ` ${detail}.` : ''} Click to change its match.">
+      <button
+        class="mt-0.5 shrink-0 rounded-sm"
+        aria-label="{note.text}. Change the match of {basename(path)}"
+        onclick={() => onreview?.(path)}
+        ><Icon aria-hidden="true" class="size-3.5 {matchTone(match, note.sure, off)}" /></button
+      >
+    </Tip>
+  {/if}
+{/snippet}
+
+{#snippet undo(path: string)}
+  <Tip text="You matched this file. Click to undo.">
+    <button
+      class="mt-0.5 shrink-0 rounded-sm text-muted-foreground hover:text-foreground"
+      aria-label="Undo match: {basename(path)}"
+      onclick={() => unmatch(path)}><XIcon class="size-3.5" /></button
+    >
+  </Tip>
+{/snippet}
 
 <table class="w-full text-sm">
   <thead class="sticky top-0 bg-card text-left text-xs text-muted-foreground">
     <tr><th class="px-4 py-2">Source</th><th>Video</th><th>Subtitles</th><th>Chapters</th></tr>
   </thead>
   <tbody>
-    {#each result.unmatched as p (p)}
-      <tr class="border-t border-border/60 text-warning">
+    {#if suggested.length > 1}
+      <tr class="border-t border-border/60">
         <td class="px-4 py-1.5" colspan="4">
-          <span class="flex items-center gap-1.5"
-            ><TriangleAlertIcon class="size-3.5 shrink-0" />Not matched to any source: {basename(p)}</span
+          <Button size="sm" variant="outline" onclick={matchSuggested}
+            ><SparklesIcon />Use the suggested source for {suggested.length} unmatched files</Button
           >
+        </td>
+      </tr>
+    {/if}
+    {#each result.unmatched as p (p)}
+      {@const offer = result.suggestions?.[p] ?? []}
+      {@const lostTo = result.spare?.[p]}
+      <tr class="border-t border-border/60">
+        <td class="px-4 py-1.5" colspan="4">
+          {#if held.has(p)}
+            <span class="flex min-w-0 items-start gap-1.5 text-muted-foreground [overflow-wrap:anywhere]"
+              ><Tip text={p}>Set to no source by you: {basename(p)}</Tip>{@render undo(p)}</span
+            >
+          {:else}
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span class="flex min-w-0 items-center gap-1.5 text-warning [overflow-wrap:anywhere]"
+                ><TriangleAlertIcon class="size-3.5 shrink-0" /><Tip text={p}
+                  >{#if lostTo}Left over: {basename(lostTo)} already has {kindOf(p) === 'video'
+                      ? 'an encode'
+                      : 'chapters'}, so {basename(p)} isn't used{:else}Not matched to any source: {basename(
+                      p,
+                    )}{/if}</Tip
+                ></span
+              >
+              <NativeSelect
+                size="sm"
+                class="max-w-full min-w-0"
+                aria-label="Match {basename(p)} to a source"
+                value=""
+                onchange={(e) => e.currentTarget.value && matchTo(p, e.currentTarget.value)}
+              >
+                <option value="">Match to…</option>
+                {#if offer.length}
+                  <optgroup label="Suggested">
+                    {#each offer as s (s.source)}<option value={s.source} title={s.detail}
+                        >{basename(s.source)}{s.why === 'pattern' ? ' (like your match)' : ''}</option
+                      >{/each}
+                  </optgroup>
+                {/if}
+                <optgroup label="All sources">
+                  {#each sources as s (s)}<option value={s}>{basename(s)}</option>{/each}
+                </optgroup>
+              </NativeSelect>
+              {#if offer.length}
+                <button class="text-xs underline underline-offset-2" onclick={() => matchTo(p, offer[0].source)}
+                  >Use {basename(offer[0].source)}</button
+                >
+              {/if}
+            </div>
+          {/if}
         </td>
       </tr>
     {/each}
     {#each result.jobs as j (j.source)}
       {@const flag = odd.get(j.source)}
+      {@const alike = duplicateSubtitles(j.subtitle_info, excluded)}
+      {@const offTime = j.subtitle_info
+        .filter((s) => s.match !== 'manual' && !excluded.includes(s.path))
+        .map((s) => [s.path, timingGap(timing[timingKey(s.path, j.source)])])
+        .filter(([, gap]) => gap)}
       <tr class="border-t border-border/60">
         <td class="px-4 py-1.5">
           <Tip text={j.source}>{basename(j.source)}</Tip>
@@ -83,34 +183,22 @@
           {/if}
         </td>
         <td class={j.encode ? (j.encode_state === 'in_progress' ? 'text-warning' : '') : 'text-primary'}>
-          {j.encode ? basename(j.encode) + (j.encode_state === 'in_progress' ? ' (still encoding)' : '') : 'new encode'}
+          <span class="flex items-start gap-1.5"
+            >{#if j.encode}{@render how(j.encode, j.matches?.[j.encode], j.details?.[j.encode])}{/if}{j.encode
+              ? basename(j.encode) + (j.encode_state === 'in_progress' ? ' (still encoding)' : '')
+              : 'new encode'}{#if j.encode && j.matches?.[j.encode] === 'manual'}{@render undo(j.encode)}{/if}</span
+          >
         </td>
         <td class="py-1.5 pr-3 text-muted-foreground">
           {#if j.subtitle_info.length}
             <ul class="flex flex-col gap-0.5">
               {#each j.subtitle_info as s (s.path)}
                 {@const off = excluded.includes(s.path)}
-                {@const note = s.match ? MATCH_NOTE[s.match] : null}
-                {@const Icon = s.match ? ICONS[s.match] : null}
                 {@const name = nameParts(basename(s.path), basename(j.source))}
                 <li class="flex min-w-0 items-start gap-1.5">
-                  {#if Icon && note}
-                    <Tip text={note.text}>
-                      <Icon
-                        role="img"
-                        aria-label={note.text}
-                        class="mt-0.5 size-3.5 shrink-0 {off
-                          ? 'text-muted-foreground/60'
-                          : s.match === 'other_episode'
-                            ? 'text-destructive'
-                            : note.sure
-                              ? 'text-success'
-                              : 'text-warning'}"
-                      />
-                    </Tip>
-                  {/if}
+                  {@render how(s.path, s.match, j.details?.[s.path], off)}
                   <Tip
-                    class="min-w-0 flex-1"
+                    class="min-w-0"
                     text="{s.path} ({s.language_name}). {off
                       ? 'Left out: click to add it back.'
                       : 'Click to leave it out.'}"
@@ -132,6 +220,7 @@
                       ></button
                     >
                   </Tip>
+                  {#if s.match === 'manual'}{@render undo(s.path)}{/if}
                 </li>
               {/each}
             </ul>
@@ -143,8 +232,26 @@
                 : `${flag.count} subtitle${flag.count === 1 ? '' : 's'}`}; most have {flag.usual}
             </div>
           {/if}
+          {#each alike as group (group[0])}
+            <div class="mt-1 flex items-start gap-1 text-xs text-warning">
+              <TriangleAlertIcon class="mt-0.5 size-3 shrink-0" /><span
+                >{group.length} alike (same language and type): {group.map(basename).join(', ')}</span
+              >
+            </div>
+          {/each}
+          {#each offTime as [path, gap] (path)}
+            <div class="mt-1 flex items-start gap-1 text-xs text-warning">
+              <TriangleAlertIcon class="mt-0.5 size-3 shrink-0" /><span>{basename(path)} {gap}</span>
+            </div>
+          {/each}
         </td>
-        <td class="text-muted-foreground">{j.chapters ? basename(j.chapters) : 'AutoQPF'}</td>
+        <td class="text-muted-foreground">
+          <span class="flex items-start gap-1.5"
+            >{#if j.chapters}{@render how(j.chapters, j.matches?.[j.chapters], j.details?.[j.chapters])}{/if}{j.chapters
+              ? basename(j.chapters)
+              : 'AutoQPF'}{#if j.chapters && j.matches?.[j.chapters] === 'manual'}{@render undo(j.chapters)}{/if}</span
+          >
+        </td>
       </tr>
     {/each}
   </tbody>

@@ -2,6 +2,7 @@
   // New jobs: rule set + language, input slots, output folder, live match preview, Add to queue.
   import { flushSync, onDestroy, onMount, untrack } from 'svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
+  import ListChecksIcon from '@lucide/svelte/icons/list-checks'
   import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import { Button } from '$lib/components/ui/button'
@@ -19,9 +20,11 @@
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
   import { groupByFolder } from '../lib/templateFolders'
-  import { ENCODERS, type EncoderSettings, type MatchResult } from '../lib/types'
+  import { ENCODERS, type EncoderSettings, type MatchResult, type SubtitleTiming } from '../lib/types'
   import LanguagePicker from '../components/LanguagePicker.svelte'
+  import MatchDialog from '../components/MatchDialog.svelte'
   import MatchTable from '../components/MatchTable.svelte'
+  import { matchEntries, needsLook as needsLookAt, timingKey, timingPairs } from '../lib/matchReview'
   import { oddSubtitleRows, oddSummary, wrongEpisodeCount } from '../lib/matchCheck'
   import Tip from '../components/Tip.svelte'
 
@@ -40,6 +43,7 @@
     autoIndex?: boolean
     autoCrop?: boolean
     completion?: ImportResult | null
+    assign?: Record<string, string | null>
   }
   const restored = drafts.read<Draft>('new-jobs')
   let ruleSet = $state(restored?.ruleSet ?? '')
@@ -55,6 +59,61 @@
   let adding = $state(false)
   let replacements = $state<string[]>([])
   let excluded = $state<string[]>([]) // subtitles unticked in Matched files
+  let assign = $state<Record<string, string | null>>(restored?.assign ?? {}) // file -> source (null: none), by hand
+  // Review matches: open, on which file, and the last match result, shown while the batch matches again.
+  let reviewing = $state(false)
+  let rematch = $state(0)
+  let reviewFocus = $state<string | null>(null)
+  let shownResult = $state<MatchResult | null>(null)
+  $effect(() => {
+    if (result) shownResult = result
+    else if (!sources.length) shownResult = null
+  })
+  // Subtitle timing (by timingKey): each text subtitle's last line against its source's length, checked in the
+  // background after each match for the pairs not asked yet, and all again each time Review matches opens (a
+  // file may have changed on disk; the server keeps each source's length while it's unchanged).
+  let timing = $state<Record<string, SubtitleTiming>>({})
+  let checkingTiming = $state(false)
+  const timingAsked = new Set<string>()
+  let timingRuns = 0
+  async function checkTiming(r: MatchResult, again: boolean) {
+    const pairs = Object.fromEntries(
+      Object.entries(timingPairs(r)).filter(([p, s]) => again || !timingAsked.has(timingKey(p, s))),
+    )
+    const keys = Object.entries(pairs).map(([p, s]) => timingKey(p, s))
+    if (!keys.length) return
+    for (const k of keys) timingAsked.add(k)
+    timingRuns++
+    checkingTiming = true
+    try {
+      const found = await api.matchTiming(pairs)
+      const next = { ...timing }
+      for (const k of keys) delete next[k] // one that can't be read any more isn't flagged
+      for (const [p, t] of Object.entries(found)) next[timingKey(p, pairs[p])] = t
+      timing = next
+    } catch {
+      for (const k of keys) timingAsked.delete(k) // ask again next time
+    } finally {
+      if (!--timingRuns) checkingTiming = false
+    }
+  }
+  $effect(() => {
+    if (result) void checkTiming(result, false)
+  })
+  let wasReviewing = false
+  $effect(() => {
+    if (reviewing && !wasReviewing && shownResult)
+      void checkTiming(
+        untrack(() => shownResult!),
+        true,
+      )
+    wasReviewing = reviewing
+  })
+  const needsLook = $derived(shownResult ? matchEntries(shownResult, timing).filter(needsLookAt).length : 0)
+  function review(path: string | null = null) {
+    reviewFocus = path
+    reviewing = true
+  }
   const odd = $derived(result ? oddSubtitleRows(result.jobs, excluded) : new Map())
   const wrongEpisode = $derived(result ? wrongEpisodeCount(result.jobs, excluded) : 0)
   let completion = $state<ImportResult | null>(restored?.completion ?? null)
@@ -92,6 +151,7 @@
         autoIndex,
         autoCrop,
         completion,
+        assign,
       }),
     )
   }
@@ -151,6 +211,8 @@
     subtitles: takesSubs ? subtitles : [],
     chapters,
     rule_set: ruleSet,
+    assign,
+    rematch, // bumped to match again with the same inputs (remembered patterns changed)
   })
 
   const matches = new LatestRequest()
@@ -267,6 +329,7 @@
     sources = encodes = subtitles = chapters = []
     replacements = []
     excluded = []
+    assign = {}
     completion = null
     error = ''
   }
@@ -313,6 +376,7 @@
         sources = encodes = subtitles = chapters = []
         result = null
         excluded = []
+        assign = {}
       }
       replacements = []
       completionKey = inputKey
@@ -361,7 +425,7 @@
             {#if takesSubs}
               <PathSlot
                 label="Subtitles"
-                hint="Subtitle files or folders, matched to each source by name or SxxEyy. With one source, they all go to it. A source you add none for gets the subtitles next to it, or one folder down."
+                hint="Subtitle files or folders, matched to each source by name, SxxEyy or the closest name; Matched files lets you match the rest. With one source, they all go to it. A source you add none for gets the subtitles next to it, or one folder down."
                 bind:paths={subtitles}
                 extensions={['.srt', '.ass', '.ssa', '.sup', '.idx']}
               />
@@ -503,10 +567,17 @@
           {#if result && !matching && wrongEpisode}<span class="text-sm text-destructive"
               >{wrongEpisode} subtitle{wrongEpisode === 1 ? '' : 's'} named for another episode</span
             >{/if}
+          {#if shownResult}
+            {#if checkingTiming}<span class="ml-auto text-xs text-muted-foreground">Checking subtitle timing…</span
+              >{/if}
+            <Button size="sm" variant="outline" class={checkingTiming ? '' : 'ml-auto'} onclick={() => review()}
+              ><ListChecksIcon />Review matches{needsLook ? ` · ${needsLook} to check` : ''}</Button
+            >
+          {/if}
         </div>
         {#if result}
           <div class="min-h-0 flex-1 overflow-auto border-t" bind:this={matchList}>
-            <MatchTable {result} bind:replacements bind:excluded {odd} />
+            <MatchTable {result} bind:replacements bind:excluded bind:assign {odd} {timing} onreview={review} />
           </div>
           <!-- Drag down to show more rows (arrow keys too); double-click goes back to filling the page. A
              focusable separator is the window splitter pattern, which Svelte's a11y check doesn't know. -->
@@ -535,6 +606,16 @@
         {/if}
       </Card.Root>
     </fieldset>
+    <MatchDialog
+      bind:open={reviewing}
+      result={shownResult}
+      {matching}
+      bind:assign
+      focus={reviewFocus}
+      {timing}
+      {checkingTiming}
+      onforget={() => rematch++}
+    />
   </div>
 
   {#if completion && (completion.kept.length || completion.unmatched.length)}
@@ -550,7 +631,7 @@
           </li>
         {/each}
         {#each completion.unmatched as path}
-          <li class="break-all">{path} matches no source. Add its source, or rename the file to match.</li>
+          <li class="break-all">{path} matches no source. Add its source, or pick one for it in Matched files.</li>
         {/each}
       </ul>
     </details>
