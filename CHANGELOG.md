@@ -13,11 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The file picker has a **Refresh** button (or F5) that lists the folder again after files change outside VideoForge. It keeps the filter.
 - The file picker sorts by name, modified date or size: click the column above the list, and again to flip it. Folders stay first. Names sort with numbers in order (E2 before E10), and the browser remembers the sort. It shows each file's and folder's modified date on windows wider than 640 px. `GET /api/fs/list` adds `mtime` to each folder.
 - The file picker works from the keyboard. ↑ and ↓ move between rows (↓ from the filter goes to the first row), Home and End go to the first and last, and Shift+↑ or ↓ ticks the rows on the way. Space ticks the row, and Shift+Space a range. Enter opens a folder, or on a file adds what's ticked (that file, when nothing is). Backspace or Alt+↑ goes up a folder and puts the cursor back on the folder you left. The keyboard shortcuts sheet lists them.
-
 - Each input on New jobs (sources, encodes, subtitles, chapters) has its own clear button beside **Browse…**, shown once it holds a path, and its label counts its paths, such as "Sources · 24". The bottom bar's **Clear** is now **Clear all**, and still empties every input.
-
 - **Matched files** on New jobs has a grip on its bottom edge: drag it down to show more rows. Held below the page, the page scrolls and the list keeps growing until every row shows. The arrow keys move it too, a double-click goes back to filling the page, and the height is remembered.
-
 - **Matched files** shows each subtitle as a short tag read from its name, such as `en · srt · synced` or `en · ass · track 7`, with the file name on hover. Click a tag to leave that subtitle out of its job, and again to put it back.
 - **Matched files** flags a job with a different number of subtitles than most of the batch ("No subtitles; most have 1"), and its header counts them, such as "2 without subtitles".
 
