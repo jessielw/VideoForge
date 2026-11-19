@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.11] - 2026-11-19
 
 ### Added
 
@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - New jobs lists sources in reading order, so `E2` comes before `E10`, in the Sources box, in **Matched files** and in the queue, whatever order they were added in.
 - Files that match no source are listed first in **Matched files**, marked in amber, instead of after every job.
 - While **Add to queue** runs, the bottom bar shows a spinner and "Adding 25 jobs to the queue…", and the inputs and **Matched files** are locked and dimmed until it's done. Paths pasted meanwhile wait and land once the jobs are added. Before, the page looked frozen during a big batch.
+- Updated FastAPI and guessit.
 
 ### Fixed
 
