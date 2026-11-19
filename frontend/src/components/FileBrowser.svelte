@@ -7,9 +7,11 @@
   // Other file work belongs in a file manager (the server only deletes empty folders).
   // Ticking: a click (on a file's row or any box) toggles one, Shift+click ticks or unticks the range
   // from the last one clicked, a mouse press dragged over rows ticks or unticks them the way the first
-  // one went, and Ctrl+A or the All box ticks every file here (not the folders).
+  // one went, and Ctrl+A or the All box ticks every file here (not the folders). The filter narrows the
+  // rows to names with every word in them; ranges and Ctrl+A only take the rows it shows.
   import { onMount } from 'svelte'
   import { api } from '../lib/api'
+  import { filterEntries } from '../lib/fileList'
   import { bytes } from '../lib/format'
   import { pickAll, pickClick, pickRange } from '../lib/pickPaths'
   import type { DirListing } from '../lib/types'
@@ -17,6 +19,8 @@
   import FileIcon from '@lucide/svelte/icons/file'
   import FolderIcon from '@lucide/svelte/icons/folder'
   import FolderPlusIcon from '@lucide/svelte/icons/folder-plus'
+  import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
+  import SearchIcon from '@lucide/svelte/icons/search'
   import Trash2Icon from '@lucide/svelte/icons/trash-2'
   import { Button } from '$lib/components/ui/button'
   import { Checkbox } from '$lib/components/ui/checkbox'
@@ -48,6 +52,7 @@
   let roots = $state<string[]>([])
   let listing = $state<DirListing | null>(null)
   let pathInput = $state('')
+  let filter = $state('') // kept on Refresh, cleared on going to another folder
   let error = $state('')
   let picked = $state<string[]>([])
   let anchor = $state<string | null>(null) // the last path clicked: Shift+click ticks from here
@@ -64,7 +69,9 @@
   async function open(path: string) {
     error = ''
     try {
-      listing = await api.list(path, extensions, programs)
+      const next = await api.list(path, extensions, programs)
+      if (next.path !== listing?.path) filter = ''
+      listing = next
       anchor = null
       pathInput = listing.path
       api.saveSettings({ last_dir: listing.path }).catch(() => {})
@@ -115,8 +122,10 @@
   })
 
   // The rows as shown, in the order Shift+click ranges over; picking one program means no ranges or All.
-  const order = $derived(listing && mode === 'files' ? [...listing.dirs, ...listing.files].map((x) => x.path) : [])
-  const files = $derived(listing && mode === 'files' && !programs ? listing.files.map((f) => f.path) : [])
+  const dirs = $derived(listing ? filterEntries(listing.dirs, filter) : [])
+  const shownFiles = $derived(listing && mode === 'files' ? filterEntries(listing.files, filter) : [])
+  const order = $derived(mode === 'files' ? [...dirs, ...shownFiles].map((x) => x.path) : [])
+  const files = $derived(programs ? [] : shownFiles.map((f) => f.path))
   const filesPicked = $derived.by(() => {
     const has = new Set(picked)
     return files.filter((p) => has.has(p)).length
@@ -146,6 +155,12 @@
   }
 
   function keys(e: KeyboardEvent) {
+    if (e.key === 'F5' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault()
+      e.stopPropagation() // the Video tab's F5 is the preview's
+      if (listing) open(listing.path)
+      return
+    }
     const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, [contenteditable]')
     if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'a' || e.altKey || typing || !files.length) return
     e.preventDefault()
@@ -199,11 +214,40 @@
         bind:value={pathInput}
         onkeydown={(e) => e.key === 'Enter' && open(pathInput)}
       />
+      <Tip text="Refresh (F5)">
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={!listing}
+          onclick={() => listing && open(listing.path)}
+          aria-label="Refresh"
+        >
+          <RefreshCwIcon />
+        </Button>
+      </Tip>
       <Tip text="New folder">
         <Button variant="ghost" size="icon" disabled={!listing} onclick={() => (newName = '')} aria-label="New folder">
           <FolderPlusIcon />
         </Button>
       </Tip>
+    </div>
+
+    <div class="relative border-b p-2">
+      <SearchIcon class="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        class="h-8 pl-8"
+        type="search"
+        aria-label="Filter this folder"
+        placeholder="Filter this folder"
+        bind:value={filter}
+        onkeydown={(e) => {
+          if (e.key === 'Escape' && filter) {
+            e.stopPropagation() // clears the filter, not closes the browser
+            e.preventDefault()
+            filter = ''
+          }
+        }}
+      />
     </div>
 
     {#if error}<div class="px-3 py-2 text-sm text-destructive">{error}</div>{/if}
@@ -252,7 +296,7 @@
             <span class="hidden text-xs sm:inline">Drag or Shift+click ticks a range · Ctrl+A ticks all</span>
           </div>
         {/if}
-        {#each listing.dirs as d (d.path)}
+        {#each dirs as d (d.path)}
           <div
             class="group flex items-center gap-2 rounded-md px-2 py-1 select-none hover:bg-accent"
             role="presentation"
@@ -284,8 +328,11 @@
             {/if}
           </div>
         {/each}
+        {#if mode === 'folder' && !dirs.length && listing.dirs.length}
+          <div class="p-4 text-center text-muted-foreground">No folder here matches “{filter.trim()}”</div>
+        {/if}
         {#if mode === 'files'}
-          {#each listing.files as f (f.path)}
+          {#each shownFiles as f (f.path)}
             <!-- The box is the keyboard's way to tick; the row is a bigger target for the mouse. -->
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div
@@ -304,13 +351,15 @@
               <span class="text-xs text-muted-foreground">{bytes(f.size)}</span>
             </div>
           {/each}
-          {#if !listing.dirs.length && !listing.files.length}
+          {#if !dirs.length && !shownFiles.length}
             <div class="p-4 text-center text-muted-foreground">
-              {programs
-                ? 'No programs here'
-                : extensions.length
-                  ? `No ${extensions.join(' ')} files here`
-                  : 'Nothing here'}
+              {filter.trim() && (listing.dirs.length || listing.files.length)
+                ? `Nothing here matches “${filter.trim()}”`
+                : programs
+                  ? 'No programs here'
+                  : extensions.length
+                    ? `No ${extensions.join(' ')} files here`
+                    : 'Nothing here'}
             </div>
           {/if}
         {/if}

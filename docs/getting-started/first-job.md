@@ -4,9 +4,18 @@ Use a short source and a separate output folder for the first run. Confirm that 
 
 ## 1. Add the source
 
-Open **New jobs**, add an MKV, MP4, or M2TS / TS file, and choose the template to start from. You can also add external subtitles, chapters, or an existing video encode to reuse. The bar at the bottom says what adding will do (how many jobs, the template, whether they are indexed and cropped, and where they are saved) and chooses **Index** and **Auto-crop** for this batch. Add the jobs, then choose **Open queue** in that bar to open the first one's editor, or **Add more** to start the next batch. Partial imports keep the form and list which existing jobs were kept or files were unmatched. In a browser, paste paths anywhere in the app and they land on New jobs (Explorer: Ctrl+Shift+C, then Ctrl+V), or use **Browse…**. In **Browse…**, press on a file and drag over the others to tick them (starting on a ticked one unticks them instead), Shift+click ticks every file between the last one you clicked and this one (or unticks them), and Ctrl+A or the **All files** box ticks every file in the folder; see [Tray and console](windows.md#tray-and-console) for how the app runs.
+Open **New jobs**, add an MKV, MP4, or M2TS / TS file, and choose the template to start from. You can also add external subtitles, chapters, or an existing video encode to reuse. The bar at the bottom says what adding will do (how many jobs, the template, whether they are indexed and cropped, and where they are saved) and chooses **Index** and **Auto-crop** for this batch. Add the jobs, then choose **Open queue** in that bar to open the first one's editor, or **Add more** to start the next batch. Partial imports keep the form and list which existing jobs were kept or files were unmatched. In a browser, paste paths anywhere in the app and they land on New jobs (Explorer: Ctrl+Shift+C, then Ctrl+V), or use **Browse…** ([below](#browsing-for-files)); see [Tray and console](windows.md#tray-and-console) for how the app runs.
 
 ![The New jobs page with three matched episodes](../assets/screenshots/new-jobs.png#only-light) ![The New jobs page with three matched episodes](../assets/screenshots/new-jobs-dark.png#only-dark)
+
+### Browsing for files
+
+**Browse…** lists the folders and files the server can see. Every **Browse…** in the app uses the same browser.
+
+- **Tick several files:** click a file's row to tick it. Press on a row and drag over others to tick them all (starting on a ticked row unticks them instead). Shift+click ticks or unticks every row from the last one you clicked.
+- **Tick every file:** Ctrl+A (Cmd+A) or the box above the list ticks every file in the folder, and again unticks them. Folders are left as they are.
+- **Filter:** type in **Filter this folder** to show only names with every word in them, such as `s01 mkv`. Ctrl+A and ranges take only the rows it shows; files you ticked before stay ticked. Esc clears it.
+- **Refresh:** the refresh button (or F5) lists the folder again after files change outside VideoForge, keeping the filter.
 
 ## 2. Index and inspect video
 

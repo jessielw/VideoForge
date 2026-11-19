@@ -323,3 +323,35 @@ test('the file picker ticks the rows a mouse press drags over, and unticks them 
   await expect(picker).toContainText('4 selected')
   expect(errors).toEqual([])
 })
+
+test('the file picker filters the folder, ticks only what it shows, and keeps the filter on Refresh', async ({
+  page,
+}) => {
+  const { errors, files } = await fixture(page, [])
+  files.push('D:/Media/Show.S01E01.mkv', 'D:/Media/Show.S01E02.mkv', 'D:/Media/Show.S02E01.mkv')
+  await page.goto('/#/new')
+  await page.getByRole('button', { name: 'Browse…' }).first().click()
+  const picker = page.getByRole('dialog', { name: 'Sources' })
+  const filter = picker.getByRole('searchbox', { name: 'Filter this folder' })
+  const box = (name: string) => picker.getByRole('checkbox', { name: `Pick ${name}` })
+
+  await filter.fill('s01 MKV')
+  await expect(box('Show.S01E01.mkv')).toBeVisible()
+  await expect(box('Show.S02E01.mkv')).toHaveCount(0)
+  await expect(box('Old')).toHaveCount(0)
+  await box('Show.S01E01.mkv').press('ControlOrMeta+a')
+  await expect(picker).toContainText('2 selected') // only the two it shows
+
+  files.push('D:/Media/Show.S01E03.mkv')
+  await picker.getByRole('button', { name: 'Refresh' }).click()
+  await expect(filter).toHaveValue('s01 MKV')
+  await expect(box('Show.S01E03.mkv')).toBeVisible()
+
+  await filter.fill('nope')
+  await expect(picker).toContainText('Nothing here matches “nope”')
+  await filter.press('Escape') // clears the filter; the picker stays open
+  await expect(filter).toHaveValue('')
+  await expect(box('Show.S02E01.mkv')).toBeVisible()
+  await expect(picker).toContainText('2 selected') // ticks it hid are kept
+  expect(errors).toEqual([])
+})

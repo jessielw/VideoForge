@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - The file picker behind **Browse…** ticks several files at once. Shift+click ticks every row from the last one clicked to this one, or unticks them when this one was ticked. Pressing the mouse on a row and dragging over others ticks them, or unticks them when the first row was ticked; dragging back takes rows out again. Ctrl+A (Cmd+A) or the new **All files** box above the list ticks every file in the folder, and again unticks them; folders are left as they are. Clicking anywhere on a file's row ticks it, as before.
+- The file picker has a **Filter this folder** box. It shows only the names with every word typed in them, such as `s01 mkv`. Ctrl+A, the All box and ranges take only the rows it shows, and files ticked before stay ticked. Esc clears it.
+- The file picker has a **Refresh** button (or F5) that lists the folder again after files change outside VideoForge. It keeps the filter.
 
 ### Changed
 
