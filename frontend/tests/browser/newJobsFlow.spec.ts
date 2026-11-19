@@ -519,13 +519,14 @@ test('Matched files tags each subtitle, flags odd rows, lists unmatched files fi
 }) => {
   const posted: Record<string, unknown>[] = []
   const { errors } = await fixture(page, posted)
-  const label = (path: string, tags: string[], track: number | null) => ({
+  const label = (path: string, tags: string[], track: number | null, match: string) => ({
     path,
     language: 'en',
     language_name: 'English',
     format: path.slice(-3),
     tags,
     track,
+    match,
   })
   const synced = (n: number) => `D:/Media/subs/Show.S01E0${n}.en.synced.srt`
   const extracted = 'D:/Media/Show.S01E01_track7_[eng].ass'
@@ -545,7 +546,12 @@ test('Matched files tags each subtitle, flags odd rows, lists unmatched files fi
           encode_state: null,
           subtitles: subs[source],
           subtitle_info: subs[source].map((p) =>
-            label(p, p.includes('synced') ? ['synced'] : [], p === extracted ? 7 : null),
+            label(
+              p,
+              p.includes('synced') ? ['synced'] : [],
+              p === extracted ? 7 : null,
+              p === extracted ? 'other_episode' : 'name', // as if its name said another episode
+            ),
           ),
           chapters: null,
           existing_id: null,
@@ -569,13 +575,17 @@ test('Matched files tags each subtitle, flags odd rows, lists unmatched files fi
   await expect(rows.nth(1)).toContainText('2 subtitles; most have 1')
   await expect(rows.nth(4)).toContainText('No subtitles; most have 1')
 
-  const ass = card.getByRole('button', { name: 'en · ass · track 7' })
-  await expect(card.getByRole('button', { name: 'en · srt · synced' })).toHaveCount(3)
+  const ass = card.getByRole('button', { name: 'en · ass · track 7: Show.S01E01_track7_[eng].ass' })
+  await expect(card.getByRole('button', { name: /^en · srt · synced: Show\.S01E0\d\.en\.synced\.srt$/ })).toHaveCount(3)
+  await expect(card.getByRole('img', { name: 'Starts with the source’s name' })).toHaveCount(3)
+  await expect(rows.nth(1).getByRole('img', { name: /name is for another episode/ })).toBeVisible()
+  await expect(card).toContainText('1 subtitle named for another episode')
   await ass.click()
   await expect(ass).toHaveAttribute('aria-pressed', 'false')
   await expect(rows.nth(1)).not.toContainText('most have') // E01 is back to one subtitle
   await expect(card).toContainText('1 without subtitles')
   await expect(card).not.toContainText('different number')
+  await expect(card).not.toContainText('named for another episode') // unticked, so no longer counted
 
   await page
     .locator('footer[aria-label="Add to queue"]')

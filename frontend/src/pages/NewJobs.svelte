@@ -22,7 +22,7 @@
   import { ENCODERS, type EncoderSettings, type MatchResult } from '../lib/types'
   import LanguagePicker from '../components/LanguagePicker.svelte'
   import MatchTable from '../components/MatchTable.svelte'
-  import { oddSubtitleRows, oddSummary } from '../lib/matchCheck'
+  import { oddSubtitleRows, oddSummary, wrongEpisodeCount } from '../lib/matchCheck'
   import Tip from '../components/Tip.svelte'
 
   type ImportResult = Awaited<ReturnType<typeof api.addJobs>>
@@ -56,6 +56,7 @@
   let replacements = $state<string[]>([])
   let excluded = $state<string[]>([]) // subtitles unticked in Matched files
   const odd = $derived(result ? oddSubtitleRows(result.jobs, excluded) : new Map())
+  const wrongEpisode = $derived(result ? wrongEpisodeCount(result.jobs, excluded) : 0)
   let completion = $state<ImportResult | null>(restored?.completion ?? null)
   // The template (by name; the rule set's starred one first) and the container it sets, which can
   // be changed here.
@@ -499,6 +500,9 @@
                 : ''}{:else}Add a source to see the jobs{/if}
           </span>
           {#if result && !matching && odd.size}<span class="text-sm text-warning">{oddSummary(odd)}</span>{/if}
+          {#if result && !matching && wrongEpisode}<span class="text-sm text-destructive"
+              >{wrongEpisode} subtitle{wrongEpisode === 1 ? '' : 's'} named for another episode</span
+            >{/if}
         </div>
         {#if result}
           <div class="min-h-0 flex-1 overflow-auto border-t" bind:this={matchList}>

@@ -14,6 +14,7 @@ from videoforge.core.pairing import (
     discover,
     external_sub_track,
     match_files,
+    match_reason,
     slot_files,
     subtitle_label,
 )
@@ -172,6 +173,18 @@ def test_subtitle_label_reads_the_name():
     extracted = subtitle_label(Path("Show.S01E01.1080p.REMUX-FraMeSToR_track7_[eng].forced.ass"))
     assert extracted["format"] == "ass" and extracted["track"] == 7 and extracted["tags"] == ["forced"]
     assert subtitle_label(Path("Show.S01E01.srt"))["language"] == "und"
+    assert subtitle_label(Path("Show.S01E01.srt"))["match"] is None  # no source given
+
+
+def test_match_reason_says_how_sure_the_match_is():
+    source = Path("Show.S01E01.1080p.REMUX.mkv")
+    assert match_reason(Path("Show.S01E01.1080p.REMUX.en.srt"), source) == "name"
+    assert match_reason(Path("Show.S01E01.NF.WEB-DL.en.synced.srt"), source) == "episode"
+    assert match_reason(Path("English.srt"), source) == "only_source"
+    assert match_reason(Path("Show.S01E02.en.srt"), source) == "other_episode"
+    assert match_reason(Path("Movie.en.srt"), Path("Movie.2001.mkv")) == "only_source"
+    assert match_reason(Path("Show.S01E02.en.srt"), Path("Movie.2001.mkv")) == "only_source"  # nothing to compare
+    assert subtitle_label(Path("Show.S01E02.en.srt"), source)["match"] == "other_episode"
 
 
 def test_without_staxrip_temp(tmp_path):

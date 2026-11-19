@@ -298,9 +298,25 @@ def find_external_subs(source: Path, near: list[Path] | None = None) -> list[Pat
     return sorted(p for p in near if _belongs(p, source))
 
 
-def subtitle_label(path: Path) -> dict[str, Any]:
+def match_reason(path: Path, source: Path) -> str:
+    """Why a file went to a source, from the two names, strongest first:
+    "name"           it starts with the source's name ("Show.S01E01.mkv" -> "Show.S01E01.en.srt")
+    "episode"        it carries the source's SxxEyy
+    "only_source"    the batch's lone source took it; nothing in the name ties it to that source
+    "other_episode"  the lone source took it, but its name carries a different SxxEyy
+    """
+    if path.name.startswith(source.stem + "."):
+        return "name"
+    mine, theirs = episode_token(source.stem), episode_token(path.stem)
+    if mine and theirs == mine:
+        return "episode"
+    return "other_episode" if mine and theirs else "only_source"
+
+
+def subtitle_label(path: Path, source: Path | None = None) -> dict[str, Any]:
     """What Matched files shows for a subtitle file, read from its name alone (nothing is opened):
-    language, format, forced/sdh/dub and synced words, and the source track it was extracted from."""
+    language, format, forced/sdh/dub and synced words, the source track it was extracted from, and
+    (given the source it matched) why it matched, as match_reason says."""
     stem = path.stem
     words = {w.lower() for w in re.split(r"[.\s_\[\]()-]+", stem)}
     tags = sorted({_TAG_ALIASES[w] for w in words if w in _TAG_ALIASES})
@@ -315,6 +331,7 @@ def subtitle_label(path: Path) -> dict[str, Any]:
         "format": path.suffix.lower().lstrip("."),
         "tags": tags,
         "track": int(m.group(1)) if m else None,
+        "match": match_reason(path, source) if source is not None else None,
     }
 
 

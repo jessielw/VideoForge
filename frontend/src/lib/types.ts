@@ -835,7 +835,12 @@ export interface SubtitleLabel {
   format: string // its extension: srt, ass, sup, idx
   tags: string[] // forced, sdh, dub, synced
   track: number | null // the source track it was extracted from (_trackN_)
+  match: SubtitleMatch | null // why it went to this job, read from the two names
 }
+
+/** Strongest first: starts with the source's name, carries its SxxEyy, taken by the batch's only source,
+ * or taken by the only source though its name carries another SxxEyy. */
+export type SubtitleMatch = 'name' | 'episode' | 'only_source' | 'other_episode'
 
 export interface MatchResult {
   jobs: MatchedJob[]

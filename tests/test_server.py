@@ -302,6 +302,7 @@ def test_add_inspect_and_edit(tmp_path):
         assert [Path(j["source"]).name for j in preview["jobs"]] == ["Show.S01E01.mkv", "Show.S01E02.mkv"]
         label = preview["jobs"][0]["subtitle_info"][0]  # found next to the source
         assert label["language"] == "en" and label["format"] == "srt" and label["path"].endswith("Show.S01E01.en.srt")
+        assert label["match"] == "name"
 
         ids = add(client, tmp_path)
         assert len(ids) == 2
