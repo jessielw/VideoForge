@@ -1,15 +1,27 @@
 <script lang="ts">
   // The jobs a set of inputs makes (source, video, subtitles, chapters) and the files left over, those first.
-  // A source already in the queue is kept unless it is ticked to be replaced. Each subtitle is a short tag
-  // (language, format, name tags) that unticks it from its job; a job with a different number of subtitles
-  // than most is flagged.
+  // A source already in the queue is kept unless it is ticked to be replaced. Each subtitle is a line: an
+  // icon for how sure its match is, a short tag (language, format, name tags) and its file name, the part
+  // it shares with the source dimmed. Clicking it unticks it from its job; a job with a different number of
+  // subtitles than most is flagged.
+  import CheckIcon from '@lucide/svelte/icons/check'
+  import CheckCheckIcon from '@lucide/svelte/icons/check-check'
+  import CircleQuestionMarkIcon from '@lucide/svelte/icons/circle-question-mark'
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
   import { Checkbox } from '$lib/components/ui/checkbox'
   import { basename } from '../lib/format'
-  import type { OddSubtitles } from '../lib/matchCheck'
+  import { MATCH_NOTE, nameParts, type OddSubtitles } from '../lib/matchCheck'
   import { router } from '../lib/router.svelte'
   import type { MatchResult, SubtitleLabel } from '../lib/types'
   import Tip from './Tip.svelte'
+
+  // Shapes as well as colours: two ticks for a name match, one for the episode, a question for a guess.
+  const ICONS = {
+    name: CheckCheckIcon,
+    episode: CheckIcon,
+    only_source: CircleQuestionMarkIcon,
+    other_episode: TriangleAlertIcon,
+  }
 
   let {
     result,
@@ -75,24 +87,54 @@
         </td>
         <td class="py-1.5 pr-3 text-muted-foreground">
           {#if j.subtitle_info.length}
-            <div class="flex flex-wrap gap-1">
+            <ul class="flex flex-col gap-0.5">
               {#each j.subtitle_info as s (s.path)}
                 {@const off = excluded.includes(s.path)}
-                <Tip
-                  text="{basename(s.path)} ({s.language_name}). {off
-                    ? 'Left out: click to add it back.'
-                    : 'Click to leave it out.'}"
-                >
-                  <button
-                    class="rounded-md px-1.5 py-0.5 text-xs whitespace-nowrap {off
-                      ? 'text-muted-foreground/60 line-through'
-                      : 'bg-muted text-foreground'}"
-                    aria-pressed={!off}
-                    onclick={() => toggle(s.path)}>{tag(s)}</button
+                {@const note = s.match ? MATCH_NOTE[s.match] : null}
+                {@const Icon = s.match ? ICONS[s.match] : null}
+                {@const name = nameParts(basename(s.path), basename(j.source))}
+                <li class="flex min-w-0 items-start gap-1.5">
+                  {#if Icon && note}
+                    <Tip text={note.text}>
+                      <Icon
+                        role="img"
+                        aria-label={note.text}
+                        class="mt-0.5 size-3.5 shrink-0 {off
+                          ? 'text-muted-foreground/60'
+                          : s.match === 'other_episode'
+                            ? 'text-destructive'
+                            : note.sure
+                              ? 'text-success'
+                              : 'text-warning'}"
+                      />
+                    </Tip>
+                  {/if}
+                  <Tip
+                    class="min-w-0 flex-1"
+                    text="{s.path} ({s.language_name}). {off
+                      ? 'Left out: click to add it back.'
+                      : 'Click to leave it out.'}"
                   >
-                </Tip>
+                    <button
+                      class="flex min-w-0 flex-1 items-start gap-1.5 rounded-md text-left text-xs {off
+                        ? 'text-muted-foreground/60 line-through'
+                        : ''}"
+                      aria-pressed={!off}
+                      aria-label="{tag(s)}: {basename(s.path)}"
+                      onclick={() => toggle(s.path)}
+                      ><span
+                        class="shrink-0 rounded-md px-1.5 whitespace-nowrap {off ? '' : 'bg-muted text-foreground'}"
+                        >{tag(s)}</span
+                      ><span class="min-w-0 [overflow-wrap:anywhere]"
+                        ><span class="text-muted-foreground">{name.shared}</span><span
+                          class={off ? '' : 'text-foreground'}>{name.rest}</span
+                        ></span
+                      ></button
+                    >
+                  </Tip>
+                </li>
               {/each}
-            </div>
+            </ul>
           {:else}—{/if}
           {#if flag}
             <div class="mt-1 flex items-center gap-1 text-xs text-warning">

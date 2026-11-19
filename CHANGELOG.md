@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2026-11-19
+
+### Changed
+
+- **Matched files** shows each subtitle's file name next to its tag, so a wrong match shows without hovering. The part of the name it shares with the source is dimmed, so the language and tags at the end stand out. Each subtitle is on its own line.
+- **Matched files** marks how sure each subtitle's match is: two green ticks when its name starts with the source's name, one when it carries the same episode (`S01E01`), an amber question mark when the batch's only source took it though nothing in its name ties the two, and a red warning when its name is for another episode. The header counts those, such as "1 subtitle named for another episode". `POST /api/match` adds `match` (`name`, `episode`, `only_source` or `other_episode`) to each entry of `subtitle_info`.
+
 ## [0.1.11] - 2026-11-19
 
 ### Added

@@ -67,7 +67,7 @@ def match(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
             | {
                 "existing_id": existing.id if (existing := q._find_source(j.source)) else None,
                 "existing_status": existing.status if existing else None,
-                "subtitle_info": [subtitle_label(p) for p in j.subtitles],
+                "subtitle_info": [subtitle_label(p, j.source) for p in j.subtitles],
             }
             for j in result.jobs
         ],
