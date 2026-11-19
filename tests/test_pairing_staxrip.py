@@ -205,3 +205,16 @@ def test_raw_encode_in_source_folder_needs_no_encode_slot(tmp_path):
     sets = slot_files([tmp_path], [], [], [], RULES)
     (job,) = match_files(sets, RULES).jobs
     assert job.encode == tmp_path / "Movie_job.hevc"
+
+
+def test_matching_never_resolves_a_path(tmp_path, monkeypatch):
+    """On a network share each resolve() is a round trip; matching a season compares paths as text."""
+    src_dir, work = make_batch(tmp_path)
+
+    def no_resolve(self, strict=False):
+        raise AssertionError(f"resolved {self}")
+
+    monkeypatch.setattr(Path, "resolve", no_resolve)
+    sets = slot_files([src_dir, src_dir / "Show.S01E01.mkv"], [work], [src_dir / "subs"], [], RULES)
+    assert [p.name for p in sets.sources] == ["Show.S01E01.mkv", "Show.S01E02.mkv", "Show.S01E03.mkv"]  # no twin
+    assert len(match_files(sets, RULES).jobs) == 3

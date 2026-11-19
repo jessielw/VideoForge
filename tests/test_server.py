@@ -2486,3 +2486,14 @@ def test_add_leaves_out_unticked_subtitles(tmp_path):
         ]
         bad = client.post("/api/jobs", json={"sources": [str(tmp_path / "src")], "exclude_subtitles": "x"})
         assert bad.status_code == 422
+
+
+def test_adding_never_resolves_a_path(tmp_path, monkeypatch):
+    """Finding a source's queued job compared every queued source resolved, for every new one: seconds on a share."""
+    make_files(tmp_path, "S01E01", "S01E02")
+    with make_client(tmp_path) as client:
+        add(client, tmp_path)
+        monkeypatch.setattr(Path, "resolve", lambda self, strict=False: pytest.fail(f"resolved {self}"))
+        preview = client.post("/api/match", json={"sources": [str(tmp_path / "src")]}).json()
+        assert all(j["existing_id"] for j in preview["jobs"])  # still found, by text
+        assert client.post("/api/jobs", json={"sources": [str(tmp_path / "src")]}).json()["added"] == []

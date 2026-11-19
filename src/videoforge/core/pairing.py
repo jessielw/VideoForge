@@ -17,6 +17,7 @@ Extras, each switchable in MatchRules:
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
@@ -86,23 +87,47 @@ def is_chapter_file(path: Path) -> bool:
     return path.suffix.lower() in CHAPTER_EXTENSIONS and bool(_CHAPTER_NAME_RE.search(path.name))
 
 
+# On a network share every look at the disk is a round trip (about 12 ms each on an SMB drive), so a season
+# of files is listed with os.scandir (a file's kind comes with the listing on Windows), the given paths are
+# checked side by side, and paths are compared as text, never resolved.
+
+
+def _key(path: Path) -> str:
+    """A path as the file system compares it (Windows: case-insensitive), without touching the disk."""
+    return os.path.normcase(os.path.abspath(path))
+
+
+def _are_dirs(paths: list[Path]) -> list[bool]:
+    """Which of the given paths are folders, checked side by side."""
+    if len(paths) < 2:
+        return [p.is_dir() for p in paths]
+    with ThreadPoolExecutor(max_workers=min(16, len(paths))) as pool:
+        return list(pool.map(Path.is_dir, paths))
+
+
+def _ext(name: str) -> str:
+    return os.path.splitext(name)[1].lower()
+
+
 def expand(paths: Iterable[Path], extensions: Iterable[str]) -> list[Path]:
     """Files as given, plus matching files one level inside any folders (sorted, de-duplicated)."""
     wanted = {e.lower() for e in extensions}
+    given = list(paths)
     out: list[Path] = []
-    for p in paths:
-        if p.is_dir():
-            out.extend(sorted(c for c in p.iterdir() if c.is_file() and c.suffix.lower() in wanted))
+    for p, is_dir in zip(given, _are_dirs(given), strict=True):
+        if is_dir:
+            with os.scandir(p) as listing:
+                out.extend(sorted(Path(f.path) for f in listing if f.is_file() and _ext(f.name) in wanted))
         elif p.suffix.lower() in wanted:
             out.append(p)
     return _unique(out)
 
 
 def _unique(paths: Iterable[Path]) -> list[Path]:
-    seen: set[Path] = set()
+    seen: set[str] = set()
     unique = []
     for p in paths:
-        key = p.resolve()
+        key = _key(p)
         if key not in seen:
             seen.add(key)
             unique.append(p)
@@ -255,8 +280,13 @@ def find_qpf_chapters(source: Path) -> Path | None:
 
 def subtitles_near(folder: Path) -> list[Path]:
     """Subtitle files in a folder and one folder down (skipping StaxRip *_temp dirs)."""
-    folders = [folder] + sorted(d for d in folder.iterdir() if d.is_dir() and not d.name.endswith("_temp"))
-    return [p for f in folders for p in f.iterdir() if p.suffix.lower() in SUBTITLE_EXTENSIONS]
+    with os.scandir(folder) as listing:
+        here = list(listing)
+    found = [Path(f.path) for f in here if _ext(f.name) in SUBTITLE_EXTENSIONS]
+    for sub in sorted((Path(d.path) for d in here if d.is_dir() and not d.name.endswith("_temp")), key=str):
+        with os.scandir(sub) as listing:
+            found += [Path(f.path) for f in listing if _ext(f.name) in SUBTITLE_EXTENSIONS]
+    return found
 
 
 def find_external_subs(source: Path, near: list[Path] | None = None) -> list[Path]:
