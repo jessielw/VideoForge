@@ -444,6 +444,11 @@ test('audio preset picker reflows at 400px and supports keyboard access without 
   const errors = await fixture(page)
   await page.setViewportSize({ width: 400, height: 700 })
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' })
+  // below 640 px the list and the editor take turns: open the template to reach its editor
+  await page
+    .getByRole('list', { name: 'Templates' })
+    .getByRole('button', { name: 'Current template', exact: true })
+    .click()
   await page.getByRole('button', { name: /^Audio preset: / }).click()
   const menu = page.locator('[data-slot="popover-content"]')
   await expect(menu.getByRole('textbox')).toBeFocused()

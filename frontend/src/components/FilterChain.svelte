@@ -129,7 +129,7 @@
           {/if}
           <Tip class="flex min-w-0 flex-1" text={fixed ? `Set in the ${s.name} section` : 'Show its lines'}>
             <button
-              class="flex min-w-0 flex-1 items-baseline gap-2 text-left disabled:cursor-default"
+              class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 text-left disabled:cursor-default"
               disabled={fixed}
               onclick={() => (expanded = expanded === i ? null : i)}
             >

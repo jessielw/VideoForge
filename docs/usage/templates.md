@@ -6,6 +6,8 @@ A template saves a job setup without its source file. It can include video proce
 
 Template drafts survive navigation and refresh in the same browser tab. Leaving an edited template, switching rule sets, or starting another template offers **Save**, **Discard**, or **Stay**.
 
+On a window narrower than 640 CSS pixels, the list and the editor take turns. Opening a template shows its editor, and **All templates** goes back to the list. Leaving an edited template this way also offers **Save**, **Discard**, or **Stay**.
+
 ## Create and apply
 
 1. Configure a test job and check its output.

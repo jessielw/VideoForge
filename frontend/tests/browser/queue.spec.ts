@@ -129,8 +129,10 @@ async function queueFixture(
       json = {
         path: 'D:\\Show',
         parent: 'D:\\',
-        dirs: [{ name: '1.mkv_tmp', path: 'D:\\Show\\1.mkv_tmp' }],
-        files: [{ name: 'videoforge-job.json', path: 'D:\\Show\\videoforge-job.json', size: 900 }],
+        dirs: [{ name: '1.mkv_tmp', path: 'D:\\Show\\1.mkv_tmp', mtime: 1_700_000_000 }],
+        files: [
+          { name: 'videoforge-job.json', path: 'D:\\Show\\videoforge-job.json', size: 900, mtime: 1_700_000_000 },
+        ],
       }
     else if (path === '/api/fs/kinds')
       json = (request.postDataJSON().paths as string[]).map((p) => ({
@@ -441,6 +443,40 @@ test('320 CSS pixel reflow keeps queue controls reachable without horizontal scr
   await expect(page.getByRole('searchbox')).toBeFocused()
   expect(errors).toEqual([])
 })
+
+// 784 x 450 is a 1568 x 900 window at 200% zoom
+for (const [width, height, zoomed] of [
+  [784, 450, true],
+  [1024, 700, false],
+  [1600, 900, false],
+] as const)
+  test(`at ${width} px the menu, the job name and the Video tab ${zoomed ? 'make room' : 'stay as they are'}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height })
+    const { errors } = await queueFixture(page, 1, ['ready'])
+    await page.goto('/#/queue/job-0')
+    // the menu: a rail below 1024 px, with no way to expand it there
+    const nav = (await page.getByRole('navigation', { name: 'Main navigation' }).boundingBox())!
+    expect(nav.width < 100).toBe(zoomed)
+    await expect(page.getByRole('button', { name: /^(Expand|Collapse) the menu$/ })).toBeVisible({ visible: !zoomed })
+    // the job name: its own line when the header is narrow, beside the Queue box otherwise; never cut
+    const name = page.getByRole('heading', { name: 'Episode 00000', level: 2 })
+    const queue = (await page.getByRole('checkbox', { name: 'Queue', exact: true }).boundingBox())!
+    const title = (await name.boundingBox())!
+    expect(title.y + title.height <= queue.y).toBe(zoomed)
+    expect(await name.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
+    // the Video tab: the preview above its settings when the tab is narrow, so it keeps a usable width
+    await page.getByRole('tab', { name: 'Video', exact: true }).click()
+    const preview = (await page.locator('#job-tab-panel > div > div').first().boundingBox())!
+    expect(preview.width).toBeGreaterThanOrEqual(300)
+    await expect(page.getByRole('separator', { name: 'Resize the side panel' })).toBeVisible({ visible: !zoomed })
+    // Expand still fills the whole window: the tab panel it sits in is a query container
+    await page.getByRole('button', { name: 'Expand', exact: true }).click()
+    const expanded = (await page.locator('#job-tab-panel > div').first().boundingBox())!
+    expect([expanded.x, expanded.y, expanded.width, expanded.height]).toEqual([0, 0, width, height])
+    expect(errors).toEqual([])
+  })
 
 test('a disabled control shows its styled tooltip, and tipped text in a row keeps focus on the row', async ({
   page,

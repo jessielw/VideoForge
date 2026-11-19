@@ -302,7 +302,7 @@ async function fixture(page: Page, mode: 'light' | 'dark', palette = 'gold') {
     '/api/fs/list': {
       path: 'D:\\Media',
       parent: 'D:\\',
-      dirs: [{ name: 'Season 01', path: 'D:\\Media\\Season 01' }],
+      dirs: [{ name: 'Season 01', path: 'D:\\Media\\Season 01', mtime: 0 }],
       files: [{ name: 'Show.S01E01.mkv', path: 'D:\\Media\\Show.S01E01.mkv', size: 1_000_000, mtime: 0 }],
     },
   }

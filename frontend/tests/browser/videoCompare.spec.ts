@@ -230,6 +230,42 @@ test('the preview and the script check show their figures in the code font', asy
   })
   expect(fits).toBe(true)
   await expect(page.getByText(/^\/ \d+ · /)).toHaveCSS('font-family', mono) // the frame count and time
+  // The frame controls fit their row at every width the layout gives them (352 px at 1440, 512 at 1600),
+  // and squeezed by the splitter, where previous, the slider and next share the first line above the rest.
+  const controls = page
+    .getByRole('textbox', { name: 'Frame number or time', exact: true })
+    .locator('xpath=ancestor::div[contains(@class, "@container")][1]/div')
+  for (const width of [1280, 1440, 1600, 1920]) {
+    await page.setViewportSize({ width, height: 800 })
+    await expect.poll(() => controls.evaluate((row) => row.scrollWidth <= row.clientWidth)).toBe(true)
+  }
+  for (const width of ['220px', '300px', '400px']) {
+    await controls.evaluate((row, w) => (row.parentElement!.style.width = w), width)
+    await expect
+      .poll(() =>
+        controls.evaluate((row) => {
+          const box = (sel: string) => row.querySelector(sel)!.getBoundingClientRect()
+          const slider = box('input[type=range]')
+          const mid = (r: DOMRect) => r.top + r.height / 2
+          const [prev, next, field] = [
+            box('[aria-label="Previous frame"]'),
+            box('[aria-label="Next frame"]'),
+            box('[aria-label="Frame number or time"]'),
+          ]
+          return (
+            row.scrollWidth <= row.clientWidth &&
+            prev.right <= slider.left &&
+            slider.right <= next.left &&
+            Math.abs(mid(prev) - mid(slider)) < 2 &&
+            Math.abs(mid(next) - mid(slider)) < 2 &&
+            slider.bottom <= field.top
+          )
+        }),
+      )
+      .toBe(true)
+  }
+  await controls.evaluate((row) => (row.parentElement!.style.width = ''))
+  await page.setViewportSize({ width: 1280, height: 800 })
   // The script check (on the Script side tab): its values are figures, its labels stay in the normal font.
   await page.getByRole('tab', { name: 'Script', exact: true }).click()
   const label = page.getByText('Size', { exact: true })

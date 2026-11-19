@@ -11,7 +11,7 @@ from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import ToolError
 from videoforge.core.job import OutputPolicy
 from videoforge.core.models import JobInputs, Overrides
-from videoforge.core.pairing import AUDIO_EXTENSIONS, SUB_FORMATS, match_files, slot_files
+from videoforge.core.pairing import AUDIO_EXTENSIONS, SUB_FORMATS, match_files, slot_files, subtitle_label
 from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.probe import mediainfo_report
@@ -67,6 +67,7 @@ def match(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
             | {
                 "existing_id": existing.id if (existing := q._find_source(j.source)) else None,
                 "existing_status": existing.status if existing else None,
+                "subtitle_info": [subtitle_label(p) for p in j.subtitles],
             }
             for j in result.jobs
         ],
@@ -87,6 +88,12 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
     result = _match(request, body)
     if not result.jobs:
         raise HTTPException(422, "No source matched")
+    excluded = body.get("exclude_subtitles") or []
+    if not isinstance(excluded, list) or not all(isinstance(p, str) for p in excluded):
+        raise HTTPException(422, "exclude_subtitles must be a list of paths")
+    drop = set(excluded)  # subtitles unticked in Matched files
+    for inputs in result.jobs:
+        inputs.subtitles = [p for p in inputs.subtitles if str(p) not in drop]
     out_dir = Path(body["output_dir"]) if body.get("output_dir") else None
     if out_dir is not None:
         store = request.app.state.store

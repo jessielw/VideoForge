@@ -417,7 +417,7 @@
   }
 </script>
 
-<div class="@container/settings h-full overflow-auto p-6">
+<div class="@container/settings h-full overflow-auto p-4 sm:p-6">
   <div class="flex min-w-0 flex-col gap-6">
     <header class="col-span-full flex flex-wrap items-center gap-3">
       <h1 class="text-xl font-semibold">Settings</h1>
@@ -482,7 +482,7 @@
       </nav>
 
       <div
-        class="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8 @min-[90rem]/settings:grid-cols-2"
+        class="grid max-w-4xl min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8"
         role="group"
         aria-labelledby="settings-tab-{tab}"
         aria-describedby="settings-about"
@@ -517,12 +517,15 @@
           {#if config}
             <section class="space-y-3">
               <h2 class="font-medium">Rule set</h2>
-              <label class="flex items-center gap-3 text-sm">
+              <label class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                 <span class="text-muted-foreground">New jobs start with</span>
                 <NativeSelect value={config.rule_set} onchange={(e) => setRuleSet(e.currentTarget.value)}>
                   {#each config.rule_sets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
                 </NativeSelect>
-                <span class="text-xs text-muted-foreground">Default: {config.rule_set_default}</span>
+                <span class="text-xs text-muted-foreground"
+                  >Default: {config.rule_sets.find((p) => p.id === config!.rule_set_default)?.name ??
+                    config.rule_set_default}</span
+                >
               </label>
             </section>
 
@@ -561,22 +564,25 @@
                   <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                     <span class="w-full font-medium sm:w-32 sm:shrink-0">{r.name}</span>
                     {#each [{ key: 'file_name', label: 'File name', own: own?.template_file_name }, { key: 'title', label: 'MKV title', own: own?.template_title }] as const as row (row.key)}
-                      <label class="flex min-w-0 items-center gap-2">
+                      <label class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                         <span class="text-muted-foreground">{row.label}</span>
                         <NativeSelect
                           class="min-w-0"
                           aria-label="{r.name}: {row.label} from the name template"
+                          aria-describedby={row.own === undefined ? undefined : `naming-${r.id}-${row.key}`}
                           value={policy[row.key]}
                           onchange={(e) => setNaming(r.id, { ...policy, [row.key]: e.currentTarget.value as NameUse })}
                         >
-                          <option value="template"
-                            >As each template says{row.own === undefined
-                              ? ''
-                              : ` (${r.name} defaults: ${row.own ? 'on' : 'off'})`}</option
-                          >
+                          <option value="template">As each template says</option>
                           <option value="on">Always on</option>
                           <option value="off">Always off</option>
                         </NativeSelect>
+                        <!-- beside the menu, not in its choice: a menu can't wrap, and this would cut it on a narrow window -->
+                        {#if row.own !== undefined}
+                          <span id="naming-{r.id}-{row.key}" class="text-xs text-muted-foreground"
+                            >{r.name} defaults: {row.own ? 'on' : 'off'}</span
+                          >
+                        {/if}
                       </label>
                     {/each}
                   </div>
@@ -701,7 +707,7 @@
             <section class="space-y-3">
               <h2 class="font-medium">Process priority</h2>
               {#each [{ key: 'encoder_priority', label: 'Video encode', hint: 'the encoder (x264, x265, ffmpeg for VP8 / VP9, SvtAv1EncApp) and the vspipe feeding it' }, { key: 'tool_priority', label: 'Other tools', hint: 'audio encodes, building the output file, indexing' }] as const as row (row.key)}
-                <label class="flex items-center gap-3 text-sm">
+                <label class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                   <span class="w-28 shrink-0 text-muted-foreground">{row.label}</span>
                   <NativeSelect
                     class="shrink-0"
@@ -713,7 +719,7 @@
                   >
                     {#each config.priorities as p (p)}<option value={p}>{PRIORITY_LABEL[p]}</option>{/each}
                   </NativeSelect>
-                  <span class="text-xs text-muted-foreground">
+                  <span class="min-w-48 flex-1 text-xs text-muted-foreground">
                     {row.hint}. Default: {PRIORITY_LABEL[config[`${row.key}_default`]]}
                   </span>
                 </label>
@@ -777,9 +783,9 @@
             </section>
 
             <section class="space-y-3">
-              <div class="flex items-center gap-3">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h2 class="font-medium">Folder browser</h2>
-                <span class="text-xs text-muted-foreground">
+                <span class="min-w-48 flex-1 text-xs text-muted-foreground">
                   {config.roots_custom
                     ? 'Only these folders (and what is under them) can be browsed.'
                     : 'Every drive can be browsed.'}
@@ -808,9 +814,9 @@
                   </span>
                 {/each}
               </div>
-              <div class="flex gap-2">
+              <div class="flex flex-wrap gap-2">
                 <Input
-                  class="w-96 font-mono text-xs"
+                  class="max-w-96 min-w-48 flex-1 font-mono text-xs"
                   placeholder="D:\Media"
                   bind:value={newRoot}
                   onkeydown={(e) => e.key === 'Enter' && addRoot(newRoot)}
@@ -834,9 +840,9 @@
         {:else if tab === 'tools'}
           {#if config}
             <section class="col-span-full min-w-0 space-y-3">
-              <div class="flex items-center gap-3">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h2 class="font-medium">Tools</h2>
-                <span class="text-xs text-muted-foreground"
+                <span class="min-w-48 flex-1 text-xs text-muted-foreground"
                   >A name without a folder, like ffmpeg, is looked up on PATH.</span
                 >
                 <Button
@@ -852,14 +858,17 @@
                 {#each config.tools as t (t.name)}
                   {@const c = checks[t.name]}
                   {@const look = c ? LOOK[c.status] : null}
-                  <div class="grid grid-cols-[12rem_1fr] items-baseline gap-x-4 gap-y-1.5 px-4 py-3">
+                  <!-- the name goes above the path when the pane is too narrow for both side by side -->
+                  <div
+                    class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-x-4 gap-y-1.5 px-4 py-3 @min-[40rem]/settings:grid-cols-[12rem_1fr]"
+                  >
                     <div>
                       <div class="text-sm font-medium">{t.label}</div>
                       <div class="text-xs text-muted-foreground">{t.purpose}</div>
                     </div>
-                    <div class="flex min-w-0 items-center gap-2">
+                    <div class="flex min-w-0 flex-wrap items-center gap-2">
                       <Input
-                        class="min-w-0 flex-1 font-mono text-xs {t.custom ? 'border-primary/60' : ''}"
+                        class="min-w-24 flex-1 font-mono text-xs {t.custom ? 'border-primary/60' : ''}"
                         value={t.custom ?? t.default}
                         placeholder={t.default || 'not set'}
                         aria-label="{t.label} path"
@@ -874,7 +883,7 @@
                         >
                       </Tip>
                     </div>
-                    <div></div>
+                    <div class="hidden @min-[40rem]/settings:block"></div>
                     <div class="flex min-w-0 items-center gap-2 text-xs">
                       {#if checking[t.name]}
                         <span class="text-muted-foreground">checking…</span>
@@ -916,9 +925,9 @@
         {:else if tab === 'automation'}
           {#if config}
             <section class="col-span-full min-w-0 space-y-3">
-              <div class="flex items-center gap-3">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h2 class="font-medium">Notifications</h2>
-                <span class="text-xs text-muted-foreground">
+                <span class="min-w-48 flex-1 text-xs text-muted-foreground">
                   Tell Discord, Telegram, ntfy, Pushover, email or
                   <a
                     class="underline hover:text-foreground"
@@ -951,7 +960,7 @@
               <div class="divide-y divide-border/60 rounded-xl border bg-card">
                 {#each config.notifications as d, i (i)}
                   <div class="space-y-2 px-4 py-3 {d.enabled ? '' : 'opacity-60'}">
-                    <div class="flex min-w-0 items-center gap-2">
+                    <div class="flex min-w-0 flex-wrap items-center gap-2">
                       <Tip text={d.enabled ? 'On' : 'Off, so nothing is sent here'}>
                         <Checkbox
                           checked={d.enabled}
@@ -960,13 +969,13 @@
                         />
                       </Tip>
                       <Input
-                        class="w-40 text-sm"
+                        class="max-w-40 grow basis-32 text-sm"
                         value={d.name}
                         aria-label="Name"
                         onchange={(e) => editNotification(i, { name: e.currentTarget.value })}
                       />
                       <Input
-                        class="min-w-0 flex-1 font-mono text-xs"
+                        class="min-w-24 flex-1 font-mono text-xs"
                         value={d.url}
                         aria-label="{d.name} Apprise URL"
                         onchange={(e) => editNotification(i, { url: e.currentTarget.value })}
@@ -991,10 +1000,14 @@
                   </div>
                 {/each}
                 <div class="space-y-2 px-4 py-3">
-                  <div class="flex min-w-0 items-center gap-2">
-                    <Input class="w-40 text-sm" placeholder="Name (optional)" bind:value={draft.name} />
+                  <div class="flex min-w-0 flex-wrap items-center gap-2">
                     <Input
-                      class="min-w-0 flex-1 font-mono text-xs"
+                      class="max-w-40 grow basis-32 text-sm"
+                      placeholder="Name (optional)"
+                      bind:value={draft.name}
+                    />
+                    <Input
+                      class="min-w-24 flex-1 font-mono text-xs"
                       placeholder="discord://webhook_id/webhook_token"
                       bind:value={draft.url}
                       onkeydown={(e) => e.key === 'Enter' && addNotification()}
@@ -1014,9 +1027,9 @@
             </section>
 
             <section class="col-span-full min-w-0 space-y-3">
-              <div class="flex items-center gap-3">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h2 class="font-medium">Actions</h2>
-                <span class="text-xs text-muted-foreground">
+                <span class="min-w-48 flex-1 text-xs text-muted-foreground">
                   After a job ends or the queue finishes, actions can move or copy the output, run a command, call a
                   webhook, or shut down or sleep the computer. A job's actions run in this order, and after a move, the
                   ones below it get the new path.
@@ -1034,7 +1047,7 @@
                 set: (changes: Partial<ActionSetting>) => void,
                 index: number | 'draft',
               )}
-                <div class="flex min-w-0 items-center gap-2">
+                <div class="flex min-w-0 flex-wrap items-center gap-2">
                   {#if index !== 'draft'}
                     <Tip text={a.enabled ? 'On' : "Off, so it doesn't run"}>
                       <Checkbox
@@ -1045,7 +1058,7 @@
                     </Tip>
                   {/if}
                   <Input
-                    class="w-40 text-sm"
+                    class="max-w-40 grow basis-32 text-sm"
                     value={a.name}
                     placeholder="Name (optional)"
                     aria-label="Name"
@@ -1059,7 +1072,7 @@
                     {#each config!.action_kinds as k (k.id)}<option value={k.id}>{k.label}</option>{/each}
                   </NativeSelect>
                   <Input
-                    class="min-w-0 flex-1 font-mono text-xs"
+                    class="min-w-24 flex-1 font-mono text-xs"
                     value={a.target}
                     placeholder={TARGET_HINT[a.kind]}
                     aria-label="{a.name || 'Action'} target"
@@ -1125,7 +1138,8 @@
               </div>
               <details class="text-xs text-muted-foreground">
                 <summary class="cursor-pointer select-none">Tokens for commands and folders</summary>
-                <div class="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5">
+                <!-- wrap-anywhere: descriptions hold unbroken paths like (<source>_tmp) that would widen the list -->
+                <div class="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 wrap-anywhere">
                   <div class="col-span-2 font-medium text-foreground">After a job</div>
                   {#each Object.entries(config.action_tokens.job) as [token, what] (token)}
                     <code>{`{${token}}`}</code><span>{what}</span>

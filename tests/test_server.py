@@ -300,6 +300,8 @@ def test_add_inspect_and_edit(tmp_path):
     with make_client(tmp_path) as client:
         preview = client.post("/api/match", json={"sources": [str(tmp_path / "src")]}).json()
         assert [Path(j["source"]).name for j in preview["jobs"]] == ["Show.S01E01.mkv", "Show.S01E02.mkv"]
+        label = preview["jobs"][0]["subtitle_info"][0]  # found next to the source
+        assert label["language"] == "en" and label["format"] == "srt" and label["path"].endswith("Show.S01E01.en.srt")
 
         ids = add(client, tmp_path)
         assert len(ids) == 2
@@ -2004,6 +2006,8 @@ def test_folder_browser(tmp_path):
         listing = client.get("/api/fs/list", params={"path": str(tmp_path / "src"), "extensions": ".mkv"}).json()
         assert [f["name"] for f in listing["files"]] == ["Show.S01E01.mkv"]
         assert listing["parent"] == str(tmp_path)
+        top = client.get("/api/fs/list", params={"path": str(tmp_path)}).json()
+        assert top["dirs"] and all(isinstance(d["mtime"], float) for d in top["dirs"])  # for sorting by date
         # Programs: by extension on Windows; elsewhere runnable, or without an extension (execute bit lost).
         tools_dir = tmp_path / "tools"
         tools_dir.mkdir()
@@ -2469,3 +2473,27 @@ def test_an_invalid_jobs_issues_say_each_check_once():
         "output.a",
     ]
     assert shown("Name must not mention dual audio: X") == ["output.name.dual", "output.a"]  # saved before
+
+
+def test_add_leaves_out_unticked_subtitles(tmp_path):
+    make_files(tmp_path, "S01E01", "S01E02")
+    with make_client(tmp_path) as client:
+        drop = str(tmp_path / "src" / "Show.S01E01.en.srt")
+        first, second = add(client, tmp_path, exclude_subtitles=[drop])
+        assert client.get(f"/api/jobs/{first}").json()["spec"]["inputs"]["subtitles"] == []
+        assert client.get(f"/api/jobs/{second}").json()["spec"]["inputs"]["subtitles"] == [
+            str(tmp_path / "src" / "Show.S01E02.en.srt")
+        ]
+        bad = client.post("/api/jobs", json={"sources": [str(tmp_path / "src")], "exclude_subtitles": "x"})
+        assert bad.status_code == 422
+
+
+def test_adding_never_resolves_a_path(tmp_path, monkeypatch):
+    """Finding a source's queued job compared every queued source resolved, for every new one: seconds on a share."""
+    make_files(tmp_path, "S01E01", "S01E02")
+    with make_client(tmp_path) as client:
+        add(client, tmp_path)
+        monkeypatch.setattr(Path, "resolve", lambda self, strict=False: pytest.fail(f"resolved {self}"))
+        preview = client.post("/api/match", json={"sources": [str(tmp_path / "src")]}).json()
+        assert all(j["existing_id"] for j in preview["jobs"])  # still found, by text
+        assert client.post("/api/jobs", json={"sources": [str(tmp_path / "src")]}).json()["added"] == []

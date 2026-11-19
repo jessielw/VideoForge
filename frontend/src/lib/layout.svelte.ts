@@ -26,6 +26,7 @@ class Layout {
   #queue = $state(read('videoforge.queueCollapsed'))
   videoExpanded = $state(false)
   narrow = $state(false)
+  compact = $state(false) // below 1024 px (200% zoom on a 1920 px screen): the nav is a rail
   small = $state(false)
 
   constructor() {
@@ -33,6 +34,9 @@ class Layout {
     const mq = window.matchMedia(NARROW)
     this.narrow = mq.matches
     mq.addEventListener('change', (e) => (this.narrow = e.matches))
+    const compact = window.matchMedia('(width < 64rem)') // the same edge as Tailwind's lg
+    this.compact = compact.matches
+    compact.addEventListener('change', (e) => (this.compact = e.matches))
     const small = window.matchMedia('(max-width: 639px)')
     this.small = small.matches
     small.addEventListener('change', (e) => (this.small = e.matches))

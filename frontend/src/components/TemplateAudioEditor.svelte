@@ -111,7 +111,7 @@
     })
   const tri = (v: boolean | null) => (v === null ? 'any' : v ? 'yes' : 'no')
   const fromTri = (v: string) => (v === 'any' ? null : v === 'yes')
-  const codecKey = (c: AudioCodec[]) => [...c].sort().join(',')
+  const codecKey = (c: AudioCodec[]) => c.toSorted().join(',')
   const num = (v: string) => (v ? Number(v) : null)
 
   function move(i: number, by: number) {

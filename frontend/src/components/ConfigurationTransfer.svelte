@@ -162,8 +162,11 @@
     installed tools and plugin files aren't included.
   </p>
   <div class="flex flex-wrap gap-2">
-    <Button variant="outline" disabled={disabled || busy} onclick={exportFile}
-      ><DownloadIcon />Export configuration</Button
+    <Button
+      variant="outline"
+      class="h-auto min-h-8 shrink whitespace-normal"
+      disabled={disabled || busy}
+      onclick={exportFile}><DownloadIcon />Export configuration</Button
     >
     <Button
       variant="outline"

@@ -29,7 +29,7 @@ Search matches job names, labels and source paths, ignoring case. Every word mus
 
 Selections survive filters and live status changes. The count identifies jobs hidden by filters; **Clear selection** clears all selected jobs. **Run selected**, Index with a selection, and the other selected-job actions include selections on other pages and hidden by filters. **Start queue** runs every queued job, and Index without a selection uses all jobs. Move up/down changes positions in the full queue, including across filtered-out neighbors.
 
-On small windows, opening one job collapses the list to a rail. **Show the queue list** opens search and filters over the editor; Escape closes it and restores focus to the opener. At widths below 640 CSS pixels, navigation also collapses and the list fills the available width. Short windows allow scrolling to reach queue controls.
+On small windows, opening one job collapses the list to a rail. **Show the queue list** opens search and filters over the editor; Escape closes it and restores focus to the opener. Below 1024 CSS pixels, the menu also collapses to icons. Below 640 CSS pixels, the list fills the available width. Short windows allow scrolling to reach queue controls.
 
 ## Queue jobs
 
@@ -47,7 +47,7 @@ Use **Index** on the Queue toolbar to index selected jobs, or all jobs if none a
 
 By default a new job is indexed as soon as it is probed (**Settings → Index new jobs**), and its crop is detected after the index (**Auto-crop new jobs**, which indexes the job even with the first option off). Turn them off to index only when you ask. A template with a fixed crop keeps its crop, and a crop you set by hand always wins.
 
-Indexing can run while another job encodes. By default, a source on the same physical disk that the encode is reading waits while that job extracts, encodes audio, indexes, or muxes, and sources on other disks go first. Once the job is only encoding video, which reads the source slowly, the waiting sources are indexed beside it. **Settings → Wait while an encode reads the same disk** controls the wait, and **Index anyway while it only encodes video** turns off the video-only exception. The sidebar shows waiting jobs as *to index after the encode*, apart from the ones being indexed.
+Indexing can run while another job encodes. By default, a source on the same physical disk that the encode is reading waits while that job extracts, encodes audio, indexes, or muxes, and sources on other disks go first. Once the job is only encoding video, which reads the source slowly, the waiting sources are indexed beside it. **Settings → Wait while an encode reads the same disk** controls the wait, and **Index anyway while it only encodes video** turns off the video-only exception. The sidebar shows waiting jobs as _to index after the encode_, apart from the ones being indexed.
 
 BestSource's first index decodes the whole video and can take substantially longer than FFMS2. Check the job log before assuming an index is stuck.
 

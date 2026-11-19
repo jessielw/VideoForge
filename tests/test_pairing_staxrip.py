@@ -8,7 +8,15 @@ from conftest import source, sub
 
 from videoforge.core.jobs import external_tracks
 from videoforge.core.models import EncodeState, SubFormat as F
-from videoforge.core.pairing import FileSets, MatchRules, discover, external_sub_track, match_files, slot_files
+from videoforge.core.pairing import (
+    FileSets,
+    MatchRules,
+    discover,
+    external_sub_track,
+    match_files,
+    slot_files,
+    subtitle_label,
+)
 
 EXTS = (".h264", ".hevc")
 RULES = MatchRules(encode_suffixes=("_job",), encode_extensions=EXTS)
@@ -134,6 +142,38 @@ def test_lone_source_takes_every_added_subtitle(tmp_path):
     assert job.encode == enc and sorted(job.subtitles) == sorted(subs)
 
 
+def test_added_subtitles_replace_the_ones_near_the_source(tmp_path):
+    """A subs folder added for some episodes: those take only it; the others still scan the source folder."""
+    (tmp_path / "extracted").mkdir()
+    synced = tmp_path / "subs-synced"
+    synced.mkdir()
+    e1, e2 = tmp_path / "Show.S01E01.mkv", tmp_path / "Show.S01E02.mkv"
+    near = [tmp_path / "extracted" / f"Show.S01E0{n}.Title.REMUX_track7_[eng].srt" for n in (1, 2)]
+    mine = synced / "Show.S01E01.Part.1.WEB-DL.en.synced.srt"
+    for p in (e1, e2, *near, mine):
+        p.write_bytes(b"")
+    first, second = match_files(FileSets([e1, e2], [], [mine]), RULES).jobs
+    assert first.subtitles == [mine]
+    assert second.subtitles == [near[1]]
+
+
+def test_sources_match_in_episode_order(tmp_path):
+    names = ["Show.E10.mkv", "Show.E2.mkv", "Show.E1.mkv"]
+    for n in names:
+        (tmp_path / n).write_bytes(b"")
+    found = match_files(FileSets([tmp_path / n for n in names]), MatchRules(scan_source_folder=False))
+    assert [j.source.name for j in found.jobs] == ["Show.E1.mkv", "Show.E2.mkv", "Show.E10.mkv"]
+
+
+def test_subtitle_label_reads_the_name():
+    synced = subtitle_label(Path("Show.S01E01.Part.1.NF.WEB-DL-GNOME_USA_23.976fps.en.synced.srt"))
+    assert synced["language"] == "en" and synced["format"] == "srt" and synced["tags"] == ["synced"]
+    assert synced["track"] is None and synced["language_name"] == "English"
+    extracted = subtitle_label(Path("Show.S01E01.1080p.REMUX-FraMeSToR_track7_[eng].forced.ass"))
+    assert extracted["format"] == "ass" and extracted["track"] == 7 and extracted["tags"] == ["forced"]
+    assert subtitle_label(Path("Show.S01E01.srt"))["language"] == "und"
+
+
 def test_without_staxrip_temp(tmp_path):
     """No log and no qpf lookup: chapters only from added files, state from the file lock."""
     src_dir, work = make_batch(tmp_path)
@@ -165,3 +205,16 @@ def test_raw_encode_in_source_folder_needs_no_encode_slot(tmp_path):
     sets = slot_files([tmp_path], [], [], [], RULES)
     (job,) = match_files(sets, RULES).jobs
     assert job.encode == tmp_path / "Movie_job.hevc"
+
+
+def test_matching_never_resolves_a_path(tmp_path, monkeypatch):
+    """On a network share each resolve() is a round trip; matching a season compares paths as text."""
+    src_dir, work = make_batch(tmp_path)
+
+    def no_resolve(self, strict=False):
+        raise AssertionError(f"resolved {self}")
+
+    monkeypatch.setattr(Path, "resolve", no_resolve)
+    sets = slot_files([src_dir, src_dir / "Show.S01E01.mkv"], [work], [src_dir / "subs"], [], RULES)
+    assert [p.name for p in sets.sources] == ["Show.S01E01.mkv", "Show.S01E02.mkv", "Show.S01E03.mkv"]  # no twin
+    assert len(match_files(sets, RULES).jobs) == 3

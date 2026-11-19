@@ -93,7 +93,13 @@ async function fixture(page: Page) {
     notification_events: [],
     actions: [],
     action_kinds: [{ id: 'command', label: 'Run command' }],
-    action_tokens: { job: {}, queue: {} },
+    action_tokens: {
+      job: {
+        output_stem: "the output's file name without its extension",
+        record: 'the job record (<output>.videoforge.json)',
+      },
+      queue: {},
+    },
     allow_commands: false,
     plugins: { folder: 'plugins', loaded: [], disabled: [], failures: [] },
   }
@@ -219,26 +225,63 @@ test('Output names: a rule set can name its jobs from the template always, never
   await page.goto('/#/settings')
   const fileName = page.getByRole('combobox', { name: 'Manual: File name from the name template' })
   await expect(fileName).toHaveValue('template')
-  await expect(fileName.locator('option[value="template"]')).toHaveText('As each template says (Manual defaults: off)')
+  await expect(fileName.locator('option[value="template"]')).toHaveText('As each template says')
+  await expect(fileName).toHaveAccessibleDescription('Manual defaults: off')
   await fileName.selectOption('off')
   await expect.poll(() => sent).toEqual([{ naming: { manual: { file_name: 'off', title: 'template' } } }])
   expect(errors).toEqual([])
 })
 
-test('Settings fits a 320 px wide window without scrolling sideways', async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 700 })
+test('Rule set names the default rule set, not its id', async ({ page }) => {
   const errors = await fixture(page)
   await page.goto('/#/settings')
+  await expect(page.getByText('Default: Manual', { exact: true })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+// 320 px less a classic 17 px scrollbar, which this Chromium hides; and a wide font, as Linux CI's fonts are wider
+const NARROW = { width: 303, height: 700 }
+const WIDE_FONT = '*{font-family:Verdana,"DejaVu Sans",sans-serif!important}'
+
+test('Settings fits a 320 px wide window without scrolling sideways', async ({ page }) => {
+  await page.setViewportSize(NARROW)
+  const errors = await fixture(page)
+  await page.goto('/#/settings')
+  await page.addStyleTag({ content: WIDE_FONT })
   const settings = page.locator('[class*="@container/settings"]')
-  // shortcut: six tabs have content that doesn't wrap yet (Process priority's hints, Folder browser's Reset row, the
-  // tool path rows, Automation's Add rows; with Linux CI's wider fonts also the "Manage video encoder presets" button
-  // and Appearance), so they are left out until it does. The four checked here fit even with a wide font.
-  const wide = ['Queue & indexing', 'Presets', 'Files & folders', 'Tools', 'Automation', 'Appearance']
-  for (const category of ORDER.filter((c) => !wide.includes(c))) {
+  for (const category of ORDER) {
     await open(page, category)
-    const { scroll, client } = await settings.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }))
+    const { scroll, client } = await settings.evaluate((el) => {
+      for (const details of el.querySelectorAll('details')) details.open = true // what's folded away must fit too
+      return { scroll: el.scrollWidth, client: el.clientWidth }
+    })
     expect.soft(scroll, category).toBeLessThanOrEqual(client)
   }
+  expect(errors).toEqual([])
+})
+
+test('the menus on Settings › Jobs show their whole choice in a 320 px wide window', async ({ page }) => {
+  await page.setViewportSize(NARROW)
+  const errors = await fixture(page)
+  await page.goto('/#/settings')
+  await page.addStyleTag({ content: WIDE_FONT })
+  const menus = page.locator('[class*="@container/settings"] select')
+  await expect(menus.first()).toBeVisible()
+  // a menu can't wrap its choice, so the choice's text, in the menu's font, must fit inside the menu's padding
+  const cut = await menus.evaluateAll((selects) =>
+    (selects as HTMLSelectElement[]).flatMap((select) => {
+      const style = getComputedStyle(select)
+      const probe = document.body.appendChild(document.createElement('span'))
+      Object.assign(probe.style, { font: style.font, whiteSpace: 'pre', position: 'absolute' })
+      probe.textContent = select.selectedOptions[0]?.text ?? ''
+      const text = probe.getBoundingClientRect().width
+      probe.remove()
+      const room = select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+      const name = select.getAttribute('aria-label') ?? select.labels[0]?.innerText.split('\n')[0]
+      return text > room ? [`${name}: "${probe.textContent}" needs ${Math.ceil(text)} px, has ${Math.floor(room)}`] : []
+    }),
+  )
+  expect(cut).toEqual([])
   expect(errors).toEqual([])
 })
 

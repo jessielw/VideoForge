@@ -6,7 +6,8 @@ mixed drop that is sorted first. Everything is matched to a source by stem
 a single source, every added subtitle and chapter file belongs to it.
 
 Extras, each switchable in MatchRules:
-    scan_source_folder   subtitles next to the source and one folder down (e.g. subs/)
+    scan_source_folder   subtitles next to the source and one folder down (e.g. subs/),
+                         for a source given no subtitle files of its own
     staxrip_temp         <source>_temp/<encode>_staxrip.log ("Job Complete") for the
                          encode state, and a_qpf/qpf_chapters.txt for chapters, while
                          StaxRip still does the video. Without it, an encode still
@@ -16,10 +17,12 @@ Extras, each switchable in MatchRules:
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
 import re
+from typing import Any
 
 from videoforge.core import lang
 from videoforge.core.models import EncodeState, JobInputs, SubFormat, SubTrack
@@ -84,23 +87,47 @@ def is_chapter_file(path: Path) -> bool:
     return path.suffix.lower() in CHAPTER_EXTENSIONS and bool(_CHAPTER_NAME_RE.search(path.name))
 
 
+# On a network share every look at the disk is a round trip (about 12 ms each on an SMB drive), so a season
+# of files is listed with os.scandir (a file's kind comes with the listing on Windows), the given paths are
+# checked side by side, and paths are compared as text, never resolved.
+
+
+def _key(path: Path) -> str:
+    """A path as the file system compares it (Windows: case-insensitive), without touching the disk."""
+    return os.path.normcase(os.path.abspath(path))
+
+
+def _are_dirs(paths: list[Path]) -> list[bool]:
+    """Which of the given paths are folders, checked side by side."""
+    if len(paths) < 2:
+        return [p.is_dir() for p in paths]
+    with ThreadPoolExecutor(max_workers=min(16, len(paths))) as pool:
+        return list(pool.map(Path.is_dir, paths))
+
+
+def _ext(name: str) -> str:
+    return os.path.splitext(name)[1].lower()
+
+
 def expand(paths: Iterable[Path], extensions: Iterable[str]) -> list[Path]:
     """Files as given, plus matching files one level inside any folders (sorted, de-duplicated)."""
     wanted = {e.lower() for e in extensions}
+    given = list(paths)
     out: list[Path] = []
-    for p in paths:
-        if p.is_dir():
-            out.extend(sorted(c for c in p.iterdir() if c.is_file() and c.suffix.lower() in wanted))
+    for p, is_dir in zip(given, _are_dirs(given), strict=True):
+        if is_dir:
+            with os.scandir(p) as listing:
+                out.extend(sorted(Path(f.path) for f in listing if f.is_file() and _ext(f.name) in wanted))
         elif p.suffix.lower() in wanted:
             out.append(p)
     return _unique(out)
 
 
 def _unique(paths: Iterable[Path]) -> list[Path]:
-    seen: set[Path] = set()
+    seen: set[str] = set()
     unique = []
     for p in paths:
-        key = p.resolve()
+        key = _key(p)
         if key not in seen:
             seen.add(key)
             unique.append(p)
@@ -160,6 +187,12 @@ def _base_stem(stem: str, suffixes: Iterable[str]) -> str:
     return stem
 
 
+def _natural_key(path: Path) -> tuple[Any, ...]:
+    """Names in the order a person reads them: E2 before E10."""
+    parts = re.split(r"(\d+)", path.name.lower())
+    return (*(int(p) if i % 2 else p for i, p in enumerate(parts)), str(path))
+
+
 def _belongs(path: Path, source: Path) -> bool:
     token = episode_token(source.stem)
     return path.name.startswith(source.stem + ".") or bool(token and episode_token(path.stem) == token)
@@ -170,9 +203,10 @@ def match_files(sets: FileSets, rules: MatchRules) -> MatchResult:
 
     Encodes match by "<source stem><suffix>", then by SxxEyy; subtitles and
     chapters by a "<source stem>." prefix or SxxEyy. A lone source takes a lone
-    encode and every subtitle/chapter file regardless of name.
+    encode and every subtitle/chapter file regardless of name. Subtitles found
+    near the source only fill in for a source given none of its own.
     """
-    sources = _unique(sets.sources)
+    sources = sorted(_unique(sets.sources), key=_natural_key)  # one job per episode, in episode order
     encodes = _unique(sets.encodes)
     remaining = list(encodes)
     by_stem = {_base_stem(e.stem, rules.encode_suffixes): e for e in encodes}
@@ -197,7 +231,7 @@ def match_files(sets: FileSets, rules: MatchRules) -> MatchResult:
     for job in jobs:
         mine = [p for p in subs_left if lone or _belongs(p, job.source)]
         subs_left = [p for p in subs_left if p not in mine]
-        if rules.scan_source_folder:
+        if rules.scan_source_folder and not mine:  # added subtitles replace the ones found near it
             folder = job.source.parent
             if folder not in near:
                 near[folder] = subtitles_near(folder)
@@ -246,8 +280,13 @@ def find_qpf_chapters(source: Path) -> Path | None:
 
 def subtitles_near(folder: Path) -> list[Path]:
     """Subtitle files in a folder and one folder down (skipping StaxRip *_temp dirs)."""
-    folders = [folder] + sorted(d for d in folder.iterdir() if d.is_dir() and not d.name.endswith("_temp"))
-    return [p for f in folders for p in f.iterdir() if p.suffix.lower() in SUBTITLE_EXTENSIONS]
+    with os.scandir(folder) as listing:
+        here = list(listing)
+    found = [Path(f.path) for f in here if _ext(f.name) in SUBTITLE_EXTENSIONS]
+    for sub in sorted((Path(d.path) for d in here if d.is_dir() and not d.name.endswith("_temp")), key=str):
+        with os.scandir(sub) as listing:
+            found += [Path(f.path) for f in listing if _ext(f.name) in SUBTITLE_EXTENSIONS]
+    return found
 
 
 def find_external_subs(source: Path, near: list[Path] | None = None) -> list[Path]:
@@ -257,6 +296,26 @@ def find_external_subs(source: Path, near: list[Path] | None = None) -> list[Pat
     """
     near = subtitles_near(source.parent) if near is None else near
     return sorted(p for p in near if _belongs(p, source))
+
+
+def subtitle_label(path: Path) -> dict[str, Any]:
+    """What Matched files shows for a subtitle file, read from its name alone (nothing is opened):
+    language, format, forced/sdh/dub and synced words, and the source track it was extracted from."""
+    stem = path.stem
+    words = {w.lower() for w in re.split(r"[.\s_\[\]()-]+", stem)}
+    tags = sorted({_TAG_ALIASES[w] for w in words if w in _TAG_ALIASES})
+    if words & {"synced", "sync"}:
+        tags.append("synced")
+    language = _language_with_region(stem) or _language_from_name(stem) or "und"
+    m = _TRACK_NO_RE.search(stem)
+    return {
+        "path": str(path),
+        "language": language,
+        "language_name": lang.display_name(language),
+        "format": path.suffix.lower().lstrip("."),
+        "tags": tags,
+        "track": int(m.group(1)) if m else None,
+    }
 
 
 def _language_from_name(stem: str) -> str | None:

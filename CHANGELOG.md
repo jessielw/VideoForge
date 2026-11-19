@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2026-11-19
+
+### Added
+
+- The file picker behind **Browse…** ticks several files at once. Shift+click ticks every row from the last one clicked to this one, or unticks them when this one was ticked. Pressing the mouse on a row and dragging over others ticks them, or unticks them when the first row was ticked; dragging back takes rows out again. Ctrl+A (Cmd+A) or the new **All files** box above the list ticks every file in the folder, and again unticks them; folders are left as they are. Clicking anywhere on a file's row ticks it, as before.
+- The file picker has a **Filter this folder** box. It shows only the names with every word typed in them, such as `s01 mkv`. Ctrl+A, the All box and ranges take only the rows it shows, and files ticked before stay ticked. Esc clears it.
+- The file picker has a **Refresh** button (or F5) that lists the folder again after files change outside VideoForge. It keeps the filter.
+- The file picker sorts by name, modified date or size: click the column above the list, and again to flip it. Folders stay first. Names sort with numbers in order (E2 before E10), and the browser remembers the sort. It shows each file's and folder's modified date on windows wider than 640 px. `GET /api/fs/list` adds `mtime` to each folder.
+- The file picker works from the keyboard. ↑ and ↓ move between rows (↓ from the filter goes to the first row), Home and End go to the first and last, and Shift+↑ or ↓ ticks the rows on the way. Space ticks the row, and Shift+Space a range. Enter opens a folder, or on a file adds what's ticked (that file, when nothing is). Backspace or Alt+↑ goes up a folder and puts the cursor back on the folder you left. The keyboard shortcuts sheet lists them.
+- Each input on New jobs (sources, encodes, subtitles, chapters) has its own clear button beside **Browse…**, shown once it holds a path, and its label counts its paths, such as "Sources · 24". The bottom bar's **Clear** is now **Clear all**, and still empties every input.
+- **Matched files** on New jobs has a grip on its bottom edge: drag it down to show more rows. Held below the page, the page scrolls and the list keeps growing until every row shows. The arrow keys move it too, a double-click goes back to filling the page, and the height is remembered.
+- **Matched files** shows each subtitle as a short tag read from its name, such as `en · srt · synced` or `en · ass · track 7`, with the file name on hover. Click a tag to leave that subtitle out of its job, and again to put it back.
+- **Matched files** flags a job with a different number of subtitles than most of the batch ("No subtitles; most have 1"), and its header counts them, such as "2 without subtitles".
+
+### Changed
+
+- Settings shows its groups in one column at every width. On wide windows, short groups no longer sit beside tall ones with empty space under them.
+- The menu collapses to icons on windows narrower than 1024 px (it was 640 px). At 200% zoom it no longer takes a quarter of the window.
+- The job's name gets its own line when the job header is narrow, instead of shrinking to a few letters.
+- The Video tab puts the preview above its settings when the tab is narrower than about 700 px, so the preview stays big enough to judge a crop.
+- A long list of paths on New jobs scrolls inside its box after about three rows, instead of pushing the rest of the page down.
+- New jobs lists sources in reading order, so `E2` comes before `E10`, in the Sources box, in **Matched files** and in the queue, whatever order they were added in.
+- Files that match no source are listed first in **Matched files**, marked in amber, instead of after every job.
+- While **Add to queue** runs, the bottom bar shows a spinner and "Adding 25 jobs to the queue…", and the inputs and **Matched files** are locked and dimmed until it's done. Paths pasted meanwhile wait and land once the jobs are added. Before, the page looked frozen during a big batch.
+- Updated FastAPI and guessit.
+
+### Fixed
+
+- Adding a season from a network share is several seconds faster, and Matched files fills in faster. Finding whether each new source was already queued looked at the disk for every queued job, for every new source: about 325 network round trips for 25 episodes. Paths are now compared as text, folders are listed in one pass, and the given paths are checked side by side. Matching a 25-episode season on an SMB share went from about 1.6 s to 0.1 s.
+- Subtitles you add on New jobs replace the ones found next to the source or one folder down, instead of joining them. Adding a `subs-synced` folder no longer also pulls in the extracted `_track7_[eng]` files beside it. A source you add no subtitles for still gets the ones near it.
+- The preview's frame controls no longer run past the preview into the filter panel when the preview is narrow. A narrow preview stacks them: the previous and next arrows sit either side of the slider, with the bookmark, frame box and frame count centred below. First and last frame and the bookmark jumps show once there's room for them, and their keys work either way. The time after the frame count shows once there's room for it.
+- The queue's key hints no longer crowd each other across lines, and read "Ctrl+A or Cmd+A". The selection hint says "1 selected job", not "1 selected jobs".
+- Settings fits a 320 px wide window on every tab. Rows that ran off the side (process priority, the folder browser, tool paths, automation, presets, appearance) now wrap.
+- The Rule set list on Settings › Jobs and the Output names menus show their whole choice on a narrow window. Output names now shows the rule set's own default, such as "Manual defaults: off", beside each menu instead of inside it.
+- Templates works on a narrow window: below 640 px the list and the editor take turns, where before the editor never showed.
+- Beside the Rule set list, Settings › Jobs shows the default rule set's name ("Manual") where it showed its id ("manual").
+
 ## [0.1.10] - 2026-11-17
 
 ### Changed

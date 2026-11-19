@@ -107,7 +107,12 @@
 </script>
 
 {#if manageOnly}
-  <Button bind:ref={trigger} variant="outline" {disabled} onclick={() => (managerOpen = true)}
+  <Button
+    bind:ref={trigger}
+    variant="outline"
+    class="h-auto min-h-8 shrink whitespace-normal"
+    {disabled}
+    onclick={() => (managerOpen = true)}
     ><SettingsIcon />Manage {title === 'Audio' ? 'audio' : 'video encoder'} presets</Button
   >
 {:else}

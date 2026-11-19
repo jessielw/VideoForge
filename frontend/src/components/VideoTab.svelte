@@ -585,14 +585,15 @@
   {/if}
 {/snippet}
 
-<!-- A phone stacks the frame over the side panel, and the page scrolls. -->
+<!-- A narrow tab (a phone, or 200% zoom) stacks the frame over the side panel, and the page scrolls: beside a
+     384 px panel, under 44rem leaves the frame too small to judge a crop. -->
 <div
   bind:clientWidth={rowW}
-  class="flex min-h-0 gap-2 max-sm:flex-col {dragging ? 'select-none' : ''} {layout.videoExpanded
-    ? 'fixed inset-0 z-40 bg-background p-4 max-sm:overflow-y-auto max-sm:p-2'
-    : 'h-full max-sm:h-auto'}"
+  class="flex min-h-0 gap-2 @max-[44rem]/job-tab:flex-col {dragging ? 'select-none' : ''} {layout.videoExpanded
+    ? 'fixed inset-0 z-40 bg-background p-4 @max-[44rem]/job-tab:overflow-y-auto max-sm:p-2'
+    : 'h-full @max-[44rem]/job-tab:h-auto'}"
 >
-  <div class="flex min-w-0 flex-1 flex-col gap-2 max-sm:h-[60vh] max-sm:flex-none">
+  <div class="flex min-w-0 flex-1 flex-col gap-2 @max-[44rem]/job-tab:h-[60vh] @max-[44rem]/job-tab:flex-none">
     {#if saving || (infoError && !scripting)}
       <div class="flex items-center gap-2">
         {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
@@ -770,7 +771,7 @@
     aria-valuemax={Math.max(PANEL_MIN, Math.round(rowW * 0.7))}
     aria-valuetext="{panelW} pixels wide"
     tabindex="0"
-    class="group flex w-2 shrink-0 cursor-col-resize touch-none justify-center max-sm:hidden"
+    class="group flex w-2 shrink-0 cursor-col-resize touch-none justify-center @max-[44rem]/job-tab:hidden"
     onpointerdown={splitDown}
     onpointermove={splitMove}
     onpointerup={splitUp}
@@ -784,7 +785,10 @@
     ></div>
   </div>
 
-  <div class="flex shrink-0 flex-col gap-2 max-sm:min-h-[60vh] max-sm:w-full!" style="width:{panelW}px">
+  <div
+    class="flex shrink-0 flex-col gap-2 @max-[44rem]/job-tab:min-h-[60vh] @max-[44rem]/job-tab:w-full!"
+    style="width:{panelW}px"
+  >
     <div class="flex items-center justify-between gap-2">
       <Tabs.Root value={vv.panel} onValueChange={(v) => (v === 'script' ? openScript() : (vv.panel = 'settings'))}>
         <Tabs.List aria-label="Side panel">

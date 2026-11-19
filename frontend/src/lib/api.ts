@@ -260,6 +260,7 @@ export const api = {
     body: InputSlots & {
       original_language: string | null
       replace_existing?: string[]
+      exclude_subtitles?: string[] // unticked in Matched files
       output_dir: string | null
       video?: Partial<VideoSettings>
       encoder?: EncoderSettings

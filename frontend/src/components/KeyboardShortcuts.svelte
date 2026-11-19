@@ -1,7 +1,7 @@
 <script lang="ts">
   // The keyboard shortcuts, on one sheet: the menu's button opens it, and so does ? anywhere but a text field.
   // Keep it in step with the handlers it lists (Queue's keys, FramePreview's onkey, VideoTab's and
-  // ScriptEditor's onkeydown).
+  // ScriptEditor's onkeydown, FileBrowser's keys).
   import KeyboardIcon from '@lucide/svelte/icons/keyboard'
   import { Button } from '$lib/components/ui/button'
   import * as Dialog from '$lib/components/ui/dialog'
@@ -25,6 +25,23 @@
         [['Shift', '↑ / ↓'], 'Grow the selection'],
         [['Ctrl / ⌘', 'A'], 'Select every matching job'],
         [['Esc'], 'Hide the list when it is over the editor'],
+      ],
+    },
+    {
+      title: 'File browser (Browse…)',
+      keys: [
+        [['Click'], 'Tick a file, or untick it'],
+        [['Shift', 'Click'], 'Tick or untick the files between'],
+        [['Drag'], 'Tick or untick the rows dragged across'],
+        [['Ctrl / ⌘', 'A'], 'Tick every file shown, or untick them'],
+        [['↑ / ↓'], 'The previous or next row (↓ from the filter: the first row)'],
+        [['Home / End'], 'The first or last row'],
+        [['Shift', '↑ / ↓'], 'Tick the rows on the way'],
+        [['Space'], 'Tick the row, or untick it'],
+        [['Enter'], 'Open the folder, or add (with nothing ticked: the file)'],
+        [['Backspace'], 'Up a folder (Alt+↑ too)'],
+        [['F5'], 'List the folder again'],
+        [['Esc'], 'Clear the filter, then close'],
       ],
     },
     {

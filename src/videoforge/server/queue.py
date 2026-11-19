@@ -536,8 +536,10 @@ class JobQueue:
         return added, left
 
     def _find_source(self, source: Path) -> Entry | None:
-        key = str(source.resolve()).lower()
-        return next((e for e in self.entries() if str(e.spec.inputs.source.resolve()).lower() == key), None)
+        """The queued job on this source. Compared as text: resolving every queued job's source for every new
+        one cost seconds on a network share."""
+        key = _same_file(source)
+        return next((e for e in self.entries() if _same_file(e.spec.inputs.source) == key), None)
 
     def duplicate(self, ids: Iterable[str]) -> list[Entry]:
         """A copy of each job, right after it: same source and settings, with a label of its own so it writes
