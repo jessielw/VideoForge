@@ -5,11 +5,13 @@ import {
   dropTarget,
   matchingJobs,
   moveSelection,
+  movedQueue,
   queuePage,
   queueRange,
   queueRows,
   queueSlots,
   queueable,
+  sameQueue,
   slotPage,
   QUEUE_PAGE_SIZE,
   type Dragged,
@@ -158,4 +160,21 @@ test('a new group is named after the season, the folder, or what the names share
   assert.equal(defaultGroupName(['/a/Movie Part 1.mkv', '/b/Movie Part 2.mkv']), 'Movie Part')
   assert.equal(defaultGroupName(['D:\\x.mkv', 'E:\\y.mkv']), '2 jobs')
   assert.equal(defaultGroupName(['D:\\a.mkv', 'D:\\b.mkv']), '2 jobs') // a drive is no name
+})
+
+test('a move that changes nothing is told apart from one that does', () => {
+  const plain = order.map(({ id, group }) => ({ id, group }))
+  // a job dropped where it already is, or just after itself
+  assert.ok(sameQueue(movedQueue(plain, ['g2'], 'g2', 'G'), plain))
+  assert.ok(sameQueue(movedQueue(plain, ['g2'], 'g3', 'G'), plain))
+  // the same place, out of its group, is a change
+  assert.ok(!sameQueue(movedQueue(plain, ['g3'], 'b', ''), plain))
+  assert.deepEqual(
+    movedQueue(plain, ['a'], 'g2', 'G').map((j) => `${j.id}:${j.group ?? ''}`),
+    ['g1:G', 'a:G', 'g2:G', 'g3:G', 'b:', 'h1:H'],
+  )
+  assert.deepEqual(
+    movedQueue(plain, ['g1', 'g2', 'g3'], null, 'G').map((j) => j.id),
+    ['a', 'b', 'h1', 'g1', 'g2', 'g3'],
+  )
 })

@@ -1008,7 +1008,7 @@ test('a group collapses, and a grip drags its jobs out of it and back in', async
   fixture.refresh()
   const list = page.getByRole('region', { name: 'Queue list', exact: true })
   await expect(list.getByRole('button', { name: 'Collapse Show S01', exact: true })).toBeVisible()
-  await expect(list.getByText('3 jobs · 0 done')).toBeVisible()
+  await expect(list.getByText('3 jobs', { exact: true })).toBeVisible()
   await list.screenshot({ path: testInfo.outputPath('queue-group.png') })
   const axe = await new AxeBuilder({ page })
     .include('section[aria-label="Queue list"]')
@@ -1018,7 +1018,7 @@ test('a group collapses, and a grip drags its jobs out of it and back in', async
 
   await list.getByRole('button', { name: 'Collapse Show S01', exact: true }).click()
   await expect(list.locator('[data-job]')).toHaveCount(2)
-  await expect(page.getByText('Showing 1–3 of 3 rows (5 jobs: a collapsed group is one row)')).toBeVisible()
+  await expect(page.getByText('Showing 1–3 of 3 rows (5 jobs)')).toBeVisible()
   await page.locator('[data-job="job-0"]').press('ArrowDown') // the arrows skip a collapsed group
   await expect(page.locator('[data-job="job-4"]')).toBeFocused()
   await page.locator('[data-job="job-4"]').press('Shift+ArrowUp') // ... a range takes all of it
@@ -1036,7 +1036,7 @@ test('a group collapses, and a grip drags its jobs out of it and back in', async
       before: 'job-4',
       group: '',
     })
-  await expect(list.getByText('2 jobs · 0 done')).toBeVisible()
+  await expect(list.getByText('2 jobs', { exact: true })).toBeVisible()
 
   // In: below a member's middle is in its group, even the last one's.
   await dragGrip(page, row(page, 'job-0'), row(page, 'job-3'), 0.75)
@@ -1047,7 +1047,7 @@ test('a group collapses, and a grip drags its jobs out of it and back in', async
       before: 'job-2',
       group: 'g1',
     })
-  await expect(list.getByText('3 jobs · 0 done')).toBeVisible()
+  await expect(list.getByText('3 jobs', { exact: true })).toBeVisible()
   expect(fixture.jobs.map((j) => j.id)).toEqual(['job-1', 'job-3', 'job-0', 'job-2', 'job-4'])
 
   // Esc drops nothing.
@@ -1060,9 +1060,7 @@ test('a group collapses, and a grip drags its jobs out of it and back in', async
   await page.mouse.up()
   expect(fixture.calls.filter((c) => c.path === '/api/jobs/move')).toHaveLength(moves)
 
-  // A drag on the row itself still selects the rows it crosses. (Something is selected first: a first selection
-  // adds Clear selection above the list, which moves the rows under the pointer.)
-  await page.locator('[data-job="job-4"]').click()
+  // A drag on the row itself still selects the rows it crosses.
   const a = (await page.locator('[data-job="job-1"]').boundingBox())!
   const b = (await page.locator('[data-job="job-0"]').boundingBox())!
   // (clear of the name, whose tooltip would open over the next row)
@@ -1099,5 +1097,51 @@ test('Group selected names the group after its folder; its menu renames and ungr
   expect(fixture.calls.map((c) => c.path)).toEqual(
     expect.arrayContaining(['/api/groups/g-new/rename', '/api/groups/g-new/ungroup']),
   )
+  expect(fixture.errors).toEqual([])
+})
+
+test('a first drag-select keeps the list still, so it ends on the row under the pointer', async ({ page }) => {
+  const { errors } = await queueFixture(page, 6, ['ready'])
+  await expect(page.getByRole('status')).toContainText('0 selected')
+  const first = page.locator('[data-job="job-1"]')
+  const before = (await first.boundingBox())!
+  const end = (await page.locator('[data-job="job-3"]').boundingBox())!
+  await page.mouse.move(before.x + before.width * 0.6, before.y + before.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(end.x + end.width * 0.6, end.y + end.height / 2, { steps: 6 })
+  await page.waitForTimeout(50)
+  await page.mouse.up()
+  await expect(page.getByRole('status')).toContainText('3 selected')
+  await expect(page.getByRole('button', { name: 'Clear selection', exact: true })).toBeVisible()
+  expect((await first.boundingBox())!.y).toBe(before.y) // Clear selection showing up moved nothing
+  expect(errors).toEqual([])
+})
+
+test("a group's menu moves the selected jobs into it or out of it, and a drop that changes nothing sends nothing", async ({
+  page,
+}) => {
+  const fixture = await queueFixture(page, 4, ['ready'])
+  for (const j of fixture.jobs.slice(1, 3)) [j.group, j.group_name] = ['g1', 'Show S01']
+  fixture.refresh()
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  await expect(list.getByText('2 jobs', { exact: true })).toBeVisible()
+  const moves = () => fixture.calls.filter((c) => c.path === '/api/jobs/move').map((c) => c.body)
+
+  // Its own place: no line, no request.
+  await dragGrip(page, row(page, 'job-1'), row(page, 'job-1'), 0.25)
+  await page.waitForTimeout(100)
+  expect(moves()).toEqual([])
+
+  await page.locator('[data-job="job-3"]').click()
+  await list.getByRole('button', { name: 'Show S01 options', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Move the selected job here' }).click()
+  await expect.poll(moves).toEqual([{ ids: ['job-3'], before: null, group: 'g1' }])
+  await expect(list.getByText('3 jobs', { exact: true })).toBeVisible()
+
+  await list.getByRole('button', { name: 'Show S01 options', exact: true }).click()
+  await expect(page.getByRole('menuitem', { name: 'Move the selected job here' })).toHaveCount(0)
+  await page.getByRole('menuitem', { name: 'Take the selected job out' }).click()
+  await expect.poll(() => moves().at(-1)).toEqual({ ids: ['job-3'], before: null, group: '' })
+  await expect(list.getByText('2 jobs', { exact: true })).toBeVisible()
   expect(fixture.errors).toEqual([])
 })

@@ -164,6 +164,24 @@ export function dropTarget(
     : { before: afterGroup(drop.group), group: dragged.group, row: lastRow, edge: 'bottom', indent: false }
 }
 
+/** The queue after a move, as the server makes it (JobQueue.move); with sameQueue, tells a drop that changes nothing. */
+export function movedQueue(order: Grouped[], ids: string[], before: string | null, group: string): Grouped[] {
+  const wanted = new Set(ids)
+  if (before !== null && wanted.has(before)) {
+    const from = order.findIndex((j) => j.id === before)
+    before = order.slice(from).find((j) => !wanted.has(j.id))?.id ?? null
+  }
+  const moving = order.filter((j) => wanted.has(j.id)).map((j) => ({ id: j.id, group: group || null }))
+  const rest = order.filter((j) => !wanted.has(j.id))
+  const found = before === null ? -1 : rest.findIndex((j) => j.id === before)
+  const at = found < 0 ? rest.length : found
+  return [...rest.slice(0, at), ...moving, ...rest.slice(at)]
+}
+
+export function sameQueue(a: Grouped[], b: Grouped[]): boolean {
+  return a.length === b.length && a.every((j, i) => j.id === b[i].id && (j.group || null) === (b[i].group || null))
+}
+
 /**
  * The queue order after Up (-1) or Down (1) on the selection: a job in a group moves only within it (dragging
  * takes a job out); an ungrouped job, or a group all selected, moves past the next job or group as a block.

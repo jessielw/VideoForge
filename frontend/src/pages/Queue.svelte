@@ -19,6 +19,8 @@
     queueable,
     slotPage,
     QUEUE_PAGE_SIZE,
+    movedQueue,
+    sameQueue,
     type Dragged,
     type Drop,
     type QueueRow,
@@ -440,9 +442,23 @@
       if (last && y > last.getBoundingClientRect().bottom)
         [index, at] = lastPage ? [rows.length, 0] : [rows.length - 1, 1]
     }
-    reordering.drop = index < 0 ? null : dropTarget(rows, index, at, app.jobs, reordering.dragged)
+    const drop = index < 0 ? null : dropTarget(rows, index, at, app.jobs, reordering.dragged)
+    // A place that changes nothing gets no line (and the drop does nothing).
+    const ids = draggedIds(reordering.dragged)
+    reordering.drop = drop && !sameQueue(movedQueue(app.jobs, ids, drop.before, drop.group), app.jobs) ? drop : null
     requestAnimationFrame(gripTick)
   }
+
+  const draggedIds = (dragged: Dragged) =>
+    dragged.kind === 'jobs' ? dragged.ids : app.jobs.filter((j) => j.group === dragged.group).map((j) => j.id)
+  // A grab cursor wherever the pointer goes while it drags.
+  $effect(() => {
+    if (!reordering) return
+    document.documentElement.classList.add('cursor-grabbing')
+    return () => document.documentElement.classList.remove('cursor-grabbing')
+  })
+  // The rows being dragged, dimmed while they move.
+  const moving = $derived(new Set(reordering ? draggedIds(reordering.dragged) : []))
 
   async function gripEnd(cancel = false) {
     const done = reordering
@@ -450,16 +466,47 @@
     pointer = null
     if (cancel || !done?.drop) return
     const { dragged, drop } = done
-    const ids =
-      dragged.kind === 'jobs' ? dragged.ids : app.jobs.filter((j) => j.group === dragged.group).map((j) => j.id)
-    await act(async () => {
-      await api.move(ids, drop.before, drop.group)
-      await app.refreshJobs()
-    })
+    await moveJobs(draggedIds(dragged), drop.before, drop.group)
   }
   onDestroy(() => gripEnd(true))
 
+  async function moveJobs(ids: string[], before: string | null, group: string) {
+    await act(async () => {
+      await api.move(ids, before, group)
+      await app.refreshJobs()
+    })
+  }
+
+  // The keyboard's way into or out of a group (the header's menu): the selected jobs go to its end, or out
+  // of it, just after it.
+  const afterGroup = (group: string, moving: string[]) => {
+    const last = app.jobs.findLastIndex((j) => j.group === group && !moving.includes(j.id))
+    return app.jobs.slice(last + 1).find((j) => !moving.includes(j.id))?.id ?? null
+  }
+  const moveToGroup = (ids: string[], group: string, into: boolean) =>
+    moveJobs(ids, afterGroup(group, ids), into ? group : '')
+  const selectedOutside = (group: string) => app.jobs.filter((j) => selectedSet.has(j.id) && j.group !== group)
+  const selectedInside = (group: string) => app.jobs.filter((j) => selectedSet.has(j.id) && j.group === group)
+
   const groupDone = (row: QueueRow & { kind: 'group' }) => row.members.filter((j) => j.status === 'done').length
+  const groupFailed = (row: QueueRow & { kind: 'group' }) =>
+    row.members.filter((j) => ['failed', 'invalid', 'error'].includes(j.status)).length
+  // The header's counts: its jobs (or how many match), then how many are done and failed, when any are.
+  const groupCounts = (row: QueueRow & { kind: 'group' }, done: number, failed: number) => {
+    const n = row.members.length
+    const parts = [
+      {
+        text: row.matching.length < n ? `${row.matching.length} of ${n} match` : `${n} ${n === 1 ? 'job' : 'jobs'}`,
+        tone: '',
+      },
+    ]
+    if (done) parts.push({ text: done === n ? 'all done' : `${done} done`, tone: done === n ? 'text-success' : '' })
+    if (failed) parts.push({ text: `${failed} failed`, tone: 'text-destructive' })
+    return parts
+  }
+  // A collapsed group whose jobs are all selected shows as selected: its rows, which would, are hidden.
+  const groupSelected = (row: QueueRow & { kind: 'group' }) =>
+    row.collapsed && row.matching.length > 0 && row.matching.every((j) => selectedSet.has(j.id))
   const groupQueued = (row: QueueRow & { kind: 'group' }) =>
     row.members.filter((j) => j.status === 'queued' || j.status === 'running')
   const groupProgress = (row: QueueRow & { kind: 'group' }) => {
@@ -882,6 +929,10 @@
               </button>
             </Tip>
           {/if}
+          {#if row.group && rows[i + 1]?.group !== row.group && rows[i + 1]?.kind !== 'group' && (row.kind === 'job' || row.collapsed)}
+            <!-- ... and a line after its last one (another group's header draws its own) -->
+            <div class="mx-auto h-0.5 w-8 shrink-0 rounded bg-primary/40" aria-hidden="true"></div>
+          {/if}
         {/each}
       </div>
       {#if slots.length > QUEUE_PAGE_SIZE}
@@ -1158,17 +1209,22 @@
           </NativeSelect>
           {#if query || status}<Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>{/if}
         </div>
-        <p role="status" class="text-xs text-muted-foreground">
-          {matching.length} of {app.jobs.length} jobs match. {selected.length} selected{hiddenSelected
-            ? ` (${hiddenSelected} hidden by filters)`
-            : ''}.
-        </p>
-        {#if selected.length}<Button variant="outline" size="sm" onclick={clearSelection}>Clear selection</Button>{/if}
+        <!-- One row of a set height: Clear selection showing up doesn't move the list (a drag-select under the
+             pointer would land on the wrong rows). -->
+        <div class="flex min-h-8 items-center gap-2">
+          <p role="status" class="min-w-0 flex-1 text-xs text-muted-foreground">
+            {matching.length} of {app.jobs.length} jobs match. {selected.length} selected{hiddenSelected
+              ? ` (${hiddenSelected} hidden by filters)`
+              : ''}.
+          </p>
+          {#if selected.length}<Button variant="outline" size="sm" class="shrink-0" onclick={clearSelection}
+              >Clear selection</Button
+            >{/if}
+        </div>
         <p class="text-xs text-muted-foreground">
           A ticked job is queued and locked, so you can't edit it until you untick it. Start queue runs it. Actions on
-          the selection include jobs on other pages and jobs hidden by filters. Index uses {selected.length
-            ? `${selected.length} selected ${selected.length === 1 ? 'job' : 'jobs'}`
-            : `all ${app.jobs.length} jobs`}.
+          the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs, or every
+          job when none is selected.
         </p>
         <!-- leading-6 leaves room for the keycaps, which stand taller than a text-xs line. -->
         <p id="queue-keys" class="text-xs leading-6 text-muted-foreground pointer-coarse:hidden">
@@ -1193,10 +1249,12 @@
       >
         {#snippet dropLine(i: number)}
           {#if reordering?.drop && reordering.drop.row === i && reordering.drop.edge !== 'inside'}
+            <!-- Indented (from the jobs' names): into the group; full width, with its dot at the edge: outside. -->
             <div
-              class="pointer-events-none absolute right-0 z-10 h-0.5 rounded bg-primary
-              {reordering.drop.edge === 'top' ? '-top-px' : '-bottom-px'}
-              {reordering.drop.indent ? 'left-6' : 'left-0'}"
+              class="pointer-events-none absolute right-1 z-10 h-[3px] rounded-full bg-primary
+              before:absolute before:-top-[2.5px] before:-left-1 before:size-2 before:rounded-full before:bg-primary
+              {reordering.drop.edge === 'top' ? '-top-[2px]' : '-bottom-[2px]'}
+              {reordering.drop.indent ? 'left-12' : 'left-1.5'}"
             ></div>
           {/if}
         {/snippet}
@@ -1214,12 +1272,16 @@
             {@const queuedJobs = groupQueued(row)}
             {@const canQueue = row.members.some((j) => queueable(j.status))}
             {@const progress = groupProgress(row)}
+            {@const done = groupDone(row)}
+            {@const failed = groupFailed(row)}
+            {@const outside = selectedOutside(row.group)}
+            {@const inside = selectedInside(row.group)}
             <div
               data-row={i}
-              class="relative flex items-center gap-1 border-b border-border/60 bg-muted/40 py-1 pl-2 text-sm
-              {reordering?.drop?.row === i && reordering.drop.edge === 'inside'
-                ? 'ring-2 ring-primary ring-inset'
-                : ''}"
+              class="relative flex h-10 items-center gap-1 border-b border-border/60 pl-2 text-sm
+              {groupSelected(row) ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]' : 'bg-muted/40'}
+              {reordering?.drop?.row === i && reordering.drop.edge === 'inside' ? 'ring-2 ring-primary ring-inset' : ''}
+              {moving.size && row.members.every((j) => moving.has(j.id)) ? 'opacity-50' : ''}"
             >
               {@render dropLine(i)}
               <Tip
@@ -1254,18 +1316,19 @@
                 <span class="flex items-baseline gap-2">
                   <span class="truncate font-medium">{row.name}</span>
                   {#if row.continued}<span class="shrink-0 text-xs text-muted-foreground">(continued)</span>{/if}
-                  <span class="readout ml-auto shrink-0 text-xs text-muted-foreground"
-                    >{row.matching.length < row.members.length
-                      ? `${row.matching.length} of ${row.members.length} match`
-                      : `${row.members.length} jobs`} · {groupDone(row)} done</span
-                  >
-                </span>
-                {#if progress !== null}
-                  <span class="mt-1 block h-1 overflow-hidden rounded bg-muted">
-                    <span class="block h-full bg-info" style="width:{progress * 100}%"></span>
+                  <span class="readout ml-auto flex shrink-0 gap-1 text-xs text-muted-foreground">
+                    {#each groupCounts(row, done, failed) as part, n (part.text)}
+                      {#if n}<span aria-hidden="true">·</span>{/if}<span class={part.tone}>{part.text}</span>
+                    {/each}
                   </span>
-                {/if}
+                </span>
               </button>
+              {#if progress !== null}
+                <!-- On the bottom edge, so a job starting doesn't change the header's height. -->
+                <span class="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-border">
+                  <span class="block h-full bg-info" style="width:{progress * 100}%"></span>
+                </span>
+              {/if}
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger>
                   {#snippet child({ props })}
@@ -1276,6 +1339,29 @@
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end" class="w-auto">
                   <DropdownMenu.Item onSelect={() => selectGroup(row)}>Select its jobs</DropdownMenu.Item>
+                  {#if outside.length}
+                    <DropdownMenu.Item
+                      onSelect={() =>
+                        moveToGroup(
+                          outside.map((j) => j.id),
+                          row.group,
+                          true,
+                        )}
+                      >Move the {outside.length === 1 ? 'selected job' : `${outside.length} selected jobs`} here</DropdownMenu.Item
+                    >
+                  {/if}
+                  {#if inside.length}
+                    <DropdownMenu.Item
+                      onSelect={() =>
+                        moveToGroup(
+                          inside.map((j) => j.id),
+                          row.group,
+                          false,
+                        )}
+                      >Take the {inside.length === 1 ? 'selected job' : `${inside.length} selected jobs`} out</DropdownMenu.Item
+                    >
+                  {/if}
+                  <DropdownMenu.Separator />
                   <DropdownMenu.Item onSelect={() => (naming = { group: row.group, name: row.name })}
                     >Rename…</DropdownMenu.Item
                   >
@@ -1293,8 +1379,12 @@
               data-row={i}
               class="relative flex border-b border-border/60 {row.group ? 'pl-4' : ''} {selectedSet.has(job.id)
                 ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]'
-                : 'hover:bg-accent'}"
+                : 'hover:bg-accent'} {moving.has(job.id) ? 'opacity-50' : ''}"
             >
+              {#if row.group}
+                <!-- A group's jobs hang from its header's box. -->
+                <span class="pointer-events-none absolute inset-y-0 left-4 w-px bg-border" aria-hidden="true"></span>
+              {/if}
               {@render dropLine(i)}
               <div class="flex shrink-0 items-start pt-2.5 pl-2">
                 <!-- Out of the tab order (the list is one stop): the keyboard queues a selection with Queue (N). -->
@@ -1450,9 +1540,7 @@
           >Showing {slots.length ? currentPage * QUEUE_PAGE_SIZE + 1 : 0}–{Math.min(
             (currentPage + 1) * QUEUE_PAGE_SIZE,
             slots.length,
-          )} of {slots.length}{slots.length !== matching.length
-            ? ` rows (${matching.length} jobs: a collapsed group is one row)`
-            : ''}</span
+          )} of {slots.length}{slots.length !== matching.length ? ` rows (${matching.length} jobs)` : ''}</span
         >
         <div class="flex gap-1">
           <Button
