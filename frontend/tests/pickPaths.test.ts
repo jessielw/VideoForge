@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { pickAll, pickClick } from '../src/lib/pickPaths.ts'
+import { pickAll, pickClick, pickRange } from '../src/lib/pickPaths.ts'
 
 const order = ['a', 'b', 'c', 'd', 'e']
 
@@ -30,4 +30,12 @@ test('pick all ticks every path, or unticks them once all are ticked', () => {
   assert.deepEqual(pickAll(['x', 'b'], ['a', 'b', 'c']), ['x', 'b', 'a', 'c'])
   assert.deepEqual(pickAll(['x', 'a', 'b', 'c'], ['a', 'b', 'c']), ['x'])
   assert.deepEqual(pickAll(['x'], []), ['x'])
+})
+
+test('a drag sets the rows from where it started over the picks from before it', () => {
+  const base = ['e']
+  assert.deepEqual(pickRange(base, order, 'b', 'd', true), ['e', 'b', 'c', 'd'])
+  assert.deepEqual(pickRange(base, order, 'b', 'c', true), ['e', 'b', 'c']) // dragged back up
+  assert.deepEqual(pickRange(['a', 'b', 'c', 'e'], order, 'c', 'a', false), ['e'])
+  assert.deepEqual(pickRange(base, order, 'x', 'c', true), ['e', 'c'])
 })

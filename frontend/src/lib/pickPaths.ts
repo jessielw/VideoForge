@@ -10,10 +10,17 @@ export function pickClick(
   anchor: string | null,
   shift: boolean,
 ): string[] {
-  const from = shift && anchor !== null ? order.indexOf(anchor) : -1
-  const to = order.indexOf(path)
-  const range = from >= 0 && to >= 0 ? order.slice(Math.min(from, to), Math.max(from, to) + 1) : [path]
-  return set(picked, range, !picked.includes(path))
+  const on = !picked.includes(path)
+  return shift && anchor !== null ? pickRange(picked, order, anchor, path, on) : set(picked, [path], on)
+}
+
+// Ticks (on) or unticks every path from `from` to `to` in shown order; a dragged press does this from
+// the row it started on, over the picks from before the press, so dragging back takes rows out again.
+// With either end missing from `order`, it's `to` alone.
+export function pickRange(picked: string[], order: string[], from: string, to: string, on: boolean): string[] {
+  const a = order.indexOf(from)
+  const b = order.indexOf(to)
+  return set(picked, a >= 0 && b >= 0 ? order.slice(Math.min(a, b), Math.max(a, b) + 1) : [to], on)
 }
 
 // Ctrl+A or the All box: tick every path in `all`, or untick them all when every one is ticked already.

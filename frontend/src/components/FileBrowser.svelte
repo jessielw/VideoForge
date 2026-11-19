@@ -6,11 +6,12 @@
   // Folders can be made here, and one made here deleted again while it's empty: the undo for a mistake.
   // Other file work belongs in a file manager (the server only deletes empty folders).
   // Ticking: a click (on a file's row or any box) toggles one, Shift+click ticks or unticks the range
-  // from the last one clicked, and Ctrl+A or the All box ticks every file here (not the folders).
+  // from the last one clicked, a mouse press dragged over rows ticks or unticks them the way the first
+  // one went, and Ctrl+A or the All box ticks every file here (not the folders).
   import { onMount } from 'svelte'
   import { api } from '../lib/api'
   import { bytes } from '../lib/format'
-  import { pickAll, pickClick } from '../lib/pickPaths'
+  import { pickAll, pickClick, pickRange } from '../lib/pickPaths'
   import type { DirListing } from '../lib/types'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import FileIcon from '@lucide/svelte/icons/file'
@@ -50,6 +51,9 @@
   let error = $state('')
   let picked = $state<string[]>([])
   let anchor = $state<string | null>(null) // the last path clicked: Shift+click ticks from here
+  // A mouse press ticks on the way down and drags over rows from there; its click then does nothing.
+  let drag = $state<{ from: string; on: boolean; base: string[] } | null>(null)
+  let pressed: string | null = null
   let newName = $state<string | null>(null) // the new folder's name while one is being made
   let made = $state<string[]>([]) // folders made here: only these offer Delete
   let deleting = $state<{ name: string; path: string } | null>(null)
@@ -121,8 +125,24 @@
   function click(path: string, e: MouseEvent) {
     e.stopPropagation() // a box's click is the row's too
     e.preventDefault() // and the box doesn't toggle itself: it shows what's picked
+    if (e.detail > 0 && pressed === path) return void (pressed = null) // the press did it (detail 0: a key)
     picked = pickClick(picked, order, path, anchor, e.shiftKey && !programs)
     anchor = path
+  }
+
+  // Touch keeps its drag for scrolling, so only a mouse paints; a single program has nothing to drag over.
+  function press(path: string, e: PointerEvent) {
+    pressed = null
+    if (e.pointerType !== 'mouse' || e.button !== 0 || e.shiftKey || programs) return
+    pressed = path
+    const on = !picked.includes(path)
+    drag = { from: path, on, base: picked }
+    picked = pickRange(picked, order, path, path, on)
+    anchor = path
+  }
+
+  function over(path: string) {
+    if (drag) picked = pickRange(drag.base, order, drag.from, path, drag.on)
   }
 
   function keys(e: KeyboardEvent) {
@@ -140,6 +160,8 @@
     }
   }
 </script>
+
+<svelte:window onpointerup={() => (drag = null)} onblur={() => (drag = null)} />
 
 <Dialog.Root open onOpenChange={(o) => !o && onclose()}>
   <Dialog.Content
@@ -227,14 +249,19 @@
               aria-label="Pick all files"
             />
             <span class="flex-1">All {files.length} files</span>
-            <span class="hidden text-xs sm:inline">Shift+click ticks a range · Ctrl+A ticks all</span>
+            <span class="hidden text-xs sm:inline">Drag or Shift+click ticks a range · Ctrl+A ticks all</span>
           </div>
         {/if}
         {#each listing.dirs as d (d.path)}
-          <div class="group flex items-center gap-2 rounded-md px-2 py-1 select-none hover:bg-accent">
+          <div
+            class="group flex items-center gap-2 rounded-md px-2 py-1 select-none hover:bg-accent"
+            role="presentation"
+            onpointerenter={() => over(d.path)}
+          >
             {#if mode === 'files'}
               <Checkbox
                 checked={picked.includes(d.path)}
+                onpointerdown={(e: PointerEvent) => press(d.path, e)}
                 onclick={(e: MouseEvent) => click(d.path, e)}
                 aria-label="Pick {d.name}"
               />
@@ -263,6 +290,8 @@
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div
               class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 select-none hover:bg-accent"
+              onpointerdown={(e) => press(f.path, e)}
+              onpointerenter={() => over(f.path)}
               onclick={(e) => click(f.path, e)}
             >
               <Checkbox

@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- The file picker behind **Browse…** ticks several files at once. Shift+click ticks every row from the last one clicked to this one, or unticks them when this one was ticked. Ctrl+A (Cmd+A) or the new **All files** box above the list ticks every file in the folder, and again unticks them; folders are left as they are. Clicking anywhere on a file's row ticks it, as before.
+- The file picker behind **Browse…** ticks several files at once. Shift+click ticks every row from the last one clicked to this one, or unticks them when this one was ticked. Pressing the mouse on a row and dragging over others ticks them, or unticks them when the first row was ticked; dragging back takes rows out again. Ctrl+A (Cmd+A) or the new **All files** box above the list ticks every file in the folder, and again unticks them; folders are left as they are. Clicking anywhere on a file's row ticks it, as before.
 
 ### Changed
 

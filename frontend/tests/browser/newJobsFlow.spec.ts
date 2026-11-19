@@ -291,3 +291,35 @@ test('the file picker ticks a range with Shift+click and every file with Ctrl+A 
   await expect(page.getByRole('list', { name: 'Sources' }).getByRole('listitem')).toHaveCount(5)
   expect(errors).toEqual([])
 })
+
+test('the file picker ticks the rows a mouse press drags over, and unticks them from a ticked row', async ({
+  page,
+}) => {
+  const { errors, files } = await fixture(page, [])
+  files.push(...[1, 2, 3, 4, 5].map((n) => `D:/Media/E0${n}.mkv`))
+  await page.goto('/#/new')
+  await page.getByRole('button', { name: 'Browse…' }).first().click()
+  const picker = page.getByRole('dialog', { name: 'Sources' })
+  const box = (n: number) => picker.getByRole('checkbox', { name: `Pick E0${n}.mkv` })
+  async function drag(from: number, ...through: number[]) {
+    await box(from).hover()
+    await page.mouse.down()
+    for (const n of through) await picker.getByText(`E0${n}.mkv`).hover()
+    await page.mouse.up()
+  }
+
+  await drag(1, 3, 4, 2) // down to 4, then back up to 2
+  for (const n of [1, 2]) await expect(box(n)).toBeChecked()
+  for (const n of [3, 4, 5]) await expect(box(n)).not.toBeChecked()
+
+  await drag(5, 4, 3)
+  await expect(picker).toContainText('5 selected')
+  await drag(2, 3) // starts on a ticked row, so it unticks
+  for (const n of [1, 4, 5]) await expect(box(n)).toBeChecked()
+  for (const n of [2, 3]) await expect(box(n)).not.toBeChecked()
+
+  await box(2).click() // a plain click after a drag still ticks one
+  await expect(box(2)).toBeChecked()
+  await expect(picker).toContainText('4 selected')
+  expect(errors).toEqual([])
+})
