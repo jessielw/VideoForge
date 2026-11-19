@@ -808,6 +808,74 @@ test('Matched files and Review matches show left-over files, subtitles alike, wh
   expect(errors).toEqual([])
 })
 
+test('Review matches moves several selected files at once, a Shift+click range or every file shown', async ({
+  page,
+}) => {
+  const posted: Record<string, unknown>[] = []
+  const { errors } = await fixture(page, posted)
+  const [e1, e2] = ['D:/Media/Show.S01E01.mkv', 'D:/Media/Show.S01E02.mkv']
+  const files = ['a', 'b', 'c', 'd'].map((n) => `D:/Media/${n}.srt`)
+  const asked: Record<string, string | null>[] = []
+  await page.route('**/api/match', (route) => {
+    const assign = (route.request().postDataJSON().assign ?? {}) as Record<string, string | null>
+    asked.push(assign)
+    const job = (source: string) => {
+      const mine = files.filter((f) => assign[f] === source)
+      return {
+        source,
+        encode: null,
+        encode_state: null,
+        subtitles: mine,
+        subtitle_info: mine.map((path, i) => ({
+          path,
+          language: ['en', 'de', 'fr', 'es'][i],
+          language_name: '',
+          format: 'srt',
+          tags: [],
+          track: null,
+          match: 'manual',
+        })),
+        chapters: null,
+        existing_id: null,
+        existing_status: null,
+        matches: Object.fromEntries(mine.map((f) => [f, 'manual'])),
+      }
+    }
+    const left = files.filter((f) => !assign[f])
+    return route.fulfill({
+      json: {
+        jobs: [job(e1), job(e2)],
+        unmatched: left,
+        held: left.filter((f) => f in assign),
+        suggestions: Object.fromEntries(left.map((f) => [f, []])),
+      },
+    })
+  })
+  await paste(page, [e1, e2].map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
+  const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
+  await card.getByRole('button', { name: /^Review matches/ }).click()
+  const dialog = page.getByRole('dialog', { name: 'Review matches' })
+
+  await dialog.getByRole('checkbox', { name: 'Select a.srt' }).click()
+  await dialog.getByRole('checkbox', { name: 'Select c.srt' }).click({ modifiers: ['Shift'] })
+  await expect(dialog).toContainText('3 selected')
+  await dialog.getByRole('combobox', { name: 'Move the selected files to' }).selectOption(e2)
+  await expect.poll(() => asked.at(-1)).toEqual({ [files[0]]: e2, [files[1]]: e2, [files[2]]: e2 })
+  await expect(dialog.getByRole('combobox', { name: 'Source for b.srt' })).toHaveValue(e2)
+
+  await dialog.getByRole('checkbox', { name: 'Select every file shown' }).click()
+  await expect(dialog).toContainText('4 selected')
+  await dialog.getByRole('combobox', { name: 'Move the selected files to' }).selectOption('-')
+  await expect
+    .poll(() => asked.at(-1))
+    .toEqual({ [files[0]]: null, [files[1]]: null, [files[2]]: null, [files[3]]: null })
+  await dialog.getByRole('button', { name: 'Undo their changes' }).click()
+  await expect.poll(() => asked.at(-1)).toEqual({})
+  await dialog.getByRole('button', { name: 'Clear selection' }).click()
+  await expect(dialog).toContainText('Select files to move several at once')
+  expect(errors).toEqual([])
+})
+
 test('while Add runs the bar says so with a spinner, the inputs are locked, and a paste waits', async ({ page }) => {
   const posted: Record<string, unknown>[] = []
   const { errors, sources } = await fixture(page, posted)

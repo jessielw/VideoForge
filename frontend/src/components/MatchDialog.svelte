@@ -6,7 +6,8 @@
   // the rest of the set the same way. Each change matches the batch again, so the list shows the result. Each
   // row says what a guess went on and what clashes with it (a second chapters file or encode for one source,
   // subtitles alike). A set matched by hand is remembered when its jobs are added; a file matched that way can
-  // forget its pattern, and the footer forgets them all.
+  // forget its pattern, and the footer forgets them all. Rows can be ticked (Shift for a range, or every row
+  // shown) to move them all to one source, or none, at once.
   import { tick } from 'svelte'
   import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle'
   import SparklesIcon from '@lucide/svelte/icons/sparkles'
@@ -15,6 +16,7 @@
   import WandSparklesIcon from '@lucide/svelte/icons/wand-sparkles'
   import XIcon from '@lucide/svelte/icons/x'
   import { Button } from '$lib/components/ui/button'
+  import { Checkbox } from '$lib/components/ui/checkbox'
   import * as Dialog from '$lib/components/ui/dialog'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
@@ -27,6 +29,7 @@
     filterEntries,
     matchEntries,
     needsLook,
+    rangeOf,
     suggestedMatches,
     type MatchEntry,
     type MatchKind,
@@ -90,6 +93,8 @@
     if (open && !wasOpen) {
       query = ''
       touched = []
+      ticked = []
+      anchor = null
       view = focus || !lookCount ? 'all' : 'look'
       forgetError = ''
       void countPatterns()
@@ -127,6 +132,45 @@
     assign = { ...assign, ...matches }
     touch(Object.keys(matches))
   }
+  // Ticked rows, for moving several at once; Shift ticks (or unticks) the range from the last row ticked.
+  let ticked = $state<string[]>([])
+  let anchor: string | null = null
+  let shift = false
+  const tickedNow = $derived(ticked.filter((p) => entries.some((e) => e.path === p)))
+  const allShown = $derived(shown.length > 0 && shown.every((e) => ticked.includes(e.path)))
+  const someShown = $derived(!allShown && shown.some((e) => ticked.includes(e.path)))
+  function toggleTicked(path: string) {
+    const on = !ticked.includes(path)
+    const paths =
+      shift && anchor
+        ? rangeOf(
+            shown.map((e) => e.path),
+            anchor,
+            path,
+          )
+        : [path]
+    ticked = on ? [...new Set([...ticked, ...paths])] : ticked.filter((p) => !paths.includes(p))
+    anchor = path
+  }
+  function tickShown(on: boolean) {
+    const paths = shown.map((e) => e.path)
+    ticked = on ? [...new Set([...ticked, ...paths])] : ticked.filter((p) => !paths.includes(p))
+  }
+  function moveTicked(value: string) {
+    if (!value) return
+    const moves = Object.fromEntries(
+      entries
+        .filter((e) => tickedNow.includes(e.path) && menuValue(e) !== value)
+        .map((e) => [e.path, value === NONE ? null : value]),
+    )
+    assign = { ...assign, ...moves }
+    touch(tickedNow)
+  }
+  function undoTicked() {
+    assign = Object.fromEntries(Object.entries(assign).filter(([p]) => !tickedNow.includes(p)))
+    touch(tickedNow)
+  }
+
   function undoAll() {
     touch(Object.keys(assign))
     assign = {}
@@ -197,6 +241,42 @@
       </div>
     {/if}
 
+    {#if shown.length}
+      <div class="flex min-h-8 flex-wrap items-center gap-2 px-3 text-sm">
+        <Checkbox
+          checked={allShown}
+          indeterminate={someShown}
+          aria-label="Select every file shown"
+          onCheckedChange={(on) => tickShown(on === true)}
+        />
+        {#if tickedNow.length}
+          <span class="font-medium">{tickedNow.length} selected</span>
+          <NativeSelect
+            size="sm"
+            class="min-w-0"
+            aria-label="Move the selected files to"
+            value=""
+            onchange={(ev) => {
+              moveTicked(ev.currentTarget.value)
+              ev.currentTarget.value = ''
+            }}
+          >
+            <option value="" disabled>Move to…</option>
+            <option value={NONE}>No source (leave them out)</option>
+            <optgroup label="Sources">
+              {#each sources as s (s)}<option value={s}>{basename(s)}</option>{/each}
+            </optgroup>
+          </NativeSelect>
+          {#if tickedNow.some((p) => p in assign)}
+            <Button size="sm" variant="ghost" onclick={undoTicked}><Undo2Icon />Undo their changes</Button>
+          {/if}
+          <Button size="sm" variant="ghost" onclick={() => (ticked = [])}>Clear selection</Button>
+        {:else}
+          <span class="text-muted-foreground">Select files to move several at once (Shift+click for a range)</span>
+        {/if}
+      </div>
+    {/if}
+
     <div class="min-h-40 flex-1 overflow-auto rounded-lg border" bind:this={list}>
       {#if !shown.length}
         <p class="p-6 text-center text-sm text-muted-foreground">
@@ -214,9 +294,20 @@
               : { shared: '', rest: basename(e.path) }}
             {@const picked = e.path in assign}
             <li
-              class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(14rem,22rem)]"
+              class="grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 px-3 py-2 sm:grid-cols-[auto_auto_minmax(0,1fr)_minmax(14rem,22rem)] {ticked.includes(
+                e.path,
+              )
+                ? 'bg-primary/5'
+                : ''}"
               data-path={e.path}
             >
+              <Checkbox
+                checked={ticked.includes(e.path)}
+                aria-label="Select {basename(e.path)}"
+                onpointerdown={(ev: PointerEvent) => (shift = ev.shiftKey)}
+                onkeydown={(ev: KeyboardEvent) => (shift = ev.shiftKey)}
+                onCheckedChange={() => toggleTicked(e.path)}
+              />
               <Tip text={note ? note.text : 'Not matched to any source'}>
                 <Icon
                   role="img"
@@ -250,7 +341,7 @@
                 </div>
                 {#if e.conflict}<div class="text-xs text-warning">{e.conflict}</div>{/if}
               </div>
-              <div class="col-span-2 flex min-w-0 items-center gap-1 sm:col-span-1">
+              <div class="col-span-3 flex min-w-0 items-center gap-1 sm:col-span-1">
                 <NativeSelect
                   size="sm"
                   class="w-full min-w-0 flex-1"
