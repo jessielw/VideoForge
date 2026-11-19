@@ -14,12 +14,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The file picker sorts by name, modified date or size: click the column above the list, and again to flip it. Folders stay first. Names sort with numbers in order (E2 before E10), and the browser remembers the sort. It shows each file's and folder's modified date on windows wider than 640 px. `GET /api/fs/list` adds `mtime` to each folder.
 - The file picker works from the keyboard. ↑ and ↓ move between rows (↓ from the filter goes to the first row), Home and End go to the first and last, and Shift+↑ or ↓ ticks the rows on the way. Space ticks the row, and Shift+Space a range. Enter opens a folder, or on a file adds what's ticked (that file, when nothing is). Backspace or Alt+↑ goes up a folder and puts the cursor back on the folder you left. The keyboard shortcuts sheet lists them.
 
+- Each input on New jobs (sources, encodes, subtitles, chapters) has its own clear button beside **Browse…**, shown once it holds a path, and its label counts its paths, such as "Sources · 24". The bottom bar's **Clear** is now **Clear all**, and still empties every input.
+
 ### Changed
 
 - Settings shows its groups in one column at every width. On wide windows, short groups no longer sit beside tall ones with empty space under them.
 - The menu collapses to icons on windows narrower than 1024 px (it was 640 px). At 200% zoom it no longer takes a quarter of the window.
 - The job's name gets its own line when the job header is narrow, instead of shrinking to a few letters.
 - The Video tab puts the preview above its settings when the tab is narrower than about 700 px, so the preview stays big enough to judge a crop.
+- A long list of paths on New jobs scrolls inside its box after about three rows, instead of pushing the rest of the page down.
 
 ### Fixed
 

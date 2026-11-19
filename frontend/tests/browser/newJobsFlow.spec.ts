@@ -450,3 +450,22 @@ test('Enter on a file with nothing ticked adds that file', async ({ page }) => {
   await expect(page.getByRole('list', { name: 'Sources' }).getByRole('listitem')).toHaveText(['E02.mkv'])
   expect(errors).toEqual([])
 })
+
+test('each slot counts its paths, scrolls a long list in its box, and clears on its own', async ({ page }) => {
+  const { errors } = await fixture(page, [])
+  const many = Array.from({ length: 30 }, (_, i) => `"D:/Media/Show.S01E${String(i + 1).padStart(2, '0')}.mkv"`)
+  await paste(page, many.join(String.fromCharCode(13, 10)))
+  const list = page.getByRole('list', { name: 'Sources' })
+  await expect(list.getByRole('listitem')).toHaveCount(30)
+  await expect(page.getByText('Sources · 30')).toBeVisible()
+  const box = await list.evaluate((el) => ({ height: el.clientHeight, scroll: el.scrollHeight }))
+  expect(box.height).toBeLessThanOrEqual(96) // three rows or so, then it scrolls
+  expect(box.scroll).toBeGreaterThan(box.height)
+
+  await expect(page.getByRole('button', { name: 'Clear all encodes' })).toHaveCount(0) // only when it has paths
+  await page.getByRole('button', { name: 'Clear all sources' }).click()
+  await expect(page.getByRole('group', { name: 'Sources' })).toContainText('MKV, MP4 or M2TS')
+  await expect(page.getByRole('button', { name: 'Clear all sources' })).toHaveCount(0)
+  await expect(page.locator('footer[aria-label="Add to queue"]')).toContainText('Paste file paths on any page')
+  expect(errors).toEqual([])
+})

@@ -463,7 +463,7 @@
           {summary}
         </p>
         {#if error}<span class="text-sm text-destructive">{error}</span>{/if}
-        {#if sources.length}<Button variant="outline" onclick={clearAll}>Clear</Button>{/if}
+        {#if sources.length}<Button variant="outline" onclick={clearAll}>Clear all</Button>{/if}
         <Button disabled={!newJobs || matching || settledKey !== inputKey || adding || !output.length} onclick={add}>
           <PlusIcon />Add {newJobs ? `${newJobs} job${newJobs === 1 ? '' : 's'}` : ''} to queue
         </Button>
