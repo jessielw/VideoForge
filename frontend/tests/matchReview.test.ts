@@ -9,6 +9,7 @@ import {
   needsLook,
   rangeOf,
   suggestedMatches,
+  timingGap,
   timingKey,
   timingNote,
   timingPairs,
@@ -211,4 +212,13 @@ test('timing: text subtitles only, not synced or matched by hand, and a flag onl
     'Its last line is at 5:00, 1:56:00 before the source ends (2:01:00): another episode or cut?',
   )
   assert.equal(matchEntries(r).find((e) => e.path === 'D:/m/E01.en.srt')?.timing, '') // not checked yet
+})
+
+test('Matched files words a timing flag after the file name', () => {
+  assert.equal(
+    timingGap({ verdict: 'late', last_ms: 2_640_000, source_ms: 1_440_000 }),
+    'ends 20:00 after its source (44:00 of 24:00): another episode or cut?',
+  )
+  assert.equal(timingGap({ verdict: null, last_ms: 1, source_ms: 1 }), '')
+  assert.equal(timingGap(undefined), '')
 })

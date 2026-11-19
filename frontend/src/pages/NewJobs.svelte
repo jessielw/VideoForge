@@ -20,11 +20,11 @@
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
   import { groupByFolder } from '../lib/templateFolders'
-  import { ENCODERS, type EncoderSettings, type MatchResult } from '../lib/types'
+  import { ENCODERS, type EncoderSettings, type MatchResult, type SubtitleTiming } from '../lib/types'
   import LanguagePicker from '../components/LanguagePicker.svelte'
   import MatchDialog from '../components/MatchDialog.svelte'
   import MatchTable from '../components/MatchTable.svelte'
-  import { matchEntries, needsLook as needsLookAt } from '../lib/matchReview'
+  import { matchEntries, needsLook as needsLookAt, timingKey, timingPairs } from '../lib/matchReview'
   import { oddSubtitleRows, oddSummary, wrongEpisodeCount } from '../lib/matchCheck'
   import Tip from '../components/Tip.svelte'
 
@@ -69,7 +69,47 @@
     if (result) shownResult = result
     else if (!sources.length) shownResult = null
   })
-  const needsLook = $derived(shownResult ? matchEntries(shownResult).filter(needsLookAt).length : 0)
+  // Subtitle timing (by timingKey): each text subtitle's last line against its source's length, checked in the
+  // background after each match for the pairs not asked yet, and all again each time Review matches opens (a
+  // file may have changed on disk; the server keeps each source's length while it's unchanged).
+  let timing = $state<Record<string, SubtitleTiming>>({})
+  let checkingTiming = $state(false)
+  const timingAsked = new Set<string>()
+  let timingRuns = 0
+  async function checkTiming(r: MatchResult, again: boolean) {
+    const pairs = Object.fromEntries(
+      Object.entries(timingPairs(r)).filter(([p, s]) => again || !timingAsked.has(timingKey(p, s))),
+    )
+    const keys = Object.entries(pairs).map(([p, s]) => timingKey(p, s))
+    if (!keys.length) return
+    for (const k of keys) timingAsked.add(k)
+    timingRuns++
+    checkingTiming = true
+    try {
+      const found = await api.matchTiming(pairs)
+      const next = { ...timing }
+      for (const k of keys) delete next[k] // one that can't be read any more isn't flagged
+      for (const [p, t] of Object.entries(found)) next[timingKey(p, pairs[p])] = t
+      timing = next
+    } catch {
+      for (const k of keys) timingAsked.delete(k) // ask again next time
+    } finally {
+      if (!--timingRuns) checkingTiming = false
+    }
+  }
+  $effect(() => {
+    if (result) void checkTiming(result, false)
+  })
+  let wasReviewing = false
+  $effect(() => {
+    if (reviewing && !wasReviewing && shownResult)
+      void checkTiming(
+        untrack(() => shownResult!),
+        true,
+      )
+    wasReviewing = reviewing
+  })
+  const needsLook = $derived(shownResult ? matchEntries(shownResult, timing).filter(needsLookAt).length : 0)
   function review(path: string | null = null) {
     reviewFocus = path
     reviewing = true
@@ -528,14 +568,16 @@
               >{wrongEpisode} subtitle{wrongEpisode === 1 ? '' : 's'} named for another episode</span
             >{/if}
           {#if shownResult}
-            <Button size="sm" variant="outline" class="ml-auto" onclick={() => review()}
+            {#if checkingTiming}<span class="ml-auto text-xs text-muted-foreground">Checking subtitle timing…</span
+              >{/if}
+            <Button size="sm" variant="outline" class={checkingTiming ? '' : 'ml-auto'} onclick={() => review()}
               ><ListChecksIcon />Review matches{needsLook ? ` · ${needsLook} to check` : ''}</Button
             >
           {/if}
         </div>
         {#if result}
           <div class="min-h-0 flex-1 overflow-auto border-t" bind:this={matchList}>
-            <MatchTable {result} bind:replacements bind:excluded bind:assign {odd} onreview={review} />
+            <MatchTable {result} bind:replacements bind:excluded bind:assign {odd} {timing} onreview={review} />
           </div>
           <!-- Drag down to show more rows (arrow keys too); double-click goes back to filling the page. A
              focusable separator is the window splitter pattern, which Svelte's a11y check doesn't know. -->
@@ -570,6 +612,8 @@
       {matching}
       bind:assign
       focus={reviewFocus}
+      {timing}
+      {checkingTiming}
       onforget={() => rematch++}
     />
   </div>

@@ -818,6 +818,76 @@ test('Matched files and Review matches show left-over files, subtitles alike, a 
   expect(errors).toEqual([])
 })
 
+test('subtitle timing is checked after matching, counted and shown in Matched files, and checked again when Review matches opens', async ({
+  page,
+}) => {
+  const posted: Record<string, unknown>[] = []
+  const { errors } = await fixture(page, posted)
+  const source = 'D:/Media/Show.S01E01.mkv'
+  const sub = 'D:/Media/Show.S01E01.en.srt'
+  const asked: Record<string, string>[] = []
+  let late = false // the file is swapped on disk between the two checks
+  await page.route('**/api/match/timing', (route) => {
+    asked.push(route.request().postDataJSON().pairs)
+    const t = late
+      ? { verdict: 'late', last_ms: 2_640_000, source_ms: 1_440_000 }
+      : { verdict: null, last_ms: 1_400_000, source_ms: 1_440_000 }
+    return route.fulfill({ json: { [sub]: t } })
+  })
+  await page.route('**/api/match', (route) =>
+    route.fulfill({
+      json: {
+        jobs: [
+          {
+            source,
+            encode: null,
+            encode_state: null,
+            subtitles: [sub],
+            subtitle_info: [
+              {
+                path: sub,
+                language: 'en',
+                language_name: 'English',
+                format: 'srt',
+                tags: [],
+                track: null,
+                match: 'name',
+              },
+            ],
+            chapters: null,
+            existing_id: null,
+            existing_status: null,
+            matches: { [sub]: 'name' },
+          },
+        ],
+        unmatched: [],
+        held: [],
+        suggestions: {},
+      },
+    }),
+  )
+  await paste(page, `"${source}"`)
+  await expect.poll(() => asked).toEqual([{ [sub]: source }]) // in the background, before anyone looks
+  const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
+  await expect(card.getByRole('button', { name: 'Review matches', exact: true })).toBeVisible()
+
+  late = true
+  await card.getByRole('button', { name: 'Review matches', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Review matches' })
+  await expect.poll(() => asked.length).toBe(2) // asked again on opening
+  // Opened on All files (nothing to check then), it moves to Needs a look once the flag turns up.
+  await expect(dialog.getByRole('radio', { name: 'Needs a look · 1' })).toHaveAttribute('aria-checked', 'true')
+  await expect(dialog).toContainText(
+    'Its last line is at 44:00, 20:00 after the source ends (24:00): another episode or cut?',
+  )
+  await page.keyboard.press('Escape')
+  await expect(card).toContainText(
+    'Show.S01E01.en.srt ends 20:00 after its source (44:00 of 24:00): another episode or cut?',
+  )
+  await expect(card.getByRole('button', { name: 'Review matches · 1 to check' })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
 test('Review matches moves several selected files at once, a Shift+click range or every file shown', async ({
   page,
 }) => {

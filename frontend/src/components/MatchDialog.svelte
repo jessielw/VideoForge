@@ -32,8 +32,6 @@
     needsLook,
     rangeOf,
     suggestedMatches,
-    timingKey,
-    timingPairs,
     type MatchEntry,
     type MatchKind,
   } from '../lib/matchReview'
@@ -46,6 +44,8 @@
     matching = false,
     assign = $bindable({}),
     focus = null,
+    timing = {},
+    checkingTiming = false,
     onforget,
   }: {
     open?: boolean
@@ -53,41 +53,18 @@
     matching?: boolean
     assign?: Record<string, string | null>
     focus?: string | null // a file to show and put the cursor on when the dialog opens
+    timing?: Record<string, SubtitleTiming> // subtitle timing checks, by timingKey
+    checkingTiming?: boolean
     onforget?: () => void // remembered patterns changed: match the batch again
   } = $props()
 
   const KIND: Record<MatchKind, string> = { video: 'Video', subtitles: 'Subtitles', chapters: 'Chapters' }
 
-  // Subtitles whose last line doesn't fit their source's length, checked when the dialog opens (reading each
-  // source's length is slow on a share), and again for a pair not asked about yet; by timingKey.
-  let timing = $state<Record<string, SubtitleTiming>>({})
-  let checkingTiming = $state(false)
-  const asked = new Set<string>()
-  $effect(() => {
-    if (!open || !result) return
-    const wanted = Object.entries(timingPairs(result)).filter(([p, s]) => !asked.has(timingKey(p, s)))
-    if (!wanted.length) return
-    for (const [p, s] of wanted) asked.add(timingKey(p, s))
-    checkingTiming = true
-    api
-      .matchTiming(Object.fromEntries(wanted))
-      .then((found) => {
-        const pairs = Object.fromEntries(wanted)
-        timing = {
-          ...timing,
-          ...Object.fromEntries(Object.entries(found).map(([p, t]) => [timingKey(p, pairs[p]), t])),
-        }
-      })
-      .catch(() => {
-        for (const [p, s] of wanted) asked.delete(timingKey(p, s)) // ask again next time
-      })
-      .finally(() => (checkingTiming = false))
-  })
-
   const entries = $derived(result ? matchEntries(result, timing) : [])
   const sources = $derived(result?.jobs.map((j) => j.source) ?? [])
   const lookCount = $derived(entries.filter(needsLook).length)
   let view = $state<'look' | 'all'>('look')
+  let autoView = false // opened on All files only because nothing needed a look then
   let query = $state('')
   let touched = $state<string[]>([]) // changed since the dialog opened: kept in "Needs a look"
   let list = $state<HTMLElement>()
@@ -125,12 +102,25 @@
       ticked = []
       anchor = null
       view = focus || !lookCount ? 'all' : 'look'
+      autoView = !focus && !lookCount
       forgetError = ''
       void countPatterns()
       if (focus) void reveal(focus)
     }
     wasOpen = open
   })
+  // Opened on All files with nothing to check, then something turned up (a subtitle timing check answered):
+  // show it, unless the user has picked a view or changed a match since.
+  $effect(() => {
+    if (open && autoView && lookCount && !touched.length) {
+      view = 'look'
+      autoView = false
+    }
+  })
+  function pickView(v: 'look' | 'all') {
+    view = v
+    autoView = false
+  }
 
   async function reveal(path: string) {
     await tick()
@@ -228,7 +218,7 @@
         spacing={1}
         aria-label="Show"
         value={view}
-        onValueChange={(v) => v && (view = v as 'look' | 'all')}
+        onValueChange={(v) => v && pickView(v as 'look' | 'all')}
       >
         <ToggleGroup.Item value="look" class="px-3 data-[state=on]:bg-primary/15"
           >Needs a look · {lookCount}</ToggleGroup.Item
@@ -315,8 +305,8 @@
       {#if !shown.length}
         <p class="p-6 text-center text-sm text-muted-foreground">
           {#if query}No file matches “{query}”.{:else if view === 'look'}Every file is matched by name or by you.
-            <button class="underline underline-offset-2" onclick={() => (view = 'all')}>Show all files</button>{:else}No
-            files to match.{/if}
+            <button class="underline underline-offset-2" onclick={() => pickView('all')}>Show all files</button
+            >{:else}No files to match.{/if}
         </p>
       {:else}
         <ul class="divide-y divide-border/60 text-sm" aria-label="Files">

@@ -42,6 +42,13 @@ const clock = (ms: number) => {
   return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`
 }
 
+/** A timing check's finding as Matched files words it after the file's name, or '' when it fits. */
+export function timingGap(t: SubtitleTiming | undefined): string {
+  if (!t?.verdict) return ''
+  const gap = clock(Math.abs(t.last_ms - t.source_ms))
+  return `ends ${gap} ${t.verdict === 'late' ? 'after' : 'before'} its source (${clock(t.last_ms)} of ${clock(t.source_ms)}): another episode or cut?`
+}
+
 /** What a timing check found, in words, or '' when the subtitle fits. */
 export function timingNote(t: SubtitleTiming | undefined): string {
   if (!t?.verdict) return ''

@@ -7,7 +7,7 @@
   // sources offered first; one matched by hand has an undo button. Clicking any file's match icon opens Review
   // matches (onreview) on that file, to move it to another source or none; its tooltip says what a guess went
   // on. A second chapters file or encode for one source is left over, and subtitles that look like the same
-  // track twice are flagged.
+  // track twice are flagged, as is one whose last line doesn't fit its source's length (timing).
   import SparklesIcon from '@lucide/svelte/icons/sparkles'
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
   import XIcon from '@lucide/svelte/icons/x'
@@ -17,9 +17,9 @@
   import { basename } from '../lib/format'
   import { MATCH_NOTE, nameParts, type OddSubtitles } from '../lib/matchCheck'
   import { MATCH_ICONS, matchTone } from '../lib/matchIcons'
-  import { duplicateSubtitles, kindOf } from '../lib/matchReview'
+  import { duplicateSubtitles, kindOf, timingGap, timingKey } from '../lib/matchReview'
   import { router } from '../lib/router.svelte'
-  import type { MatchResult, SubtitleLabel, SubtitleMatch } from '../lib/types'
+  import type { MatchResult, SubtitleLabel, SubtitleMatch, SubtitleTiming } from '../lib/types'
   import Tip from './Tip.svelte'
 
   let {
@@ -28,6 +28,7 @@
     excluded = $bindable([]),
     assign = $bindable({}),
     odd = new Map(),
+    timing = {},
     onreview,
   }: {
     result: MatchResult
@@ -35,6 +36,7 @@
     excluded?: string[]
     assign?: Record<string, string | null>
     odd?: ReadonlyMap<string, OddSubtitles>
+    timing?: Record<string, SubtitleTiming> // subtitle timing checks, by timingKey
     onreview?: (path: string) => void // open Review matches on this file
   } = $props()
 
@@ -153,6 +155,10 @@
     {#each result.jobs as j (j.source)}
       {@const flag = odd.get(j.source)}
       {@const alike = duplicateSubtitles(j.subtitle_info, excluded)}
+      {@const offTime = j.subtitle_info
+        .filter((s) => s.match !== 'manual' && !excluded.includes(s.path))
+        .map((s) => [s.path, timingGap(timing[timingKey(s.path, j.source)])])
+        .filter(([, gap]) => gap)}
       <tr class="border-t border-border/60">
         <td class="px-4 py-1.5">
           <Tip text={j.source}>{basename(j.source)}</Tip>
@@ -231,6 +237,11 @@
               <TriangleAlertIcon class="mt-0.5 size-3 shrink-0" /><span
                 >{group.length} alike (same language and type): {group.map(basename).join(', ')}</span
               >
+            </div>
+          {/each}
+          {#each offTime as [path, gap] (path)}
+            <div class="mt-1 flex items-start gap-1 text-xs text-warning">
+              <TriangleAlertIcon class="mt-0.5 size-3 shrink-0" /><span>{basename(path)} {gap}</span>
             </div>
           {/each}
         </td>
