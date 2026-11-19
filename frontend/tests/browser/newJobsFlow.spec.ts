@@ -481,7 +481,7 @@ test('the grip under Matched files drags it taller past the page, without jumpin
   const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
   await expect(card).toContainText('30 job(s)')
   const grip = page.getByRole('separator', { name: 'Resize Matched files' })
-  const scrollTop = () => card.evaluate((el) => el.parentElement!.scrollTop)
+  const scrollTop = () => card.evaluate((el) => el.closest('.overflow-auto')!.scrollTop)
   const before = (await card.boundingBox())!.height
 
   const at = (await grip.boundingBox())!
@@ -583,5 +583,34 @@ test('Matched files tags each subtitle, flags odd rows, lists unmatched files fi
     .click()
   await expect.poll(() => posted.length).toBe(1)
   expect(posted[0].exclude_subtitles).toEqual([extracted])
+  expect(errors).toEqual([])
+})
+
+test('while Add runs the bar says so with a spinner, the inputs are locked, and a paste waits', async ({ page }) => {
+  const posted: Record<string, unknown>[] = []
+  const { errors, sources } = await fixture(page, posted)
+  let release!: () => void
+  const held = new Promise<void>((resolve) => (release = resolve))
+  await page.route('**/api/jobs', async (route) =>
+    route.request().method() === 'POST' ? (await held, await route.fallback()) : route.fallback(),
+  )
+  await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
+  const bar = page.locator('footer[aria-label="Add to queue"]')
+  await bar.getByRole('button', { name: /Add 2 jobs/ }).click()
+
+  await expect(bar.getByRole('status')).toHaveText('Adding 2 jobs to the queue…')
+  await expect(bar.getByRole('button', { name: 'Adding…' })).toBeDisabled()
+  await expect(bar.getByRole('button', { name: 'Clear all' })).toBeDisabled()
+  await expect(
+    page.getByRole('list', { name: 'Sources' }).getByRole('button', { name: 'Remove' }).first(),
+  ).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Clear all sources' })).toBeDisabled()
+  await paste(page, '"D:/Media/Show.S01E03.mkv"') // held until Add is done
+  await expect(page.getByRole('list', { name: 'Sources' }).getByRole('listitem')).toHaveCount(2)
+
+  release()
+  await expect(bar.getByRole('status')).toContainText('Added 2 jobs')
+  await expect(page.getByRole('list', { name: 'Sources' }).getByRole('listitem')).toHaveText(['Show.S01E03.mkv'])
+  expect(posted).toHaveLength(1)
   expect(errors).toEqual([])
 })

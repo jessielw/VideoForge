@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A long list of paths on New jobs scrolls inside its box after about three rows, instead of pushing the rest of the page down.
 - New jobs lists sources in reading order, so `E2` comes before `E10`, in the Sources box, in **Matched files** and in the queue, whatever order they were added in.
 - Files that match no source are listed first in **Matched files**, marked in amber, instead of after every job.
+- While **Add to queue** runs, the bottom bar shows a spinner and "Adding 25 jobs to the queue…", and the inputs and **Matched files** are locked and dimmed until it's done. Paths pasted meanwhile wait and land once the jobs are added. Before, the page looked frozen during a big batch.
 
 ### Fixed
 
