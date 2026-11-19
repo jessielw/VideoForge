@@ -108,6 +108,7 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
     existing_status: null,
   })
   const folders = ['D:/Media/Old'] // what the folder picker lists in D:/Media
+  const files: string[] = [] // and the files it lists there
   const removed: Record<string, unknown>[] = []
   await page.routeWebSocket('**/api/events', () => {})
   await page.route('**/api/**', async (route) => {
@@ -115,7 +116,12 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
     const request = route.request()
     if (path === '/api/fs/list')
       return route.fulfill({
-        json: { path: 'D:/Media', parent: 'D:/', dirs: folders.map((p) => ({ name: p.slice(9), path: p })), files: [] },
+        json: {
+          path: 'D:/Media',
+          parent: 'D:/',
+          dirs: folders.map((p) => ({ name: p.slice(9), path: p })),
+          files: files.map((p) => ({ name: p.slice(9), path: p, size: 1 })),
+        },
       })
     if (path === '/api/fs/mkdir') {
       const made = `D:/Media/${request.postDataJSON().name}`
@@ -156,7 +162,7 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
     await route.fulfill({ json: responses[path] })
   })
   await page.goto('/#/queue')
-  return { errors, sources, removed }
+  return { errors, sources, removed, files }
 }
 
 async function paste(page: Page, text: string) {
@@ -251,5 +257,37 @@ test('the folder picker offers Delete only on a folder made in it, and asks to d
   await confirm.getByRole('button', { name: 'Delete', exact: true }).click()
   await expect(picker.getByRole('button', { name: 'Oops', exact: true })).toHaveCount(0)
   expect(removed).toEqual([{ path: 'D:/Media/Oops' }])
+  expect(errors).toEqual([])
+})
+
+test('the file picker ticks a range with Shift+click and every file with Ctrl+A or the All box', async ({ page }) => {
+  const { errors, files } = await fixture(page, [])
+  files.push(...[1, 2, 3, 4, 5].map((n) => `D:/Media/E0${n}.mkv`))
+  await page.goto('/#/new')
+  await page.getByRole('button', { name: 'Browse…' }).first().click()
+  const picker = page.getByRole('dialog', { name: 'Sources' })
+  const box = (n: number) => picker.getByRole('checkbox', { name: `Pick E0${n}.mkv` })
+  const all = picker.getByRole('checkbox', { name: 'Pick all files' })
+
+  await picker.getByText('E02.mkv').click() // the row ticks, not only the box
+  await box(4).click({ modifiers: ['Shift'] })
+  for (const n of [2, 3, 4]) await expect(box(n)).toBeChecked()
+  for (const n of [1, 5]) await expect(box(n)).not.toBeChecked()
+  await expect(all).toHaveAttribute('data-state', 'indeterminate')
+  await expect(picker).toContainText('3 selected')
+
+  await box(3).click({ modifiers: ['Shift'] }) // unticks 4 back to 3
+  for (const n of [3, 4]) await expect(box(n)).not.toBeChecked()
+  await expect(box(2)).toBeChecked()
+
+  await box(1).press('ControlOrMeta+a')
+  for (const n of [1, 2, 3, 4, 5]) await expect(box(n)).toBeChecked()
+  await expect(picker.getByRole('checkbox', { name: 'Pick Old' })).not.toBeChecked() // files only
+  await all.click()
+  await expect(picker).not.toContainText('selected')
+
+  await all.click()
+  await picker.getByRole('button', { name: 'Add' }).click()
+  await expect(page.getByRole('list', { name: 'Sources' }).getByRole('listitem')).toHaveCount(5)
   expect(errors).toEqual([])
 })

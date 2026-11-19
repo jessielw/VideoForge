@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- The file picker behind **Browse…** ticks several files at once. Shift+click ticks every row from the last one clicked to this one, or unticks them when this one was ticked. Ctrl+A (Cmd+A) or the new **All files** box above the list ticks every file in the folder, and again unticks them; folders are left as they are. Clicking anywhere on a file's row ticks it, as before.
+
 ### Changed
 
 - Settings shows its groups in one column at every width. On wide windows, short groups no longer sit beside tall ones with empty space under them.

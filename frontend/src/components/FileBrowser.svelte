@@ -5,9 +5,12 @@
   // unless orFolder: then the folder you're in will do (DEE's split encoders are a folder of programs).
   // Folders can be made here, and one made here deleted again while it's empty: the undo for a mistake.
   // Other file work belongs in a file manager (the server only deletes empty folders).
+  // Ticking: a click (on a file's row or any box) toggles one, Shift+click ticks or unticks the range
+  // from the last one clicked, and Ctrl+A or the All box ticks every file here (not the folders).
   import { onMount } from 'svelte'
   import { api } from '../lib/api'
   import { bytes } from '../lib/format'
+  import { pickAll, pickClick } from '../lib/pickPaths'
   import type { DirListing } from '../lib/types'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
   import FileIcon from '@lucide/svelte/icons/file'
@@ -46,6 +49,7 @@
   let pathInput = $state('')
   let error = $state('')
   let picked = $state<string[]>([])
+  let anchor = $state<string | null>(null) // the last path clicked: Shift+click ticks from here
   let newName = $state<string | null>(null) // the new folder's name while one is being made
   let made = $state<string[]>([]) // folders made here: only these offer Delete
   let deleting = $state<{ name: string; path: string } | null>(null)
@@ -57,6 +61,7 @@
     error = ''
     try {
       listing = await api.list(path, extensions, programs)
+      anchor = null
       pathInput = listing.path
       api.saveSettings({ last_dir: listing.path }).catch(() => {})
     } catch (e) {
@@ -105,8 +110,26 @@
     if (!listing && roots[0]) await open(roots[0])
   })
 
-  function toggle(path: string) {
-    picked = picked.includes(path) ? picked.filter((p) => p !== path) : [...picked, path]
+  // The rows as shown, in the order Shift+click ranges over; picking one program means no ranges or All.
+  const order = $derived(listing && mode === 'files' ? [...listing.dirs, ...listing.files].map((x) => x.path) : [])
+  const files = $derived(listing && mode === 'files' && !programs ? listing.files.map((f) => f.path) : [])
+  const filesPicked = $derived.by(() => {
+    const has = new Set(picked)
+    return files.filter((p) => has.has(p)).length
+  })
+
+  function click(path: string, e: MouseEvent) {
+    e.stopPropagation() // a box's click is the row's too
+    e.preventDefault() // and the box doesn't toggle itself: it shows what's picked
+    picked = pickClick(picked, order, path, anchor, e.shiftKey && !programs)
+    anchor = path
+  }
+
+  function keys(e: KeyboardEvent) {
+    const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, [contenteditable]')
+    if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'a' || e.altKey || typing || !files.length) return
+    e.preventDefault()
+    picked = pickAll(picked, files)
   }
 
   function confirm() {
@@ -119,7 +142,12 @@
 </script>
 
 <Dialog.Root open onOpenChange={(o) => !o && onclose()}>
-  <Dialog.Content class="flex h-[80vh] flex-col gap-0 p-0 sm:max-w-3xl" showCloseButton={false} aria-label={title}>
+  <Dialog.Content
+    class="flex h-[80vh] flex-col gap-0 p-0 sm:max-w-3xl"
+    showCloseButton={false}
+    aria-label={title}
+    onkeydown={keys}
+  >
     <header class="flex items-center gap-2 border-b p-3">
       <Dialog.Title>{title}</Dialog.Title>
       <NativeSelect
@@ -187,12 +215,27 @@
             <Button variant="ghost" size="sm" onclick={() => (newName = null)}>Cancel</Button>
           </form>
         {/if}
+        {#if files.length > 1}
+          <div class="flex items-center gap-2 border-b px-2 pt-1 pb-2 text-sm text-muted-foreground select-none">
+            <Checkbox
+              checked={filesPicked === files.length}
+              indeterminate={filesPicked > 0 && filesPicked < files.length}
+              onclick={(e: MouseEvent) => {
+                e.preventDefault()
+                picked = pickAll(picked, files)
+              }}
+              aria-label="Pick all files"
+            />
+            <span class="flex-1">All {files.length} files</span>
+            <span class="hidden text-xs sm:inline">Shift+click ticks a range · Ctrl+A ticks all</span>
+          </div>
+        {/if}
         {#each listing.dirs as d (d.path)}
-          <div class="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
+          <div class="group flex items-center gap-2 rounded-md px-2 py-1 select-none hover:bg-accent">
             {#if mode === 'files'}
               <Checkbox
                 checked={picked.includes(d.path)}
-                onCheckedChange={() => toggle(d.path)}
+                onclick={(e: MouseEvent) => click(d.path, e)}
                 aria-label="Pick {d.name}"
               />
             {/if}
@@ -216,12 +259,21 @@
         {/each}
         {#if mode === 'files'}
           {#each listing.files as f (f.path)}
-            <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-accent">
-              <Checkbox checked={picked.includes(f.path)} onCheckedChange={() => toggle(f.path)} />
+            <!-- The box is the keyboard's way to tick; the row is a bigger target for the mouse. -->
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <div
+              class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 select-none hover:bg-accent"
+              onclick={(e) => click(f.path, e)}
+            >
+              <Checkbox
+                checked={picked.includes(f.path)}
+                onclick={(e: MouseEvent) => click(f.path, e)}
+                aria-label="Pick {f.name}"
+              />
               <FileIcon class="size-4 text-muted-foreground" />
               <span class="flex-1 truncate">{f.name}</span>
               <span class="text-xs text-muted-foreground">{bytes(f.size)}</span>
-            </label>
+            </div>
           {/each}
           {#if !listing.dirs.length && !listing.files.length}
             <div class="p-4 text-center text-muted-foreground">
