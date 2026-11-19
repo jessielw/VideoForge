@@ -386,3 +386,67 @@ test('the file picker sorts by name, size or date, keeps folders first, and reme
   await expect(picker.getByRole('button', { name: 'Sort by modified' })).toHaveAttribute('aria-pressed', 'true')
   expect(errors).toEqual([])
 })
+
+test('the file picker moves, ticks, opens and adds from the keyboard', async ({ page }) => {
+  const { errors, files } = await fixture(page, [])
+  files.push(...[1, 2, 3, 4, 5].map((n) => `D:/Media/E0${n}.mkv`))
+  const listed: string[] = []
+  page.on('request', (r) => {
+    const url = new URL(r.url())
+    if (url.pathname === '/api/fs/list') listed.push(url.searchParams.get('path')!)
+  })
+  await page.goto('/#/new')
+  await page.getByRole('button', { name: 'Browse…' }).first().click()
+  const picker = page.getByRole('dialog', { name: 'Sources' })
+  const box = (name: string) => picker.getByRole('checkbox', { name: `Pick ${name}` })
+
+  await picker.getByRole('searchbox', { name: 'Filter this folder' }).press('ArrowDown')
+  await expect(box('Old')).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(box('E01.mkv')).toBeFocused()
+  await page.keyboard.press('Shift+ArrowDown')
+  await page.keyboard.press('Shift+ArrowDown')
+  await expect(box('E03.mkv')).toBeFocused()
+  for (const n of [1, 2, 3]) await expect(box(`E0${n}.mkv`)).toBeChecked()
+  await page.keyboard.press('End')
+  await expect(box('E05.mkv')).toBeFocused()
+  await page.keyboard.press('Space')
+  await expect(picker).toContainText('4 selected')
+  await picker.getByRole('checkbox', { name: 'Pick all files' }).press('Space')
+  await expect(picker).toContainText('5 selected')
+  await picker.getByRole('checkbox', { name: 'Pick all files' }).press('Space')
+  await expect(picker).not.toContainText('selected')
+  await box('E01.mkv').press('Space')
+  await box('E03.mkv').press('Shift+Space') // a range, like Shift+click
+  await box('E05.mkv').press('Space')
+  await expect(box('E02.mkv')).toBeChecked()
+  await expect(box('E04.mkv')).not.toBeChecked()
+  await expect(picker).toContainText('4 selected')
+
+  await page.keyboard.press('Home')
+  await expect(box('Old')).toBeFocused()
+  await page.keyboard.press('Enter') // opens the folder, not ticks it
+  await expect.poll(() => listed.at(-1)).toBe('D:/Media/Old')
+  await expect(box('Old')).not.toBeChecked()
+  await expect(box('Old')).toBeFocused() // the mock lists D:/Media again; the cursor is on the first row
+  await page.keyboard.press('Backspace')
+  await expect.poll(() => listed.at(-1)).toBe('D:/')
+
+  await box('E02.mkv').focus()
+  await page.keyboard.press('Enter') // adds what's ticked
+  await expect(picker).toBeHidden()
+  await expect(page.getByRole('list', { name: 'Sources' }).getByRole('listitem')).toHaveCount(4)
+  expect(errors).toEqual([])
+})
+
+test('Enter on a file with nothing ticked adds that file', async ({ page }) => {
+  const { errors, files } = await fixture(page, [])
+  files.push('D:/Media/E01.mkv', 'D:/Media/E02.mkv')
+  await page.goto('/#/new')
+  await page.getByRole('button', { name: 'Browse…' }).first().click()
+  const picker = page.getByRole('dialog', { name: 'Sources' })
+  await picker.getByRole('checkbox', { name: 'Pick E02.mkv' }).press('Enter')
+  await expect(picker).toBeHidden()
+  await expect(page.getByRole('list', { name: 'Sources' }).getByRole('listitem')).toHaveText(['E02.mkv'])
+  expect(errors).toEqual([])
+})

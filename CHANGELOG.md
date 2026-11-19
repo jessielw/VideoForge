@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The file picker has a **Filter this folder** box. It shows only the names with every word typed in them, such as `s01 mkv`. Ctrl+A, the All box and ranges take only the rows it shows, and files ticked before stay ticked. Esc clears it.
 - The file picker has a **Refresh** button (or F5) that lists the folder again after files change outside VideoForge. It keeps the filter.
 - The file picker sorts by name, modified date or size: click the column above the list, and again to flip it. Folders stay first. Names sort with numbers in order (E2 before E10), and the browser remembers the sort. It shows each file's and folder's modified date on windows wider than 640 px. `GET /api/fs/list` adds `mtime` to each folder.
+- The file picker works from the keyboard. ↑ and ↓ move between rows (↓ from the filter goes to the first row), Home and End go to the first and last, and Shift+↑ or ↓ ticks the rows on the way. Space ticks the row, and Shift+Space a range. Enter opens a folder, or on a file adds what's ticked (that file, when nothing is). Backspace or Alt+↑ goes up a folder and puts the cursor back on the folder you left. The keyboard shortcuts sheet lists them.
 
 ### Changed
 

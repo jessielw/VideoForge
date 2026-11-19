@@ -10,7 +10,10 @@
   // one went, and Ctrl+A or the All box ticks every file here (not the folders). The filter narrows the
   // rows to names with every word in them; ranges and Ctrl+A only take the rows it shows. The column
   // headers sort by name, date or size (folders stay first), remembered in this browser.
-  import { onMount } from 'svelte'
+  // Keys on a row: arrows, Home and End move (Shift+arrows tick on the way), Space ticks, Enter opens a
+  // folder or adds (the file under the cursor when nothing is ticked), Backspace or Alt+Up goes up.
+  // KeyboardShortcuts lists them: keep it in step.
+  import { onMount, tick } from 'svelte'
   import { api } from '../lib/api'
   import { filterEntries, sortEntries, type FileSort, type SortKey } from '../lib/fileList'
   import { bytes } from '../lib/format'
@@ -66,6 +69,7 @@
   let made = $state<string[]>([]) // folders made here: only these offer Delete
   let deleting = $state<{ name: string; path: string } | null>(null)
   let busy = $state(false)
+  let list = $state<HTMLElement | null>(null)
 
   const message = (e: unknown) => String(e instanceof Error ? e.message : e)
 
@@ -95,7 +99,8 @@
   const modified = (mtime: number) =>
     new Date(mtime * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
 
-  async function open(path: string) {
+  // focus: from the keyboard, put the cursor on this row once it's listed (true: the first row).
+  async function open(path: string, focus?: string | true) {
     error = ''
     try {
       const next = await api.list(path, extensions, programs)
@@ -104,9 +109,21 @@
       anchor = null
       pathInput = listing.path
       api.saveSettings({ last_dir: listing.path }).catch(() => {})
+      if (focus) {
+        await tick()
+        focusRow(focus === true ? null : focus)
+      }
     } catch (e) {
       error = message(e)
     }
+  }
+
+  // The rows the keyboard moves over: each row's box, or a folder's name when choosing a folder.
+  const rows = () => [...(list?.querySelectorAll<HTMLElement>('[data-row]') ?? [])]
+
+  function focusRow(path: string | null) {
+    const all = rows()
+    ;(all.find((r) => r.dataset.row === path) ?? all[0])?.focus()
   }
 
   async function makeDir() {
@@ -170,6 +187,20 @@
     anchor = path
   }
 
+  // A box toggles itself on Space (no click), so Space has to tick here, before it does.
+  function space(e: KeyboardEvent, tickIt: () => void) {
+    if (e.key !== ' ') return
+    e.preventDefault()
+    tickIt()
+  }
+
+  function spaceRow(path: string, e: KeyboardEvent) {
+    space(e, () => {
+      picked = pickClick(picked, order, path, anchor, e.shiftKey && !programs)
+      anchor = path
+    })
+  }
+
   // Touch keeps its drag for scrolling, so only a mouse paints; a single program has nothing to drag over.
   function press(path: string, e: PointerEvent) {
     pressed = null
@@ -192,10 +223,45 @@
       if (listing) open(listing.path)
       return
     }
-    const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, [contenteditable]')
-    if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'a' || e.altKey || typing || !files.length) return
-    e.preventDefault()
-    picked = pickAll(picked, files)
+    const el = e.target instanceof HTMLElement ? e.target : null
+    const typing = !!el?.closest('input, textarea, [contenteditable]')
+    const row = el?.closest<HTMLElement>('[data-row]')?.dataset.row
+    const plain = !e.ctrlKey && !e.metaKey && !e.altKey
+    if (e.key === 'ArrowDown' && plain && el?.closest('[data-filter]')) {
+      e.preventDefault()
+      focusRow(null)
+    } else if (!typing && ((e.key === 'Backspace' && plain) || (e.key === 'ArrowUp' && e.altKey))) {
+      e.preventDefault()
+      if (listing?.parent) open(listing.parent, listing.path) // the cursor lands on the folder left
+    } else if (row !== undefined && plain && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+      e.preventDefault()
+      move(row, e.key, e.shiftKey)
+    } else if (row !== undefined && plain && e.key === 'Enter') {
+      e.preventDefault()
+      if (listing?.dirs.some((d) => d.path === row)) open(row, true)
+      else {
+        if (!picked.length) picked = [row]
+        confirm()
+      }
+    } else if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a' && !typing && files.length) {
+      e.preventDefault()
+      picked = pickAll(picked, files)
+    }
+  }
+
+  // Shift ticks every row from where the moving started (the anchor) to the one it lands on.
+  function move(row: string, key: string, shift: boolean) {
+    const all = rows()
+    const at = all.findIndex((r) => r.dataset.row === row)
+    const to = key === 'Home' ? 0 : key === 'End' ? all.length - 1 : at + (key === 'ArrowDown' ? 1 : -1)
+    const next = all[Math.max(0, Math.min(to, all.length - 1))]
+    const path = next?.dataset.row
+    if (!next || path === undefined) return
+    next.focus()
+    if (shift && mode === 'files' && !programs) {
+      anchor ??= row
+      picked = pickRange(picked, order, anchor, path, true)
+    } else anchor = path
   }
 
   function confirm() {
@@ -283,6 +349,7 @@
         class="h-8 pl-8"
         type="search"
         aria-label="Filter this folder"
+        data-filter
         placeholder="Filter this folder"
         bind:value={filter}
         onkeydown={(e) => {
@@ -297,7 +364,7 @@
 
     {#if error}<div class="px-3 py-2 text-sm text-destructive">{error}</div>{/if}
 
-    <div class="min-h-0 flex-1 overflow-auto p-1">
+    <div class="min-h-0 flex-1 overflow-auto p-1" bind:this={list}>
       {#if listing}
         {#if newName !== null}
           <form
@@ -339,6 +406,7 @@
                     e.preventDefault()
                     picked = pickAll(picked, files)
                   }}
+                  onkeydown={(e: KeyboardEvent) => space(e, () => (picked = pickAll(picked, files)))}
                   aria-label="Pick all files"
                 />
               </Tip>
@@ -358,13 +426,20 @@
           >
             {#if mode === 'files'}
               <Checkbox
+                class="scroll-mt-9"
+                data-row={d.path}
                 checked={picked.includes(d.path)}
                 onpointerdown={(e: PointerEvent) => press(d.path, e)}
                 onclick={(e: MouseEvent) => click(d.path, e)}
+                onkeydown={(e: KeyboardEvent) => spaceRow(d.path, e)}
                 aria-label="Pick {d.name}"
               />
             {/if}
-            <button class="flex min-w-0 flex-1 items-center gap-2 text-left" onclick={() => open(d.path)}>
+            <button
+              class="flex min-w-0 flex-1 scroll-mt-9 items-center gap-2 text-left"
+              data-row={mode === 'folder' ? d.path : undefined}
+              onclick={() => open(d.path)}
+            >
               <FolderIcon class="size-4 shrink-0 text-primary" /><span class="truncate">{d.name}</span>
             </button>
             {#if made.includes(d.path)}
@@ -398,8 +473,11 @@
               onclick={(e) => click(f.path, e)}
             >
               <Checkbox
+                class="scroll-mt-9"
+                data-row={f.path}
                 checked={picked.includes(f.path)}
                 onclick={(e: MouseEvent) => click(f.path, e)}
+                onkeydown={(e: KeyboardEvent) => spaceRow(f.path, e)}
                 aria-label="Pick {f.name}"
               />
               <FileIcon class="size-4 text-muted-foreground" />
