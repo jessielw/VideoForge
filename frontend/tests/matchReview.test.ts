@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { MATCH_NOTE } from '../src/lib/matchCheck.ts'
-import { filterEntries, kindOf, matchEntries, needsLook, suggestedMatches, UNSURE } from '../src/lib/matchReview.ts'
+import {
+  duplicateSubtitles,
+  filterEntries,
+  kindOf,
+  matchEntries,
+  needsLook,
+  rangeOf,
+  suggestedMatches,
+  UNSURE,
+} from '../src/lib/matchReview.ts'
 import type { MatchResult, MatchedJob } from '../src/lib/types.ts'
 
 const job = (source: string, files: Partial<MatchedJob> & { matches: MatchedJob['matches'] }): MatchedJob => ({
@@ -97,4 +106,60 @@ test('reads a file’s kind from its extension', () => {
     'video',
     'video',
   ])
+})
+
+const label = (path: string, language: string, format: string, tags: string[] = []) => ({
+  path,
+  language,
+  language_name: language,
+  format,
+  tags,
+  track: null,
+  match: 'name' as const,
+})
+
+test('subtitles alike: same language, format and tags, synced or not, ticked ones only', () => {
+  const info = [
+    label('a.en.srt', 'en', 'srt'),
+    label('a.en.synced.srt', 'en', 'srt', ['synced']),
+    label('a.en.sup', 'en', 'sup'),
+    label('a.en.forced.srt', 'en', 'srt', ['forced']),
+  ]
+  assert.deepEqual(duplicateSubtitles(info), [['a.en.srt', 'a.en.synced.srt']])
+  assert.deepEqual(duplicateSubtitles(info, ['a.en.srt']), [])
+})
+
+test('a left-over file and subtitles alike need a look, and say why', () => {
+  const r: MatchResult = {
+    jobs: [
+      job('D:/m/E01.mkv', {
+        chapters: 'D:/m/E01.chapters.txt',
+        subtitles: ['D:/m/E01.en.srt', 'D:/m/E01.en.synced.srt'],
+        subtitle_info: [
+          label('D:/m/E01.en.srt', 'en', 'srt'),
+          label('D:/m/E01.en.synced.srt', 'en', 'srt', ['synced']),
+        ],
+        matches: { 'D:/m/E01.chapters.txt': 'name', 'D:/m/E01.en.srt': 'name', 'D:/m/E01.en.synced.srt': 'name' },
+        details: {},
+      }),
+    ],
+    unmatched: ['D:/m/chapters_E01.xml'],
+    held: [],
+    spare: { 'D:/m/chapters_E01.xml': 'D:/m/E01.mkv' },
+    suggestions: {},
+  }
+  const entries = matchEntries(r)
+  assert.deepEqual(
+    entries.filter(needsLook).map((e) => [e.path.slice(5), e.conflict]),
+    [
+      ['chapters_E01.xml', 'Left over: E01.mkv already has chapters, E01.chapters.txt'],
+      ['E01.en.srt', 'Same language and type as E01.en.synced.srt'],
+      ['E01.en.synced.srt', 'Same language and type as E01.en.srt'],
+    ],
+  )
+})
+
+test('a Shift+click range runs either way between two shown paths', () => {
+  assert.deepEqual(rangeOf(['a', 'b', 'c', 'd'], 'c', 'a'), ['a', 'b', 'c'])
+  assert.deepEqual(rangeOf(['a', 'b'], 'gone', 'b'), ['b'])
 })

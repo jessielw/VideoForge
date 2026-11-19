@@ -10,11 +10,13 @@ from fastapi import APIRouter, Body, HTTPException, Request
 from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import ToolError
 from videoforge.core.job import OutputPolicy
+from videoforge.core.match_names import shape
 from videoforge.core.models import JobInputs, Overrides
 from videoforge.core.pairing import (
     AUDIO_EXTENSIONS,
     SUB_FORMATS,
     MatchResult,
+    learn_patterns,
     match_files,
     match_reason,
     slot_files,
@@ -26,7 +28,7 @@ from videoforge.core.probe import mediainfo_report
 from videoforge.core.template import Template
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.core.workdir import work_dir_size
-from videoforge.server import output_folders
+from videoforge.server import match_patterns, output_folders
 from videoforge.server.queue import LOG_LINES, Busy, JobQueue
 from videoforge.server.routes.presets import default_template, subs_default
 from videoforge.server.views import detail, summary
@@ -60,7 +62,7 @@ def _match(request: Request, body: dict[str, Any]):
         _paths(body, "chapters"),
         rules,
     )
-    return match_files(sets, rules, _assign(body))
+    return match_files(sets, rules, _assign(body), match_patterns.load(request.app.state.store))
 
 
 def _assign(body: dict[str, Any]) -> dict[Path, Path | None]:
@@ -81,15 +83,15 @@ def _unmatched(result: MatchResult) -> list[Path]:
 @router.post("/match")
 def match(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     """Preview what Add would create from the given files and folders. Each job says how each of its files matched
-    (matches: {path: reason}); each unmatched file has sources to offer (suggestions: {path: [{source, why}]});
-    held lists the unmatched files the user set to no source."""
+    (matches: {path: reason}) and, for a guess, what it went on (details: {path: words}). Each unmatched file has
+    sources to offer (suggestions: {path: [{source, why, detail}]}); held lists the unmatched files the user set to
+    no source, and spare those left out because their source already has one of their kind ({path: source})."""
     result = _match(request, body)
     q = queue_of(request)
     unmatched = _unmatched(result)
 
-    def reasons(j: JobInputs) -> dict[str, str]:
-        files = [f for f in (j.encode, j.chapters) if f] + j.subtitles
-        return {str(f): result.how.get(f) or match_reason(f, j.source) for f in files}
+    def files(j: JobInputs) -> list[Path]:
+        return [f for f in (j.encode, j.chapters) if f] + j.subtitles
 
     return {
         "jobs": [
@@ -98,16 +100,39 @@ def match(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
                 "existing_id": existing.id if (existing := q._find_source(j.source)) else None,
                 "existing_status": existing.status if existing else None,
                 "subtitle_info": [subtitle_label(p, j.source, result.how.get(p)) for p in j.subtitles],
-                "matches": reasons(j),
+                "matches": {str(f): result.how.get(f) or match_reason(f, j.source) for f in files(j)},
+                "details": {str(f): result.detail[f] for f in files(j) if f in result.detail},
+                # the remembered pattern each "learned" file went by, to forget it
+                "patterns": {str(f): shape(f.stem) for f in files(j) if result.how.get(f) == "learned"},
             }
             for j in result.jobs
         ],
         "unmatched": [str(p) for p in unmatched],
         "held": [str(p) for p in unmatched if result.how.get(p) == "manual"],
+        "spare": {str(p): str(s) for p, s in result.spare.items()},
         "suggestions": {
-            str(p): [{"source": str(s), "why": why} for s, why in result.suggestions.get(p, [])] for p in unmatched
+            str(p): [{"source": str(s), "why": why, "detail": d} for s, why, d in result.suggestions.get(p, [])]
+            for p in unmatched
         },
     }
+
+
+@router.get("/match/patterns")
+def list_match_patterns(request: Request) -> list[dict[str, Any]]:
+    """Name patterns remembered from sets the user matched by hand (match_patterns), newest first."""
+    return [
+        {"shape": p.shape, "position": p.position, "example": p.example}
+        for p in match_patterns.load(request.app.state.store)
+    ]
+
+
+@router.post("/match/patterns/forget")
+def forget_match_patterns(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """{shape}: forget that pattern, or every one when shape is left out. Returns {forgotten: count}."""
+    shape = body.get("shape")
+    if shape is not None and not isinstance(shape, str):
+        raise HTTPException(422, "shape must be text")
+    return {"forgotten": match_patterns.forget(request.app.state.store, shape)}
 
 
 def _optional_bool(body: dict[str, Any], key: str) -> bool | None:
@@ -150,6 +175,8 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         auto_index=_optional_bool(body, "auto_index"),
         auto_crop=_optional_bool(body, "auto_crop"),
     )
+    if added:  # sets the user matched by hand teach later batches
+        match_patterns.remember(request.app.state.store, learn_patterns(_assign(body), [j.source for j in result.jobs]))
     added_sources = {e.spec.inputs.source for e in added}
     kept = []
     for inputs in result.jobs:

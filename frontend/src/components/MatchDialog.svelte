@@ -3,7 +3,10 @@
   // subtitles) with the source it goes to, how it matched, and a menu to change that: any source, or none.
   // "Needs a look" shows the unmatched files and the guesses (closest name, numbered set, the only source);
   // a file changed here stays in that view until the dialog closes. Matching one file of a numbered set offers
-  // the rest of the set the same way. Each change matches the batch again, so the list shows the result.
+  // the rest of the set the same way. Each change matches the batch again, so the list shows the result. Each
+  // row says what a guess went on and what clashes with it (a second chapters file or encode for one source,
+  // subtitles alike). A set matched by hand is remembered when its jobs are added; a file matched that way can
+  // forget its pattern, and the footer forgets them all.
   import { tick } from 'svelte'
   import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle'
   import SparklesIcon from '@lucide/svelte/icons/sparkles'
@@ -16,6 +19,7 @@
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
+  import { api } from '../lib/api'
   import { basename } from '../lib/format'
   import { MATCH_NOTE, nameParts } from '../lib/matchCheck'
   import { MATCH_ICONS, matchTone } from '../lib/matchIcons'
@@ -36,12 +40,14 @@
     matching = false,
     assign = $bindable({}),
     focus = null,
+    onforget,
   }: {
     open?: boolean
     result: MatchResult | null
     matching?: boolean
     assign?: Record<string, string | null>
     focus?: string | null // a file to show and put the cursor on when the dialog opens
+    onforget?: () => void // remembered patterns changed: match the batch again
   } = $props()
 
   const KIND: Record<MatchKind, string> = { video: 'Video', subtitles: 'Subtitles', chapters: 'Chapters' }
@@ -60,6 +66,23 @@
   const learned = $derived(suggestedMatches(entries, 'pattern'))
   const suggested = $derived(suggestedMatches(entries))
   const mine = $derived(Object.keys(assign).length)
+  let remembered = $state(0) // name patterns remembered from earlier batches
+  let forgetError = $state('')
+
+  async function countPatterns() {
+    remembered = (await api.matchPatterns().catch(() => [])).length
+  }
+  async function forget(shape?: string) {
+    forgetError = ''
+    try {
+      await api.forgetMatchPatterns(shape)
+    } catch (e) {
+      forgetError = e instanceof Error ? e.message : String(e)
+      return
+    }
+    await countPatterns()
+    onforget?.()
+  }
 
   // Each opening starts afresh: "Needs a look" when something does, all files otherwise or to show one file.
   let wasOpen = false
@@ -68,6 +91,8 @@
       query = ''
       touched = []
       view = focus || !lookCount ? 'all' : 'look'
+      forgetError = ''
+      void countPatterns()
       if (focus) void reveal(focus)
     }
     wasOpen = open
@@ -208,11 +233,22 @@
                 <div class="text-xs text-muted-foreground">
                   {[
                     KIND[e.kind],
-                    e.source !== null ? '' : e.reason === 'manual' ? 'set to no source by you' : 'not matched',
+                    e.source !== null
+                      ? e.detail
+                      : e.reason === 'manual'
+                        ? 'set to no source by you'
+                        : e.conflict
+                          ? ''
+                          : 'not matched',
                   ]
                     .filter(Boolean)
-                    .join(' · ')}
+                    .join(' · ')}{#if e.pattern}
+                    · <button
+                      class="underline underline-offset-2 hover:text-foreground"
+                      onclick={() => forget(e.pattern ?? undefined)}>Forget this pattern</button
+                    >{/if}
                 </div>
+                {#if e.conflict}<div class="text-xs text-warning">{e.conflict}</div>{/if}
               </div>
               <div class="col-span-2 flex min-w-0 items-center gap-1 sm:col-span-1">
                 <NativeSelect
@@ -226,7 +262,7 @@
                   <option value={NONE}>No source (leave it out)</option>
                   {#if e.suggestions.length}
                     <optgroup label="Suggested">
-                      {#each e.suggestions as s (s.source)}<option value={s.source}
+                      {#each e.suggestions as s (s.source)}<option value={s.source} title={s.detail}
                           >{basename(s.source)}{s.why === 'pattern' ? ' (like your match)' : ''}</option
                         >{/each}
                     </optgroup>
@@ -254,7 +290,15 @@
       {/if}
     </div>
 
-    <Dialog.Footer>
+    <Dialog.Footer class="items-center">
+      {#if forgetError}<span class="text-sm text-destructive">{forgetError}</span>{/if}
+      {#if remembered}
+        <span class="mr-auto text-xs text-muted-foreground"
+          >Sets you matched by hand are remembered for later batches · {remembered}
+          <button class="underline underline-offset-2 hover:text-foreground" onclick={() => forget()}>Forget all</button
+          ></span
+        >
+      {/if}
       <Button onclick={() => (open = false)}>Done</Button>
     </Dialog.Footer>
   </Dialog.Content>

@@ -7,6 +7,7 @@ import type { SubtitleMatch } from './types'
 /** What each match reason means, for the icon's tooltip; `sure` is false where a person should look. */
 export const MATCH_NOTE: Record<SubtitleMatch, { text: string; sure: boolean }> = {
   manual: { text: 'You matched it to this source', sure: true },
+  learned: { text: 'Named like a set you matched before', sure: true },
   name: { text: 'Starts with the source’s name', sure: true },
   episode: { text: 'Same episode as the source', sure: true },
   number: { text: 'Its number lines up with this source’s, in a set of files named alike; check it', sure: false },

@@ -826,6 +826,8 @@ export interface MatchedJob {
   chapters: string | null
   encode_state: string
   matches: Record<string, SubtitleMatch> // how each of its files (encode, chapters, subtitles) matched
+  details?: Record<string, string> // for a guess, what it went on, in words
+  patterns?: Record<string, string> // a file matched by a remembered pattern -> that pattern's shape
 }
 
 /** A matched subtitle file as Matched files shows it, read from its name. */
@@ -839,23 +841,26 @@ export interface SubtitleLabel {
   match: SubtitleMatch | null // why it went to this job, read from the two names
 }
 
-/** How a file went to its source, strongest first: matched by the user, starts with the source's name, the
+/** How a file went to its source, strongest first: matched by the user, a pattern the user taught before, starts with the source's name, the
  * same episode (SxxEyy, or its episode number alone), its number lines up with the source's in a numbered set,
  * its name is closest to this source's of the batch, chapters from StaxRip's temp folder, taken by the batch's
  * only source, or taken by the only source though its name carries another SxxEyy. */
 export type SubtitleMatch =
-  'manual' | 'name' | 'episode' | 'number' | 'similar' | 'staxrip' | 'only_source' | 'other_episode'
+  'manual' | 'learned' | 'name' | 'episode' | 'number' | 'similar' | 'staxrip' | 'only_source' | 'other_episode'
 
-/** A source offered for an unmatched file: the way the user matched a file of its shape, or the closest name. */
+/** A source offered for an unmatched file: the way the user matched a file of its shape, its episode number,
+ * or the closest name; detail says what it went on. */
 export interface MatchSuggestion {
   source: string
-  why: 'pattern' | 'similar'
+  why: 'pattern' | 'episode' | 'similar'
+  detail?: string
 }
 
 export interface MatchResult {
   jobs: MatchedJob[]
   unmatched: string[]
   held: string[] // the unmatched files the user set to no source
+  spare?: Record<string, string> // left over: their source already has one of their kind (file -> source)
   suggestions: Record<string, MatchSuggestion[]> // per unmatched file, best first
 }
 

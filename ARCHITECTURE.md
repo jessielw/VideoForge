@@ -105,6 +105,8 @@ src/videoforge/
     settings.py          Port, data folder, browsable roots
     store.py             SQLite (app data): jobs (spec + state JSON, order), shared; profiles, each with its own
                          settings and presets (video, encoder, template), one active (routes/profiles.py)
+    match_patterns.py    Name patterns taught by matching a set by hand (pairing.learn_patterns), saved on Add in
+                         the profile's settings and passed to match_files for later batches
     queue.py             The queue: one worker thread runs jobs in order; start/stop/cancel, pause/resume, priority;
                          the index lane (its own thread: work folder, script, source index; nothing else)
     events.py            Progress, log lines and job changes -> WebSocket /api/events

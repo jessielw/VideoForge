@@ -257,6 +257,10 @@ export const api = {
   removeDir: (path: string) => post<{ path: string }>('/api/fs/rmdir', { path }), // empty folders only
 
   match: (slots: InputSlots) => post<MatchResult>('/api/match', slots),
+  // Name patterns remembered from sets matched by hand; forget one (by shape) or all.
+  matchPatterns: () => get<{ shape: string; position: number; example: string }[]>('/api/match/patterns'),
+  forgetMatchPatterns: (shape?: string) =>
+    post<{ forgotten: number }>('/api/match/patterns/forget', shape === undefined ? {} : { shape }),
   addJobs: (
     body: InputSlots & {
       original_language: string | null

@@ -7,6 +7,7 @@ Nothing here touches the disk; pairing.py decides what goes where.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from difflib import SequenceMatcher
 import re
 
@@ -103,3 +104,13 @@ def position_of(stem: str, number: int) -> int | None:
     """Where a number stands among a name's numbers, if it is there exactly once."""
     at = [i for i, n in enumerate(numbers(stem)) if n == number]
     return at[0] if len(at) == 1 else None
+
+
+@dataclass(frozen=True, slots=True)
+class NamePattern:
+    """A set of file names the user matched by hand (pairing.learn_patterns): names of this shape go to the source
+    whose number stands at this position among the name's numbers."""
+
+    shape: str
+    position: int
+    example: str  # a file name it was learned from, to show

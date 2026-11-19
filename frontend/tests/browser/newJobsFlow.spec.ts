@@ -153,6 +153,7 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
     }
     const responses: Record<string, unknown> = {
       '/api/jobs': [],
+      '/api/match/patterns': [],
       '/api/rule-sets': [ruleSet],
       '/api/presets': presets,
       '/api/health': { ok: true, version: 'test' },
@@ -624,7 +625,7 @@ test('files are matched by hand in Matched files and in Review matches, sent wit
         subtitles: mine,
         subtitle_info: mine.map((path) => ({
           path,
-          language: 'en',
+          language: path === setA || path === setB ? 'ja' : 'en', // the set isn't alike the others
           language_name: 'English',
           format: 'srt',
           tags: [],
@@ -708,6 +709,102 @@ test('files are matched by hand in Matched files and in Review matches, sent wit
     .click()
   await expect.poll(() => posted.length).toBe(1)
   expect(posted[0].assign).toEqual({ [setA]: e1, [setB]: e2, [stray]: null })
+  expect(errors).toEqual([])
+})
+
+test('Matched files and Review matches show left-over files, subtitles alike, what a guess went on, and forget a remembered pattern', async ({
+  page,
+}) => {
+  const posted: Record<string, unknown>[] = []
+  const { errors } = await fixture(page, posted)
+  const [e1, e2] = ['D:/Media/Show.S01E01.mkv', 'D:/Media/Show.S01E02.mkv']
+  const chapters = 'D:/Media/Show.S01E01.chapters.txt'
+  const spare = 'D:/Media/chapters_E01.xml'
+  const [plain, synced] = ['D:/Media/Show.S01E01.en.srt', 'D:/Media/Show.S01E01.en.synced.srt']
+  const taught = 'D:/Media/t2_c2.srt'
+  const shape = 't#_c#'
+  let remembered = 1
+  let matches = 0
+  const forgotten: unknown[] = []
+  await page.route('**/api/match/patterns', (route) =>
+    route.fulfill({ json: remembered ? [{ shape, position: 1, example: 't1_c1.srt' }] : [] }),
+  )
+  await page.route('**/api/match/patterns/forget', (route) => {
+    forgotten.push(route.request().postDataJSON())
+    remembered = 0
+    return route.fulfill({ json: { forgotten: 1 } })
+  })
+  await page.route('**/api/match', (route) => {
+    matches++
+    const sub = (path: string, tags: string[], match: string) => ({
+      path,
+      language: 'en',
+      language_name: 'English',
+      format: 'srt',
+      tags,
+      track: null,
+      match,
+    })
+    const learned = remembered > 0
+    return route.fulfill({
+      json: {
+        jobs: [
+          {
+            source: e1,
+            encode: null,
+            encode_state: null,
+            subtitles: [plain, synced],
+            subtitle_info: [sub(plain, [], 'name'), sub(synced, ['synced'], 'name')],
+            chapters,
+            existing_id: null,
+            existing_status: null,
+            matches: { [chapters]: 'name', [plain]: 'name', [synced]: 'name' },
+          },
+          {
+            source: e2,
+            encode: null,
+            encode_state: null,
+            subtitles: learned ? [taught] : [],
+            subtitle_info: learned ? [{ ...sub(taught, [], 'learned'), language: 'und' }] : [],
+            chapters: null,
+            existing_id: null,
+            existing_status: null,
+            matches: learned ? { [taught]: 'learned' } : {},
+            details: learned ? { [taught]: 'Named like t1_c1.srt, which you matched before' } : {},
+            patterns: learned ? { [taught]: shape } : {},
+          },
+        ],
+        unmatched: learned ? [spare] : [spare, taught],
+        held: [],
+        spare: { [spare]: e1 },
+        suggestions: {},
+      },
+    })
+  })
+  await paste(page, [e1, e2].map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
+
+  const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
+  await expect(card).toContainText(
+    'Left over: Show.S01E01.mkv already has chapters, so chapters_E01.xml isn’t used'.replace('’', "'"),
+  )
+  await expect(card).toContainText('2 alike (same language and type): Show.S01E01.en.srt, Show.S01E01.en.synced.srt')
+  await expect(
+    card.getByRole('button', { name: /^Named like a set you matched before\. Change the match of t2_c2\.srt$/ }),
+  ).toBeVisible()
+
+  await card.getByRole('button', { name: /^Review matches/ }).click()
+  const dialog = page.getByRole('dialog', { name: 'Review matches' })
+  await expect(dialog).toContainText('Left over: Show.S01E01.mkv already has chapters, Show.S01E01.chapters.txt')
+  await expect(dialog).toContainText('Same language and type as Show.S01E01.en.synced.srt')
+  await dialog.getByRole('radio', { name: /All files/ }).click()
+  await expect(dialog).toContainText('Named like t1_c1.srt, which you matched before')
+  await expect(dialog).toContainText('Sets you matched by hand are remembered for later batches · 1')
+  const before = matches
+  await dialog.getByRole('button', { name: 'Forget this pattern' }).click()
+  await expect.poll(() => forgotten).toEqual([{ shape }])
+  await expect.poll(() => matches).toBeGreaterThan(before) // matched again without it
+  await expect(dialog).not.toContainText('remembered for later batches')
+  await expect(dialog.getByRole('combobox', { name: 'Source for t2_c2.srt' })).toHaveValue('')
   expect(errors).toEqual([])
 })
 

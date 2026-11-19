@@ -18,7 +18,7 @@ Extras, each switchable in MatchRules:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 import os
@@ -27,7 +27,7 @@ import re
 from typing import Any
 
 from videoforge.core import lang, match_names as names_
-from videoforge.core.match_names import episode_token
+from videoforge.core.match_names import NamePattern, episode_token
 from videoforge.core.models import EncodeState, JobInputs, SubFormat, SubTrack
 
 # What may follow a source's name in a file named after it: "Show.S01E01.en.srt", "Show.S01E01_track3_".
@@ -81,11 +81,18 @@ class MatchResult:
     jobs: list[JobInputs]
     unmatched: FileSets  # encodes, subtitles and chapters no source claimed
     # How files were placed where their names alone don't say (match_reason covers the rest): "manual" (by the
-    # user, also for an unmatched file they set to no source), "episode" (its episode number alone), "number"
-    # (its place in a numbered set), "similar" (the closest name) or "staxrip" (StaxRip temp folder chapters).
+    # user, also for an unmatched file they set to no source), "learned" (a pattern the user taught before),
+    # "episode" (its episode number alone), "number" (its place in a numbered set), "similar" (the closest name)
+    # or "staxrip" (StaxRip temp folder chapters).
     how: dict[Path, str] = field(default_factory=dict)
-    # Per unmatched file, sources to offer, best first, each with why: "pattern" or "similar" (match_files).
-    suggestions: dict[Path, list[tuple[Path, str]]] = field(default_factory=dict)
+    # What a guess went on, in words, such as "Shares movie, one and 2001 with the source's name".
+    detail: dict[Path, str] = field(default_factory=dict)
+    # Files left unmatched because their source already has one of their kind (a second chapters file or
+    # encode): file -> that source.
+    spare: dict[Path, Path] = field(default_factory=dict)
+    # Per unmatched file, sources to offer, best first: (source, why, detail), why being "pattern" (the way the
+    # user matched a file of its shape), "episode" (its episode number) or "similar" (the closest name).
+    suggestions: dict[Path, list[tuple[Path, str, str]]] = field(default_factory=dict)
 
 
 def is_chapter_file(path: Path) -> bool:
@@ -215,13 +222,24 @@ def _other_episode(a: tuple[int | None, int] | None, b: tuple[int | None, int] |
     return bool(a and b and (a[1] != b[1] or (None not in (a[0], b[0]) and a[0] != b[0])))
 
 
-def rank_sources(path: Path, sources: list[Path]) -> list[tuple[Path, float]]:
-    """The sources a file's name is closest to, best first, each scored 0-1: the share of the words that set a
-    source's name apart from the batch's other sources ("S01E04", "Movie", "2001", not "1080p" or "BluRay") that
-    the file's name also has; an SxxEyy also counts when the file has only its episode number ("Show - 04.ass").
-    A source for another episode is never a candidate. Equal scores go by how alike the names read."""
-    if not sources:
-        return []
+def _listing(items: Sequence[str]) -> str:
+    """ "a", "a and b", "a, b and c"."""
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+@dataclass(frozen=True, slots=True)
+class _Rank:
+    source: Path
+    score: float  # the share of the source's telling words the file's name has
+    likeness: float  # how alike the two names read, for equal scores
+    shared: tuple[str, ...]  # those words
+
+    @property
+    def detail(self) -> str:
+        return f"Shares {_listing(self.shared)} with the source's name"
+
+
+def _rank(path: Path, sources: list[Path]) -> list[_Rank]:
     names = [names_.words(s.stem) for s in sources]
     shared = set.intersection(*names) if len(names) > 1 else set()
     words, mine = names_.words(path.stem), names_.episode_of(path.stem)
@@ -232,23 +250,33 @@ def rank_sources(path: Path, sources: list[Path]) -> list[tuple[Path, float]]:
             continue
         token = episode_token(source.stem)
         number = str(theirs[1]) if theirs else None
+        hits = []
+        for w in sorted(own - shared):
+            if w in words:
+                hits.append(w)
+            elif token is not None and number in words and episode_token(w) == token:
+                hits.append(number)  # "Show - 04" for "S01E04"
+        if hits:
+            score = len(hits) / len(own - shared)
+            ranked.append(_Rank(source, score, names_.likeness(path.stem, source.stem), tuple(hits)))
+    ranked.sort(key=lambda r: (-r.score, -r.likeness))
+    return ranked
 
-        def found(w: str, token: str | None = token, number: str | None = number) -> bool:
-            return w in words or (token is not None and number in words and episode_token(w) == token)
 
-        apart = own - shared
-        if apart and (hits := sum(map(found, apart))):
-            ranked.append((source, hits / len(apart), names_.likeness(path.stem, source.stem)))
-    ranked.sort(key=lambda r: (-r[1], -r[2]))
-    return [(s, score) for s, score, _ in ranked]
+def rank_sources(path: Path, sources: list[Path]) -> list[tuple[Path, float]]:
+    """The sources a file's name is closest to, best first, each scored 0-1: the share of the words that set a
+    source's name apart from the batch's other sources ("S01E04", "Movie", "2001", not "1080p" or "BluRay") that
+    the file's name also has; an SxxEyy also counts when the file has only its episode number ("Show - 04.ass").
+    A source for another episode is never a candidate. Equal scores go by how alike the names read."""
+    return [(r.source, r.score) for r in _rank(path, sources)] if sources else []
 
 
-def _closest(path: Path, sources: list[Path]) -> Path | None:
+def _closest(path: Path, sources: list[Path]) -> _Rank | None:
     """The one source a file is clearly named for: at least half its telling words, and more than any other."""
-    ranked = rank_sources(path, sources)
-    if not ranked or ranked[0][1] < 0.5 or (len(ranked) > 1 and ranked[1][1] >= ranked[0][1]):
+    ranked = _rank(path, sources)
+    if not ranked or ranked[0].score < 0.5 or (len(ranked) > 1 and ranked[1].score >= ranked[0].score):
         return None
-    return ranked[0][0]
+    return ranked[0]
 
 
 class _Numbered:
@@ -263,18 +291,25 @@ class _Numbered:
         # the numbers are episodes (not, say, the season of "S01E01" and "S02E01")
         self.episodes = bool(nums) and all(eps) and nums == [e[1] for e in eps if e]
 
-    def by_episode(self, path: Path) -> Path | None:
+    def by_episode(self, path: Path) -> tuple[Path, str] | None:
         """The source for a file whose name has only an episode number ("E04", "Show - 04"), or an SxxEyy in
         another spelling than the sources'; a season counts only when the sources all have the one season."""
         ep = names_.episode_of(path.stem)
         if not ep or not self.episodes or (ep[0] is not None and len(self.seasons) > 1):
             return None
         source = self.by_number.get(ep[1])
-        return source if source and not _other_episode(ep, names_.episode_of(source.stem)) else None
+        if source is None or _other_episode(ep, names_.episode_of(source.stem)):
+            return None
+        return source, f"Episode {ep[1]} in its name"
 
-    def by_position(self, files: list[Path]) -> dict[Path, Path]:
+    def at(self, path: Path, position: int) -> Path | None:
+        """The source whose number stands at this position among the file name's numbers."""
+        nums = names_.numbers(path.stem)
+        return self.by_number.get(nums[position]) if position < len(nums) else None
+
+    def by_position(self, files: list[Path]) -> dict[Path, tuple[Path, str]]:
         """Files of one set (at least two of the same shape) whose changing number lines up with the sources'."""
-        out: dict[Path, Path] = {}
+        out: dict[Path, tuple[Path, str]] = {}
         if not self.by_number:
             return out
         groups: dict[str, list[Path]] = {}
@@ -283,7 +318,9 @@ class _Numbered:
         for group in groups.values():
             at = names_.numbered_position([f.stem for f in group], set(self.by_number))
             if at is not None:
-                out |= {f: self.by_number[names_.numbers(f.stem)[at]] for f in group}
+                for f in group:
+                    n = names_.numbers(f.stem)[at]
+                    out[f] = self.by_number[n], f"Its number {n} lines up with the source's, in a set of {len(group)}"
         return out
 
     def like(self, example: Path, source: Path, files: list[Path]) -> dict[Path, Path]:
@@ -294,11 +331,7 @@ class _Numbered:
         if at is None:
             return {}
         same = names_.shape(example.stem)
-        out = {}
-        for f in files:
-            if f != example and names_.shape(f.stem) == same and (s := self.by_number.get(names_.numbers(f.stem)[at])):
-                out[f] = s
-        return out
+        return {f: s for f in files if f != example and names_.shape(f.stem) == same and (s := self.at(f, at))}
 
 
 def _assigned(assign: Mapping[Path, Path | None] | None, sources: list[Path]) -> dict[str, tuple[Path, Path | None]]:
@@ -313,25 +346,55 @@ def _assigned(assign: Mapping[Path, Path | None] | None, sources: list[Path]) ->
     return out
 
 
-def match_files(sets: FileSets, rules: MatchRules, assign: Mapping[Path, Path | None] | None = None) -> MatchResult:
+def learn_patterns(assign: Mapping[Path, Path | None], sources: list[Path]) -> list[NamePattern]:
+    """What the user taught by matching a set by hand: at least two files of one shape, each matched to the source
+    whose number stands at the same position among the file name's numbers. Remembered, a later batch can match
+    files of that shape the same way (match_files' patterns)."""
+    numbered = _Numbered(sorted(_unique(sources), key=_natural_key))
+    by_key = {_key(s): s for s in sources}
+    seen: dict[str, list[tuple[Path, int | None]]] = {}
+    for f, s in assign.items():
+        source = by_key.get(_key(s)) if s is not None else None
+        if source is None:
+            continue
+        n = numbered.number_of.get(source)
+        seen.setdefault(names_.shape(f.stem), []).append((f, names_.position_of(f.stem, n) if n is not None else None))
+    out = []
+    for shape, files in seen.items():
+        positions = {at for _, at in files}
+        if len(files) > 1 and len(positions) == 1 and (at := positions.pop()) is not None:
+            out.append(NamePattern(shape, at, min(f.name for f, _ in files)))
+    return out
+
+
+def match_files(
+    sets: FileSets,
+    rules: MatchRules,
+    assign: Mapping[Path, Path | None] | None = None,
+    patterns: Sequence[NamePattern] = (),
+) -> MatchResult:
     """One job per source.
 
     assign: files the user matched by hand, file -> source, or -> None for no source; they go first and win
     over any other match. A subtitle found near a source can be moved too.
+    patterns: what the user taught in earlier batches (learn_patterns).
 
     Encodes match by "<source stem><suffix>", then by SxxEyy. Subtitles and chapters, strongest first: named
     after the source (its name, then a separator), the same SxxEyy; then, with several sources, for a file no
-    name ties to any: its episode number alone ("E04", "Show - 04"), its place in a set of files whose changing
-    number lines up with the sources' ("number"), or the one source its name is clearly closest to
-    (rank_sources, "similar"). A lone source takes a lone encode and every subtitle/chapter file regardless of
-    name. Subtitles found near the source only fill in for a source given none of its own.
+    name ties to any: a pattern the user taught ("learned"), its episode number alone ("episode": "E04",
+    "Show - 04"), its place in a set of files whose changing number lines up with the sources' ("number"), or
+    the one source its name is clearly closest to (rank_sources, "similar"). A lone source takes a lone encode
+    and every subtitle/chapter file regardless of name. Subtitles found near the source only fill in for a
+    source given none of its own. A source takes one encode and one chapters file, the strongest match; the
+    others stay unmatched (spare).
 
-    Each file left unmatched gets suggestions: the source it would go to the way the user matched a file of its
-    shape ("pattern"), then the closest names ("similar").
+    Each file left unmatched gets suggestions (_suggest).
     """
     sources = sorted(_unique(sets.sources), key=_natural_key)  # one job per episode, in episode order
     manual = _assigned(assign, sources)
     how: dict[Path, str] = {}
+    detail: dict[Path, str] = {}
+    spare: dict[Path, Path] = {}
 
     def by_hand(files: list[Path], source: Path) -> list[Path]:
         mine = [f for f in files if (m := manual.get(_key(f))) and m[1] == source]
@@ -354,7 +417,7 @@ def match_files(sets: FileSets, rules: MatchRules, assign: Mapping[Path, Path | 
             match = None
         for extra in chosen[1:]:  # one encode per job: more matched to it by hand stay unmatched
             how.pop(extra)
-            remaining.append(extra)
+            spare[extra] = s
         jobs.append(JobInputs(s, match))
 
     if len(jobs) == 1 and jobs[0].encode is None and len(remaining) == 1:
@@ -380,17 +443,29 @@ def match_files(sets: FileSets, rules: MatchRules, assign: Mapping[Path, Path | 
     chapters_left = [p for p in all_chapters if _key(p) not in manual]
     numbered = _Numbered(sources)
     found: dict[Path, Path] = {}  # file -> source, for files no name ties to any source
+
+    def place(p: Path, source: Path, reason: str, why: str) -> None:
+        found[p], how[p], detail[p] = source, reason, why
+
     if not lone:
         untied = [p for p in subs_left + chapters_left if not any(_belongs(p, s) for s in sources)]
         for p in untied:
-            if source := numbered.by_episode(p):
-                found[p], how[p] = source, "episode"
+            if taught := next((t for t in patterns if t.shape == names_.shape(p.stem)), None):
+                if source := numbered.at(p, taught.position):
+                    place(p, source, "learned", f"Named like {taught.example}, which you matched before")
+        for p in untied:
+            if p not in found and (by_ep := numbered.by_episode(p)):
+                place(p, *by_ep[:1], "episode", by_ep[1])
         rest = [p for p in untied if p not in found]
-        for p, source in numbered.by_position(rest).items():
-            found[p], how[p] = source, "number"
+        for p, (source, why) in numbered.by_position(rest).items():
+            place(p, source, "number", why)
         for p in rest:
-            if p not in found and (source := _closest(p, sources)):
-                found[p], how[p] = source, "similar"
+            if p not in found and (best := _closest(p, sources)):
+                place(p, best.source, "similar", best.detail)
+
+    def strength(p: Path, source: Path) -> int:
+        return 0 if _named_after(p, source) else 1 if _belongs(p, source) else 2
+
     for job in jobs:
         src = job.source
         mine = [p for p in subs_left if lone or _belongs(p, src) or found.get(p) == src]
@@ -399,9 +474,13 @@ def match_files(sets: FileSets, rules: MatchRules, assign: Mapping[Path, Path | 
             mine += [p for p in find_external_subs(src, near_of(src.parent)) if _key(p) not in manual]
         job.subtitles = sorted(_unique([*by_hand(all_subs, src), *mine]))
 
-        chapters = by_hand(all_chapters, src)
-        chapters += [p for p in chapters_left if lone or _belongs(p, src) or found.get(p) == src]
-        chapters_left = [p for p in chapters_left if p not in chapters]
+        auto = [p for p in chapters_left if lone or _belongs(p, src) or found.get(p) == src]
+        chapters_left = [p for p in chapters_left if p not in auto]
+        chapters = by_hand(all_chapters, src) + sorted(auto, key=lambda p: strength(p, src))
+        for extra in chapters[1:]:  # one chapters file per job: the others stay unmatched
+            for d in (how, detail):
+                d.pop(extra, None)
+            spare[extra] = src
         if chapters:
             job.chapters = chapters[0]
         elif rules.staxrip_temp and (qpf := find_qpf_chapters(src)):
@@ -412,14 +491,14 @@ def match_files(sets: FileSets, rules: MatchRules, assign: Mapping[Path, Path | 
     # Files the user set to no source stay unmatched, marked as theirs.
     held = {_key(f) for f, s in manual.values() if s is None}
     left = FileSets(
-        encodes=remaining + [p for p in encodes if _key(p) in held],
+        encodes=remaining + [p for p in encodes if _key(p) in held or p in spare],
         subtitles=subs_left + [p for p in all_subs if _key(p) in held],
-        chapters=chapters_left + [p for p in all_chapters if _key(p) in held],
+        chapters=chapters_left + [p for p in all_chapters if _key(p) in held or p in spare],
     )
     unmatched = [*left.encodes, *left.subtitles, *left.chapters]
     how.update({p: "manual" for p in unmatched if _key(p) in held})
     examples = [(f, s) for f, s in manual.values() if s is not None]
-    return MatchResult(jobs, left, how, _suggest(unmatched, sources, numbered, examples))
+    return MatchResult(jobs, left, how, detail, spare, _suggest(unmatched, sources, numbered, examples))
 
 
 SUGGESTIONS = 3  # sources offered for an unmatched file
@@ -427,17 +506,23 @@ SUGGESTIONS = 3  # sources offered for an unmatched file
 
 def _suggest(
     unmatched: list[Path], sources: list[Path], numbered: _Numbered, examples: list[tuple[Path, Path]]
-) -> dict[Path, list[tuple[Path, str]]]:
+) -> dict[Path, list[tuple[Path, str, str]]]:
     """Sources to offer each unmatched file, best first: the one it would go to the way the user matched a file of
-    its shape ("pattern"), then the closest names ("similar")."""
-    learned: dict[Path, Path] = {}
+    its shape ("pattern"), the one its episode number points to ("episode", for an encode: only a suggestion),
+    then the closest names ("similar")."""
+    learned: dict[Path, tuple[Path, str]] = {}
     for example, source in examples:
-        learned = numbered.like(example, source, unmatched) | learned  # the first example wins
-    out: dict[Path, list[tuple[Path, str]]] = {}
+        for f, s in numbered.like(example, source, unmatched).items():
+            learned.setdefault(f, (s, f"Named like {example.name}, which you matched"))
+    out: dict[Path, list[tuple[Path, str, str]]] = {}
     for p in unmatched:
-        offer = [(learned[p], "pattern")] if p in learned else []
-        offer += [(s, "similar") for s, _ in rank_sources(p, sources) if s != learned.get(p)]
-        out[p] = offer[:SUGGESTIONS]
+        offer: list[tuple[Path, str, str]] = []
+        if p in learned:
+            offer.append((learned[p][0], "pattern", learned[p][1]))
+        if by_ep := numbered.by_episode(p):
+            offer.append((by_ep[0], "episode", by_ep[1]))
+        offer += [(r.source, "similar", r.detail) for r in _rank(p, sources)]
+        out[p] = list({s: (s, why, d) for s, why, d in reversed(offer)}.values())[::-1][:SUGGESTIONS]
     return out
 
 

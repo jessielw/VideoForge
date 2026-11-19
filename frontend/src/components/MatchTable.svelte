@@ -5,7 +5,9 @@
   // it shares with the source dimmed. Clicking it unticks it from its job; a job with a different number of
   // subtitles than most is flagged. A file no source claimed can be matched by hand (assign), its closest
   // sources offered first; one matched by hand has an undo button. Clicking any file's match icon opens Review
-  // matches (onreview) on that file, to move it to another source or none.
+  // matches (onreview) on that file, to move it to another source or none; its tooltip says what a guess went
+  // on. A second chapters file or encode for one source is left over, and subtitles that look like the same
+  // track twice are flagged.
   import SparklesIcon from '@lucide/svelte/icons/sparkles'
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
   import XIcon from '@lucide/svelte/icons/x'
@@ -15,6 +17,7 @@
   import { basename } from '../lib/format'
   import { MATCH_NOTE, nameParts, type OddSubtitles } from '../lib/matchCheck'
   import { MATCH_ICONS, matchTone } from '../lib/matchIcons'
+  import { duplicateSubtitles, kindOf } from '../lib/matchReview'
   import { router } from '../lib/router.svelte'
   import type { MatchResult, SubtitleLabel, SubtitleMatch } from '../lib/types'
   import Tip from './Tip.svelte'
@@ -59,11 +62,11 @@
 </script>
 
 <!-- How a file matched; a button that opens Review matches on it. -->
-{#snippet how(path: string, match: SubtitleMatch | null | undefined, off = false)}
+{#snippet how(path: string, match: SubtitleMatch | null | undefined, detail = '', off = false)}
   {#if match}
     {@const note = MATCH_NOTE[match]}
     {@const Icon = MATCH_ICONS[match]}
-    <Tip text="{note.text}. Click to change its match.">
+    <Tip text="{note.text}.{detail ? ` ${detail}.` : ''} Click to change its match.">
       <button
         class="mt-0.5 shrink-0 rounded-sm"
         aria-label="{note.text}. Change the match of {basename(path)}"
@@ -100,6 +103,7 @@
     {/if}
     {#each result.unmatched as p (p)}
       {@const offer = result.suggestions?.[p] ?? []}
+      {@const lostTo = result.spare?.[p]}
       <tr class="border-t border-border/60">
         <td class="px-4 py-1.5" colspan="4">
           {#if held.has(p)}
@@ -110,7 +114,11 @@
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span class="flex min-w-0 items-center gap-1.5 text-warning [overflow-wrap:anywhere]"
                 ><TriangleAlertIcon class="size-3.5 shrink-0" /><Tip text={p}
-                  >Not matched to any source: {basename(p)}</Tip
+                  >{#if lostTo}Left over: {basename(lostTo)} already has {kindOf(p) === 'video'
+                      ? 'an encode'
+                      : 'chapters'}, so {basename(p)} isn't used{:else}Not matched to any source: {basename(
+                      p,
+                    )}{/if}</Tip
                 ></span
               >
               <NativeSelect
@@ -123,7 +131,7 @@
                 <option value="">Match to…</option>
                 {#if offer.length}
                   <optgroup label="Suggested">
-                    {#each offer as s (s.source)}<option value={s.source}
+                    {#each offer as s (s.source)}<option value={s.source} title={s.detail}
                         >{basename(s.source)}{s.why === 'pattern' ? ' (like your match)' : ''}</option
                       >{/each}
                   </optgroup>
@@ -144,6 +152,7 @@
     {/each}
     {#each result.jobs as j (j.source)}
       {@const flag = odd.get(j.source)}
+      {@const alike = duplicateSubtitles(j.subtitle_info, excluded)}
       <tr class="border-t border-border/60">
         <td class="px-4 py-1.5">
           <Tip text={j.source}>{basename(j.source)}</Tip>
@@ -169,7 +178,7 @@
         </td>
         <td class={j.encode ? (j.encode_state === 'in_progress' ? 'text-warning' : '') : 'text-primary'}>
           <span class="flex items-start gap-1.5"
-            >{#if j.encode}{@render how(j.encode, j.matches?.[j.encode])}{/if}{j.encode
+            >{#if j.encode}{@render how(j.encode, j.matches?.[j.encode], j.details?.[j.encode])}{/if}{j.encode
               ? basename(j.encode) + (j.encode_state === 'in_progress' ? ' (still encoding)' : '')
               : 'new encode'}{#if j.encode && j.matches?.[j.encode] === 'manual'}{@render undo(j.encode)}{/if}</span
           >
@@ -181,7 +190,7 @@
                 {@const off = excluded.includes(s.path)}
                 {@const name = nameParts(basename(s.path), basename(j.source))}
                 <li class="flex min-w-0 items-start gap-1.5">
-                  {@render how(s.path, s.match, off)}
+                  {@render how(s.path, s.match, j.details?.[s.path], off)}
                   <Tip
                     class="min-w-0"
                     text="{s.path} ({s.language_name}). {off
@@ -217,10 +226,17 @@
                 : `${flag.count} subtitle${flag.count === 1 ? '' : 's'}`}; most have {flag.usual}
             </div>
           {/if}
+          {#each alike as group (group[0])}
+            <div class="mt-1 flex items-start gap-1 text-xs text-warning">
+              <TriangleAlertIcon class="mt-0.5 size-3 shrink-0" /><span
+                >{group.length} alike (same language and type): {group.map(basename).join(', ')}</span
+              >
+            </div>
+          {/each}
         </td>
         <td class="text-muted-foreground">
           <span class="flex items-start gap-1.5"
-            >{#if j.chapters}{@render how(j.chapters, j.matches?.[j.chapters])}{/if}{j.chapters
+            >{#if j.chapters}{@render how(j.chapters, j.matches?.[j.chapters], j.details?.[j.chapters])}{/if}{j.chapters
               ? basename(j.chapters)
               : 'AutoQPF'}{#if j.chapters && j.matches?.[j.chapters] === 'manual'}{@render undo(j.chapters)}{/if}</span
           >

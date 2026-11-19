@@ -62,6 +62,7 @@
   let assign = $state<Record<string, string | null>>(restored?.assign ?? {}) // file -> source (null: none), by hand
   // Review matches: open, on which file, and the last match result, shown while the batch matches again.
   let reviewing = $state(false)
+  let rematch = $state(0)
   let reviewFocus = $state<string | null>(null)
   let shownResult = $state<MatchResult | null>(null)
   $effect(() => {
@@ -171,6 +172,7 @@
     chapters,
     rule_set: ruleSet,
     assign,
+    rematch, // bumped to match again with the same inputs (remembered patterns changed)
   })
 
   const matches = new LatestRequest()
@@ -562,7 +564,14 @@
         {/if}
       </Card.Root>
     </fieldset>
-    <MatchDialog bind:open={reviewing} result={shownResult} {matching} bind:assign focus={reviewFocus} />
+    <MatchDialog
+      bind:open={reviewing}
+      result={shownResult}
+      {matching}
+      bind:assign
+      focus={reviewFocus}
+      onforget={() => rematch++}
+    />
   </div>
 
   {#if completion && (completion.kept.length || completion.unmatched.length)}
