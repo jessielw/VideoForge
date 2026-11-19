@@ -134,6 +134,21 @@ def test_lone_source_takes_every_added_subtitle(tmp_path):
     assert job.encode == enc and sorted(job.subtitles) == sorted(subs)
 
 
+def test_added_subtitles_replace_the_ones_near_the_source(tmp_path):
+    """A subs folder added for some episodes: those take only it; the others still scan the source folder."""
+    (tmp_path / "extracted").mkdir()
+    synced = tmp_path / "subs-synced"
+    synced.mkdir()
+    e1, e2 = tmp_path / "Show.S01E01.mkv", tmp_path / "Show.S01E02.mkv"
+    near = [tmp_path / "extracted" / f"Show.S01E0{n}.Title.REMUX_track7_[eng].srt" for n in (1, 2)]
+    mine = synced / "Show.S01E01.Part.1.WEB-DL.en.synced.srt"
+    for p in (e1, e2, *near, mine):
+        p.write_bytes(b"")
+    first, second = match_files(FileSets([e1, e2], [], [mine]), RULES).jobs
+    assert first.subtitles == [mine]
+    assert second.subtitles == [near[1]]
+
+
 def test_without_staxrip_temp(tmp_path):
     """No log and no qpf lookup: chapters only from added files, state from the file lock."""
     src_dir, work = make_batch(tmp_path)

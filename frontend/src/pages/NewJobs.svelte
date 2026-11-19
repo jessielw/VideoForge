@@ -279,7 +279,7 @@
           {#if takesSubs}
             <PathSlot
               label="Subtitles"
-              hint="Subtitle files or folders, matched to each source by name or SxxEyy. With one source, they all go to it. Subtitles next to the source, or one folder down, are added too."
+              hint="Subtitle files or folders, matched to each source by name or SxxEyy. With one source, they all go to it. A source you add none for gets the subtitles next to it, or one folder down."
               bind:paths={subtitles}
               extensions={['.srt', '.ass', '.ssa', '.sup', '.idx']}
             />

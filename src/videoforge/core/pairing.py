@@ -6,7 +6,8 @@ mixed drop that is sorted first. Everything is matched to a source by stem
 a single source, every added subtitle and chapter file belongs to it.
 
 Extras, each switchable in MatchRules:
-    scan_source_folder   subtitles next to the source and one folder down (e.g. subs/)
+    scan_source_folder   subtitles next to the source and one folder down (e.g. subs/),
+                         for a source given no subtitle files of its own
     staxrip_temp         <source>_temp/<encode>_staxrip.log ("Job Complete") for the
                          encode state, and a_qpf/qpf_chapters.txt for chapters, while
                          StaxRip still does the video. Without it, an encode still
@@ -170,7 +171,8 @@ def match_files(sets: FileSets, rules: MatchRules) -> MatchResult:
 
     Encodes match by "<source stem><suffix>", then by SxxEyy; subtitles and
     chapters by a "<source stem>." prefix or SxxEyy. A lone source takes a lone
-    encode and every subtitle/chapter file regardless of name.
+    encode and every subtitle/chapter file regardless of name. Subtitles found
+    near the source only fill in for a source given none of its own.
     """
     sources = _unique(sets.sources)
     encodes = _unique(sets.encodes)
@@ -197,7 +199,7 @@ def match_files(sets: FileSets, rules: MatchRules) -> MatchResult:
     for job in jobs:
         mine = [p for p in subs_left if lone or _belongs(p, job.source)]
         subs_left = [p for p in subs_left if p not in mine]
-        if rules.scan_source_folder:
+        if rules.scan_source_folder and not mine:  # added subtitles replace the ones found near it
             folder = job.source.parent
             if folder not in near:
                 near[folder] = subtitles_near(folder)

@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Subtitles you add on New jobs replace the ones found next to the source or one folder down, instead of joining them. Adding a `subs-synced` folder no longer also pulls in the extracted `_track7_[eng]` files beside it. A source you add no subtitles for still gets the ones near it.
 - The preview's frame controls no longer run past the preview into the filter panel when the preview is narrow. A narrow preview stacks them: the previous and next arrows sit either side of the slider, with the bookmark, frame box and frame count centred below. First and last frame and the bookmark jumps show once there's room for them, and their keys work either way. The time after the frame count shows once there's room for it.
 - The queue's key hints no longer crowd each other across lines, and read "Ctrl+A or Cmd+A". The selection hint says "1 selected job", not "1 selected jobs".
 - Settings fits a 320 px wide window on every tab. Rows that ran off the side (process priority, the folder browser, tool paths, automation, presets, appearance) now wrap.
