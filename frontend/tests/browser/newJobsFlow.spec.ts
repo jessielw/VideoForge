@@ -119,8 +119,13 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
         json: {
           path: 'D:/Media',
           parent: 'D:/',
-          dirs: folders.map((p) => ({ name: p.slice(9), path: p })),
-          files: files.map((p) => ({ name: p.slice(9), path: p, size: 1 })),
+          dirs: folders.map((p) => ({ name: p.slice(9), path: p, mtime: 1_700_000_000 })),
+          files: files.map((p, i) => ({
+            name: p.slice(9),
+            path: p,
+            size: [3, 1, 2][i % 3] * 1e9,
+            mtime: 1_700_000_000 + i,
+          })),
         },
       })
     if (path === '/api/fs/mkdir') {
@@ -353,5 +358,31 @@ test('the file picker filters the folder, ticks only what it shows, and keeps th
   await expect(filter).toHaveValue('')
   await expect(box('Show.S02E01.mkv')).toBeVisible()
   await expect(picker).toContainText('2 selected') // ticks it hid are kept
+  expect(errors).toEqual([])
+})
+
+test('the file picker sorts by name, size or date, keeps folders first, and remembers the sort', async ({ page }) => {
+  const { errors, files } = await fixture(page, [])
+  files.push('D:/Media/E10.mkv', 'D:/Media/E2.mkv', 'D:/Media/E1.mkv') // 3, 1 and 2 GB; E1 newest
+  await page.goto('/#/new')
+  const browse = page.getByRole('button', { name: 'Browse…' }).first()
+  await browse.click()
+  const picker = page.getByRole('dialog', { name: 'Sources' })
+  const rows = () => picker.getByRole('checkbox', { name: /^Pick (?!all)/ })
+  const shown = async () =>
+    (await rows().evaluateAll((xs) => xs.map((x) => x.getAttribute('aria-label')))).map((x) => x!.slice(5))
+
+  await expect.poll(shown).toEqual(['Old', 'E1.mkv', 'E2.mkv', 'E10.mkv']) // by name, numbers in order
+  await picker.getByRole('button', { name: 'Sort by size' }).click()
+  await expect.poll(shown).toEqual(['Old', 'E10.mkv', 'E1.mkv', 'E2.mkv']) // biggest first
+  await picker.getByRole('button', { name: 'Sort by size' }).click()
+  await expect.poll(shown).toEqual(['Old', 'E2.mkv', 'E1.mkv', 'E10.mkv'])
+  await picker.getByRole('button', { name: 'Sort by modified' }).click()
+  await expect.poll(shown).toEqual(['Old', 'E1.mkv', 'E2.mkv', 'E10.mkv']) // newest first
+  await expect(picker.getByRole('button', { name: 'Sort by modified' })).toHaveAttribute('aria-pressed', 'true')
+
+  await picker.getByRole('button', { name: 'Cancel' }).click()
+  await browse.click()
+  await expect(picker.getByRole('button', { name: 'Sort by modified' })).toHaveAttribute('aria-pressed', 'true')
   expect(errors).toEqual([])
 })

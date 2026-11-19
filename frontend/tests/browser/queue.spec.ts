@@ -129,8 +129,10 @@ async function queueFixture(
       json = {
         path: 'D:\\Show',
         parent: 'D:\\',
-        dirs: [{ name: '1.mkv_tmp', path: 'D:\\Show\\1.mkv_tmp' }],
-        files: [{ name: 'videoforge-job.json', path: 'D:\\Show\\videoforge-job.json', size: 900 }],
+        dirs: [{ name: '1.mkv_tmp', path: 'D:\\Show\\1.mkv_tmp', mtime: 1_700_000_000 }],
+        files: [
+          { name: 'videoforge-job.json', path: 'D:\\Show\\videoforge-job.json', size: 900, mtime: 1_700_000_000 },
+        ],
       }
     else if (path === '/api/fs/kinds')
       json = (request.postDataJSON().paths as string[]).map((p) => ({

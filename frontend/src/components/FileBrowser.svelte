@@ -8,14 +8,17 @@
   // Ticking: a click (on a file's row or any box) toggles one, Shift+click ticks or unticks the range
   // from the last one clicked, a mouse press dragged over rows ticks or unticks them the way the first
   // one went, and Ctrl+A or the All box ticks every file here (not the folders). The filter narrows the
-  // rows to names with every word in them; ranges and Ctrl+A only take the rows it shows.
+  // rows to names with every word in them; ranges and Ctrl+A only take the rows it shows. The column
+  // headers sort by name, date or size (folders stay first), remembered in this browser.
   import { onMount } from 'svelte'
   import { api } from '../lib/api'
-  import { filterEntries } from '../lib/fileList'
+  import { filterEntries, sortEntries, type FileSort, type SortKey } from '../lib/fileList'
   import { bytes } from '../lib/format'
   import { pickAll, pickClick, pickRange } from '../lib/pickPaths'
   import type { DirListing } from '../lib/types'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
+  import ChevronDownIcon from '@lucide/svelte/icons/chevron-down'
+  import ChevronUpIcon from '@lucide/svelte/icons/chevron-up'
   import FileIcon from '@lucide/svelte/icons/file'
   import FolderIcon from '@lucide/svelte/icons/folder'
   import FolderPlusIcon from '@lucide/svelte/icons/folder-plus'
@@ -65,6 +68,32 @@
   let busy = $state(false)
 
   const message = (e: unknown) => String(e instanceof Error ? e.message : e)
+
+  const SORT_KEY = 'videoforge.fileSort'
+  let sort = $state<FileSort>(savedSort())
+
+  function savedSort(): FileSort {
+    try {
+      const v = JSON.parse(localStorage.getItem(SORT_KEY) ?? 'null')
+      if (['name', 'mtime', 'size'].includes(v?.key)) return { key: v.key, desc: !!v.desc }
+    } catch {
+      /* storage blocked */
+    }
+    return { key: 'name', desc: false }
+  }
+
+  // A new column starts newest or biggest first (names A to Z); the same column again flips it.
+  function sortBy(key: SortKey) {
+    sort = sort.key === key ? { key, desc: !sort.desc } : { key, desc: key !== 'name' }
+    try {
+      localStorage.setItem(SORT_KEY, JSON.stringify(sort))
+    } catch {
+      /* storage blocked */
+    }
+  }
+
+  const modified = (mtime: number) =>
+    new Date(mtime * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
 
   async function open(path: string) {
     error = ''
@@ -122,8 +151,10 @@
   })
 
   // The rows as shown, in the order Shift+click ranges over; picking one program means no ranges or All.
-  const dirs = $derived(listing ? filterEntries(listing.dirs, filter) : [])
-  const shownFiles = $derived(listing && mode === 'files' ? filterEntries(listing.files, filter) : [])
+  const dirs = $derived(listing ? sortEntries(filterEntries(listing.dirs, filter), sort) : [])
+  const shownFiles = $derived(
+    listing && mode === 'files' ? sortEntries(filterEntries(listing.files, filter), sort) : [],
+  )
   const order = $derived(mode === 'files' ? [...dirs, ...shownFiles].map((x) => x.path) : [])
   const files = $derived(programs ? [] : shownFiles.map((f) => f.path))
   const filesPicked = $derived.by(() => {
@@ -175,6 +206,20 @@
     }
   }
 </script>
+
+{#snippet column(key: SortKey, label: string, cls: string)}
+  <button
+    class="flex items-center gap-1 hover:text-foreground {cls} {sort.key === key ? 'font-medium text-foreground' : ''}"
+    onclick={() => sortBy(key)}
+    aria-label="Sort by {label.toLowerCase()}"
+    aria-pressed={sort.key === key}
+  >
+    {label}
+    {#if sort.key === key}
+      {#if sort.desc}<ChevronDownIcon class="size-3" />{:else}<ChevronUpIcon class="size-3" />{/if}
+    {/if}
+  </button>
+{/snippet}
 
 <svelte:window onpointerup={() => (drag = null)} onblur={() => (drag = null)} />
 
@@ -281,19 +326,28 @@
             <Button variant="ghost" size="sm" onclick={() => (newName = null)}>Cancel</Button>
           </form>
         {/if}
-        {#if files.length > 1}
-          <div class="flex items-center gap-2 border-b px-2 pt-1 pb-2 text-sm text-muted-foreground select-none">
-            <Checkbox
-              checked={filesPicked === files.length}
-              indeterminate={filesPicked > 0 && filesPicked < files.length}
-              onclick={(e: MouseEvent) => {
-                e.preventDefault()
-                picked = pickAll(picked, files)
-              }}
-              aria-label="Pick all files"
-            />
-            <span class="flex-1">All {files.length} files</span>
-            <span class="hidden text-xs sm:inline">Drag or Shift+click ticks a range · Ctrl+A ticks all</span>
+        {#if dirs.length + shownFiles.length > 1}
+          <div
+            class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-2 py-1 text-xs text-muted-foreground select-none"
+          >
+            {#if files.length > 1}
+              <Tip text="All {files.length} files (Ctrl+A)">
+                <Checkbox
+                  checked={filesPicked === files.length}
+                  indeterminate={filesPicked > 0 && filesPicked < files.length}
+                  onclick={(e: MouseEvent) => {
+                    e.preventDefault()
+                    picked = pickAll(picked, files)
+                  }}
+                  aria-label="Pick all files"
+                />
+              </Tip>
+            {:else if mode === 'files'}
+              <span class="size-4 shrink-0"></span>
+            {/if}
+            {@render column('name', 'Name', 'flex-1')}
+            {@render column('mtime', 'Modified', 'hidden w-36 sm:flex')}
+            {#if mode === 'files'}{@render column('size', 'Size', 'w-20 justify-end')}{/if}
           </div>
         {/if}
         {#each dirs as d (d.path)}
@@ -310,8 +364,8 @@
                 aria-label="Pick {d.name}"
               />
             {/if}
-            <button class="flex flex-1 items-center gap-2 text-left" onclick={() => open(d.path)}>
-              <FolderIcon class="size-4 text-primary" />{d.name}
+            <button class="flex min-w-0 flex-1 items-center gap-2 text-left" onclick={() => open(d.path)}>
+              <FolderIcon class="size-4 shrink-0 text-primary" /><span class="truncate">{d.name}</span>
             </button>
             {#if made.includes(d.path)}
               <Tip text="Delete {d.name}">
@@ -326,6 +380,8 @@
                 </Button>
               </Tip>
             {/if}
+            <span class="hidden w-36 text-xs text-muted-foreground sm:block">{modified(d.mtime)}</span>
+            {#if mode === 'files'}<span class="w-20"></span>{/if}
           </div>
         {/each}
         {#if mode === 'folder' && !dirs.length && listing.dirs.length}
@@ -348,7 +404,8 @@
               />
               <FileIcon class="size-4 text-muted-foreground" />
               <span class="flex-1 truncate">{f.name}</span>
-              <span class="text-xs text-muted-foreground">{bytes(f.size)}</span>
+              <span class="hidden w-36 text-xs text-muted-foreground sm:block">{modified(f.mtime)}</span>
+              <span class="w-20 text-right text-xs text-muted-foreground">{bytes(f.size)}</span>
             </div>
           {/each}
           {#if !dirs.length && !shownFiles.length}
@@ -370,7 +427,7 @@
       <span class="text-xs text-muted-foreground">
         {#if mode === 'files'}
           {picked.length
-            ? `${picked.length} selected`
+            ? `${picked.length} selected${programs ? '' : '. Drag or Shift+click ticks a range, Ctrl+A every file.'}`
             : programs
               ? orFolder
                 ? "Tick the program, or use this folder for DEE's split encoders."

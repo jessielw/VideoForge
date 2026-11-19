@@ -2004,6 +2004,8 @@ def test_folder_browser(tmp_path):
         listing = client.get("/api/fs/list", params={"path": str(tmp_path / "src"), "extensions": ".mkv"}).json()
         assert [f["name"] for f in listing["files"]] == ["Show.S01E01.mkv"]
         assert listing["parent"] == str(tmp_path)
+        top = client.get("/api/fs/list", params={"path": str(tmp_path)}).json()
+        assert top["dirs"] and all(isinstance(d["mtime"], float) for d in top["dirs"])  # for sorting by date
         # Programs: by extension on Windows; elsewhere runnable, or without an extension (execute bit lost).
         tools_dir = tmp_path / "tools"
         tools_dir.mkdir()

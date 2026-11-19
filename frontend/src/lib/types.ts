@@ -834,7 +834,7 @@ export interface MatchResult {
 export interface DirListing {
   path: string
   parent: string | null
-  dirs: { name: string; path: string }[]
+  dirs: { name: string; path: string; mtime: number }[]
   files: { name: string; path: string; size: number; mtime: number }[]
 }
 

@@ -15,6 +15,7 @@ Open **New jobs**, add an MKV, MP4, or M2TS / TS file, and choose the template t
 - **Tick several files:** click a file's row to tick it. Press on a row and drag over others to tick them all (starting on a ticked row unticks them instead). Shift+click ticks or unticks every row from the last one you clicked.
 - **Tick every file:** Ctrl+A (Cmd+A) or the box above the list ticks every file in the folder, and again unticks them. Folders are left as they are.
 - **Filter:** type in **Filter this folder** to show only names with every word in them, such as `s01 mkv`. Ctrl+A and ranges take only the rows it shows; files you ticked before stay ticked. Esc clears it.
+- **Sort:** click **Name**, **Modified** or **Size** above the list. A new column starts newest or biggest first, and clicking it again flips it. Folders stay above files; sorting by size keeps them by name. Names sort with numbers in order (E2 before E10), and this browser remembers the sort.
 - **Refresh:** the refresh button (or F5) lists the folder again after files change outside VideoForge, keeping the filter.
 
 ## 2. Index and inspect video
