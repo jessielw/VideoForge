@@ -192,7 +192,7 @@ test('Matched files keeps its size while the sources match again', async ({ page
   await expect(card).toContainText('Matching…')
   expect((await card.boundingBox())!.height).toBeGreaterThanOrEqual(Math.min(before, 192)) // no collapse to one line
   release()
-  await expect(page.getByText('Show.S01E03.mkv')).toBeVisible()
+  await expect(card.getByText('Show.S01E03.mkv')).toBeVisible()
   expect(errors).toEqual([])
 })
 
@@ -467,5 +467,36 @@ test('each slot counts its paths, scrolls a long list in its box, and clears on 
   await expect(page.getByRole('group', { name: 'Sources' })).toContainText('MKV, MP4 or M2TS')
   await expect(page.getByRole('button', { name: 'Clear all sources' })).toHaveCount(0)
   await expect(page.locator('footer[aria-label="Add to queue"]')).toContainText('Paste file paths on any page')
+  expect(errors).toEqual([])
+})
+
+test('the grip on Matched files pulls it taller, keeps its bottom in view, and remembers the height', async ({
+  page,
+}) => {
+  const { errors } = await fixture(page, [])
+  await page.setViewportSize({ width: 1280, height: 900 })
+  const many = Array.from({ length: 30 }, (_, i) => `"D:/Media/Show.S01E${String(i + 1).padStart(2, '0')}.mkv"`)
+  await paste(page, many.join(String.fromCharCode(13, 10)))
+  const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
+  await expect(card).toContainText('30 job(s)')
+  const grip = page.getByRole('separator', { name: 'Resize Matched files' })
+  const before = (await card.boundingBox())!.height
+  const at = (await grip.boundingBox())!
+  await page.mouse.move(at.x + at.width / 2, at.y + 4)
+  await page.mouse.down()
+  await page.mouse.move(at.x + at.width / 2, at.y - 200, { steps: 5 })
+  await page.mouse.up()
+  const after = (await card.boundingBox())!
+  expect(after.height).toBeGreaterThan(before + 150)
+  expect(after.y + after.height).toBeLessThanOrEqual(900) // the bottom stays in view
+
+  await page.reload()
+  await expect(card).toContainText('30 job(s)')
+  expect((await card.boundingBox())!.height).toBeGreaterThan(before + 150) // remembered
+  await grip.focus()
+  await page.keyboard.press('ArrowUp')
+  await expect(grip).toHaveAttribute('aria-valuetext', /pixels tall/)
+  await grip.dblclick()
+  await expect(grip).toHaveAttribute('aria-valuetext', 'Fills the page')
   expect(errors).toEqual([])
 })
