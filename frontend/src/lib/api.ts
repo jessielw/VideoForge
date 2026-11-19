@@ -106,6 +106,7 @@ export interface InputSlots {
   subtitles: string[]
   chapters: string[]
   rule_set: string
+  assign?: Record<string, string | null> // file -> source (null: no source), matched by hand
 }
 
 // A job's files, each replaced when given (a folder adds its files of that kind).

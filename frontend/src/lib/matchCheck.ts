@@ -6,8 +6,12 @@ import type { SubtitleMatch } from './types'
 
 /** What each match reason means, for the icon's tooltip; `sure` is false where a person should look. */
 export const MATCH_NOTE: Record<SubtitleMatch, { text: string; sure: boolean }> = {
+  manual: { text: 'You matched it to this source', sure: true },
   name: { text: 'Starts with the source’s name', sure: true },
   episode: { text: 'Same episode as the source', sure: true },
+  number: { text: 'Its number lines up with this source’s, in a set of files named alike; check it', sure: false },
+  similar: { text: 'Its name is closest to this source’s; check it', sure: false },
+  staxrip: { text: 'From StaxRip’s temp folder for this source', sure: true },
   only_source: { text: 'Taken by the only source; nothing in its name ties it to that source', sure: false },
   other_episode: { text: 'Taken by the only source, but its name is for another episode', sure: false },
 }

@@ -2,6 +2,7 @@
   // New jobs: rule set + language, input slots, output folder, live match preview, Add to queue.
   import { flushSync, onDestroy, onMount, untrack } from 'svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
+  import ListChecksIcon from '@lucide/svelte/icons/list-checks'
   import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import { Button } from '$lib/components/ui/button'
@@ -21,7 +22,9 @@
   import { groupByFolder } from '../lib/templateFolders'
   import { ENCODERS, type EncoderSettings, type MatchResult } from '../lib/types'
   import LanguagePicker from '../components/LanguagePicker.svelte'
+  import MatchDialog from '../components/MatchDialog.svelte'
   import MatchTable from '../components/MatchTable.svelte'
+  import { matchEntries, needsLook as needsLookAt } from '../lib/matchReview'
   import { oddSubtitleRows, oddSummary, wrongEpisodeCount } from '../lib/matchCheck'
   import Tip from '../components/Tip.svelte'
 
@@ -40,6 +43,7 @@
     autoIndex?: boolean
     autoCrop?: boolean
     completion?: ImportResult | null
+    assign?: Record<string, string | null>
   }
   const restored = drafts.read<Draft>('new-jobs')
   let ruleSet = $state(restored?.ruleSet ?? '')
@@ -55,6 +59,20 @@
   let adding = $state(false)
   let replacements = $state<string[]>([])
   let excluded = $state<string[]>([]) // subtitles unticked in Matched files
+  let assign = $state<Record<string, string | null>>(restored?.assign ?? {}) // file -> source (null: none), by hand
+  // Review matches: open, on which file, and the last match result, shown while the batch matches again.
+  let reviewing = $state(false)
+  let reviewFocus = $state<string | null>(null)
+  let shownResult = $state<MatchResult | null>(null)
+  $effect(() => {
+    if (result) shownResult = result
+    else if (!sources.length) shownResult = null
+  })
+  const needsLook = $derived(shownResult ? matchEntries(shownResult).filter(needsLookAt).length : 0)
+  function review(path: string | null = null) {
+    reviewFocus = path
+    reviewing = true
+  }
   const odd = $derived(result ? oddSubtitleRows(result.jobs, excluded) : new Map())
   const wrongEpisode = $derived(result ? wrongEpisodeCount(result.jobs, excluded) : 0)
   let completion = $state<ImportResult | null>(restored?.completion ?? null)
@@ -92,6 +110,7 @@
         autoIndex,
         autoCrop,
         completion,
+        assign,
       }),
     )
   }
@@ -151,6 +170,7 @@
     subtitles: takesSubs ? subtitles : [],
     chapters,
     rule_set: ruleSet,
+    assign,
   })
 
   const matches = new LatestRequest()
@@ -267,6 +287,7 @@
     sources = encodes = subtitles = chapters = []
     replacements = []
     excluded = []
+    assign = {}
     completion = null
     error = ''
   }
@@ -313,6 +334,7 @@
         sources = encodes = subtitles = chapters = []
         result = null
         excluded = []
+        assign = {}
       }
       replacements = []
       completionKey = inputKey
@@ -361,7 +383,7 @@
             {#if takesSubs}
               <PathSlot
                 label="Subtitles"
-                hint="Subtitle files or folders, matched to each source by name or SxxEyy. With one source, they all go to it. A source you add none for gets the subtitles next to it, or one folder down."
+                hint="Subtitle files or folders, matched to each source by name, SxxEyy or the closest name; Matched files lets you match the rest. With one source, they all go to it. A source you add none for gets the subtitles next to it, or one folder down."
                 bind:paths={subtitles}
                 extensions={['.srt', '.ass', '.ssa', '.sup', '.idx']}
               />
@@ -503,10 +525,15 @@
           {#if result && !matching && wrongEpisode}<span class="text-sm text-destructive"
               >{wrongEpisode} subtitle{wrongEpisode === 1 ? '' : 's'} named for another episode</span
             >{/if}
+          {#if shownResult}
+            <Button size="sm" variant="outline" class="ml-auto" onclick={() => review()}
+              ><ListChecksIcon />Review matches{needsLook ? ` · ${needsLook} to check` : ''}</Button
+            >
+          {/if}
         </div>
         {#if result}
           <div class="min-h-0 flex-1 overflow-auto border-t" bind:this={matchList}>
-            <MatchTable {result} bind:replacements bind:excluded {odd} />
+            <MatchTable {result} bind:replacements bind:excluded bind:assign {odd} onreview={review} />
           </div>
           <!-- Drag down to show more rows (arrow keys too); double-click goes back to filling the page. A
              focusable separator is the window splitter pattern, which Svelte's a11y check doesn't know. -->
@@ -535,6 +562,7 @@
         {/if}
       </Card.Root>
     </fieldset>
+    <MatchDialog bind:open={reviewing} result={shownResult} {matching} bind:assign focus={reviewFocus} />
   </div>
 
   {#if completion && (completion.kept.length || completion.unmatched.length)}
@@ -550,7 +578,7 @@
           </li>
         {/each}
         {#each completion.unmatched as path}
-          <li class="break-all">{path} matches no source. Add its source, or rename the file to match.</li>
+          <li class="break-all">{path} matches no source. Add its source, or pick one for it in Matched files.</li>
         {/each}
       </ul>
     </details>

@@ -78,7 +78,7 @@ scan_source_folder = true
 staxrip_temp = true
 ```
 
-Suffixes match existing video encodes to source stems; episode names can also match by `SxxEyy`. `scan_source_folder` also finds matching subtitle files (SRT, ASS/SSA, SUP, VobSub IDX) beside the source and one folder down, for a source you added no subtitle files for. Subtitles you add for a source replace the ones it would find. `staxrip_temp` reads the source's StaxRip temp folder for an encode still running and chapter files.
+Suffixes match existing video encodes to source stems; episode names can also match by `SxxEyy`. Subtitle and chapter files match a source whose name they start with (followed by `.`, `_`, `-`, a space, `[` or `(`), or by `SxxEyy` (also spelled `S1E2`, `S01.E02` or `1x02`); with several sources, a file neither ties to a source can match by its episode number alone, its place in a set of files named alike, or the one source its name is clearly closest to. **Review matches** on New jobs lets you check and change any of them ([Review matches](../getting-started/first-job.md#review-matches)). `scan_source_folder` also finds matching subtitle files (SRT, ASS/SSA, SUP, VobSub IDX) beside the source and one folder down, for a source you added no subtitle files for. Subtitles you add for a source replace the ones it would find. `staxrip_temp` reads the source's StaxRip temp folder for an encode still running and chapter files.
 
 ## Actions and plugins
 

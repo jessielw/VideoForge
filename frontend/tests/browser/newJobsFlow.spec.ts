@@ -577,8 +577,8 @@ test('Matched files tags each subtitle, flags odd rows, lists unmatched files fi
 
   const ass = card.getByRole('button', { name: 'en · ass · track 7: Show.S01E01_track7_[eng].ass' })
   await expect(card.getByRole('button', { name: /^en · srt · synced: Show\.S01E0\d\.en\.synced\.srt$/ })).toHaveCount(3)
-  await expect(card.getByRole('img', { name: 'Starts with the source’s name' })).toHaveCount(3)
-  await expect(rows.nth(1).getByRole('img', { name: /name is for another episode/ })).toBeVisible()
+  await expect(card.getByRole('button', { name: /^Starts with the source’s name\./ })).toHaveCount(3)
+  await expect(rows.nth(1).getByRole('button', { name: /name is for another episode/ })).toBeVisible()
   await expect(card).toContainText('1 subtitle named for another episode')
   await ass.click()
   await expect(ass).toHaveAttribute('aria-pressed', 'false')
@@ -593,6 +593,121 @@ test('Matched files tags each subtitle, flags odd rows, lists unmatched files fi
     .click()
   await expect.poll(() => posted.length).toBe(1)
   expect(posted[0].exclude_subtitles).toEqual([extracted])
+  expect(errors).toEqual([])
+})
+
+test('files are matched by hand in Matched files and in Review matches, sent with Add, and can be undone', async ({
+  page,
+}) => {
+  const posted: Record<string, unknown>[] = []
+  const { errors } = await fixture(page, posted)
+  const [e1, e2, e3] = ['D:/Media/Show.S01E01.mkv', 'D:/Media/Show.S01E02.mkv', 'D:/Media/Show.S01E03.mkv']
+  const named = 'D:/Media/Show.S01E01.en.srt' // matched by its name
+  const stray = 'D:/Media/Show - 02.srt' // unmatched, the closest name suggested
+  const [setA, setB] = ['D:/Media/t1_c1.srt', 'D:/Media/t2_c2.srt'] // a numbered set nothing ties to an episode
+  const asked: Record<string, string | null>[] = []
+  // A stand-in for the server: the user's matches win, the rest go by name or stay unmatched; matching setA by
+  // hand offers setB the same way.
+  await page.route('**/api/match', (route) => {
+    const assign = (route.request().postDataJSON().assign ?? {}) as Record<string, string | null>
+    asked.push(assign)
+    const files = [named, stray, setA, setB]
+    const auto: Record<string, string> = { [named]: e1 }
+    const placed = (f: string) => (f in assign ? assign[f] : (auto[f] ?? null))
+    const job = (source: string) => {
+      const mine = files.filter((f) => placed(f) === source)
+      const how = (f: string) => (f in assign ? 'manual' : 'name')
+      return {
+        source,
+        encode: null,
+        encode_state: null,
+        subtitles: mine,
+        subtitle_info: mine.map((path) => ({
+          path,
+          language: 'en',
+          language_name: 'English',
+          format: 'srt',
+          tags: [],
+          track: null,
+          match: how(path),
+        })),
+        chapters: null,
+        existing_id: null,
+        existing_status: null,
+        matches: Object.fromEntries(mine.map((f) => [f, how(f)])),
+      }
+    }
+    const left = files.filter((f) => placed(f) === null)
+    const offer = (f: string) =>
+      f === stray
+        ? [{ source: e2, why: 'similar' }]
+        : f === setB && assign[setA] === e1
+          ? [{ source: e2, why: 'pattern' }]
+          : []
+    return route.fulfill({
+      json: {
+        jobs: [e1, e2, e3].map(job),
+        unmatched: left,
+        held: left.filter((f) => f in assign),
+        suggestions: Object.fromEntries(left.map((f) => [f, offer(f)])),
+      },
+    })
+  })
+  await paste(page, [e1, e2, e3].map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
+
+  // In the table: the suggested source in one click, and undone.
+  const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
+  await expect(card).toContainText('Not matched to any source: Show - 02.srt')
+  const pick = card.getByRole('combobox', { name: 'Match Show - 02.srt to a source' })
+  await expect(pick.locator('optgroup[label="Suggested"] option')).toHaveText(['Show.S01E02.mkv'])
+  await card.getByRole('button', { name: 'Use Show.S01E02.mkv' }).click()
+  await expect.poll(() => asked.at(-1)).toEqual({ [stray]: e2 })
+  await expect(card.getByRole('button', { name: /^You matched it to this source\. Change the match/ })).toBeVisible()
+  await card.getByRole('button', { name: 'Undo match: Show - 02.srt' }).click()
+  await expect.poll(() => asked.at(-1)).toEqual({})
+
+  // Review matches: what needs a look, a filter, a match by hand and the rest of its set the same way.
+  await card.getByRole('button', { name: 'Review matches · 3 to check' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Review matches' })
+  const files = dialog.getByRole('list', { name: 'Files' }).getByRole('listitem')
+  await expect(files).toHaveCount(3)
+  await dialog.getByRole('textbox', { name: 'Filter by name' }).fill('t1 srt')
+  await expect(files).toHaveCount(1)
+  await dialog.getByRole('textbox', { name: 'Filter by name' }).fill('')
+  await dialog.getByRole('combobox', { name: 'Source for t1_c1.srt' }).selectOption(e1)
+  await expect.poll(() => asked.at(-1)).toEqual({ [setA]: e1 })
+  await expect(dialog).toContainText('1 more file named like the one you matched.')
+  await expect(
+    dialog.getByRole('combobox', { name: 'Source for t2_c2.srt' }).locator('option', { hasText: '(like your match)' }),
+  ).toHaveCount(1)
+  await dialog.getByRole('button', { name: 'Match them the same way' }).click()
+  await expect.poll(() => asked.at(-1)).toEqual({ [setA]: e1, [setB]: e2 })
+  await expect(files).toHaveCount(3) // changed here, so still listed
+  await expect(dialog.getByRole('combobox', { name: 'Source for t2_c2.srt' })).toHaveValue(e2)
+
+  // Any file can move, or go to no source.
+  await dialog.getByRole('radio', { name: /All files/ }).click()
+  await dialog.getByRole('combobox', { name: 'Source for Show.S01E01.en.srt' }).selectOption(e3)
+  await expect.poll(() => asked.at(-1)?.[named]).toBe(e3)
+  await dialog.getByRole('button', { name: 'Undo match: Show.S01E01.en.srt' }).click()
+  await expect.poll(() => named in (asked.at(-1) ?? {})).toBe(false)
+  await dialog.getByRole('combobox', { name: 'Source for Show - 02.srt' }).selectOption('-')
+  await expect.poll(() => asked.at(-1)?.[stray]).toBe(null)
+  await dialog.getByRole('button', { name: 'Done' }).click()
+  await expect(dialog).toBeHidden()
+  await expect(card).toContainText('Set to no source by you: Show - 02.srt')
+
+  // A file's match icon opens Review matches on that file.
+  await card.getByRole('button', { name: /Change the match of Show\.S01E01\.en\.srt$/ }).click()
+  await expect(dialog.getByRole('combobox', { name: 'Source for Show.S01E01.en.srt' })).toBeFocused()
+  await page.keyboard.press('Escape')
+
+  await page
+    .locator('footer[aria-label="Add to queue"]')
+    .getByRole('button', { name: /Add 3 jobs/ })
+    .click()
+  await expect.poll(() => posted.length).toBe(1)
+  expect(posted[0].assign).toEqual({ [setA]: e1, [setB]: e2, [stray]: null })
   expect(errors).toEqual([])
 })
 

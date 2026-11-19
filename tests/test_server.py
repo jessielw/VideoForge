@@ -160,6 +160,35 @@ def test_partial_and_zero_imports_explain_kept_jobs(tmp_path):
         assert len(again["kept"]) == 2
 
 
+def test_match_suggests_sources_and_takes_files_matched_by_hand(tmp_path):
+    make_files(tmp_path, "S01E01", "S01E02")
+    stray = tmp_path / "English.srt"
+    stray.write_text("subtitle", encoding="utf-8")
+    e1, e2 = (str(tmp_path / "src" / f"Show.S01E0{n}.mkv") for n in (1, 2))
+    near1 = str(tmp_path / "src" / "Show.S01E01.en.srt")
+    body = {"sources": [str(tmp_path / "src")], "subtitles": [str(stray)]}
+    with make_client(tmp_path) as client:
+        preview = client.post("/api/match", json=body).json()
+        assert preview["unmatched"] == [str(stray)] and preview["held"] == []
+        assert preview["suggestions"] == {str(stray): []}  # nothing in its name to go on
+        first = next(j for j in preview["jobs"] if j["source"] == e1)
+        assert first["matches"] == {near1: "name"}
+
+        # The stray to E02, and E01's own subtitle (found beside it) to no source.
+        matched = client.post("/api/match", json=body | {"assign": {str(stray): e2, near1: None}}).json()
+        assert matched["unmatched"] == [near1] and matched["held"] == [near1]
+        second = next(j for j in matched["jobs"] if j["source"] == e2)
+        assert second["matches"][str(stray)] == "manual"
+        assert str(tmp_path / "src" / "Show.S01E02.en.srt") in second["subtitles"]  # its own stay
+        assert next(j for j in matched["jobs"] if j["source"] == e1)["subtitles"] == []
+        assert client.post("/api/match", json=body | {"assign": [str(stray)]}).status_code == 422
+
+        added = client.post(
+            "/api/jobs", json=body | {"assign": {str(stray): e2, near1: None}, "output_dir": str(tmp_path / "out")}
+        ).json()
+        assert len(added["added"]) == 2 and added["unmatched"] == []  # set to no source on purpose
+
+
 def test_a_job_is_added_again_from_its_file_exactly_as_it_was(tmp_path):
     from videoforge.core import job_file
 

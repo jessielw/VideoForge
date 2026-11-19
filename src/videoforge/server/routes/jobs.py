@@ -11,7 +11,15 @@ from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import ToolError
 from videoforge.core.job import OutputPolicy
 from videoforge.core.models import JobInputs, Overrides
-from videoforge.core.pairing import AUDIO_EXTENSIONS, SUB_FORMATS, match_files, slot_files, subtitle_label
+from videoforge.core.pairing import (
+    AUDIO_EXTENSIONS,
+    SUB_FORMATS,
+    MatchResult,
+    match_files,
+    match_reason,
+    slot_files,
+    subtitle_label,
+)
 from videoforge.core.pipeline.build import build_steps, output_path
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.probe import mediainfo_report
@@ -52,26 +60,53 @@ def _match(request: Request, body: dict[str, Any]):
         _paths(body, "chapters"),
         rules,
     )
-    return match_files(sets, rules)
+    return match_files(sets, rules, _assign(body))
+
+
+def _assign(body: dict[str, Any]) -> dict[Path, Path | None]:
+    """{file: source, or null for no source}: files the user matched by hand in Matched files."""
+    assign = body.get("assign") or {}
+    if not isinstance(assign, dict) or not all(
+        isinstance(k, str) and (v is None or isinstance(v, str)) for k, v in assign.items()
+    ):
+        raise HTTPException(422, "assign must map file paths to source paths or null")
+    return {Path(k): Path(v) if v else None for k, v in assign.items()}
+
+
+def _unmatched(result: MatchResult) -> list[Path]:
+    left = result.unmatched
+    return left.encodes + left.subtitles + left.chapters
 
 
 @router.post("/match")
 def match(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    """Preview what Add would create from the given files and folders."""
+    """Preview what Add would create from the given files and folders. Each job says how each of its files matched
+    (matches: {path: reason}); each unmatched file has sources to offer (suggestions: {path: [{source, why}]});
+    held lists the unmatched files the user set to no source."""
     result = _match(request, body)
-    left = result.unmatched
     q = queue_of(request)
+    unmatched = _unmatched(result)
+
+    def reasons(j: JobInputs) -> dict[str, str]:
+        files = [f for f in (j.encode, j.chapters) if f] + j.subtitles
+        return {str(f): result.how.get(f) or match_reason(f, j.source) for f in files}
+
     return {
         "jobs": [
             to_json(j)
             | {
                 "existing_id": existing.id if (existing := q._find_source(j.source)) else None,
                 "existing_status": existing.status if existing else None,
-                "subtitle_info": [subtitle_label(p, j.source) for p in j.subtitles],
+                "subtitle_info": [subtitle_label(p, j.source, result.how.get(p)) for p in j.subtitles],
+                "matches": reasons(j),
             }
             for j in result.jobs
         ],
-        "unmatched": [str(p) for p in left.encodes + left.subtitles + left.chapters],
+        "unmatched": [str(p) for p in unmatched],
+        "held": [str(p) for p in unmatched if result.how.get(p) == "manual"],
+        "suggestions": {
+            str(p): [{"source": str(s), "why": why} for s, why in result.suggestions.get(p, [])] for p in unmatched
+        },
     }
 
 
@@ -115,7 +150,6 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         auto_index=_optional_bool(body, "auto_index"),
         auto_crop=_optional_bool(body, "auto_crop"),
     )
-    left = result.unmatched
     added_sources = {e.spec.inputs.source for e in added}
     kept = []
     for inputs in result.jobs:
@@ -137,7 +171,8 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         "added": [e.id for e in added],
         "skipped": skipped,
         "kept": kept,
-        "unmatched": [str(p) for p in left.encodes + left.subtitles + left.chapters],
+        # not those the user set to no source: they meant to leave them out
+        "unmatched": [str(p) for p in _unmatched(result) if result.how.get(p) != "manual"],
     }
 
 

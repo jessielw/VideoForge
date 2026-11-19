@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Subtitles and chapters named after their source with an underscore, such as gMKVExtract's `Show.S01E01_track7_[eng].forced.srt`, match their source again. The `_` after `S01E01` hid the episode, and only a `.` after the source's name counted as starting with it; now `_`, `-`, a space, `[` or `(` count too, in any letter case.
+
+### Added
+
+- Matching reads more episode spellings: `S1E2`, `S01.E02`, `S01 E02` and `1x02` count as `S01E02` (not `1920x1080` or `5.1x264`), for encodes and the job record's episode too. With several sources, a subtitle or chapter file that no name ties to a source can match by its episode number alone (`E04`, `Ep 04`, `Episode 4`, `Show - 04v2`), when the sources are all one season.
+- With several sources, a set of subtitle or chapter files named alike (`disc1_title01_track3.srt`, `disc1_title02_track3.srt`…) matches when the number that changes from file to file lines up with the sources' episodes. **Matched files** marks those with a `#`, so you can check them.
+- With several sources, a subtitle or chapter file nothing else ties to a source goes to the one source its name is clearly closest to, such as `Movie.One.2001.en.srt` to `Movie.One.2001.1080p.BluRay.mkv`. Words every source shares (`1080p`, `BluRay`) don't count, a file is never matched to a source for another episode, and equal scores go by how alike the names read. **Matched files** marks those with amber sparkles.
+- **Review matches** on New jobs lists every file of the batch with the source it goes to and how it matched. **Needs a look** shows the unmatched files and the guesses; **All files** shows the rest, and a filter box narrows either one. Pick another source for any file (encodes, chapters and subtitles, also one found beside a source), or **No source (leave it out)**. Your changes win over matching by name, go with Add and are kept with the draft, and each one has an undo; **Undo my matches** clears them all. Open it from the **Review matches** button above the list, which counts the files to check, or by clicking a file's match icon in **Matched files**, which opens it on that file.
+- When you match one file of a set named alike by hand, the rest of the set is offered the same way: Review matches says how many more files are named like it, and **Match them the same way** does them all. Unmatched files also offer the sources with the closest names, and **Use the suggestions** takes the best one for each. In **Matched files**, an unmatched file's row has the same menu, a **Use** link for the best guess, and **Use the suggested source for N unmatched files**.
+- `POST /api/match` and `POST /api/jobs` take `assign`: `{file: source}`, or `{file: null}` for no source. `/api/match` adds each job's `matches` (`{file: how}` for its encode, chapters and subtitles), `suggestions` (`{file: [{source, why}]}`, `why` being `pattern` or `similar`) and `held` (the unmatched files set to no source). A match can be `manual`, `name`, `episode`, `number`, `similar`, `staxrip`, `only_source` or `other_episode`. `/api/jobs` doesn't list files set to no source as unmatched.
+
 ## [0.1.12] - 2026-11-19
 
 ### Changed
