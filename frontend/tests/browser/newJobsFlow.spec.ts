@@ -103,6 +103,7 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
     encode: null,
     encode_state: null,
     subtitles: [],
+    subtitle_info: [],
     chapters: null,
     existing_id: null,
     existing_status: null,
@@ -510,5 +511,77 @@ test('the grip under Matched files drags it taller past the page, without jumpin
   expect((await card.boundingBox())!.height).toBeGreaterThan(tall + 40)
   await grip.dblclick()
   await expect(grip).toHaveAttribute('aria-valuetext', 'Fills the page')
+  expect(errors).toEqual([])
+})
+
+test('Matched files tags each subtitle, flags odd rows, lists unmatched files first, and drops unticked subtitles', async ({
+  page,
+}) => {
+  const posted: Record<string, unknown>[] = []
+  const { errors } = await fixture(page, posted)
+  const label = (path: string, tags: string[], track: number | null) => ({
+    path,
+    language: 'en',
+    language_name: 'English',
+    format: path.slice(-3),
+    tags,
+    track,
+  })
+  const synced = (n: number) => `D:/Media/subs/Show.S01E0${n}.en.synced.srt`
+  const extracted = 'D:/Media/Show.S01E01_track7_[eng].ass'
+  await page.route('**/api/match', (route) => {
+    const sources = route.request().postDataJSON().sources as string[]
+    const subs: Record<string, string[]> = {
+      'D:/Media/Show.S01E01.mkv': [extracted, synced(1)],
+      'D:/Media/Show.S01E02.mkv': [synced(2)],
+      'D:/Media/Show.S01E03.mkv': [synced(3)],
+      'D:/Media/Show.S01E10.mkv': [],
+    }
+    return route.fulfill({
+      json: {
+        jobs: [...sources].sort().map((source) => ({
+          source,
+          encode: null,
+          encode_state: null,
+          subtitles: subs[source],
+          subtitle_info: subs[source].map((p) =>
+            label(p, p.includes('synced') ? ['synced'] : [], p === extracted ? 7 : null),
+          ),
+          chapters: null,
+          existing_id: null,
+          existing_status: null,
+        })),
+        unmatched: ['D:/Media/Stray.srt'],
+      },
+    })
+  })
+  await paste(
+    page,
+    ['S01E10', 'S01E02', 'S01E03', 'S01E01'].map((e) => `"D:/Media/Show.${e}.mkv"`).join(String.fromCharCode(13, 10)),
+  )
+
+  const chips = page.getByRole('list', { name: 'Sources' }).getByRole('listitem')
+  await expect(chips).toHaveText(['Show.S01E01.mkv', 'Show.S01E02.mkv', 'Show.S01E03.mkv', 'Show.S01E10.mkv']) // reading order
+  const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
+  const rows = card.locator('tbody tr')
+  await expect(rows.first()).toContainText('Not matched to any source: Stray.srt')
+  await expect(card).toContainText('1 without subtitles · 1 with a different number of subtitles')
+  await expect(rows.nth(1)).toContainText('2 subtitles; most have 1')
+  await expect(rows.nth(4)).toContainText('No subtitles; most have 1')
+
+  const ass = card.getByRole('button', { name: 'en · ass · track 7' })
+  await expect(card.getByRole('button', { name: 'en · srt · synced' })).toHaveCount(3)
+  await ass.click()
+  await expect(ass).toHaveAttribute('aria-pressed', 'false')
+  await expect(rows.nth(1)).not.toContainText('most have') // E01 is back to one subtitle
+  await expect(card).toContainText('1 without subtitles')
+  await expect(card).not.toContainText('different number')
+
+  await page
+    .locator('footer[aria-label="Add to queue"]')
+    .getByRole('button', { name: /Add 4 jobs/ })
+    .click()
+  await expect.poll(() => posted.length).toBe(1)
+  expect(posted[0].exclude_subtitles).toEqual([extracted])
   expect(errors).toEqual([])
 })

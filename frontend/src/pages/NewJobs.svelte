@@ -21,6 +21,7 @@
   import { ENCODERS, type EncoderSettings, type MatchResult } from '../lib/types'
   import LanguagePicker from '../components/LanguagePicker.svelte'
   import MatchTable from '../components/MatchTable.svelte'
+  import { oddSubtitleRows, oddSummary } from '../lib/matchCheck'
   import Tip from '../components/Tip.svelte'
 
   type ImportResult = Awaited<ReturnType<typeof api.addJobs>>
@@ -52,6 +53,8 @@
   let error = $state('')
   let adding = $state(false)
   let replacements = $state<string[]>([])
+  let excluded = $state<string[]>([]) // subtitles unticked in Matched files
+  const odd = $derived(result ? oddSubtitleRows(result.jobs, excluded) : new Map())
   let completion = $state<ImportResult | null>(restored?.completion ?? null)
   // The template (by name; the rule set's starred one first) and the container it sets, which can
   // be changed here.
@@ -261,6 +264,7 @@
   function clearAll() {
     sources = encodes = subtitles = chapters = []
     replacements = []
+    excluded = []
     completion = null
     error = ''
   }
@@ -289,6 +293,7 @@
       const r = await api.addJobs({
         ...JSON.parse(settledKey),
         replace_existing: replacements,
+        exclude_subtitles: excluded,
         original_language: language || null,
         output_dir: output[0] ?? null,
         auto_index: autoIndex,
@@ -305,6 +310,7 @@
       if (r.added.length && !r.skipped.length && !r.unmatched.length && inputKey === submittedKey) {
         sources = encodes = subtitles = chapters = []
         result = null
+        excluded = []
       }
       replacements = []
       completionKey = inputKey
@@ -489,10 +495,11 @@
               ? ` · ${result.unmatched.length} unmatched`
               : ''}{:else}Add a source to see the jobs{/if}
         </span>
+        {#if result && !matching && odd.size}<span class="text-sm text-warning">{oddSummary(odd)}</span>{/if}
       </div>
       {#if result}
         <div class="min-h-0 flex-1 overflow-auto border-t" bind:this={matchList}>
-          <MatchTable {result} bind:replacements />
+          <MatchTable {result} bind:replacements bind:excluded {odd} />
         </div>
         <!-- Drag down to show more rows (arrow keys too); double-click goes back to filling the page. A
              focusable separator is the window splitter pattern, which Svelte's a11y check doesn't know. -->

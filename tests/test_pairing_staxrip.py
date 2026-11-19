@@ -8,7 +8,15 @@ from conftest import source, sub
 
 from videoforge.core.jobs import external_tracks
 from videoforge.core.models import EncodeState, SubFormat as F
-from videoforge.core.pairing import FileSets, MatchRules, discover, external_sub_track, match_files, slot_files
+from videoforge.core.pairing import (
+    FileSets,
+    MatchRules,
+    discover,
+    external_sub_track,
+    match_files,
+    slot_files,
+    subtitle_label,
+)
 
 EXTS = (".h264", ".hevc")
 RULES = MatchRules(encode_suffixes=("_job",), encode_extensions=EXTS)
@@ -147,6 +155,23 @@ def test_added_subtitles_replace_the_ones_near_the_source(tmp_path):
     first, second = match_files(FileSets([e1, e2], [], [mine]), RULES).jobs
     assert first.subtitles == [mine]
     assert second.subtitles == [near[1]]
+
+
+def test_sources_match_in_episode_order(tmp_path):
+    names = ["Show.E10.mkv", "Show.E2.mkv", "Show.E1.mkv"]
+    for n in names:
+        (tmp_path / n).write_bytes(b"")
+    found = match_files(FileSets([tmp_path / n for n in names]), MatchRules(scan_source_folder=False))
+    assert [j.source.name for j in found.jobs] == ["Show.E1.mkv", "Show.E2.mkv", "Show.E10.mkv"]
+
+
+def test_subtitle_label_reads_the_name():
+    synced = subtitle_label(Path("Show.S01E01.Part.1.NF.WEB-DL-GNOME_USA_23.976fps.en.synced.srt"))
+    assert synced["language"] == "en" and synced["format"] == "srt" and synced["tags"] == ["synced"]
+    assert synced["track"] is None and synced["language_name"] == "English"
+    extracted = subtitle_label(Path("Show.S01E01.1080p.REMUX-FraMeSToR_track7_[eng].forced.ass"))
+    assert extracted["format"] == "ass" and extracted["track"] == 7 and extracted["tags"] == ["forced"]
+    assert subtitle_label(Path("Show.S01E01.srt"))["language"] == "und"
 
 
 def test_without_staxrip_temp(tmp_path):

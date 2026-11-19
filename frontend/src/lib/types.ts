@@ -822,8 +822,19 @@ export interface MatchedJob {
   source: string
   encode: string | null
   subtitles: string[]
+  subtitle_info: SubtitleLabel[] // the same files, described from their names
   chapters: string | null
   encode_state: string
+}
+
+/** A matched subtitle file as Matched files shows it, read from its name. */
+export interface SubtitleLabel {
+  path: string
+  language: string // "und" when the name has none
+  language_name: string
+  format: string // its extension: srt, ass, sup, idx
+  tags: string[] // forced, sdh, dub, synced
+  track: number | null // the source track it was extracted from (_trackN_)
 }
 
 export interface MatchResult {

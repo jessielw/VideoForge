@@ -28,6 +28,9 @@
   } = $props()
 
   let browsing = $state(false)
+  // Shown in the order a person reads names (E2 before E10), whatever order they were added in.
+  const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+  const shown = $derived(mode === 'files' ? [...paths].sort((a, b) => byName.compare(basename(a), basename(b))) : paths)
 
   function add(picked: string[]) {
     browsing = false
@@ -55,7 +58,7 @@
       aria-label={label}
       use:pathDrop={{ rule: { mode: mode === 'folder' ? 'folder' : 'files', extensions, label }, accept: add }}
     >
-      {#each paths as p (p)}
+      {#each shown as p (p)}
         <Tip class="min-w-0 max-w-full" text={p}>
           <span
             class="flex min-w-0 max-w-full items-center gap-1 rounded-md bg-muted py-0.5 pr-1 pl-2 text-xs break-all"

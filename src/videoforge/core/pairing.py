@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 import os
 from pathlib import Path
 import re
+from typing import Any
 
 from videoforge.core import lang
 from videoforge.core.models import EncodeState, JobInputs, SubFormat, SubTrack
@@ -161,6 +162,12 @@ def _base_stem(stem: str, suffixes: Iterable[str]) -> str:
     return stem
 
 
+def _natural_key(path: Path) -> tuple[Any, ...]:
+    """Names in the order a person reads them: E2 before E10."""
+    parts = re.split(r"(\d+)", path.name.lower())
+    return (*(int(p) if i % 2 else p for i, p in enumerate(parts)), str(path))
+
+
 def _belongs(path: Path, source: Path) -> bool:
     token = episode_token(source.stem)
     return path.name.startswith(source.stem + ".") or bool(token and episode_token(path.stem) == token)
@@ -174,7 +181,7 @@ def match_files(sets: FileSets, rules: MatchRules) -> MatchResult:
     encode and every subtitle/chapter file regardless of name. Subtitles found
     near the source only fill in for a source given none of its own.
     """
-    sources = _unique(sets.sources)
+    sources = sorted(_unique(sets.sources), key=_natural_key)  # one job per episode, in episode order
     encodes = _unique(sets.encodes)
     remaining = list(encodes)
     by_stem = {_base_stem(e.stem, rules.encode_suffixes): e for e in encodes}
@@ -259,6 +266,26 @@ def find_external_subs(source: Path, near: list[Path] | None = None) -> list[Pat
     """
     near = subtitles_near(source.parent) if near is None else near
     return sorted(p for p in near if _belongs(p, source))
+
+
+def subtitle_label(path: Path) -> dict[str, Any]:
+    """What Matched files shows for a subtitle file, read from its name alone (nothing is opened):
+    language, format, forced/sdh/dub and synced words, and the source track it was extracted from."""
+    stem = path.stem
+    words = {w.lower() for w in re.split(r"[.\s_\[\]()-]+", stem)}
+    tags = sorted({_TAG_ALIASES[w] for w in words if w in _TAG_ALIASES})
+    if words & {"synced", "sync"}:
+        tags.append("synced")
+    language = _language_with_region(stem) or _language_from_name(stem) or "und"
+    m = _TRACK_NO_RE.search(stem)
+    return {
+        "path": str(path),
+        "language": language,
+        "language_name": lang.display_name(language),
+        "format": path.suffix.lower().lstrip("."),
+        "tags": tags,
+        "track": int(m.group(1)) if m else None,
+    }
 
 
 def _language_from_name(stem: str) -> str | None:

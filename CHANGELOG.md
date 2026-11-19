@@ -18,6 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **Matched files** on New jobs has a grip on its bottom edge: drag it down to show more rows. Held below the page, the page scrolls and the list keeps growing until every row shows. The arrow keys move it too, a double-click goes back to filling the page, and the height is remembered.
 
+- **Matched files** shows each subtitle as a short tag read from its name, such as `en · srt · synced` or `en · ass · track 7`, with the file name on hover. Click a tag to leave that subtitle out of its job, and again to put it back.
+- **Matched files** flags a job with a different number of subtitles than most of the batch ("No subtitles; most have 1"), and its header counts them, such as "2 without subtitles".
+
 ### Changed
 
 - Settings shows its groups in one column at every width. On wide windows, short groups no longer sit beside tall ones with empty space under them.
@@ -25,6 +28,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The job's name gets its own line when the job header is narrow, instead of shrinking to a few letters.
 - The Video tab puts the preview above its settings when the tab is narrower than about 700 px, so the preview stays big enough to judge a crop.
 - A long list of paths on New jobs scrolls inside its box after about three rows, instead of pushing the rest of the page down.
+- New jobs lists sources in reading order, so `E2` comes before `E10`, in the Sources box, in **Matched files** and in the queue, whatever order they were added in.
+- Files that match no source are listed first in **Matched files**, marked in amber, instead of after every job.
 
 ### Fixed
 

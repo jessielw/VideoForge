@@ -300,6 +300,8 @@ def test_add_inspect_and_edit(tmp_path):
     with make_client(tmp_path) as client:
         preview = client.post("/api/match", json={"sources": [str(tmp_path / "src")]}).json()
         assert [Path(j["source"]).name for j in preview["jobs"]] == ["Show.S01E01.mkv", "Show.S01E02.mkv"]
+        label = preview["jobs"][0]["subtitle_info"][0]  # found next to the source
+        assert label["language"] == "en" and label["format"] == "srt" and label["path"].endswith("Show.S01E01.en.srt")
 
         ids = add(client, tmp_path)
         assert len(ids) == 2
@@ -2471,3 +2473,16 @@ def test_an_invalid_jobs_issues_say_each_check_once():
         "output.a",
     ]
     assert shown("Name must not mention dual audio: X") == ["output.name.dual", "output.a"]  # saved before
+
+
+def test_add_leaves_out_unticked_subtitles(tmp_path):
+    make_files(tmp_path, "S01E01", "S01E02")
+    with make_client(tmp_path) as client:
+        drop = str(tmp_path / "src" / "Show.S01E01.en.srt")
+        first, second = add(client, tmp_path, exclude_subtitles=[drop])
+        assert client.get(f"/api/jobs/{first}").json()["spec"]["inputs"]["subtitles"] == []
+        assert client.get(f"/api/jobs/{second}").json()["spec"]["inputs"]["subtitles"] == [
+            str(tmp_path / "src" / "Show.S01E02.en.srt")
+        ]
+        bad = client.post("/api/jobs", json={"sources": [str(tmp_path / "src")], "exclude_subtitles": "x"})
+        assert bad.status_code == 422
