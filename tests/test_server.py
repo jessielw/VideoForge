@@ -423,6 +423,13 @@ def test_add_inspect_and_edit(tmp_path):
         enc = edited["spec"]["encoder"] | {"rate_control": "crf", "crf": 17}
         assert client.post("/api/jobs/apply", json={"ids": ids, "encoder": enc}).json()["updated"] == ids
         assert [j["encoder"] for j in client.get("/api/jobs").json()] == ["x264 CRF 17", "x264 CRF 17"]
+        # One output folder for the batch (Queue's batch panel), and cleared again.
+        batch_out = str(tmp_path / "batch-out")
+        assert client.post("/api/jobs/apply", json={"ids": ids, "output_dir": batch_out}).json()["updated"] == ids
+        assert [client.get(f"/api/jobs/{i}").json()["spec"]["output_dir"] for i in ids] == [batch_out] * 2
+        client.post("/api/jobs/apply", json={"ids": ids, "output_dir": None})
+        assert client.get(f"/api/jobs/{ids[1]}").json()["spec"]["output_dir"] is None
+        client.post("/api/jobs/apply", json={"ids": ids, "output_dir": str(tmp_path / "out")})
 
         commands = client.get(f"/api/jobs/{ids[0]}/commands").json()
         steps = ["script", "index", "script.info", "chapters", "video", "mux"]  # audio is copied

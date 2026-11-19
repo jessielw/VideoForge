@@ -2,6 +2,8 @@
   // The queue: jobs on the left (click, Ctrl/Shift-click, drag across rows, Shift+arrows or Ctrl+A to
   // select several), the selected job's editor on the right, or a batch panel when several are selected.
   import EncoderPanel from '../components/EncoderPanel.svelte'
+  import FileBrowser from '../components/FileBrowser.svelte'
+  import OutputFolderMenu from '../components/OutputFolderMenu.svelte'
   import PathSlot from '../components/PathSlot.svelte'
   import { tick, onDestroy } from 'svelte'
   import { Input } from '$lib/components/ui/input'
@@ -17,6 +19,7 @@
   import DatabaseZapIcon from '@lucide/svelte/icons/database-zap'
   import FileDownIcon from '@lucide/svelte/icons/file-down'
   import FileUpIcon from '@lucide/svelte/icons/file-up'
+  import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
   import GaugeIcon from '@lucide/svelte/icons/gauge'
   import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
   import ListChecksIcon from '@lucide/svelte/icons/list-checks'
@@ -42,6 +45,7 @@
   import ReuseDialog from '../components/ReuseDialog.svelte'
   import Tip from '../components/Tip.svelte'
   import { api } from '../lib/api'
+  import { pastedPaths, pathDrop } from '../lib/dropPaths.svelte'
   import {
     bytes,
     duration,
@@ -575,6 +579,22 @@
       const r = await api.apply(selected, { container })
       const label = batchContainers.find((c) => c.id === container)?.label ?? container
       toast.success(`${label} for ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''))
+    })
+  }
+
+  // One output folder for the whole batch (null clears it).
+  let browsingOutput = $state(false)
+  async function applyOutput(path: string | null) {
+    if (!batchSource) return
+    batchSource.spec.output_dir = path
+    await act(async () => {
+      const r = await api.apply(selected, { output_dir: path })
+      toast.success(
+        (path
+          ? `Output folder set for ${r.updated.length} job(s)`
+          : `Output folder cleared for ${r.updated.length} job(s)`) +
+          (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
+      )
     })
   }
 
@@ -1223,6 +1243,31 @@
                 <span class="text-xs text-muted-foreground">Each job keeps its own extra arguments.</span>
               </Card.Root>
             {/if}
+            <Card.Root class="gap-2 p-4">
+              <div
+                class="-m-1 flex flex-wrap items-center gap-3 rounded-lg p-1 outline-none"
+                role="group"
+                aria-label="Output folder for the selected jobs (drop or paste a folder)"
+                use:pathDrop={{
+                  rule: { mode: 'folder', label: 'Output folder' },
+                  accept: (paths) => applyOutput(paths[0]),
+                }}
+              >
+                <span class="text-sm">Output folder</span>
+                <Input
+                  class="min-w-48 flex-1 font-mono text-xs"
+                  aria-label="Output folder for the selected jobs"
+                  placeholder="Not set"
+                  value={batchSource.spec.output_dir ?? ''}
+                  onchange={(e) => applyOutput(pastedPaths((e.target as HTMLInputElement).value)[0] || null)}
+                />
+                <Button variant="outline" onclick={() => (browsingOutput = true)}><FolderOpenIcon />Browse…</Button>
+                <OutputFolderMenu onpick={(path) => applyOutput(path)} />
+              </div>
+              <p class="text-xs text-muted-foreground">
+                Every selected job writes its file here. Each job keeps its own output name.
+              </p>
+            </Card.Root>
             <Card.Root class="p-4">
               <EncoderPanel ruleSet={batchSource.rule_set} value={batchSource.spec.encoder} onchange={applyEncoder} />
             </Card.Root>
@@ -1243,6 +1288,19 @@
 </div>
 
 <ReuseDialog />
+
+{#if browsingOutput && batchSource}
+  <FileBrowser
+    title="Output folder for {selected.length} jobs"
+    mode="folder"
+    start={batchSource.spec.output_dir ?? ''}
+    onpick={(paths) => {
+      browsingOutput = false
+      if (paths[0]) applyOutput(paths[0])
+    }}
+    onclose={() => (browsingOutput = false)}
+  />
+{/if}
 
 <Dialog.Root bind:open={importOpen}>
   <Dialog.Content>

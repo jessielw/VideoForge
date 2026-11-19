@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- The Queue's batch panel (several jobs selected) sets one **Output folder** for all of them: type or paste a path, **Browse…**, pick a saved folder, or drop a folder on the row. Clearing the box clears it on every job. Each job keeps its own output name, and queued, running or indexing jobs are skipped as for the other batch settings.
+
 ## [0.1.13] - 2026-11-19
 
 ### Fixed
