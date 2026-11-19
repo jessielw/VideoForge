@@ -7,7 +7,8 @@
   // row says what a guess went on and what clashes with it (a second chapters file or encode for one source,
   // subtitles alike). A set matched by hand is remembered when its jobs are added; a file matched that way can
   // forget its pattern, and the footer forgets them all. Rows can be ticked (Shift for a range, or every row
-  // shown) to move them all to one source, or none, at once.
+  // shown) to move them all to one source, or none, at once. A text subtitle whose last line ends well past
+  // its source, or well before it, is flagged (a warning only); one tagged synced or matched by hand isn't.
   import { tick } from 'svelte'
   import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle'
   import SparklesIcon from '@lucide/svelte/icons/sparkles'
@@ -31,10 +32,12 @@
     needsLook,
     rangeOf,
     suggestedMatches,
+    timingKey,
+    timingPairs,
     type MatchEntry,
     type MatchKind,
   } from '../lib/matchReview'
-  import type { MatchResult } from '../lib/types'
+  import type { MatchResult, SubtitleTiming } from '../lib/types'
   import Tip from './Tip.svelte'
 
   let {
@@ -55,7 +58,33 @@
 
   const KIND: Record<MatchKind, string> = { video: 'Video', subtitles: 'Subtitles', chapters: 'Chapters' }
 
-  const entries = $derived(result ? matchEntries(result) : [])
+  // Subtitles whose last line doesn't fit their source's length, checked when the dialog opens (reading each
+  // source's length is slow on a share), and again for a pair not asked about yet; by timingKey.
+  let timing = $state<Record<string, SubtitleTiming>>({})
+  let checkingTiming = $state(false)
+  const asked = new Set<string>()
+  $effect(() => {
+    if (!open || !result) return
+    const wanted = Object.entries(timingPairs(result)).filter(([p, s]) => !asked.has(timingKey(p, s)))
+    if (!wanted.length) return
+    for (const [p, s] of wanted) asked.add(timingKey(p, s))
+    checkingTiming = true
+    api
+      .matchTiming(Object.fromEntries(wanted))
+      .then((found) => {
+        const pairs = Object.fromEntries(wanted)
+        timing = {
+          ...timing,
+          ...Object.fromEntries(Object.entries(found).map(([p, t]) => [timingKey(p, pairs[p]), t])),
+        }
+      })
+      .catch(() => {
+        for (const [p, s] of wanted) asked.delete(timingKey(p, s)) // ask again next time
+      })
+      .finally(() => (checkingTiming = false))
+  })
+
+  const entries = $derived(result ? matchEntries(result, timing) : [])
   const sources = $derived(result?.jobs.map((j) => j.source) ?? [])
   const lookCount = $derived(entries.filter(needsLook).length)
   let view = $state<'look' | 'all'>('look')
@@ -215,6 +244,11 @@
         bind:value={query}
       />
       <span class="flex-1"></span>
+      {#if checkingTiming}
+        <span class="flex items-center gap-1 text-xs text-muted-foreground"
+          ><LoaderCircleIcon class="size-3 animate-spin" />Checking subtitle timing…</span
+        >
+      {/if}
       {#if mine}
         <Button size="sm" variant="ghost" onclick={undoAll}><Undo2Icon />Undo my matches · {mine}</Button>
       {/if}
@@ -340,6 +374,7 @@
                     >{/if}
                 </div>
                 {#if e.conflict}<div class="text-xs text-warning">{e.conflict}</div>{/if}
+                {#if e.timing}<div class="text-xs text-warning">{e.timing}</div>{/if}
               </div>
               <div class="col-span-3 flex min-w-0 items-center gap-1 sm:col-span-1">
                 <NativeSelect

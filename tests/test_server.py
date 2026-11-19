@@ -189,6 +189,29 @@ def test_match_suggests_sources_and_takes_files_matched_by_hand(tmp_path):
         assert len(added["added"]) == 2 and added["unmatched"] == []  # set to no source on purpose
 
 
+def test_match_timing_flags_subtitles_that_dont_fit_their_source(tmp_path, monkeypatch):
+    from videoforge.core import sub_timing
+
+    monkeypatch.setattr(sub_timing, "source_length_ms", lambda p, _mkvmerge: {"A.mkv": 24 * 60_000}.get(p.name))
+
+    def srt(name, end):
+        p = tmp_path / name
+        p.write_text(f"1\n00:00:01,000 --> {end}\nx\n", encoding="utf-8")
+        return str(p)
+
+    a = str(tmp_path / "A.mkv")
+    fits, late, early = srt("fits.srt", "00:22:30,000"), srt("late.srt", "00:44:00,000"), srt("early.srt", "00:05:00,0")
+    forced = srt("early.forced.srt", "00:05:00,000")
+    body = {"pairs": {fits: a, late: a, early: a, forced: a, srt("other.srt", "00:01:00,0"): str(tmp_path / "B.mkv")}}
+    (tmp_path / "x.sup").write_bytes(b"PG")
+    body["pairs"][str(tmp_path / "x.sup")] = a
+    with make_client(tmp_path) as client:
+        out = client.post("/api/match/timing", json=body).json()
+        assert {k: v["verdict"] for k, v in out.items()} == {fits: None, late: "late", early: "early", forced: None}
+        assert out[late] == {"verdict": "late", "last_ms": 44 * 60_000, "source_ms": 24 * 60_000}
+        assert client.post("/api/match/timing", json={"pairs": [fits]}).status_code == 422
+
+
 def test_a_set_matched_by_hand_is_remembered_on_add_and_can_be_forgotten(tmp_path):
     make_files(tmp_path, "S01E01", "S01E02", "S01E03", "S01E04")
     subs = [tmp_path / f"t{n}_c{n + 1}.srt" for n in (1, 2, 3)]

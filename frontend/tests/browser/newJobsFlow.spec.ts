@@ -154,6 +154,7 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
     const responses: Record<string, unknown> = {
       '/api/jobs': [],
       '/api/match/patterns': [],
+      '/api/match/timing': {},
       '/api/rule-sets': [ruleSet],
       '/api/presets': presets,
       '/api/health': { ok: true, version: 'test' },
@@ -712,7 +713,7 @@ test('files are matched by hand in Matched files and in Review matches, sent wit
   expect(errors).toEqual([])
 })
 
-test('Matched files and Review matches show left-over files, subtitles alike, what a guess went on, and forget a remembered pattern', async ({
+test('Matched files and Review matches show left-over files, subtitles alike, a subtitle too long for its source, what a guess went on, and forget a remembered pattern', async ({
   page,
 }) => {
   const posted: Record<string, unknown>[] = []
@@ -733,6 +734,11 @@ test('Matched files and Review matches show left-over files, subtitles alike, wh
     forgotten.push(route.request().postDataJSON())
     remembered = 0
     return route.fulfill({ json: { forgotten: 1 } })
+  })
+  const timed: Record<string, string>[] = []
+  await page.route('**/api/match/timing', (route) => {
+    timed.push(route.request().postDataJSON().pairs)
+    return route.fulfill({ json: { [plain]: { verdict: 'late', last_ms: 2_640_000, source_ms: 1_440_000 } } })
   })
   await page.route('**/api/match', (route) => {
     matches++
@@ -796,6 +802,10 @@ test('Matched files and Review matches show left-over files, subtitles alike, wh
   const dialog = page.getByRole('dialog', { name: 'Review matches' })
   await expect(dialog).toContainText('Left over: Show.S01E01.mkv already has chapters, Show.S01E01.chapters.txt')
   await expect(dialog).toContainText('Same language and type as Show.S01E01.en.synced.srt')
+  await expect(dialog).toContainText(
+    'Its last line is at 44:00, 20:00 after the source ends (24:00): another episode or cut?',
+  )
+  expect(timed[0]).toEqual({ [plain]: e1, [taught]: e2 }) // not the synced one
   await dialog.getByRole('radio', { name: /All files/ }).click()
   await expect(dialog).toContainText('Named like t1_c1.srt, which you matched before')
   await expect(dialog).toContainText('Sets you matched by hand are remembered for later batches · 1')

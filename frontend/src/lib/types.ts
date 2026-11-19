@@ -856,6 +856,13 @@ export interface MatchSuggestion {
   detail?: string
 }
 
+/** /api/match/timing's answer for one subtitle: late, early or (null) it fits its source's length. */
+export interface SubtitleTiming {
+  verdict: 'late' | 'early' | null
+  last_ms: number
+  source_ms: number
+}
+
 export interface MatchResult {
   jobs: MatchedJob[]
   unmatched: string[]

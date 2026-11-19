@@ -9,6 +9,9 @@ import {
   needsLook,
   rangeOf,
   suggestedMatches,
+  timingKey,
+  timingNote,
+  timingPairs,
   UNSURE,
 } from '../src/lib/matchReview.ts'
 import type { MatchResult, MatchedJob } from '../src/lib/types.ts'
@@ -162,4 +165,50 @@ test('a left-over file and subtitles alike need a look, and say why', () => {
 test('a Shift+click range runs either way between two shown paths', () => {
   assert.deepEqual(rangeOf(['a', 'b', 'c', 'd'], 'c', 'a'), ['a', 'b', 'c'])
   assert.deepEqual(rangeOf(['a', 'b'], 'gone', 'b'), ['b'])
+})
+
+test('timing: text subtitles only, not synced or matched by hand, and a flag only for one that does not fit', () => {
+  const r: MatchResult = {
+    jobs: [
+      job('D:/m/E01.mkv', {
+        subtitles: ['D:/m/E01.en.srt', 'D:/m/E01.en.synced.srt', 'D:/m/E01.en.sup', 'D:/m/E01.ja.ass', 'D:/m/x.srt'],
+        subtitle_info: [
+          label('D:/m/E01.en.srt', 'en', 'srt'),
+          label('D:/m/E01.en.synced.srt', 'en', 'srt', ['synced']),
+          label('D:/m/E01.en.sup', 'en', 'sup'),
+          label('D:/m/E01.ja.ass', 'ja', 'ass'),
+          label('D:/m/x.srt', 'und', 'srt'),
+        ],
+        matches: {
+          'D:/m/E01.en.srt': 'name',
+          'D:/m/E01.en.synced.srt': 'name',
+          'D:/m/E01.en.sup': 'name',
+          'D:/m/E01.ja.ass': 'name',
+          'D:/m/x.srt': 'manual',
+        },
+      }),
+    ],
+    unmatched: [],
+    held: [],
+    suggestions: {},
+  }
+  assert.deepEqual(timingPairs(r), { 'D:/m/E01.en.srt': 'D:/m/E01.mkv', 'D:/m/E01.ja.ass': 'D:/m/E01.mkv' })
+
+  const late = { verdict: 'late' as const, last_ms: 2_640_000, source_ms: 1_440_000 }
+  const timing = {
+    [timingKey('D:/m/E01.en.srt', 'D:/m/E01.mkv')]: late,
+    [timingKey('D:/m/E01.ja.ass', 'D:/m/E01.mkv')]: { verdict: null, last_ms: 1_400_000, source_ms: 1_440_000 },
+    [timingKey('D:/m/x.srt', 'D:/m/E01.mkv')]: late, // matched by hand: never flagged
+  }
+  const flagged = matchEntries(r, timing).filter((e) => e.timing)
+  assert.ok(flagged.every(needsLook))
+  assert.deepEqual(
+    flagged.map((e) => [e.path.slice(5), e.timing]),
+    [['E01.en.srt', 'Its last line is at 44:00, 20:00 after the source ends (24:00): another episode or cut?']],
+  )
+  assert.equal(
+    timingNote({ verdict: 'early', last_ms: 300_000, source_ms: 7_260_000 }),
+    'Its last line is at 5:00, 1:56:00 before the source ends (2:01:00): another episode or cut?',
+  )
+  assert.equal(matchEntries(r).find((e) => e.path === 'D:/m/E01.en.srt')?.timing, '') // not checked yet
 })

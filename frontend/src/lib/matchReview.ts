@@ -2,7 +2,7 @@
 // its source, how it matched, what that went on, what clashes with it and what to offer, so a person can check
 // and change any of them.
 
-import type { MatchResult, MatchSuggestion, SubtitleLabel, SubtitleMatch } from './types'
+import type { MatchResult, MatchSuggestion, SubtitleLabel, SubtitleMatch, SubtitleTiming } from './types'
 
 /** The matches a person should check: MATCH_NOTE's not-sure ones (a test keeps the two the same). */
 export const UNSURE: ReadonlySet<SubtitleMatch> = new Set(['number', 'similar', 'only_source', 'other_episode'])
@@ -17,7 +17,38 @@ export interface MatchEntry {
   detail: string // for a guess, what it went on
   conflict: string // what clashes with it: its source already has one of its kind, or a subtitle like it
   pattern: string | null // the remembered pattern it matched by (its shape), to forget
+  timing: string // a subtitle whose last line doesn't fit its source's length: what's off
   suggestions: MatchSuggestion[]
+}
+
+/** A subtitle and its source, as one key: a subtitle moved to another source is checked again. */
+export const timingKey = (path: string, source: string) => `${path}\n${source}`
+
+/** The subtitles a timing check is for ({subtitle: source}): text ones (SRT, ASS) matched to a source, leaving
+ * out those tagged synced and those the user matched (picking a file's source confirms it). */
+export function timingPairs(result: MatchResult): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const j of result.jobs)
+    for (const s of j.subtitle_info ?? [])
+      if (/\.(srt|ass|ssa)$/i.test(s.path) && !s.tags.includes('synced') && j.matches?.[s.path] !== 'manual')
+        out[s.path] = j.source
+  return out
+}
+
+const clock = (ms: number) => {
+  const s = Math.round(ms / 1000)
+  const [h, m, sec] = [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60]
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`
+}
+
+/** What a timing check found, in words, or '' when the subtitle fits. */
+export function timingNote(t: SubtitleTiming | undefined): string {
+  if (!t?.verdict) return ''
+  const gap = clock(Math.abs(t.last_ms - t.source_ms))
+  return t.verdict === 'late'
+    ? `Its last line is at ${clock(t.last_ms)}, ${gap} after the source ends (${clock(t.source_ms)}): another episode or cut?`
+    : `Its last line is at ${clock(t.last_ms)}, ${gap} before the source ends (${clock(t.source_ms)}): another episode or cut?`
 }
 
 const SUBTITLE = /\.(srt|ass|ssa|sup|idx)$/i
@@ -43,7 +74,7 @@ export function duplicateSubtitles(info: readonly SubtitleLabel[], excluded: rea
 
 /** Unmatched files first, then each job's files in source order (video, chapters, subtitles). Chapters found in
  * StaxRip's temp folder are left out: they aren't inputs, so they can't move. */
-export function matchEntries(result: MatchResult): MatchEntry[] {
+export function matchEntries(result: MatchResult, timing: Record<string, SubtitleTiming> = {}): MatchEntry[] {
   const held = new Set(result.held ?? [])
   const bySource = new Map(result.jobs.map((j) => [j.source, j]))
   const out: MatchEntry[] = result.unmatched.map((path) => {
@@ -60,6 +91,7 @@ export function matchEntries(result: MatchResult): MatchEntry[] {
         ? `Left over: ${nameOf(lostTo)} already has ${kind === 'video' ? 'an encode' : 'chapters'}${has ? `, ${nameOf(has)}` : ''}`
         : '',
       pattern: null,
+      timing: '',
       suggestions: result.suggestions?.[path] ?? [],
     }
   })
@@ -83,6 +115,7 @@ export function matchEntries(result: MatchResult): MatchEntry[] {
         detail: j.details?.[path] ?? '',
         conflict: others.length ? `Same language and type as ${others.join(', ')}` : '',
         pattern: j.patterns?.[path] ?? null,
+        timing: kind === 'subtitles' && reason !== 'manual' ? timingNote(timing[timingKey(path, j.source)]) : '',
         suggestions: [],
       })
     }
@@ -90,9 +123,10 @@ export function matchEntries(result: MatchResult): MatchEntry[] {
   return out
 }
 
-/** Unmatched (and not set so on purpose), matched in a way a person should check, or clashing with another. */
+/** Unmatched (and not set so on purpose), matched in a way a person should check, clashing with another, or a
+ * subtitle that doesn't fit its source's length. */
 export function needsLook(e: MatchEntry): boolean {
-  return e.reason === null || UNSURE.has(e.reason) || !!e.conflict
+  return e.reason === null || UNSURE.has(e.reason) || !!e.conflict || !!e.timing
 }
 
 /** The entries whose file or source name has every word of the query, case-insensitively. */

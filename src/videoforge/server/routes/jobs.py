@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Request
 
+from videoforge.core import sub_timing
 from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import ToolError
 from videoforge.core.job import OutputPolicy
@@ -115,6 +117,31 @@ def match(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
             for p in unmatched
         },
     }
+
+
+@router.post("/match/timing")
+def match_timing(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """{pairs: {subtitle: source}}: whether each text subtitle's last cue fits its source's length (sub_timing).
+    Returns {subtitle: {verdict: "late" | "early" | null, last_ms, source_ms}}, leaving out the ones that can't be
+    read (image subtitles, no cues, no source length). Reading a source's length is slow on a share: the caller
+    asks only when someone looks."""
+    pairs = body.get("pairs") or {}
+    if not isinstance(pairs, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in pairs.items()):
+        raise HTTPException(422, "pairs must map subtitle paths to source paths")
+    mkvmerge = queue_of(request).app.tools.mkvmerge
+    subs = {Path(s): Path(src) for s, src in pairs.items() if Path(s).suffix.lower() in sub_timing.TEXT_FORMATS}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        lasts = dict(zip(subs, pool.map(sub_timing.last_cue_ms, subs), strict=True))
+        wanted = sorted({src for s, src in subs.items() if lasts[s] is not None}, key=str)
+        lengths = dict(zip(wanted, pool.map(lambda p: sub_timing.source_length_ms(p, mkvmerge), wanted), strict=True))
+    out: dict[str, Any] = {}
+    for s, src in subs.items():
+        last, length = lasts[s], lengths.get(src)
+        if last is None or not length:
+            continue
+        forced = "forced" in subtitle_label(s)["tags"]
+        out[str(s)] = {"verdict": sub_timing.verdict(last, length, forced=forced), "last_ms": last, "source_ms": length}
+    return out
 
 
 @router.get("/match/patterns")
