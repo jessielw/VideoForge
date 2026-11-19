@@ -106,6 +106,8 @@ async function fixture(page: Page) {
     id: 'auto',
     name: 'Rules',
     label: '',
+    group: null,
+    group_name: '',
     source: 'D:/Film.mkv',
     rule_set: 'group',
     status: 'ready',

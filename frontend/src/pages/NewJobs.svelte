@@ -20,6 +20,7 @@
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
   import { groupByFolder } from '../lib/templateFolders'
+  import { defaultGroupName } from '../lib/queueView'
   import { ENCODERS, type EncoderSettings, type MatchResult, type SubtitleTiming } from '../lib/types'
   import LanguagePicker from '../components/LanguagePicker.svelte'
   import MatchDialog from '../components/MatchDialog.svelte'
@@ -335,6 +336,18 @@
   }
 
   const newJobs = $derived((result?.jobs.filter((j) => !j.existing_id).length ?? 0) + replacements.length)
+  // Two or more new jobs go in a queue group (shown together, collapsible), named after them unless the
+  // name is typed (for these inputs).
+  let grouping = $state(true)
+  let typedGroupName = $state<{ key: string; name: string } | null>(null)
+  const groupName = $derived(
+    typedGroupName?.key === inputKey
+      ? typedGroupName.name
+      : defaultGroupName(
+          result?.jobs.filter((j) => !j.existing_id || replacements.includes(j.existing_id)).map((j) => j.source) ?? [],
+        ),
+  )
+  const groupsJobs = $derived(grouping && newJobs > 1 && !!groupName.trim())
   const cropWillRun = $derived(autoCrop && template?.data.crop_mode !== 'fixed')
   // What pressing Add will do, in words.
   const summary = $derived.by(() => {
@@ -342,7 +355,7 @@
     if (matching || !result) return 'Matching…'
     const after = cropWillRun ? 'index and auto-crop' : autoIndex ? 'index' : 'neither index nor crop'
     return [
-      `${newJobs} job${newJobs === 1 ? '' : 's'}`,
+      `${newJobs} job${newJobs === 1 ? '' : 's'}${groupsJobs ? ` in group ${groupName.trim()}` : ''}`,
       template?.name ?? 'no template',
       `will ${after}`,
       output[0] ? `saved to ${output[0]}` : 'choose an output folder',
@@ -363,6 +376,7 @@
         output_dir: output[0] ?? null,
         auto_index: autoIndex,
         auto_crop: autoCrop,
+        group_name: groupsJobs ? groupName.trim() : undefined,
         template: template && {
           ...$state.snapshot(template.data),
           encoder: $state.snapshot(encoder ?? template.data.encoder),
@@ -520,6 +534,22 @@
             <span class="text-xs text-muted-foreground"
               >These two apply to this batch. Their defaults are in Settings › Queue & indexing.</span
             >
+            {#if newJobs > 1}
+              <span class="flex min-w-0 flex-wrap items-center gap-2">
+                <label class="flex items-center gap-2">
+                  <Checkbox checked={grouping} onCheckedChange={(v) => (grouping = v === true)} />Group them
+                </label>
+                <Input
+                  class="h-8 w-56 max-w-full"
+                  aria-label="Group name"
+                  maxlength={80}
+                  disabled={!grouping}
+                  value={groupName}
+                  oninput={(e) => (typedGroupName = { key: inputKey, name: e.currentTarget.value })}
+                />
+                <span class="text-xs text-muted-foreground">(shown together in the Queue, and collapsible)</span>
+              </span>
+            {/if}
           </div>
           {#if encoder}
             <div class="text-sm text-muted-foreground">Encoder preset</div>

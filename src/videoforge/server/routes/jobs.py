@@ -31,7 +31,7 @@ from videoforge.core.template import Template
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.core.workdir import work_dir_size
 from videoforge.server import match_patterns, output_folders
-from videoforge.server.queue import LOG_LINES, Busy, JobQueue
+from videoforge.server.queue import LOG_LINES, Busy, JobQueue, clean_group_name
 from videoforge.server.routes.presets import default_template, subs_default
 from videoforge.server.views import detail, summary
 
@@ -181,6 +181,12 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
     drop = set(excluded)  # subtitles unticked in Matched files
     for inputs in result.jobs:
         inputs.subtitles = [p for p in inputs.subtitles if str(p) not in drop]
+    group_name = body.get("group_name") or None  # a queue group for the new jobs, when there are two or more
+    if group_name is not None:
+        try:
+            group_name = clean_group_name(group_name)
+        except ValueError as ex:
+            raise HTTPException(422, str(ex)) from None
     out_dir = Path(body["output_dir"]) if body.get("output_dir") else None
     if out_dir is not None:
         store = request.app.state.store
@@ -201,6 +207,7 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
         subs_default=subs_default(request.app.state.store),
         auto_index=_optional_bool(body, "auto_index"),
         auto_crop=_optional_bool(body, "auto_crop"),
+        group_name=group_name,
     )
     if added:  # sets the user matched by hand teach later batches
         match_patterns.remember(request.app.state.store, learn_patterns(_assign(body), [j.source for j in result.jobs]))
@@ -232,7 +239,9 @@ def add_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, An
 
 @router.get("/jobs")
 def list_jobs(request: Request) -> list[dict[str, Any]]:
-    return [summary(e) for e in queue_of(request).entries()]
+    q = queue_of(request)
+    groups = q.group_names()
+    return [summary(e, groups) for e in q.entries()]
 
 
 @router.post("/jobs/apply-crop")
@@ -436,6 +445,60 @@ def reorder_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str
     q = queue_of(request)
     q.reorder(body.get("ids") or [])
     return {"ids": [e.id for e in q.entries()]}
+
+
+def _ids(body: dict[str, Any]) -> list[str]:
+    ids = body.get("ids") or []
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        raise HTTPException(422, "ids must be a list of job ids")
+    return ids
+
+
+@router.post("/jobs/move")
+def move_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """{ids, before, group}: the jobs go just before `before` (null: at the end), in queue group `group`
+    ("" or null: none). Returns the queue order."""
+    q = queue_of(request)
+    before, group = body.get("before"), body.get("group") or ""
+    if not isinstance(before, str | None) or not isinstance(group, str):
+        raise HTTPException(422, "before is a job id or null, group a group id or empty")
+    try:
+        q.move(_ids(body), before, group)
+    except KeyError as ex:
+        raise HTTPException(404, str(ex)) from None
+    return {"ids": [e.id for e in q.entries()]}
+
+
+@router.post("/jobs/group")
+def group_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    """{ids, name}: a new queue group of these jobs, where the first of them is. Returns {group}."""
+    try:
+        return {"group": queue_of(request).group(_ids(body), body.get("name"))}
+    except ValueError as ex:
+        raise HTTPException(422, str(ex)) from None
+    except KeyError as ex:
+        raise HTTPException(404, str(ex)) from None
+
+
+@router.post("/groups/{group_id}/rename")
+def rename_group(request: Request, group_id: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
+    try:
+        queue_of(request).rename_group(group_id, body.get("name"))
+    except ValueError as ex:
+        raise HTTPException(422, str(ex)) from None
+    except KeyError as ex:
+        raise HTTPException(404, str(ex)) from None
+    return {"group": group_id}
+
+
+@router.post("/groups/{group_id}/ungroup")
+def ungroup(request: Request, group_id: str) -> dict[str, Any]:
+    """The group goes; its jobs stay where they are."""
+    try:
+        queue_of(request).ungroup(group_id)
+    except KeyError as ex:
+        raise HTTPException(404, str(ex)) from None
+    return {"group": group_id}
 
 
 @router.post("/jobs/reprobe")

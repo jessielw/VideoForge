@@ -67,6 +67,8 @@ async function fixture(page: Page, extra: SubTrack[] = []) {
     id: 'names',
     name: 'Subtitle names',
     label: '',
+    group: null,
+    group_name: '',
     source: 'D:/Show.mkv',
     rule_set: 'manual',
     status: 'ready',

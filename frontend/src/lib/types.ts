@@ -155,6 +155,8 @@ export interface JobSummary {
   id: string
   name: string
   label: string // tells jobs on one source apart (spec.label)
+  group: string | null // the queue group it's shown in (a batch shown together, e.g. a season)
+  group_name: string
   source: string
   rule_set: string
   status: Status

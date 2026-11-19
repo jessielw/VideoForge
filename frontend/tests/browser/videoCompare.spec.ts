@@ -14,6 +14,8 @@ async function fixture(page: Page) {
     id: 'job-0',
     name: 'Show S01E01',
     label: '',
+    group: null,
+    group_name: '',
     source: 'D:\\Media\\Show.S01E01.mkv',
     rule_set: 'manual',
     status: 'ready',

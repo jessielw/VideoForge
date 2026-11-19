@@ -35,6 +35,8 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
     id: 'delay',
     name: 'Audio delay',
     label: '',
+    group: null,
+    group_name: '',
     source: 'D:/Show.mkv',
     rule_set: 'manual',
     status: 'ready',

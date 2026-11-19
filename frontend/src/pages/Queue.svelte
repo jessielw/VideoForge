@@ -7,11 +7,31 @@
   import PathSlot from '../components/PathSlot.svelte'
   import { tick, onDestroy } from 'svelte'
   import { Input } from '$lib/components/ui/input'
-  import { matchingJobs, queuePage, queueRange, queueable, QUEUE_PAGE_SIZE } from '../lib/queueView'
+  import {
+    defaultGroupName,
+    dropTarget,
+    matchingJobs,
+    moveSelection,
+    queuePage,
+    queueRange,
+    queueRows,
+    queueSlots,
+    queueable,
+    slotPage,
+    QUEUE_PAGE_SIZE,
+    type Dragged,
+    type Drop,
+    type QueueRow,
+  } from '../lib/queueView'
   import { saves } from '../lib/saves'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
+  import ChevronDownIcon from '@lucide/svelte/icons/chevron-down'
   import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left'
+  import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
+  import EllipsisIcon from '@lucide/svelte/icons/ellipsis'
+  import FolderPlusIcon from '@lucide/svelte/icons/folder-plus'
+  import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical'
   import CopyPlusIcon from '@lucide/svelte/icons/copy-plus'
   import CropIcon from '@lucide/svelte/icons/crop'
   import DatabaseCheckIcon from '@lucide/svelte/icons/database-check'
@@ -78,8 +98,41 @@
   const matchingSet = $derived(new Set(matchingIds))
   const selectedSet = $derived(new Set(selected))
   const hiddenSelected = $derived(selected.filter((id) => !matchingSet.has(id)).length)
-  const currentPage = $derived(queuePage(matching.length, page))
-  const pageJobs = $derived(matching.slice(currentPage * QUEUE_PAGE_SIZE, (currentPage + 1) * QUEUE_PAGE_SIZE))
+
+  // Queue groups (a batch shown together, e.g. a season): which are collapsed is this browser's.
+  const COLLAPSED_KEY = 'videoforge.queue.collapsed'
+  let collapsed = $state(
+    new Set<string>(
+      (() => {
+        try {
+          const saved = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]')
+          return Array.isArray(saved) ? saved.filter((g) => typeof g === 'string') : []
+        } catch {
+          return []
+        }
+      })(),
+    ),
+  )
+  function setCollapsed(group: string, shut: boolean) {
+    const next = new Set([...collapsed].filter((g) => app.jobs.some((j) => j.group === g)))
+    if (shut) next.add(group)
+    else next.delete(group)
+    collapsed = next
+    try {
+      localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]))
+    } catch {
+      // private window or blocked storage: it's only remembered until the page reloads
+    }
+  }
+
+  // A page is QUEUE_PAGE_SIZE slots: a matching job each, a collapsed group one for all its jobs.
+  const slots = $derived(queueSlots(matching, collapsed))
+  const currentPage = $derived(queuePage(slots.length, page))
+  const lastPage = $derived((currentPage + 1) * QUEUE_PAGE_SIZE >= slots.length)
+  const rows = $derived(queueRows(slots, currentPage, app.jobs))
+  const pageJobs = $derived(rows.flatMap((r) => (r.kind === 'job' ? [r.job] : [])))
+  const visibleIds = $derived(slots.flatMap((s) => (s.kind === 'job' ? [s.job.id] : []))) // what arrows go through
+  const place = $derived(new Map(matchingIds.map((id, i) => [id, i + 1]))) // a rail chip's number
   const tabStop = $derived(
     pageJobs.find((job) => job.id === cursor)?.id ??
       pageJobs.find((job) => selectedSet.has(job.id))?.id ??
@@ -107,7 +160,7 @@
   }
 
   async function changePage(next: number) {
-    page = queuePage(matching.length, next)
+    page = queuePage(slots.length, next)
     await tick()
     const scroller = (peek || !rail ? listEl : railEl)?.querySelector<HTMLElement>('[data-scroller]')
     scroller?.scrollTo(0, 0)
@@ -168,11 +221,13 @@
   // The routed job is selected once it's in the list (the prune below would undo it otherwise).
   $effect(() => {
     const id = router.jobId
-    if (id && !selected.includes(id) && app.jobs.some((j) => j.id === id)) {
+    const job = id ? app.jobs.find((j) => j.id === id) : undefined
+    if (id && job && !selected.includes(id)) {
       selected = [id]
       query = ''
       status = ''
-      page = Math.floor(app.jobs.findIndex((j) => j.id === id) / QUEUE_PAGE_SIZE)
+      if (job.group && collapsed.has(job.group)) setCollapsed(job.group, false) // its row shows
+      page = Math.max(0, slotPage(queueSlots(app.jobs, collapsed), id))
     }
   })
 
@@ -266,13 +321,14 @@
 
   // Up/Down (Home/End) move the selection, with Shift they stretch it from the anchor; Ctrl+A selects all.
   async function keys(e: KeyboardEvent) {
-    const ids = matchingIds
-    if (!ids.length) return
+    if (!matchingIds.length) return
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
       e.preventDefault()
-      select(ids)
+      select(matchingIds)
       return
     }
+    const ids = visibleIds // not a collapsed group's (Shift still takes them, from the matching jobs)
+    if (!ids.length) return
     const target = (e.target as HTMLElement).closest<HTMLElement>('[data-job]')?.dataset.job
     if (!target) return
     const at = Math.max(0, ids.indexOf(target))
@@ -286,7 +342,7 @@
       anchor = id
       select([id])
     }
-    page = Math.floor(ids.indexOf(id) / QUEUE_PAGE_SIZE)
+    page = Math.max(0, slotPage(slots, id))
     await focusJob(id)
   }
 
@@ -338,14 +394,115 @@
     }
   }
 
-  async function move(step: number) {
-    const ids = app.jobs.map((j) => j.id)
-    const sel = new Set(selected)
-    const order = step < 0 ? ids : ids.toReversed()
-    for (let i = 1; i < order.length; i++) {
-      if (sel.has(order[i]) && !sel.has(order[i - 1])) [order[i - 1], order[i]] = [order[i], order[i - 1]]
+  // A job in a group moves within it (drag its grip to take it out); a whole group selected moves as one.
+  async function move(step: -1 | 1) {
+    await act(() => api.reorder(moveSelection(app.jobs, new Set(selected), step)))
+  }
+
+  // --- queue groups: drag a grip to move jobs (into or out of a group) or a whole group -------------------
+  let reordering = $state<{ dragged: Dragged; drop: Drop | null } | null>(null)
+  let pointer: { x: number; y: number; scroller: HTMLElement } | null = null
+
+  function gripStart(e: PointerEvent, dragged: Dragged) {
+    const scroller = (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-scroller]')
+    if (e.button !== 0 || !scroller) return
+    e.preventDefault()
+    e.stopPropagation()
+    pointer = { x: e.clientX, y: e.clientY, scroller }
+    reordering = { dragged, drop: null }
+    requestAnimationFrame(gripTick)
+  }
+
+  // A job's grip moves the selection when the job is in it, else just the job.
+  function jobsFor(id: string): Dragged {
+    const ids = selectedSet.has(id) ? app.jobs.filter((j) => selectedSet.has(j.id)).map((j) => j.id) : [id]
+    return { kind: 'jobs', ids }
+  }
+
+  function gripTick() {
+    if (!reordering || !pointer) return
+    const { scroller } = pointer
+    const r = scroller.getBoundingClientRect()
+    const edge = 32
+    if (pointer.y < r.top + edge) scroller.scrollTop -= Math.ceil((r.top + edge - pointer.y) / 3)
+    else if (pointer.y > r.bottom - edge) scroller.scrollTop += Math.ceil((pointer.y - r.bottom + edge) / 3)
+    const x = Math.min(Math.max(pointer.x, r.left + 2), r.right - 2)
+    const y = Math.min(Math.max(pointer.y, r.top + 2), r.bottom - 2)
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-row]')
+    let index = -1
+    let at = 0
+    if (el && scroller.contains(el)) {
+      index = Number(el.dataset.row)
+      const box = el.getBoundingClientRect()
+      at = (y - box.top) / Math.max(box.height, 1)
+    } else {
+      const last = scroller.querySelector<HTMLElement>(`[data-row="${rows.length - 1}"]`)
+      if (last && y > last.getBoundingClientRect().bottom)
+        [index, at] = lastPage ? [rows.length, 0] : [rows.length - 1, 1]
     }
-    await act(() => api.reorder(step < 0 ? order : order.reverse()))
+    reordering.drop = index < 0 ? null : dropTarget(rows, index, at, app.jobs, reordering.dragged)
+    requestAnimationFrame(gripTick)
+  }
+
+  async function gripEnd(cancel = false) {
+    const done = reordering
+    reordering = null
+    pointer = null
+    if (cancel || !done?.drop) return
+    const { dragged, drop } = done
+    const ids =
+      dragged.kind === 'jobs' ? dragged.ids : app.jobs.filter((j) => j.group === dragged.group).map((j) => j.id)
+    await act(async () => {
+      await api.move(ids, drop.before, drop.group)
+      await app.refreshJobs()
+    })
+  }
+  onDestroy(() => gripEnd(true))
+
+  const groupDone = (row: QueueRow & { kind: 'group' }) => row.members.filter((j) => j.status === 'done').length
+  const groupQueued = (row: QueueRow & { kind: 'group' }) =>
+    row.members.filter((j) => j.status === 'queued' || j.status === 'running')
+  const groupProgress = (row: QueueRow & { kind: 'group' }) => {
+    const live = row.members.filter((j) => LIVE.includes(j.status) && j.progress)
+    if (!live.length) return null
+    return (groupDone(row) + live.reduce((sum, j) => sum + (j.progress?.overall ?? 0), 0)) / row.members.length
+  }
+
+  function selectGroup(row: QueueRow & { kind: 'group' }) {
+    const ids = row.matching.map((j) => j.id)
+    anchor = ids[0] ?? null
+    select(ids)
+  }
+
+  // Tick: queue every job in it that can be; untick: unqueue the queued ones.
+  async function queueGroup(row: QueueRow & { kind: 'group' }, on: boolean) {
+    if (on) await queue(row.members.filter((j) => queueable(j.status)).map((j) => j.id))
+    else await unqueue(row.members.filter((j) => j.status === 'queued').map((j) => j.id))
+  }
+
+  // Group selected (new), or a group's Rename: the name, in a dialog.
+  let naming = $state<{ group: string | null; name: string } | null>(null)
+  function startGroup() {
+    naming = { group: null, name: defaultGroupName(app.jobs.filter((j) => selectedSet.has(j.id)).map((j) => j.source)) }
+  }
+  async function saveName() {
+    const n = naming
+    if (!n || !n.name.trim()) return
+    await act(async () => {
+      if (n.group) await api.renameGroup(n.group, n.name)
+      else {
+        const { group } = await api.group([...selected], n.name)
+        setCollapsed(group, false)
+      }
+      await app.refreshJobs()
+      naming = null
+    })
+  }
+  async function ungroup(group: string) {
+    await act(async () => {
+      await api.ungroup(group)
+      await app.refreshJobs()
+    })
   }
 
   // A copy of each selected job right after it (same source and settings, a label of its own), for a second
@@ -618,11 +775,23 @@
 
 <svelte:window
   onpointerdown={outside}
-  onpointermove={dragMove}
-  onpointerup={dragEnd}
-  onpointercancel={dragEnd}
+  onpointermove={(e) => {
+    dragMove(e)
+    if (pointer) [pointer.x, pointer.y] = [e.clientX, e.clientY]
+  }}
+  onpointerup={() => {
+    dragEnd()
+    if (reordering) void gripEnd()
+  }}
+  onpointercancel={() => {
+    dragEnd()
+    if (reordering) void gripEnd(true)
+  }}
   onkeydown={(e) => {
-    if (peek && e.key === 'Escape') {
+    if (reordering && e.key === 'Escape') {
+      void gripEnd(true)
+      e.stopPropagation()
+    } else if (peek && e.key === 'Escape') {
       hideList()
       e.stopPropagation()
     }
@@ -662,38 +831,60 @@
         aria-label="Matching jobs"
         class="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-auto border-t border-border py-2 select-none"
       >
-        {#each pageJobs as job, i (job.id)}
-          <Tip
-            side="right"
-            class="shrink-0"
-            text="{job.name}{job.label ? ` (${job.label})` : ''}: {STATUS_LABEL[job.status]}{job.issue
-              ? ` (${job.issue})`
-              : ''}"
-          >
-            <button
-              data-job={job.id}
-              aria-label={`${job.name}${job.label ? ` (${job.label})` : ''}: ${STATUS_LABEL[job.status]}`}
-              aria-pressed={selectedSet.has(job.id)}
-              tabindex={job.id === tabStop ? 0 : -1}
-              onfocus={() => (cursor = job.id)}
-              onkeydown={keys}
-              class="relative flex h-9 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border text-xs focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring
-              {selectedSet.has(job.id) ? 'border-primary bg-card' : 'hover:bg-accent'}
-              {STATUS_TONE[job.status]}"
-              onpointerdown={(e) => dragStart(e, job.id)}
-              onclick={(e) => click(e, job.id)}
+        {#each rows as row, i (row.kind === 'job' ? row.job.id : `group:${row.group}:${i}`)}
+          {#if row.kind === 'group'}
+            <!-- A group: a line before its jobs; a collapsed one is one chip for all of them. -->
+            <Tip
+              side="right"
+              class="w-full shrink-0 {i ? 'pt-1' : ''}"
+              text="{row.name}: {row.members.length} jobs{row.collapsed ? ' (collapsed)' : ''}"
             >
-              {currentPage * QUEUE_PAGE_SIZE + i + 1}
-              {#if LIVE.includes(job.status) && job.progress}
-                <span class="absolute inset-x-0 bottom-0 h-1 bg-muted">
-                  <span class="block h-full bg-info" style="width:{job.progress.overall * 100}%"></span>
-                </span>
-              {/if}
-            </button>
-          </Tip>
+              <div class="mx-auto h-0.5 w-8 rounded bg-primary/40"></div>
+            </Tip>
+            {#if row.collapsed}
+              <Tip side="right" class="shrink-0" text="Select the {row.matching.length} jobs of {row.name}">
+                <button
+                  aria-label={`${row.name}: ${row.matching.length} jobs, collapsed. Select them.`}
+                  tabindex={-1}
+                  class="flex h-9 w-10 shrink-0 items-center justify-center rounded-md border border-dashed text-xs hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+                  onclick={() => selectGroup(row)}>+{row.matching.length}</button
+                >
+              </Tip>
+            {/if}
+          {:else}
+            {@const job = row.job}
+            <Tip
+              side="right"
+              class="shrink-0"
+              text="{job.name}{job.label ? ` (${job.label})` : ''}: {STATUS_LABEL[job.status]}{job.issue
+                ? ` (${job.issue})`
+                : ''}{row.group ? ` · ${job.group_name}` : ''}"
+            >
+              <button
+                data-job={job.id}
+                aria-label={`${job.name}${job.label ? ` (${job.label})` : ''}: ${STATUS_LABEL[job.status]}`}
+                aria-pressed={selectedSet.has(job.id)}
+                tabindex={job.id === tabStop ? 0 : -1}
+                onfocus={() => (cursor = job.id)}
+                onkeydown={keys}
+                class="relative flex h-9 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border text-xs focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring
+                {selectedSet.has(job.id) ? 'border-primary bg-card' : 'hover:bg-accent'}
+                {STATUS_TONE[job.status]}"
+                onpointerdown={(e) => dragStart(e, job.id)}
+                onclick={(e) => click(e, job.id)}
+              >
+                {place.get(job.id)}
+                {#if LIVE.includes(job.status) && job.progress}
+                  <span class="absolute inset-x-0 bottom-0 h-1 bg-muted">
+                    <span class="block h-full bg-info" style="width:{job.progress.overall * 100}%"></span>
+                  </span>
+                {/if}
+              </button>
+            </Tip>
+          {/if}
         {/each}
       </div>
-      {#if matching.length > QUEUE_PAGE_SIZE}
+      {#if slots.length > QUEUE_PAGE_SIZE}
         <Button
           variant="ghost"
           size="icon"
@@ -704,7 +895,7 @@
         <Button
           variant="ghost"
           size="icon"
-          disabled={(currentPage + 1) * QUEUE_PAGE_SIZE >= matching.length}
+          disabled={lastPage}
           aria-label="Next queue page"
           onclick={() => changePage(currentPage + 1)}><ArrowDownIcon /></Button
         >
@@ -854,7 +1045,7 @@
             ><DatabaseZapIcon /></Button
           >
         </Tip>
-        <Tip text="Move up in the full queue">
+        <Tip text="Move up in the full queue. A job in a group stays in it; a whole group selected moves as one.">
           <Button
             variant="ghost"
             size="icon"
@@ -863,13 +1054,24 @@
             aria-label="Move selected jobs up"><ArrowUpIcon /></Button
           >
         </Tip>
-        <Tip text="Move down in the full queue">
+        <Tip text="Move down in the full queue. A job in a group stays in it; a whole group selected moves as one.">
           <Button
             variant="ghost"
             size="icon"
             disabled={!selected.length}
             onclick={() => move(1)}
             aria-label="Move selected jobs down"><ArrowDownIcon /></Button
+          >
+        </Tip>
+        <Tip
+          text="Puts the selected jobs in a new group, shown together and collapsible (out of any group they were in). Drag a job's grip to move it into or out of a group."
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={!selected.length}
+            onclick={startGroup}
+            aria-label="Group the selected jobs"><FolderPlusIcon /></Button
           >
         </Tip>
         <Tip
@@ -989,137 +1191,242 @@
         aria-describedby="queue-keys"
         class="min-h-24 flex-1 overflow-auto select-none"
       >
-        {#each pageJobs as job (job.id)}
-          {@const queued = job.status === 'queued' || job.status === 'running'}
-          <div
-            class="flex border-b border-border/60 {selectedSet.has(job.id)
-              ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]'
-              : 'hover:bg-accent'}"
+        {#snippet dropLine(i: number)}
+          {#if reordering?.drop && reordering.drop.row === i && reordering.drop.edge !== 'inside'}
+            <div
+              class="pointer-events-none absolute right-0 z-10 h-0.5 rounded bg-primary
+              {reordering.drop.edge === 'top' ? '-top-px' : '-bottom-px'}
+              {reordering.drop.indent ? 'left-6' : 'left-0'}"
+            ></div>
+          {/if}
+        {/snippet}
+        {#snippet grip(label: string, dragged: () => Dragged)}
+          <!-- Pointer only: the keyboard moves jobs with the Up and Down buttons. -->
+          <span
+            aria-hidden="true"
+            title={label}
+            class="flex shrink-0 cursor-grab touch-none items-center self-stretch px-1 text-muted-foreground/50 hover:text-foreground active:cursor-grabbing"
+            onpointerdown={(e) => gripStart(e, dragged())}><GripVerticalIcon class="size-4" /></span
           >
-            <div class="flex shrink-0 items-start pt-2.5 pl-2">
-              <!-- Out of the tab order (the list is one stop): the keyboard queues a selection with Queue (N). -->
+        {/snippet}
+        {#each rows as row, i (row.kind === 'job' ? row.job.id : `group:${row.group}:${i}`)}
+          {#if row.kind === 'group'}
+            {@const queuedJobs = groupQueued(row)}
+            {@const canQueue = row.members.some((j) => queueable(j.status))}
+            {@const progress = groupProgress(row)}
+            <div
+              data-row={i}
+              class="relative flex items-center gap-1 border-b border-border/60 bg-muted/40 py-1 pl-2 text-sm
+              {reordering?.drop?.row === i && reordering.drop.edge === 'inside'
+                ? 'ring-2 ring-primary ring-inset'
+                : ''}"
+            >
+              {@render dropLine(i)}
               <Tip
-                text={job.status === 'running'
-                  ? 'Running'
-                  : queued
-                    ? 'Queued and locked. Untick it to make changes.'
-                    : queueable(job.status)
-                      ? "Tick to queue it. It's locked while it's queued."
-                      : `Can't be queued while its status is ${STATUS_LABEL[job.status]}`}
+                text={queuedJobs.length === row.members.length
+                  ? 'All queued. Untick to unqueue the ones not running yet.'
+                  : 'Tick to queue every job in the group that can be queued'}
               >
                 <Checkbox
-                  bind:checked={() => queued, (on) => act(() => (on ? queue([job.id]) : unqueue([job.id])))}
-                  disabled={job.status === 'running' || (!queued && !queueable(job.status))}
+                  bind:checked={() => queuedJobs.length === row.members.length, (on) => act(() => queueGroup(row, on))}
+                  indeterminate={queuedJobs.length > 0 && queuedJobs.length < row.members.length}
+                  disabled={!canQueue && !queuedJobs.some((j) => j.status === 'queued')}
                   tabindex={-1}
-                  aria-label={`Queued: ${job.name}${job.label ? ` (${job.label})` : ''}`}
+                  aria-label={`Queued: every job in ${row.name}`}
                 />
               </Tip>
-            </div>
-            <button
-              data-job={job.id}
-              aria-pressed={selectedSet.has(job.id)}
-              tabindex={job.id === tabStop ? 0 : -1}
-              onfocus={() => (cursor = job.id)}
-              onkeydown={keys}
-              class="block min-w-0 flex-1 py-2 pr-3 pl-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
-              onpointerdown={(e) => dragStart(e, job.id)}
-              onclick={(e) => click(e, job.id)}
-            >
-              <div class="flex items-center gap-2">
-                <Tip class="block truncate font-medium" text={job.source}>{job.name}</Tip>
-                {#if job.label}<Tip class="shrink-0" text="Label"
-                    ><Badge variant="outline" class="px-1.5 py-0 text-xs font-normal">{job.label}</Badge></Tip
-                  >{/if}
-                {#if paused(job.status)}
-                  <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
-                {:else}
-                  <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
-                {/if}
-              </div>
-              {#if job.source_facts}
-                {@const f = job.source_facts}
-                <!-- min-h-5: a 20 px tag doesn't change the row's height; a narrow list wraps whole figures -->
-                <div
-                  class="readout mt-0.5 flex min-h-5 min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground"
-                >
-                  <span class="shrink-0"
-                    >{sizeLabel(f.resolution)}{f.duration_ms ? ` · ${duration(f.duration_ms / 1000)}` : ''}{f.interlaced
-                      ? ' · interlaced'
-                      : ''}</span
-                  >
-                  {#each f.hdr as name (name)}
-                    <Tip
-                      class="shrink-0"
-                      text={name.endsWith('?')
-                        ? "Dolby Vision profile 7. Set dovi_tool in Settings › Tools so VideoForge can read whether its enhancement layer is FEL or MEL, which decides how it's encoded."
-                        : 'The source is ' + name}
-                    >
-                      <Badge
-                        variant="outline"
-                        class="px-1 py-0 text-xs font-normal {name.endsWith('?')
-                          ? 'border-warning/40 text-warning'
-                          : ''}">{name}</Badge
-                      >
-                    </Tip>
-                  {/each}
-                </div>
-              {/if}
-              <!-- On a narrow list a figure moves whole to the next line instead of breaking inside itself. -->
-              <div
-                class="readout mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground *:whitespace-nowrap"
+              <Button
+                variant="ghost"
+                size="icon"
+                class="size-7"
+                aria-expanded={!row.collapsed}
+                aria-label={`${row.collapsed ? 'Expand' : 'Collapse'} ${row.name}`}
+                onclick={() => setCollapsed(row.group, !row.collapsed)}
               >
-                <span>{job.encoder}</span>
-                {#if job.custom_script}
-                  <span>· custom script</span>
-                {:else if job.crop && (job.crop.top || job.crop.bottom || job.crop.left || job.crop.right)}
-                  <span>· crop {job.crop.left}/{job.crop.top}/{job.crop.right}/{job.crop.bottom}</span>
-                {/if}
-                <span>· {job.audio.length} audio · {job.subs} subs</span>
-                {#if job.indexed}
-                  <Tip class="ml-auto shrink-0 items-center" text="Indexed, so the preview opens at once"
-                    ><DatabaseCheckIcon class="size-3.5" /></Tip
+                {#if row.collapsed}<ChevronRightIcon />{:else}<ChevronDownIcon />{/if}
+              </Button>
+              <button
+                class="min-w-0 flex-1 py-1 text-left focus-visible:outline-2 focus-visible:outline-ring"
+                tabindex={-1}
+                onclick={() => selectGroup(row)}
+                aria-label={`${row.name}: select its ${row.matching.length} jobs`}
+              >
+                <span class="flex items-baseline gap-2">
+                  <span class="truncate font-medium">{row.name}</span>
+                  {#if row.continued}<span class="shrink-0 text-xs text-muted-foreground">(continued)</span>{/if}
+                  <span class="readout ml-auto shrink-0 text-xs text-muted-foreground"
+                    >{row.matching.length < row.members.length
+                      ? `${row.matching.length} of ${row.members.length} match`
+                      : `${row.members.length} jobs`} · {groupDone(row)} done</span
                   >
+                </span>
+                {#if progress !== null}
+                  <span class="mt-1 block h-1 overflow-hidden rounded bg-muted">
+                    <span class="block h-full bg-info" style="width:{progress * 100}%"></span>
+                  </span>
                 {/if}
-              </div>
-              {#if LIVE.includes(job.status) && job.progress}
-                <div class="readout mt-1.5 flex items-center gap-2 text-xs text-info">
-                  <div class="h-1 flex-1 overflow-hidden rounded bg-muted">
-                    <div class="h-full bg-info" style="width:{job.progress.overall * 100}%"></div>
-                  </div>
-                  {percent(job.progress.overall)}
-                </div>
-                <div class="flex gap-2 text-xs text-muted-foreground">
-                  <span class="readout truncate">{job.progress.step} · {percent(job.progress.fraction)}</span>
-                  <Tip
-                    class="readout ml-auto shrink-0"
-                    text="Encoder speed · time since the run started · the job's time left (a guess from its pace so far)"
-                    >{progressTimes(job.progress)}</Tip
+              </button>
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger>
+                  {#snippet child({ props })}
+                    <Button {...props} variant="ghost" size="icon" class="size-7" aria-label={`${row.name} options`}
+                      ><EllipsisIcon /></Button
+                    >
+                  {/snippet}
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end" class="w-auto">
+                  <DropdownMenu.Item onSelect={() => selectGroup(row)}>Select its jobs</DropdownMenu.Item>
+                  <DropdownMenu.Item onSelect={() => (naming = { group: row.group, name: row.name })}
+                    >Rename…</DropdownMenu.Item
                   >
-                </div>
-              {:else if job.issue}
-                <div
-                  class="mt-0.5 truncate text-xs {['blocked', 'error', 'failed', 'invalid'].includes(job.status)
-                    ? 'text-destructive'
-                    : 'text-warning'}"
-                >
-                  {job.issue}
-                </div>
-              {/if}
-              {#if job.index_held && job.status === 'index-queued'}
+                  <Tip class="block" side="left" text="The group goes. Its jobs stay in the queue, where they are.">
+                    <DropdownMenu.Item onSelect={() => ungroup(row.group)}>Ungroup</DropdownMenu.Item>
+                  </Tip>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+              {@render grip(`Drag to move ${row.name}`, () => ({ kind: 'group', group: row.group }))}
+            </div>
+          {:else}
+            {@const job = row.job}
+            {@const queued = job.status === 'queued' || job.status === 'running'}
+            <div
+              data-row={i}
+              class="relative flex border-b border-border/60 {row.group ? 'pl-4' : ''} {selectedSet.has(job.id)
+                ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]'
+                : 'hover:bg-accent'}"
+            >
+              {@render dropLine(i)}
+              <div class="flex shrink-0 items-start pt-2.5 pl-2">
+                <!-- Out of the tab order (the list is one stop): the keyboard queues a selection with Queue (N). -->
                 <Tip
-                  class="mt-0.5 block truncate text-xs text-muted-foreground"
-                  text="Settings › Queue & indexing › Wait while an encode reads the same disk"
+                  text={job.status === 'running'
+                    ? 'Running'
+                    : queued
+                      ? 'Queued and locked. Untick it to make changes.'
+                      : queueable(job.status)
+                        ? "Tick to queue it. It's locked while it's queued."
+                        : `Can't be queued while its status is ${STATUS_LABEL[job.status]}`}
                 >
-                  Waiting for the encode reading this disk
+                  <Checkbox
+                    bind:checked={() => queued, (on) => act(() => (on ? queue([job.id]) : unqueue([job.id])))}
+                    disabled={job.status === 'running' || (!queued && !queueable(job.status))}
+                    tabindex={-1}
+                    aria-label={`Queued: ${job.name}${job.label ? ` (${job.label})` : ''}`}
+                  />
                 </Tip>
-              {/if}
-              {#if job.index_error && job.status !== 'indexing'}
-                <Tip class="mt-0.5 block truncate text-xs text-warning" text={job.index_error}>
-                  Index failed: {job.index_error}
-                </Tip>
-              {/if}
-            </button>
-          </div>
+              </div>
+              <button
+                data-job={job.id}
+                aria-pressed={selectedSet.has(job.id)}
+                tabindex={job.id === tabStop ? 0 : -1}
+                onfocus={() => (cursor = job.id)}
+                onkeydown={keys}
+                class="block min-w-0 flex-1 py-2 pr-3 pl-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+                onpointerdown={(e) => dragStart(e, job.id)}
+                onclick={(e) => click(e, job.id)}
+              >
+                <div class="flex items-center gap-2">
+                  <Tip class="block truncate font-medium" text={job.source}>{job.name}</Tip>
+                  {#if job.label}<Tip class="shrink-0" text="Label"
+                      ><Badge variant="outline" class="px-1.5 py-0 text-xs font-normal">{job.label}</Badge></Tip
+                    >{/if}
+                  {#if paused(job.status)}
+                    <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
+                  {:else}
+                    <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
+                  {/if}
+                </div>
+                {#if job.source_facts}
+                  {@const f = job.source_facts}
+                  <!-- min-h-5: a 20 px tag doesn't change the row's height; a narrow list wraps whole figures -->
+                  <div
+                    class="readout mt-0.5 flex min-h-5 min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground"
+                  >
+                    <span class="shrink-0"
+                      >{sizeLabel(f.resolution)}{f.duration_ms
+                        ? ` · ${duration(f.duration_ms / 1000)}`
+                        : ''}{f.interlaced ? ' · interlaced' : ''}</span
+                    >
+                    {#each f.hdr as name (name)}
+                      <Tip
+                        class="shrink-0"
+                        text={name.endsWith('?')
+                          ? "Dolby Vision profile 7. Set dovi_tool in Settings › Tools so VideoForge can read whether its enhancement layer is FEL or MEL, which decides how it's encoded."
+                          : 'The source is ' + name}
+                      >
+                        <Badge
+                          variant="outline"
+                          class="px-1 py-0 text-xs font-normal {name.endsWith('?')
+                            ? 'border-warning/40 text-warning'
+                            : ''}">{name}</Badge
+                        >
+                      </Tip>
+                    {/each}
+                  </div>
+                {/if}
+                <!-- On a narrow list a figure moves whole to the next line instead of breaking inside itself. -->
+                <div
+                  class="readout mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground *:whitespace-nowrap"
+                >
+                  <span>{job.encoder}</span>
+                  {#if job.custom_script}
+                    <span>· custom script</span>
+                  {:else if job.crop && (job.crop.top || job.crop.bottom || job.crop.left || job.crop.right)}
+                    <span>· crop {job.crop.left}/{job.crop.top}/{job.crop.right}/{job.crop.bottom}</span>
+                  {/if}
+                  <span>· {job.audio.length} audio · {job.subs} subs</span>
+                  {#if job.indexed}
+                    <Tip class="ml-auto shrink-0 items-center" text="Indexed, so the preview opens at once"
+                      ><DatabaseCheckIcon class="size-3.5" /></Tip
+                    >
+                  {/if}
+                </div>
+                {#if LIVE.includes(job.status) && job.progress}
+                  <div class="readout mt-1.5 flex items-center gap-2 text-xs text-info">
+                    <div class="h-1 flex-1 overflow-hidden rounded bg-muted">
+                      <div class="h-full bg-info" style="width:{job.progress.overall * 100}%"></div>
+                    </div>
+                    {percent(job.progress.overall)}
+                  </div>
+                  <div class="flex gap-2 text-xs text-muted-foreground">
+                    <span class="readout truncate">{job.progress.step} · {percent(job.progress.fraction)}</span>
+                    <Tip
+                      class="readout ml-auto shrink-0"
+                      text="Encoder speed · time since the run started · the job's time left (a guess from its pace so far)"
+                      >{progressTimes(job.progress)}</Tip
+                    >
+                  </div>
+                {:else if job.issue}
+                  <div
+                    class="mt-0.5 truncate text-xs {['blocked', 'error', 'failed', 'invalid'].includes(job.status)
+                      ? 'text-destructive'
+                      : 'text-warning'}"
+                  >
+                    {job.issue}
+                  </div>
+                {/if}
+                {#if job.index_held && job.status === 'index-queued'}
+                  <Tip
+                    class="mt-0.5 block truncate text-xs text-muted-foreground"
+                    text="Settings › Queue & indexing › Wait while an encode reads the same disk"
+                  >
+                    Waiting for the encode reading this disk
+                  </Tip>
+                {/if}
+                {#if job.index_error && job.status !== 'indexing'}
+                  <Tip class="mt-0.5 block truncate text-xs text-warning" text={job.index_error}>
+                    Index failed: {job.index_error}
+                  </Tip>
+                {/if}
+              </button>
+              {@render grip(
+                selectedSet.has(job.id) && selected.length > 1
+                  ? `Drag to move the ${selected.length} selected jobs`
+                  : 'Drag to move this job, into or out of a group',
+                () => jobsFor(job.id),
+              )}
+            </div>
+          {/if}
         {:else}
           <div class="p-6 text-center text-muted-foreground">
             {#if app.jobs.length}
@@ -1131,13 +1438,21 @@
             {/if}
           </div>
         {/each}
+        {#if reordering && lastPage}
+          <!-- Below the last row: the end of the queue, out of any group. -->
+          <div class="h-10" aria-hidden="true">
+            {#if reordering.drop?.row === rows.length}<div class="h-0.5 rounded bg-primary"></div>{/if}
+          </div>
+        {/if}
       </div>
       <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t p-2 text-xs">
         <span
-          >Showing {matching.length ? currentPage * QUEUE_PAGE_SIZE + 1 : 0}–{Math.min(
+          >Showing {slots.length ? currentPage * QUEUE_PAGE_SIZE + 1 : 0}–{Math.min(
             (currentPage + 1) * QUEUE_PAGE_SIZE,
-            matching.length,
-          )} of {matching.length}</span
+            slots.length,
+          )} of {slots.length}{slots.length !== matching.length
+            ? ` rows (${matching.length} jobs: a collapsed group is one row)`
+            : ''}</span
         >
         <div class="flex gap-1">
           <Button
@@ -1150,7 +1465,7 @@
           <Button
             variant="outline"
             size="sm"
-            disabled={(currentPage + 1) * QUEUE_PAGE_SIZE >= matching.length}
+            disabled={lastPage}
             aria-label="Next queue page"
             onclick={() => changePage(currentPage + 1)}>Next</Button
           >
@@ -1301,6 +1616,38 @@
     onclose={() => (browsingOutput = false)}
   />
 {/if}
+
+<Dialog.Root
+  open={naming !== null}
+  onOpenChange={(open) => {
+    if (!open) naming = null
+  }}
+>
+  <Dialog.Content>
+    <Dialog.Header>
+      <Dialog.Title>{naming?.group ? 'Rename the group' : `Group ${selected.length} jobs`}</Dialog.Title>
+      <Dialog.Description>
+        A group's jobs are shown together, and you can collapse it. Drag a job's grip to move it into or out of a group.
+        Grouping doesn't change the jobs' settings.
+      </Dialog.Description>
+    </Dialog.Header>
+    {#if naming}
+      <form
+        class="contents"
+        onsubmit={(e) => {
+          e.preventDefault()
+          void saveName()
+        }}
+      >
+        <Input aria-label="Group name" maxlength={80} bind:value={naming.name} />
+        <Dialog.Footer>
+          <Button variant="outline" type="button" onclick={() => (naming = null)}>Cancel</Button>
+          <Button type="submit" disabled={!naming.name.trim()}>{naming.group ? 'Rename' : 'Group'}</Button>
+        </Dialog.Footer>
+      </form>
+    {/if}
+  </Dialog.Content>
+</Dialog.Root>
 
 <Dialog.Root bind:open={importOpen}>
   <Dialog.Content>

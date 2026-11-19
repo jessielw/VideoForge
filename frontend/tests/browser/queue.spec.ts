@@ -17,6 +17,8 @@ async function queueFixture(
     id: `job-${i}`,
     name: `Episode ${String(i).padStart(5, '0')}`,
     label: '',
+    group: null,
+    group_name: '',
     source: `D:\\Show\\Season${i < count / 2 ? 1 : 2}\\${i}.mkv`,
     rule_set: 'manual',
     status: statuses[i % statuses.length],
@@ -140,7 +142,26 @@ async function queueFixture(
         kind: p.endsWith('_tmp') ? 'folder' : 'file',
       }))
     else if (path === '/api/jobs/import') json = { added: [], skipped: [] }
-    else throw new Error(`Unhandled queue fixture request: ${request.method()} ${path}`)
+    // Queue groups, as the server does them (enough for the list to show the result).
+    else if (path === '/api/jobs/move') {
+      const { ids, before, group } = request.postDataJSON() as { ids: string[]; before: string | null; group: string }
+      const moving = jobs.filter((j) => ids.includes(j.id))
+      const rest = jobs.filter((j) => !ids.includes(j.id))
+      const name = rest.find((j) => j.group === group)?.group_name ?? moving.find((j) => j.group === group)?.group_name
+      for (const j of moving) [j.group, j.group_name] = group ? [group, name ?? ''] : [null, '']
+      const at = before === null ? rest.length : rest.findIndex((j) => j.id === before)
+      jobs.splice(0, jobs.length, ...rest.slice(0, at), ...moving, ...rest.slice(at))
+      json = { ids: jobs.map((j) => j.id) }
+    } else if (path === '/api/jobs/group') {
+      const { ids, name } = request.postDataJSON() as { ids: string[]; name: string }
+      for (const j of jobs) if (ids.includes(j.id)) [j.group, j.group_name] = ['g-new', name]
+      json = { group: 'g-new' }
+    } else if (/^\/api\/groups\/[^/]+\/(rename|ungroup)$/.test(path)) {
+      const [, , , id, action] = path.split('/')
+      for (const j of jobs.filter((j) => j.group === id))
+        [j.group, j.group_name] = action === 'rename' ? [id, request.postDataJSON().name] : [null, '']
+      json = { group: id }
+    } else throw new Error(`Unhandled queue fixture request: ${request.method()} ${path}`)
     await route.fulfill({ json })
   })
   await page.goto('/#/queue')
@@ -966,4 +987,117 @@ test('Output tab: every label lines up with the first control in its row', async
   )
   expect(rows.filter((r) => r.gap > 2)).toEqual([])
   expect(errors).toEqual([])
+})
+
+/** Drag a row's grip to `y` of the way down the target row (0 top, 1 bottom), in small steps like a hand. */
+async function dragGrip(page: Page, from: Locator, to: Locator, y: number) {
+  const grip = (await from.locator('[title^="Drag to move"]').boundingBox())!
+  const target = (await to.boundingBox())!
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height * y, { steps: 8 })
+  await page.waitForTimeout(50) // a frame for the drop line
+  await page.mouse.up()
+}
+
+const row = (page: Page, id: string) => page.locator('[data-row]', { has: page.locator(`[data-job="${id}"]`) })
+
+test('a group collapses, and a grip drags its jobs out of it and back in', async ({ page }, testInfo) => {
+  const fixture = await queueFixture(page, 5, ['ready'])
+  for (const j of fixture.jobs.slice(1, 4)) [j.group, j.group_name] = ['g1', 'Show S01']
+  fixture.refresh()
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  await expect(list.getByRole('button', { name: 'Collapse Show S01', exact: true })).toBeVisible()
+  await expect(list.getByText('3 jobs · 0 done')).toBeVisible()
+  await list.screenshot({ path: testInfo.outputPath('queue-group.png') })
+  const axe = await new AxeBuilder({ page })
+    .include('section[aria-label="Queue list"]')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
+    .analyze()
+  expect(axe.violations).toEqual([])
+
+  await list.getByRole('button', { name: 'Collapse Show S01', exact: true }).click()
+  await expect(list.locator('[data-job]')).toHaveCount(2)
+  await expect(page.getByText('Showing 1–3 of 3 rows (5 jobs: a collapsed group is one row)')).toBeVisible()
+  await page.locator('[data-job="job-0"]').press('ArrowDown') // the arrows skip a collapsed group
+  await expect(page.locator('[data-job="job-4"]')).toBeFocused()
+  await page.locator('[data-job="job-4"]').press('Shift+ArrowUp') // ... a range takes all of it
+  await expect(page.getByRole('status')).toContainText('5 selected')
+  await list.getByRole('button', { name: 'Expand Show S01', exact: true }).click()
+  await expect(list.locator('[data-job]')).toHaveCount(5)
+  await page.getByRole('button', { name: 'Clear selection', exact: true }).click()
+
+  // Out: above job-4's middle is after the group, not in it.
+  await dragGrip(page, row(page, 'job-2'), row(page, 'job-4'), 0.25)
+  await expect
+    .poll(() => fixture.calls.find((c) => c.path === '/api/jobs/move')?.body)
+    .toEqual({
+      ids: ['job-2'],
+      before: 'job-4',
+      group: '',
+    })
+  await expect(list.getByText('2 jobs · 0 done')).toBeVisible()
+
+  // In: below a member's middle is in its group, even the last one's.
+  await dragGrip(page, row(page, 'job-0'), row(page, 'job-3'), 0.75)
+  await expect
+    .poll(() => fixture.calls.filter((c) => c.path === '/api/jobs/move').at(-1)?.body)
+    .toEqual({
+      ids: ['job-0'],
+      before: 'job-2',
+      group: 'g1',
+    })
+  await expect(list.getByText('3 jobs · 0 done')).toBeVisible()
+  expect(fixture.jobs.map((j) => j.id)).toEqual(['job-1', 'job-3', 'job-0', 'job-2', 'job-4'])
+
+  // Esc drops nothing.
+  const moves = fixture.calls.filter((c) => c.path === '/api/jobs/move').length
+  const grip = (await row(page, 'job-4').locator('[title^="Drag to move"]').boundingBox())!
+  await page.mouse.move(grip.x + 4, grip.y + 4)
+  await page.mouse.down()
+  await page.mouse.move(grip.x + 4, grip.y - 60, { steps: 5 })
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  expect(fixture.calls.filter((c) => c.path === '/api/jobs/move')).toHaveLength(moves)
+
+  // A drag on the row itself still selects the rows it crosses. (Something is selected first: a first selection
+  // adds Clear selection above the list, which moves the rows under the pointer.)
+  await page.locator('[data-job="job-4"]').click()
+  const a = (await page.locator('[data-job="job-1"]').boundingBox())!
+  const b = (await page.locator('[data-job="job-0"]').boundingBox())!
+  // (clear of the name, whose tooltip would open over the next row)
+  await page.mouse.move(a.x + a.width * 0.6, a.y + a.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(b.x + b.width * 0.6, b.y + b.height / 2, { steps: 6 })
+  await page.waitForTimeout(50) // a frame for the selection to reach the last row
+  await page.mouse.up()
+  await expect(page.getByRole('status')).toContainText('3 selected')
+  expect(fixture.errors).toEqual([])
+})
+
+test('Group selected names the group after its folder; its menu renames and ungroups it', async ({ page }) => {
+  const fixture = await queueFixture(page, 4, ['ready']) // job-0 and job-1 in Season1, the others in Season2
+  await page.locator('[data-job="job-0"]').click()
+  await page.locator('[data-job="job-1"]').click({ modifiers: ['ControlOrMeta'] })
+  await page.getByRole('button', { name: 'Group the selected jobs', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Group 2 jobs' })
+  await expect(dialog.getByRole('textbox', { name: 'Group name' })).toHaveValue('Show Season1')
+  await dialog.getByRole('button', { name: 'Group', exact: true }).click()
+  await expect
+    .poll(() => fixture.calls.find((c) => c.path === '/api/jobs/group')?.body)
+    .toEqual({ ids: ['job-0', 'job-1'], name: 'Show Season1' })
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  await list.getByRole('button', { name: 'Show Season1 options', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Rename…' }).click()
+  const rename = page.getByRole('dialog', { name: 'Rename the group' })
+  await rename.getByRole('textbox', { name: 'Group name' }).fill('Extras')
+  await rename.getByRole('button', { name: 'Rename', exact: true }).click()
+  await expect(list.getByRole('button', { name: 'Collapse Extras', exact: true })).toBeVisible()
+  await list.getByRole('button', { name: 'Extras options', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Ungroup' }).click()
+  await expect(list.getByRole('button', { name: 'Collapse Extras', exact: true })).toHaveCount(0)
+  expect(fixture.calls.map((c) => c.path)).toEqual(
+    expect.arrayContaining(['/api/groups/g-new/rename', '/api/groups/g-new/ungroup']),
+  )
+  expect(fixture.errors).toEqual([])
 })

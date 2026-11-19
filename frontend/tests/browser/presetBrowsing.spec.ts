@@ -121,6 +121,8 @@ async function fixture(page: Page, empty = false) {
     id: 'presets',
     name: 'Preset browsing',
     label: '',
+    group: null,
+    group_name: '',
     source: 'D:/Show.mkv',
     rule_set: 'manual',
     status: 'ready',

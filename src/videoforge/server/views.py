@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
@@ -73,13 +74,16 @@ def issues(e: Entry) -> list[Issue]:
     return sorted(out, key=lambda i: order[i.severity])
 
 
-def summary(e: Entry) -> dict[str, Any]:
+def summary(e: Entry, groups: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """groups: queue group names by id (JobQueue.group_names)."""
     first = next((i for i in issues(e) if i.severity is not Severity.INFO), None)
     s = e.spec
     return {
         "id": e.id,
         "name": s.name,
         "label": s.label,  # tells jobs on one source apart
+        "group": e.group or None,  # the queue group it's shown in
+        "group_name": (groups or {}).get(e.group, "") if e.group else "",
         "source": str(s.inputs.source),
         "rule_set": s.rule_set,
         "status": e.status.value,
@@ -120,7 +124,7 @@ def source_facts(e: Entry) -> dict[str, Any] | None:
 
 def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     rule_set = queue.rule_set(e)
-    out = summary(e)
+    out = summary(e, queue.group_names())
     out["spec"] = to_json(e.spec)
     out["issues"] = [to_json(i) for i in issues(e)]
     out["steps"] = to_json(e.state.steps)

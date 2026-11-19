@@ -217,7 +217,15 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
   ])
   expect(tops[1]).toBe(tops[0]) // the bar's top line meets the nav's status block's
   const bar = page.locator('footer[aria-label="Add to queue"]')
-  await expect(bar).toContainText('2 jobs · Sized · will index and auto-crop · saved to D:/Output')
+  // Two or more go in a queue group, named after the season; the name can be typed, and the box unticked.
+  await expect(bar).toContainText('2 jobs in group Show S01 · Sized · will index and auto-crop · saved to D:/Output')
+  const groupName = page.getByRole('textbox', { name: 'Group name' })
+  await groupName.fill('My show')
+  await expect(bar).toContainText('2 jobs in group My show · Sized')
+  await page.getByRole('checkbox', { name: 'Group them' }).click()
+  await expect(bar).toContainText('2 jobs · Sized')
+  await expect(groupName).toBeDisabled()
+  await page.getByRole('checkbox', { name: 'Group them' }).click()
 
   await page.getByRole('checkbox', { name: 'Auto-crop' }).click()
   await expect(bar).toContainText('will index ·')
@@ -231,7 +239,13 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
   await expect(bar.getByRole('status')).toContainText('Added 2 jobs')
   await expect(bar.getByRole('button', { name: 'Open queue' })).toBeVisible()
   expect(posted).toHaveLength(1)
-  expect(posted[0]).toMatchObject({ auto_index: false, auto_crop: false, output_dir: 'D:/Output', rule_set: 'manual' })
+  expect(posted[0]).toMatchObject({
+    auto_index: false,
+    auto_crop: false,
+    output_dir: 'D:/Output',
+    rule_set: 'manual',
+    group_name: 'My show',
+  })
   expect(posted[0].sources).toEqual(sources)
 
   await bar.getByRole('button', { name: 'Add more' }).click() // a clean form for the next batch
@@ -239,7 +253,10 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
   await expect(page.getByText('Show.S01E02.mkv')).toHaveCount(0)
 
   await paste(page, sources[0])
+  await expect(page.getByRole('checkbox', { name: 'Group them' })).toHaveCount(0) // one job: no group
   await bar.getByRole('button', { name: /Add 1 job to queue/ }).click()
+  await expect.poll(() => posted.length).toBe(2)
+  expect(posted[1].group_name).toBeUndefined()
   await bar.getByRole('button', { name: 'Open queue' }).click()
   await expect(page).toHaveURL(/#\/queue/)
   expect(errors).toEqual([])

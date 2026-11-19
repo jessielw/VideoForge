@@ -21,6 +21,21 @@ Each job keeps its files in its own folder in the source's work folder, named by
 
 Adding the same source again keeps the existing job instead of making another; use Duplicate.
 
+## Groups
+
+A group shows a batch of jobs together under one header, such as a season. Adding two or more jobs at once on **New jobs** puts them in a group when **Group them** is ticked (it is by default). The group is named after the jobs: `Show S01` from episode names like `Show.S01E01`, else their folder (`Show Season 1` for a season folder), else what their names start with. Change the name there before adding, or untick **Group them**. To group jobs already in the queue, select them and use **Group** (the folder-plus icon on the toolbar); this takes them out of any group they were in.
+
+A group's jobs always sit together in the queue, so the queue runs them one after another. Its header:
+
+- **Collapse/expand** (the arrow) hides or shows its jobs. Collapsing is remembered in this browser. A collapsed group counts as one row on a page, and the arrow keys skip it; a Shift range or Ctrl/Cmd+A still takes all of its jobs.
+- **The name** selects every job in it that the search and filter show, for the batch panel. The header counts the jobs, how many are done, and, while a filter is on, how many match. A running job adds a progress bar for the whole group.
+- **The box** queues every job in it that can be queued, or, when all are queued, unqueues the ones not running yet.
+- **⋯** has **Select its jobs**, **Rename…** and **Ungroup**. Ungroup removes the group; its jobs stay in the queue, where they are.
+
+To move jobs, drag the grip (⋮⋮) at the right of a row. The grip of a selected job moves every selected job. A line shows where they will go: an indented line puts them in that group, and a full-width line puts them outside any group. Below a group's last job, the upper part of the gap is still inside the group and the lower part is outside it. On a collapsed header, the middle adds them at the end of the group, and the top or bottom puts them before or after it. Drag a header's grip to move the whole group; it lands before or after another group, never inside one. Esc cancels a drag. Dragging on a row itself still selects the rows you drag across.
+
+The **Move up** and **Move down** buttons keep a job inside its group (drag it to take it out). With a whole group selected, they move the group as one past the next job or group. Removing a group's jobs and undoing it puts them back in the group. A duplicate goes in its job's group. Groups belong to the queue only: they aren't saved in job files, so jobs added from job files start ungrouped.
+
 ## Find and select jobs
 
 Search matches job names, labels and source paths, ignoring case. Every word must match somewhere in the name or path. Combine it with a status filter; status counts reflect the current search. The list shows 100 matching jobs per page, in queue order. **Previous** and **Next** change pages without changing the selection or the run order.

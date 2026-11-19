@@ -13,6 +13,8 @@ async function phoneFixture(page: Page) {
     id: `job-${i}`,
     name: i === 0 ? LONG : `Show S01E0${i + 1}`,
     label: '',
+    group: null,
+    group_name: '',
     source: `D:\\Media\\Show\\Season 01\\Show.S01E0${i + 1}.mkv`,
     rule_set: 'manual',
     status,

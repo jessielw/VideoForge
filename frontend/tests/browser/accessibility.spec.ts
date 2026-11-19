@@ -133,6 +133,8 @@ async function fixture(page: Page, mode: 'light' | 'dark', palette = 'gold') {
     id: 'a11y',
     name: 'Show.S01E01.mkv',
     label: '',
+    group: null,
+    group_name: '',
     source: 'D:/Media/Show.S01E01.mkv',
     rule_set: 'manual',
     status: 'ready',
