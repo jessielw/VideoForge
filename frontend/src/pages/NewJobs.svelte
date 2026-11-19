@@ -1,6 +1,6 @@
 <script lang="ts">
   // New jobs: rule set + language, input slots, output folder, live match preview, Add to queue.
-  import { onDestroy, onMount, tick, untrack } from 'svelte'
+  import { flushSync, onDestroy, onMount, untrack } from 'svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import { Button } from '$lib/components/ui/button'
@@ -186,13 +186,17 @@
     })
   })
 
-  // Matched files' height, pulled up by the grip on its top edge (arrow keys too) and remembered. The page
-  // scrolls with it, so the card's bottom stays put and the inputs above scroll away. 0: it fills what's left.
+  // Matched files' height, dragged by the grip on its bottom edge (arrow keys too) and remembered; 0 fills
+  // what's left of the page. Held below the page, the page scrolls and the card keeps growing, up to the
+  // height that shows every row. Grabbing the grip never scrolls the page by itself.
   const MATCH_MIN = 192
   let matchH = $state(readMatchH())
   let scroller = $state<HTMLElement>()
   let matchCard = $state<HTMLElement | null>(null)
-  let pull: { y: number; h: number } | null = null
+  let matchList = $state<HTMLElement>()
+  let matchGrip = $state<HTMLElement>()
+  // y and h at the press; at: the pointer now; scrolled: how far the page has scrolled to follow it
+  let pull: { y: number; h: number; at: number; scrolled: number; max: number; frame: number } | null = null
   function readMatchH(): number {
     try {
       const n = Number(localStorage.getItem('videoforge.matchedH'))
@@ -201,12 +205,6 @@
       return 0
     }
   }
-  async function setMatchH(h: number) {
-    const max = Math.max(MATCH_MIN, (scroller?.clientHeight ?? 0) - 48) // the visible page, less its padding
-    matchH = h <= MATCH_MIN ? 0 : Math.round(Math.min(h, max))
-    await tick()
-    if (scroller) scroller.scrollTop = scroller.scrollHeight // keep the card's bottom in view
-  }
   function saveMatchH() {
     try {
       localStorage.setItem('videoforge.matchedH', String(matchH))
@@ -214,23 +212,49 @@
       // storage blocked: the height lasts until reload
     }
   }
+  function fullMatchH(): number {
+    if (!matchCard || !matchList) return MATCH_MIN
+    return matchCard.offsetHeight - matchList.clientHeight + matchList.scrollHeight // every row showing
+  }
+  function setMatchH(h: number, max = fullMatchH()) {
+    matchH = h <= MATCH_MIN ? 0 : Math.round(Math.min(h, Math.max(MATCH_MIN, max)))
+  }
+  function pullFrame() {
+    if (!pull || !scroller) return
+    const past = pull.at - scroller.getBoundingClientRect().bottom
+    if (past > 0) {
+      const p = pull
+      const step = Math.min(24, Math.ceil(past / 4))
+      flushSync(() => setMatchH(p.h + p.at - p.y + p.scrolled + step, p.max))
+      const before = scroller.scrollTop
+      scroller.scrollTop += step
+      p.scrolled += scroller.scrollTop - before
+    }
+    pull.frame = requestAnimationFrame(pullFrame)
+  }
   function pullDown(e: PointerEvent) {
     e.preventDefault()
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    pull = { y: e.clientY, h: matchCard?.offsetHeight ?? MATCH_MIN }
+    const h = matchCard?.offsetHeight ?? MATCH_MIN
+    pull = { y: e.clientY, h, at: e.clientY, scrolled: 0, max: fullMatchH(), frame: 0 }
+    pull.frame = requestAnimationFrame(pullFrame)
   }
   function pullMove(e: PointerEvent) {
-    if (pull) setMatchH(pull.h + pull.y - e.clientY)
+    if (!pull) return
+    pull.at = e.clientY
+    setMatchH(pull.h + pull.at - pull.y + pull.scrolled, pull.max)
   }
   function pullUp() {
     if (!pull) return
+    cancelAnimationFrame(pull.frame)
     pull = null
     saveMatchH()
   }
-  async function pullKey(e: KeyboardEvent) {
+  function pullKey(e: KeyboardEvent) {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
     e.preventDefault()
-    await setMatchH((matchCard?.offsetHeight ?? MATCH_MIN) + (e.key === 'ArrowUp' ? 48 : -48))
+    flushSync(() => setMatchH((matchCard?.offsetHeight ?? MATCH_MIN) + (e.key === 'ArrowDown' ? 48 : -48)))
+    matchGrip?.scrollIntoView({ block: 'nearest' })
     saveMatchH()
   }
 
@@ -458,11 +482,23 @@
       class="{result || matching ? 'min-h-48 flex-1' : ''} shrink-0 gap-0 py-0"
       style={(result || matching) && matchH ? `min-height:${matchH}px` : undefined}
     >
+      <div class="flex shrink-0 flex-wrap items-center gap-3 px-4 py-2">
+        <h2 class="font-medium">Matched files</h2>
+        <span class="text-sm text-muted-foreground">
+          {#if matching}Matching…{:else if result}{result.jobs.length} job(s){result.unmatched.length
+              ? ` · ${result.unmatched.length} unmatched`
+              : ''}{:else}Add a source to see the jobs{/if}
+        </span>
+      </div>
       {#if result}
-        <!-- Pull up to make the list taller (arrow keys too); double-click goes back to filling the page. A
+        <div class="min-h-0 flex-1 overflow-auto border-t" bind:this={matchList}>
+          <MatchTable {result} bind:replacements />
+        </div>
+        <!-- Drag down to show more rows (arrow keys too); double-click goes back to filling the page. A
              focusable separator is the window splitter pattern, which Svelte's a11y check doesn't know. -->
         <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
         <div
+          bind:this={matchGrip}
           role="separator"
           aria-orientation="horizontal"
           aria-label="Resize Matched files"
@@ -470,7 +506,7 @@
           aria-valuemin={MATCH_MIN}
           aria-valuetext={matchH ? `${matchH} pixels tall` : 'Fills the page'}
           tabindex="0"
-          class="group flex h-3 shrink-0 cursor-row-resize touch-none justify-center rounded-t-xl pt-1 outline-none select-none"
+          class="group flex h-3 shrink-0 cursor-row-resize touch-none items-center justify-center rounded-b-xl border-t outline-none select-none"
           onpointerdown={pullDown}
           onpointermove={pullMove}
           onpointerup={pullUp}
@@ -481,19 +517,6 @@
           <div
             class="h-1 w-10 rounded-full bg-border transition-colors group-hover:bg-primary group-focus-visible:bg-primary"
           ></div>
-        </div>
-      {/if}
-      <div class="flex shrink-0 flex-wrap items-center gap-3 px-4 pb-2 {result ? 'pt-0.5' : 'pt-2'}">
-        <h2 class="font-medium">Matched files</h2>
-        <span class="text-sm text-muted-foreground">
-          {#if matching}Matching…{:else if result}{result.jobs.length} job(s){result.unmatched.length
-              ? ` · ${result.unmatched.length} unmatched`
-              : ''}{:else}Add a source to see the jobs{/if}
-        </span>
-      </div>
-      {#if result}
-        <div class="min-h-0 flex-1 overflow-auto border-t">
-          <MatchTable {result} bind:replacements />
         </div>
       {/if}
     </Card.Root>

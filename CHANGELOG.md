@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Each input on New jobs (sources, encodes, subtitles, chapters) has its own clear button beside **Browse…**, shown once it holds a path, and its label counts its paths, such as "Sources · 24". The bottom bar's **Clear** is now **Clear all**, and still empties every input.
 
-- **Matched files** on New jobs has a grip on its top edge: pull it up to show more rows. The page scrolls with it, so the list's bottom stays in view and the inputs above scroll away. The arrow keys move it too, a double-click goes back to filling the page, and the height is remembered.
+- **Matched files** on New jobs has a grip on its bottom edge: drag it down to show more rows. Held below the page, the page scrolls and the list keeps growing until every row shows. The arrow keys move it too, a double-click goes back to filling the page, and the height is remembered.
 
 ### Changed
 

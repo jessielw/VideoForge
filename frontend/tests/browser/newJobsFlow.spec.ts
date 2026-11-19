@@ -470,7 +470,7 @@ test('each slot counts its paths, scrolls a long list in its box, and clears on 
   expect(errors).toEqual([])
 })
 
-test('the grip on Matched files pulls it taller, keeps its bottom in view, and remembers the height', async ({
+test('the grip under Matched files drags it taller past the page, without jumping the page, and is remembered', async ({
   page,
 }) => {
   const { errors } = await fixture(page, [])
@@ -480,22 +480,34 @@ test('the grip on Matched files pulls it taller, keeps its bottom in view, and r
   const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
   await expect(card).toContainText('30 job(s)')
   const grip = page.getByRole('separator', { name: 'Resize Matched files' })
+  const scrollTop = () => card.evaluate((el) => el.parentElement!.scrollTop)
   const before = (await card.boundingBox())!.height
+
   const at = (await grip.boundingBox())!
-  await page.mouse.move(at.x + at.width / 2, at.y + 4)
+  const x = at.x + at.width / 2
+  await page.mouse.move(x, at.y + 6)
   await page.mouse.down()
-  await page.mouse.move(at.x + at.width / 2, at.y - 200, { steps: 5 })
+  await page.mouse.move(x, 880, { steps: 3 }) // below the page, over the bottom bar: the page scrolls
+  await page.waitForTimeout(500)
   await page.mouse.up()
-  const after = (await card.boundingBox())!
-  expect(after.height).toBeGreaterThan(before + 150)
-  expect(after.y + after.height).toBeLessThanOrEqual(900) // the bottom stays in view
+  const tall = (await card.boundingBox())!.height
+  expect(tall).toBeGreaterThan(before + 100)
+  expect(await scrollTop()).toBeGreaterThan(0)
+
+  const top = await scrollTop()
+  const now = (await grip.boundingBox())!
+  await page.mouse.move(x, now.y + 6)
+  await page.mouse.down() // a grab alone moves nothing
+  await page.mouse.move(x, now.y + 7)
+  await page.mouse.up()
+  expect(await scrollTop()).toBe(top)
 
   await page.reload()
   await expect(card).toContainText('30 job(s)')
-  expect((await card.boundingBox())!.height).toBeGreaterThan(before + 150) // remembered
+  expect(Math.abs((await card.boundingBox())!.height - tall)).toBeLessThan(4) // remembered
   await grip.focus()
-  await page.keyboard.press('ArrowUp')
-  await expect(grip).toHaveAttribute('aria-valuetext', /pixels tall/)
+  await page.keyboard.press('ArrowDown')
+  expect((await card.boundingBox())!.height).toBeGreaterThan(tall + 40)
   await grip.dblclick()
   await expect(grip).toHaveAttribute('aria-valuetext', 'Fills the page')
   expect(errors).toEqual([])
