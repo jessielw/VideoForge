@@ -181,6 +181,42 @@ async function paste(page: Page, text: string) {
   }, text)
 }
 
+test("each Browse on New jobs opens at its own last folder, not at another Browse's", async ({ page }) => {
+  const { errors } = await fixture(page, [])
+  // Sources were last browsed in D:/Media; the output folder was browsed since (the shared last_dir).
+  const settings = {
+    output_dir: 'D:/Output',
+    last_dir: 'D:/Output',
+    last_dirs: { sources: 'D:/Media' },
+    output_folders: [],
+    output_default: '',
+  }
+  const saved: Record<string, unknown>[] = []
+  await page.route('**/api/settings', (route) => {
+    if (route.request().method() === 'PUT') saved.push(route.request().postDataJSON())
+    return route.fulfill({ json: settings })
+  })
+  const opened: string[] = []
+  await page.route(/\/api\/fs\/list\?/, (route) => {
+    const path = new URL(route.request().url()).searchParams.get('path')!
+    opened.push(path)
+    return route.fulfill({ json: { path, parent: 'D:/', dirs: [], files: [] } })
+  })
+  await page.goto('/#/new')
+  const main = page.locator('main')
+  const browse = main.getByRole('button', { name: 'Browse…', exact: true })
+
+  await browse.first().click() // Sources
+  await expect.poll(() => opened).toEqual(['D:/Media'])
+  await expect.poll(() => saved).toEqual([{ last_dir: 'D:/Media', last_dirs: { sources: 'D:/Media' } }])
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
+
+  await browse.nth(1).click() // Output folder: no folder of its own yet, so the shared one
+  await expect.poll(() => opened.at(-1)).toBe('D:/Output')
+  await expect.poll(() => saved.at(-1)).toEqual({ last_dir: 'D:/Output', last_dirs: { output: 'D:/Output' } })
+  expect(errors).toEqual([])
+})
+
 test('Matched files keeps its size while the sources match again', async ({ page }) => {
   const { errors, sources } = await fixture(page, [])
   await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))

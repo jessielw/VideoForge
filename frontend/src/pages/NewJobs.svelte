@@ -424,6 +424,7 @@
           hint="MKV, MP4 or M2TS / TS files, or a folder of them"
           bind:paths={sources}
           extensions={['.mkv', '.mp4', '.m4v', '.m2ts', '.mts', '.ts']}
+          remember="sources"
         />
         <details open={!!(encodes.length || subtitles.length || chapters.length)}>
           <summary class="cursor-pointer text-sm text-muted-foreground select-none">
@@ -435,6 +436,7 @@
               hint="Optional. Video you've already encoded goes into the output instead of a new encode. Each one is matched to its source by name or SxxEyy."
               bind:paths={encodes}
               extensions={['.mkv', '.h264', '.264', '.hevc', '.265', '.h265', '.avc']}
+              remember="encodes"
             />
             {#if takesSubs}
               <PathSlot
@@ -442,6 +444,7 @@
                 hint="Subtitle files or folders, matched to each source by name, SxxEyy or the closest name; Matched files lets you match the rest. With one source, they all go to it. A source you add none for gets the subtitles next to it, or one folder down."
                 bind:paths={subtitles}
                 extensions={['.srt', '.ass', '.ssa', '.sup', '.idx']}
+                remember="subtitles"
               />
             {/if}
             <PathSlot
@@ -449,10 +452,17 @@
               hint="Optional. Without a file, AutoQPF uses the source's chapters or adds one every 5%. You can turn AutoQPF off on the job's Output tab."
               bind:paths={chapters}
               extensions={['.txt', '.xml']}
+              remember="chapters"
             />
           </div>
         </details>
-        <PathSlot label="Output folder" hint="Where finished files are saved" bind:paths={output} mode="folder">
+        <PathSlot
+          label="Output folder"
+          hint="Where finished files are saved"
+          bind:paths={output}
+          mode="folder"
+          remember="output"
+        >
           {#snippet actions()}<OutputFolderMenu onpick={(path) => (output = [path])} />{/snippet}
         </PathSlot>
         <div

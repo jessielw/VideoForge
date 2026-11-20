@@ -54,6 +54,7 @@ export type OutputFolder = { path: string; pinned: boolean }
 export type Settings = {
   output_dir: string
   last_dir: string
+  last_dirs?: Record<string, string> // the last folder of each kind of Browse ("sources", "output"...)
   output_folders: OutputFolder[]
   output_default: string
 }

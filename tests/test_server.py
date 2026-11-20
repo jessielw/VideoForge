@@ -2462,6 +2462,20 @@ def test_output_folders(tmp_path):
         assert client.put("/api/settings", json={"output_default": 3}).status_code == 422
 
 
+def test_each_browse_remembers_its_own_folder(tmp_path):
+    """last_dirs keeps a folder per kind of Browse (New jobs' Sources, Output folder...); a PUT changes only the kinds
+    it names, and last_dir stays the shared one."""
+    with make_client(tmp_path) as client:
+        assert client.get("/api/settings").json()["last_dirs"] == {}
+        client.put("/api/settings", json={"last_dir": "/media", "last_dirs": {"sources": "/media"}})
+        s = client.put("/api/settings", json={"last_dir": "/out", "last_dirs": {"output": "/out"}}).json()
+        assert s["last_dirs"] == {"sources": "/media", "output": "/out"}
+        assert s["last_dir"] == "/out"
+        for bad in ("x", {"sources": 3}, ["sources"]):
+            assert client.put("/api/settings", json={"last_dirs": bad}).status_code == 422
+        assert client.get("/api/settings").json()["last_dirs"] == {"sources": "/media", "output": "/out"}
+
+
 def test_output_folders_remember():
     from videoforge.server.output_folders import MAX_RECENT, clean, remember
 
