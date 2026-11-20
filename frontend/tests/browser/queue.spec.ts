@@ -845,12 +845,39 @@ async function visibleLeft(button: Locator): Promise<number> {
   })
 }
 
-test('Edit the whole script lines up with the side panel controls', async ({ page }) => {
+test('Edit the whole script lines up with the Source filter menu above it', async ({ page }) => {
   const { errors } = await queueFixture(page, 1, ['ready'])
   await page.goto('/#/queue/job-0')
-  const edit = await visibleLeft(page.getByRole('button', { name: 'Edit the whole script…', exact: true }))
-  const preset = await visibleLeft(page.getByRole('complementary').getByRole('button').first()) // the preset menu
-  expect(Math.abs(edit - preset)).toBeLessThanOrEqual(1)
+  const panel = page.getByRole('complementary')
+  await panel.locator('summary').filter({ hasText: 'Advanced' }).click()
+  const edit = await visibleLeft(panel.getByRole('button', { name: 'Edit the whole script…', exact: true }))
+  const filter = await visibleLeft(panel.getByRole('combobox', { name: 'Source filter', exact: true }))
+  expect(Math.abs(edit - filter)).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+test('Video: Source filter and Edit the whole script… sit in a closed Advanced section at the bottom', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await withDetail(page, (d) => (d.spec.video.source_filter = 'bestsource'))
+  await page.goto('/#/queue/job-0')
+  const panel = page.getByRole('complementary')
+  const advanced = panel.locator('summary').filter({ hasText: 'Advanced' })
+  const filter = panel.getByRole('combobox', { name: 'Source filter', exact: true })
+  const edit = panel.getByRole('button', { name: 'Edit the whole script…', exact: true })
+  // BestSource isn't the default, FFMS2.
+  await expect(advanced).toHaveText('Advanced (1)')
+  await expect(filter).toBeHidden()
+  await expect(edit).toBeHidden()
+  const filters = (await panel.getByText('Filters', { exact: true }).boundingBox())!
+  expect((await advanced.boundingBox())!.y).toBeGreaterThan(filters.y)
+  await advanced.click()
+  await expect(filter).toHaveValue('bestsource')
+  await expect(edit).toBeVisible()
+  await expect(advanced).toHaveText('Advanced')
+  await page.reload()
+  await expect(filter).toBeVisible()
   expect(errors).toEqual([])
 })
 
