@@ -446,6 +446,7 @@ test("the Output tab's extra arguments box is named after its visible label", as
   const { errors } = await fixture(page, 'light')
   await page.goto('/#/queue/a11y')
   await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  await page.locator('summary').filter({ hasText: 'Advanced' }).click()
   await expect(page.getByRole('textbox', { name: /^Extra arguments for \S+$/ })).toBeVisible()
   expect(errors).toEqual([])
 })

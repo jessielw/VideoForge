@@ -986,15 +986,17 @@ test('Output tab: every label lines up with the first control in its row', async
   // The rule set's containers bring the Container and PGS compression rows (a checkbox first: no text baseline).
   await withRuleSet(page)
   await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  await page.locator('summary').filter({ hasText: 'Advanced' }).click()
   await expect(page.getByText('PGS compression', { exact: true })).toBeVisible()
-  // Each label in the tab's label column against the first control on its row; a textarea counts by its first line.
+  // Each label in the tab's label columns (the tab's, and its Advanced section's) against the first control on its
+  // row; a textarea counts by its first line.
   const rows = await page.evaluate(() => {
-    const grid = [...document.querySelectorAll<HTMLElement>('main .grid')].find((g) =>
-      g.textContent?.includes('Existing output'),
-    )!
+    const grids = ['Existing output', 'PGS compression'].map((text) =>
+      [...document.querySelectorAll<HTMLElement>('main .grid')].find((g) => g.textContent?.includes(text))!,
+    )
     const control = 'input:not([type=hidden]), select, textarea, button, [role=checkbox]'
     const out: { label: string; gap: number }[] = []
-    for (const label of [...grid.children] as HTMLElement[]) {
+    for (const label of grids.flatMap((grid) => [...grid.children]) as HTMLElement[]) {
       const cell = label.nextElementSibling as HTMLElement | null
       const text = label.textContent?.trim()
       if (!cell || !text || label.querySelector(control)) continue
@@ -1016,6 +1018,34 @@ test('Output tab: every label lines up with the first control in its row', async
     expect.arrayContaining(['Existing output', 'Name template', 'PGS compression']),
   )
   expect(rows.filter((r) => r.gap > 2)).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('Output: extra arguments, PGS compression, the work folder and finished steps sit in a closed Advanced section', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await withDetail(page, (d) => {
+    Object.assign(d.spec.mux, { extra: '--no-date', pgs_zlib: true })
+    d.steps = { mux: { id: 'mux', fingerprint: 'f', outputs: [], seconds: 3 } }
+  })
+  await withRuleSet(page)
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  const advanced = page.locator('summary').filter({ hasText: 'Advanced' })
+  const extra = page.getByRole('textbox', { name: 'Extra arguments for mkvmerge', exact: true })
+  const pgs = page.getByRole('checkbox', { name: 'Compress PGS subtitles with zlib', exact: true })
+  const work = page.getByText('Work folder', { exact: true })
+  const steps = page.getByText(/^Finished steps/)
+  // The extra arguments and PGS compression differ from the defaults; the work folder and steps aren't settings.
+  await expect(advanced).toHaveText('Advanced (2)')
+  for (const hidden of [extra, pgs, work, steps]) await expect(hidden).toBeHidden()
+  const existing = (await page.getByText('Existing output', { exact: true }).boundingBox())!
+  expect((await advanced.boundingBox())!.y).toBeGreaterThan(existing.y)
+  await expect(page.getByText('D:\\Show\\Season1\\0.mkv_tmp', { exact: true })).toBeHidden()
+  await advanced.click()
+  for (const shown of [extra, pgs, work, steps]) await expect(shown).toBeVisible()
+  await expect(extra).toHaveValue('--no-date')
+  await expect(advanced).toHaveText('Advanced')
   expect(errors).toEqual([])
 })
 

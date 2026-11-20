@@ -19,6 +19,7 @@
   import { app } from '../lib/state.svelte'
   import { layout } from '../lib/layout.svelte'
   import type { CommandStep, JobDetail } from '../lib/types'
+  import Advanced from './Advanced.svelte'
   import EncoderPanel from './EncoderPanel.svelte'
   import OutputFolderMenu from './OutputFolderMenu.svelte'
   import NameSettings from './NameSettings.svelte'
@@ -471,27 +472,6 @@
             {:else}
               <span>{container?.label ?? job.spec.mux.container}</span>
             {/if}
-            {#if container?.id === 'mkv'}
-              <!-- self-start: the row starts with a checkbox, whose baseline moves with its tick; its first line is at the top -->
-              <span class="self-start text-muted-foreground">PGS compression</span>
-              <label class="flex items-center gap-2">
-                <Checkbox
-                  checked={job.spec.mux.pgs_zlib ?? false}
-                  disabled={!editable}
-                  onCheckedChange={(v) => save({ mux: { ...job!.spec.mux, pgs_zlib: v } })}
-                />
-                Compress PGS subtitles with zlib
-              </label>
-            {/if}
-            <span class="text-muted-foreground">Extra arguments</span>
-            <Input
-              class="font-mono text-xs placeholder:font-sans"
-              aria-label="Extra arguments for {container?.tool ?? 'the output'}"
-              placeholder="added to the {container?.tool ?? 'output'} command as typed"
-              value={job.spec.mux.extra}
-              disabled={!editable}
-              onchange={(e) => save({ mux: { ...job!.spec.mux, extra: (e.target as HTMLInputElement).value.trim() } })}
-            />
             <span class="text-muted-foreground">Chapters</span>
             <div
               class="-m-1 flex flex-wrap items-center gap-2 rounded-lg p-1 outline-none"
@@ -540,38 +520,69 @@
             >
               {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
             </NativeSelect>
-            <span class="text-muted-foreground">Work folder</span>
-            <code class="text-xs break-all text-muted-foreground">{job.source}_tmp</code>
             <span class="text-muted-foreground">Output</span>
             <code class="text-xs break-all text-muted-foreground">{job.output ?? '(after the run)'}</code>
           </div>
-          {#if muxCommands.length}
-            <div class="space-y-2">
-              <span class="section-label">Commands that build the output file</span>
-              {#each muxCommands as c (c.id)}
-                <div class="rounded-lg border bg-muted/50 p-2">
-                  <div class="text-xs font-medium text-foreground">{c.label}</div>
-                  <code class="block text-xs break-all text-muted-foreground">{c.command}</code>
-                </div>
-              {/each}
+          <!-- counts the extra arguments and PGS compression, which are off by default -->
+          <Advanced
+            area="output"
+            title="Advanced"
+            count={(job.spec.mux.extra ? 1 : 0) + (container?.id === 'mkv' && job.spec.mux.pgs_zlib ? 1 : 0)}
+          >
+            <div class="grid grid-cols-[8rem_minmax(0,1fr)] items-baseline gap-3 text-sm">
+              {#if container?.id === 'mkv'}
+                <!-- self-start: the row starts with a checkbox, whose baseline moves with its tick; its first line is at the top -->
+                <span class="self-start text-muted-foreground">PGS compression</span>
+                <label class="flex items-center gap-2">
+                  <Checkbox
+                    checked={job.spec.mux.pgs_zlib ?? false}
+                    disabled={!editable}
+                    onCheckedChange={(v) => save({ mux: { ...job!.spec.mux, pgs_zlib: v } })}
+                  />
+                  Compress PGS subtitles with zlib
+                </label>
+              {/if}
+              <span class="text-muted-foreground">Extra arguments</span>
+              <Input
+                class="font-mono text-xs placeholder:font-sans"
+                aria-label="Extra arguments for {container?.tool ?? 'the output'}"
+                placeholder="added to the {container?.tool ?? 'output'} command as typed"
+                value={job.spec.mux.extra}
+                disabled={!editable}
+                onchange={(e) =>
+                  save({ mux: { ...job!.spec.mux, extra: (e.target as HTMLInputElement).value.trim() } })}
+              />
+              <span class="text-muted-foreground">Work folder</span>
+              <code class="text-xs break-all text-muted-foreground">{job.source}_tmp</code>
             </div>
-          {/if}
-          {#if Object.keys(job.steps).length}
-            <div>
-              <span class="section-label"
-                >Finished steps (reused on the next run if nothing they depend on changed)</span
-              >
-              <ul class="mt-2 space-y-1 text-sm">
-                {#each Object.values(job.steps) as s (s.id)}
-                  <li class="flex gap-3">
-                    <CheckIcon class="size-4 text-success" /><span class="w-28">{s.id}</span><span
-                      class="text-muted-foreground">{s.seconds}s</span
-                    >
-                  </li>
+            {#if muxCommands.length}
+              <div class="space-y-2">
+                <span class="section-label">Commands that build the output file</span>
+                {#each muxCommands as c (c.id)}
+                  <div class="rounded-lg border bg-muted/50 p-2">
+                    <div class="text-xs font-medium text-foreground">{c.label}</div>
+                    <code class="block text-xs break-all text-muted-foreground">{c.command}</code>
+                  </div>
                 {/each}
-              </ul>
-            </div>
-          {/if}
+              </div>
+            {/if}
+            {#if Object.keys(job.steps).length}
+              <div>
+                <span class="section-label"
+                  >Finished steps (reused on the next run if nothing they depend on changed)</span
+                >
+                <ul class="mt-2 space-y-1 text-sm">
+                  {#each Object.values(job.steps) as s (s.id)}
+                    <li class="flex gap-3">
+                      <CheckIcon class="size-4 text-success" /><span class="w-28">{s.id}</span><span
+                        class="text-muted-foreground">{s.seconds}s</span
+                      >
+                    </li>
+                  {/each}
+                </ul>
+              </div>
+            {/if}
+          </Advanced>
         </div>
       {:else}
         <JobLog {jobId} running={job.status === 'running'} />
