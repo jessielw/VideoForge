@@ -167,7 +167,13 @@ async function queueFixture(
   })
   await page.goto('/#/queue')
   await expect(page.getByRole('status')).toContainText(`${count} of ${count} jobs match`)
-  return { jobs, calls, errors, refresh: () => socket.send(JSON.stringify({ type: 'job', id: jobs[0].id })) }
+  return {
+    jobs,
+    calls,
+    errors,
+    refresh: () => socket.send(JSON.stringify({ type: 'job', id: jobs[0].id })),
+    send: (event: Record<string, unknown>) => socket.send(JSON.stringify(event)), // a server event, such as 'queue'
+  }
 }
 
 test('10,000 jobs: bounded rows, combined filters, counts, and explicit action scope', async ({ page }) => {
@@ -763,6 +769,65 @@ test('the Encoder tab fills at most one control with the accent', async ({ page 
     )
   expect(filled.length, filled.join(', ')).toBeLessThanOrEqual(1)
   expect(errors).toEqual([])
+})
+
+test("the toolbar's first row stays put when a job starts or indexing runs, so Cancel never lands on Run selected", async ({
+  page,
+}) => {
+  const fixture = await queueFixture(page, 3, ['ready'])
+  const runSelected = page.getByRole('button', { name: /^Run selected/ })
+  // where it starts: its count's digits change its width
+  const at = async () => {
+    const { x, y, height } = (await runSelected.boundingBox())!
+    return { x, y, height }
+  }
+  const idleAt = await at()
+  // A selection brings Queue (1), at the end of the selection's row: the first row stays as it was.
+  await page.getByText('Episode 00001', { exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Queue (1)', exact: true })).toBeVisible()
+  const before = await at()
+  expect(before).toEqual(idleAt)
+  const firstRowEnd = before.y + before.height
+  const below = async (name: string) =>
+    expect((await page.getByRole('button', { name, exact: true }).boundingBox())!.y).toBeGreaterThanOrEqual(firstRowEnd)
+  const idle = {
+    type: 'queue',
+    running: false,
+    current: null,
+    stop_after_current: false,
+    paused: false,
+    priority: null,
+    queued: 0,
+    indexing: null,
+    sampling: null,
+    index_queued: 0,
+    index_held: 0,
+  }
+
+  fixture.send({ ...idle, running: true, current: 'job-0', queued: 1 })
+  await expect(page.getByRole('button', { name: 'Stop after current', exact: true })).toBeVisible()
+  expect(await at()).toEqual(before)
+  await below('Cancel')
+  await below('Pause after pass 1')
+  await below('Pause')
+
+  fixture.send({ ...idle, running: true, current: 'job-0', stop_after_current: true })
+  await expect(page.getByRole('button', { name: 'Stopping…', exact: true })).toBeVisible()
+  expect(await at()).toEqual(before)
+
+  // Indexing with no job running: Start queue keeps its place, and the second row has what applies to indexing.
+  fixture.send({ ...idle, indexing: 'job-2' })
+  await expect(page.getByRole('button', { name: /^Start queue/ })).toBeVisible()
+  expect(await at()).toEqual(before)
+  await below('Stop indexing')
+  await below('Pause')
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0)
+
+  fixture.send(idle)
+  await expect(page.getByRole('button', { name: 'Stop indexing', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toHaveCount(0)
+  expect(await at()).toEqual(before)
+  expect(fixture.errors).toEqual([])
 })
 
 test('a disabled Start queue is gray, not dimmed gold', async ({ page }) => {

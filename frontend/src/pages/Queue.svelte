@@ -966,218 +966,244 @@
       class="flex min-w-0 flex-col overflow-y-auto border-r border-border {cls}"
       aria-label="Queue list"
     >
-      <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-border p-2">
-        <Tip
-          class={peek ? '' : 'max-sm:hidden'}
-          text={peek ? 'Hide the list (Esc)' : 'Collapse the list, for more room'}
+      <!-- Three rows. The first never moves: Start queue and Stop after current share one slot, as wide as the
+           longer of the two, so Run selected stays under the pointer when a job starts (a double click on it used to
+           land on Cancel). The second shows only while something runs, indexes or is paused. The third acts on the
+           selection; Queue and Unqueue end it, so one showing up doesn't wrap the first row and move the list. -->
+      {#snippet slotLabel(label: string)}
+        <!-- each of the slot's labels in one cell, the others hidden: the slot is as wide as the longest -->
+        <span class="inline-grid"
+          ><span class="col-start-1 row-start-1">{label}</span
+          >{#each [`Start queue (${startJobs.length})`, 'Stop after current', 'Stopping…'] as other (other)}<span
+              class="invisible col-start-1 row-start-1"
+              aria-hidden="true">{other}</span
+            >{/each}</span
         >
-          <Button
-            variant="ghost"
-            size="icon"
-            onclick={hideList}
-            aria-label={peek ? 'Hide the queue list' : 'Collapse the queue list'}
-          >
-            <PanelLeftCloseIcon />
-          </Button>
-        </Tip>
-        {#if app.queue.running}
-          <Tip text="Finish the current job, then stop">
-            <Button variant="outline" onclick={() => act(api.stop)}>
-              <ListEndIcon />{app.queue.stop_after_current ? 'Stopping…' : 'Stop after current'}
-            </Button>
-          </Tip>
-          <Tip text="Cancel the running job">
-            <Button variant="outline" onclick={() => act(api.cancel)}><SquareIcon />Cancel</Button>
-          </Tip>
-          {#if app.queue.current}
-            <Tip
-              text={pausing
-                ? 'The job stops after pass 1. Click to cancel that.'
-                : "Stops the running job when its video's pass 1 is done. It keeps what it finished, so you can close VideoForge. Running the job again goes on with pass 2."}
-            >
-              <Button variant={pausing ? 'default' : 'outline'} onclick={pauseAfterPass1}>
-                <PauseIcon />{pausing ? 'Pausing after pass 1' : 'Pause after pass 1'}
-              </Button>
-            </Tip>
-          {/if}
-        {:else}
+      {/snippet}
+      <div class="shrink-0 space-y-1 border-b border-border p-2">
+        <div class="flex flex-wrap items-center gap-1">
           <Tip
-            text={startJobs.length
-              ? `Run the ${startJobs.length} queued jobs, in queue order`
-              : 'Nothing is queued. Tick the jobs to run, or select some and use Queue.'}
+            class={peek ? '' : 'max-sm:hidden'}
+            text={peek ? 'Hide the list (Esc)' : 'Collapse the list, for more room'}
           >
-            <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())}>
-              <PlayIcon />Start queue ({startJobs.length})
+            <Button
+              variant="ghost"
+              size="icon"
+              onclick={hideList}
+              aria-label={peek ? 'Hide the queue list' : 'Collapse the queue list'}
+            >
+              <PanelLeftCloseIcon />
             </Button>
           </Tip>
-        {/if}
-        {#if working || app.queue.paused}
-          {#if app.queue.paused}
-            <Tip text="Resumes the paused tools.">
-              <Button onclick={() => act(api.resume)}><PlayIcon /><span class="max-sm:sr-only">Resume</span></Button>
+          {#if app.queue.running}
+            <Tip text="Finish the current job, then stop">
+              <Button variant="outline" onclick={() => act(api.stop)}>
+                <ListEndIcon />{@render slotLabel(app.queue.stop_after_current ? 'Stopping…' : 'Stop after current')}
+              </Button>
             </Tip>
           {:else}
             <Tip
-              text="Suspends the running job's tools and any background indexing or test encode. They use no CPU until you resume."
+              text={startJobs.length
+                ? `Run the ${startJobs.length} queued jobs, in queue order`
+                : 'Nothing is queued. Tick the jobs to run, or select some and use Queue.'}
             >
-              <Button variant="outline" onclick={() => act(api.pause)}>
-                <PauseIcon /><span class="max-sm:sr-only">Pause</span>
+              <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())}>
+                <PlayIcon />{@render slotLabel(`Start queue (${startJobs.length})`)}
               </Button>
             </Tip>
           {/if}
-          <DropdownMenu.Root>
-            <Tip
-              text="Sets the process priority of the running job, and of any indexing or test encode running now, until each one finishes. Later jobs use the default in Settings › Queue & indexing."
+          <Tip class={selected.length ? '' : 'max-sm:hidden'} text="Queue the selected jobs and start">
+            <Button variant="outline" disabled={starting || !selected.length} onclick={() => act(() => run(selected))}>
+              <PlayIcon />Run selected ({selected.length})
+            </Button>
+          </Tip>
+        </div>
+        {#if app.queue.running || working || app.queue.paused || indexing}
+          <div class="flex flex-wrap items-center gap-1">
+            {#if app.queue.running}
+              <Tip text="Cancel the running job">
+                <Button variant="outline" onclick={() => act(api.cancel)}><SquareIcon />Cancel</Button>
+              </Tip>
+              {#if app.queue.current}
+                <Tip
+                  text={pausing
+                    ? 'The job stops after pass 1. Click to cancel that.'
+                    : "Stops the running job when its video's pass 1 is done. It keeps what it finished, so you can close VideoForge. Running the job again goes on with pass 2."}
+                >
+                  <Button variant={pausing ? 'default' : 'outline'} onclick={pauseAfterPass1}>
+                    <PauseIcon />{pausing ? 'Pausing after pass 1' : 'Pause after pass 1'}
+                  </Button>
+                </Tip>
+              {/if}
+            {/if}
+            {#if working || app.queue.paused}
+              {#if app.queue.paused}
+                <Tip text="Resumes the paused tools.">
+                  <Button onclick={() => act(api.resume)}><PlayIcon /><span class="max-sm:sr-only">Resume</span></Button
+                  >
+                </Tip>
+              {:else}
+                <Tip
+                  text="Suspends the running job's tools and any background indexing or test encode. They use no CPU until you resume."
+                >
+                  <Button variant="outline" onclick={() => act(api.pause)}>
+                    <PauseIcon /><span class="max-sm:sr-only">Pause</span>
+                  </Button>
+                </Tip>
+              {/if}
+              <DropdownMenu.Root>
+                <Tip
+                  text="Sets the process priority of the running job, and of any indexing or test encode running now, until each one finishes. Later jobs use the default in Settings › Queue & indexing."
+                >
+                  <DropdownMenu.Trigger disabled={!working}>
+                    {#snippet child({ props })}
+                      <Button {...props} variant="ghost" size="icon" aria-label="Process priority"><GaugeIcon /></Button
+                      >
+                    {/snippet}
+                  </DropdownMenu.Trigger>
+                </Tip>
+                <DropdownMenu.Content align="start" class="w-48">
+                  <DropdownMenu.Label>Priority until they finish</DropdownMenu.Label>
+                  <DropdownMenu.RadioGroup
+                    value={app.queue.priority ?? ''}
+                    onValueChange={(v) => act(() => api.priority((v || null) as Priority | null))}
+                  >
+                    <DropdownMenu.RadioItem value="">As in Settings</DropdownMenu.RadioItem>
+                    {#each Object.entries(PRIORITY_LABEL) as [value, label] (value)}
+                      <DropdownMenu.RadioItem {value}>{label}</DropdownMenu.RadioItem>
+                    {/each}
+                  </DropdownMenu.RadioGroup>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+            {/if}
+            {#if indexing}
+              <Tip text="Cancels the indexing, test encode or CRF search that's running, and the ones waiting.">
+                <Button variant="outline" onclick={() => act(() => app.stopIndexing())}>
+                  <DatabaseXIcon /><span class="max-sm:sr-only">Stop indexing</span>
+                </Button>
+              </Tip>
+            {/if}
+          </div>
+        {/if}
+        <div class="flex flex-wrap items-center gap-1">
+          <Tip text={`Select all ${matching.length} matching jobs across pages (Ctrl+A in the list)`}>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!matching.length}
+              onclick={selectMatching}
+              aria-label="Select matching jobs"><ListChecksIcon /></Button
             >
-              <DropdownMenu.Trigger disabled={!working}>
+          </Tip>
+          <Tip
+            text="Indexes {selected.length
+              ? 'the selected jobs'
+              : 'every job'} not indexed yet ({toIndex}), so their preview opens without waiting. Jobs are indexed one at a time in the background, beside the queue. Indexing makes only the work folder, the script and the source index."
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!toIndex}
+              onclick={() => index(indexTarget)}
+              aria-label={selected.length ? 'Index the selected jobs' : 'Index every job not indexed yet'}
+              ><DatabaseZapIcon /></Button
+            >
+          </Tip>
+          <Tip text="Move up in the full queue. A job in a group stays in it; a whole group selected moves as one.">
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!selected.length}
+              onclick={() => move(-1)}
+              aria-label="Move selected jobs up"><ArrowUpIcon /></Button
+            >
+          </Tip>
+          <Tip text="Move down in the full queue. A job in a group stays in it; a whole group selected moves as one.">
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!selected.length}
+              onclick={() => move(1)}
+              aria-label="Move selected jobs down"><ArrowDownIcon /></Button
+            >
+          </Tip>
+          <Tip
+            text="Puts the selected jobs in a new group, shown together and collapsible (out of any group they were in). Drag a job's grip to move it into or out of a group."
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!selected.length}
+              onclick={startGroup}
+              aria-label="Group the selected jobs"><FolderPlusIcon /></Button
+            >
+          </Tip>
+          <Tip
+            text="Makes a copy of each selected job right after it, with its own label. Use it to make a second output with a few settings changed."
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!selected.length}
+              onclick={duplicate}
+              aria-label="Duplicate selected jobs"><CopyPlusIcon /></Button
+            >
+          </Tip>
+          <DropdownMenu.Root>
+            <Tip text="More actions">
+              <DropdownMenu.Trigger>
                 {#snippet child({ props })}
-                  <Button {...props} variant="ghost" size="icon" aria-label="Process priority"><GaugeIcon /></Button>
+                  <Button {...props} variant="ghost" size="icon" aria-label="More actions"><EllipsisIcon /></Button>
                 {/snippet}
               </DropdownMenu.Trigger>
             </Tip>
-            <DropdownMenu.Content align="start" class="w-48">
-              <DropdownMenu.Label>Priority until they finish</DropdownMenu.Label>
-              <DropdownMenu.RadioGroup
-                value={app.queue.priority ?? ''}
-                onValueChange={(v) => act(() => api.priority((v || null) as Priority | null))}
+            <DropdownMenu.Content align="end" class="w-auto">
+              <Tip
+                class="block"
+                side="left"
+                text="Saves each selected job's whole setup as a job file in its work folder, so you can add it again later. A run saves one too."
               >
-                <DropdownMenu.RadioItem value="">As in Settings</DropdownMenu.RadioItem>
-                {#each Object.entries(PRIORITY_LABEL) as [value, label] (value)}
-                  <DropdownMenu.RadioItem {value}>{label}</DropdownMenu.RadioItem>
-                {/each}
-              </DropdownMenu.RadioGroup>
+                <DropdownMenu.Item disabled={!selected.length} onSelect={saveJobFiles}>Save job files</DropdownMenu.Item
+                >
+              </Tip>
+              <Tip class="block" side="left" text="Adds each job with the settings it was saved with.">
+                <DropdownMenu.Item onSelect={() => (importOpen = true)}>Add jobs from job files…</DropdownMenu.Item>
+              </Tip>
+              <DropdownMenu.Item disabled={!selected.length} onSelect={() => act(() => api.reprobe(selected))}
+                >Read tracks again</DropdownMenu.Item
+              >
             </DropdownMenu.Content>
           </DropdownMenu.Root>
-        {/if}
-        <Tip class={selected.length ? '' : 'max-sm:hidden'} text="Queue the selected jobs and start">
-          <Button variant="outline" disabled={starting || !selected.length} onclick={() => act(() => run(selected))}>
-            <PlayIcon />Run selected ({selected.length})
-          </Button>
-        </Tip>
-        {#if queueableSelected.length}
-          <Tip
-            text="Queues the selected jobs, so they can't be edited. Start queue runs them, or a running queue picks them up in their turn."
-          >
-            <Button variant="outline" onclick={() => act(() => queue())}>Queue ({queueableSelected.length})</Button>
-          </Tip>
-        {/if}
-        {#if waitingSelected.length}
-          <Tip text="Takes the selected jobs out of the queue so you can edit them. Their settings and files stay.">
-            <Button variant="outline" onclick={() => act(() => unqueue())}>Unqueue ({waitingSelected.length})</Button>
-          </Tip>
-        {/if}
-        {#if indexing}
-          <Tip text="Cancels the indexing, test encode or CRF search that's running, and the ones waiting.">
-            <Button variant="outline" onclick={() => act(() => app.stopIndexing())}>
-              <DatabaseXIcon /><span class="max-sm:sr-only">Stop indexing</span>
-            </Button>
-          </Tip>
-        {/if}
-        <span class="flex-1"></span>
-        <Tip text={`Select all ${matching.length} matching jobs across pages (Ctrl+A in the list)`}>
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={!matching.length}
-            onclick={selectMatching}
-            aria-label="Select matching jobs"><ListChecksIcon /></Button
-          >
-        </Tip>
-        <Tip
-          text="Indexes {selected.length
-            ? 'the selected jobs'
-            : 'every job'} not indexed yet ({toIndex}), so their preview opens without waiting. Jobs are indexed one at a time in the background, beside the queue. Indexing makes only the work folder, the script and the source index."
-        >
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={!toIndex}
-            onclick={() => index(indexTarget)}
-            aria-label={selected.length ? 'Index the selected jobs' : 'Index every job not indexed yet'}
-            ><DatabaseZapIcon /></Button
-          >
-        </Tip>
-        <Tip text="Move up in the full queue. A job in a group stays in it; a whole group selected moves as one.">
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={!selected.length}
-            onclick={() => move(-1)}
-            aria-label="Move selected jobs up"><ArrowUpIcon /></Button
-          >
-        </Tip>
-        <Tip text="Move down in the full queue. A job in a group stays in it; a whole group selected moves as one.">
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={!selected.length}
-            onclick={() => move(1)}
-            aria-label="Move selected jobs down"><ArrowDownIcon /></Button
-          >
-        </Tip>
-        <Tip
-          text="Puts the selected jobs in a new group, shown together and collapsible (out of any group they were in). Drag a job's grip to move it into or out of a group."
-        >
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={!selected.length}
-            onclick={startGroup}
-            aria-label="Group the selected jobs"><FolderPlusIcon /></Button
-          >
-        </Tip>
-        <Tip
-          text="Makes a copy of each selected job right after it, with its own label. Use it to make a second output with a few settings changed."
-        >
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={!selected.length}
-            onclick={duplicate}
-            aria-label="Duplicate selected jobs"><CopyPlusIcon /></Button
-          >
-        </Tip>
-        <DropdownMenu.Root>
-          <Tip text="More actions">
-            <DropdownMenu.Trigger>
-              {#snippet child({ props })}
-                <Button {...props} variant="ghost" size="icon" aria-label="More actions"><EllipsisIcon /></Button>
-              {/snippet}
-            </DropdownMenu.Trigger>
-          </Tip>
-          <DropdownMenu.Content align="end" class="w-auto">
+          <DropdownMenu.Root>
+            <Tip text="Remove">
+              <DropdownMenu.Trigger disabled={!selected.length}>
+                {#snippet child({ props })}
+                  <Button {...props} variant="ghost" size="icon" class="hover:text-destructive" aria-label="Remove"
+                    ><Trash2Icon /></Button
+                  >
+                {/snippet}
+              </DropdownMenu.Trigger>
+            </Tip>
+            <DropdownMenu.Content align="end" class="w-auto">
+              <DropdownMenu.Item onSelect={() => remove()}>Remove from the queue</DropdownMenu.Item>
+              <Tip class="block" side="left" text="Shows the work folders and their sizes before deleting them.">
+                <DropdownMenu.Item onSelect={confirmRemoval}>Remove and delete work folders</DropdownMenu.Item>
+              </Tip>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+          {#if queueableSelected.length}
             <Tip
-              class="block"
-              side="left"
-              text="Saves each selected job's whole setup as a job file in its work folder, so you can add it again later. A run saves one too."
+              text="Queues the selected jobs, so they can't be edited. Start queue runs them, or a running queue picks them up in their turn."
             >
-              <DropdownMenu.Item disabled={!selected.length} onSelect={saveJobFiles}>Save job files</DropdownMenu.Item>
+              <Button variant="outline" onclick={() => act(() => queue())}>Queue ({queueableSelected.length})</Button>
             </Tip>
-            <Tip class="block" side="left" text="Adds each job with the settings it was saved with.">
-              <DropdownMenu.Item onSelect={() => (importOpen = true)}>Add jobs from job files…</DropdownMenu.Item>
+          {/if}
+          {#if waitingSelected.length}
+            <Tip text="Takes the selected jobs out of the queue so you can edit them. Their settings and files stay.">
+              <Button variant="outline" onclick={() => act(() => unqueue())}>Unqueue ({waitingSelected.length})</Button>
             </Tip>
-            <DropdownMenu.Item disabled={!selected.length} onSelect={() => act(() => api.reprobe(selected))}
-              >Read tracks again</DropdownMenu.Item
-            >
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-        <DropdownMenu.Root>
-          <Tip text="Remove">
-            <DropdownMenu.Trigger disabled={!selected.length}>
-              {#snippet child({ props })}
-                <Button {...props} variant="ghost" size="icon" class="hover:text-destructive" aria-label="Remove"
-                  ><Trash2Icon /></Button
-                >
-              {/snippet}
-            </DropdownMenu.Trigger>
-          </Tip>
-          <DropdownMenu.Content align="end" class="w-auto">
-            <DropdownMenu.Item onSelect={() => remove()}>Remove from the queue</DropdownMenu.Item>
-            <Tip class="block" side="left" text="Shows the work folders and their sizes before deleting them.">
-              <DropdownMenu.Item onSelect={confirmRemoval}>Remove and delete work folders</DropdownMenu.Item>
-            </Tip>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
+          {/if}
+        </div>
       </div>
 
       <div class="shrink-0 space-y-2 border-b border-border p-2">
