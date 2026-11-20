@@ -1427,3 +1427,116 @@ test("a queue row and its rail button count the job's errors and warnings instea
   await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText('Episode 00000: Blocked (1 error, 2 warnings)')
   expect(fixture.errors).toEqual([])
 })
+
+const HLG = "Dolby Vision 8.4 (HLG) isn't carried yet. Untick Dolby Vision from the source on the Encoder tab"
+
+test('the job header counts the issues, and the Issues tab lists each one with its code', async ({
+  page,
+}, testInfo) => {
+  const { errors } = await queueFixture(page, 1, ['blocked'])
+  await withDetail(page, (d) => {
+    d.issues = [
+      { severity: 'block', code: 'hdr.dv_hlg', message: HLG },
+      { severity: 'warn', code: 'video.option_unknown', message: "x265's help doesn't list --foo" },
+      { severity: 'warn', code: 'name.token', message: 'The name template has an unknown token.' },
+      { severity: 'info', code: 'video.color_source', message: "The source's color wins over the encoder options'" },
+    ]
+    d.issue_counts = { block: 1, warn: 2 }
+  })
+  await page.goto('/#/queue/job-0')
+  const header = page.locator('header')
+  // The header counts them: no messages, no codes.
+  await expect(header).toContainText('1 error · 2 warnings')
+  await expect(header).not.toContainText('hdr.dv_hlg')
+  await expect(header).not.toContainText("isn't carried yet")
+  const tab = page.getByRole('tab', { name: 'Issues 3', exact: true })
+  await expect(tab).toHaveClass(/bg-destructive\/10/) // the worst issue's tint
+  const jobTabs = page.getByRole('tablist', { name: 'Job sections', exact: true }).getByRole('tab')
+  await expect(jobTabs.last()).toHaveAccessibleName('Issues 3') // after Log
+  await header.screenshot({ path: testInfo.outputPath('issues-header.png') })
+
+  await header.getByRole('button', { name: 'Open the Issues tab', exact: true }).click()
+  await expect(tab).toHaveAttribute('aria-selected', 'true')
+  await expect(header.getByRole('button', { name: 'Open the Issues tab', exact: true })).toHaveCount(0)
+  const panel = page.getByRole('tabpanel', { name: 'Issues 3' })
+  await expect(panel.getByRole('heading', { name: 'Errors' })).toBeVisible()
+  await expect(panel.getByRole('heading', { name: 'Warnings' })).toBeVisible()
+  const items = panel.getByRole('listitem')
+  await expect(items).toHaveCount(3) // info notes stay out
+  // A screen reader hears the kind first; a message gets its final period; the code follows.
+  const said = (i: number) => items.nth(i).evaluate((el) => el.textContent!.replace(/\s+/g, ' ').trim())
+  expect(await said(0)).toBe(`Error: ${HLG}. hdr.dv_hlg`)
+  expect(await said(1)).toBe("Warning: x265's help doesn't list --foo. video.option_unknown")
+  expect(await said(2)).toBe('Warning: The name template has an unknown token. name.token')
+  await expect(items.nth(0).getByText(HLG, { exact: false })).toHaveCSS('color', await panelText(panel))
+  await page.getByRole('tabpanel').screenshot({ path: testInfo.outputPath('issues-tab.png') })
+  expect(errors).toEqual([])
+})
+
+for (const palette of ['gold', 'indigo', 'ocean', 'forest', 'ember', 'rose', 'slate'])
+  for (const mode of ['light', 'dark'])
+    test(`the Issues tab's tint and its list keep their contrast: ${palette}, ${mode}`, async ({ page }) => {
+      await page.addInitScript(
+        ([palette, mode]) => {
+          localStorage.setItem('videoforge.palette', palette)
+          localStorage.setItem('videoforge.mode', mode)
+        },
+        [palette, mode],
+      )
+      const fixture = await queueFixture(page, 1, ['blocked'])
+      const detail = await withDetail(page, (d) => {
+        d.issues = [
+          { severity: 'block', code: 'hdr.dv_hlg', message: HLG },
+          { severity: 'warn', code: 'name.token', message: 'The name template has an unknown token.' },
+        ]
+      })
+      await page.goto('/#/queue/job-0')
+      const contrast = async () =>
+        (await page.waitForTimeout(300), // the tabs' colors fade in
+        await new AxeBuilder({ page })
+          .include('header')
+          .include('#job-tab-panel')
+          // the blocked job's dimmed Queue box: a disabled control, which WCAG leaves out
+          .exclude('header label:has([role=checkbox][disabled])')
+          .withRules(['color-contrast'])
+          .analyze()).violations.flatMap((v) => v.nodes.map((n) => `${n.target.join(' ')}: ${n.any[0]?.message}`))
+      const tab = page.getByRole('tab', { name: /^Issues/ })
+      // An error's tint and a warning's, each while the tab is closed and while it's open.
+      for (const issues of [detail.issues, detail.issues.slice(1)]) {
+        detail.issues = issues
+        fixture.refresh()
+        await expect(tab).toHaveAccessibleName(`Issues ${issues.length}`)
+        await page.getByRole('tab', { name: 'Video', exact: true }).click()
+        expect(await contrast()).toEqual([])
+        await tab.click()
+        expect(await contrast()).toEqual([])
+      }
+      expect(fixture.errors).toEqual([])
+    })
+
+/** The tab panel's own text color: an issue's message is in it, not in red or yellow. */
+async function panelText(panel: Locator) {
+  return panel.evaluate((el) => getComputedStyle(el).color)
+}
+
+test('the Issues tab shows with issues, and stays saying none are left while it is open', async ({ page }) => {
+  const fixture = await queueFixture(page, 1, ['warn'])
+  const detail = await withDetail(page, (d) => {
+    d.issues = [{ severity: 'warn', code: 'outfile.exists', message: 'The output file is already there' }]
+    d.issue_counts = { block: 0, warn: 1 }
+  })
+  await page.goto('/#/queue/job-0')
+  await expect(page.locator('header')).toContainText('Ready with warnings')
+  const tab = page.getByRole('tab', { name: 'Issues 1', exact: true })
+  await expect(tab).toHaveClass(/bg-warning\/10/)
+  await tab.click()
+
+  Object.assign(detail, { issues: [], issue_counts: { block: 0, warn: 0 }, status: 'ready' })
+  fixture.refresh()
+  const panel = page.getByRole('tabpanel')
+  await expect(panel).toHaveText('No issues left.')
+  await expect(page.getByRole('button', { name: 'Open the Issues tab', exact: true })).toHaveCount(0)
+  await page.getByRole('tab', { name: 'Video', exact: true }).click()
+  await expect(page.getByRole('tab', { name: /^Issues/ })).toHaveCount(0)
+  expect(fixture.errors).toEqual([])
+})
