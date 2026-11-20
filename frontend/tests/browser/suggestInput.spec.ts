@@ -139,6 +139,7 @@ test("target sizes and option names suggest from the app's own list", async ({ p
   await expect(size).toHaveValue('25000')
   await expect(page.getByText('Unsaved changes')).toBeVisible()
 
+  await page.locator('summary').filter({ hasText: 'Advanced settings' }).click()
   const name = page.getByRole('combobox', { name: 'New option name' })
   await expect(name).toHaveAttribute('autocomplete', 'off')
   await name.fill('fram') // by name, then by help text

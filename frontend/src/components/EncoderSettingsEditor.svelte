@@ -24,7 +24,7 @@
     type SizeBudget,
     type VideoHdr,
   } from '../lib/types'
-  import { untrack, type Snippet } from 'svelte'
+  import type { Snippet } from 'svelte'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import XIcon from '@lucide/svelte/icons/x'
   import { Button } from '$lib/components/ui/button'
@@ -34,6 +34,7 @@
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import { api } from '../lib/api'
   import { extraFlags, parseOptions, unknownHint, type OptionHelp } from '../lib/encoderOptions'
+  import Advanced from './Advanced.svelte'
   import SuggestInput from './SuggestInput.svelte'
   import Tip from './Tip.svelte'
 
@@ -44,7 +45,6 @@
     value,
     onchange,
     presetControl,
-    advancedCollapsed = false,
     disabled = false,
     colorArgs,
     hdr10plus,
@@ -54,7 +54,6 @@
     value: EncoderSettings
     onchange: (v: EncoderSettings) => void
     presetControl?: Snippet
-    advancedCollapsed?: boolean
     disabled?: boolean
     colorArgs?: string[] | null
     hdr10plus?: boolean | null
@@ -246,8 +245,6 @@
   const VP9_DEFAULTS = '-tile-columns 6 -frame-parallel 1 -auto-alt-ref 1 -lag-in-frames 25 -row-mt 1'
   const dashes = $derived(vpx ? '-' : '--')
 
-  // its own state: an open={...} attribute was set again on each edit, which closed the section (preset manager)
-  let advancedOpen = $state(untrack(() => !advancedCollapsed))
   let newKey = $state('')
   let newValue = $state('')
 
@@ -273,6 +270,18 @@
   })
   const hint = (name: string) => unknownHint(name, known, dashes, encoderLabel)
   const extraHints = $derived(extraFlags(value.extra, dashes).map(hint).filter(Boolean))
+  // Closed, Advanced settings counts what differs from VideoForge's defaults (no options or extra arguments, the
+  // source's color, no override) and, apart, its warnings
+  const advancedCount = $derived(
+    Object.keys(value.options).length +
+      (value.extra.trim() ? 1 : 0) +
+      (value.source_color ? 0 : 1) +
+      (value.color_override ? 1 : 0),
+  )
+  const advancedWarnings = $derived(Object.keys(value.options).filter(hint).length + extraHints.length)
+  // HDR10+ and Dolby Vision: with no one source (the preset manager, the template editor, the Queue's multi-job
+  // panel) for the encoders that carry them; on a job once its tracks are read, when the source has either
+  const showHdr = $derived(dv === undefined ? carriesHdr : dv !== null && (!!hdr10plus || !!(dv && dv.dv_profile)))
   const newName = $derived(/\s|=/.test(newKey.trim()) ? '' : newKey.trim().replace(/^-+/, '')) // one name typed
 
   function set<K extends keyof EncoderSettings>(key: K, v: EncoderSettings[K]) {
@@ -459,80 +468,15 @@
     >
       {#each DEPTHS[value.encoder] as d (d)}<option value={d}>{d}-bit</option>{/each}
     </NativeSelect>
+    {#if hdr && value.source_color && value.depth < 10}
+      <span class="hidden @min-[32rem]/encoder:block"></span>
+      <span class="text-xs text-warning">An HDR source: encode it at 10-bit.</span>
+    {/if}
   </div>
 
-  <details bind:open={advancedOpen} class="rounded-lg border p-3">
-    <summary class="cursor-pointer text-sm font-medium"
-      >{value.encoder === 'x265' || svt ? 'Advanced settings and HDR' : 'Advanced settings'}</summary
-    >
-    <div class="space-y-4 pt-4">
-      <label class="flex items-start gap-3 text-sm">
-        <Checkbox
-          class="mt-0.5"
-          checked={value.source_color}
-          {disabled}
-          aria-labelledby="{uid}-color"
-          aria-describedby="{uid}-color-help {uid}-color-state"
-          onCheckedChange={(v) => set('source_color', v)}
-        />
-        <span class="min-w-0">
-          <span id="{uid}-color">Color from the source</span>
-          <span id="{uid}-color-help" class="block text-xs text-muted-foreground">
-            Copies the source's color description{value.encoder === 'x265' || svt ? ' and HDR10 metadata' : ''} into the encode.
-            {#if value.encoder === 'x265'}
-              With HDR10 values it also adds --hdr10 --repeat-headers --hrd --aud. A --no- option below turns one of
-              those off, such as --no-hrd.
-            {:else if vpx}
-              {value.encoder === 'vp9'
-                ? 'VP9 holds the matrix and range in the stream, and'
-                : 'VP8 holds none of it in the stream, so'} the output file is tagged with the color and the pixel aspect.
-              An HDR10 mastering display and light levels aren't carried yet.
-            {:else if svt}
-              AV1 holds them in the stream, and an MKV's video track is tagged with them too, along with the pixel
-              aspect.
-            {/if}
-            Untick it when the script changes the colors.
-          </span>
-          <span id="{uid}-color-state" class="block">
-            {#if colorArgs !== undefined}
-              {#if colorArgs === null}
-                <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
-              {:else if !colorArgs.length}
-                <span class="block text-xs text-muted-foreground">The source doesn't describe its colors.</span>
-              {:else}
-                <code
-                  class="mt-1 block font-mono text-xs break-all {value.source_color
-                    ? ''
-                    : 'text-muted-foreground line-through'}">{colorArgs.join(' ')}</code
-                >
-              {/if}
-              {#if hdr && value.source_color && value.depth < 10}
-                <span class="mt-1 block text-xs text-warning">An HDR source: encode it at 10-bit.</span>
-              {/if}
-            {/if}
-          </span>
-        </span>
-      </label>
-
-      <label class="flex items-start gap-3 text-sm {value.source_color ? '' : 'opacity-60'}">
-        <Checkbox
-          class="mt-0.5"
-          checked={value.color_override}
-          disabled={disabled || !value.source_color}
-          aria-labelledby="{uid}-override"
-          aria-describedby="{uid}-override-help"
-          onCheckedChange={(v) => set('color_override', v)}
-        />
-        <span class="min-w-0">
-          <span id="{uid}-override">Override the source's color</span>
-          <span id="{uid}-override-help" class="block text-xs text-muted-foreground">
-            Your color flags in the options and extra arguments win over the source's. Use it when the source's tags are
-            wrong. Off, a flag the source has a value for is left out, and a flag it has no value for still applies. The
-            chroma location always comes from the options.
-          </span>
-        </span>
-      </label>
-
+  {#if showHdr}
+    <section class="space-y-4">
+      <div class="section-label">HDR</div>
       <!-- only x265 and SVT-AV1-HDR carry HDR10+ and Dolby Vision (hdr.keeps_hdr10plus / keeps_dv): other encoders
            just say what the source loses -->
       {#if !carriesHdr}
@@ -664,121 +608,184 @@
           </span>
         </label>
       {/if}
+    </section>
+  {/if}
 
-      <div>
-        <div class="section-label mb-2">Options ({dashes}name value, in order; an empty value is a flag)</div>
-        {#if value.encoder === 'vp9'}
-          <p class="mb-2 text-xs text-muted-foreground">
-            ffmpeg's libvpx-vp9 options. These defaults go before them, and an option set here wins: <code
-              class="font-mono">{VP9_DEFAULTS}</code
-            >
-          </p>
-        {:else if vpx}
-          <p class="mb-2 text-xs text-muted-foreground">ffmpeg's libvpx options.</p>
-        {:else if svt}
-          <p class="mb-2 text-xs text-muted-foreground">
-            SvtAv1EncApp's options (--enable-variance-boost 1, --film-grain 8, ...). VideoForge puts <code
-              class="font-mono">--progress 2</code
-            >
-            before them to show the encode's progress. Keyframes at chapter starts are forced in CRF mode only.
-          </p>
-        {/if}
-        <div class="overflow-hidden rounded-lg border">
-          {#each Object.entries(value.options) as [key, val] (key)}
-            {@const warn = hint(key)}
-            <div
-              class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 border-b border-border/60 px-2 py-1 last:border-b-0"
-            >
-              <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
-              <Tip class="grid min-w-0" text={known?.get(key)}>
-                <SuggestInput
-                  class="font-mono text-xs {warn ? 'border-warning' : ''}"
-                  value={key}
-                  suggestions={optionSuggestions}
-                  aria-label="Option name"
-                  onpick={(name) => setOption(key, val, name)}
-                  onchange={(e) => setOption(key, val, (e.target as HTMLInputElement).value.trim().replace(/^-+/, ''))}
-                />
-              </Tip>
-              <Input
-                class="min-w-0 font-mono text-xs"
-                value={val}
-                aria-label="{dashes}{key} value"
-                placeholder="(flag)"
-                onchange={(e) => setOption(key, (e.target as HTMLInputElement).value.trim())}
-              />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                class="text-muted-foreground hover:text-destructive"
-                onclick={() => setOption(key, null)}
-                aria-label="Remove"
+  <Advanced area="encoder" title="Advanced settings" count={advancedCount} warnings={advancedWarnings}>
+    <label class="flex items-start gap-3 text-sm">
+      <Checkbox
+        class="mt-0.5"
+        checked={value.source_color}
+        {disabled}
+        aria-labelledby="{uid}-color"
+        aria-describedby="{uid}-color-help {uid}-color-state"
+        onCheckedChange={(v) => set('source_color', v)}
+      />
+      <span class="min-w-0">
+        <span id="{uid}-color">Color from the source</span>
+        <span id="{uid}-color-help" class="block text-xs text-muted-foreground">
+          Copies the source's color description{value.encoder === 'x265' || svt ? ' and HDR10 metadata' : ''} into the encode.
+          {#if value.encoder === 'x265'}
+            With HDR10 values it also adds --hdr10 --repeat-headers --hrd --aud. A --no- option below turns one of those
+            off, such as --no-hrd.
+          {:else if vpx}
+            {value.encoder === 'vp9'
+              ? 'VP9 holds the matrix and range in the stream, and'
+              : 'VP8 holds none of it in the stream, so'} the output file is tagged with the color and the pixel aspect. An
+            HDR10 mastering display and light levels aren't carried yet.
+          {:else if svt}
+            AV1 holds them in the stream, and an MKV's video track is tagged with them too, along with the pixel aspect.
+          {/if}
+          Untick it when the script changes the colors.
+        </span>
+        <span id="{uid}-color-state" class="block">
+          {#if colorArgs !== undefined}
+            {#if colorArgs === null}
+              <span class="block text-xs text-muted-foreground">Known once the source is probed.</span>
+            {:else if !colorArgs.length}
+              <span class="block text-xs text-muted-foreground">The source doesn't describe its colors.</span>
+            {:else}
+              <code
+                class="mt-1 block font-mono text-xs break-all {value.source_color
+                  ? ''
+                  : 'text-muted-foreground line-through'}">{colorArgs.join(' ')}</code
               >
-                <XIcon />
-              </Button>
-              {#if warn}
-                <p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{warn}</p>
-              {:else if known?.get(key)}
-                <Tip
-                  class="col-start-2 col-end-5 block truncate pb-0.5 text-xs text-muted-foreground"
-                  text={known.get(key)}
-                >
-                  {known.get(key)}
-                </Tip>
-              {/if}
-            </div>
-          {/each}
+            {/if}
+          {/if}
+        </span>
+      </span>
+    </label>
+
+    <label class="flex items-start gap-3 text-sm {value.source_color ? '' : 'opacity-60'}">
+      <Checkbox
+        class="mt-0.5"
+        checked={value.color_override}
+        disabled={disabled || !value.source_color}
+        aria-labelledby="{uid}-override"
+        aria-describedby="{uid}-override-help"
+        onCheckedChange={(v) => set('color_override', v)}
+      />
+      <span class="min-w-0">
+        <span id="{uid}-override">Override the source's color</span>
+        <span id="{uid}-override-help" class="block text-xs text-muted-foreground">
+          Your color flags in the options and extra arguments win over the source's. Use it when the source's tags are
+          wrong. Off, a flag the source has a value for is left out, and a flag it has no value for still applies. The
+          chroma location always comes from the options.
+        </span>
+      </span>
+    </label>
+
+    <div>
+      <div class="section-label mb-2">Options ({dashes}name value, in order; an empty value is a flag)</div>
+      {#if value.encoder === 'vp9'}
+        <p class="mb-2 text-xs text-muted-foreground">
+          ffmpeg's libvpx-vp9 options. These defaults go before them, and an option set here wins: <code
+            class="font-mono">{VP9_DEFAULTS}</code
+          >
+        </p>
+      {:else if vpx}
+        <p class="mb-2 text-xs text-muted-foreground">ffmpeg's libvpx options.</p>
+      {:else if svt}
+        <p class="mb-2 text-xs text-muted-foreground">
+          SvtAv1EncApp's options (--enable-variance-boost 1, --film-grain 8, ...). VideoForge puts <code
+            class="font-mono">--progress 2</code
+          >
+          before them to show the encode's progress. Keyframes at chapter starts are forced in CRF mode only.
+        </p>
+      {/if}
+      <div class="overflow-hidden rounded-lg border">
+        {#each Object.entries(value.options) as [key, val] (key)}
+          {@const warn = hint(key)}
           <div
-            class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 bg-muted/50 px-2 py-1"
+            class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 border-b border-border/60 px-2 py-1 last:border-b-0"
           >
             <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
-            <Tip
-              class="grid min-w-0"
-              text="Type one option name, or paste a whole command line. Enter adds a row for each option."
-            >
+            <Tip class="grid min-w-0" text={known?.get(key)}>
               <SuggestInput
-                class="font-mono text-xs"
-                placeholder="name, or paste {dashes}ref 4 {dashes}bframes 8"
-                aria-label="New option name"
+                class="font-mono text-xs {warn ? 'border-warning' : ''}"
+                value={key}
                 suggestions={optionSuggestions}
-                bind:value={newKey}
-                oninput={() => (notAdded = '')}
-                onkeydown={(e) => e.key === 'Enter' && addOption()}
+                aria-label="Option name"
+                onpick={(name) => setOption(key, val, name)}
+                onchange={(e) => setOption(key, val, (e.target as HTMLInputElement).value.trim().replace(/^-+/, ''))}
               />
             </Tip>
             <Input
               class="min-w-0 font-mono text-xs"
-              placeholder="value"
-              aria-label="New option value"
-              bind:value={newValue}
-              onkeydown={(e) => e.key === 'Enter' && addOption()}
+              value={val}
+              aria-label="{dashes}{key} value"
+              placeholder="(flag)"
+              onchange={(e) => setOption(key, (e.target as HTMLInputElement).value.trim())}
             />
-            <Button variant="ghost" size="icon-sm" onclick={addOption} aria-label="Add"><PlusIcon /></Button>
-            {#if newName && hint(newName)}
-              <p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{hint(newName)}</p>
-            {:else if newName && known?.get(newName)}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              class="text-muted-foreground hover:text-destructive"
+              onclick={() => setOption(key, null)}
+              aria-label="Remove"
+            >
+              <XIcon />
+            </Button>
+            {#if warn}
+              <p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{warn}</p>
+            {:else if known?.get(key)}
               <Tip
                 class="col-start-2 col-end-5 block truncate pb-0.5 text-xs text-muted-foreground"
-                text={known.get(newName)}
+                text={known.get(key)}
               >
-                {known.get(newName)}
+                {known.get(key)}
               </Tip>
             {/if}
-            {#if notAdded}<p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{notAdded}</p>{/if}
           </div>
+        {/each}
+        <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-x-2 bg-muted/50 px-2 py-1">
+          <span class="font-mono text-xs text-muted-foreground">{dashes}</span>
+          <Tip
+            class="grid min-w-0"
+            text="Type one option name, or paste a whole command line. Enter adds a row for each option."
+          >
+            <SuggestInput
+              class="font-mono text-xs"
+              placeholder="name, or paste {dashes}ref 4 {dashes}bframes 8"
+              aria-label="New option name"
+              suggestions={optionSuggestions}
+              bind:value={newKey}
+              oninput={() => (notAdded = '')}
+              onkeydown={(e) => e.key === 'Enter' && addOption()}
+            />
+          </Tip>
+          <Input
+            class="min-w-0 font-mono text-xs"
+            placeholder="value"
+            aria-label="New option value"
+            bind:value={newValue}
+            onkeydown={(e) => e.key === 'Enter' && addOption()}
+          />
+          <Button variant="ghost" size="icon-sm" onclick={addOption} aria-label="Add"><PlusIcon /></Button>
+          {#if newName && hint(newName)}
+            <p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{hint(newName)}</p>
+          {:else if newName && known?.get(newName)}
+            <Tip
+              class="col-start-2 col-end-5 block truncate pb-0.5 text-xs text-muted-foreground"
+              text={known.get(newName)}
+            >
+              {known.get(newName)}
+            </Tip>
+          {/if}
+          {#if notAdded}<p class="col-start-2 col-end-5 pb-0.5 text-xs text-warning">{notAdded}</p>{/if}
         </div>
       </div>
-
-      <label class="block">
-        <span class="section-label">Extra arguments</span>
-        <Input
-          class="mt-1 w-full font-mono text-xs placeholder:font-sans"
-          value={value.extra}
-          placeholder="added at the end, as typed"
-          onchange={(e) => set('extra', (e.target as HTMLInputElement).value)}
-        />
-        {#each extraHints as warn (warn)}<span class="mt-1 block text-xs text-warning">{warn}</span>{/each}
-      </label>
     </div>
-  </details>
+
+    <label class="block">
+      <span class="section-label">Extra arguments</span>
+      <Input
+        class="mt-1 w-full font-mono text-xs placeholder:font-sans"
+        value={value.extra}
+        placeholder="added at the end, as typed"
+        onchange={(e) => set('extra', (e.target as HTMLInputElement).value)}
+      />
+      {#each extraHints as warn (warn)}<span class="mt-1 block text-xs text-warning">{warn}</span>{/each}
+    </label>
+  </Advanced>
 </fieldset>

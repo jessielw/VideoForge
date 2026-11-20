@@ -370,6 +370,8 @@ for (const mode of ['light', 'dark'] as const) {
     await page.goto('/#/queue/a11y')
     for (const tab of ['Video', 'Encoder', 'Audio', 'Subtitles', 'Output', 'Log']) {
       await page.getByRole('tab', { name: tab, exact: true }).click()
+      // axe skips what a closed section hides: open them (they stay open, as the browser remembers)
+      for (const summary of await page.locator('details:not([open]) > summary').all()) await summary.click()
       await check(`job ${tab}`)
     }
 
@@ -463,6 +465,7 @@ test('suggestion lists open when asked, not on focus, and are not a Tab stop', a
 
   await page.goto('/#/queue/a11y')
   await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await page.locator('summary').filter({ hasText: 'Advanced settings' }).click()
   const option = page.getByRole('combobox', { name: 'New option name' })
   await option.focus()
   await expect(option).toHaveAttribute('aria-expanded', 'false')
@@ -498,6 +501,7 @@ test('checkbox and palette names leave their help text to the description', asyn
   }
   await page.goto('/#/queue/a11y')
   await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await page.locator('summary').filter({ hasText: 'Advanced settings' }).click()
   await expect(page.getByRole('checkbox', { name: 'Color from the source', exact: true })).toHaveAccessibleDescription(
     /color description/,
   )

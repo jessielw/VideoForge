@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page, type WebSocketRoute } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import type { JobDetail, JobSummary, Status, Template } from '../../src/lib/types.ts'
+import type { JobDetail, JobSummary, Status, Template, Tracks, VideoColor, VideoHdr } from '../../src/lib/types.ts'
 
 async function queueFixture(
   page: Page,
@@ -666,6 +666,7 @@ test('encoder option names keep their case', async ({ page }) => {
   const { errors } = await queueFixture(page, 1, ['ready'])
   await page.goto('/#/queue/job-0')
   await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await page.locator('summary').filter({ hasText: 'Advanced settings' }).click()
   expect(await page.getByText(/^Options \(/).innerText()).toContain('--name value')
   expect(errors).toEqual([])
 })
@@ -681,6 +682,8 @@ test('job tabs: no text under 12 px, no uppercase labels, no italics', async ({ 
   const problems: string[] = [...(await typeProblems(page)).map((p) => `Queue: ${p}`)]
   for (const tab of ['Encoder', 'Audio', 'Subtitles', 'Output']) {
     await page.getByRole('tab', { name: tab, exact: true }).click()
+    // the closed Advanced sections' text is checked too
+    for (const summary of await page.locator('details:not([open]) > summary').all()) await summary.click()
     problems.push(...(await typeProblems(page)).map((p) => `${tab}: ${p}`))
   }
   expect([...new Set(problems)]).toEqual([])
@@ -1144,4 +1147,152 @@ test("a group's menu moves the selected jobs into it or out of it, and a drop th
   await expect.poll(() => moves().at(-1)).toEqual({ ids: ['job-3'], before: null, group: '' })
   await expect(list.getByText('2 jobs', { exact: true })).toBeVisible()
   expect(fixture.errors).toEqual([])
+})
+
+/** After queueFixture: serve job-0's detail with `change` made to it, for every request the editor sends. */
+async function withDetail(page: Page, change: (d: JobDetail) => void) {
+  const detail: JobDetail = await page.evaluate(() => fetch('/api/jobs/job-0').then((r) => r.json()))
+  change(detail)
+  await page.route('**/api/jobs/job-0', (route) => route.fulfill({ json: detail }))
+  return detail
+}
+
+const PQ: VideoColor = {
+  primaries: 'bt2020',
+  transfer: 'smpte2084',
+  matrix: 'bt2020nc',
+  range: 'limited',
+  chroma_loc: null,
+  master_display: '',
+  max_cll: 0,
+  max_fall: 0,
+}
+const DV_HDR10PLUS: VideoHdr = {
+  dv_profile: 8,
+  dv_compat: 1,
+  dv_level: 6,
+  dv_layers: 'BL+RPU',
+  dv_el: '',
+  dv_stream: 0,
+  hdr10plus: true,
+}
+const tracks = (hdr?: VideoHdr): Tracks => ({
+  video: { width: 3840, height: 2160, start_ms: 0, default_duration_ns: null, sar_num: 1, sar_den: 1, color: PQ, hdr },
+  audio: [],
+  subs: [],
+  has_chapters: false,
+  count: 1,
+})
+
+test('Encoder: Advanced settings starts closed, counts what differs from the defaults, and stays as it was left', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 2, ['ready'])
+  await withDetail(page, (d) =>
+    Object.assign(d.spec.encoder, {
+      options: { 'aq-mode': '3', 'psy-rd': '2.0' },
+      extra: '--bogus 1',
+      source_color: false,
+    }),
+  )
+  await page.route('**/api/config/video-options/x265', (route) =>
+    route.fulfill({
+      json: {
+        dashes: '--',
+        options: [
+          { name: 'aq-mode', help: 'AQ mode' },
+          { name: 'psy-rd', help: 'Psy-RD strength' },
+        ],
+      },
+    }),
+  )
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  const advanced = page.locator('summary').filter({ hasText: 'Advanced settings' })
+  const color = page.getByRole('checkbox', { name: 'Color from the source', exact: true })
+  // Two options, the extra arguments and Color from the source off; x265's help doesn't list --bogus.
+  await expect(advanced).toHaveText('Advanced settings (4) · 1 warning')
+  await expect(color).toBeHidden()
+  await advanced.click()
+  await expect(color).toBeVisible()
+  await expect(advanced).toHaveText('Advanced settings')
+
+  await page.reload()
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await expect(color).toBeVisible()
+  // The Queue's multi-job panel shows the same section, and it's open there too.
+  await page.goto('/#/queue')
+  await page.locator('[data-job="job-0"]').click()
+  await page.locator('[data-job="job-1"]').click({ modifiers: ['Shift'] })
+  const panel = page.getByRole('region', { name: 'Job settings', exact: true })
+  await expect(panel.getByRole('checkbox', { name: 'Color from the source', exact: true })).toBeVisible()
+  await panel.locator('summary').filter({ hasText: 'Advanced settings' }).click()
+  await expect(panel.getByRole('checkbox', { name: 'Color from the source', exact: true })).toBeHidden()
+  await page.locator('[data-job="job-0"]').click()
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await expect(color).toBeHidden()
+  expect(errors).toEqual([])
+})
+
+test('Encoder: HDR10+ and Dolby Vision sit in an HDR section that shows when the source has either', async ({
+  page,
+}, testInfo) => {
+  const fixture = await queueFixture(page, 1, ['ready'])
+  const detail = await withDetail(page, (d) => {
+    d.tracks = tracks(DV_HDR10PLUS)
+    d.color_args = ['--colorprim', 'bt2020', '--transfer', 'smpte2084', '--colormatrix', 'bt2020nc']
+    d.spec.encoder.depth = 8
+  })
+  await page.route('**/api/config/video-options/x264', (route) =>
+    route.fulfill({ json: { dashes: '--', options: [] } }),
+  )
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  const hdr10plus = page.getByRole('checkbox', { name: /^HDR10\+ from the source/ })
+  const dv = page.getByRole('checkbox', { name: /^Dolby Vision from the source/ })
+  const label = page.getByText('HDR', { exact: true })
+  const tenBit = page.getByText('An HDR source: encode it at 10-bit.', { exact: true })
+  // With Advanced settings closed, the HDR section and the 10-bit note still show, in order under Bit depth.
+  await expect(page.locator('summary').filter({ hasText: 'Advanced settings' })).toHaveText('Advanced settings')
+  await expect(hdr10plus).toBeVisible()
+  await expect(dv).toBeVisible()
+  const depth = (await page.getByRole('combobox', { name: 'Bit depth' }).boundingBox())!
+  const note = (await tenBit.boundingBox())!
+  const section = (await label.boundingBox())!
+  const summary = (await page.locator('summary').filter({ hasText: 'Advanced settings' }).boundingBox())!
+  expect(note.y).toBeGreaterThanOrEqual(depth.y + depth.height)
+  expect(section.y).toBeGreaterThan(note.y)
+  expect(summary.y).toBeGreaterThan(section.y)
+  await page.getByRole('tabpanel').screenshot({ path: testInfo.outputPath('encoder-hdr.png') })
+
+  // A source without HDR10+ or Dolby Vision, and one whose tracks aren't read yet: no HDR section.
+  detail.tracks = tracks()
+  fixture.refresh()
+  await expect(hdr10plus).toBeHidden()
+  await expect(label).toBeHidden()
+  detail.tracks = null
+  fixture.refresh()
+  await expect(page.getByText('The source has no HDR10+.')).toHaveCount(0)
+  await expect(hdr10plus).toBeHidden()
+
+  // An encoder that can't carry them: the section holds only what the source loses.
+  detail.tracks = tracks(DV_HDR10PLUS)
+  detail.spec.encoder.encoder = 'x264'
+  fixture.refresh()
+  await expect(page.getByText(/can't carry the source's Dolby Vision and HDR10\+/)).toBeVisible()
+  await expect(hdr10plus).toBeHidden()
+  expect(fixture.errors).toEqual([])
+})
+
+test('Encoder: with no one source, the HDR section shows for the encoders that carry HDR10+ and Dolby Vision', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 2, ['ready'])
+  await page.locator('[data-job="job-0"]').click()
+  await page.locator('[data-job="job-1"]').click({ modifiers: ['Shift'] })
+  const panel = page.getByRole('region', { name: 'Job settings', exact: true })
+  await expect(panel.getByRole('checkbox', { name: /^HDR10\+ from the source/ })).toBeVisible()
+  await expect(panel.getByRole('checkbox', { name: /^Dolby Vision from the source/ })).toBeVisible()
+  await expect(panel.getByText('HDR', { exact: true })).toBeVisible()
+  expect(errors).toEqual([])
 })
