@@ -128,6 +128,7 @@ async function fixture(page: Page, empty = false) {
     status: 'ready',
     progress: null,
     issue: '',
+    issue_counts: { block: 0, warn: 0 },
     output: null,
     encoder: 'x264',
     crop: null,

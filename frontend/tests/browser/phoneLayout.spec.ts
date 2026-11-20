@@ -34,6 +34,7 @@ async function phoneFixture(page: Page) {
           }
         : null,
     issue: status === 'failed' ? 'x265 exited with code 1' : '',
+    issue_counts: { block: status === 'failed' ? 1 : 0, warn: 0 },
     output: null,
     encoder: 'x265',
     crop: null,

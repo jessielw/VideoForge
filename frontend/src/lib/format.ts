@@ -26,7 +26,7 @@ export const STATUS_LABEL: Record<Status, string> = {
   sampling: 'Test encode',
   'index-queued': 'Waiting to index',
   ready: 'Ready',
-  warn: 'Warn',
+  warn: 'Ready with warnings',
   blocked: 'Blocked',
   queued: 'Queued',
   running: 'Running',
@@ -63,6 +63,14 @@ export const SEVERITY_TONE: Record<Severity, string> = {
   block: 'text-destructive',
   warn: 'text-warning',
   info: 'text-muted-foreground',
+}
+
+/** A job's errors and warnings as counts ("1 error", "2 warnings"), leaving out a kind with none. */
+export function issueCounts(counts: { block: number; warn: number }): string[] {
+  return [
+    counts.block ? `${counts.block} ${counts.block === 1 ? 'error' : 'errors'}` : '',
+    counts.warn ? `${counts.warn} ${counts.warn === 1 ? 'warning' : 'warnings'}` : '',
+  ].filter(Boolean)
 }
 
 export function basename(path: string | null | undefined): string {

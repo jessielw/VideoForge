@@ -466,12 +466,16 @@ def test_two_jobs_writing_one_file_block_and_an_existing_file_warns(tmp_path):
         job = wait_for(client, one, "warn")
         assert [i["code"] for i in job["issues"]] == ["outfile.exists"]
         assert wait_for(client, two, "ready", "warn")["issues"] == []
+        # the queue row counts them
+        counts = {j["id"]: j["issue_counts"] for j in client.get("/api/jobs").json()}
+        assert counts == {one: {"block": 0, "warn": 1}, two: {"block": 0, "warn": 0}}
 
         client.patch(f"/api/jobs/{two}", json={"output_name": "Show.S01E01"})
         for job_id, other in ((one, "Show.S01E02.mkv"), (two, "Show.S01E01.mkv")):
             job = client.get(f"/api/jobs/{job_id}").json()
             assert job["status"] == "blocked" and job["issues"][0]["code"] == "outfile.shared"
             assert other in job["issues"][0]["message"]
+            assert job["issue_counts"]["block"] == 1
         assert client.post("/api/queue/enqueue", json={"ids": [one, two]}).json()["enqueued"] == []
 
         client.patch(f"/api/jobs/{two}", json={"label": "dubbed"})  # Show.S01E01.dubbed.mkv

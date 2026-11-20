@@ -24,6 +24,7 @@ async function queueFixture(
     status: statuses[i % statuses.length],
     progress: null,
     issue: '',
+    issue_counts: { block: 0, warn: 0 },
     output: null,
     encoder: 'x265',
     crop: null,
@@ -250,7 +251,8 @@ test('deep links reveal jobs beyond page one; shrinking a live result clamps its
 
 test('job files to add are pasted or browsed for on the server, and checked as they go in', async ({ page }) => {
   const { calls, errors } = await queueFixture(page, 3)
-  await page.getByRole('button', { name: 'Add jobs from job files', exact: true }).click()
+  await page.getByRole('button', { name: 'More actions', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Add jobs from job files…', exact: true }).click()
   const add = page.getByRole('button', { name: 'Add jobs', exact: true })
   await expect(add).toBeDisabled()
   const slot = page.getByRole('dialog', { name: 'Add jobs from job files' }).getByRole('group', { name: 'Job files' })
@@ -1352,4 +1354,76 @@ test('Encoder: with no one source, the HDR section shows for the encoders that c
   await expect(panel.getByRole('checkbox', { name: /^Dolby Vision from the source/ })).toBeVisible()
   await expect(panel.getByText('HDR', { exact: true })).toBeVisible()
   expect(errors).toEqual([])
+})
+
+test('More actions holds Save job files, Add jobs from job files and Read tracks again', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3, ['ready'])
+  const reprobed: string[][] = []
+  await page.route('**/api/jobs/reprobe', async (route) => {
+    reprobed.push(route.request().postDataJSON().ids)
+    await route.fulfill({ json: { ids: [] } })
+  })
+  for (const gone of [
+    'Save job files of the selected jobs',
+    'Add jobs from job files',
+    "Read the selected jobs' tracks again",
+  ])
+    await expect(page.getByRole('button', { name: gone, exact: true })).toHaveCount(0)
+  const more = page.getByRole('button', { name: 'More actions', exact: true })
+  // Adding jobs needs no selection; the other two act on the selected jobs.
+  await more.click()
+  await expect(page.getByRole('menuitem', { name: 'Save job files', exact: true })).toBeDisabled()
+  await expect(page.getByRole('menuitem', { name: 'Add jobs from job files…', exact: true })).toBeEnabled()
+  await expect(page.getByRole('menuitem', { name: 'Read tracks again', exact: true })).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await page.locator('[data-job="job-1"]').click()
+  await more.click()
+  await expect(page.getByRole('menuitem', { name: 'Save job files', exact: true })).toBeEnabled()
+  await page.getByRole('menuitem', { name: 'Read tracks again', exact: true }).click()
+  await expect.poll(() => reprobed).toEqual([['job-1']])
+  expect(errors).toEqual([])
+})
+
+test('the key hint is for screen readers only, and still describes the list', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3, ['ready'])
+  const list = page
+    .getByRole('region', { name: 'Queue list', exact: true })
+    .getByRole('group', { name: 'Matching jobs', exact: true })
+  await expect(list).toHaveAccessibleDescription(/Arrow keys, Home and End move through the list/)
+  const hint = (await page.locator('#queue-keys').boundingBox())!
+  expect(hint.width * hint.height).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+test("a queue row and its rail button count the job's errors and warnings instead of naming one", async ({ page }) => {
+  const fixture = await queueFixture(page, 3, ['ready'])
+  Object.assign(fixture.jobs[0], {
+    status: 'blocked',
+    issue: 'The output file is shared with another job',
+    issue_counts: { block: 1, warn: 2 },
+  })
+  Object.assign(fixture.jobs[1], {
+    status: 'warn',
+    issue: 'The output file exists',
+    issue_counts: { block: 0, warn: 1 },
+  })
+  Object.assign(fixture.jobs[2], {
+    status: 'warn',
+    issue: 'The output file exists',
+    issue_counts: { block: 0, warn: 2 },
+  })
+  fixture.refresh()
+  const rows = page.getByRole('region', { name: 'Queue list', exact: true })
+  await expect(rows.locator('[data-job="job-0"]')).toContainText('1 error · 2 warnings')
+  await expect(rows.locator('[data-job="job-1"]')).toContainText('1 warning')
+  // The status says Warning(s), short enough that a narrow list keeps the name; the count is under it.
+  await expect(rows.locator('[data-job="job-1"]').getByText('Warning', { exact: true })).toBeVisible()
+  await expect(rows.locator('[data-job="job-2"]').getByText('Warnings', { exact: true })).toBeVisible()
+  await expect(rows.locator('[data-job="job-1"]')).not.toContainText('Ready')
+  await expect(rows.getByText('The output file is shared with another job')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Collapse the queue list', exact: true }).click()
+  await page.getByRole('region', { name: 'Queue rail', exact: true }).locator('[data-job="job-0"]').hover()
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText('Episode 00000: Blocked (1 error, 2 warnings)')
+  expect(fixture.errors).toEqual([])
 })

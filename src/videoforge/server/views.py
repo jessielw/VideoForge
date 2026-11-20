@@ -76,7 +76,8 @@ def issues(e: Entry) -> list[Issue]:
 
 def summary(e: Entry, groups: Mapping[str, str] | None = None) -> dict[str, Any]:
     """groups: queue group names by id (JobQueue.group_names)."""
-    first = next((i for i in issues(e) if i.severity is not Severity.INFO), None)
+    found = [i for i in issues(e) if i.severity is not Severity.INFO]
+    first = found[0] if found else None
     s = e.spec
     return {
         "id": e.id,
@@ -90,6 +91,11 @@ def summary(e: Entry, groups: Mapping[str, str] | None = None) -> dict[str, Any]
         "pause_after_pass1": e.state.pause_after_pass1,
         "progress": e.progress,
         "issue": first.message if first else "",
+        # the queue row's counts: errors and warnings (the job's Issues tab lists them)
+        "issue_counts": {
+            "block": sum(i.severity is Severity.BLOCK for i in found),
+            "warn": sum(i.severity is Severity.WARN for i in found),
+        },
         "output": str(e.state.output) if e.state.output else None,
         "encoder": encoder_label(s.encoder) if s.encodes_video else "reuses encode",
         # A custom script body ignores the crop fields; a reused encode has no script at all.
