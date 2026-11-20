@@ -1494,6 +1494,43 @@ test('the job header counts the issues, and the Issues tab lists each one with i
   expect(errors).toEqual([])
 })
 
+test('each issue links to where it is fixed, after its message; one with no one place has no link', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 1, ['blocked'])
+  const depth = 'An HDR source needs a 10-bit encode, or its gradients can band. Set the bit depth to 10'
+  await withDetail(page, (d) => {
+    d.issues = [
+      {
+        severity: 'block',
+        code: 'tools.missing',
+        message: 'MKV needs mkvmerge. Set it in Settings › Tools',
+        tab: 'tools',
+      },
+      { severity: 'block', code: 'probe', message: "The source couldn't be read", tab: null },
+      { severity: 'warn', code: 'hdr.depth', message: depth, tab: 'encoder' },
+    ]
+    d.issue_counts = { block: 2, warn: 1 }
+  })
+  await page.goto('/#/queue/job-0')
+  const issues = page.getByRole('tab', { name: /^Issues/ })
+  await issues.click()
+  const items = page.getByRole('tabpanel').getByRole('listitem')
+  await expect(items.nth(1).getByRole('button')).toHaveCount(0)
+  const said = await items.nth(2).evaluate((el) => el.textContent!.replace(/\s+/g, ' ').trim())
+  expect(said).toBe(`Warning: ${depth}. Go to the Encoder tab hdr.depth`)
+  await items.nth(2).getByRole('button', { name: 'Go to the Encoder tab', exact: true }).click()
+  await expect(page.getByRole('tab', { name: 'Encoder', exact: true })).toHaveAttribute('aria-selected', 'true')
+
+  await issues.click()
+  expect(errors).toEqual([])
+  // Settings › Tools: Settings opens on that category (its requests aren't this fixture's)
+  await page.route('**/api/**', (route) => route.fulfill({ status: 404, json: {} }))
+  await items.nth(0).getByRole('button', { name: 'Go to Settings › Tools', exact: true }).click()
+  await expect(page).toHaveURL(/#\/settings$/)
+  expect(await page.evaluate(() => localStorage.getItem('videoforge.settingsTab'))).toBe('tools')
+})
+
 for (const palette of ['gold', 'indigo', 'ocean', 'forest', 'ember', 'rose', 'slate'])
   for (const mode of ['light', 'dark'])
     test(`the Issues tab's tint and its list keep their contrast: ${palette}, ${mode}`, async ({ page }) => {

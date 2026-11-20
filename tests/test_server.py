@@ -464,7 +464,7 @@ def test_two_jobs_writing_one_file_block_and_an_existing_file_warns(tmp_path):
     with make_client(tmp_path) as client:
         one, two = add(client, tmp_path)
         job = wait_for(client, one, "warn")
-        assert [i["code"] for i in job["issues"]] == ["outfile.exists"]
+        assert [(i["code"], i["tab"]) for i in job["issues"]] == [("outfile.exists", "output")]  # where it's fixed
         assert wait_for(client, two, "ready", "warn")["issues"] == []
         # the queue row counts them
         counts = {j["id"]: j["issue_counts"] for j in client.get("/api/jobs").json()}
@@ -2584,6 +2584,46 @@ def test_an_invalid_jobs_issues_say_each_check_once():
         "output.a",
     ]
     assert shown("Name must not mention dual audio: X") == ["output.name.dual", "output.a"]  # saved before
+
+
+@pytest.mark.parametrize(
+    ("code", "tab"),
+    [
+        ("audio.none", "audio"),
+        ("audio.delay", "audio"),
+        ("tools.dee_split", "audio"),
+        ("subs.language", "subs"),
+        ("subs.burn_many", "subs"),
+        ("video.interlaced", "video"),
+        ("hdr.dv_bake_bs", "video"),
+        ("hdr.dv_custom", "video"),
+        ("video.option_unknown", "encoder"),
+        ("video.target_small", "encoder"),
+        ("hdr.depth", "encoder"),
+        ("hdr.dv_x264", "encoder"),
+        ("hdr.hdr10plus_depth", "encoder"),
+        ("tools.missing", "tools"),
+        ("hdr.dv_second_track", "tools"),
+        ("hdr.dv_el", "tools"),
+        ("hdr.svt_build", "tools"),
+        ("mux.mp4_subs", "output"),
+        ("name.token", "output"),
+        ("outfile.exists", "output"),
+        ("run.failed", "log"),
+        ("run.interrupted", "log"),
+        ("probe", None),
+        ("input.no_video", None),
+        ("sync.video_start", None),
+        ("pair.encoding", None),
+        ("output.name.dual", None),  # an output check: the run's, not a setting's
+        ("output.hdr.dv_missing", None),
+        ("house.track_count", None),  # a plugin rule set's own
+    ],
+)
+def test_each_issue_names_the_tab_where_it_is_fixed(code, tab):
+    from videoforge.server.views import issue_tab
+
+    assert issue_tab(code) == tab
 
 
 def test_add_leaves_out_unticked_subtitles(tmp_path):
