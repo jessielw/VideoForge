@@ -214,13 +214,22 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
     await route.fulfill({ json: responses[path] })
   })
   await page.goto('/#/queue/delay')
-  await page.getByRole('tab', { name: 'Audio', exact: true }).click()
-  return { delayInput: page.getByRole('spinbutton', { name: 'Delay (ms)', exact: true }), saves, errors }
+  // Delay is in the track's Settings, which opens per track and isn't remembered
+  const openDelay = async () => {
+    await page.getByRole('tab', { name: 'Audio', exact: true }).click()
+    if (trackEditor)
+      await page
+        .getByRole('tabpanel', { name: 'Audio' })
+        .getByRole('button', { name: /^Settings/ })
+        .click()
+  }
+  await openDelay()
+  return { delayInput: page.getByRole('spinbutton', { name: 'Delay (ms)', exact: true }), saves, errors, openDelay }
 }
 
 for (const delay of [24, -24, 0]) {
   test(`Delay shows detected ${delay} ms and edits the total without applying delay twice`, async ({ page }) => {
-    const { delayInput, saves, errors } = await fixture(page, delay)
+    const { delayInput, saves, errors, openDelay } = await fixture(page, delay)
     await expect(delayInput).toHaveValue(String(delay))
     expect(saves).toHaveLength(0)
 
@@ -236,7 +245,7 @@ for (const delay of [24, -24, 0]) {
     await expect.poll(() => saves.at(-1)?.tracks['id:1']?.sync_ms ?? 0).toBe(0 - delay)
     await expect(delayInput).toHaveValue('0')
     await page.reload()
-    await page.getByRole('tab', { name: 'Audio', exact: true }).click()
+    await openDelay()
     await expect(delayInput).toHaveValue('0')
 
     await delayInput.fill('')
@@ -247,6 +256,32 @@ for (const delay of [24, -24, 0]) {
     expect(errors).toEqual([])
   })
 }
+
+test("a copied track's Settings opens its delay, and counts a changed delay but not a detected one", async ({
+  page,
+}) => {
+  const { delayInput, errors } = await fixture(page, 24)
+  const settings = page.getByRole('tabpanel', { name: 'Audio' }).getByRole('button', { name: /^Settings/ })
+  await expect(settings).toHaveAccessibleName('Settings')
+  await expect(settings).toHaveAttribute('aria-expanded', 'true')
+  await expect(delayInput).toBeVisible()
+  await settings.click()
+  await expect(delayInput).toBeHidden()
+  await page.mouse.move(0, 0) // a tooltip closed by a click opens again once the pointer comes back
+  await settings.hover()
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText('Delay')
+  // The detected delay still shows in the track's summary line.
+  await expect(page.getByText('delay +24 ms', { exact: true })).toBeVisible()
+
+  await page.reload()
+  await page.getByRole('tab', { name: 'Audio', exact: true }).click()
+  await expect(delayInput).toBeHidden() // a track's Settings isn't remembered
+  await settings.click()
+  await delayInput.fill('30')
+  await delayInput.blur()
+  await expect(settings).toHaveAccessibleName('Settings (1)')
+  expect(errors).toEqual([])
+})
 
 test('existing saved corrections retain their timing and can return to the detected delay', async ({ page }) => {
   const { delayInput, saves, errors } = await fixture(page, 24, 10)
