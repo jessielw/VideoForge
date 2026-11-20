@@ -38,7 +38,7 @@ You can make more than one output from a source audio track, for example a copie
 
 ### Adjust audio delay
 
-Each audio track has a **Delay** field showing its total delay relative to video in milliseconds: a positive value plays the track later, a negative one earlier. It starts with the detected source delay, so a track detected at +24 ms shows **24**. Entering **0** cancels that delay; clearing the field restores the detected delay. Changes are applied when muxing, so changing Delay does not encode the track again. A negative value drops the audio before the video's first frame. A track that ends up more than 2 seconds off the video warns, which often means the wrong file or a wrong value.
+Each audio track's **Settings** has a **Delay** field showing its total delay relative to video in milliseconds: a positive value plays the track later, a negative one earlier. It starts with the detected source delay, so a track detected at +24 ms shows **24**. Entering **0** cancels that delay; clearing the field restores the detected delay. Changes are applied when muxing, so changing Delay does not encode the track again. A negative value drops the audio before the video's first frame. A track that ends up more than 2 seconds off the video warns, which often means the wrong file or a wrong value. **Settings** counts a changed delay; the track's summary line shows the detected one.
 
 Audio encodes run alongside the video once indexing is complete. **Settings** controls how many run at once; see [pipeline settings](../configuration/settings.md#pipeline-settings).
 

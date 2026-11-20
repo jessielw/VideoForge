@@ -24,7 +24,7 @@ Use **Encoder preset** in a job's Encoder tab, the template editor, or New jobs 
 The compact picker opens with **My presets** and your folders above the built-in configurations, across all encoders. Select a preset to apply its encoder and settings together. Search by name, folder, encoder, or settings across the library, or use the **Encoder** filter to narrow the results. The manager uses the same browser. Choose **Manage presets…** to open the larger editor:
 
 1. Select a preset on the left, or choose **New from current settings**.
-2. Edit its name, folder, encoder, quality, speed, and bit depth on the right. Expand **Advanced settings** (**Advanced settings and HDR** for x265 and the SVT-AV1 encoders) for structured options, extra arguments, and metadata settings. The HDR10+ and Dolby Vision boxes show for x265 and SVT-AV1-HDR only, the encoders that carry them.
+2. Edit its name, folder, encoder, quality, speed, and bit depth on the right. The **HDR** section below them holds the HDR10+ and Dolby Vision boxes, for x265 and SVT-AV1-HDR only, the encoders that carry them. Expand **Advanced settings** for the color settings, structured options, and extra arguments.
 3. Choose **Save preset** to update the library, or **Save new preset** to create a copy of a built-in configuration. Use `/` in the folder field for nesting, such as `1080p / SDR`.
 
 Saving does not change the current job or template. **Apply encoder settings** applies the edited configuration and closes the dialog; it does not save library changes. **Cancel** discards the open draft. Switching presets with unsaved edits offers Save, Discard, or Keep editing.
@@ -94,6 +94,8 @@ A short sample scores differently from the whole video, and the scores compare w
 
 ## Options and extra arguments
 
+The color settings, the options, and the extra arguments are in **Advanced settings**, which starts closed. The browser remembers whether it's open; the job's Encoder tab, the preset manager, the template editor, and the Queue's batch panel share that choice. Closed, its title counts what in it differs from VideoForge's defaults: each option, the extra arguments, **Color from the source** turned off, and **Override the source's color** turned on, as in **Advanced settings (3)**. It counts warnings apart, such as an option the encoder's help doesn't list.
+
 Structured options and extra arguments are applied after generated defaults. Their color flags are the exception: the source's color wins over them unless **Override the source's color** is on (see [HDR10 and color](#hdr10-and-color)). Inspect the generated command when using advanced flags.
 
 The option name field suggests the names the configured encoder lists in its own help (x264 and x265 `--fullhelp`, SvtAv1EncApp `--help`, ffmpeg's libvpx and codec options) and shows what each one does. A name the encoder doesn't list, in the options or the extra arguments, shows a warning with the nearest listed name, and the job gets an `video.option_unknown` warning before it runs. It is a warning only: some builds take options their help leaves out. Short flags (`-p`) aren't checked.
@@ -132,6 +134,8 @@ Supported metadata preservation uses **x265** or **SVT-AV1-HDR** with the releva
 | Dolby Vision profile 8.4 (HLG) | Not supported for Dolby Vision preservation |
 
 Dolby Vision requires a **10-bit encode**, and profile 8.1 an HDR10 mastering display. x265 also needs VBV values: set `--vbv-maxrate` and `--vbv-bufsize`, or use a supported `--level-idc` to fill the missing values. SVT-AV1-HDR needs none.
+
+The two boxes are in the Encoder tab's **HDR** section, after **Bit depth**. On a job, the section shows once the source is read and has HDR10+ or Dolby Vision; with another encoder, it says what the encode loses. The preset manager, the template editor, and the batch panel show it for x265 and SVT-AV1-HDR. With **Color from the source** on, a note under **Bit depth** asks for 10-bit when an HDR source is set to 8-bit.
 
 SVT-AV1-HDR writes HDR10+ and the Dolby Vision RPU into the AV1 stream with `--hdr10plus-json` and `--dolby-vision-rpu`. A build without its HDR libraries leaves those flags out of its `--help`, and the job is blocked (`hdr.svt_build`). An MP4 gets the Dolby Vision profile from MP4Box's `:dvp=10.1` (or `10.0`), and mkvmerge finds it in the stream. MediaInfo can't see HDR10+ in AV1, so the validate step counts the HDR10+ and RPU metadata on each frame of the encode instead. A profile 5 encode is tagged as unspecified color with full range, the same as x265 writes for it, because its base layer isn't BT.2020 PQ. FEL processing uses FFMS2 or L-SMASH. A UHD Blu-ray's `.m2ts` keeps its enhancement layer in a second video track that MediaInfo reports as plain HDR10; VideoForge reads that track's RPU (dovi_tool is needed for this) and takes the RPU and the enhancement layer from it. A FEL source's HDR10+ is left out of the encode: it was measured on the base layer, so its values don't fit the picture with the enhancement layer baked in, which can be brighter. The Dolby Vision RPU and the HDR10 values describe the baked picture. Crop and resize adjust the RPU's active-area information, and auto crop reads it (see [Crop and resize](video.md#crop-and-resize)).
 

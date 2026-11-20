@@ -2,6 +2,8 @@
 
 The job's **Output** tab controls its destination, container, label, chapters, and AutoQPF settings. Inspect the plan after changing the container or supplying an existing video encode.
 
+The extra arguments, PGS compression, the work folder, the commands that build the file, and the finished steps are under **Advanced**, at the bottom of the tab. Closed, its title counts the extra arguments and PGS compression when they're set. The browser remembers whether it's open.
+
 ## Folder, container, and label
 
 Choose **MKV** or **MP4** and a writable destination. MKV uses MKVToolNix; MP4 uses MP4Box. Clearing the output folder saves that empty value and blocks the job until a folder is chosen. An output is written as `<output>.partial`, validated, then published. A rejected candidate is kept as `<name>.unpublished-<id>.<container>` for inspection, and the previous finished file stays intact.
