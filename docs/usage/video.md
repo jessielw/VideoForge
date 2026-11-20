@@ -12,7 +12,7 @@ The **Video** tab edits the VapourSynth processing used by both preview and enco
 | L-SMASH-Works | `lsmas` | Alternative source reader |
 | BestSource | `bs` | Exact seeking; the first index decodes the whole video |
 
-Select an installed filter. Changing the source reader can require a new index. See [Tools and VapourSynth plugins](../configuration/tools.md) if a reader is missing.
+Select an installed filter under **Advanced**, at the bottom of the side panel. Its title shows **(1)** when the filter isn't FFMS2. Changing the source reader can require a new index. See [Tools and VapourSynth plugins](../configuration/tools.md) if a reader is missing.
 
 ## Crop and resize
 
@@ -50,7 +50,7 @@ When MediaInfo reports the source as interlaced (Interlaced, MBAFF, or PAFF), th
 
 ## Custom VapourSynth code
 
-The editor exposes the generated script. Custom processing reads `src` and assigns the result to `clip`. For example, a processing body can start with:
+The editor exposes the generated script; open it with **Edit the whole script…** under **Advanced**, at the bottom of the side panel. Custom processing reads `src` and assigns the result to `clip`. For example, a processing body can start with:
 
 ```python
 clip = src

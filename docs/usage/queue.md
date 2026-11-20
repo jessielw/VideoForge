@@ -80,7 +80,7 @@ A 2-pass encode can be stopped between its passes. **Pause after pass 1** in the
 
 ## Job files
 
-Every job's whole setup (source, tracks, video and encoder settings, mux and output options) is saved as `videoforge-job.json` in the job's folder in the source's `_tmp` folder when it runs. **Save job file** writes it for the selected jobs at any time. **Add jobs from job files** (Queue toolbar) takes the file, a job's folder, or a source's `_tmp` folder (every job in it), pasted or picked with **Browse…**, and adds each job exactly as it was saved: no template or profile default is applied. A job whose source already has a job with that label is left out. The work folder is where it was, so the run reuses the steps it already finished.
+Every job's whole setup (source, tracks, video and encoder settings, mux and output options) is saved as `videoforge-job.json` in the job's folder in the source's `_tmp` folder when it runs. **Save job files** in **More actions** (**⋯** on the Queue toolbar) writes it for the selected jobs at any time. **Add jobs from job files…**, also in **More actions**, takes the file, a job's folder, or a source's `_tmp` folder (every job in it), pasted or picked with **Browse…**, and adds each job exactly as it was saved: no template or profile default is applied. A job whose source already has a job with that label is left out. The work folder is where it was, so the run reuses the steps it already finished.
 
 ## Reuse completed work
 
@@ -93,10 +93,12 @@ Intermediate files and `finished-steps.json` live in the job's folder in the sou
 | Status | Meaning | Next step |
 | --- | --- | --- |
 | Done | Output was muxed and passed its output checks | Inspect playback |
-| Invalid | Candidate failed an output check; existing finished output was kept | Inspect issues and the unpublished file |
+| Invalid | Candidate failed an output check; existing finished output was kept | Inspect the **Issues** tab and the unpublished file |
 | Failed | A tool or pipeline step failed | Read the last failed step in Log |
-| Skipped | The job was skipped by planning or its existing-output policy | Review planning issues and the Output tab |
+| Skipped | The job was skipped by planning or its existing-output policy | Review the **Issues** tab and the Output tab |
 | Canceled | The run was interrupted | Rerun and review reuse choices |
+
+A job with errors or warnings shows how many in its header and its queue row, such as "1 error · 2 warnings". Its **Issues** tab, after **Log**, lists each one with its code, and shows only while there are any. An error blocks the job (**Blocked**) or says why a run failed; a warning lets it run (**Ready with warnings**; its queue row says **Warning**, or **Warnings** for more than one).
 
 A done (or invalid) job's header says what its last run made: the output's size, that as a share of the source, its overall bitrate, how long the run took and how many steps it reused. It's taken as the run ends, so it stays after an action moves the file or the work folder is deleted.
 

@@ -163,6 +163,7 @@ export interface JobSummary {
   pause_after_pass1: boolean // stop once the video's pass 1 is done (a 2-pass encode)
   progress: Progress | null
   issue: string
+  issue_counts: { block: number; warn: number } // its errors and warnings (the Issues tab lists them)
   output: string | null
   encoder: string
   crop: Crop | null // null with a custom script body or a reused encode

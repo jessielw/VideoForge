@@ -1,31 +1,26 @@
 <script lang="ts">
-  // One job, StaxRip-style: issues on top, then Video | Encoder | Audio | Subtitles | Output | Log.
+  // One job, StaxRip-style: Video | Encoder | Audio | Subtitles | Output | Log, and Issues when it has any (the header
+  // counts them).
   // Changes save straight away (the server replans); a queued, running or indexing job is read-only.
   // Queue (top left, and the tick on its queue row) locks the job for the run: the queue runs it.
   import { api, type SpecChanges } from '../lib/api'
   import { reuseQuestion } from '../lib/reuse.svelte'
   import { saves } from '../lib/saves'
-  import {
-    basename,
-    bytes,
-    duration,
-    percent,
-    SEVERITY_TONE,
-    sizeLabel,
-    STATUS_LABEL,
-    STATUS_TONE,
-  } from '../lib/format'
+  import { basename, bytes, duration, percent, sizeLabel, STATUS_LABEL, STATUS_TONE } from '../lib/format'
   import { queueable } from '../lib/queueView'
   import { app } from '../lib/state.svelte'
   import { layout } from '../lib/layout.svelte'
   import type { CommandStep, JobDetail } from '../lib/types'
+  import Advanced from './Advanced.svelte'
   import EncoderPanel from './EncoderPanel.svelte'
+  import IssueCounts from './IssueCounts.svelte'
   import OutputFolderMenu from './OutputFolderMenu.svelte'
   import NameSettings from './NameSettings.svelte'
   import SampleCard from './SampleCard.svelte'
   import CrfSearchCard from './CrfSearchCard.svelte'
   import { videoView } from '../lib/videoView.svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
+  import CircleXIcon from '@lucide/svelte/icons/circle-x'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
   import InfoIcon from '@lucide/svelte/icons/info'
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
@@ -49,12 +44,11 @@
 
   let { jobId }: { jobId: string } = $props()
 
-  type Tab = 'video' | 'encoder' | 'audio' | 'subs' | 'output' | 'log'
+  type Tab = 'video' | 'encoder' | 'audio' | 'subs' | 'output' | 'log' | 'issues'
   let tab = $state<Tab>('video')
   let job = $state<JobDetail | null>(null)
   let error = $state('')
   let commands = $state<CommandStep[]>([])
-  let showInfo = $state(false)
   let browsing = $state<'output' | 'chapters' | null>(null)
   let mediainfo = $state(false)
 
@@ -157,6 +151,14 @@
     { id: 'log', label: 'Log' },
   ]
   const problems = $derived((job?.issues ?? []).filter((i) => i.severity !== 'info'))
+  const counts = $derived({
+    block: problems.filter((i) => i.severity === 'block').length,
+    warn: problems.filter((i) => i.severity === 'warn').length,
+  })
+  // There while the job has errors or warnings, and while it's open: the last one going leaves it saying so.
+  const issuesTab = $derived(problems.length > 0 || tab === 'issues')
+  // The server's messages end without a period (its issue code used to follow them)
+  const sentence = (message: string) => (/[.!?]$/.test(message) ? message : `${message}.`)
   const ruleSet = $derived(app.ruleSets.find((p) => p.id === job?.rule_set))
   const containers = $derived(ruleSet?.containers ?? [])
   const container = $derived(containers.find((c) => c.id === job?.spec.mux.container) ?? containers[0])
@@ -258,17 +260,15 @@
         </div>
       {/if}
       {#if problems.length}
-        <button class="w-full text-left text-sm" onclick={() => (showInfo = !showInfo)}>
-          {#each problems.slice(0, showInfo ? problems.length : 2) as i, n (n)}
-            <div class={SEVERITY_TONE[i.severity]}>
-              <TriangleAlertIcon class="mr-1 inline size-3.5 align-[-2px]" />{i.message}
-              <span class="text-xs text-muted-foreground">{i.code}</span>
-            </div>
-          {/each}
-          {#if !showInfo && problems.length > 2}<div class="text-xs text-muted-foreground">
-              +{problems.length - 2} more…
-            </div>{/if}
-        </button>
+        <!-- the counts only: the Issues tab lists them, with their codes -->
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span><IssueCounts {counts} /></span>
+          {#if tab !== 'issues'}
+            <Button variant="link" size="xs" class="h-auto p-0" onclick={() => (tab = 'issues')}
+              >Open the Issues tab</Button
+            >
+          {/if}
+        </div>
       {/if}
       {#if (job.status === 'failed' || job.status === 'invalid') && tab !== 'log'}
         <Button variant="link" size="xs" class="h-auto p-0" onclick={() => (tab = 'log')}
@@ -287,6 +287,27 @@
             >{t.label}</Tabs.Trigger
           >
         {/each}
+        {#if issuesTab}
+          <!-- tinted in its worst issue's color, so it stands out (! beats the line tabs' own background and border);
+               the words keep the text color: yellow on the yellow tint is too faint -->
+
+          <Tabs.Trigger
+            value="issues"
+            id="job-tab-issues"
+            aria-controls="job-tab-panel"
+            class="px-3 {counts.block
+              ? 'border-destructive/40! bg-destructive/10! text-foreground'
+              : counts.warn
+                ? 'border-warning/40! bg-warning/10! text-foreground'
+                : ''}"
+          >
+            {#if counts.block}<CircleXIcon
+                aria-hidden="true"
+                class="text-destructive"
+              />{:else if counts.warn}<TriangleAlertIcon aria-hidden="true" class="text-warning" />{/if}Issues
+            {#if problems.length}<span class="readout">{problems.length}</span>{/if}
+          </Tabs.Trigger>
+        {/if}
       </Tabs.List>
     </header>
 
@@ -471,27 +492,6 @@
             {:else}
               <span>{container?.label ?? job.spec.mux.container}</span>
             {/if}
-            {#if container?.id === 'mkv'}
-              <!-- self-start: the row starts with a checkbox, whose baseline moves with its tick; its first line is at the top -->
-              <span class="self-start text-muted-foreground">PGS compression</span>
-              <label class="flex items-center gap-2">
-                <Checkbox
-                  checked={job.spec.mux.pgs_zlib ?? false}
-                  disabled={!editable}
-                  onCheckedChange={(v) => save({ mux: { ...job!.spec.mux, pgs_zlib: v } })}
-                />
-                Compress PGS subtitles with zlib
-              </label>
-            {/if}
-            <span class="text-muted-foreground">Extra arguments</span>
-            <Input
-              class="font-mono text-xs placeholder:font-sans"
-              aria-label="Extra arguments for {container?.tool ?? 'the output'}"
-              placeholder="added to the {container?.tool ?? 'output'} command as typed"
-              value={job.spec.mux.extra}
-              disabled={!editable}
-              onchange={(e) => save({ mux: { ...job!.spec.mux, extra: (e.target as HTMLInputElement).value.trim() } })}
-            />
             <span class="text-muted-foreground">Chapters</span>
             <div
               class="-m-1 flex flex-wrap items-center gap-2 rounded-lg p-1 outline-none"
@@ -540,38 +540,99 @@
             >
               {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
             </NativeSelect>
-            <span class="text-muted-foreground">Work folder</span>
-            <code class="text-xs break-all text-muted-foreground">{job.source}_tmp</code>
             <span class="text-muted-foreground">Output</span>
             <code class="text-xs break-all text-muted-foreground">{job.output ?? '(after the run)'}</code>
           </div>
-          {#if muxCommands.length}
-            <div class="space-y-2">
-              <span class="section-label">Commands that build the output file</span>
-              {#each muxCommands as c (c.id)}
-                <div class="rounded-lg border bg-muted/50 p-2">
-                  <div class="text-xs font-medium text-foreground">{c.label}</div>
-                  <code class="block text-xs break-all text-muted-foreground">{c.command}</code>
-                </div>
-              {/each}
+          <!-- counts the extra arguments and PGS compression, which are off by default -->
+          <Advanced
+            area="output"
+            title="Advanced"
+            count={(job.spec.mux.extra ? 1 : 0) + (container?.id === 'mkv' && job.spec.mux.pgs_zlib ? 1 : 0)}
+          >
+            <div class="grid grid-cols-[8rem_minmax(0,1fr)] items-baseline gap-3 text-sm">
+              {#if container?.id === 'mkv'}
+                <!-- self-start: the row starts with a checkbox, whose baseline moves with its tick; its first line is at the top -->
+                <span class="self-start text-muted-foreground">PGS compression</span>
+                <label class="flex items-center gap-2">
+                  <Checkbox
+                    checked={job.spec.mux.pgs_zlib ?? false}
+                    disabled={!editable}
+                    onCheckedChange={(v) => save({ mux: { ...job!.spec.mux, pgs_zlib: v } })}
+                  />
+                  Compress PGS subtitles with zlib
+                </label>
+              {/if}
+              <span class="text-muted-foreground">Extra arguments</span>
+              <Input
+                class="font-mono text-xs placeholder:font-sans"
+                aria-label="Extra arguments for {container?.tool ?? 'the output'}"
+                placeholder="added to the {container?.tool ?? 'output'} command as typed"
+                value={job.spec.mux.extra}
+                disabled={!editable}
+                onchange={(e) =>
+                  save({ mux: { ...job!.spec.mux, extra: (e.target as HTMLInputElement).value.trim() } })}
+              />
+              <span class="text-muted-foreground">Work folder</span>
+              <code class="text-xs break-all text-muted-foreground">{job.source}_tmp</code>
             </div>
-          {/if}
-          {#if Object.keys(job.steps).length}
-            <div>
-              <span class="section-label"
-                >Finished steps (reused on the next run if nothing they depend on changed)</span
-              >
-              <ul class="mt-2 space-y-1 text-sm">
-                {#each Object.values(job.steps) as s (s.id)}
-                  <li class="flex gap-3">
-                    <CheckIcon class="size-4 text-success" /><span class="w-28">{s.id}</span><span
-                      class="text-muted-foreground">{s.seconds}s</span
-                    >
-                  </li>
+            {#if muxCommands.length}
+              <div class="space-y-2">
+                <span class="section-label">Commands that build the output file</span>
+                {#each muxCommands as c (c.id)}
+                  <div class="rounded-lg border bg-muted/50 p-2">
+                    <div class="text-xs font-medium text-foreground">{c.label}</div>
+                    <code class="block text-xs break-all text-muted-foreground">{c.command}</code>
+                  </div>
                 {/each}
-              </ul>
-            </div>
-          {/if}
+              </div>
+            {/if}
+            {#if Object.keys(job.steps).length}
+              <div>
+                <span class="section-label"
+                  >Finished steps (reused on the next run if nothing they depend on changed)</span
+                >
+                <ul class="mt-2 space-y-1 text-sm">
+                  {#each Object.values(job.steps) as s (s.id)}
+                    <li class="flex gap-3">
+                      <CheckIcon class="size-4 text-success" /><span class="w-28">{s.id}</span><span
+                        class="text-muted-foreground">{s.seconds}s</span
+                      >
+                    </li>
+                  {/each}
+                </ul>
+              </div>
+            {/if}
+          </Advanced>
+        </div>
+      {:else if tab === 'issues'}
+        <div class="max-w-3xl space-y-5">
+          {#each [['block', 'Errors', 'Error:'], ['warn', 'Warnings', 'Warning:']] as const as [severity, heading, spoken] (severity)}
+            {@const list = problems.filter((i) => i.severity === severity)}
+            {#if list.length}
+              <section class="space-y-2">
+                <h3 class="section-label">{heading}</h3>
+                <ul class="space-y-2 text-sm">
+                  {#each list as i, n (n)}
+                    <li class="flex gap-2">
+                      {#if severity === 'block'}<CircleXIcon
+                          aria-hidden="true"
+                          class="mt-0.5 size-4 shrink-0 text-destructive"
+                        />{:else}<TriangleAlertIcon
+                          aria-hidden="true"
+                          class="mt-0.5 size-4 shrink-0 text-warning"
+                        />{/if}
+                      <span class="min-w-0"
+                        ><span class="sr-only">{`${spoken} `}</span><span>{sentence(i.message)}</span>{' '}<code
+                          class="font-mono text-xs break-all text-muted-foreground">{i.code}</code
+                        ></span
+                      >
+                    </li>
+                  {/each}
+                </ul>
+              </section>
+            {/if}
+          {/each}
+          {#if !problems.length}<p class="text-sm text-muted-foreground">No issues left.</p>{/if}
         </div>
       {:else}
         <JobLog {jobId} running={job.status === 'running'} />

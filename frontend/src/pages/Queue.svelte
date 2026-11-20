@@ -39,8 +39,6 @@
   import DatabaseCheckIcon from '@lucide/svelte/icons/database-check'
   import DatabaseXIcon from '@lucide/svelte/icons/database-x'
   import DatabaseZapIcon from '@lucide/svelte/icons/database-zap'
-  import FileDownIcon from '@lucide/svelte/icons/file-down'
-  import FileUpIcon from '@lucide/svelte/icons/file-up'
   import FolderOpenIcon from '@lucide/svelte/icons/folder-open'
   import GaugeIcon from '@lucide/svelte/icons/gauge'
   import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
@@ -50,7 +48,6 @@
   import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open'
   import PauseIcon from '@lucide/svelte/icons/pause'
   import PlayIcon from '@lucide/svelte/icons/play'
-  import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
   import SquareIcon from '@lucide/svelte/icons/square'
   import Trash2Icon from '@lucide/svelte/icons/trash-2'
   import { toast } from 'svelte-sonner'
@@ -62,6 +59,7 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
+  import IssueCounts from '../components/IssueCounts.svelte'
   import JobEditor from '../components/JobEditor.svelte'
   import Kbd from '../components/Kbd.svelte'
   import ReuseDialog from '../components/ReuseDialog.svelte'
@@ -71,6 +69,7 @@
   import {
     bytes,
     duration,
+    issueCounts,
     percent,
     PRIORITY_LABEL,
     progressTimes,
@@ -903,8 +902,9 @@
             <Tip
               side="right"
               class="shrink-0"
-              text="{job.name}{job.label ? ` (${job.label})` : ''}: {STATUS_LABEL[job.status]}{job.issue
-                ? ` (${job.issue})`
+              text="{job.name}{job.label ? ` (${job.label})` : ''}: {STATUS_LABEL[job.status]}{job.issue_counts.block ||
+              job.issue_counts.warn
+                ? ` (${issueCounts(job.issue_counts).join(', ')})`
                 : ''}{row.group ? ` · ${job.group_name}` : ''}"
             >
               <button
@@ -1136,33 +1136,30 @@
             aria-label="Duplicate selected jobs"><CopyPlusIcon /></Button
           >
         </Tip>
-        <Tip
-          text="Saves each selected job's whole setup as a job file in its work folder, so you can add it again later. A run saves one too."
-        >
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={!selected.length}
-            onclick={saveJobFiles}
-            aria-label="Save job files of the selected jobs"><FileDownIcon /></Button
-          >
-        </Tip>
-        <Tip text="Add jobs from job files, exactly as they were">
-          <Button variant="ghost" size="icon" onclick={() => (importOpen = true)} aria-label="Add jobs from job files">
-            <FileUpIcon />
-          </Button>
-        </Tip>
-        <Tip text="Read the tracks again">
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={!selected.length}
-            onclick={() => act(() => api.reprobe(selected))}
-            aria-label="Read the selected jobs' tracks again"
-          >
-            <RefreshCwIcon />
-          </Button>
-        </Tip>
+        <DropdownMenu.Root>
+          <Tip text="More actions">
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <Button {...props} variant="ghost" size="icon" aria-label="More actions"><EllipsisIcon /></Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+          </Tip>
+          <DropdownMenu.Content align="end" class="w-auto">
+            <Tip
+              class="block"
+              side="left"
+              text="Saves each selected job's whole setup as a job file in its work folder, so you can add it again later. A run saves one too."
+            >
+              <DropdownMenu.Item disabled={!selected.length} onSelect={saveJobFiles}>Save job files</DropdownMenu.Item>
+            </Tip>
+            <Tip class="block" side="left" text="Adds each job with the settings it was saved with.">
+              <DropdownMenu.Item onSelect={() => (importOpen = true)}>Add jobs from job files…</DropdownMenu.Item>
+            </Tip>
+            <DropdownMenu.Item disabled={!selected.length} onSelect={() => act(() => api.reprobe(selected))}
+              >Read tracks again</DropdownMenu.Item
+            >
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
         <DropdownMenu.Root>
           <Tip text="Remove">
             <DropdownMenu.Trigger disabled={!selected.length}>
@@ -1226,8 +1223,8 @@
           the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs, or every
           job when none is selected.
         </p>
-        <!-- leading-6 leaves room for the keycaps, which stand taller than a text-xs line. -->
-        <p id="queue-keys" class="text-xs leading-6 text-muted-foreground pointer-coarse:hidden">
+        <!-- for screen readers, as the list's description: the Shortcuts dialog shows the keys -->
+        <p id="queue-keys" class="sr-only">
           Arrow keys, <Kbd>Home</Kbd> and <Kbd>End</Kbd> move through the list. <Kbd>Shift</Kbd> extends the selection, and
           <Kbd>Ctrl+A</Kbd> or <Kbd>Cmd+A</Kbd> selects matching jobs on every page.
         </p>
@@ -1422,6 +1419,11 @@
                     >{/if}
                   {#if paused(job.status)}
                     <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
+                  {:else if job.status === 'warn'}
+                    <!-- the count under it says how many; "Ready with warnings" cut a narrow list's names -->
+                    <span class="ml-auto shrink-0 text-xs {STATUS_TONE.warn}"
+                      >{job.issue_counts.warn === 1 ? 'Warning' : 'Warnings'}</span
+                    >
                   {:else}
                     <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
                   {/if}
@@ -1486,14 +1488,9 @@
                       >{progressTimes(job.progress)}</Tip
                     >
                   </div>
-                {:else if job.issue}
-                  <div
-                    class="mt-0.5 truncate text-xs {['blocked', 'error', 'failed', 'invalid'].includes(job.status)
-                      ? 'text-destructive'
-                      : 'text-warning'}"
-                  >
-                    {job.issue}
-                  </div>
+                {:else if job.issue_counts.block || job.issue_counts.warn}
+                  <!-- the counts only: the job's Issues tab says what they are -->
+                  <div class="mt-0.5 text-xs text-muted-foreground"><IssueCounts counts={job.issue_counts} /></div>
                 {/if}
                 {#if job.index_held && job.status === 'index-queued'}
                   <Tip

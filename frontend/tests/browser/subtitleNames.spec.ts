@@ -74,6 +74,7 @@ async function fixture(page: Page, extra: SubTrack[] = []) {
     status: 'ready',
     progress: null,
     issue: '',
+    issue_counts: { block: 0, warn: 0 },
     output: null,
     encoder: 'x265',
     crop: null,

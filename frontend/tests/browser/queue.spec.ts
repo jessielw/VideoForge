@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page, type WebSocketRoute } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import type { JobDetail, JobSummary, Status, Template } from '../../src/lib/types.ts'
+import type { JobDetail, JobSummary, Status, Template, Tracks, VideoColor, VideoHdr } from '../../src/lib/types.ts'
 
 async function queueFixture(
   page: Page,
@@ -24,6 +24,7 @@ async function queueFixture(
     status: statuses[i % statuses.length],
     progress: null,
     issue: '',
+    issue_counts: { block: 0, warn: 0 },
     output: null,
     encoder: 'x265',
     crop: null,
@@ -250,7 +251,8 @@ test('deep links reveal jobs beyond page one; shrinking a live result clamps its
 
 test('job files to add are pasted or browsed for on the server, and checked as they go in', async ({ page }) => {
   const { calls, errors } = await queueFixture(page, 3)
-  await page.getByRole('button', { name: 'Add jobs from job files', exact: true }).click()
+  await page.getByRole('button', { name: 'More actions', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Add jobs from job files…', exact: true }).click()
   const add = page.getByRole('button', { name: 'Add jobs', exact: true })
   await expect(add).toBeDisabled()
   const slot = page.getByRole('dialog', { name: 'Add jobs from job files' }).getByRole('group', { name: 'Job files' })
@@ -666,6 +668,7 @@ test('encoder option names keep their case', async ({ page }) => {
   const { errors } = await queueFixture(page, 1, ['ready'])
   await page.goto('/#/queue/job-0')
   await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await page.locator('summary').filter({ hasText: 'Advanced settings' }).click()
   expect(await page.getByText(/^Options \(/).innerText()).toContain('--name value')
   expect(errors).toEqual([])
 })
@@ -681,6 +684,8 @@ test('job tabs: no text under 12 px, no uppercase labels, no italics', async ({ 
   const problems: string[] = [...(await typeProblems(page)).map((p) => `Queue: ${p}`)]
   for (const tab of ['Encoder', 'Audio', 'Subtitles', 'Output']) {
     await page.getByRole('tab', { name: tab, exact: true }).click()
+    // the closed Advanced sections' text is checked too
+    for (const summary of await page.locator('details:not([open]) > summary').all()) await summary.click()
     problems.push(...(await typeProblems(page)).map((p) => `${tab}: ${p}`))
   }
   expect([...new Set(problems)]).toEqual([])
@@ -842,12 +847,39 @@ async function visibleLeft(button: Locator): Promise<number> {
   })
 }
 
-test('Edit the whole script lines up with the side panel controls', async ({ page }) => {
+test('Edit the whole script lines up with the Source filter menu above it', async ({ page }) => {
   const { errors } = await queueFixture(page, 1, ['ready'])
   await page.goto('/#/queue/job-0')
-  const edit = await visibleLeft(page.getByRole('button', { name: 'Edit the whole script…', exact: true }))
-  const preset = await visibleLeft(page.getByRole('complementary').getByRole('button').first()) // the preset menu
-  expect(Math.abs(edit - preset)).toBeLessThanOrEqual(1)
+  const panel = page.getByRole('complementary')
+  await panel.locator('summary').filter({ hasText: 'Advanced' }).click()
+  const edit = await visibleLeft(panel.getByRole('button', { name: 'Edit the whole script…', exact: true }))
+  const filter = await visibleLeft(panel.getByRole('combobox', { name: 'Source filter', exact: true }))
+  expect(Math.abs(edit - filter)).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+test('Video: Source filter and Edit the whole script… sit in a closed Advanced section at the bottom', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await withDetail(page, (d) => (d.spec.video.source_filter = 'bestsource'))
+  await page.goto('/#/queue/job-0')
+  const panel = page.getByRole('complementary')
+  const advanced = panel.locator('summary').filter({ hasText: 'Advanced' })
+  const filter = panel.getByRole('combobox', { name: 'Source filter', exact: true })
+  const edit = panel.getByRole('button', { name: 'Edit the whole script…', exact: true })
+  // BestSource isn't the default, FFMS2.
+  await expect(advanced).toHaveText('Advanced (1)')
+  await expect(filter).toBeHidden()
+  await expect(edit).toBeHidden()
+  const filters = (await panel.getByText('Filters', { exact: true }).boundingBox())!
+  expect((await advanced.boundingBox())!.y).toBeGreaterThan(filters.y)
+  await advanced.click()
+  await expect(filter).toHaveValue('bestsource')
+  await expect(edit).toBeVisible()
+  await expect(advanced).toHaveText('Advanced')
+  await page.reload()
+  await expect(filter).toBeVisible()
   expect(errors).toEqual([])
 })
 
@@ -956,15 +988,17 @@ test('Output tab: every label lines up with the first control in its row', async
   // The rule set's containers bring the Container and PGS compression rows (a checkbox first: no text baseline).
   await withRuleSet(page)
   await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  await page.locator('summary').filter({ hasText: 'Advanced' }).click()
   await expect(page.getByText('PGS compression', { exact: true })).toBeVisible()
-  // Each label in the tab's label column against the first control on its row; a textarea counts by its first line.
+  // Each label in the tab's label columns (the tab's, and its Advanced section's) against the first control on its
+  // row; a textarea counts by its first line.
   const rows = await page.evaluate(() => {
-    const grid = [...document.querySelectorAll<HTMLElement>('main .grid')].find((g) =>
-      g.textContent?.includes('Existing output'),
-    )!
+    const grids = ['Existing output', 'PGS compression'].map((text) =>
+      [...document.querySelectorAll<HTMLElement>('main .grid')].find((g) => g.textContent?.includes(text))!,
+    )
     const control = 'input:not([type=hidden]), select, textarea, button, [role=checkbox]'
     const out: { label: string; gap: number }[] = []
-    for (const label of [...grid.children] as HTMLElement[]) {
+    for (const label of grids.flatMap((grid) => [...grid.children]) as HTMLElement[]) {
       const cell = label.nextElementSibling as HTMLElement | null
       const text = label.textContent?.trim()
       if (!cell || !text || label.querySelector(control)) continue
@@ -986,6 +1020,34 @@ test('Output tab: every label lines up with the first control in its row', async
     expect.arrayContaining(['Existing output', 'Name template', 'PGS compression']),
   )
   expect(rows.filter((r) => r.gap > 2)).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('Output: extra arguments, PGS compression, the work folder and finished steps sit in a closed Advanced section', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await withDetail(page, (d) => {
+    Object.assign(d.spec.mux, { extra: '--no-date', pgs_zlib: true })
+    d.steps = { mux: { id: 'mux', fingerprint: 'f', outputs: [], seconds: 3 } }
+  })
+  await withRuleSet(page)
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  const advanced = page.locator('summary').filter({ hasText: 'Advanced' })
+  const extra = page.getByRole('textbox', { name: 'Extra arguments for mkvmerge', exact: true })
+  const pgs = page.getByRole('checkbox', { name: 'Compress PGS subtitles with zlib', exact: true })
+  const work = page.getByText('Work folder', { exact: true })
+  const steps = page.getByText(/^Finished steps/)
+  // The extra arguments and PGS compression differ from the defaults; the work folder and steps aren't settings.
+  await expect(advanced).toHaveText('Advanced (2)')
+  for (const hidden of [extra, pgs, work, steps]) await expect(hidden).toBeHidden()
+  const existing = (await page.getByText('Existing output', { exact: true }).boundingBox())!
+  expect((await advanced.boundingBox())!.y).toBeGreaterThan(existing.y)
+  await expect(page.getByText('D:\\Show\\Season1\\0.mkv_tmp', { exact: true })).toBeHidden()
+  await advanced.click()
+  for (const shown of [extra, pgs, work, steps]) await expect(shown).toBeVisible()
+  await expect(extra).toHaveValue('--no-date')
+  await expect(advanced).toHaveText('Advanced')
   expect(errors).toEqual([])
 })
 
@@ -1143,5 +1205,338 @@ test("a group's menu moves the selected jobs into it or out of it, and a drop th
   await page.getByRole('menuitem', { name: 'Take the selected job out' }).click()
   await expect.poll(() => moves().at(-1)).toEqual({ ids: ['job-3'], before: null, group: '' })
   await expect(list.getByText('2 jobs', { exact: true })).toBeVisible()
+  expect(fixture.errors).toEqual([])
+})
+
+/** After queueFixture: serve job-0's detail with `change` made to it, for every request the editor sends. */
+async function withDetail(page: Page, change: (d: JobDetail) => void) {
+  const detail: JobDetail = await page.evaluate(() => fetch('/api/jobs/job-0').then((r) => r.json()))
+  change(detail)
+  await page.route('**/api/jobs/job-0', (route) => route.fulfill({ json: detail }))
+  return detail
+}
+
+const PQ: VideoColor = {
+  primaries: 'bt2020',
+  transfer: 'smpte2084',
+  matrix: 'bt2020nc',
+  range: 'limited',
+  chroma_loc: null,
+  master_display: '',
+  max_cll: 0,
+  max_fall: 0,
+}
+const DV_HDR10PLUS: VideoHdr = {
+  dv_profile: 8,
+  dv_compat: 1,
+  dv_level: 6,
+  dv_layers: 'BL+RPU',
+  dv_el: '',
+  dv_stream: 0,
+  hdr10plus: true,
+}
+const tracks = (hdr?: VideoHdr): Tracks => ({
+  video: { width: 3840, height: 2160, start_ms: 0, default_duration_ns: null, sar_num: 1, sar_den: 1, color: PQ, hdr },
+  audio: [],
+  subs: [],
+  has_chapters: false,
+  count: 1,
+})
+
+test('Encoder: Advanced settings starts closed, counts what differs from the defaults, and stays as it was left', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 2, ['ready'])
+  await withDetail(page, (d) =>
+    Object.assign(d.spec.encoder, {
+      options: { 'aq-mode': '3', 'psy-rd': '2.0' },
+      extra: '--bogus 1',
+      source_color: false,
+    }),
+  )
+  await page.route('**/api/config/video-options/x265', (route) =>
+    route.fulfill({
+      json: {
+        dashes: '--',
+        options: [
+          { name: 'aq-mode', help: 'AQ mode' },
+          { name: 'psy-rd', help: 'Psy-RD strength' },
+        ],
+      },
+    }),
+  )
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  const advanced = page.locator('summary').filter({ hasText: 'Advanced settings' })
+  const color = page.getByRole('checkbox', { name: 'Color from the source', exact: true })
+  // Two options, the extra arguments and Color from the source off; x265's help doesn't list --bogus.
+  await expect(advanced).toHaveText('Advanced settings (4) · 1 warning')
+  await expect(color).toBeHidden()
+  await advanced.click()
+  await expect(color).toBeVisible()
+  await expect(advanced).toHaveText('Advanced settings')
+
+  await page.reload()
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await expect(color).toBeVisible()
+  // The Queue's multi-job panel shows the same section, and it's open there too.
+  await page.goto('/#/queue')
+  await page.locator('[data-job="job-0"]').click()
+  await page.locator('[data-job="job-1"]').click({ modifiers: ['Shift'] })
+  const panel = page.getByRole('region', { name: 'Job settings', exact: true })
+  await expect(panel.getByRole('checkbox', { name: 'Color from the source', exact: true })).toBeVisible()
+  await panel.locator('summary').filter({ hasText: 'Advanced settings' }).click()
+  await expect(panel.getByRole('checkbox', { name: 'Color from the source', exact: true })).toBeHidden()
+  await page.locator('[data-job="job-0"]').click()
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await expect(color).toBeHidden()
+  expect(errors).toEqual([])
+})
+
+test('Encoder: HDR10+ and Dolby Vision sit in an HDR section that shows when the source has either', async ({
+  page,
+}, testInfo) => {
+  const fixture = await queueFixture(page, 1, ['ready'])
+  const detail = await withDetail(page, (d) => {
+    d.tracks = tracks(DV_HDR10PLUS)
+    d.color_args = ['--colorprim', 'bt2020', '--transfer', 'smpte2084', '--colormatrix', 'bt2020nc']
+    d.spec.encoder.depth = 8
+  })
+  await page.route('**/api/config/video-options/x264', (route) =>
+    route.fulfill({ json: { dashes: '--', options: [] } }),
+  )
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  const hdr10plus = page.getByRole('checkbox', { name: /^HDR10\+ from the source/ })
+  const dv = page.getByRole('checkbox', { name: /^Dolby Vision from the source/ })
+  const label = page.getByText('HDR', { exact: true })
+  const tenBit = page.getByText('An HDR source: encode it at 10-bit.', { exact: true })
+  // With Advanced settings closed, the HDR section and the 10-bit note still show, in order under Bit depth.
+  await expect(page.locator('summary').filter({ hasText: 'Advanced settings' })).toHaveText('Advanced settings')
+  await expect(hdr10plus).toBeVisible()
+  await expect(dv).toBeVisible()
+  const depth = (await page.getByRole('combobox', { name: 'Bit depth' }).boundingBox())!
+  const note = (await tenBit.boundingBox())!
+  const section = (await label.boundingBox())!
+  const summary = (await page.locator('summary').filter({ hasText: 'Advanced settings' }).boundingBox())!
+  expect(note.y).toBeGreaterThanOrEqual(depth.y + depth.height)
+  expect(section.y).toBeGreaterThan(note.y)
+  expect(summary.y).toBeGreaterThan(section.y)
+  await page.getByRole('tabpanel').screenshot({ path: testInfo.outputPath('encoder-hdr.png') })
+
+  // A source without HDR10+ or Dolby Vision, and one whose tracks aren't read yet: no HDR section.
+  detail.tracks = tracks()
+  fixture.refresh()
+  await expect(hdr10plus).toBeHidden()
+  await expect(label).toBeHidden()
+  detail.tracks = null
+  fixture.refresh()
+  await expect(page.getByText('The source has no HDR10+.')).toHaveCount(0)
+  await expect(hdr10plus).toBeHidden()
+
+  // An encoder that can't carry them: the section holds only what the source loses.
+  detail.tracks = tracks(DV_HDR10PLUS)
+  detail.spec.encoder.encoder = 'x264'
+  fixture.refresh()
+  await expect(page.getByText(/can't carry the source's Dolby Vision and HDR10\+/)).toBeVisible()
+  await expect(hdr10plus).toBeHidden()
+  expect(fixture.errors).toEqual([])
+})
+
+test('Encoder: with no one source, the HDR section shows for the encoders that carry HDR10+ and Dolby Vision', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 2, ['ready'])
+  await page.locator('[data-job="job-0"]').click()
+  await page.locator('[data-job="job-1"]').click({ modifiers: ['Shift'] })
+  const panel = page.getByRole('region', { name: 'Job settings', exact: true })
+  await expect(panel.getByRole('checkbox', { name: /^HDR10\+ from the source/ })).toBeVisible()
+  await expect(panel.getByRole('checkbox', { name: /^Dolby Vision from the source/ })).toBeVisible()
+  await expect(panel.getByText('HDR', { exact: true })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('More actions holds Save job files, Add jobs from job files and Read tracks again', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3, ['ready'])
+  const reprobed: string[][] = []
+  await page.route('**/api/jobs/reprobe', async (route) => {
+    reprobed.push(route.request().postDataJSON().ids)
+    await route.fulfill({ json: { ids: [] } })
+  })
+  for (const gone of [
+    'Save job files of the selected jobs',
+    'Add jobs from job files',
+    "Read the selected jobs' tracks again",
+  ])
+    await expect(page.getByRole('button', { name: gone, exact: true })).toHaveCount(0)
+  const more = page.getByRole('button', { name: 'More actions', exact: true })
+  // Adding jobs needs no selection; the other two act on the selected jobs.
+  await more.click()
+  await expect(page.getByRole('menuitem', { name: 'Save job files', exact: true })).toBeDisabled()
+  await expect(page.getByRole('menuitem', { name: 'Add jobs from job files…', exact: true })).toBeEnabled()
+  await expect(page.getByRole('menuitem', { name: 'Read tracks again', exact: true })).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await page.locator('[data-job="job-1"]').click()
+  await more.click()
+  await expect(page.getByRole('menuitem', { name: 'Save job files', exact: true })).toBeEnabled()
+  await page.getByRole('menuitem', { name: 'Read tracks again', exact: true }).click()
+  await expect.poll(() => reprobed).toEqual([['job-1']])
+  expect(errors).toEqual([])
+})
+
+test('the key hint is for screen readers only, and still describes the list', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3, ['ready'])
+  const list = page
+    .getByRole('region', { name: 'Queue list', exact: true })
+    .getByRole('group', { name: 'Matching jobs', exact: true })
+  await expect(list).toHaveAccessibleDescription(/Arrow keys, Home and End move through the list/)
+  const hint = (await page.locator('#queue-keys').boundingBox())!
+  expect(hint.width * hint.height).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+test("a queue row and its rail button count the job's errors and warnings instead of naming one", async ({ page }) => {
+  const fixture = await queueFixture(page, 3, ['ready'])
+  Object.assign(fixture.jobs[0], {
+    status: 'blocked',
+    issue: 'The output file is shared with another job',
+    issue_counts: { block: 1, warn: 2 },
+  })
+  Object.assign(fixture.jobs[1], {
+    status: 'warn',
+    issue: 'The output file exists',
+    issue_counts: { block: 0, warn: 1 },
+  })
+  Object.assign(fixture.jobs[2], {
+    status: 'warn',
+    issue: 'The output file exists',
+    issue_counts: { block: 0, warn: 2 },
+  })
+  fixture.refresh()
+  const rows = page.getByRole('region', { name: 'Queue list', exact: true })
+  await expect(rows.locator('[data-job="job-0"]')).toContainText('1 error · 2 warnings')
+  await expect(rows.locator('[data-job="job-1"]')).toContainText('1 warning')
+  // The status says Warning(s), short enough that a narrow list keeps the name; the count is under it.
+  await expect(rows.locator('[data-job="job-1"]').getByText('Warning', { exact: true })).toBeVisible()
+  await expect(rows.locator('[data-job="job-2"]').getByText('Warnings', { exact: true })).toBeVisible()
+  await expect(rows.locator('[data-job="job-1"]')).not.toContainText('Ready')
+  await expect(rows.getByText('The output file is shared with another job')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Collapse the queue list', exact: true }).click()
+  await page.getByRole('region', { name: 'Queue rail', exact: true }).locator('[data-job="job-0"]').hover()
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText('Episode 00000: Blocked (1 error, 2 warnings)')
+  expect(fixture.errors).toEqual([])
+})
+
+const HLG = "Dolby Vision 8.4 (HLG) isn't carried yet. Untick Dolby Vision from the source on the Encoder tab"
+
+test('the job header counts the issues, and the Issues tab lists each one with its code', async ({
+  page,
+}, testInfo) => {
+  const { errors } = await queueFixture(page, 1, ['blocked'])
+  await withDetail(page, (d) => {
+    d.issues = [
+      { severity: 'block', code: 'hdr.dv_hlg', message: HLG },
+      { severity: 'warn', code: 'video.option_unknown', message: "x265's help doesn't list --foo" },
+      { severity: 'warn', code: 'name.token', message: 'The name template has an unknown token.' },
+      { severity: 'info', code: 'video.color_source', message: "The source's color wins over the encoder options'" },
+    ]
+    d.issue_counts = { block: 1, warn: 2 }
+  })
+  await page.goto('/#/queue/job-0')
+  const header = page.locator('header')
+  // The header counts them: no messages, no codes.
+  await expect(header).toContainText('1 error · 2 warnings')
+  await expect(header).not.toContainText('hdr.dv_hlg')
+  await expect(header).not.toContainText("isn't carried yet")
+  const tab = page.getByRole('tab', { name: 'Issues 3', exact: true })
+  await expect(tab).toHaveClass(/bg-destructive\/10/) // the worst issue's tint
+  const jobTabs = page.getByRole('tablist', { name: 'Job sections', exact: true }).getByRole('tab')
+  await expect(jobTabs.last()).toHaveAccessibleName('Issues 3') // after Log
+  await header.screenshot({ path: testInfo.outputPath('issues-header.png') })
+
+  await header.getByRole('button', { name: 'Open the Issues tab', exact: true }).click()
+  await expect(tab).toHaveAttribute('aria-selected', 'true')
+  await expect(header.getByRole('button', { name: 'Open the Issues tab', exact: true })).toHaveCount(0)
+  const panel = page.getByRole('tabpanel', { name: 'Issues 3' })
+  await expect(panel.getByRole('heading', { name: 'Errors' })).toBeVisible()
+  await expect(panel.getByRole('heading', { name: 'Warnings' })).toBeVisible()
+  const items = panel.getByRole('listitem')
+  await expect(items).toHaveCount(3) // info notes stay out
+  // A screen reader hears the kind first; a message gets its final period; the code follows.
+  const said = (i: number) => items.nth(i).evaluate((el) => el.textContent!.replace(/\s+/g, ' ').trim())
+  expect(await said(0)).toBe(`Error: ${HLG}. hdr.dv_hlg`)
+  expect(await said(1)).toBe("Warning: x265's help doesn't list --foo. video.option_unknown")
+  expect(await said(2)).toBe('Warning: The name template has an unknown token. name.token')
+  await expect(items.nth(0).getByText(HLG, { exact: false })).toHaveCSS('color', await panelText(panel))
+  await page.getByRole('tabpanel').screenshot({ path: testInfo.outputPath('issues-tab.png') })
+  expect(errors).toEqual([])
+})
+
+for (const palette of ['gold', 'indigo', 'ocean', 'forest', 'ember', 'rose', 'slate'])
+  for (const mode of ['light', 'dark'])
+    test(`the Issues tab's tint and its list keep their contrast: ${palette}, ${mode}`, async ({ page }) => {
+      await page.addInitScript(
+        ([palette, mode]) => {
+          localStorage.setItem('videoforge.palette', palette)
+          localStorage.setItem('videoforge.mode', mode)
+        },
+        [palette, mode],
+      )
+      const fixture = await queueFixture(page, 1, ['blocked'])
+      const detail = await withDetail(page, (d) => {
+        d.issues = [
+          { severity: 'block', code: 'hdr.dv_hlg', message: HLG },
+          { severity: 'warn', code: 'name.token', message: 'The name template has an unknown token.' },
+        ]
+      })
+      await page.goto('/#/queue/job-0')
+      const contrast = async () =>
+        (await page.waitForTimeout(300), // the tabs' colors fade in
+        await new AxeBuilder({ page })
+          .include('header')
+          .include('#job-tab-panel')
+          // the blocked job's dimmed Queue box: a disabled control, which WCAG leaves out
+          .exclude('header label:has([role=checkbox][disabled])')
+          .withRules(['color-contrast'])
+          .analyze()).violations.flatMap((v) => v.nodes.map((n) => `${n.target.join(' ')}: ${n.any[0]?.message}`))
+      const tab = page.getByRole('tab', { name: /^Issues/ })
+      // An error's tint and a warning's, each while the tab is closed and while it's open.
+      for (const issues of [detail.issues, detail.issues.slice(1)]) {
+        detail.issues = issues
+        fixture.refresh()
+        await expect(tab).toHaveAccessibleName(`Issues ${issues.length}`)
+        await page.getByRole('tab', { name: 'Video', exact: true }).click()
+        expect(await contrast()).toEqual([])
+        await tab.click()
+        expect(await contrast()).toEqual([])
+      }
+      expect(fixture.errors).toEqual([])
+    })
+
+/** The tab panel's own text color: an issue's message is in it, not in red or yellow. */
+async function panelText(panel: Locator) {
+  return panel.evaluate((el) => getComputedStyle(el).color)
+}
+
+test('the Issues tab shows with issues, and stays saying none are left while it is open', async ({ page }) => {
+  const fixture = await queueFixture(page, 1, ['warn'])
+  const detail = await withDetail(page, (d) => {
+    d.issues = [{ severity: 'warn', code: 'outfile.exists', message: 'The output file is already there' }]
+    d.issue_counts = { block: 0, warn: 1 }
+  })
+  await page.goto('/#/queue/job-0')
+  await expect(page.locator('header')).toContainText('Ready with warnings')
+  const tab = page.getByRole('tab', { name: 'Issues 1', exact: true })
+  await expect(tab).toHaveClass(/bg-warning\/10/)
+  await tab.click()
+
+  Object.assign(detail, { issues: [], issue_counts: { block: 0, warn: 0 }, status: 'ready' })
+  fixture.refresh()
+  const panel = page.getByRole('tabpanel')
+  await expect(panel).toHaveText('No issues left.')
+  await expect(page.getByRole('button', { name: 'Open the Issues tab', exact: true })).toHaveCount(0)
+  await page.getByRole('tab', { name: 'Video', exact: true }).click()
+  await expect(page.getByRole('tab', { name: /^Issues/ })).toHaveCount(0)
   expect(fixture.errors).toEqual([])
 })

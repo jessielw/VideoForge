@@ -58,6 +58,7 @@
   import { Toggle } from '$lib/components/ui/toggle'
   import * as ToggleGroup from '$lib/components/ui/toggle-group'
   import Tip from './Tip.svelte'
+  import Advanced from './Advanced.svelte'
   import FilterChain from './FilterChain.svelte'
   import PresetMenu from './PresetMenu.svelte'
   import ResizeEditor from './ResizeEditor.svelte'
@@ -979,22 +980,6 @@
             {#if cropOrigin}<p class="text-xs text-muted-foreground">Auto-crop from {cropOrigin}</p>{/if}
           </section>
 
-          <section class="space-y-2">
-            <span class="section-label">Source filter</span>
-            <NativeSelect
-              class="w-full"
-              aria-label="Source filter"
-              value={video.source_filter}
-              onchange={(e) => {
-                video.source_filter = (e.target as HTMLSelectElement).value as SourceFilter
-                info = { crop: null, output: null }
-                commit(0) // the saved job brings the new filter (and whether it's indexed): the preview follows
-              }}
-            >
-              {#each SOURCE_FILTERS as f (f.id)}<option value={f.id} title={f.title}>{f.label}</option>{/each}
-            </NativeSelect>
-          </section>
-
           <ResizeEditor
             bind:resize={video.resize}
             input={video.custom === null ? resizeIn : null}
@@ -1016,10 +1001,30 @@
                 <button class="underline underline-offset-2" onclick={openScript}>Edit it</button> ·
                 <button class="underline underline-offset-2" onclick={useGenerated}>Back to generated</button>
               </p>
-            {:else}
-              <Button variant="outline" size="sm" onclick={openScript}>Edit the whole script…</Button>
             {/if}
           </section>
+
+          <!-- counts a source filter other than FFMS2, the default -->
+          <Advanced area="video" title="Advanced" count={video.source_filter === 'ffms2' ? 0 : 1}>
+            <section class="space-y-2">
+              <span class="section-label">Source filter</span>
+              <NativeSelect
+                class="w-full"
+                aria-label="Source filter"
+                value={video.source_filter}
+                onchange={(e) => {
+                  video.source_filter = (e.target as HTMLSelectElement).value as SourceFilter
+                  info = { crop: null, output: null }
+                  commit(0) // the saved job brings the new filter (and whether it's indexed): the preview follows
+                }}
+              >
+                {#each SOURCE_FILTERS as f (f.id)}<option value={f.id} title={f.title}>{f.label}</option>{/each}
+              </NativeSelect>
+            </section>
+            {#if video.custom === null}
+              <Button variant="outline" size="sm" onclick={openScript}>Edit the whole script…</Button>
+            {/if}
+          </Advanced>
         </fieldset>
       </aside>
     {/if}
