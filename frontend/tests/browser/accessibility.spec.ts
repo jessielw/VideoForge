@@ -536,6 +536,15 @@ test('every palette keeps text contrast in light mode', async ({ page }) => {
       const v = await violations(page, ['color-contrast'])
       if (v.length) found[`${palette} ${state}`] = v
     }
+    // The link style, in the empty list's sentence
+    await page.goto('/#/queue')
+    await page.getByRole('searchbox').fill('no matches')
+    const empty = page
+      .getByRole('region', { name: 'Queue list', exact: true })
+      .getByText('No jobs match these filters.')
+    await expect(empty.getByRole('button', { name: 'Clear filters', exact: true })).toBeVisible()
+    const v = await violations(page, ['color-contrast'])
+    if (v.length) found[`${palette} queue, no matches`] = v
     await page.unrouteAll({ behavior: 'ignoreErrors' })
   }
   expect(found).toEqual({})

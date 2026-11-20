@@ -21,7 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- **Open the failed step in the Log tab** in the job header is readable in light mode. Its color was below the 4.5:1 contrast that WCAG asks for text.
+- Links are readable in light mode: **Open the failed step in the Log tab** in the job header, **Open existing job** on New jobs, and **Clear filters** and **Add some** in an empty Queue list. Their color was below the 4.5:1 contrast that WCAG asks for text; they're in the text color now, underlined.
 - Dragging across Queue rows to select them, with nothing selected yet, ends on the row under the pointer again. **Clear selection** showing up above the list as the drag began moved the rows down a line. It now sits beside the selection count, which keeps its height.
 
 ## [0.1.13] - 2026-11-19

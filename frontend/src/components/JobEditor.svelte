@@ -264,18 +264,14 @@
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <span><IssueCounts {counts} /></span>
           {#if tab !== 'issues'}
-            <!-- the text color, underlined: the link style's primary color is too faint on a light background -->
-            <Button
-              variant="link"
-              size="xs"
-              class="h-auto p-0 text-foreground underline"
-              onclick={() => (tab = 'issues')}>Open the Issues tab</Button
+            <Button variant="link" size="xs" class="h-auto p-0" onclick={() => (tab = 'issues')}
+              >Open the Issues tab</Button
             >
           {/if}
         </div>
       {/if}
       {#if (job.status === 'failed' || job.status === 'invalid') && tab !== 'log'}
-        <Button variant="link" size="xs" class="h-auto p-0 text-foreground underline" onclick={() => (tab = 'log')}
+        <Button variant="link" size="xs" class="h-auto p-0" onclick={() => (tab = 'log')}
           >Open the failed step in the Log tab</Button
         >
       {/if}
