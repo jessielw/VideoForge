@@ -150,6 +150,26 @@ def test_an_unread_second_track_warns(tmp_path):
     assert "hdr.dv_second_track" not in [i.code for i in hdr.issues(found, settings, missing)]
 
 
+@pytest.mark.parametrize("transfer", ["smpte2084", "arib-std-b67"])
+def test_an_hdr_source_at_8_bit_warns(transfer):
+    """HDR10 (PQ) or HLG tagged from the source at 8-bit: a warning that names the fix; the Encoder tab's hint says
+    the same. HDR10+ and Dolby Vision at 8-bit block on their own, so no second message."""
+    video = VideoInfo(3840, 2160)
+    video.color.transfer = transfer
+    (issue,) = hdr.issues(video, EncoderSettings(encoder=Encoder.X264, depth=8))
+    assert (issue.severity.value, issue.code) == ("warn", "hdr.depth")
+    assert issue.message == ("An HDR source needs a 10-bit encode, or its gradients can band. Set the bit depth to 10")
+    vp8 = hdr.issues(video, EncoderSettings(encoder=Encoder.VP8, depth=8, preset="2"))
+    assert [i.message for i in vp8] == [
+        "An HDR source needs a 10-bit encode, or its gradients can band. VP8 is 8-bit only, so choose another encoder"
+    ]
+    assert hdr.issues(video, EncoderSettings(encoder=Encoder.X264, depth=10)) == []
+    assert hdr.issues(video, EncoderSettings(encoder=Encoder.X264, depth=8, source_color=False)) == []
+    assert hdr.issues(VideoInfo(1920, 1080), EncoderSettings(encoder=Encoder.X264, depth=8)) == []
+    plus = replace(video, hdr=VideoHdr(hdr10plus=True))
+    assert [i.code for i in hdr.issues(plus, EncoderSettings(encoder=Encoder.X265, depth=8))] == ["hdr.hdr10plus_depth"]
+
+
 def test_hdr10plus_frames_and_x264(tmp_path):
     meta = tmp_path / "hdr10plus.json"
     meta.write_text('{"JSONInfo": {"HDR10plusProfile": "B"}, "SceneInfo": [{}, {}, {}]}', encoding="utf-8")
