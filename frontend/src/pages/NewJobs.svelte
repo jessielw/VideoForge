@@ -362,6 +362,20 @@
     ].join(' · ')
   })
 
+  // What the last Add did, and when it added jobs, what comes next.
+  const completionText = $derived.by(() => {
+    if (!completion) return ''
+    const n = completion.added.length
+    return [
+      n ? `Added ${n} job${n === 1 ? '' : 's'}` : 'Nothing added',
+      completion.skipped.length ? `${completion.skipped.length} already in the queue, kept` : '',
+      completion.unmatched.length ? `${completion.unmatched.length} unmatched` : '',
+      n ? 'Next: check each job in the Queue, then tick its box to queue it.' : '',
+    ]
+      .filter(Boolean)
+      .join(' · ')
+  })
+
   async function add() {
     if (adding || matching || !newJobs || settledKey !== inputKey || !output.length) return
     adding = true
@@ -691,13 +705,7 @@
       {#if completion}
         <p role="status" class="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">
           {#if completion.added.length}<CheckIcon class="size-4 shrink-0 text-success" />{/if}
-          <span class="truncate">
-            {#if completion.added.length}Added {completion.added.length} job{completion.added.length === 1
-                ? ''
-                : 's'}{:else}Nothing added{/if}{completion.skipped.length
-              ? ` · ${completion.skipped.length} already in the queue, kept`
-              : ''}{completion.unmatched.length ? ` · ${completion.unmatched.length} unmatched` : ''}
-          </span>
+          <span class="truncate" title={completionText}>{completionText}</span>
         </p>
         {#if sources.length}<Button variant="ghost" onclick={() => (completion = null)}>Keep editing</Button>{/if}
         <Button variant="outline" onclick={clearAll}>Add more</Button>

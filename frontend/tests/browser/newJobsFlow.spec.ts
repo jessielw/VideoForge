@@ -235,6 +235,20 @@ test('Matched files keeps its size while the sources match again', async ({ page
   expect(errors).toEqual([])
 })
 
+test('an Add that adds nothing says so, with no next step', async ({ page }) => {
+  const { errors, sources } = await fixture(page, [])
+  await page.route('**/api/jobs', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ json: { added: [], skipped: ['Show.S01E01.mkv'], unmatched: [], kept: [] } })
+      : route.fallback(),
+  )
+  await paste(page, `"${sources[0]}"`)
+  const bar = page.locator('footer[aria-label="Add to queue"]')
+  await bar.getByRole('button', { name: /Add 1 job/ }).click()
+  await expect(bar.getByRole('status')).toHaveText('Nothing added · 1 already in the queue, kept')
+  expect(errors).toEqual([])
+})
+
 test('pasted paths land on New jobs; the bottom bar says what Add will do and then offers the queue', async ({
   page,
 }) => {
@@ -272,7 +286,14 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
   await expect(bar).toContainText('will neither index nor crop')
   await bar.getByRole('button', { name: /Add 2 jobs/ }).click()
 
-  await expect(bar.getByRole('status')).toContainText('Added 2 jobs')
+  // What comes next, after what was added
+  await expect(bar.getByRole('status')).toHaveText(
+    'Added 2 jobs · Next: check each job in the Queue, then tick its box to queue it.',
+  )
+  await expect(bar.getByRole('status').locator('[title]')).toHaveAttribute(
+    'title',
+    'Added 2 jobs · Next: check each job in the Queue, then tick its box to queue it.',
+  )
   await expect(bar.getByRole('button', { name: 'Open queue' })).toBeVisible()
   expect(posted).toHaveLength(1)
   expect(posted[0]).toMatchObject({
