@@ -501,6 +501,9 @@ test('the grip under Matched files drags it taller past the page, without jumpin
   await expect(card).toContainText('30 job(s)')
   const grip = page.getByRole('separator', { name: 'Resize Matched files' })
   const scrollTop = () => card.evaluate((el) => el.closest('.overflow-auto')!.scrollTop)
+  // With "Group them" shown and Linux's wider fonts, the grip starts under the bottom bar, where a grab hits the bar
+  await grip.evaluate((el) => el.scrollIntoView({ block: 'nearest', behavior: 'instant' }))
+  const start = await scrollTop()
   const before = (await card.boundingBox())!.height
 
   const at = (await grip.boundingBox())!
@@ -512,7 +515,7 @@ test('the grip under Matched files drags it taller past the page, without jumpin
   await page.mouse.up()
   const tall = (await card.boundingBox())!.height
   expect(tall).toBeGreaterThan(before + 100)
-  expect(await scrollTop()).toBeGreaterThan(0)
+  expect(await scrollTop()).toBeGreaterThan(start)
 
   const top = await scrollTop()
   const now = (await grip.boundingBox())!
