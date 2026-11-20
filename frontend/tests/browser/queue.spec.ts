@@ -825,12 +825,42 @@ for (const palette of ['gold', 'indigo', 'ocean', 'forest', 'ember', 'rose', 'sl
 
 test('queue row checkboxes line up with the search box', async ({ page }) => {
   const { errors } = await queueFixture(page, 3)
-  const search = await page.getByPlaceholder('Search name or source path').boundingBox()
+  const search = await page.getByPlaceholder('Search name, path, encoder or HDR').boundingBox()
   const tick = await page
     .getByRole('checkbox', { name: /^Queued: / })
     .first()
     .boundingBox()
   expect(Math.abs(tick!.x - search!.x)).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+test('a Queue caption names the checkboxes, and a queued row shows a lock before its status', async ({ page }) => {
+  const { errors } = await queueFixture(page, 2, ['queued', 'ready'])
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  await expect(list.getByRole('searchbox')).toHaveAccessibleName(
+    'Search jobs by name, source path, encoder, resolution or HDR format',
+  )
+  // The caption sits over the column of checkboxes; each box has its own name, so a screen reader skips it.
+  const caption = list.getByText('Queue', { exact: true })
+  await expect(caption).toHaveAttribute('aria-hidden', 'true')
+  const c = (await caption.boundingBox())!
+  const box = (await list.getByRole('checkbox', { name: 'Queued: Episode 00000' }).boundingBox())!
+  expect(Math.abs(c.x - box.x)).toBeLessThanOrEqual(1)
+  expect(c.y + c.height).toBeLessThanOrEqual(box.y)
+  await caption.hover()
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+    "A ticked job is queued and locked, so you can't edit it until you untick it. Start queue runs the queued jobs.",
+  )
+  // The paragraph keeps the rest.
+  await expect(list).toContainText(
+    'Actions on the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs, or every job when none is selected.',
+  )
+  await expect(list).not.toContainText('A ticked job is queued')
+  // A lock before "Queued", in its color; none on a ready row.
+  const queued = page.locator('[data-job="job-0"]')
+  await expect(queued.locator('svg.lucide-lock')).toHaveCount(1)
+  await expect(queued.getByText('Queued', { exact: true })).toBeVisible()
+  await expect(page.locator('[data-job="job-1"]').locator('svg.lucide-lock')).toHaveCount(0)
   expect(errors).toEqual([])
 })
 

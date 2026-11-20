@@ -44,6 +44,7 @@
   import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
   import ListChecksIcon from '@lucide/svelte/icons/list-checks'
   import ListEndIcon from '@lucide/svelte/icons/list-end'
+  import LockIcon from '@lucide/svelte/icons/lock'
   import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close'
   import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open'
   import PauseIcon from '@lucide/svelte/icons/pause'
@@ -1182,8 +1183,8 @@
       <div class="shrink-0 space-y-2 border-b border-border p-2">
         <Input
           type="search"
-          aria-label="Search jobs by name or source path"
-          placeholder="Search name or source path"
+          aria-label="Search jobs by name, source path, encoder, resolution or HDR format"
+          placeholder="Search name, path, encoder or HDR"
           value={query}
           oninput={(e) => {
             query = e.currentTarget.value
@@ -1219,10 +1220,16 @@
             >{/if}
         </div>
         <p class="text-xs text-muted-foreground">
-          A ticked job is queued and locked, so you can't edit it until you untick it. Start queue runs it. Actions on
-          the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs, or every
-          job when none is selected.
+          Actions on the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs,
+          or every job when none is selected.
         </p>
+        <!-- Over the column of checkboxes, which queue and lock a job (clicking a row selects it). Each box has its own
+             name, so a screen reader skips this. -->
+        <Tip
+          class="w-fit text-xs text-muted-foreground"
+          text="A ticked job is queued and locked, so you can't edit it until you untick it. Start queue runs the queued jobs."
+          ><span aria-hidden="true">Queue</span></Tip
+        >
         <!-- for screen readers, as the list's description: the Shortcuts dialog shows the keys -->
         <p id="queue-keys" class="sr-only">
           Arrow keys, <Kbd>Home</Kbd> and <Kbd>End</Kbd> move through the list. <Kbd>Shift</Kbd> extends the selection, and
@@ -1423,6 +1430,11 @@
                     <!-- the count under it says how many; "Ready with warnings" cut a narrow list's names -->
                     <span class="ml-auto shrink-0 text-xs {STATUS_TONE.warn}"
                       >{job.issue_counts.warn === 1 ? 'Warning' : 'Warnings'}</span
+                    >
+                  {:else if job.status === 'queued'}
+                    <!-- locked: its box is ticked, so its settings can't change until it's unticked -->
+                    <span class="ml-auto flex shrink-0 items-center gap-1 text-xs {STATUS_TONE.queued}"
+                      ><LockIcon aria-hidden="true" class="size-3" />{STATUS_LABEL.queued}</span
                     >
                   {:else}
                     <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
