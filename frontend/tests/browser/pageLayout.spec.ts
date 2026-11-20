@@ -1,7 +1,8 @@
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import type { ConfigState, NamePolicy, RuleSet, Template } from '../../src/lib/types.ts'
 
-async function layoutFixture(page: Page, naming?: NamePolicy) {
+/** others: rule sets installed beside Manual (a plugin's), each like Manual but for its id and name. */
+async function layoutFixture(page: Page, naming?: NamePolicy, others: Pick<RuleSet, 'id' | 'name'>[] = []) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   const template: Template = {
@@ -57,6 +58,7 @@ async function layoutFixture(page: Page, naming?: NamePolicy) {
     defaults: { video: template.video, encoder: template.encoder, template },
     naming,
   }
+  const more = others.map((r) => ({ ...ruleSet, ...r, default: false }))
   const config: ConfigState = {
     tools: [
       {
@@ -74,7 +76,7 @@ async function layoutFixture(page: Page, naming?: NamePolicy) {
     default_roots: ['D:\\Media'],
     rule_set: 'manual',
     rule_set_default: 'manual',
-    rule_sets: [ruleSet],
+    rule_sets: [ruleSet, ...more],
     restart: [],
     index_waits_for_disk: true,
     index_during_video: true,
@@ -113,7 +115,7 @@ async function layoutFixture(page: Page, naming?: NamePolicy) {
     const responses: Record<string, unknown> = {
       '/api/preset-packs/managed': { presets: [], problems: [] },
       '/api/jobs': [],
-      '/api/rule-sets': [ruleSet],
+      '/api/rule-sets': [ruleSet, ...more],
       '/api/health': { ok: true, version: 'test' },
       '/api/profiles': { profiles: [{ id: 'default', name: 'Default' }], active: 'default' },
       '/api/presets': {
@@ -571,16 +573,60 @@ async function labelGap(label: Locator, control: Locator): Promise<number> {
 for (const width of [1600, 1280]) {
   test(`New jobs labels line up with their controls at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
-    const errors = await layoutFixture(page)
+    const errors = await layoutFixture(page, undefined, [{ id: 'house', name: 'House rules' }])
     await page.goto('/#/new')
     const main = page.locator('main')
-    const ruleSet = main.getByRole('combobox', { name: 'Rule set', exact: true })
-    expect(await labelGap(main.getByText('Rule set', { exact: true }), ruleSet)).toBeLessThanOrEqual(2)
-    const preset = main.getByRole('button', { name: /^Encoder preset/ })
-    expect(await labelGap(main.getByText('Encoder preset', { exact: true }), preset)).toBeLessThanOrEqual(2)
+    for (const [label, control] of [
+      ['Rule set', main.getByRole('combobox', { name: 'Rule set', exact: true })],
+      ['Original language', main.getByRole('combobox', { name: 'Original language', exact: true })],
+      ['Template', main.getByRole('combobox', { name: 'Template', exact: true })],
+      ['Encoder preset', main.getByRole('button', { name: /^Encoder preset/ })],
+      ['Container', main.getByRole('combobox', { name: 'Container', exact: true })],
+    ] as const)
+      expect(await labelGap(main.getByText(label, { exact: true }), control), label).toBeLessThanOrEqual(2)
     expect(errors).toEqual([])
   })
 }
+
+/** Each text's top edge on the page, in the order given. */
+async function tops(page: Page, texts: string[]): Promise<number[]> {
+  const main = page.locator('main')
+  return Promise.all(texts.map(async (t) => (await main.getByText(t, { exact: true }).boundingBox())!.y))
+}
+
+test('New jobs asks in decision order, and shows Rule set only when there is a choice', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/new')
+  const main = page.locator('main')
+  // One rule set (a new user's Manual): no menu, no paragraph about it.
+  await expect(main.getByText('Template', { exact: true })).toBeVisible()
+  await expect(main.getByRole('combobox', { name: 'Rule set' })).toHaveCount(0)
+  await expect(main.getByText(/The rule set picks each job's tracks/)).toHaveCount(0)
+  const order = ['Sources', 'Output folder', 'Original language', 'Template', 'Encoder preset', 'Container']
+  const y = await tops(page, [...order, 'After adding'])
+  expect(y).toEqual([...y].sort((a, b) => a - b))
+  await expect(
+    main.getByText(
+      "Template audio rules and some rule sets choose tracks by it. Left empty, VideoForge reads it from the source's audio.",
+    ),
+  ).toBeVisible()
+  await expect(
+    main.getByText('The encoder preset and the container change only their part of the template.'),
+  ).toBeVisible()
+  await expect(main.getByText(/Changes encoder settings only/)).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test('New jobs shows Rule set, first after the output folder, with two rule sets', async ({ page }) => {
+  const errors = await layoutFixture(page, undefined, [{ id: 'house', name: 'House rules' }])
+  await page.goto('/#/new')
+  const main = page.locator('main')
+  await expect(main.getByRole('combobox', { name: 'Rule set', exact: true })).toBeVisible()
+  await expect(main.getByText(/The rule set picks each job's tracks/)).toBeVisible()
+  const y = await tops(page, ['Output folder', 'Rule set', 'Original language'])
+  expect(y).toEqual([...y].sort((a, b) => a - b))
+  expect(errors).toEqual([])
+})
 
 test('New jobs: After adding stays level with its checkboxes, ticked or not', async ({ page }) => {
   const errors = await layoutFixture(page)

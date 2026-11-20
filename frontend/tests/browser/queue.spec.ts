@@ -1023,6 +1023,27 @@ test('Output tab: every label lines up with the first control in its row', async
   expect(errors).toEqual([])
 })
 
+test('Output tab: the Rule set menu shows only when there is more than one rule set', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await withRuleSet(page)
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  const panel = page.getByRole('tabpanel')
+  await expect(panel.getByText('Existing output', { exact: true })).toBeVisible()
+  await expect(panel.getByRole('combobox', { name: 'Rule set' })).toHaveCount(0)
+  await expect(panel.getByText('Rule set', { exact: true })).toHaveCount(0)
+  // The header's facts line still names it.
+  await expect(page.locator('header').getByText(/^Manual · x265/)).toBeVisible()
+
+  const ruleSets = await page.evaluate(() => fetch('/api/rule-sets').then((r) => r.json()))
+  await page.route('**/api/rule-sets', (route) =>
+    route.fulfill({ json: [...ruleSets, { ...ruleSets[0], id: 'house', name: 'House rules', default: false }] }),
+  )
+  await page.reload()
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  await expect(page.getByRole('tabpanel').getByRole('combobox', { name: 'Rule set', exact: true })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
 test('Output: extra arguments, PGS compression, the work folder and finished steps sit in a closed Advanced section', async ({
   page,
 }) => {

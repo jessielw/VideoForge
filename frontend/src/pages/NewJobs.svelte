@@ -1,5 +1,5 @@
 <script lang="ts">
-  // New jobs: rule set + language, input slots, output folder, live match preview, Add to queue.
+  // New jobs: input slots, output folder, rule set, language, template and its parts, live match preview, Add to queue.
   import { flushSync, onDestroy, onMount, untrack } from 'svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import ListChecksIcon from '@lucide/svelte/icons/list-checks'
@@ -458,24 +458,32 @@
         <div
           class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-3 @min-[40rem]/import:grid-cols-[8rem_minmax(0,1fr)]"
         >
-          <div class="text-sm text-muted-foreground">Rule set</div>
+          <!-- The choices in the order they're made: what decides the tracks, the template, the parts of it this
+               batch changes, then what happens after adding. A new user has one rule set: nothing to choose. -->
+          {#if app.ruleSets.length > 1}
+            <div class="text-sm text-muted-foreground">Rule set</div>
+            <div class="flex flex-wrap items-center gap-3">
+              <NativeSelect bind:value={ruleSet} aria-label="Rule set">
+                {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+              </NativeSelect>
+              <p class="basis-full text-xs text-muted-foreground">
+                The rule set picks each job's tracks and default settings, and checks the finished file. Manual keeps
+                every track in source order for you to change.
+              </p>
+            </div>
+          {/if}
+          <div class="text-sm text-muted-foreground">Original language</div>
           <div class="flex flex-wrap items-center gap-3">
-            <NativeSelect bind:value={ruleSet} aria-label="Rule set">
-              {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-            </NativeSelect>
-            <label class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              Original language
-              <LanguagePicker
-                class="w-48"
-                aria-label="Original language"
-                placeholder="Guess from audio"
-                value={language}
-                onchange={(v: string) => (language = v)}
-              />
-            </label>
+            <LanguagePicker
+              class="w-48"
+              aria-label="Original language"
+              placeholder="Guess from audio"
+              value={language}
+              onchange={(v: string) => (language = v)}
+            />
             <p class="basis-full text-xs text-muted-foreground">
-              The rule set picks each job's tracks and default settings, and checks the finished file. Manual keeps
-              every track in source order for you to change.
+              Template audio rules and some rule sets choose tracks by it. Left empty, VideoForge reads it from the
+              source's audio.
             </p>
           </div>
           <div class="text-sm text-muted-foreground">Template</div>
@@ -497,14 +505,6 @@
               {/each}
             </NativeSelect>
             <button class="underline underline-offset-2" onclick={() => router.go('templates')}>Edit templates…</button>
-            {#if containers.length > 1}
-              <label class="flex flex-wrap items-center gap-2">
-                Container
-                <NativeSelect bind:value={container}>
-                  {#each containers as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
-                </NativeSelect>
-              </label>
-            {/if}
             {#if template?.data.crop_mode === 'auto'}
               <span>Crop detected per job after adding</span>
             {:else if template?.data.crop_mode === 'fixed'}
@@ -512,6 +512,42 @@
               <span>Crop {c.left}/{c.top}/{c.right}/{c.bottom} on every job</span>
             {/if}
           </div>
+          {#if encoder}
+            <div class="text-sm text-muted-foreground">Encoder preset</div>
+            <div class="min-w-0 space-y-2">
+              <div class="flex flex-wrap items-center gap-3">
+                <EncoderPresetMenu
+                  {ruleSet}
+                  current={encoder}
+                  apply={(value) => {
+                    encoder = value
+                  }}
+                />
+                <span class="text-xs text-muted-foreground"
+                  >{ENCODERS.find(([id]) => id === encoder?.encoder)?.[1]} · {encoder.depth}-bit</span
+                >
+                <button
+                  class="text-xs underline underline-offset-2"
+                  onclick={() => {
+                    encoder = structuredClone($state.snapshot(template.data.encoder))
+                  }}>Use template settings</button
+                >
+              </div>
+              <p class="text-xs text-muted-foreground">
+                {containers.length > 1
+                  ? 'The encoder preset and the container change only their part of the template.'
+                  : 'The encoder preset changes only its part of the template.'}
+              </p>
+            </div>
+          {/if}
+          {#if containers.length > 1}
+            <div class="text-sm text-muted-foreground">Container</div>
+            <div>
+              <NativeSelect bind:value={container} aria-label="Container">
+                {#each containers as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
+              </NativeSelect>
+            </div>
+          {/if}
           <!-- self-start: the row starts with a checkbox, whose baseline moves with its tick; its first line is at the top -->
           <div class="self-start text-sm text-muted-foreground">After adding</div>
           <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
@@ -551,32 +587,6 @@
               </span>
             {/if}
           </div>
-          {#if encoder}
-            <div class="text-sm text-muted-foreground">Encoder preset</div>
-            <div class="min-w-0 space-y-2">
-              <div class="flex flex-wrap items-center gap-3">
-                <EncoderPresetMenu
-                  {ruleSet}
-                  current={encoder}
-                  apply={(value) => {
-                    encoder = value
-                  }}
-                />
-                <span class="text-xs text-muted-foreground"
-                  >{ENCODERS.find(([id]) => id === encoder?.encoder)?.[1]} · {encoder.depth}-bit</span
-                >
-                <button
-                  class="text-xs underline underline-offset-2"
-                  onclick={() => {
-                    encoder = structuredClone($state.snapshot(template.data.encoder))
-                  }}>Use template settings</button
-                >
-              </div>
-              <p class="text-xs text-muted-foreground">
-                Changes encoder settings only. Resize and filters come from the template.
-              </p>
-            </div>
-          {/if}
         </div>
       </Card.Root>
 

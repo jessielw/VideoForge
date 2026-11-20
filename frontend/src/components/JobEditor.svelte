@@ -530,16 +530,19 @@
               <Checkbox checked={job.spec.qpf} disabled={!editable} onCheckedChange={(v) => save({ qpf: v })} />
               AutoQPF: chapters from the source (or every 5%) and keyframes on them
             </label>
-            <span class="text-muted-foreground">Rule set</span>
-            <NativeSelect
-              class="w-48"
-              aria-label="Rule set"
-              value={job.rule_set}
-              disabled={!editable}
-              onchange={(e) => save({ rule_set: e.currentTarget.value })}
-            >
-              {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-            </NativeSelect>
+            {#if app.ruleSets.length > 1}
+              <!-- with one rule set installed there's nothing to choose; the header's facts line names it -->
+              <span class="text-muted-foreground">Rule set</span>
+              <NativeSelect
+                class="w-48"
+                aria-label="Rule set"
+                value={job.rule_set}
+                disabled={!editable}
+                onchange={(e) => save({ rule_set: e.currentTarget.value })}
+              >
+                {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+              </NativeSelect>
+            {/if}
             <span class="text-muted-foreground">Output</span>
             <code class="text-xs break-all text-muted-foreground">{job.output ?? '(after the run)'}</code>
           </div>
