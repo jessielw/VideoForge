@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **Queue groups**: a batch of jobs shown together under one header, such as a season. Adding two or more jobs on **New jobs** puts them in a group when **Group them** is ticked (the default). The group is named `Show S01` from the episode names, else after the folder; you can type another name. **Group** on the Queue toolbar groups the selected jobs. The header collapses and expands the group (remembered in the browser), selects its jobs, queues or unqueues them all, and shows how many are done or failed and the group's progress. Its **⋯** menu moves the selected jobs into or out of the group (the keyboard's way to do it), renames it or ungroups it. Drag a row's grip (⋮⋮) to move jobs into or out of a group: an indented drop line means inside it, a full-width one outside. Drag a header's grip to move the whole group. A group's jobs always stay together in the queue order. **Move up**/**Move down** keep a job inside its group and move a fully selected group as one. Groups belong to the queue only, not to job files. `POST /api/jobs` takes `group_name`; `POST /api/jobs/move` takes `{ids, before, group}`, `POST /api/jobs/group` takes `{ids, name}`, and `POST /api/groups/{id}/rename` and `/ungroup` manage a group; `GET /api/jobs` adds each job's `group` and `group_name`.
 - The Queue's batch panel (several jobs selected) sets one **Output folder** for all of them: type or paste a path, **Browse…**, pick a saved folder, or drop a folder on the row. Clearing the box clears it on every job. Each job keeps its own output name, and queued, running or indexing jobs are skipped as for the other batch settings.
+- After **Add**, the bar on **New jobs** says what comes next: check each job in the Queue, then tick its box to queue it.
+- A job warns when an HDR10 or HLG source is encoded at 8-bit with **Color from the source** on, and shows **Ready with warnings** instead of **Ready**. Before, only the note under **Bit depth** on the Encoder tab said so.
+- On the **Issues** tab, an issue with one place to fix it links there, such as **Go to the Encoder tab** or **Go to Settings › Tools**. Each issue in a job's `GET /api/jobs/{id}` adds a `tab`.
+- The queue list's checkboxes have a **Queue** caption, whose tooltip says that a ticked job is queued and locked. A queued row shows a lock before **Queued**.
+- The Queue search also matches each row's encoder, resolution and HDR tags, such as `x265`, `3840` or `HDR10`. To give one kind of source its own encoder preset, search for it, use **Select matching jobs**, and set the preset once in the batch panel.
 
 ### Changed
 
@@ -18,11 +23,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - An audio track's **Delay** moved into its **Settings**, which every audio track now has, a copied one too. **Settings** counts a changed delay.
 - **Save job files**, **Add jobs from job files…** and **Read tracks again** moved into **More actions** (**⋯**) on the Queue toolbar. The keyboard hint under the queue list is now for screen readers only; **Shortcuts** lists the same keys.
 - The job header counts its errors and warnings, such as "1 error · 2 warnings", instead of listing the messages with their codes, and a new **Issues** tab lists each one with its code. Queue rows count them too. The "Warn" status is now **Ready with warnings**; a queue row says **Warning** or **Warnings**, with the count under it. `GET /api/jobs` adds each job's `issue_counts` (`block`, `warn`).
+- **New jobs** asks in the order the choices are made: output folder, rule set, original language, template, then the encoder preset and container (which change only their part of the template), with **After adding** last. With only one rule set installed, as on a new install, New jobs and a job's Output tab hide the **Rule set** menu.
+- Each **Browse…** on New jobs (Sources, Encodes, Subtitles, Chapters, Output folder) opens where it was last used. Every Browse used to open in the last folder any of them showed, so Sources could open in the output folder. `GET /api/settings` adds `last_dirs`.
 
 ### Fixed
 
 - Links are readable in light mode: **Open the failed step in the Log tab** in the job header, **Open existing job** on New jobs, and **Clear filters** and **Add some** in an empty Queue list. Their color was below the 4.5:1 contrast that WCAG asks for text; they're in the text color now, underlined.
 - Dragging across Queue rows to select them, with nothing selected yet, ends on the row under the pointer again. **Clear selection** showing up above the list as the drag began moved the rows down a line. It now sits beside the selection count, which keeps its height.
+- A double click on **Run selected** could cancel the job it started: when a job started, **Cancel** took Run selected's place. The Queue toolbar's first row now stays put. **Start queue** becomes **Stop after current** in the same slot, and **Cancel**, **Pause after pass 1**, **Pause** or **Resume**, the priority menu and **Stop indexing** go on a second row that shows only while they apply. **Queue (N)** and **Unqueue (N)** moved to the end of the row of icons.
 
 ## [0.1.13] - 2026-11-19
 

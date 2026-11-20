@@ -13,7 +13,7 @@ Declare a `videoforge.rule_sets` entry point in the rule set package's `pyprojec
 my_rule_set = "my_rule_set.rule_set:MyRuleSet"
 ```
 
-Install that package into the Python environment running VideoForge. Select its ID in **Settings** or set the top-level configuration key:
+Install that package into the Python environment running VideoForge. Once more than one rule set is installed, New jobs and each job's Output tab show a **Rule set** menu. Select its ID in **Settings** or set the top-level configuration key:
 
 ```toml
 rule_set = "my_rule_set"
