@@ -187,6 +187,8 @@ export interface Issue {
   severity: Severity
   code: string
   message: string
+  // A job's issues only: where it's fixed (a job tab's id, or 'tools' for Settings › Tools); null: no one place
+  tab?: string | null
 }
 
 export type AudioAction =

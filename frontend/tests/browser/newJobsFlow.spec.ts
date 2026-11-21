@@ -181,6 +181,42 @@ async function paste(page: Page, text: string) {
   }, text)
 }
 
+test("each Browse on New jobs opens at its own last folder, not at another Browse's", async ({ page }) => {
+  const { errors } = await fixture(page, [])
+  // Sources were last browsed in D:/Media; the output folder was browsed since (the shared last_dir).
+  const settings = {
+    output_dir: 'D:/Output',
+    last_dir: 'D:/Output',
+    last_dirs: { sources: 'D:/Media' },
+    output_folders: [],
+    output_default: '',
+  }
+  const saved: Record<string, unknown>[] = []
+  await page.route('**/api/settings', (route) => {
+    if (route.request().method() === 'PUT') saved.push(route.request().postDataJSON())
+    return route.fulfill({ json: settings })
+  })
+  const opened: string[] = []
+  await page.route(/\/api\/fs\/list\?/, (route) => {
+    const path = new URL(route.request().url()).searchParams.get('path')!
+    opened.push(path)
+    return route.fulfill({ json: { path, parent: 'D:/', dirs: [], files: [] } })
+  })
+  await page.goto('/#/new')
+  const main = page.locator('main')
+  const browse = main.getByRole('button', { name: 'Browse…', exact: true })
+
+  await browse.first().click() // Sources
+  await expect.poll(() => opened).toEqual(['D:/Media'])
+  await expect.poll(() => saved).toEqual([{ last_dir: 'D:/Media', last_dirs: { sources: 'D:/Media' } }])
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
+
+  await browse.nth(1).click() // Output folder: no folder of its own yet, so the shared one
+  await expect.poll(() => opened.at(-1)).toBe('D:/Output')
+  await expect.poll(() => saved.at(-1)).toEqual({ last_dir: 'D:/Output', last_dirs: { output: 'D:/Output' } })
+  expect(errors).toEqual([])
+})
+
 test('Matched files keeps its size while the sources match again', async ({ page }) => {
   const { errors, sources } = await fixture(page, [])
   await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
@@ -196,6 +232,20 @@ test('Matched files keeps its size while the sources match again', async ({ page
   expect((await card.boundingBox())!.height).toBeGreaterThanOrEqual(Math.min(before, 192)) // no collapse to one line
   release()
   await expect(card.getByText('Show.S01E03.mkv')).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('an Add that adds nothing says so, with no next step', async ({ page }) => {
+  const { errors, sources } = await fixture(page, [])
+  await page.route('**/api/jobs', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ json: { added: [], skipped: ['Show.S01E01.mkv'], unmatched: [], kept: [] } })
+      : route.fallback(),
+  )
+  await paste(page, `"${sources[0]}"`)
+  const bar = page.locator('footer[aria-label="Add to queue"]')
+  await bar.getByRole('button', { name: /Add 1 job/ }).click()
+  await expect(bar.getByRole('status')).toHaveText('Nothing added · 1 already in the queue, kept')
   expect(errors).toEqual([])
 })
 
@@ -236,7 +286,14 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
   await expect(bar).toContainText('will neither index nor crop')
   await bar.getByRole('button', { name: /Add 2 jobs/ }).click()
 
-  await expect(bar.getByRole('status')).toContainText('Added 2 jobs')
+  // What comes next, after what was added
+  await expect(bar.getByRole('status')).toHaveText(
+    'Added 2 jobs · Next: check each job in the Queue, then tick its box to queue it.',
+  )
+  await expect(bar.getByRole('status').locator('[title]')).toHaveAttribute(
+    'title',
+    'Added 2 jobs · Next: check each job in the Queue, then tick its box to queue it.',
+  )
   await expect(bar.getByRole('button', { name: 'Open queue' })).toBeVisible()
   expect(posted).toHaveLength(1)
   expect(posted[0]).toMatchObject({
@@ -415,11 +472,31 @@ test('the file picker moves, ticks, opens and adds from the keyboard', async ({ 
     const url = new URL(r.url())
     if (url.pathname === '/api/fs/list') listed.push(url.searchParams.get('path')!)
   })
+  // The same rows in every folder, as the fixture's, but each listing names the folder asked for: the Path box
+  // then shows when the picker has listed it, and so has put the cursor on its row. Moving on before that, the
+  // cursor could land after the next focus and take it (a CI run's Enter on E02 opened Old instead).
+  await page.route(/\/api\/fs\/list\?/, (route) =>
+    route.fulfill({
+      json: {
+        path: new URL(route.request().url()).searchParams.get('path'),
+        parent: 'D:/',
+        dirs: [{ name: 'Old', path: 'D:/Media/Old', mtime: 1_700_000_000 }],
+        files: files.map((p, i) => ({
+          name: p.slice(9),
+          path: p,
+          size: [3, 1, 2][i % 3] * 1e9,
+          mtime: 1_700_000_000 + i,
+        })),
+      },
+    }),
+  )
   await page.goto('/#/new')
   await page.getByRole('button', { name: 'Browse…' }).first().click()
   const picker = page.getByRole('dialog', { name: 'Sources' })
   const box = (name: string) => picker.getByRole('checkbox', { name: `Pick ${name}` })
+  const shows = (path: string) => expect(picker.getByRole('textbox', { name: 'Path' })).toHaveValue(path)
 
+  await shows('D:/') // listed: before that, ArrowDown has no row to go to
   await picker.getByRole('searchbox', { name: 'Filter this folder' }).press('ArrowDown')
   await expect(box('Old')).toBeFocused()
   await page.keyboard.press('ArrowDown')
@@ -447,10 +524,13 @@ test('the file picker moves, ticks, opens and adds from the keyboard', async ({ 
   await expect(box('Old')).toBeFocused()
   await page.keyboard.press('Enter') // opens the folder, not ticks it
   await expect.poll(() => listed.at(-1)).toBe('D:/Media/Old')
+  await shows('D:/Media/Old')
   await expect(box('Old')).not.toBeChecked()
-  await expect(box('Old')).toBeFocused() // the mock lists D:/Media again; the cursor is on the first row
+  await expect(box('Old')).toBeFocused() // the mock lists the same rows; the cursor is on the first row
   await page.keyboard.press('Backspace')
   await expect.poll(() => listed.at(-1)).toBe('D:/')
+  await shows('D:/')
+  await expect(box('Old')).toBeFocused() // the cursor lands on the folder it left
 
   await box('E02.mkv').focus()
   await page.keyboard.press('Enter') // adds what's ticked

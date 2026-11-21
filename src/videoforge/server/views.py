@@ -52,6 +52,32 @@ def made(e: Entry) -> dict[str, Any] | None:
     return to_json(m) | {"kbps": round(m.output_bytes * 8 / ms) if ms else None}
 
 
+# Where each issue is fixed, for the Issues tab's link: a job tab, or "tools" (Settings › Tools). The first entry a
+# code is or starts with wins; a code none matches gets no link (the source's probe, an output check, a plugin's own).
+ISSUE_TABS: tuple[tuple[str, str], ...] = (
+    ("tools.dee_split", "audio"),
+    ("tools.missing", "tools"),
+    ("hdr.dv_second_track", "tools"),
+    ("hdr.dv_el", "tools"),
+    ("hdr.svt_build", "tools"),
+    ("hdr.dv_bake_bs", "video"),
+    ("hdr.dv_custom", "video"),
+    ("video.interlaced", "video"),
+    ("video.", "encoder"),
+    ("hdr.", "encoder"),
+    ("audio.", "audio"),
+    ("subs.", "subs"),
+    ("mux.", "output"),
+    ("name.", "output"),
+    ("outfile.", "output"),
+    ("run.", "log"),
+)
+
+
+def issue_tab(code: str) -> str | None:
+    return next((tab for prefix, tab in ISSUE_TABS if code == prefix or code.startswith(prefix)), None)
+
+
 def issues(e: Entry) -> list[Issue]:
     out: list[Issue] = []
     if e.probe_error:
@@ -132,7 +158,7 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     rule_set = queue.rule_set(e)
     out = summary(e, queue.group_names())
     out["spec"] = to_json(e.spec)
-    out["issues"] = [to_json(i) for i in issues(e)]
+    out["issues"] = [to_json(i) | {"tab": issue_tab(i.code)} for i in issues(e)]
     out["steps"] = to_json(e.state.steps)
     out["made"] = made(e)  # the last run that wrote the output: sizes, time, bitrate
     out["plan"] = None

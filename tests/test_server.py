@@ -464,7 +464,7 @@ def test_two_jobs_writing_one_file_block_and_an_existing_file_warns(tmp_path):
     with make_client(tmp_path) as client:
         one, two = add(client, tmp_path)
         job = wait_for(client, one, "warn")
-        assert [i["code"] for i in job["issues"]] == ["outfile.exists"]
+        assert [(i["code"], i["tab"]) for i in job["issues"]] == [("outfile.exists", "output")]  # where it's fixed
         assert wait_for(client, two, "ready", "warn")["issues"] == []
         # the queue row counts them
         counts = {j["id"]: j["issue_counts"] for j in client.get("/api/jobs").json()}
@@ -2462,6 +2462,20 @@ def test_output_folders(tmp_path):
         assert client.put("/api/settings", json={"output_default": 3}).status_code == 422
 
 
+def test_each_browse_remembers_its_own_folder(tmp_path):
+    """last_dirs keeps a folder per kind of Browse (New jobs' Sources, Output folder...); a PUT changes only the kinds
+    it names, and last_dir stays the shared one."""
+    with make_client(tmp_path) as client:
+        assert client.get("/api/settings").json()["last_dirs"] == {}
+        client.put("/api/settings", json={"last_dir": "/media", "last_dirs": {"sources": "/media"}})
+        s = client.put("/api/settings", json={"last_dir": "/out", "last_dirs": {"output": "/out"}}).json()
+        assert s["last_dirs"] == {"sources": "/media", "output": "/out"}
+        assert s["last_dir"] == "/out"
+        for bad in ("x", {"sources": 3}, ["sources"]):
+            assert client.put("/api/settings", json={"last_dirs": bad}).status_code == 422
+        assert client.get("/api/settings").json()["last_dirs"] == {"sources": "/media", "output": "/out"}
+
+
 def test_output_folders_remember():
     from videoforge.server.output_folders import MAX_RECENT, clean, remember
 
@@ -2570,6 +2584,46 @@ def test_an_invalid_jobs_issues_say_each_check_once():
         "output.a",
     ]
     assert shown("Name must not mention dual audio: X") == ["output.name.dual", "output.a"]  # saved before
+
+
+@pytest.mark.parametrize(
+    ("code", "tab"),
+    [
+        ("audio.none", "audio"),
+        ("audio.delay", "audio"),
+        ("tools.dee_split", "audio"),
+        ("subs.language", "subs"),
+        ("subs.burn_many", "subs"),
+        ("video.interlaced", "video"),
+        ("hdr.dv_bake_bs", "video"),
+        ("hdr.dv_custom", "video"),
+        ("video.option_unknown", "encoder"),
+        ("video.target_small", "encoder"),
+        ("hdr.depth", "encoder"),
+        ("hdr.dv_x264", "encoder"),
+        ("hdr.hdr10plus_depth", "encoder"),
+        ("tools.missing", "tools"),
+        ("hdr.dv_second_track", "tools"),
+        ("hdr.dv_el", "tools"),
+        ("hdr.svt_build", "tools"),
+        ("mux.mp4_subs", "output"),
+        ("name.token", "output"),
+        ("outfile.exists", "output"),
+        ("run.failed", "log"),
+        ("run.interrupted", "log"),
+        ("probe", None),
+        ("input.no_video", None),
+        ("sync.video_start", None),
+        ("pair.encoding", None),
+        ("output.name.dual", None),  # an output check: the run's, not a setting's
+        ("output.hdr.dv_missing", None),
+        ("house.track_count", None),  # a plugin rule set's own
+    ],
+)
+def test_each_issue_names_the_tab_where_it_is_fixed(code, tab):
+    from videoforge.server.views import issue_tab
+
+    assert issue_tab(code) == tab
 
 
 def test_add_leaves_out_unticked_subtitles(tmp_path):

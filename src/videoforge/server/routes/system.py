@@ -219,6 +219,8 @@ def get_settings(request: Request) -> dict[str, Any]:
     return {
         "output_dir": store.get_setting("output_dir", ""),
         "last_dir": store.get_setting("last_dir", ""),
+        # The last folder of each kind of Browse (New jobs' "sources", "output"...); last_dir is the one they share.
+        "last_dirs": store.get_setting("last_dirs", {}),
         "output_folders": folders,
         # The default only counts while it is still a pinned folder.
         "output_default": default if any(f["pinned"] and f["path"] == default for f in folders) else "",
@@ -231,6 +233,11 @@ def put_settings(request: Request, body: dict[str, Any] = Body(...)) -> dict[str
     for key in ("output_dir", "last_dir"):
         if key in body:
             store.set_setting(key, body[key])
+    if "last_dirs" in body:
+        dirs = body["last_dirs"]
+        if not isinstance(dirs, dict) or not all(isinstance(v, str) for v in dirs.values()):
+            raise HTTPException(422, "last_dirs: expected folder paths by kind")
+        store.set_setting("last_dirs", store.get_setting("last_dirs", {}) | dirs)
     if output_folders.KEY in body:
         try:
             store.set_setting(output_folders.KEY, output_folders.clean(body[output_folders.KEY]))

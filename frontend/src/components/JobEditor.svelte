@@ -10,6 +10,7 @@
   import { queueable } from '../lib/queueView'
   import { app } from '../lib/state.svelte'
   import { layout } from '../lib/layout.svelte'
+  import { openSettings } from '../lib/settingsLink'
   import type { CommandStep, JobDetail } from '../lib/types'
   import Advanced from './Advanced.svelte'
   import EncoderPanel from './EncoderPanel.svelte'
@@ -530,16 +531,19 @@
               <Checkbox checked={job.spec.qpf} disabled={!editable} onCheckedChange={(v) => save({ qpf: v })} />
               AutoQPF: chapters from the source (or every 5%) and keyframes on them
             </label>
-            <span class="text-muted-foreground">Rule set</span>
-            <NativeSelect
-              class="w-48"
-              aria-label="Rule set"
-              value={job.rule_set}
-              disabled={!editable}
-              onchange={(e) => save({ rule_set: e.currentTarget.value })}
-            >
-              {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-            </NativeSelect>
+            {#if app.ruleSets.length > 1}
+              <!-- with one rule set installed there's nothing to choose; the header's facts line names it -->
+              <span class="text-muted-foreground">Rule set</span>
+              <NativeSelect
+                class="w-48"
+                aria-label="Rule set"
+                value={job.rule_set}
+                disabled={!editable}
+                onchange={(e) => save({ rule_set: e.currentTarget.value })}
+              >
+                {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+              </NativeSelect>
+            {/if}
             <span class="text-muted-foreground">Output</span>
             <code class="text-xs break-all text-muted-foreground">{job.output ?? '(after the run)'}</code>
           </div>
@@ -613,6 +617,8 @@
                 <h3 class="section-label">{heading}</h3>
                 <ul class="space-y-2 text-sm">
                   {#each list as i, n (n)}
+                    <!-- the tab where it's fixed, from the server's table; Settings › Tools is a page of its own -->
+                    {@const goes = TABS.find((t) => t.id === i.tab)}
                     <li class="flex gap-2">
                       {#if severity === 'block'}<CircleXIcon
                           aria-hidden="true"
@@ -622,8 +628,18 @@
                           class="mt-0.5 size-4 shrink-0 text-warning"
                         />{/if}
                       <span class="min-w-0"
-                        ><span class="sr-only">{`${spoken} `}</span><span>{sentence(i.message)}</span>{' '}<code
-                          class="font-mono text-xs break-all text-muted-foreground">{i.code}</code
+                        ><span class="sr-only">{`${spoken} `}</span><span>{sentence(i.message)}</span
+                        >{' '}{#if goes}<Button
+                            variant="link"
+                            size="xs"
+                            class="h-auto p-0"
+                            onclick={() => (tab = goes.id)}>Go to the {goes.label} tab</Button
+                          >{' '}{:else if i.tab === 'tools'}<Button
+                            variant="link"
+                            size="xs"
+                            class="h-auto p-0"
+                            onclick={() => openSettings('tools')}>Go to Settings › Tools</Button
+                          >{' '}{/if}<code class="font-mono text-xs break-all text-muted-foreground">{i.code}</code
                         ></span
                       >
                     </li>

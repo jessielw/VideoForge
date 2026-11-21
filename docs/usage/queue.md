@@ -38,7 +38,7 @@ The **Move up** and **Move down** buttons keep a job inside its group (drag it t
 
 ## Find and select jobs
 
-Search matches job names, labels and source paths, ignoring case. Every word must match somewhere in the name or path. Combine it with a status filter; status counts reflect the current search. The list shows 100 matching jobs per page, in queue order. **Previous** and **Next** change pages without changing the selection or the run order.
+Search matches job names, labels, source paths and each row's format, ignoring case: its encoder (`x265`), resolution (`3840`) and HDR tags (`HDR10`, `DV`). Every word must match somewhere in them. To give one kind of source its own encoder preset, search for it, use **Select matching jobs**, and set the preset once in the batch panel. Combine it with a status filter; status counts reflect the current search. The list shows 100 matching jobs per page, in queue order. **Previous** and **Next** change pages without changing the selection or the run order.
 
 **Select matching jobs** selects every match across pages. Ctrl/Cmd+A does the same when a job row has focus; it keeps its usual text-selection behavior in Search. Use arrows or Home/End to move between matching jobs, including across pages. Shift extends a selection, Ctrl/Cmd-click toggles a row, and dragging selects a range of matching rows. Tab leaves the row group after one stop instead of visiting every job. Press **?** (outside a text field), or **Shortcuts** in the menu, for every keyboard shortcut in the app.
 
@@ -48,7 +48,7 @@ On small windows, opening one job collapses the list to a rail. **Show the queue
 
 ## Queue jobs
 
-A job runs only once it's queued. Queue it when its settings are final: tick its box in the queue list or **Queue** at the top of its editor (they're the same switch), or select several jobs and use **Queue (N)** on the toolbar. A queued job is locked: its settings are read-only and its preview doesn't change, so what the queue will encode is what you see. Untick it (or **Unqueue (N)**) to edit it again; the queue leaves it out until it's queued again.
+A job runs only once it's queued. Queue it when its settings are final: tick its box in the queue list, in the column under **Queue**, or **Queue** at the top of its editor (they're the same switch), or select several jobs and use **Queue (N)** on the toolbar. A queued job is locked: its settings are read-only and its preview doesn't change, so what the queue will encode is what you see. Its row shows a lock before **Queued**. Untick it (or **Unqueue (N)**) to edit it again; the queue leaves it out until it's queued again.
 
 A job queued while the queue runs is picked up in its turn, in queue order. Queueing a completed, failed or canceled job runs it again; unticking it before it runs keeps its last result. A job can't be queued while it's being probed, indexed or crop-detected, or while it's blocked.
 
@@ -68,7 +68,7 @@ BestSource's first index decodes the whole video and can take substantially long
 
 ## Pause, stop, and cancel
 
-Pause and resume control the running tools. The Queue toolbar also changes the running job's process priority. Default priorities for later runs are on **Settings**.
+While a job runs, something indexes or the queue is paused, a second row of the Queue toolbar holds **Cancel**, **Pause after pass 1**, **Pause** or **Resume**, the process priority menu and **Stop indexing**. **Start queue** becomes **Stop after current** in its own place, so **Run selected** stays where it is. Pause and resume control the running tools, and the priority menu changes the running job's process priority. Default priorities for later runs are on **Settings**.
 
 Stopping the queue after the current job leaves the remaining jobs queued. Canceling interrupts the running work. When VideoForge shuts down, its child tools stop too; a partially encoded stream is not a finished reusable step.
 
@@ -98,7 +98,7 @@ Intermediate files and `finished-steps.json` live in the job's folder in the sou
 | Skipped | The job was skipped by planning or its existing-output policy | Review the **Issues** tab and the Output tab |
 | Canceled | The run was interrupted | Rerun and review reuse choices |
 
-A job with errors or warnings shows how many in its header and its queue row, such as "1 error · 2 warnings". Its **Issues** tab, after **Log**, lists each one with its code, and shows only while there are any. An error blocks the job (**Blocked**) or says why a run failed; a warning lets it run (**Ready with warnings**; its queue row says **Warning**, or **Warnings** for more than one).
+A job with errors or warnings shows how many in its header and its queue row, such as "1 error · 2 warnings". Its **Issues** tab, after **Log**, lists each one with its code, and shows only while there are any. An issue with one place to fix it links there, such as **Go to the Encoder tab** or **Go to Settings › Tools**. An error blocks the job (**Blocked**) or says why a run failed; a warning lets it run (**Ready with warnings**; its queue row says **Warning**, or **Warnings** for more than one).
 
 A done (or invalid) job's header says what its last run made: the output's size, that as a share of the source, its overall bitrate, how long the run took and how many steps it reused. It's taken as the run ends, so it stays after an action moves the file or the work folder is deleted.
 

@@ -46,6 +46,24 @@ test('queue search combines words, labels, source paths, and status without chan
   )
 })
 
+test("queue search also matches a row's format: its encoder, resolution and HDR tags", () => {
+  const formats = [
+    { ...jobs[0], encoder: 'x265 CRF 18 10-bit', source_facts: { resolution: '3840x2160', hdr: ['HDR10'] } },
+    { ...jobs[1], encoder: 'x264 CRF 18', source_facts: { resolution: '1920x1080', hdr: [] } },
+    { ...jobs[2], encoder: 'x265 CRF 20 10-bit', source_facts: { resolution: '3840x1608', hdr: ['DV 8.1', 'HDR10+'] } },
+  ] as JobSummary[]
+  const ids = (query: string) => matchingJobs(formats, query).map((j) => j.id)
+  assert.deepEqual(ids('hdr10'), ['a', 'c']) // HDR10+ has HDR10 in it
+  assert.deepEqual(ids('3840 x265'), ['a', 'c'])
+  assert.deepEqual(ids('x264'), ['b'])
+  assert.deepEqual(ids('dv episode'), ['c'])
+  assert.deepEqual(ids('2160'), ['a'])
+  assert.deepEqual(
+    matchingJobs(jobs, 'x265').map((j) => j.id),
+    [],
+  ) // rows not read yet have no format
+})
+
 test('selection ranges follow matching order and recover when a live status removes the anchor', () => {
   assert.deepEqual(queueRange(['a', 'c'], 'c', 'a'), ['a', 'c'])
   assert.deepEqual(queueRange(['a', 'c'], 'b', 'c'), ['c'])
