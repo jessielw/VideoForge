@@ -34,6 +34,7 @@ from videoforge.core.pipeline.steps import Step, StepProgress
 from videoforge.core.plan_io import to_json
 from videoforge.core.template import Template
 from videoforge.core.video.settings import Crop
+from videoforge.core.video.vs import ScriptError
 from videoforge.core.workdir import keep_records, note_finished, work_dir
 from videoforge.rule_sets.manual import ManualRuleSet
 from videoforge.server.app import create_app
@@ -2295,6 +2296,39 @@ def test_saving_a_template_keeps_the_container_its_extra_arguments_were_typed_fo
         assert save(container="mkv", extra_container=None) == "mp4"  # the same arguments: kept
         assert save(container="mkv", extra="-split 600") == "mkv"  # typed again
         assert save(extra="") is None
+
+
+class MissingPlugin:
+    """A preview whose scripts fail on a source filter plugin that isn't installed (FFMS2, the default)."""
+
+    def has(self, *_args, **_kwargs) -> bool:
+        return True  # loaded: no index needed
+
+    def check(self, *_args, **_kwargs):
+        raise ScriptError(
+            "AttributeError: No attribute with the name ffms2 exists. Did you mistype a plugin namespace or forget to "
+            "install a plugin?",
+            3,
+        )
+
+    frame = info = check
+
+
+def test_the_video_tab_names_a_missing_plugin_above_the_raw_error(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        client.app.state.preview = MissingPlugin()
+        checked = client.get(f"/api/jobs/{job}/video/check").json()
+        assert checked["hint"] == (
+            "VapourSynth can't find the FFMS2 plugin, which the Source filter needs. Install it, or choose another "
+            "Source filter."
+        )
+        assert checked["error"].startswith("AttributeError: No attribute with the name ffms2") and checked["line"] == 3
+        frame = client.get(f"/api/jobs/{job}/video/frame")
+        assert frame.status_code == 422
+        assert frame.json()["detail"] == f"{checked['hint']}\n\nLine 3: {checked['error']}"
 
 
 def test_removal_preview_marks_each_job_remove_keeps(tmp_path):

@@ -35,6 +35,7 @@ from videoforge.core.video.script import (
     build_script,
     compares_filters,
     encoded_script,
+    plugin_hint,
     script_parts,
 )
 from videoforge.core.video.settings import Crop
@@ -129,9 +130,10 @@ def _preview(request: Request) -> Preview:
     return request.app.state.preview
 
 
-def _failed(ex: Exception) -> HTTPException:
-    """A script that fails (422, the editor shows it) or a preview that stopped (503)."""
-    return HTTPException(503 if isinstance(ex, PreviewError) else 422, str(ex))
+def _failed(ex: Exception, e: Entry) -> HTTPException:
+    """A script that fails (422, the editor shows it; a missing plugin named first) or a preview that stopped (503)."""
+    hint = plugin_hint(ex.message, e.spec.video.source_filter) if isinstance(ex, ScriptError) else ""
+    return HTTPException(503 if isinstance(ex, PreviewError) else 422, f"{hint}\n\n{ex}" if hint else str(ex))
 
 
 @router.get("/script")
@@ -180,7 +182,8 @@ def check(request: Request, job_id: str, stage: ScriptStage = "output") -> dict[
         )
         if ex.line and ex.line > len(head) + len(body):
             message += " (in the generated end of the script: the body must leave a video clip in `clip`)"
-        return {"ok": False, "error": message, "line": ex.line}
+        hint = plugin_hint(ex.message, spec.video.source_filter)
+        return {"ok": False, "error": message, "line": ex.line, "hint": hint}
     except (FrameError, PreviewError) as ex:  # a filter failing on frame 0, or the preview stopped
         return {"ok": False, "error": str(ex), "line": None}
     return {"ok": True, "info": _info_json(e, i, stage)}
@@ -188,13 +191,13 @@ def check(request: Request, job_id: str, stage: ScriptStage = "output") -> dict[
 
 @router.get("/info")
 def info(request: Request, job_id: str, stage: Stage = "output") -> dict[str, Any]:
+    e = _entry(request, job_id)
     try:
-        e = _entry(request, job_id)
         preview, script, slot = _preview(request), script_for(e, stage), _slot(e.spec, stage)
         with _loading(e, preview, script, slot):
             i = preview.info(script, slot=slot)
     except (ScriptError, FrameError, PreviewError) as ex:
-        raise _failed(ex) from None
+        raise _failed(ex, e) from None
     return _info_json(e, i, stage)
 
 
@@ -207,13 +210,13 @@ def frame(
     fmt: Literal["jpeg", "png"] = "jpeg",
     quality: int = 90,
 ) -> Response:
+    e = _entry(request, job_id)
     try:
-        e = _entry(request, job_id)
         preview, script, slot = _preview(request), script_for(e, stage), _slot(e.spec, stage)
         with _loading(e, preview, script, slot):
             data, pict, frames, crop_view = preview.frame(script, n, fmt, quality, slot=slot)
     except (ScriptError, FrameError, PreviewError) as ex:
-        raise _failed(ex) from None
+        raise _failed(ex, e) from None
     return Response(
         data,
         media_type=f"image/{fmt}",
@@ -230,13 +233,13 @@ def frame(
 def detect_crop(request: Request, job_id: str, samples: int = 20) -> dict[str, Any]:
     """Suggest a crop from the uncropped source (the job isn't changed): a Dolby Vision source's from its RPU's L5
     (checked against the detected borders), else the detected borders. origin says which."""
+    e = _entry(request, job_id)
     try:
-        e = _entry(request, job_id)
         _indexed(e)
         with e.source_lock:
             detected = source_crop(_preview(request), e.spec, max(3, min(samples, 60)))
     except (ScriptError, FrameError, PreviewError) as ex:
-        raise _failed(ex) from None
+        raise _failed(ex, e) from None
     q: JobQueue = request.app.state.queue
     crop, origin = auto_crop(e.spec, e.source_video, q.app.tools.dovi_tool, detected)
     return to_json(crop) | {"origin": origin}

@@ -212,6 +212,23 @@ test('bookmarks mark frames on the scrub bar, and [ and ] go between them; a tim
   expect(errors).toEqual([])
 })
 
+test("a preview error above the frame shows in full: a missing plugin's line, then the raw error", async ({ page }) => {
+  const { errors } = await fixture(page)
+  const hint =
+    "VapourSynth can't find the FFMS2 plugin, which the Source filter needs. Install it, or choose another Source filter."
+  const raw =
+    'Line 3: AttributeError: No attribute with the name ffms2 exists. Did you mistype a plugin namespace or forget to install a plugin?'
+  await page.route('**/api/jobs/job-0/video/info**', (route) =>
+    route.fulfill({ status: 422, json: { detail: `${hint}\n\n${raw}` } }),
+  )
+  await page.reload()
+  const line = page.getByText(hint)
+  await expect(line).toBeVisible()
+  expect(await line.evaluate((el) => el.textContent)).toBe(`${hint}\n\n${raw}`) // the raw error a line under it
+  expect(await line.evaluate((el) => el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight)).toBe(true) // nothing cut off
+  expect(errors).toEqual([])
+})
+
 test('the preview and the script check show their figures in the code font', async ({ page }) => {
   const { errors } = await fixture(page)
   // The script and a passing check, so the Video tab shows the check's grid of figures.

@@ -34,7 +34,7 @@ from videoforge.core.video.encoders import (
     vspipe_command,
 )
 from videoforge.core.video.filters import PRESETS, field_issues
-from videoforge.core.video.script import build_script, compares_filters, script_parts
+from videoforge.core.video.script import build_script, compares_filters, plugin_hint, script_parts
 from videoforge.core.video.settings import (
     Crop,
     Encoder,
@@ -144,6 +144,41 @@ def test_script_errors_carry_the_line(script, line, message):
         vsx.load_clip(script)
     assert e.value.line == line and message in e.value.message
     assert str(e.value).startswith(f"Line {line}: ") if line else str(e.value) == e.value.message
+
+
+MISSING = "AttributeError: No attribute with the name {} exists. Did you mistype a plugin namespace or forget to install a plugin?"
+
+
+@pytest.mark.parametrize(
+    ("namespace", "source_filter", "hint"),
+    [
+        (
+            "lsmas",
+            SourceFilter.LSMASH,
+            "VapourSynth can't find the L-SMASH Works plugin, which the Source filter needs. Install it, or choose "
+            "another Source filter.",
+        ),
+        (
+            "bs",
+            SourceFilter.BESTSOURCE,
+            "VapourSynth can't find the BestSource plugin, which the Source filter needs. Install it, or choose "
+            "another Source filter.",
+        ),
+        # FFMS2 with another Source filter: the encode compare's, which no Source filter changes
+        (
+            "ffms2",
+            SourceFilter.BESTSOURCE,
+            "VapourSynth can't find a plugin for core.ffms2, which the script uses. Install it.",
+        ),
+        ("mv", SourceFilter.FFMS2, "VapourSynth can't find a plugin for core.mv, which the script uses. Install it."),
+    ],
+)
+def test_a_missing_plugin_is_named(namespace, source_filter, hint):
+    assert plugin_hint(MISSING.format(namespace), source_filter) == hint
+
+
+def test_other_script_errors_get_no_plugin_hint():
+    assert plugin_hint("NameError: name 'undefined_name' is not defined", SourceFilter.FFMS2) == ""
 
 
 # --- encoders -----------------------------------------------------------------------

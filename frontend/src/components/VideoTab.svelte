@@ -598,9 +598,12 @@
     {#if saving || (infoError && !scripting)}
       <div class="flex items-center gap-2">
         {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
-        {#if infoError && !scripting}<Tip class="block truncate text-xs text-destructive" text={infoError}
-            >{infoError}</Tip
-          >{/if}
+        <!-- in full: a missing plugin's line, then the raw error under it -->
+        {#if infoError && !scripting}<p
+            class="max-h-24 min-w-0 overflow-y-auto text-xs whitespace-pre-line text-destructive"
+          >
+            {infoError}
+          </p>{/if}
       </div>
     {/if}
     {#if !ready}
@@ -850,6 +853,7 @@
           </div>
         {/if}
         {#if vv.checked && !vv.checked.ok}
+          {#if vv.checked.hint}<p class="shrink-0 text-sm text-destructive">{vv.checked.hint}</p>{/if}
           <pre
             class="max-h-40 shrink-0 overflow-auto rounded-lg border border-destructive/50 bg-destructive/10 p-2 text-xs whitespace-pre-wrap text-destructive">{vv
               .checked.line

@@ -574,7 +574,8 @@ export interface ScriptParts {
   custom: boolean
 }
 
-export type ScriptCheck = { ok: true; info: ClipInfo } | { ok: false; error: string; line: number | null }
+export type ScriptCheck =
+  { ok: true; info: ClipInfo } | { ok: false; error: string; line: number | null; hint?: string } // hint: a missing plugin, in plain words
 
 export interface TrackProperty {
   key: string
