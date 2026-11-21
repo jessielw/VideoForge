@@ -18,7 +18,7 @@ const video: EncoderSettings = {
   dolby_vision: false,
 }
 
-async function fixture(page: Page, posted: Record<string, unknown>[]) {
+async function fixture(page: Page, posted: Record<string, unknown>[], qpf = true) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   const template: Template = {
@@ -39,7 +39,7 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
       template_title: false,
       name_suffix: '',
     },
-    qpf: true,
+    qpf,
     crop_mode: 'keep',
     audio: null,
     subs: null,
@@ -181,6 +181,42 @@ async function paste(page: Page, text: string) {
   }, text)
 }
 
+test("each Browse on New jobs opens at its own last folder, not at another Browse's", async ({ page }) => {
+  const { errors } = await fixture(page, [])
+  // Sources were last browsed in D:/Media; the output folder was browsed since (the shared last_dir).
+  const settings = {
+    output_dir: 'D:/Output',
+    last_dir: 'D:/Output',
+    last_dirs: { sources: 'D:/Media' },
+    output_folders: [],
+    output_default: '',
+  }
+  const saved: Record<string, unknown>[] = []
+  await page.route('**/api/settings', (route) => {
+    if (route.request().method() === 'PUT') saved.push(route.request().postDataJSON())
+    return route.fulfill({ json: settings })
+  })
+  const opened: string[] = []
+  await page.route(/\/api\/fs\/list\?/, (route) => {
+    const path = new URL(route.request().url()).searchParams.get('path')!
+    opened.push(path)
+    return route.fulfill({ json: { path, parent: 'D:/', dirs: [], files: [] } })
+  })
+  await page.goto('/#/new')
+  const main = page.locator('main')
+  const browse = main.getByRole('button', { name: 'Browse…', exact: true })
+
+  await browse.first().click() // Sources
+  await expect.poll(() => opened).toEqual(['D:/Media'])
+  await expect.poll(() => saved).toEqual([{ last_dir: 'D:/Media', last_dirs: { sources: 'D:/Media' } }])
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
+
+  await browse.nth(1).click() // Output folder: no folder of its own yet, so the shared one
+  await expect.poll(() => opened.at(-1)).toBe('D:/Output')
+  await expect.poll(() => saved.at(-1)).toEqual({ last_dir: 'D:/Output', last_dirs: { output: 'D:/Output' } })
+  expect(errors).toEqual([])
+})
+
 test('Matched files keeps its size while the sources match again', async ({ page }) => {
   const { errors, sources } = await fixture(page, [])
   await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
@@ -196,6 +232,81 @@ test('Matched files keeps its size while the sources match again', async ({ page
   expect((await card.boundingBox())!.height).toBeGreaterThanOrEqual(Math.min(before, 192)) // no collapse to one line
   release()
   await expect(card.getByText('Show.S01E03.mkv')).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test("Matched files says AutoQPF where it runs, and From the source for a source's existing encode", async ({
+  page,
+}) => {
+  const { errors, sources } = await fixture(page, [])
+  await page.route('**/api/match', (route) =>
+    route.fulfill({
+      json: {
+        jobs: sources.map((source, i) => ({
+          source,
+          encode: i ? 'D:/Media/Show.S01E02.hevc' : null, // an existing encode: AutoQPF doesn't run
+          encode_state: i ? 'done' : null,
+          subtitles: [],
+          subtitle_info: [],
+          chapters: null,
+          existing_id: null,
+          existing_status: null,
+        })),
+        unmatched: [],
+      },
+    }),
+  )
+  await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
+  await expect(page.getByRole('row').filter({ hasText: 'Show.S01E01.mkv' })).toContainText('AutoQPF')
+  await expect(page.getByRole('row').filter({ hasText: 'Show.S01E02.mkv' })).toContainText('From the source')
+  expect(errors).toEqual([])
+})
+
+test('Matched files says From the source when the template turns AutoQPF off', async ({ page }) => {
+  const { errors, sources } = await fixture(page, [], false)
+  await paste(page, `"${sources[0]}"`)
+  const row = page.getByRole('row').filter({ hasText: 'Show.S01E01.mkv' })
+  await expect(row).toContainText('From the source')
+  await expect(row).not.toContainText('AutoQPF')
+  expect(errors).toEqual([])
+})
+
+test('in a narrow window the bar after Add puts its buttons on a second row, all inside it', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 })
+  const { errors, sources } = await fixture(page, [])
+  // one added and one kept: the sources stay, so the bar has all three buttons
+  await page.route('**/api/jobs', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ json: { added: ['a'], skipped: ['Show.S01E02.mkv'], unmatched: [], kept: [] } })
+      : route.fallback(),
+  )
+  await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
+  const bar = page.locator('footer[aria-label="Add to queue"]')
+  await bar.getByRole('button', { name: /Add 2 jobs/ }).click()
+  await expect(bar.getByRole('button', { name: 'Open queue' })).toBeVisible()
+  const edge = (await bar.boundingBox())!
+  const status = (await bar.getByRole('status').boundingBox())!
+  expect(status.width).toBeGreaterThan(200)
+  for (const name of ['Keep editing', 'Add more', 'Open queue']) {
+    const button = (await bar.getByRole('button', { name }).boundingBox())!
+    expect(button.x + button.width, name).toBeLessThanOrEqual(edge.x + edge.width)
+    expect(button.y + button.height, name).toBeLessThanOrEqual(edge.y + edge.height)
+    expect(button.y, name).toBeGreaterThanOrEqual(status.y + status.height) // below the status line
+  }
+  expect(errors).toEqual([])
+})
+
+test('an Add that adds nothing says so, with no next step', async ({ page }) => {
+  const { errors, sources } = await fixture(page, [])
+  await page.route('**/api/jobs', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ json: { added: [], skipped: ['Show.S01E01.mkv'], unmatched: [], kept: [] } })
+      : route.fallback(),
+  )
+  await paste(page, `"${sources[0]}"`)
+  const bar = page.locator('footer[aria-label="Add to queue"]')
+  await bar.getByRole('button', { name: /Add 1 job/ }).click()
+  await expect(bar.getByRole('status')).toHaveText('Nothing added · 1 already in the queue, kept')
   expect(errors).toEqual([])
 })
 
@@ -217,7 +328,15 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
   ])
   expect(tops[1]).toBe(tops[0]) // the bar's top line meets the nav's status block's
   const bar = page.locator('footer[aria-label="Add to queue"]')
-  await expect(bar).toContainText('2 jobs · Sized · will index and auto-crop · saved to D:/Output')
+  // Two or more go in a queue group, named after the season; the name can be typed, and the box unticked.
+  await expect(bar).toContainText('2 jobs in group Show S01 · Sized · will index and auto-crop · saved to D:/Output')
+  const groupName = page.getByRole('textbox', { name: 'Group name' })
+  await groupName.fill('My show')
+  await expect(bar).toContainText('2 jobs in group My show · Sized')
+  await page.getByRole('checkbox', { name: 'Group them' }).click()
+  await expect(bar).toContainText('2 jobs · Sized')
+  await expect(groupName).toBeDisabled()
+  await page.getByRole('checkbox', { name: 'Group them' }).click()
 
   await page.getByRole('checkbox', { name: 'Auto-crop' }).click()
   await expect(bar).toContainText('will index ·')
@@ -228,10 +347,23 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
   await expect(bar).toContainText('will neither index nor crop')
   await bar.getByRole('button', { name: /Add 2 jobs/ }).click()
 
-  await expect(bar.getByRole('status')).toContainText('Added 2 jobs')
+  // What comes next, after what was added
+  await expect(bar.getByRole('status')).toHaveText(
+    'Added 2 jobs · Next: check each job in the Queue, then tick its box to queue it.',
+  )
+  await expect(bar.getByRole('status').locator('[title]')).toHaveAttribute(
+    'title',
+    'Added 2 jobs · Next: check each job in the Queue, then tick its box to queue it.',
+  )
   await expect(bar.getByRole('button', { name: 'Open queue' })).toBeVisible()
   expect(posted).toHaveLength(1)
-  expect(posted[0]).toMatchObject({ auto_index: false, auto_crop: false, output_dir: 'D:/Output', rule_set: 'manual' })
+  expect(posted[0]).toMatchObject({
+    auto_index: false,
+    auto_crop: false,
+    output_dir: 'D:/Output',
+    rule_set: 'manual',
+    group_name: 'My show',
+  })
   expect(posted[0].sources).toEqual(sources)
 
   await bar.getByRole('button', { name: 'Add more' }).click() // a clean form for the next batch
@@ -239,7 +371,10 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
   await expect(page.getByText('Show.S01E02.mkv')).toHaveCount(0)
 
   await paste(page, sources[0])
+  await expect(page.getByRole('checkbox', { name: 'Group them' })).toHaveCount(0) // one job: no group
   await bar.getByRole('button', { name: /Add 1 job to queue/ }).click()
+  await expect.poll(() => posted.length).toBe(2)
+  expect(posted[1].group_name).toBeUndefined()
   await bar.getByRole('button', { name: 'Open queue' }).click()
   await expect(page).toHaveURL(/#\/queue/)
   expect(errors).toEqual([])
@@ -398,11 +533,31 @@ test('the file picker moves, ticks, opens and adds from the keyboard', async ({ 
     const url = new URL(r.url())
     if (url.pathname === '/api/fs/list') listed.push(url.searchParams.get('path')!)
   })
+  // The same rows in every folder, as the fixture's, but each listing names the folder asked for: the Path box
+  // then shows when the picker has listed it, and so has put the cursor on its row. Moving on before that, the
+  // cursor could land after the next focus and take it (a CI run's Enter on E02 opened Old instead).
+  await page.route(/\/api\/fs\/list\?/, (route) =>
+    route.fulfill({
+      json: {
+        path: new URL(route.request().url()).searchParams.get('path'),
+        parent: 'D:/',
+        dirs: [{ name: 'Old', path: 'D:/Media/Old', mtime: 1_700_000_000 }],
+        files: files.map((p, i) => ({
+          name: p.slice(9),
+          path: p,
+          size: [3, 1, 2][i % 3] * 1e9,
+          mtime: 1_700_000_000 + i,
+        })),
+      },
+    }),
+  )
   await page.goto('/#/new')
   await page.getByRole('button', { name: 'Browse…' }).first().click()
   const picker = page.getByRole('dialog', { name: 'Sources' })
   const box = (name: string) => picker.getByRole('checkbox', { name: `Pick ${name}` })
+  const shows = (path: string) => expect(picker.getByRole('textbox', { name: 'Path' })).toHaveValue(path)
 
+  await shows('D:/') // listed: before that, ArrowDown has no row to go to
   await picker.getByRole('searchbox', { name: 'Filter this folder' }).press('ArrowDown')
   await expect(box('Old')).toBeFocused()
   await page.keyboard.press('ArrowDown')
@@ -430,10 +585,13 @@ test('the file picker moves, ticks, opens and adds from the keyboard', async ({ 
   await expect(box('Old')).toBeFocused()
   await page.keyboard.press('Enter') // opens the folder, not ticks it
   await expect.poll(() => listed.at(-1)).toBe('D:/Media/Old')
+  await shows('D:/Media/Old')
   await expect(box('Old')).not.toBeChecked()
-  await expect(box('Old')).toBeFocused() // the mock lists D:/Media again; the cursor is on the first row
+  await expect(box('Old')).toBeFocused() // the mock lists the same rows; the cursor is on the first row
   await page.keyboard.press('Backspace')
   await expect.poll(() => listed.at(-1)).toBe('D:/')
+  await shows('D:/')
+  await expect(box('Old')).toBeFocused() // the cursor lands on the folder it left
 
   await box('E02.mkv').focus()
   await page.keyboard.press('Enter') // adds what's ticked
@@ -484,6 +642,9 @@ test('the grip under Matched files drags it taller past the page, without jumpin
   await expect(card).toContainText('30 job(s)')
   const grip = page.getByRole('separator', { name: 'Resize Matched files' })
   const scrollTop = () => card.evaluate((el) => el.closest('.overflow-auto')!.scrollTop)
+  // With "Group them" shown and Linux's wider fonts, the grip starts under the bottom bar, where a grab hits the bar
+  await grip.evaluate((el) => el.scrollIntoView({ block: 'nearest', behavior: 'instant' }))
+  const start = await scrollTop()
   const before = (await card.boundingBox())!.height
 
   const at = (await grip.boundingBox())!
@@ -495,7 +656,7 @@ test('the grip under Matched files drags it taller past the page, without jumpin
   await page.mouse.up()
   const tall = (await card.boundingBox())!.height
   expect(tall).toBeGreaterThan(before + 100)
-  expect(await scrollTop()).toBeGreaterThan(0)
+  expect(await scrollTop()).toBeGreaterThan(start)
 
   const top = await scrollTop()
   const now = (await grip.boundingBox())!

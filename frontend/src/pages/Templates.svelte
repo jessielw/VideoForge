@@ -119,6 +119,14 @@
   const userNames = $derived(new Set(app.presets.template.map((t) => t.name)))
   const containers = $derived(app.ruleSets.find((p) => p.id === ruleSet)?.containers ?? [])
   const container = $derived(containers.find((c) => c.id === draft?.mux.container) ?? containers[0])
+  // The container the extra arguments were typed for (mux.extra_container, which the server sets on a save), when
+  // it isn't this one: warned, as on a job, until the arguments are edited.
+  const typedFor = $derived.by(() => {
+    const m = draft?.mux
+    if (!m?.extra || m.extra_container == null || m.extra !== opened?.data.mux.extra) return null
+    const was = containers.find((c) => c.id === m.extra_container) ?? containers[0]
+    return was && container && was.id !== container.id ? was : null
+  })
   // templates are shared; a rule set without a track editor ignores their audio and subtitles
   const trackEditor = $derived(app.ruleSets.find((p) => p.id === ruleSet)?.track_editor ?? false)
   const trackFlags = $derived(app.ruleSets.find((p) => p.id === ruleSet)?.track_properties ?? [])
@@ -241,6 +249,9 @@
     try {
       if (opened.name && opened.name !== name) app.presets = await api.renamePreset('template', opened.name, name)
       app.presets = await api.savePreset('template', name, saved)
+      // the server says what the extra arguments were typed for
+      const typed = app.presets.template.find((t) => t.name === name)?.data.mux.extra_container
+      saved.mux.extra_container = draft.mux.extra_container = typed
       opened = { name, builtin: false, data: saved }
       if (draftName === name) setName(name) // the folder as stored ("a / b")
       error = ''
@@ -315,7 +326,7 @@
   <section class="flex shrink-0 flex-col {layout.small ? (editing ? 'hidden' : 'w-full') : 'w-72 border-r'}">
     <div class="space-y-3 border-b p-4">
       <div class="flex items-center justify-between gap-2">
-        <h1 class="text-xl font-semibold">Templates</h1>
+        <h1 tabindex="-1" class="text-xl font-semibold outline-none">Templates</h1>
         <Tip text="Select saved templates to delete several at once">
           <Button
             variant={selecting ? 'secondary' : 'ghost'}
@@ -654,6 +665,12 @@
                   placeholder="added to the {container?.tool ?? 'output'} command as typed"
                   bind:value={draft.mux.extra}
                 />
+                {#if typedFor}
+                  <p class="text-xs text-warning @min-[26rem]/output:col-start-2">
+                    These were typed for {typedFor.label}, but the container is now {container?.label}. Change or clear
+                    them.
+                  </p>
+                {/if}
                 <NameSettings
                   mux={draft.mux}
                   mkv={container?.id === 'mkv'}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,32 @@ def made(e: Entry) -> dict[str, Any] | None:
     return to_json(m) | {"kbps": round(m.output_bytes * 8 / ms) if ms else None}
 
 
+# Where each issue is fixed, for the Issues tab's link: a job tab, or "tools" (Settings › Tools). The first entry a
+# code is or starts with wins; a code none matches gets no link (the source's probe, an output check, a plugin's own).
+ISSUE_TABS: tuple[tuple[str, str], ...] = (
+    ("tools.dee_split", "audio"),
+    ("tools.missing", "tools"),
+    ("hdr.dv_second_track", "tools"),
+    ("hdr.dv_el", "tools"),
+    ("hdr.svt_build", "tools"),
+    ("hdr.dv_bake_bs", "video"),
+    ("hdr.dv_custom", "video"),
+    ("video.interlaced", "video"),
+    ("video.", "encoder"),
+    ("hdr.", "encoder"),
+    ("audio.", "audio"),
+    ("subs.", "subs"),
+    ("mux.", "output"),
+    ("name.", "output"),
+    ("outfile.", "output"),
+    ("run.", "log"),
+)
+
+
+def issue_tab(code: str) -> str | None:
+    return next((tab for prefix, tab in ISSUE_TABS if code == prefix or code.startswith(prefix)), None)
+
+
 def issues(e: Entry) -> list[Issue]:
     out: list[Issue] = []
     if e.probe_error:
@@ -73,19 +100,28 @@ def issues(e: Entry) -> list[Issue]:
     return sorted(out, key=lambda i: order[i.severity])
 
 
-def summary(e: Entry) -> dict[str, Any]:
-    first = next((i for i in issues(e) if i.severity is not Severity.INFO), None)
+def summary(e: Entry, groups: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """groups: queue group names by id (JobQueue.group_names)."""
+    found = [i for i in issues(e) if i.severity is not Severity.INFO]
+    first = found[0] if found else None
     s = e.spec
     return {
         "id": e.id,
         "name": s.name,
         "label": s.label,  # tells jobs on one source apart
+        "group": e.group or None,  # the queue group it's shown in
+        "group_name": (groups or {}).get(e.group, "") if e.group else "",
         "source": str(s.inputs.source),
         "rule_set": s.rule_set,
         "status": e.status.value,
         "pause_after_pass1": e.state.pause_after_pass1,
         "progress": e.progress,
         "issue": first.message if first else "",
+        # the queue row's counts: errors and warnings (the job's Issues tab lists them)
+        "issue_counts": {
+            "block": sum(i.severity is Severity.BLOCK for i in found),
+            "warn": sum(i.severity is Severity.WARN for i in found),
+        },
         "output": str(e.state.output) if e.state.output else None,
         "encoder": encoder_label(s.encoder) if s.encodes_video else "reuses encode",
         # A custom script body ignores the crop fields; a reused encode has no script at all.
@@ -120,9 +156,9 @@ def source_facts(e: Entry) -> dict[str, Any] | None:
 
 def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     rule_set = queue.rule_set(e)
-    out = summary(e)
+    out = summary(e, queue.group_names())
     out["spec"] = to_json(e.spec)
-    out["issues"] = [to_json(i) for i in issues(e)]
+    out["issues"] = [to_json(i) | {"tab": issue_tab(i.code)} for i in issues(e)]
     out["steps"] = to_json(e.state.steps)
     out["made"] = made(e)  # the last run that wrote the output: sizes, time, bitrate
     out["plan"] = None

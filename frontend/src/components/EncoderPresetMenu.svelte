@@ -57,6 +57,6 @@
   }}
   applyLabel="Apply encoder settings"
 >
-  {#snippet editor(value, onchange)}<EncoderSettingsEditor {value} {onchange} advancedCollapsed />{/snippet}
+  {#snippet editor(value, onchange)}<EncoderSettingsEditor {value} {onchange} />{/snippet}
   {#snippet transfer(current, disabled)}<EncoderTransfer {current} {disabled} />{/snippet}
 </GroupedPresetMenu>

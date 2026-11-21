@@ -294,10 +294,27 @@ def issues(
     video_settings: VideoSettings | None = None,
 ) -> list[Issue]:
     """What stands in the way of carrying the source's HDR10+ and Dolby Vision (the Encoder tab's "HDR10+ /
-    Dolby Vision from the source")."""
+    Dolby Vision from the source"), and an HDR source tagged as one at 8-bit."""
     if video is None:
         return []
-    return _hdr10plus_issues(video, settings, tools) + _dv_issues(video, settings, tools, video_settings)
+    out = _hdr10plus_issues(video, settings, tools) + _dv_issues(video, settings, tools, video_settings)
+    return out + _depth_issues(video, settings, [i.code for i in out])
+
+
+def _depth_issues(video: VideoInfo, settings: EncoderSettings, codes: list[str]) -> list[Issue]:
+    """PQ or HLG tagged from the source at 8-bit (the Encoder tab's "An HDR source: encode it at 10-bit."); HDR10+
+    and Dolby Vision block on their own, so they need no second message."""
+    if (
+        video.color.transfer not in ("smpte2084", "arib-std-b67")
+        or not settings.source_color
+        or settings.depth >= 10
+        or {"hdr.hdr10plus_depth", "hdr.dv_depth"} & set(codes)
+    ):
+        return []
+    fix = (
+        "VP8 is 8-bit only, so choose another encoder" if settings.encoder is Encoder.VP8 else "Set the bit depth to 10"
+    )
+    return [Issue(Severity.WARN, "hdr.depth", f"An HDR source needs a 10-bit encode, or its gradients can band. {fix}")]
 
 
 def _dv_issues(

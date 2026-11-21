@@ -377,7 +377,7 @@
       ov.options = {}
     })
 
-  // The encode's own settings, folded away under a "Settings" toggle per track.
+  // The track's delay and its encode's own settings, folded away under a "Settings" toggle per track (not saved).
   let openSettings = $state<Record<string, boolean>>({})
   const setOption = (t: AudioTrack, o: EncodeOptionInfo, v: string) =>
     editTrack(t, (ov) => {
@@ -701,6 +701,7 @@
         {@const layoutMark = mark(t, (o) => o?.layout)}
         {@const bitrateMark = mark(t, (o) => o?.bitrate_kbps)}
         {@const delayMark = mark(t, (o) => o?.sync_ms)}
+        {@const changed = (enc ? changedOptions(t, enc) : 0) + (ov?.sync_ms ? 1 : 0)}
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border/60 px-3 py-2 text-sm">
           <AudioPresetMenu
             current={audioPresetSettings(effectiveAudio(ov, planned))}
@@ -766,15 +767,32 @@
               </label>
             </Tip>
           {/if}
-          <Tip
-            text="The track's total delay against the video. Plus plays it later, minus earlier. Detected delay: {t.delay_ms >
-            0
-              ? '+'
-              : ''}{t.delay_ms} ms. Clear the box to go back to it. A change only rebuilds the output file, without encoding again."
-          >
-            <label class="flex items-center gap-1.5 text-muted-foreground">
-              Delay
+          <Tip text={enc?.options.length ? `Delay and ${enc.label} settings` : 'Delay'}>
+            <Button
+              variant="ghost"
+              size="sm"
+              class={openSettings[t.key] ? 'text-primary hover:text-primary' : ''}
+              aria-expanded={!!openSettings[t.key]}
+              onclick={() => (openSettings[t.key] = !openSettings[t.key])}
+            >
+              <SlidersHorizontalIcon />Settings{changed ? ` (${changed})` : ''}
+            </Button>
+          </Tip>
+          {#if planned}<span class="text-xs text-muted-foreground">→ {audioOut(planned)}</span>{/if}
+        </div>
+        {#if openSettings[t.key]}
+          <div class="grid gap-x-4 gap-y-2 border-t border-border/60 px-3 py-2 text-sm sm:grid-cols-[12rem_1fr]">
+            <Tip
+              text="The track's total delay against the video. Plus plays it later, minus earlier. Detected delay: {t.delay_ms >
+              0
+                ? '+'
+                : ''}{t.delay_ms} ms. Clear the box to go back to it. A change only rebuilds the output file, without encoding again."
+            >
+              <label class="text-muted-foreground" for="delay-{t.key}">Delay</label>
+            </Tip>
+            <div class="flex items-center gap-2">
               <Input
+                id="delay-{t.key}"
                 class="w-20 {delayMark ? INPUT_MARK[delayMark] : ''}"
                 type="number"
                 step="1"
@@ -782,28 +800,9 @@
                 value={t.delay_ms + (ov?.sync_ms ?? 0)}
                 aria-label="Delay (ms)"
                 onchange={(e) => setDelay(t, e.currentTarget)}
-              />ms
-            </label>
-          </Tip>
-          {#if enc?.options.length}
-            {@const changed = changedOptions(t, enc)}
-            <Tip text="{enc.label} settings">
-              <Button
-                variant="ghost"
-                size="sm"
-                class={openSettings[t.key] ? 'text-primary hover:text-primary' : ''}
-                aria-expanded={!!openSettings[t.key]}
-                onclick={() => (openSettings[t.key] = !openSettings[t.key])}
-              >
-                <SlidersHorizontalIcon />Settings{changed ? ` (${changed})` : ''}
-              </Button>
-            </Tip>
-          {/if}
-          {#if planned}<span class="text-xs text-muted-foreground">→ {audioOut(planned)}</span>{/if}
-        </div>
-        {#if enc?.options.length && openSettings[t.key]}
-          <div class="grid gap-x-4 gap-y-2 border-t border-border/60 px-3 py-2 text-sm sm:grid-cols-[12rem_1fr]">
-            {#each shownOptions(enc.options, (o) => ov?.options?.[o.key] ?? planned?.options?.[o.key] ?? o.default) as o (o.key)}
+              /><span class="text-muted-foreground">ms</span>
+            </div>
+            {#each enc ? shownOptions(enc.options, (o) => ov?.options?.[o.key] ?? planned?.options?.[o.key] ?? o.default) : [] as o (o.key)}
               {@const value = ov?.options?.[o.key] ?? planned?.options?.[o.key] ?? o.default}
               <Tip text={o.help}>
                 <label class="text-muted-foreground" for="opt-{t.key}-{o.key}">{o.label}</label>

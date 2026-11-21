@@ -147,17 +147,18 @@ test('a long list gets a filter box that narrows it and keeps typing inside it',
 
 // Settings › Files & folders: the same saved folders, managed outside the New jobs menu. Answers GET from `current`
 // and records each PUT, so a test can change what the next load sees.
-async function settingsList(page: Page, folders: { path: string; pinned: boolean }[]) {
+async function settingsList(page: Page, folders: { path: string; pinned: boolean }[], def = '') {
   const errors = await fixture(page, folders)
-  const state = { current: folders, saved: [] as unknown[] }
+  const state = { current: folders, def, saved: [] as unknown[] }
   await page.route('**/api/settings', async (route) => {
     const empty = { output_dir: '', last_dir: '' }
     if (route.request().method() === 'PUT') {
       const body = route.request().postDataJSON()
       state.saved.push(body)
       state.current = body.output_folders
+      state.def = body.output_default
       await route.fulfill({ json: { ...empty, ...body } })
-    } else await route.fulfill({ json: { ...empty, output_folders: state.current, output_default: '' } })
+    } else await route.fulfill({ json: { ...empty, output_folders: state.current, output_default: state.def } })
   })
   await page.goto('/#/settings')
   await page.getByRole('button', { name: 'Files & folders', exact: true }).click()
@@ -181,6 +182,19 @@ test('Files & folders lists saved folders and pins, stars and forgets them', asy
   expect(errors).toEqual([])
 })
 
+test("Files & folders clears the default from its star and keeps the folder's pin", async ({ page }) => {
+  const { errors, state, section } = await settingsList(page, [folder(1, true), folder(2)], 'D:/Out/show-1')
+  const row = section.getByRole('listitem').filter({ hasText: 'show-1' })
+  await expect(row).toContainText('Default')
+  await row.getByRole('button', { name: 'Clear the default' }).click()
+  await expect
+    .poll(() => state.saved.at(-1))
+    .toEqual({ output_folders: [folder(1, true), folder(2)], output_default: '' })
+  await expect(row.getByRole('button', { name: 'Make D:/Out/show-1 the default' })).toBeVisible()
+  await expect(row).not.toContainText('Default')
+  expect(errors).toEqual([])
+})
+
 test('Files & folders keeps keyboard focus with the folder through pin, unpin and forget', async ({ page }) => {
   const { errors, section } = await settingsList(page, [folder(1, true), folder(2)])
   await section.getByRole('button', { name: 'Pin D:/Out/show-2' }).press('Enter')
@@ -191,6 +205,48 @@ test('Files & folders keeps keyboard focus with the folder through pin, unpin an
   await expect(section.getByRole('button', { name: 'Forget D:/Out/show-2' })).toBeFocused()
   await section.getByRole('button', { name: 'Forget D:/Out/show-2' }).press('Enter')
   await expect(section.getByRole('heading', { name: 'Saved output folders' })).toBeFocused()
+  expect(errors).toEqual([])
+})
+
+test('Files & folders says when the saved folders could not be loaded, and Retry loads them', async ({ page }) => {
+  const errors = await fixture(page, [folder(1)])
+  let fail = true
+  await page.route('**/api/settings', (route) =>
+    fail ? route.fulfill({ status: 500, json: { detail: 'disk full' } }) : route.fallback(),
+  )
+  await page.goto('/#/settings')
+  await page.getByRole('button', { name: 'Files & folders', exact: true }).click()
+  const section = page.getByRole('region', { name: 'Saved output folders' })
+  await expect(section.getByRole('alert')).toContainText("Couldn't load the saved output folders: disk full")
+  await expect(section).not.toContainText('No saved output folders yet')
+  fail = false
+  await section.getByRole('button', { name: 'Retry' }).click()
+  await expect(section.getByRole('listitem')).toHaveText([/show-1/])
+  await expect(section.getByRole('alert')).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test('two quick clicks in Files & folders keep both changes', async ({ page }) => {
+  const { errors, state, section } = await settingsList(page, [folder(1, true), folder(2)])
+  // Each save waits until the test lets it through, as over a slow connection.
+  const held: (() => void)[] = []
+  await page.route('**/api/settings', async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback()
+    await new Promise<void>((resolve) => held.push(resolve))
+    await route.fallback()
+  })
+  await section.getByRole('button', { name: 'Pin D:/Out/show-2' }).click()
+  await expect(section.getByRole('button', { name: 'Unpin D:/Out/show-2' })).toBeVisible() // at once
+  await section.getByRole('button', { name: 'Make D:/Out/show-1 the default' }).click()
+  for (let n = 0; n < 2; n++) {
+    await expect.poll(() => held.length).toBeGreaterThan(0)
+    held.shift()!()
+  }
+  await expect
+    .poll(() => state.saved.at(-1))
+    .toEqual({ output_folders: [folder(1, true), folder(2, true)], output_default: 'D:/Out/show-1' })
+  await expect(section.getByRole('button', { name: 'Unpin D:/Out/show-2' })).toBeVisible()
+  await expect(section.getByRole('listitem').filter({ hasText: 'show-1' })).toContainText('Default')
   expect(errors).toEqual([])
 })
 

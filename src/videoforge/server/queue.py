@@ -42,7 +42,7 @@ from videoforge.core.disks import disks, low_space
 from videoforge.core.events import EventBus, IndexFinished, JobFinished, JobStarted, QueueFinished
 from videoforge.core.execute import process
 from videoforge.core.execute.control import Priority
-from videoforge.core.execute.mux import MuxSettings
+from videoforge.core.execute.mux import MuxSettings, extra_container
 from videoforge.core.execute.process import Cancelled, CancelToken, ToolError
 from videoforge.core.job import (
     STEP_TAIL,
@@ -99,6 +99,15 @@ _PROGRESS_INTERVAL = 0.25  # seconds between progress events per job
 _ETA_AFTER = (0.01, 5.0)  # a job's time left is guessed once this run moved overall this far, for this long
 logger = logging.getLogger(__name__)
 LANE_SETTING = "index_lane"  # the store's record of the lane: job ids in order, the one being indexed first
+MAX_GROUP_NAME = 80
+
+
+def clean_group_name(name: object) -> str:
+    """A queue group's name as given, trimmed: 1 to MAX_GROUP_NAME characters (two groups may share one)."""
+    text = name.strip() if isinstance(name, str) else ""
+    if not 1 <= len(text) <= MAX_GROUP_NAME:
+        raise ValueError(f"A group name is 1 to {MAX_GROUP_NAME} characters")
+    return text
 
 
 _OUTFILE = ("outfile.shared", "outfile.exists", "outfile.missing")  # JobQueue._refresh_outputs' issue codes
@@ -194,6 +203,9 @@ class Entry:
     # The last run's output per step (in memory; state.run keeps only each step's tail).
     step_lines: dict[str, deque[str]] = field(default_factory=dict)
     event_seq: int = 0  # log/step snapshot boundary, per job and server lifetime
+    # The queue group it's shown in (JobQueue._groups), "" for none. A group's jobs are always next to each
+    # other in the queue order (JobQueue._normalize_groups). A queue matter only: not in the spec or job file.
+    group: str = ""
 
     @property
     def id(self) -> str:
@@ -290,6 +302,7 @@ class JobQueue:
         self._source_locks: dict[str, threading.Lock] = {}  # per work folder (Entry.source_lock)
         self._removed: dict[str, tuple[Entry, int]] = {}  # last 100 removals, undo until server restart
         self._order: list[str] = []
+        self._groups: dict[str, str] = {}  # queue groups: name by id (a batch shown together, e.g. a season)
         self._lock = threading.RLock()
         self._probes = ThreadPoolExecutor(max_workers=probe_workers, thread_name_prefix="probe")
         self._worker: threading.Thread | None = None
@@ -348,7 +361,7 @@ class JobQueue:
 
     def _save(self, e: Entry) -> None:
         try:
-            self.store.save_job(e.spec, e.state, queued=e.queued, running=e.running)
+            self.store.save_job(e.spec, e.state, queued=e.queued, running=e.running, group=e.group)
         except sqlite3.ProgrammingError:
             # The store closed after a shutdown that stopped waiting for this job: the store keeps it as
             # running, so the next start queues it again, as after a crash.
@@ -379,8 +392,12 @@ class JobQueue:
     def load(self) -> None:
         """Jobs from the store; a job the server stopped in the middle of is queued again, and the index
         lane goes on where it stopped (a job stopped mid-index is indexed again)."""
+        groups = self.store.load_groups()
+        with self._lock:
+            self._groups = groups
         for stored in self.store.load_jobs():
             e = Entry(stored.spec, stored.state, queued=stored.queued or stored.running)
+            e.group = stored.group if stored.group in groups else ""
             if stored.running:
                 e.state.status = None
                 e.state.error = (
@@ -391,6 +408,9 @@ class JobQueue:
                 self._entries[e.id] = e
                 self._order.append(e.id)
             self._save(e)
+        with self._lock:  # repairs a group split up or left empty (an older version, a crash)
+            if self._normalize_groups():
+                self.store.reorder(self._order)
         lane = [i for i in self.store.get_global(LANE_SETTING) or [] if i in self._entries]
         logger.info(
             "%d job(s) loaded, %d queued, %d to index",
@@ -421,13 +441,17 @@ class JobQueue:
         subs_default: TemplateSubs | None = None,
         auto_index: bool | None = None,
         auto_crop: bool | None = None,
+        group_name: str | None = None,
     ) -> tuple[list[Entry], list[str]]:
         """One job per matched source, starting from the rule set's video and mux defaults, or the template,
         then the given settings; subs_default (Settings' subtitle rules) for a job its template sets none for
         (unless the rule set picks tracks by its own rules).
         A source already in the queue is kept unless its exact job ID is explicitly replaced.
         auto_index / auto_crop override Settings' for this batch (None: the setting).
+        group_name: the new jobs go in a queue group of that name, when there are two or more.
         Returns (new jobs, names skipped because they are busy)."""
+        if group_name is not None:
+            group_name = clean_group_name(group_name)
         rule_set = self.rule_sets(rule_set_id)
         index_new = self.auto_index if auto_index is None else auto_index
         crop_new = self.auto_crop if auto_crop is None else auto_crop
@@ -477,6 +501,8 @@ class JobQueue:
                 self._save(e)
                 added.append(e)
                 self.events.publish("job.added", id=e.id)
+        if group_name is not None and len(added) > 1:
+            self.group([e.id for e in added], group_name)
         self.probe([e.id for e in added])
         return added, skipped
 
@@ -559,6 +585,7 @@ class JobQueue:
                     k: _copy(v) for k, v in dict(e.state.steps).items() if all(p.parent == shared for p in v.outputs)
                 }
                 c = Entry(spec, JobState(steps=steps), probed=_copy(e.probed), probing=e.probed is None)
+                c.group = e.group  # right after the job, so in its group
                 self._attach(c)
                 self._entries[c.id] = c
                 self._order.insert(self._order.index(e.id) + 1, c.id)
@@ -827,7 +854,7 @@ class JobQueue:
             if qpf is not None:
                 s.qpf = qpf
             if mux is not None:
-                s.mux = mux
+                s.mux = replace(mux, extra_container=extra_container(mux, s.mux))
             if container is not None:
                 s.mux = replace(s.mux, container=container)
             if label is not None:
@@ -880,12 +907,18 @@ class JobQueue:
                     continue
                 e, position = self._removed.pop(job_id)
                 e.queued = e.index_queued = e.index_now = e.index_held = False
+                if e.group not in self._groups:  # ungrouped meanwhile
+                    e.group = ""
+                position = min(position, len(self._order))
+                if span := [i for i, o in enumerate(self._order) if self._entries[o].group == e.group != ""]:
+                    position = min(max(position, span[0]), span[-1] + 1)  # back in its group, wherever it is now
                 self._attach(e)
                 self._entries[job_id] = e
-                self._order.insert(min(position, len(self._order)), job_id)
+                self._order.insert(position, job_id)
                 self._replan(e)
                 self._save(e)
                 restored.append(job_id)
+            self._normalize_groups()
             self.store.reorder(self._order)
         for job_id in restored:
             self.events.publish("job.added", id=job_id)
@@ -895,8 +928,111 @@ class JobQueue:
         with self._lock:
             known = [i for i in ids if i in self._entries]
             self._order = known + [i for i in self._order if i not in known]
+            self._normalize_groups()
             self.store.reorder(self._order)
         self.events.publish("order", ids=list(self._order))
+
+    # --- queue groups ------------------------------------------------------------------
+
+    def group_names(self) -> dict[str, str]:
+        with self._lock:
+            return dict(self._groups)
+
+    def _normalize_groups(self) -> bool:
+        """Under the lock: each group's jobs together, where its first job is, in their order; a group with no
+        jobs left goes (unless a removed job that can still be restored is in it). Whether the order changed."""
+        members: dict[str, list[str]] = defaultdict(list)
+        for job_id in self._order:
+            if g := self._entries[job_id].group:
+                members[g].append(job_id)
+        order: list[str] = []
+        for job_id in self._order:
+            g = self._entries[job_id].group
+            if not g:
+                order.append(job_id)
+            elif members[g] and members[g][0] == job_id:
+                order.extend(members[g])
+        changed = order != self._order
+        self._order = order
+        kept = set(members) | {e.group for e, _ in self._removed.values()}
+        for g in [g for g in self._groups if g not in kept]:
+            del self._groups[g]
+            self.store.delete_group(g)
+        return changed
+
+    def _regroup(self, changed: Iterable[Entry]) -> None:
+        """Under the lock, after the order or groups changed: keep the groups together, save, and tell."""
+        for e in changed:
+            self._save(e)
+            self._changed(e)
+        self._normalize_groups()
+        self.store.reorder(self._order)
+        self.events.publish("order", ids=list(self._order))
+
+    def move(self, ids: Iterable[str], before: str | None, group: str) -> None:
+        """Move jobs (in their queue order) to just before `before` (the end when None), into `group`
+        ("" for none). A job moves out of its group or into another this way; moving all of a group's jobs
+        with their own group moves the group. A place inside another group ends up just past it."""
+        with self._lock:
+            if group and group not in self._groups:
+                raise KeyError(f"No queue group {group!r}")
+            wanted = set(ids)
+            moving = [i for i in self._order if i in wanted]
+            if not moving:
+                return
+            rest = [i for i in self._order if i not in wanted]
+            if before in wanted:  # the place is the first job after it that stays
+                after = self._order[self._order.index(before) :]
+                before = next((i for i in after if i not in wanted), None)
+            at = rest.index(before) if before in rest else len(rest)
+            self._order = rest[:at] + moving + rest[at:]
+            changed = [self._entries[i] for i in moving if self._entries[i].group != group]
+            for e in changed:
+                e.group = group
+            self._regroup(changed)
+
+    def group(self, ids: Iterable[str], name: object) -> str:
+        """A new group of these jobs (out of any other), where the first of them is; its id."""
+        name = clean_group_name(name)
+        with self._lock:
+            wanted = set(ids)
+            moving = [i for i in self._order if i in wanted]
+            if not moving:
+                raise KeyError("No such jobs")
+            gid = uuid.uuid4().hex[:12]
+            self._groups[gid] = name
+            self.store.save_group(gid, name)
+            first = self._order.index(moving[0])
+            rest = [i for i in self._order if i not in wanted]
+            at = sum(1 for i in self._order[:first] if i not in wanted)
+            self._order = rest[:at] + moving + rest[at:]
+            for i in moving:
+                self._entries[i].group = gid
+            self._regroup([self._entries[i] for i in moving])
+        return gid
+
+    def ungroup(self, group: str) -> None:
+        """The group goes; its jobs stay where they are."""
+        with self._lock:
+            if group not in self._groups:
+                raise KeyError(f"No queue group {group!r}")
+            del self._groups[group]
+            self.store.delete_group(group)
+            changed = [e for e in self._entries.values() if e.group == group]
+            for e in changed:
+                e.group = ""
+            self._regroup(changed)
+
+    def rename_group(self, group: str, name: object) -> None:
+        name = clean_group_name(name)
+        with self._lock:
+            if group not in self._groups:
+                raise KeyError(f"No queue group {group!r}")
+            self._groups[group] = name
+            self.store.save_group(group, name)
+            for e in self._entries.values():
+                if e.group == group:
+                    self._changed(e)
 
     # --- running -----------------------------------------------------------------------
 

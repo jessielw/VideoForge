@@ -30,6 +30,7 @@ from videoforge.core.models import (
     JobInputs,
     Overrides,
     Plan,
+    Severity,
     SourceInfo,
     TemplateAudio,
     TemplateChoice,
@@ -143,7 +144,30 @@ class JobSpec:
 
     def container(self, rule_set: RuleSet) -> str:
         """The job's container: its own pick when the rule set offers it, else the rule set's."""
-        return self.mux.container if self.mux.container in rule_set.containers else rule_set.container
+        return offered(self.mux.container, rule_set)
+
+
+def offered(container: str, rule_set: RuleSet) -> str:
+    """A container pick ("" = the rule set's) as the rule set makes it: the pick when it's offered, else its own."""
+    return container if container in rule_set.containers else rule_set.container
+
+
+def extra_issues(spec: JobSpec, rule_set: RuleSet) -> list[Issue]:
+    """The extra muxer arguments were typed for another container's tool than the job's (mux.extra_container)."""
+    typed = spec.mux.extra_container
+    if not spec.mux.extra or typed is None:
+        return []
+    was, now = offered(typed, rule_set), spec.container(rule_set)
+    if was == now:
+        return []
+    return [
+        Issue(
+            Severity.WARN,
+            "mux.extra_container",
+            f"The extra arguments were typed for {MUXERS[was].label}, but the container is now {MUXERS[now].label}. "
+            "Change or clear them",
+        )
+    ]
 
 
 def clean_label(text: str) -> str:
@@ -295,6 +319,7 @@ def plan_spec(spec: JobSpec, probed: ProbedInputs, rule_set: RuleSet, tools: Too
     if tools is not None:
         plan.issues += tool_issues(plan, tools, spec.container(rule_set))
     plan.issues += mux_issues(plan, spec.container(rule_set))
+    plan.issues += extra_issues(spec, rule_set)
     plan.issues += naming.issues(spec)
     if spec.encodes_video:
         plan.issues += encoders.issues(spec.encoder, probed.source.video, spec.makes_qpfile)

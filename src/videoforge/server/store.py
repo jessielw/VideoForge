@@ -33,8 +33,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     state TEXT NOT NULL,
     queued INTEGER NOT NULL DEFAULT 0,
     running INTEGER NOT NULL DEFAULT 0,
-    updated TEXT NOT NULL
+    updated TEXT NOT NULL,
+    grp TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS queue_groups (id TEXT PRIMARY KEY, name TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL, position REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
@@ -63,6 +65,7 @@ class StoredJob:
     state: JobState
     queued: bool
     running: bool  # true only if the server stopped mid-run
+    group: str = ""  # the queue group it's in (queue_groups), "" for none
 
 
 class Store:
@@ -86,7 +89,10 @@ class Store:
         self._reserved: dict[str, tuple[str, ...]] = {}
 
     def _migrate(self) -> None:
-        """Settings and presets saved before profiles (0.1.0-beta.11) become the first profile's."""
+        """Settings and presets saved before profiles (0.1.0-beta.11) become the first profile's; jobs saved
+        before queue groups get the column for them."""
+        if "grp" not in [row[1] for row in self._db.execute("PRAGMA table_info(jobs)")]:
+            self._db.execute("ALTER TABLE jobs ADD COLUMN grp TEXT NOT NULL DEFAULT ''")
         columns = [row[1] for row in self._db.execute("PRAGMA table_info(settings)")]
         if not columns or "profile" in columns:
             for sql in PROFILE_TABLES:
@@ -225,13 +231,15 @@ class Store:
 
     def load_jobs(self) -> list[StoredJob]:
         with self._lock:
-            rows = self._db.execute("SELECT spec, state, queued, running FROM jobs ORDER BY position").fetchall()
+            rows = self._db.execute("SELECT spec, state, queued, running, grp FROM jobs ORDER BY position").fetchall()
         return [
-            StoredJob(from_json(JobSpec, json.loads(spec)), from_json(JobState, json.loads(state)), bool(q), bool(r))
-            for spec, state, q, r in rows
+            StoredJob(from_json(JobSpec, json.loads(spec)), from_json(JobState, json.loads(state)), bool(q), bool(r), g)
+            for spec, state, q, r, g in rows
         ]
 
-    def save_job(self, spec: JobSpec, state: JobState, *, queued: bool = False, running: bool = False) -> None:
+    def save_job(
+        self, spec: JobSpec, state: JobState, *, queued: bool = False, running: bool = False, group: str = ""
+    ) -> None:
         now = datetime.now().isoformat(timespec="seconds")
         with self._lock:
             row = self._db.execute("SELECT position FROM jobs WHERE id = ?", (spec.id,)).fetchone()
@@ -239,8 +247,8 @@ class Store:
                 row[0] if row else (self._db.execute("SELECT COALESCE(MAX(position), 0) + 1 FROM jobs").fetchone()[0])
             )
             self._db.execute(
-                "INSERT OR REPLACE INTO jobs (id, position, spec, state, queued, running, updated)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO jobs (id, position, spec, state, queued, running, updated, grp)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     spec.id,
                     position,
@@ -249,6 +257,7 @@ class Store:
                     int(queued),
                     int(running),
                     now,
+                    group,
                 ),
             )
 
@@ -262,6 +271,21 @@ class Store:
             for i, job_id in enumerate(ids):
                 self._db.execute("UPDATE jobs SET position = ? WHERE id = ?", (i + 1, job_id))
             self._db.execute("COMMIT")
+
+    # --- queue groups (a batch of jobs shown together, e.g. a season) -----------------
+
+    def load_groups(self) -> dict[str, str]:
+        """Each group's name by its id."""
+        with self._lock:
+            return dict(self._db.execute("SELECT id, name FROM queue_groups").fetchall())
+
+    def save_group(self, group_id: str, name: str) -> None:
+        with self._lock:
+            self._db.execute("INSERT OR REPLACE INTO queue_groups (id, name) VALUES (?, ?)", (group_id, name))
+
+    def delete_group(self, group_id: str) -> None:
+        with self._lock:
+            self._db.execute("DELETE FROM queue_groups WHERE id = ?", (group_id,))
 
     # --- settings and presets -------------------------------------------------------
 

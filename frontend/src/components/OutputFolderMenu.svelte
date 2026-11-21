@@ -11,7 +11,7 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { api } from '../lib/api'
   import type { OutputFolder } from '../lib/api'
-  import { forget, togglePin } from '../lib/outputFolders'
+  import { forget, savesInTurn, togglePin, type Saved } from '../lib/outputFolders'
   import Tip from './Tip.svelte'
 
   let { onpick, disabled = false }: { onpick: (path: string) => void; disabled?: boolean } = $props()
@@ -27,18 +27,29 @@
     fallback = s?.output_default ?? ''
   }
 
+  const send = savesInTurn(async (s) => {
+    const r = await api.saveSettings({ output_folders: s.folders, output_default: s.fallback })
+    return { folders: r.output_folders, fallback: r.output_default }
+  })
+  // A click shows at once; the server's list replaces it once no newer click is waiting (a failed save: reloaded).
   async function save(next: OutputFolder[], def = fallback) {
-    const s = await api.saveSettings({ output_folders: next, output_default: def }).catch(() => null)
-    if (s) {
-      folders = s.output_folders
-      fallback = s.output_default
+    folders = next
+    fallback = def
+    try {
+      const reply = await send({ folders: next, fallback: def })
+      if (reply) {
+        folders = reply.folders
+        fallback = reply.fallback
+      }
+    } catch {
+      await load()
     }
   }
 
   const shown = $derived(folders.filter((f) => f.path.toLowerCase().includes(filter.trim().toLowerCase())))
   const pinned = $derived(shown.filter((f) => f.pinned))
   const recent = $derived(shown.filter((f) => !f.pinned))
-  const apply = (r: { folders: OutputFolder[]; fallback: string }) => save(r.folders, r.fallback)
+  const apply = (r: Saved) => save(r.folders, r.fallback)
   const toggle = (f: OutputFolder) => apply(togglePin(folders, f, fallback))
   const remove = (f: OutputFolder) => apply(forget(folders, f, fallback))
 </script>

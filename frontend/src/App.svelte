@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { ModeWatcher } from 'mode-watcher'
   import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
   import ListVideoIcon from '@lucide/svelte/icons/list-video'
@@ -39,6 +39,22 @@
   onMount(() => {
     installDrops()
     void app.start()
+  })
+
+  // A page change: focus that was on the old page (gone with it, so on <body>) goes to the new page's heading, or to
+  // <main> on a page without one. Focus elsewhere, such as on the side menu, stays.
+  let main = $state<HTMLElement>()
+  let shownPage = router.page
+  $effect(() => {
+    const page = router.page
+    if (page === shownPage) return
+    shownPage = page
+    void tick().then(() => {
+      if (document.activeElement && document.activeElement !== document.body) return
+      const heading = main?.querySelector<HTMLElement>('h1')
+      heading?.focus()
+      if (!heading || document.activeElement !== heading) main?.focus() // none, or hidden (Templates' editor, narrow)
+    })
   })
 
   const navCollapsed = $derived(layout.navCollapsed || layout.compact)
@@ -85,12 +101,15 @@
       aria-label="Main navigation"
     >
       <div class="flex items-center gap-2 py-4 {navCollapsed ? 'justify-center' : 'px-5'}">
-        <Tip side="right" text={app.version ? `VideoForge ${app.version}` : undefined}>
+        <Tip side="right" class="shrink-0" text={app.version ? `VideoForge ${app.version}` : undefined}>
           <img src="/favicon.svg" alt="" class="size-6" />
         </Tip>
         {#if !navCollapsed}
-          <span class="text-base font-semibold">VideoForge</span>
-          {#if app.version}<span class="text-xs text-muted-foreground tabular-nums">{app.version}</span>{/if}
+          <!-- the version under the name: any version, in any font, leaves the logo its size -->
+          <div class="flex min-w-0 flex-col leading-tight">
+            <span class="text-base font-semibold">VideoForge</span>
+            {#if app.version}<span class="truncate text-xs text-muted-foreground tabular-nums">{app.version}</span>{/if}
+          </div>
         {/if}
       </div>
       <div class="flex flex-col gap-0.5 px-2">
@@ -181,7 +200,7 @@
             {#if held}
               <Tip
                 class="block truncate text-muted-foreground"
-                text="An encode is reading their disk. Settings › Queue & indexing › Wait while an encode reads the same disk"
+                text="An encode is reading their disk. Indexing waits for it (Settings › Queue & indexing › Wait while an encode reads the same disk), and always while another job of the same source runs."
               >
                 {held} to index after the encode
               </Tip>
@@ -195,7 +214,7 @@
       {/if}
     </nav>
 
-    <main id="main" tabindex="-1" class="flex min-w-0 flex-1 flex-col overflow-hidden outline-none">
+    <main bind:this={main} id="main" tabindex="-1" class="flex min-w-0 flex-1 flex-col overflow-hidden outline-none">
       {#if app.connectionError}
         <div class="m-6 shrink-0 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
           Couldn't reach the VideoForge server: {app.connectionError}

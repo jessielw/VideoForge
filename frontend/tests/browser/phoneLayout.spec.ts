@@ -13,6 +13,8 @@ async function phoneFixture(page: Page) {
     id: `job-${i}`,
     name: i === 0 ? LONG : `Show S01E0${i + 1}`,
     label: '',
+    group: null,
+    group_name: '',
     source: `D:\\Media\\Show\\Season 01\\Show.S01E0${i + 1}.mkv`,
     rule_set: 'manual',
     status,
@@ -32,6 +34,7 @@ async function phoneFixture(page: Page) {
           }
         : null,
     issue: status === 'failed' ? 'x265 exited with code 1' : '',
+    issue_counts: { block: status === 'failed' ? 1 : 0, warn: 0 },
     output: null,
     encoder: 'x265',
     crop: null,

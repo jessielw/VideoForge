@@ -29,7 +29,7 @@
 
 <div class="flex h-full flex-col gap-3 p-6 max-sm:p-3">
   <header class="flex items-center gap-3">
-    <h1 class="text-xl font-semibold">Log</h1>
+    <h1 tabindex="-1" class="text-xl font-semibold outline-none">Log</h1>
     <NativeSelect bind:value={filter} class="min-w-0" aria-label="Job">
       <option value="">All jobs</option>
       {#each jobs as id (id)}<option value={id}>{app.jobName(id)}</option>{/each}

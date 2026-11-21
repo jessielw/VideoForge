@@ -78,10 +78,11 @@
     }))
     return { mode: 'position', slots, rules: [], others: 'keep' }
   }
-  // The job's settings match a template when all but the crop and tracks do (per source, or rules).
+  // The job's settings match a template when all but the crop and tracks do (per source, or rules), and the
+  // container its extra arguments were typed for (when they were typed, not a setting).
   function canon(v: unknown): string {
     return JSON.stringify(v, (key, val) =>
-      key === 'crop' || key === 'crop_mode' || key === 'audio' || key === 'subs'
+      key === 'crop' || key === 'crop_mode' || key === 'audio' || key === 'subs' || key === 'extra_container'
         ? undefined
         : val && typeof val === 'object' && !Array.isArray(val)
           ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b)))

@@ -54,6 +54,7 @@ export type OutputFolder = { path: string; pinned: boolean }
 export type Settings = {
   output_dir: string
   last_dir: string
+  last_dirs?: Record<string, string> // the last folder of each kind of Browse ("sources", "output"...)
   output_folders: OutputFolder[]
   output_default: string
 }
@@ -276,6 +277,8 @@ export const api = {
       /** this batch only; left out, Settings' value applies */
       auto_index?: boolean
       auto_crop?: boolean
+      /** the new jobs go in a queue group of this name, when there are two or more */
+      group_name?: string
     },
   ) =>
     post<{
@@ -312,6 +315,12 @@ export const api = {
   importJobs: (paths: string[]) =>
     post<{ added: string[]; skipped: { path: string; reason: string }[] }>('/api/jobs/import', { paths }),
   reorder: (ids: string[]) => post<{ ids: string[] }>('/api/jobs/reorder', { ids }),
+  // the jobs go just before `before` (null: at the end), into queue group `group` ('' for none)
+  move: (ids: string[], before: string | null, group: string) =>
+    post<{ ids: string[] }>('/api/jobs/move', { ids, before, group }),
+  group: (ids: string[], name: string) => post<{ group: string }>('/api/jobs/group', { ids, name }),
+  renameGroup: (id: string, name: string) => post(`/api/groups/${encodeURIComponent(id)}/rename`, { name }),
+  ungroup: (id: string) => post(`/api/groups/${encodeURIComponent(id)}/ungroup`, {}),
   reprobe: (ids: string[]) => post('/api/jobs/reprobe', { ids }),
   log: (id: string) => get<{ lines: string[] }>(`/api/jobs/${id}/log`),
   commands: (id: string) => get<CommandStep[]>(`/api/jobs/${id}/commands`),

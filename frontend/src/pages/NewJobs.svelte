@@ -1,5 +1,5 @@
 <script lang="ts">
-  // New jobs: rule set + language, input slots, output folder, live match preview, Add to queue.
+  // New jobs: input slots, output folder, rule set, language, template and its parts, live match preview, Add to queue.
   import { flushSync, onDestroy, onMount, untrack } from 'svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import ListChecksIcon from '@lucide/svelte/icons/list-checks'
@@ -20,6 +20,7 @@
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
   import { groupByFolder } from '../lib/templateFolders'
+  import { defaultGroupName } from '../lib/queueView'
   import { ENCODERS, type EncoderSettings, type MatchResult, type SubtitleTiming } from '../lib/types'
   import LanguagePicker from '../components/LanguagePicker.svelte'
   import MatchDialog from '../components/MatchDialog.svelte'
@@ -335,6 +336,18 @@
   }
 
   const newJobs = $derived((result?.jobs.filter((j) => !j.existing_id).length ?? 0) + replacements.length)
+  // Two or more new jobs go in a queue group (shown together, collapsible), named after them unless the
+  // name is typed (for these inputs).
+  let grouping = $state(true)
+  let typedGroupName = $state<{ key: string; name: string } | null>(null)
+  const groupName = $derived(
+    typedGroupName?.key === inputKey
+      ? typedGroupName.name
+      : defaultGroupName(
+          result?.jobs.filter((j) => !j.existing_id || replacements.includes(j.existing_id)).map((j) => j.source) ?? [],
+        ),
+  )
+  const groupsJobs = $derived(grouping && newJobs > 1 && !!groupName.trim())
   const cropWillRun = $derived(autoCrop && template?.data.crop_mode !== 'fixed')
   // What pressing Add will do, in words.
   const summary = $derived.by(() => {
@@ -342,11 +355,25 @@
     if (matching || !result) return 'Matching…'
     const after = cropWillRun ? 'index and auto-crop' : autoIndex ? 'index' : 'neither index nor crop'
     return [
-      `${newJobs} job${newJobs === 1 ? '' : 's'}`,
+      `${newJobs} job${newJobs === 1 ? '' : 's'}${groupsJobs ? ` in group ${groupName.trim()}` : ''}`,
       template?.name ?? 'no template',
       `will ${after}`,
       output[0] ? `saved to ${output[0]}` : 'choose an output folder',
     ].join(' · ')
+  })
+
+  // What the last Add did, and when it added jobs, what comes next.
+  const completionText = $derived.by(() => {
+    if (!completion) return ''
+    const n = completion.added.length
+    return [
+      n ? `Added ${n} job${n === 1 ? '' : 's'}` : 'Nothing added',
+      completion.skipped.length ? `${completion.skipped.length} already in the queue, kept` : '',
+      completion.unmatched.length ? `${completion.unmatched.length} unmatched` : '',
+      n ? 'Next: check each job in the Queue, then tick its box to queue it.' : '',
+    ]
+      .filter(Boolean)
+      .join(' · ')
   })
 
   async function add() {
@@ -363,6 +390,7 @@
         output_dir: output[0] ?? null,
         auto_index: autoIndex,
         auto_crop: autoCrop,
+        group_name: groupsJobs ? groupName.trim() : undefined,
         template: template && {
           ...$state.snapshot(template.data),
           encoder: $state.snapshot(encoder ?? template.data.encoder),
@@ -395,7 +423,7 @@
 <div class="flex h-full flex-col">
   <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-6" bind:this={scroller}>
     <header class="flex shrink-0 flex-wrap items-center gap-3">
-      <h1 class="text-xl font-semibold">New jobs</h1>
+      <h1 tabindex="-1" class="text-xl font-semibold outline-none">New jobs</h1>
       <span class="text-sm text-muted-foreground"
         >Use Browse, or copy files as paths (Explorer: Ctrl+Shift+C) and paste them on any page, outside a text box.
         Each source file becomes one job. A folder adds a job for each source file in it, but not in its subfolders.</span
@@ -410,6 +438,7 @@
           hint="MKV, MP4 or M2TS / TS files, or a folder of them"
           bind:paths={sources}
           extensions={['.mkv', '.mp4', '.m4v', '.m2ts', '.mts', '.ts']}
+          remember="sources"
         />
         <details open={!!(encodes.length || subtitles.length || chapters.length)}>
           <summary class="cursor-pointer text-sm text-muted-foreground select-none">
@@ -421,6 +450,7 @@
               hint="Optional. Video you've already encoded goes into the output instead of a new encode. Each one is matched to its source by name or SxxEyy."
               bind:paths={encodes}
               extensions={['.mkv', '.h264', '.264', '.hevc', '.265', '.h265', '.avc']}
+              remember="encodes"
             />
             {#if takesSubs}
               <PathSlot
@@ -428,6 +458,7 @@
                 hint="Subtitle files or folders, matched to each source by name, SxxEyy or the closest name; Matched files lets you match the rest. With one source, they all go to it. A source you add none for gets the subtitles next to it, or one folder down."
                 bind:paths={subtitles}
                 extensions={['.srt', '.ass', '.ssa', '.sup', '.idx']}
+                remember="subtitles"
               />
             {/if}
             <PathSlot
@@ -435,33 +466,48 @@
               hint="Optional. Without a file, AutoQPF uses the source's chapters or adds one every 5%. You can turn AutoQPF off on the job's Output tab."
               bind:paths={chapters}
               extensions={['.txt', '.xml']}
+              remember="chapters"
             />
           </div>
         </details>
-        <PathSlot label="Output folder" hint="Where finished files are saved" bind:paths={output} mode="folder">
+        <PathSlot
+          label="Output folder"
+          hint="Where finished files are saved"
+          bind:paths={output}
+          mode="folder"
+          remember="output"
+        >
           {#snippet actions()}<OutputFolderMenu onpick={(path) => (output = [path])} />{/snippet}
         </PathSlot>
         <div
           class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-3 @min-[40rem]/import:grid-cols-[8rem_minmax(0,1fr)]"
         >
-          <div class="text-sm text-muted-foreground">Rule set</div>
+          <!-- The choices in the order they're made: what decides the tracks, the template, the parts of it this
+               batch changes, then what happens after adding. A new user has one rule set: nothing to choose. -->
+          {#if app.ruleSets.length > 1}
+            <div class="text-sm text-muted-foreground">Rule set</div>
+            <div class="flex flex-wrap items-center gap-3">
+              <NativeSelect bind:value={ruleSet} aria-label="Rule set">
+                {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+              </NativeSelect>
+              <p class="basis-full text-xs text-muted-foreground">
+                The rule set picks each job's tracks and default settings, and checks the finished file. Manual keeps
+                every track in source order for you to change.
+              </p>
+            </div>
+          {/if}
+          <div class="text-sm text-muted-foreground">Original language</div>
           <div class="flex flex-wrap items-center gap-3">
-            <NativeSelect bind:value={ruleSet} aria-label="Rule set">
-              {#each app.ruleSets as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-            </NativeSelect>
-            <label class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              Original language
-              <LanguagePicker
-                class="w-48"
-                aria-label="Original language"
-                placeholder="Guess from audio"
-                value={language}
-                onchange={(v: string) => (language = v)}
-              />
-            </label>
+            <LanguagePicker
+              class="w-48"
+              aria-label="Original language"
+              placeholder="Guess from audio"
+              value={language}
+              onchange={(v: string) => (language = v)}
+            />
             <p class="basis-full text-xs text-muted-foreground">
-              The rule set picks each job's tracks and default settings, and checks the finished file. Manual keeps
-              every track in source order for you to change.
+              Template audio rules and some rule sets choose tracks by it. Left empty, VideoForge reads it from the
+              source's audio.
             </p>
           </div>
           <div class="text-sm text-muted-foreground">Template</div>
@@ -483,43 +529,12 @@
               {/each}
             </NativeSelect>
             <button class="underline underline-offset-2" onclick={() => router.go('templates')}>Edit templates…</button>
-            {#if containers.length > 1}
-              <label class="flex flex-wrap items-center gap-2">
-                Container
-                <NativeSelect bind:value={container}>
-                  {#each containers as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
-                </NativeSelect>
-              </label>
-            {/if}
             {#if template?.data.crop_mode === 'auto'}
               <span>Crop detected per job after adding</span>
             {:else if template?.data.crop_mode === 'fixed'}
               {@const c = template.data.video.crop}
               <span>Crop {c.left}/{c.top}/{c.right}/{c.bottom} on every job</span>
             {/if}
-          </div>
-          <!-- self-start: the row starts with a checkbox, whose baseline moves with its tick; its first line is at the top -->
-          <div class="self-start text-sm text-muted-foreground">After adding</div>
-          <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-            <span class="flex items-center gap-2">
-              <label class="flex items-center gap-2">
-                <Checkbox
-                  checked={autoIndex}
-                  aria-describedby="new-jobs-index-help"
-                  onCheckedChange={(v) => (autoIndex = v === true)}
-                />Index
-              </label>
-              <span id="new-jobs-index-help" class="text-xs text-muted-foreground"
-                >(indexes each job in the background for its preview)</span
-              >
-            </span>
-            <label class="flex items-center gap-2">
-              <Checkbox checked={autoCrop} onCheckedChange={(v) => (autoCrop = v === true)} />Auto-crop
-              <span class="text-xs text-muted-foreground">(indexes first)</span>
-            </label>
-            <span class="text-xs text-muted-foreground"
-              >These two apply to this batch. Their defaults are in Settings › Queue & indexing.</span
-            >
           </div>
           {#if encoder}
             <div class="text-sm text-muted-foreground">Encoder preset</div>
@@ -543,10 +558,59 @@
                 >
               </div>
               <p class="text-xs text-muted-foreground">
-                Changes encoder settings only. Resize and filters come from the template.
+                {containers.length > 1
+                  ? 'The encoder preset and the container change only their part of the template.'
+                  : 'The encoder preset changes only its part of the template.'}
               </p>
             </div>
           {/if}
+          {#if containers.length > 1}
+            <div class="text-sm text-muted-foreground">Container</div>
+            <div>
+              <NativeSelect bind:value={container} aria-label="Container">
+                {#each containers as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
+              </NativeSelect>
+            </div>
+          {/if}
+          <!-- self-start: the row starts with a checkbox, whose baseline moves with its tick; its first line is at the top -->
+          <div class="self-start text-sm text-muted-foreground">After adding</div>
+          <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <span class="flex items-center gap-2">
+              <label class="flex items-center gap-2">
+                <Checkbox
+                  checked={autoIndex}
+                  aria-describedby="new-jobs-index-help"
+                  onCheckedChange={(v) => (autoIndex = v === true)}
+                />Index
+              </label>
+              <span id="new-jobs-index-help" class="text-xs text-muted-foreground"
+                >(indexes each job in the background for its preview)</span
+              >
+            </span>
+            <label class="flex items-center gap-2">
+              <Checkbox checked={autoCrop} onCheckedChange={(v) => (autoCrop = v === true)} />Auto-crop
+              <span class="text-xs text-muted-foreground">(indexes first)</span>
+            </label>
+            <span class="text-xs text-muted-foreground"
+              >These two apply to this batch. Their defaults are in Settings › Queue & indexing.</span
+            >
+            {#if newJobs > 1}
+              <span class="flex min-w-0 flex-wrap items-center gap-2">
+                <label class="flex items-center gap-2">
+                  <Checkbox checked={grouping} onCheckedChange={(v) => (grouping = v === true)} />Group them
+                </label>
+                <Input
+                  class="h-8 w-56 max-w-full"
+                  aria-label="Group name"
+                  maxlength={80}
+                  disabled={!grouping}
+                  value={groupName}
+                  oninput={(e) => (typedGroupName = { key: inputKey, name: e.currentTarget.value })}
+                />
+                <span class="text-xs text-muted-foreground">(shown together in the Queue, and collapsible)</span>
+              </span>
+            {/if}
+          </div>
         </div>
       </Card.Root>
 
@@ -577,7 +641,16 @@
         </div>
         {#if result}
           <div class="min-h-0 flex-1 overflow-auto border-t" bind:this={matchList}>
-            <MatchTable {result} bind:replacements bind:excluded bind:assign {odd} {timing} onreview={review} />
+            <MatchTable
+              {result}
+              bind:replacements
+              bind:excluded
+              bind:assign
+              {odd}
+              {timing}
+              qpf={template?.data.qpf ?? true}
+              onreview={review}
+            />
           </div>
           <!-- Drag down to show more rows (arrow keys too); double-click goes back to filling the page. A
              focusable separator is the window splitter pattern, which Svelte's a11y check doesn't know. -->
@@ -636,18 +709,15 @@
       </ul>
     </details>
   {/if}
-  <footer class="h-(--bar-h) shrink-0 border-t bg-card" aria-label="Add to queue">
-    <div class="flex h-full items-center gap-3 overflow-hidden px-6">
+  <!-- one line, level with the side menu's status block; a narrow window: the text, then the buttons below it -->
+  <footer class="h-(--bar-h) shrink-0 border-t bg-card max-sm:h-auto" aria-label="Add to queue">
+    <div
+      class="flex h-full items-center gap-3 overflow-hidden px-6 max-sm:flex-wrap max-sm:justify-end max-sm:gap-2 max-sm:px-3 max-sm:py-2"
+    >
       {#if completion}
-        <p role="status" class="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">
+        <p role="status" class="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium max-sm:basis-full">
           {#if completion.added.length}<CheckIcon class="size-4 shrink-0 text-success" />{/if}
-          <span class="truncate">
-            {#if completion.added.length}Added {completion.added.length} job{completion.added.length === 1
-                ? ''
-                : 's'}{:else}Nothing added{/if}{completion.skipped.length
-              ? ` · ${completion.skipped.length} already in the queue, kept`
-              : ''}{completion.unmatched.length ? ` · ${completion.unmatched.length} unmatched` : ''}
-          </span>
+          <span class="truncate" title={completionText}>{completionText}</span>
         </p>
         {#if sources.length}<Button variant="ghost" onclick={() => (completion = null)}>Keep editing</Button>{/if}
         <Button variant="outline" onclick={clearAll}>Add more</Button>
@@ -656,12 +726,15 @@
         {/if}
       {:else}
         {#if adding}
-          <p role="status" class="flex min-w-0 flex-1 items-center gap-2 text-sm">
+          <p role="status" class="flex min-w-0 flex-1 items-center gap-2 text-sm max-sm:basis-full">
             <LoaderCircleIcon class="size-4 shrink-0 animate-spin text-muted-foreground" />
             <span class="truncate">Adding {newJobs} job{newJobs === 1 ? '' : 's'} to the queue…</span>
           </p>
         {:else}
-          <p class="min-w-0 flex-1 truncate text-sm {sources.length ? '' : 'text-muted-foreground'}" title={summary}>
+          <p
+            class="min-w-0 flex-1 truncate text-sm max-sm:basis-full {sources.length ? '' : 'text-muted-foreground'}"
+            title={summary}
+          >
             {summary}
           </p>
         {/if}

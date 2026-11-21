@@ -155,12 +155,15 @@ export interface JobSummary {
   id: string
   name: string
   label: string // tells jobs on one source apart (spec.label)
+  group: string | null // the queue group it's shown in (a batch shown together, e.g. a season)
+  group_name: string
   source: string
   rule_set: string
   status: Status
   pause_after_pass1: boolean // stop once the video's pass 1 is done (a 2-pass encode)
   progress: Progress | null
   issue: string
+  issue_counts: { block: number; warn: number } // its errors and warnings (the Issues tab lists them)
   output: string | null
   encoder: string
   crop: Crop | null // null with a custom script body or a reused encode
@@ -184,6 +187,8 @@ export interface Issue {
   severity: Severity
   code: string
   message: string
+  // A job's issues only: where it's fixed (a job tab's id, or 'tools' for Settings › Tools); null: no one place
+  tab?: string | null
 }
 
 export type AudioAction =
@@ -289,6 +294,7 @@ export interface JobSpec {
 export interface MuxSettings {
   container: string
   extra: string
+  extra_container?: string | null // the container when extra last changed (the server sets it); null: from before
   pgs_zlib: boolean
   name_template: string // '' = the default template (NameTokens.default_template)
   template_file_name: boolean // the file is named from the template (a name typed for the job still wins)
@@ -568,7 +574,8 @@ export interface ScriptParts {
   custom: boolean
 }
 
-export type ScriptCheck = { ok: true; info: ClipInfo } | { ok: false; error: string; line: number | null }
+export type ScriptCheck =
+  { ok: true; info: ClipInfo } | { ok: false; error: string; line: number | null; hint?: string } // hint: a missing plugin, in plain words
 
 export interface TrackProperty {
   key: string

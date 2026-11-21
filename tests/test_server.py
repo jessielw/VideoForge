@@ -32,7 +32,9 @@ from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioCodec as C, SubFormat as F, VideoInfo
 from videoforge.core.pipeline.steps import Step, StepProgress
 from videoforge.core.plan_io import to_json
+from videoforge.core.template import Template
 from videoforge.core.video.settings import Crop
+from videoforge.core.video.vs import ScriptError
 from videoforge.core.workdir import keep_records, note_finished, work_dir
 from videoforge.rule_sets.manual import ManualRuleSet
 from videoforge.server.app import create_app
@@ -423,6 +425,13 @@ def test_add_inspect_and_edit(tmp_path):
         enc = edited["spec"]["encoder"] | {"rate_control": "crf", "crf": 17}
         assert client.post("/api/jobs/apply", json={"ids": ids, "encoder": enc}).json()["updated"] == ids
         assert [j["encoder"] for j in client.get("/api/jobs").json()] == ["x264 CRF 17", "x264 CRF 17"]
+        # One output folder for the batch (Queue's batch panel), and cleared again.
+        batch_out = str(tmp_path / "batch-out")
+        assert client.post("/api/jobs/apply", json={"ids": ids, "output_dir": batch_out}).json()["updated"] == ids
+        assert [client.get(f"/api/jobs/{i}").json()["spec"]["output_dir"] for i in ids] == [batch_out] * 2
+        client.post("/api/jobs/apply", json={"ids": ids, "output_dir": None})
+        assert client.get(f"/api/jobs/{ids[1]}").json()["spec"]["output_dir"] is None
+        client.post("/api/jobs/apply", json={"ids": ids, "output_dir": str(tmp_path / "out")})
 
         commands = client.get(f"/api/jobs/{ids[0]}/commands").json()
         steps = ["script", "index", "script.info", "chapters", "video", "mux"]  # audio is copied
@@ -457,14 +466,18 @@ def test_two_jobs_writing_one_file_block_and_an_existing_file_warns(tmp_path):
     with make_client(tmp_path) as client:
         one, two = add(client, tmp_path)
         job = wait_for(client, one, "warn")
-        assert [i["code"] for i in job["issues"]] == ["outfile.exists"]
+        assert [(i["code"], i["tab"]) for i in job["issues"]] == [("outfile.exists", "output")]  # where it's fixed
         assert wait_for(client, two, "ready", "warn")["issues"] == []
+        # the queue row counts them
+        counts = {j["id"]: j["issue_counts"] for j in client.get("/api/jobs").json()}
+        assert counts == {one: {"block": 0, "warn": 1}, two: {"block": 0, "warn": 0}}
 
         client.patch(f"/api/jobs/{two}", json={"output_name": "Show.S01E01"})
         for job_id, other in ((one, "Show.S01E02.mkv"), (two, "Show.S01E01.mkv")):
             job = client.get(f"/api/jobs/{job_id}").json()
             assert job["status"] == "blocked" and job["issues"][0]["code"] == "outfile.shared"
             assert other in job["issues"][0]["message"]
+            assert job["issue_counts"]["block"] == 1
         assert client.post("/api/queue/enqueue", json={"ids": [one, two]}).json()["enqueued"] == []
 
         client.patch(f"/api/jobs/{two}", json={"label": "dubbed"})  # Show.S01E01.dubbed.mkv
@@ -1429,7 +1442,7 @@ def test_templates(tmp_path):
         client.patch(f"/api/jobs/{ids[0]}", json={"mux": {"container": "mp4", "extra": "-y"}})
         client.post("/api/jobs/apply", json={"ids": ids, "container": "mkv"})
         assert [client.get(f"/api/jobs/{i}").json()["spec"]["mux"] for i in ids] == [
-            to_json(MuxSettings(container="mkv", extra="-y")),
+            to_json(MuxSettings(container="mkv", extra="-y", extra_container="mp4")),  # typed for MP4: warns
             to_json(MuxSettings(container="mkv", extra="-x")),
         ]
 
@@ -2223,6 +2236,126 @@ def test_the_page_is_never_served_stale(tmp_path):
             assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
 
 
+def test_extra_muxer_arguments_warn_once_the_container_changes(tmp_path):
+    """The server saves the container a job's extra muxer arguments were typed for (mux.extra_container, never the
+    client's); a job whose container then changes warns, until the arguments change or the container goes back."""
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        get = lambda: client.get(f"/api/jobs/{job}").json()
+        warned = lambda: [i for i in get()["issues"] if i["code"] == "mux.extra_container"]
+        mux = get()["spec"]["mux"]
+        client.patch(
+            f"/api/jobs/{job}", json={"mux": mux | {"extra": "--split parts:00:10:00", "extra_container": "mp4"}}
+        )
+        assert get()["spec"]["mux"]["extra_container"] == mux["container"] and warned() == []
+        client.post("/api/jobs/apply", json={"ids": [job], "container": "mp4"})  # the batch panel
+        [issue] = warned()
+        assert (issue["severity"], issue["tab"]) == ("warn", "output")
+        assert issue["message"] == (
+            "The extra arguments were typed for MKV (mkvmerge), but the container is now MP4 (MP4Box). Change or clear them"
+        )
+        client.patch(f"/api/jobs/{job}", json={"container": "mkv"})  # back
+        assert warned() == []
+        client.patch(f"/api/jobs/{job}", json={"mux": get()["spec"]["mux"] | {"container": "mp4"}})  # the Output tab
+        assert warned()
+        client.patch(f"/api/jobs/{job}", json={"mux": get()["spec"]["mux"] | {"extra": "-split 600"}})  # typed again
+        assert get()["spec"]["mux"]["extra_container"] == "mp4" and warned() == []
+        client.patch(f"/api/jobs/{job}", json={"mux": get()["spec"]["mux"] | {"extra": ""}})
+        assert get()["spec"]["mux"]["extra_container"] is None
+
+        # saved before the container was kept: never warns
+        client.patch(f"/api/jobs/{job}", json={"mux": get()["spec"]["mux"] | {"extra": "-x"}})
+        entry = client.app.state.queue.get(job)
+        entry.spec.mux = replace(entry.spec.mux, extra_container=None)
+        client.patch(f"/api/jobs/{job}", json={"container": "mkv"})
+        assert warned() == []
+
+
+def test_a_template_brings_the_container_its_extra_arguments_were_typed_for(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        typed = to_json(Template(mux=MuxSettings(container="mp4", extra="-x", extra_container="mkv")))
+        job = add(client, tmp_path, template=typed)[0]
+        job = wait_for(client, job, "ready", "warn", "blocked")  # blocked: the source's PGS can't go into MP4
+        assert job["spec"]["mux"]["extra_container"] == "mkv"
+        assert "mux.extra_container" in [i["code"] for i in job["issues"]]
+
+
+def test_saving_a_template_keeps_the_container_its_extra_arguments_were_typed_for(tmp_path):
+    with make_client(tmp_path) as client:
+        data = to_json(Template(mux=MuxSettings(container="mp4", extra="-inter 500", extra_container="mkv")))
+
+        def save(**mux):
+            client.put("/api/presets/template/T", json=data | {"mux": data["mux"] | mux})
+            [saved] = [t["data"]["mux"] for t in client.get("/api/presets").json()["template"] if t["name"] == "T"]
+            return saved["extra_container"]
+
+        assert save() == "mp4"  # new: typed for its container (the client's value is ignored)
+        assert save(container="mkv", extra_container=None) == "mp4"  # the same arguments: kept
+        assert save(container="mkv", extra="-split 600") == "mkv"  # typed again
+        assert save(extra="") is None
+
+
+class MissingPlugin:
+    """A preview whose scripts fail on a source filter plugin that isn't installed (FFMS2, the default)."""
+
+    def has(self, *_args, **_kwargs) -> bool:
+        return True  # loaded: no index needed
+
+    def check(self, *_args, **_kwargs):
+        raise ScriptError(
+            "AttributeError: No attribute with the name ffms2 exists. Did you mistype a plugin namespace or forget to "
+            "install a plugin?",
+            3,
+        )
+
+    frame = info = check
+
+
+def test_the_video_tab_names_a_missing_plugin_above_the_raw_error(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        client.app.state.preview = MissingPlugin()
+        checked = client.get(f"/api/jobs/{job}/video/check").json()
+        assert checked["hint"] == (
+            "VapourSynth can't find the FFMS2 plugin, which the Source filter needs. Install it, or choose another "
+            "Source filter."
+        )
+        assert checked["error"].startswith("AttributeError: No attribute with the name ffms2") and checked["line"] == 3
+        frame = client.get(f"/api/jobs/{job}/video/frame")
+        assert frame.status_code == 422
+        assert frame.json()["detail"] == f"{checked['hint']}\n\nLine 3: {checked['error']}"
+
+
+def test_removal_preview_marks_each_job_remove_keeps(tmp_path):
+    """A queued job and one running a test encode or CRF search are kept by remove(), so the preview says so."""
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        entry = client.app.state.queue.get(job)
+        kept = (
+            "Kept with its work folder: the job is queued or running, indexing, or running a test encode or CRF search"
+        )
+        preview = lambda: client.post("/api/jobs/removal-preview", json={"ids": [job]}).json()["folders"][0]
+        assert preview()["error"] == ""
+        entry.sampling = True
+        try:
+            assert preview()["error"] == kept
+            assert client.post("/api/jobs/remove", json={"ids": [job]}).json()["removed"] == []
+        finally:
+            entry.sampling = False
+        entry.queued = True
+        try:
+            assert preview()["error"] == kept
+        finally:
+            entry.queued = False
+
+
 def test_manual_cleanup_keeps_work_on_archive_failure(tmp_path, monkeypatch):
     make_files(tmp_path)
     with make_client(tmp_path) as client:
@@ -2451,6 +2584,20 @@ def test_output_folders(tmp_path):
         assert client.put("/api/settings", json={"output_default": 3}).status_code == 422
 
 
+def test_each_browse_remembers_its_own_folder(tmp_path):
+    """last_dirs keeps a folder per kind of Browse (New jobs' Sources, Output folder...); a PUT changes only the kinds
+    it names, and last_dir stays the shared one."""
+    with make_client(tmp_path) as client:
+        assert client.get("/api/settings").json()["last_dirs"] == {}
+        client.put("/api/settings", json={"last_dir": "/media", "last_dirs": {"sources": "/media"}})
+        s = client.put("/api/settings", json={"last_dir": "/out", "last_dirs": {"output": "/out"}}).json()
+        assert s["last_dirs"] == {"sources": "/media", "output": "/out"}
+        assert s["last_dir"] == "/out"
+        for bad in ("x", {"sources": 3}, ["sources"]):
+            assert client.put("/api/settings", json={"last_dirs": bad}).status_code == 422
+        assert client.get("/api/settings").json()["last_dirs"] == {"sources": "/media", "output": "/out"}
+
+
 def test_output_folders_remember():
     from videoforge.server.output_folders import MAX_RECENT, clean, remember
 
@@ -2559,6 +2706,46 @@ def test_an_invalid_jobs_issues_say_each_check_once():
         "output.a",
     ]
     assert shown("Name must not mention dual audio: X") == ["output.name.dual", "output.a"]  # saved before
+
+
+@pytest.mark.parametrize(
+    ("code", "tab"),
+    [
+        ("audio.none", "audio"),
+        ("audio.delay", "audio"),
+        ("tools.dee_split", "audio"),
+        ("subs.language", "subs"),
+        ("subs.burn_many", "subs"),
+        ("video.interlaced", "video"),
+        ("hdr.dv_bake_bs", "video"),
+        ("hdr.dv_custom", "video"),
+        ("video.option_unknown", "encoder"),
+        ("video.target_small", "encoder"),
+        ("hdr.depth", "encoder"),
+        ("hdr.dv_x264", "encoder"),
+        ("hdr.hdr10plus_depth", "encoder"),
+        ("tools.missing", "tools"),
+        ("hdr.dv_second_track", "tools"),
+        ("hdr.dv_el", "tools"),
+        ("hdr.svt_build", "tools"),
+        ("mux.mp4_subs", "output"),
+        ("name.token", "output"),
+        ("outfile.exists", "output"),
+        ("run.failed", "log"),
+        ("run.interrupted", "log"),
+        ("probe", None),
+        ("input.no_video", None),
+        ("sync.video_start", None),
+        ("pair.encoding", None),
+        ("output.name.dual", None),  # an output check: the run's, not a setting's
+        ("output.hdr.dv_missing", None),
+        ("house.track_count", None),  # a plugin rule set's own
+    ],
+)
+def test_each_issue_names_the_tab_where_it_is_fixed(code, tab):
+    from videoforge.server.views import issue_tab
+
+    assert issue_tab(code) == tab
 
 
 def test_add_leaves_out_unticked_subtitles(tmp_path):

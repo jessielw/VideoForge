@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page, type WebSocketRoute } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import type { JobDetail, JobSummary, Status, Template } from '../../src/lib/types.ts'
+import type { JobDetail, JobSummary, Status, Template, Tracks, VideoColor, VideoHdr } from '../../src/lib/types.ts'
 
 async function queueFixture(
   page: Page,
@@ -17,11 +17,14 @@ async function queueFixture(
     id: `job-${i}`,
     name: `Episode ${String(i).padStart(5, '0')}`,
     label: '',
+    group: null,
+    group_name: '',
     source: `D:\\Show\\Season${i < count / 2 ? 1 : 2}\\${i}.mkv`,
     rule_set: 'manual',
     status: statuses[i % statuses.length],
     progress: null,
     issue: '',
+    issue_counts: { block: 0, warn: 0 },
     output: null,
     encoder: 'x265',
     crop: null,
@@ -140,12 +143,37 @@ async function queueFixture(
         kind: p.endsWith('_tmp') ? 'folder' : 'file',
       }))
     else if (path === '/api/jobs/import') json = { added: [], skipped: [] }
-    else throw new Error(`Unhandled queue fixture request: ${request.method()} ${path}`)
+    // Queue groups, as the server does them (enough for the list to show the result).
+    else if (path === '/api/jobs/move') {
+      const { ids, before, group } = request.postDataJSON() as { ids: string[]; before: string | null; group: string }
+      const moving = jobs.filter((j) => ids.includes(j.id))
+      const rest = jobs.filter((j) => !ids.includes(j.id))
+      const name = rest.find((j) => j.group === group)?.group_name ?? moving.find((j) => j.group === group)?.group_name
+      for (const j of moving) [j.group, j.group_name] = group ? [group, name ?? ''] : [null, '']
+      const at = before === null ? rest.length : rest.findIndex((j) => j.id === before)
+      jobs.splice(0, jobs.length, ...rest.slice(0, at), ...moving, ...rest.slice(at))
+      json = { ids: jobs.map((j) => j.id) }
+    } else if (path === '/api/jobs/group') {
+      const { ids, name } = request.postDataJSON() as { ids: string[]; name: string }
+      for (const j of jobs) if (ids.includes(j.id)) [j.group, j.group_name] = ['g-new', name]
+      json = { group: 'g-new' }
+    } else if (/^\/api\/groups\/[^/]+\/(rename|ungroup)$/.test(path)) {
+      const [, , , id, action] = path.split('/')
+      for (const j of jobs.filter((j) => j.group === id))
+        [j.group, j.group_name] = action === 'rename' ? [id, request.postDataJSON().name] : [null, '']
+      json = { group: id }
+    } else throw new Error(`Unhandled queue fixture request: ${request.method()} ${path}`)
     await route.fulfill({ json })
   })
   await page.goto('/#/queue')
   await expect(page.getByRole('status')).toContainText(`${count} of ${count} jobs match`)
-  return { jobs, calls, errors, refresh: () => socket.send(JSON.stringify({ type: 'job', id: jobs[0].id })) }
+  return {
+    jobs,
+    calls,
+    errors,
+    refresh: () => socket.send(JSON.stringify({ type: 'job', id: jobs[0].id })),
+    send: (event: Record<string, unknown>) => socket.send(JSON.stringify(event)), // a server event, such as 'queue'
+  }
 }
 
 test('10,000 jobs: bounded rows, combined filters, counts, and explicit action scope', async ({ page }) => {
@@ -229,7 +257,8 @@ test('deep links reveal jobs beyond page one; shrinking a live result clamps its
 
 test('job files to add are pasted or browsed for on the server, and checked as they go in', async ({ page }) => {
   const { calls, errors } = await queueFixture(page, 3)
-  await page.getByRole('button', { name: 'Add jobs from job files', exact: true }).click()
+  await page.getByRole('button', { name: 'More actions', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Add jobs from job files…', exact: true }).click()
   const add = page.getByRole('button', { name: 'Add jobs', exact: true })
   await expect(add).toBeDisabled()
   const slot = page.getByRole('dialog', { name: 'Add jobs from job files' }).getByRole('group', { name: 'Job files' })
@@ -645,6 +674,7 @@ test('encoder option names keep their case', async ({ page }) => {
   const { errors } = await queueFixture(page, 1, ['ready'])
   await page.goto('/#/queue/job-0')
   await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await page.locator('summary').filter({ hasText: 'Advanced settings' }).click()
   expect(await page.getByText(/^Options \(/).innerText()).toContain('--name value')
   expect(errors).toEqual([])
 })
@@ -660,6 +690,8 @@ test('job tabs: no text under 12 px, no uppercase labels, no italics', async ({ 
   const problems: string[] = [...(await typeProblems(page)).map((p) => `Queue: ${p}`)]
   for (const tab of ['Encoder', 'Audio', 'Subtitles', 'Output']) {
     await page.getByRole('tab', { name: tab, exact: true }).click()
+    // the closed Advanced sections' text is checked too
+    for (const summary of await page.locator('details:not([open]) > summary').all()) await summary.click()
     problems.push(...(await typeProblems(page)).map((p) => `${tab}: ${p}`))
   }
   expect([...new Set(problems)]).toEqual([])
@@ -739,6 +771,65 @@ test('the Encoder tab fills at most one control with the accent', async ({ page 
   expect(errors).toEqual([])
 })
 
+test("the toolbar's first row stays put when a job starts or indexing runs, so Cancel never lands on Run selected", async ({
+  page,
+}) => {
+  const fixture = await queueFixture(page, 3, ['ready'])
+  const runSelected = page.getByRole('button', { name: /^Run selected/ })
+  // where it starts: its count's digits change its width
+  const at = async () => {
+    const { x, y, height } = (await runSelected.boundingBox())!
+    return { x, y, height }
+  }
+  const idleAt = await at()
+  // A selection brings Queue (1), at the end of the selection's row: the first row stays as it was.
+  await page.getByText('Episode 00001', { exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Queue (1)', exact: true })).toBeVisible()
+  const before = await at()
+  expect(before).toEqual(idleAt)
+  const firstRowEnd = before.y + before.height
+  const below = async (name: string) =>
+    expect((await page.getByRole('button', { name, exact: true }).boundingBox())!.y).toBeGreaterThanOrEqual(firstRowEnd)
+  const idle = {
+    type: 'queue',
+    running: false,
+    current: null,
+    stop_after_current: false,
+    paused: false,
+    priority: null,
+    queued: 0,
+    indexing: null,
+    sampling: null,
+    index_queued: 0,
+    index_held: 0,
+  }
+
+  fixture.send({ ...idle, running: true, current: 'job-0', queued: 1 })
+  await expect(page.getByRole('button', { name: 'Stop after current', exact: true })).toBeVisible()
+  expect(await at()).toEqual(before)
+  await below('Cancel')
+  await below('Pause after pass 1')
+  await below('Pause')
+
+  fixture.send({ ...idle, running: true, current: 'job-0', stop_after_current: true })
+  await expect(page.getByRole('button', { name: 'Stopping…', exact: true })).toBeVisible()
+  expect(await at()).toEqual(before)
+
+  // Indexing with no job running: Start queue keeps its place, and the second row has what applies to indexing.
+  fixture.send({ ...idle, indexing: 'job-2' })
+  await expect(page.getByRole('button', { name: /^Start queue/ })).toBeVisible()
+  expect(await at()).toEqual(before)
+  await below('Stop indexing')
+  await below('Pause')
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0)
+
+  fixture.send(idle)
+  await expect(page.getByRole('button', { name: 'Stop indexing', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toHaveCount(0)
+  expect(await at()).toEqual(before)
+  expect(fixture.errors).toEqual([])
+})
+
 test('a disabled Start queue is gray, not dimmed gold', async ({ page }) => {
   const { errors } = await queueFixture(page, 3, ['ready'])
   const start = page.getByRole('button', { name: /^Start queue/ })
@@ -799,12 +890,42 @@ for (const palette of ['gold', 'indigo', 'ocean', 'forest', 'ember', 'rose', 'sl
 
 test('queue row checkboxes line up with the search box', async ({ page }) => {
   const { errors } = await queueFixture(page, 3)
-  const search = await page.getByPlaceholder('Search name or source path').boundingBox()
+  const search = await page.getByPlaceholder('Search name, path, encoder or HDR').boundingBox()
   const tick = await page
     .getByRole('checkbox', { name: /^Queued: / })
     .first()
     .boundingBox()
   expect(Math.abs(tick!.x - search!.x)).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+test('a Queue caption names the checkboxes, and a queued row shows a lock before its status', async ({ page }) => {
+  const { errors } = await queueFixture(page, 2, ['queued', 'ready'])
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  await expect(list.getByRole('searchbox')).toHaveAccessibleName(
+    'Search jobs by name, source path, encoder, resolution or HDR format',
+  )
+  // The caption sits over the column of checkboxes; each box has its own name, so a screen reader skips it.
+  const caption = list.getByText('Queue', { exact: true })
+  await expect(caption).toHaveAttribute('aria-hidden', 'true')
+  const c = (await caption.boundingBox())!
+  const box = (await list.getByRole('checkbox', { name: 'Queued: Episode 00000' }).boundingBox())!
+  expect(Math.abs(c.x - box.x)).toBeLessThanOrEqual(1)
+  expect(c.y + c.height).toBeLessThanOrEqual(box.y)
+  await caption.hover()
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+    "A ticked job is queued and locked, so you can't edit it until you untick it. Start queue runs the queued jobs.",
+  )
+  // The paragraph keeps the rest.
+  await expect(list).toContainText(
+    'Actions on the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs, or every job when none is selected.',
+  )
+  await expect(list).not.toContainText('A ticked job is queued')
+  // A lock before "Queued", in its color; none on a ready row.
+  const queued = page.locator('[data-job="job-0"]')
+  await expect(queued.locator('svg.lucide-lock')).toHaveCount(1)
+  await expect(queued.getByText('Queued', { exact: true })).toBeVisible()
+  await expect(page.locator('[data-job="job-1"]').locator('svg.lucide-lock')).toHaveCount(0)
   expect(errors).toEqual([])
 })
 
@@ -821,12 +942,39 @@ async function visibleLeft(button: Locator): Promise<number> {
   })
 }
 
-test('Edit the whole script lines up with the side panel controls', async ({ page }) => {
+test('Edit the whole script lines up with the Source filter menu above it', async ({ page }) => {
   const { errors } = await queueFixture(page, 1, ['ready'])
   await page.goto('/#/queue/job-0')
-  const edit = await visibleLeft(page.getByRole('button', { name: 'Edit the whole script…', exact: true }))
-  const preset = await visibleLeft(page.getByRole('complementary').getByRole('button').first()) // the preset menu
-  expect(Math.abs(edit - preset)).toBeLessThanOrEqual(1)
+  const panel = page.getByRole('complementary')
+  await panel.locator('summary').filter({ hasText: 'Advanced' }).click()
+  const edit = await visibleLeft(panel.getByRole('button', { name: 'Edit the whole script…', exact: true }))
+  const filter = await visibleLeft(panel.getByRole('combobox', { name: 'Source filter', exact: true }))
+  expect(Math.abs(edit - filter)).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+test('Video: Source filter and Edit the whole script… sit in a closed Advanced section at the bottom', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await withDetail(page, (d) => (d.spec.video.source_filter = 'bestsource'))
+  await page.goto('/#/queue/job-0')
+  const panel = page.getByRole('complementary')
+  const advanced = panel.locator('summary').filter({ hasText: 'Advanced' })
+  const filter = panel.getByRole('combobox', { name: 'Source filter', exact: true })
+  const edit = panel.getByRole('button', { name: 'Edit the whole script…', exact: true })
+  // BestSource isn't the default, FFMS2.
+  await expect(advanced).toHaveText('Advanced (1)')
+  await expect(filter).toBeHidden()
+  await expect(edit).toBeHidden()
+  const filters = (await panel.getByText('Filters', { exact: true }).boundingBox())!
+  expect((await advanced.boundingBox())!.y).toBeGreaterThan(filters.y)
+  await advanced.click()
+  await expect(filter).toHaveValue('bestsource')
+  await expect(edit).toBeVisible()
+  await expect(advanced).toHaveText('Advanced')
+  await page.reload()
+  await expect(filter).toBeVisible()
   expect(errors).toEqual([])
 })
 
@@ -935,15 +1083,17 @@ test('Output tab: every label lines up with the first control in its row', async
   // The rule set's containers bring the Container and PGS compression rows (a checkbox first: no text baseline).
   await withRuleSet(page)
   await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  await page.locator('summary').filter({ hasText: 'Advanced' }).click()
   await expect(page.getByText('PGS compression', { exact: true })).toBeVisible()
-  // Each label in the tab's label column against the first control on its row; a textarea counts by its first line.
+  // Each label in the tab's label columns (the tab's, and its Advanced section's) against the first control on its
+  // row; a textarea counts by its first line.
   const rows = await page.evaluate(() => {
-    const grid = [...document.querySelectorAll<HTMLElement>('main .grid')].find((g) =>
-      g.textContent?.includes('Existing output'),
-    )!
+    const grids = ['Existing output', 'PGS compression'].map((text) =>
+      [...document.querySelectorAll<HTMLElement>('main .grid')].find((g) => g.textContent?.includes(text))!,
+    )
     const control = 'input:not([type=hidden]), select, textarea, button, [role=checkbox]'
     const out: { label: string; gap: number }[] = []
-    for (const label of [...grid.children] as HTMLElement[]) {
+    for (const label of grids.flatMap((grid) => [...grid.children]) as HTMLElement[]) {
       const cell = label.nextElementSibling as HTMLElement | null
       const text = label.textContent?.trim()
       if (!cell || !text || label.querySelector(control)) continue
@@ -966,4 +1116,580 @@ test('Output tab: every label lines up with the first control in its row', async
   )
   expect(rows.filter((r) => r.gap > 2)).toEqual([])
   expect(errors).toEqual([])
+})
+
+test('Output tab: the Rule set menu shows only when there is more than one rule set', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await withRuleSet(page)
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  const panel = page.getByRole('tabpanel')
+  await expect(panel.getByText('Existing output', { exact: true })).toBeVisible()
+  await expect(panel.getByRole('combobox', { name: 'Rule set' })).toHaveCount(0)
+  await expect(panel.getByText('Rule set', { exact: true })).toHaveCount(0)
+  // The header's facts line still names it.
+  await expect(page.locator('header').getByText(/^Manual · x265/)).toBeVisible()
+
+  const ruleSets = await page.evaluate(() => fetch('/api/rule-sets').then((r) => r.json()))
+  await page.route('**/api/rule-sets', (route) =>
+    route.fulfill({ json: [...ruleSets, { ...ruleSets[0], id: 'house', name: 'House rules', default: false }] }),
+  )
+  await page.reload()
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  await expect(page.getByRole('tabpanel').getByRole('combobox', { name: 'Rule set', exact: true })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('Output: extra arguments, PGS compression, the work folder and finished steps sit in a closed Advanced section', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 1, ['ready'])
+  await withDetail(page, (d) => {
+    Object.assign(d.spec.mux, { extra: '--no-date', pgs_zlib: true })
+    d.steps = { mux: { id: 'mux', fingerprint: 'f', outputs: [], seconds: 3 } }
+  })
+  await withRuleSet(page)
+  await page.getByRole('tab', { name: 'Output', exact: true }).click()
+  const advanced = page.locator('summary').filter({ hasText: 'Advanced' })
+  const extra = page.getByRole('textbox', { name: 'Extra arguments for mkvmerge', exact: true })
+  const pgs = page.getByRole('checkbox', { name: 'Compress PGS subtitles with zlib', exact: true })
+  const work = page.getByText('Work folder', { exact: true })
+  const steps = page.getByText(/^Finished steps/)
+  // The extra arguments and PGS compression differ from the defaults; the work folder and steps aren't settings.
+  await expect(advanced).toHaveText('Advanced (2)')
+  for (const hidden of [extra, pgs, work, steps]) await expect(hidden).toBeHidden()
+  const existing = (await page.getByText('Existing output', { exact: true }).boundingBox())!
+  expect((await advanced.boundingBox())!.y).toBeGreaterThan(existing.y)
+  await expect(page.getByText('D:\\Show\\Season1\\0.mkv_tmp', { exact: true })).toBeHidden()
+  await advanced.click()
+  for (const shown of [extra, pgs, work, steps]) await expect(shown).toBeVisible()
+  await expect(extra).toHaveValue('--no-date')
+  await expect(advanced).toHaveText('Advanced')
+  expect(errors).toEqual([])
+})
+
+/** Drag a row's grip to `y` of the way down the target row (0 top, 1 bottom), in small steps like a hand. */
+async function dragGrip(page: Page, from: Locator, to: Locator, y: number) {
+  const grip = (await from.locator('[title^="Drag to move"]').boundingBox())!
+  const target = (await to.boundingBox())!
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height * y, { steps: 8 })
+  await page.waitForTimeout(50) // a frame for the drop line
+  await page.mouse.up()
+}
+
+const row = (page: Page, id: string) => page.locator('[data-row]', { has: page.locator(`[data-job="${id}"]`) })
+
+test('a group collapses, and a grip drags its jobs out of it and back in', async ({ page }, testInfo) => {
+  const fixture = await queueFixture(page, 5, ['ready'])
+  for (const j of fixture.jobs.slice(1, 4)) [j.group, j.group_name] = ['g1', 'Show S01']
+  fixture.refresh()
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  await expect(list.getByRole('button', { name: 'Collapse Show S01', exact: true })).toBeVisible()
+  await expect(list.getByText('3 jobs', { exact: true })).toBeVisible()
+  await list.screenshot({ path: testInfo.outputPath('queue-group.png') })
+  const axe = await new AxeBuilder({ page })
+    .include('section[aria-label="Queue list"]')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
+    .analyze()
+  expect(axe.violations).toEqual([])
+
+  await list.getByRole('button', { name: 'Collapse Show S01', exact: true }).click()
+  await expect(list.locator('[data-job]')).toHaveCount(2)
+  await expect(page.getByText('Showing 1–3 of 3 rows (5 jobs)')).toBeVisible()
+  await page.locator('[data-job="job-0"]').press('ArrowDown') // the arrows skip a collapsed group
+  await expect(page.locator('[data-job="job-4"]')).toBeFocused()
+  await page.locator('[data-job="job-4"]').press('Shift+ArrowUp') // ... a range takes all of it
+  await expect(page.getByRole('status')).toContainText('5 selected')
+  await list.getByRole('button', { name: 'Expand Show S01', exact: true }).click()
+  await expect(list.locator('[data-job]')).toHaveCount(5)
+  await page.getByRole('button', { name: 'Clear selection', exact: true }).click()
+
+  // Out: above job-4's middle is after the group, not in it.
+  await dragGrip(page, row(page, 'job-2'), row(page, 'job-4'), 0.25)
+  await expect
+    .poll(() => fixture.calls.find((c) => c.path === '/api/jobs/move')?.body)
+    .toEqual({
+      ids: ['job-2'],
+      before: 'job-4',
+      group: '',
+    })
+  await expect(list.getByText('2 jobs', { exact: true })).toBeVisible()
+
+  // In: below a member's middle is in its group, even the last one's.
+  await dragGrip(page, row(page, 'job-0'), row(page, 'job-3'), 0.75)
+  await expect
+    .poll(() => fixture.calls.filter((c) => c.path === '/api/jobs/move').at(-1)?.body)
+    .toEqual({
+      ids: ['job-0'],
+      before: 'job-2',
+      group: 'g1',
+    })
+  await expect(list.getByText('3 jobs', { exact: true })).toBeVisible()
+  expect(fixture.jobs.map((j) => j.id)).toEqual(['job-1', 'job-3', 'job-0', 'job-2', 'job-4'])
+
+  // Esc drops nothing.
+  const moves = fixture.calls.filter((c) => c.path === '/api/jobs/move').length
+  const grip = (await row(page, 'job-4').locator('[title^="Drag to move"]').boundingBox())!
+  await page.mouse.move(grip.x + 4, grip.y + 4)
+  await page.mouse.down()
+  await page.mouse.move(grip.x + 4, grip.y - 60, { steps: 5 })
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  expect(fixture.calls.filter((c) => c.path === '/api/jobs/move')).toHaveLength(moves)
+
+  // A drag on the row itself still selects the rows it crosses.
+  const a = (await page.locator('[data-job="job-1"]').boundingBox())!
+  const b = (await page.locator('[data-job="job-0"]').boundingBox())!
+  // (clear of the name, whose tooltip would open over the next row)
+  await page.mouse.move(a.x + a.width * 0.6, a.y + a.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(b.x + b.width * 0.6, b.y + b.height / 2, { steps: 6 })
+  await page.waitForTimeout(50) // a frame for the selection to reach the last row
+  await page.mouse.up()
+  await expect(page.getByRole('status')).toContainText('3 selected')
+  expect(fixture.errors).toEqual([])
+})
+
+test('Group selected names the group after its folder; its menu renames and ungroups it', async ({ page }) => {
+  const fixture = await queueFixture(page, 4, ['ready']) // job-0 and job-1 in Season1, the others in Season2
+  await page.locator('[data-job="job-0"]').click()
+  await page.locator('[data-job="job-1"]').click({ modifiers: ['ControlOrMeta'] })
+  await page.getByRole('button', { name: 'Group the selected jobs', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Group 2 jobs' })
+  await expect(dialog.getByRole('textbox', { name: 'Group name' })).toHaveValue('Show Season1')
+  await dialog.getByRole('button', { name: 'Group', exact: true }).click()
+  await expect
+    .poll(() => fixture.calls.find((c) => c.path === '/api/jobs/group')?.body)
+    .toEqual({ ids: ['job-0', 'job-1'], name: 'Show Season1' })
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  await list.getByRole('button', { name: 'Show Season1 options', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Rename…' }).click()
+  const rename = page.getByRole('dialog', { name: 'Rename the group' })
+  await rename.getByRole('textbox', { name: 'Group name' }).fill('Extras')
+  await rename.getByRole('button', { name: 'Rename', exact: true }).click()
+  await expect(list.getByRole('button', { name: 'Collapse Extras', exact: true })).toBeVisible()
+  await list.getByRole('button', { name: 'Extras options', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Ungroup' }).click()
+  await expect(list.getByRole('button', { name: 'Collapse Extras', exact: true })).toHaveCount(0)
+  expect(fixture.calls.map((c) => c.path)).toEqual(
+    expect.arrayContaining(['/api/groups/g-new/rename', '/api/groups/g-new/ungroup']),
+  )
+  expect(fixture.errors).toEqual([])
+})
+
+test('a first drag-select keeps the list still, so it ends on the row under the pointer', async ({ page }) => {
+  const { errors } = await queueFixture(page, 6, ['ready'])
+  await expect(page.getByRole('status')).toContainText('0 selected')
+  const first = page.locator('[data-job="job-1"]')
+  const before = (await first.boundingBox())!
+  const end = (await page.locator('[data-job="job-3"]').boundingBox())!
+  await page.mouse.move(before.x + before.width * 0.6, before.y + before.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(end.x + end.width * 0.6, end.y + end.height / 2, { steps: 6 })
+  await page.waitForTimeout(50)
+  await page.mouse.up()
+  await expect(page.getByRole('status')).toContainText('3 selected')
+  await expect(page.getByRole('button', { name: 'Clear selection', exact: true })).toBeVisible()
+  expect((await first.boundingBox())!.y).toBe(before.y) // Clear selection showing up moved nothing
+  expect(errors).toEqual([])
+})
+
+test("a group's menu moves the selected jobs into it or out of it, and a drop that changes nothing sends nothing", async ({
+  page,
+}) => {
+  const fixture = await queueFixture(page, 4, ['ready'])
+  for (const j of fixture.jobs.slice(1, 3)) [j.group, j.group_name] = ['g1', 'Show S01']
+  fixture.refresh()
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  await expect(list.getByText('2 jobs', { exact: true })).toBeVisible()
+  const moves = () => fixture.calls.filter((c) => c.path === '/api/jobs/move').map((c) => c.body)
+
+  // Its own place: no line, no request.
+  await dragGrip(page, row(page, 'job-1'), row(page, 'job-1'), 0.25)
+  await page.waitForTimeout(100)
+  expect(moves()).toEqual([])
+
+  await page.locator('[data-job="job-3"]').click()
+  await list.getByRole('button', { name: 'Show S01 options', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Move the selected job here' }).click()
+  await expect.poll(moves).toEqual([{ ids: ['job-3'], before: null, group: 'g1' }])
+  await expect(list.getByText('3 jobs', { exact: true })).toBeVisible()
+
+  await list.getByRole('button', { name: 'Show S01 options', exact: true }).click()
+  await expect(page.getByRole('menuitem', { name: 'Move the selected job here' })).toHaveCount(0)
+  await page.getByRole('menuitem', { name: 'Take the selected job out' }).click()
+  await expect.poll(() => moves().at(-1)).toEqual({ ids: ['job-3'], before: null, group: '' })
+  await expect(list.getByText('2 jobs', { exact: true })).toBeVisible()
+  expect(fixture.errors).toEqual([])
+})
+
+/** After queueFixture: serve job-0's detail with `change` made to it, for every request the editor sends. */
+async function withDetail(page: Page, change: (d: JobDetail) => void) {
+  const detail: JobDetail = await page.evaluate(() => fetch('/api/jobs/job-0').then((r) => r.json()))
+  change(detail)
+  await page.route('**/api/jobs/job-0', (route) => route.fulfill({ json: detail }))
+  return detail
+}
+
+const PQ: VideoColor = {
+  primaries: 'bt2020',
+  transfer: 'smpte2084',
+  matrix: 'bt2020nc',
+  range: 'limited',
+  chroma_loc: null,
+  master_display: '',
+  max_cll: 0,
+  max_fall: 0,
+}
+const DV_HDR10PLUS: VideoHdr = {
+  dv_profile: 8,
+  dv_compat: 1,
+  dv_level: 6,
+  dv_layers: 'BL+RPU',
+  dv_el: '',
+  dv_stream: 0,
+  hdr10plus: true,
+}
+const tracks = (hdr?: VideoHdr): Tracks => ({
+  video: { width: 3840, height: 2160, start_ms: 0, default_duration_ns: null, sar_num: 1, sar_den: 1, color: PQ, hdr },
+  audio: [],
+  subs: [],
+  has_chapters: false,
+  count: 1,
+})
+
+test('Encoder: Advanced settings starts closed, counts what differs from the defaults, and stays as it was left', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 2, ['ready'])
+  await withDetail(page, (d) =>
+    Object.assign(d.spec.encoder, {
+      options: { 'aq-mode': '3', 'psy-rd': '2.0' },
+      extra: '--bogus 1',
+      source_color: false,
+    }),
+  )
+  await page.route('**/api/config/video-options/x265', (route) =>
+    route.fulfill({
+      json: {
+        dashes: '--',
+        options: [
+          { name: 'aq-mode', help: 'AQ mode' },
+          { name: 'psy-rd', help: 'Psy-RD strength' },
+        ],
+      },
+    }),
+  )
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  const advanced = page.locator('summary').filter({ hasText: 'Advanced settings' })
+  const color = page.getByRole('checkbox', { name: 'Color from the source', exact: true })
+  // Two options, the extra arguments and Color from the source off; x265's help doesn't list --bogus.
+  await expect(advanced).toHaveText('Advanced settings (4) · 1 warning')
+  await expect(color).toBeHidden()
+  await advanced.click()
+  await expect(color).toBeVisible()
+  await expect(advanced).toHaveText('Advanced settings')
+
+  await page.reload()
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await expect(color).toBeVisible()
+  // The Queue's multi-job panel shows the same section, and it's open there too.
+  await page.goto('/#/queue')
+  await page.locator('[data-job="job-0"]').click()
+  await page.locator('[data-job="job-1"]').click({ modifiers: ['Shift'] })
+  const panel = page.getByRole('region', { name: 'Job settings', exact: true })
+  await expect(panel.getByRole('checkbox', { name: 'Color from the source', exact: true })).toBeVisible()
+  await panel.locator('summary').filter({ hasText: 'Advanced settings' }).click()
+  await expect(panel.getByRole('checkbox', { name: 'Color from the source', exact: true })).toBeHidden()
+  await page.locator('[data-job="job-0"]').click()
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  await expect(color).toBeHidden()
+  expect(errors).toEqual([])
+})
+
+test('Encoder: HDR10+ and Dolby Vision sit in an HDR section that shows when the source has either', async ({
+  page,
+}, testInfo) => {
+  const fixture = await queueFixture(page, 1, ['ready'])
+  const detail = await withDetail(page, (d) => {
+    d.tracks = tracks(DV_HDR10PLUS)
+    d.color_args = ['--colorprim', 'bt2020', '--transfer', 'smpte2084', '--colormatrix', 'bt2020nc']
+    d.spec.encoder.depth = 8
+  })
+  await page.route('**/api/config/video-options/x264', (route) =>
+    route.fulfill({ json: { dashes: '--', options: [] } }),
+  )
+  await page.goto('/#/queue/job-0')
+  await page.getByRole('tab', { name: 'Encoder', exact: true }).click()
+  const hdr10plus = page.getByRole('checkbox', { name: /^HDR10\+ from the source/ })
+  const dv = page.getByRole('checkbox', { name: /^Dolby Vision from the source/ })
+  const label = page.getByText('HDR', { exact: true })
+  const tenBit = page.getByText('An HDR source: encode it at 10-bit.', { exact: true })
+  // With Advanced settings closed, the HDR section and the 10-bit note still show, in order under Bit depth.
+  await expect(page.locator('summary').filter({ hasText: 'Advanced settings' })).toHaveText('Advanced settings')
+  await expect(hdr10plus).toBeVisible()
+  await expect(dv).toBeVisible()
+  const depth = (await page.getByRole('combobox', { name: 'Bit depth' }).boundingBox())!
+  const note = (await tenBit.boundingBox())!
+  const section = (await label.boundingBox())!
+  const summary = (await page.locator('summary').filter({ hasText: 'Advanced settings' }).boundingBox())!
+  expect(note.y).toBeGreaterThanOrEqual(depth.y + depth.height)
+  expect(section.y).toBeGreaterThan(note.y)
+  expect(summary.y).toBeGreaterThan(section.y)
+  await page.getByRole('tabpanel').screenshot({ path: testInfo.outputPath('encoder-hdr.png') })
+
+  // A source without HDR10+ or Dolby Vision, and one whose tracks aren't read yet: no HDR section.
+  detail.tracks = tracks()
+  fixture.refresh()
+  await expect(hdr10plus).toBeHidden()
+  await expect(label).toBeHidden()
+  detail.tracks = null
+  fixture.refresh()
+  await expect(page.getByText('The source has no HDR10+.')).toHaveCount(0)
+  await expect(hdr10plus).toBeHidden()
+
+  // An encoder that can't carry them: the section holds only what the source loses.
+  detail.tracks = tracks(DV_HDR10PLUS)
+  detail.spec.encoder.encoder = 'x264'
+  fixture.refresh()
+  await expect(page.getByText(/can't carry the source's Dolby Vision and HDR10\+/)).toBeVisible()
+  await expect(hdr10plus).toBeHidden()
+  expect(fixture.errors).toEqual([])
+})
+
+test('Encoder: with no one source, the HDR section shows for the encoders that carry HDR10+ and Dolby Vision', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 2, ['ready'])
+  await page.locator('[data-job="job-0"]').click()
+  await page.locator('[data-job="job-1"]').click({ modifiers: ['Shift'] })
+  const panel = page.getByRole('region', { name: 'Job settings', exact: true })
+  await expect(panel.getByRole('checkbox', { name: /^HDR10\+ from the source/ })).toBeVisible()
+  await expect(panel.getByRole('checkbox', { name: /^Dolby Vision from the source/ })).toBeVisible()
+  await expect(panel.getByText('HDR', { exact: true })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('More actions holds Save job files, Add jobs from job files and Read tracks again', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3, ['ready'])
+  const reprobed: string[][] = []
+  await page.route('**/api/jobs/reprobe', async (route) => {
+    reprobed.push(route.request().postDataJSON().ids)
+    await route.fulfill({ json: { ids: [] } })
+  })
+  for (const gone of [
+    'Save job files of the selected jobs',
+    'Add jobs from job files',
+    "Read the selected jobs' tracks again",
+  ])
+    await expect(page.getByRole('button', { name: gone, exact: true })).toHaveCount(0)
+  const more = page.getByRole('button', { name: 'More actions', exact: true })
+  // Adding jobs needs no selection; the other two act on the selected jobs.
+  await more.click()
+  await expect(page.getByRole('menuitem', { name: 'Save job files', exact: true })).toBeDisabled()
+  await expect(page.getByRole('menuitem', { name: 'Add jobs from job files…', exact: true })).toBeEnabled()
+  await expect(page.getByRole('menuitem', { name: 'Read tracks again', exact: true })).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await page.locator('[data-job="job-1"]').click()
+  await more.click()
+  await expect(page.getByRole('menuitem', { name: 'Save job files', exact: true })).toBeEnabled()
+  await page.getByRole('menuitem', { name: 'Read tracks again', exact: true }).click()
+  await expect.poll(() => reprobed).toEqual([['job-1']])
+  expect(errors).toEqual([])
+})
+
+test('the key hint is for screen readers only, and still describes the list', async ({ page }) => {
+  const { errors } = await queueFixture(page, 3, ['ready'])
+  const list = page
+    .getByRole('region', { name: 'Queue list', exact: true })
+    .getByRole('group', { name: 'Matching jobs', exact: true })
+  await expect(list).toHaveAccessibleDescription(/Arrow keys, Home and End move through the list/)
+  const hint = (await page.locator('#queue-keys').boundingBox())!
+  expect(hint.width * hint.height).toBeLessThanOrEqual(1)
+  expect(errors).toEqual([])
+})
+
+test("a queue row and its rail button count the job's errors and warnings instead of naming one", async ({ page }) => {
+  const fixture = await queueFixture(page, 3, ['ready'])
+  Object.assign(fixture.jobs[0], {
+    status: 'blocked',
+    issue: 'The output file is shared with another job',
+    issue_counts: { block: 1, warn: 2 },
+  })
+  Object.assign(fixture.jobs[1], {
+    status: 'warn',
+    issue: 'The output file exists',
+    issue_counts: { block: 0, warn: 1 },
+  })
+  Object.assign(fixture.jobs[2], {
+    status: 'warn',
+    issue: 'The output file exists',
+    issue_counts: { block: 0, warn: 2 },
+  })
+  fixture.refresh()
+  const rows = page.getByRole('region', { name: 'Queue list', exact: true })
+  await expect(rows.locator('[data-job="job-0"]')).toContainText('1 error · 2 warnings')
+  await expect(rows.locator('[data-job="job-1"]')).toContainText('1 warning')
+  // The status says Warning(s), short enough that a narrow list keeps the name; the count is under it.
+  await expect(rows.locator('[data-job="job-1"]').getByText('Warning', { exact: true })).toBeVisible()
+  await expect(rows.locator('[data-job="job-2"]').getByText('Warnings', { exact: true })).toBeVisible()
+  await expect(rows.locator('[data-job="job-1"]')).not.toContainText('Ready')
+  await expect(rows.getByText('The output file is shared with another job')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Collapse the queue list', exact: true }).click()
+  await page.getByRole('region', { name: 'Queue rail', exact: true }).locator('[data-job="job-0"]').hover()
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText('Episode 00000: Blocked (1 error, 2 warnings)')
+  expect(fixture.errors).toEqual([])
+})
+
+const HLG = "Dolby Vision 8.4 (HLG) isn't carried yet. Untick Dolby Vision from the source on the Encoder tab"
+
+test('the job header counts the issues, and the Issues tab lists each one with its code', async ({
+  page,
+}, testInfo) => {
+  const { errors } = await queueFixture(page, 1, ['blocked'])
+  await withDetail(page, (d) => {
+    d.issues = [
+      { severity: 'block', code: 'hdr.dv_hlg', message: HLG },
+      { severity: 'warn', code: 'video.option_unknown', message: "x265's help doesn't list --foo" },
+      { severity: 'warn', code: 'name.token', message: 'The name template has an unknown token.' },
+      { severity: 'info', code: 'video.color_source', message: "The source's color wins over the encoder options'" },
+    ]
+    d.issue_counts = { block: 1, warn: 2 }
+  })
+  await page.goto('/#/queue/job-0')
+  const header = page.locator('header')
+  // The header counts them: no messages, no codes.
+  await expect(header).toContainText('1 error · 2 warnings')
+  await expect(header).not.toContainText('hdr.dv_hlg')
+  await expect(header).not.toContainText("isn't carried yet")
+  const tab = page.getByRole('tab', { name: 'Issues 3', exact: true })
+  await expect(tab).toHaveClass(/bg-destructive\/10/) // the worst issue's tint
+  const jobTabs = page.getByRole('tablist', { name: 'Job sections', exact: true }).getByRole('tab')
+  await expect(jobTabs.last()).toHaveAccessibleName('Issues 3') // after Log
+  await header.screenshot({ path: testInfo.outputPath('issues-header.png') })
+
+  await header.getByRole('button', { name: 'Open the Issues tab', exact: true }).click()
+  await expect(tab).toHaveAttribute('aria-selected', 'true')
+  await expect(header.getByRole('button', { name: 'Open the Issues tab', exact: true })).toHaveCount(0)
+  const panel = page.getByRole('tabpanel', { name: 'Issues 3' })
+  await expect(panel.getByRole('heading', { name: 'Errors' })).toBeVisible()
+  await expect(panel.getByRole('heading', { name: 'Warnings' })).toBeVisible()
+  const items = panel.getByRole('listitem')
+  await expect(items).toHaveCount(3) // info notes stay out
+  // A screen reader hears the kind first; a message gets its final period; the code follows.
+  const said = (i: number) => items.nth(i).evaluate((el) => el.textContent!.replace(/\s+/g, ' ').trim())
+  expect(await said(0)).toBe(`Error: ${HLG}. hdr.dv_hlg`)
+  expect(await said(1)).toBe("Warning: x265's help doesn't list --foo. video.option_unknown")
+  expect(await said(2)).toBe('Warning: The name template has an unknown token. name.token')
+  await expect(items.nth(0).getByText(HLG, { exact: false })).toHaveCSS('color', await panelText(panel))
+  await page.getByRole('tabpanel').screenshot({ path: testInfo.outputPath('issues-tab.png') })
+  expect(errors).toEqual([])
+})
+
+test('each issue links to where it is fixed, after its message; one with no one place has no link', async ({
+  page,
+}) => {
+  const { errors } = await queueFixture(page, 1, ['blocked'])
+  const depth = 'An HDR source needs a 10-bit encode, or its gradients can band. Set the bit depth to 10'
+  await withDetail(page, (d) => {
+    d.issues = [
+      {
+        severity: 'block',
+        code: 'tools.missing',
+        message: 'MKV needs mkvmerge. Set it in Settings › Tools',
+        tab: 'tools',
+      },
+      { severity: 'block', code: 'probe', message: "The source couldn't be read", tab: null },
+      { severity: 'warn', code: 'hdr.depth', message: depth, tab: 'encoder' },
+    ]
+    d.issue_counts = { block: 2, warn: 1 }
+  })
+  await page.goto('/#/queue/job-0')
+  const issues = page.getByRole('tab', { name: /^Issues/ })
+  await issues.click()
+  const items = page.getByRole('tabpanel').getByRole('listitem')
+  await expect(items.nth(1).getByRole('button')).toHaveCount(0)
+  const said = await items.nth(2).evaluate((el) => el.textContent!.replace(/\s+/g, ' ').trim())
+  expect(said).toBe(`Warning: ${depth}. Go to the Encoder tab hdr.depth`)
+  await items.nth(2).getByRole('button', { name: 'Go to the Encoder tab', exact: true }).click()
+  await expect(page.getByRole('tab', { name: 'Encoder', exact: true })).toHaveAttribute('aria-selected', 'true')
+
+  await issues.click()
+  expect(errors).toEqual([])
+  // Settings › Tools: Settings opens on that category (its requests aren't this fixture's)
+  await page.route('**/api/**', (route) => route.fulfill({ status: 404, json: {} }))
+  await items.nth(0).getByRole('button', { name: 'Go to Settings › Tools', exact: true }).click()
+  await expect(page).toHaveURL(/#\/settings$/)
+  expect(await page.evaluate(() => localStorage.getItem('videoforge.settingsTab'))).toBe('tools')
+})
+
+for (const palette of ['gold', 'indigo', 'ocean', 'forest', 'ember', 'rose', 'slate'])
+  for (const mode of ['light', 'dark'])
+    test(`the Issues tab's tint and its list keep their contrast: ${palette}, ${mode}`, async ({ page }) => {
+      await page.addInitScript(
+        ([palette, mode]) => {
+          localStorage.setItem('videoforge.palette', palette)
+          localStorage.setItem('videoforge.mode', mode)
+        },
+        [palette, mode],
+      )
+      const fixture = await queueFixture(page, 1, ['blocked'])
+      const detail = await withDetail(page, (d) => {
+        d.issues = [
+          { severity: 'block', code: 'hdr.dv_hlg', message: HLG },
+          { severity: 'warn', code: 'name.token', message: 'The name template has an unknown token.' },
+        ]
+      })
+      await page.goto('/#/queue/job-0')
+      const contrast = async () =>
+        (await page.waitForTimeout(300), // the tabs' colors fade in
+        await new AxeBuilder({ page })
+          .include('header')
+          .include('#job-tab-panel')
+          // the blocked job's dimmed Queue box: a disabled control, which WCAG leaves out
+          .exclude('header label:has([role=checkbox][disabled])')
+          .withRules(['color-contrast'])
+          .analyze()).violations.flatMap((v) => v.nodes.map((n) => `${n.target.join(' ')}: ${n.any[0]?.message}`))
+      const tab = page.getByRole('tab', { name: /^Issues/ })
+      // An error's tint and a warning's, each while the tab is closed and while it's open.
+      for (const issues of [detail.issues, detail.issues.slice(1)]) {
+        detail.issues = issues
+        fixture.refresh()
+        await expect(tab).toHaveAccessibleName(`Issues ${issues.length}`)
+        await page.getByRole('tab', { name: 'Video', exact: true }).click()
+        expect(await contrast()).toEqual([])
+        await tab.click()
+        expect(await contrast()).toEqual([])
+      }
+      expect(fixture.errors).toEqual([])
+    })
+
+/** The tab panel's own text color: an issue's message is in it, not in red or yellow. */
+async function panelText(panel: Locator) {
+  return panel.evaluate((el) => getComputedStyle(el).color)
+}
+
+test('the Issues tab shows with issues, and stays saying none are left while it is open', async ({ page }) => {
+  const fixture = await queueFixture(page, 1, ['warn'])
+  const detail = await withDetail(page, (d) => {
+    d.issues = [{ severity: 'warn', code: 'outfile.exists', message: 'The output file is already there' }]
+    d.issue_counts = { block: 0, warn: 1 }
+  })
+  await page.goto('/#/queue/job-0')
+  await expect(page.locator('header')).toContainText('Ready with warnings')
+  const tab = page.getByRole('tab', { name: 'Issues 1', exact: true })
+  await expect(tab).toHaveClass(/bg-warning\/10/)
+  await tab.click()
+
+  Object.assign(detail, { issues: [], issue_counts: { block: 0, warn: 0 }, status: 'ready' })
+  fixture.refresh()
+  const panel = page.getByRole('tabpanel')
+  await expect(panel).toHaveText('No issues left.')
+  await expect(page.getByRole('button', { name: 'Open the Issues tab', exact: true })).toHaveCount(0)
+  await page.getByRole('tab', { name: 'Video', exact: true }).click()
+  await expect(page.getByRole('tab', { name: /^Issues/ })).toHaveCount(0)
+  expect(fixture.errors).toEqual([])
 })

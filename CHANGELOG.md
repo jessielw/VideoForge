@@ -4,6 +4,49 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.14] - 2026-11-21
+
+### Added
+
+- **Queue groups**: a batch of jobs shown together under one header, such as a season. Adding two or more jobs on **New jobs** puts them in a group when **Group them** is ticked (the default). The group is named `Show S01` from the episode names, else after the folder; you can type another name. **Group** on the Queue toolbar groups the selected jobs. The header collapses and expands the group (remembered in the browser), selects its jobs, queues or unqueues them all, and shows how many are done or failed and the group's progress. Its **⋯** menu moves the selected jobs into or out of the group (the keyboard's way to do it), renames it or ungroups it. Drag a row's grip (⋮⋮) to move jobs into or out of a group: an indented drop line means inside it, a full-width one outside. Drag a header's grip to move the whole group. A group's jobs always stay together in the queue order. **Move up**/**Move down** keep a job inside its group and move a fully selected group as one. Groups belong to the queue only, not to job files. `POST /api/jobs` takes `group_name`; `POST /api/jobs/move` takes `{ids, before, group}`, `POST /api/jobs/group` takes `{ids, name}`, and `POST /api/groups/{id}/rename` and `/ungroup` manage a group; `GET /api/jobs` adds each job's `group` and `group_name`.
+- The Queue's batch panel (several jobs selected) sets one **Output folder** for all of them: type or paste a path, **Browse…**, pick a saved folder, or drop a folder on the row. Clearing the box clears it on every job. Each job keeps its own output name, and queued, running or indexing jobs are skipped as for the other batch settings.
+- After **Add**, the bar on **New jobs** says what comes next: check each job in the Queue, then tick its box to queue it.
+- A job warns when an HDR10 or HLG source is encoded at 8-bit with **Color from the source** on, and shows **Ready with warnings** instead of **Ready**. Before, only the note under **Bit depth** on the Encoder tab said so.
+- On the **Issues** tab, an issue with one place to fix it links there, such as **Go to the Encoder tab** or **Go to Settings › Tools**. Each issue in a job's `GET /api/jobs/{id}` adds a `tab`.
+- The queue list's checkboxes have a **Queue** caption, whose tooltip says that a ticked job is queued and locked. A queued row shows a lock before **Queued**.
+- The Queue search also matches each row's encoder, resolution and HDR tags, such as `x265`, `3840` or `HDR10`. To give one kind of source its own encoder preset, search for it, use **Select matching jobs**, and set the preset once in the batch panel.
+- A job warns when its extra muxer arguments were typed for the other container, such as mkvmerge arguments on a job whose container was then changed to MP4 on its Output tab or in the Queue's batch panel. The warning goes when the arguments are changed or cleared, or the container goes back. The template editor shows the same warning under **Extra arguments**. Jobs and templates saved before this version never warn. Jobs, templates and their files save the container the arguments were typed for as `mux.extra_container`.
+
+### Changed
+
+- Settings that most jobs leave alone are in closed sections now, and the browser remembers which you open. A closed section's title counts what in it differs from VideoForge's defaults, with its warnings counted apart. **Advanced settings** on the Encoder tab (color settings, options and extra arguments) now starts closed, where it was open on a job, in the template editor and in the batch panel. One open or closed choice covers all four places, the preset manager included. The Video tab's side panel and the Output tab each end with an **Advanced** section: **Source filter** and **Edit the whole script…** on the Video tab; extra arguments, PGS compression, the work folder, the mux commands and the finished steps on the Output tab.
+- HDR10+ and Dolby Vision moved out of **Advanced settings** into an **HDR** section after **Bit depth**. On a job it shows once the source is read and has either. "An HDR source: encode it at 10-bit." moved under **Bit depth**.
+- An audio track's **Delay** moved into its **Settings**, which every audio track now has, a copied one too. **Settings** counts a changed delay.
+- **Save job files**, **Add jobs from job files…** and **Read tracks again** moved into **More actions** (**⋯**) on the Queue toolbar. The keyboard hint under the queue list is now for screen readers only; **Shortcuts** lists the same keys.
+- The job header counts its errors and warnings, such as "1 error · 2 warnings", instead of listing the messages with their codes, and a new **Issues** tab lists each one with its code. Queue rows count them too. The "Warn" status is now **Ready with warnings**; a queue row says **Warning** or **Warnings**, with the count under it. `GET /api/jobs` adds each job's `issue_counts` (`block`, `warn`).
+- **New jobs** asks in the order the choices are made: output folder, rule set, original language, template, then the encoder preset and container (which change only their part of the template), with **After adding** last. With only one rule set installed, as on a new install, New jobs and a job's Output tab hide the **Rule set** menu.
+- Each **Browse…** on New jobs (Sources, Encodes, Subtitles, Chapters, Output folder) opens where it was last used. Every Browse used to open in the last folder any of them showed, so Sources could open in the output folder. `GET /api/settings` adds `last_dirs`.
+
+### Fixed
+
+- Links are readable in light mode: **Open the failed step in the Log tab** in the job header, **Open existing job** on New jobs, and **Clear filters** and **Add some** in an empty Queue list. Their color was below the 4.5:1 contrast that WCAG asks for text; they're in the text color now, underlined.
+- Dragging across Queue rows to select them, with nothing selected yet, ends on the row under the pointer again. **Clear selection** showing up above the list as the drag began moved the rows down a line. It now sits beside the selection count, which keeps its height.
+- A double click on **Run selected** could cancel the job it started: when a job started, **Cancel** took Run selected's place. The Queue toolbar's first row now stays put. **Start queue** becomes **Stop after current** in the same slot, and **Cancel**, **Pause after pass 1**, **Pause** or **Resume**, the priority menu and **Stop indexing** go on a second row that shows only while they apply. **Queue (N)** and **Unqueue (N)** moved to the end of the row of icons.
+- Settings › Files & folders says when the saved output folders couldn't be loaded, with **Retry**. It used to say there were none.
+- Two quick clicks in the saved output folders (in Settings, or the **Saved** menu on New jobs) keep both changes. The second click could undo the first.
+- In a wide window, the Settings list of sections stays in view while a long section scrolls, with **Shut down** and the version under it.
+- Removing a folder browser root, a notification or an action in Settings moves keyboard focus to the next row's remove button, else the previous row's, else the section's heading. Focus used to be lost.
+- In a narrow window, Settings scrolls the row of sections so the one it opens on (such as **Appearance**) is in view.
+- Going to another page moves keyboard focus to that page's heading (on the Queue, its main area) when focus was on the old page. **Open Templates** in Settings used to drop it. Clicking the side menu leaves focus on the menu.
+- In an audio or subtitle rule's languages box (templates, and Settings › Jobs › Default subtitles), Enter adds the language and closes the list, which used to stay open over the controls below. Typing or the Down arrow opens it again. Picking with the mouse keeps it open for more.
+- **New jobs › Matched files** says **From the source** in the Chapters column when AutoQPF won't run: the source has an existing encode, or the template turns AutoQPF off. It said **AutoQPF** for every source without a chapter file.
+- In a window under 640 px wide, the **New jobs** bar puts its buttons on a second row, so **Open queue** is no longer cut off.
+- **Remove and delete work folders** marks a job running a test encode or CRF search as kept, as it did for queued, running and indexing jobs. Before, its folder was listed with no note, and the job then stayed.
+- When the script needs a VapourSynth plugin that isn't installed, the Video tab names it above the error. For the Source filter's plugin, it says to install it or choose another Source filter.
+- A read-only choice, such as the encoder on a locked job's Encoder tab, its container or a built-in template's settings, shows the chosen item at full strength, and the others stay dimmed. At half strength the chosen item's border was hard to see, most of all in the Gold light theme.
+- The version at the top of the side menu has a line of its own under **VideoForge**, so a long version or a wide font no longer squeezes the logo.
+- Wording: the Video tab's Dolby Vision and HDR10+ notes name SVT-AV1-HDR as well as x265; the SVT-AV1 color help no longer suggests only MKV gets the pixel aspect; Settings › Plugins gives every reason a plugin can't be removed; and Settings, the Video tab, the Queue and the side menu say that indexing also waits while another job of the same source runs.
+
 ## [0.1.13] - 2026-11-19
 
 ### Fixed

@@ -20,5 +20,7 @@ export default defineConfig({
       : 'npm run dev -- --host 127.0.0.1 --port 5178 --strictPort',
     url: 'http://127.0.0.1:5178',
     reuseExistingServer: false,
+    // The tests answer the API themselves: a request left over as a page closes goes to a closed port, never an app
+    env: { VIDEOFORGE_PORT: '9' },
   },
 })

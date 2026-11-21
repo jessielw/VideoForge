@@ -2,6 +2,10 @@
 
 The job's **Output** tab controls its destination, container, label, chapters, and AutoQPF settings. Inspect the plan after changing the container or supplying an existing video encode.
 
+The extra arguments, PGS compression, the work folder, the commands that build the file, and the finished steps are under **Advanced**, at the bottom of the tab. Closed, its title counts the extra arguments and PGS compression when they're set. The browser remembers whether it's open.
+
+The extra arguments go to the container's tool: mkvmerge for MKV, MP4Box for MP4. If the container changes after they were typed, on this tab or in the Queue's batch panel, the job warns until you change or clear them, or set the container back. The template editor shows the same warning under **Extra arguments**.
+
 ## Folder, container, and label
 
 Choose **MKV** or **MP4** and a writable destination. MKV uses MKVToolNix; MP4 uses MP4Box. Clearing the output folder saves that empty value and blocks the job until a folder is chosen. An output is written as `<output>.partial`, validated, then published. A rejected candidate is kept as `<name>.unpublished-<id>.<container>` for inspection, and the previous finished file stays intact.
@@ -62,6 +66,8 @@ Jobs can use source chapters, an added chapter file, or AutoQPF-generated chapte
 - **A chapter file you added** (OGM `.txt` or Matroska `.xml`): the output gets your file as it is, and AutoQPF makes only the QP file from it. A file with no chapters VideoForge can read fails the job's chapters step.
 
 With AutoQPF off, the encoder gets no QP file, and an added chapter file is still muxed. VP8, VP9 and SVT-AV1 (in CRF) take the QP file's frames as forced keyframes. A reused video encode has already chosen its keyframes, and a test encode leaves them out.
+
+On **New jobs**, the **Chapters** column of **Matched files** shows where each job's chapters will come from: an added chapter file's name, **AutoQPF**, or **From the source** for a job that reuses an encode or whose template turns AutoQPF off.
 
 The completed [job record](../job-record.md#chapters) states where the chapters came from.
 

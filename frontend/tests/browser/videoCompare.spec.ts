@@ -14,11 +14,14 @@ async function fixture(page: Page) {
     id: 'job-0',
     name: 'Show S01E01',
     label: '',
+    group: null,
+    group_name: '',
     source: 'D:\\Media\\Show.S01E01.mkv',
     rule_set: 'manual',
     status: 'ready',
     progress: null,
     issue: '',
+    issue_counts: { block: 0, warn: 0 },
     output: null,
     encoder: 'x265',
     crop: null,
@@ -206,6 +209,23 @@ test('bookmarks mark frames on the scrub bar, and [ and ] go between them; a tim
   await page.reload()
   await page.locator('[data-job="job-0"]').click()
   await expect(page.locator('[data-mark]')).toHaveCount(2)
+  expect(errors).toEqual([])
+})
+
+test("a preview error above the frame shows in full: a missing plugin's line, then the raw error", async ({ page }) => {
+  const { errors } = await fixture(page)
+  const hint =
+    "VapourSynth can't find the FFMS2 plugin, which the Source filter needs. Install it, or choose another Source filter."
+  const raw =
+    'Line 3: AttributeError: No attribute with the name ffms2 exists. Did you mistype a plugin namespace or forget to install a plugin?'
+  await page.route('**/api/jobs/job-0/video/info**', (route) =>
+    route.fulfill({ status: 422, json: { detail: `${hint}\n\n${raw}` } }),
+  )
+  await page.reload()
+  const line = page.getByText(hint)
+  await expect(line).toBeVisible()
+  expect(await line.evaluate((el) => el.textContent)).toBe(`${hint}\n\n${raw}`) // the raw error a line under it
+  expect(await line.evaluate((el) => el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight)).toBe(true) // nothing cut off
   expect(errors).toEqual([])
 })
 

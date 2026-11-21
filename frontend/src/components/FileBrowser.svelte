@@ -42,6 +42,7 @@
     programs = false,
     orFolder = false,
     start = '',
+    remember = '',
     onpick,
     onclose,
   }: {
@@ -51,6 +52,8 @@
     programs?: boolean
     orFolder?: boolean
     start?: string
+    // a kind of Browse ("sources", "output"...) that opens where it was last used, not where any Browse was
+    remember?: string
     onpick: (paths: string[]) => void
     onclose: () => void
   } = $props()
@@ -108,7 +111,9 @@
       listing = next
       anchor = null
       pathInput = listing.path
-      api.saveSettings({ last_dir: listing.path }).catch(() => {})
+      api
+        .saveSettings({ last_dir: listing.path, ...(remember ? { last_dirs: { [remember]: listing.path } } : {}) })
+        .catch(() => {})
       if (focus) {
         await tick()
         focusRow(focus === true ? null : focus)
@@ -162,8 +167,8 @@
 
   onMount(async () => {
     roots = await api.roots()
-    const settings = await api.settings().catch(() => ({ last_dir: '', output_dir: '' }))
-    await open(start || settings.last_dir || roots[0] || 'C:\\')
+    const settings = await api.settings().catch(() => ({ last_dir: '', last_dirs: undefined }))
+    await open(start || (remember && settings.last_dirs?.[remember]) || settings.last_dir || roots[0] || 'C:\\')
     if (!listing && roots[0]) await open(roots[0])
   })
 
