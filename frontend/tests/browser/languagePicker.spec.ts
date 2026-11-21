@@ -168,3 +168,30 @@ test('rule languages: pick from the list, type a name or a tag, chips come off',
   await expect(page.getByRole('listbox')).toHaveCount(0)
   expect(errors).toEqual([])
 })
+
+test('rule languages: Enter adds and closes the list, typing or Down opens it, a click keeps it open', async ({
+  page,
+}) => {
+  const errors = await fixture(page)
+  const box = page.getByRole('combobox', { name: 'Rule 1: languages' })
+  const field = box.locator('..')
+  await box.fill('jap')
+  await box.press('Enter')
+  await expect(field).toContainText('Japanese')
+  await expect(box).toHaveAttribute('aria-expanded', 'false') // it would cover the controls below
+  await expect(page.getByRole('listbox')).toHaveCount(0)
+  await expect(box).toBeFocused()
+  await box.press('ArrowDown')
+  await expect(box).toHaveAttribute('aria-expanded', 'true')
+  await page
+    .getByRole('listbox')
+    .getByRole('option', { name: /French/ })
+    .first()
+    .click()
+  await expect(field).toContainText('French')
+  await expect(box).toHaveAttribute('aria-expanded', 'true') // the mouse picks several at once
+  await box.press('Escape')
+  await box.pressSequentially('ger')
+  await expect(box).toHaveAttribute('aria-expanded', 'true')
+  expect(errors).toEqual([])
+})

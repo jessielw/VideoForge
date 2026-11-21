@@ -83,11 +83,14 @@
     query = ''
   }
 
-  function pick(tag: string) {
+  // Several languages: Enter (close) adds one and closes the list, which would cover the controls below; typing or
+  // Down opens it again. A mouse pick keeps it open for more.
+  function pick(tag: string, close = false) {
     if (Array.isArray(value)) {
       emit(isChosen(tag) ? value.filter((v) => v.toLowerCase() !== tag.toLowerCase()) : [...value, tag])
       query = ''
       active = 0
+      if (close) end()
       input?.focus()
     } else {
       if (tag !== value) emit(tag)
@@ -109,7 +112,7 @@
       requestAnimationFrame(() => list?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' }))
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      if (open && items[active]) pick(items[active][0])
+      if (open && items[active]) pick(items[active][0], true)
       else if (!many && clearable && open && !query.trim()) pick('')
     } else if (e.key === 'Escape' && open) {
       e.preventDefault()
