@@ -472,11 +472,31 @@ test('the file picker moves, ticks, opens and adds from the keyboard', async ({ 
     const url = new URL(r.url())
     if (url.pathname === '/api/fs/list') listed.push(url.searchParams.get('path')!)
   })
+  // The same rows in every folder, as the fixture's, but each listing names the folder asked for: the Path box
+  // then shows when the picker has listed it, and so has put the cursor on its row. Moving on before that, the
+  // cursor could land after the next focus and take it (a CI run's Enter on E02 opened Old instead).
+  await page.route(/\/api\/fs\/list\?/, (route) =>
+    route.fulfill({
+      json: {
+        path: new URL(route.request().url()).searchParams.get('path'),
+        parent: 'D:/',
+        dirs: [{ name: 'Old', path: 'D:/Media/Old', mtime: 1_700_000_000 }],
+        files: files.map((p, i) => ({
+          name: p.slice(9),
+          path: p,
+          size: [3, 1, 2][i % 3] * 1e9,
+          mtime: 1_700_000_000 + i,
+        })),
+      },
+    }),
+  )
   await page.goto('/#/new')
   await page.getByRole('button', { name: 'Browse…' }).first().click()
   const picker = page.getByRole('dialog', { name: 'Sources' })
   const box = (name: string) => picker.getByRole('checkbox', { name: `Pick ${name}` })
+  const shows = (path: string) => expect(picker.getByRole('textbox', { name: 'Path' })).toHaveValue(path)
 
+  await shows('D:/') // listed: before that, ArrowDown has no row to go to
   await picker.getByRole('searchbox', { name: 'Filter this folder' }).press('ArrowDown')
   await expect(box('Old')).toBeFocused()
   await page.keyboard.press('ArrowDown')
@@ -504,10 +524,13 @@ test('the file picker moves, ticks, opens and adds from the keyboard', async ({ 
   await expect(box('Old')).toBeFocused()
   await page.keyboard.press('Enter') // opens the folder, not ticks it
   await expect.poll(() => listed.at(-1)).toBe('D:/Media/Old')
+  await shows('D:/Media/Old')
   await expect(box('Old')).not.toBeChecked()
-  await expect(box('Old')).toBeFocused() // the mock lists D:/Media again; the cursor is on the first row
+  await expect(box('Old')).toBeFocused() // the mock lists the same rows; the cursor is on the first row
   await page.keyboard.press('Backspace')
   await expect.poll(() => listed.at(-1)).toBe('D:/')
+  await shows('D:/')
+  await expect(box('Old')).toBeFocused() // the cursor lands on the folder it left
 
   await box('E02.mkv').focus()
   await page.keyboard.press('Enter') // adds what's ticked
