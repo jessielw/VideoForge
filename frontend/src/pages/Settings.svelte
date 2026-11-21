@@ -678,7 +678,7 @@
                   <span id="index-waits">Wait while an encode reads the same disk</span>
                   <span id="index-waits-help" class="block text-xs text-muted-foreground">
                     Indexing a job waits while the running job uses the disk its source is on, and jobs on other disks
-                    go first. Index now on a job never waits.
+                    go first. Index now on a job's Video tab skips this wait.
                   </span>
                 </span>
               </label>

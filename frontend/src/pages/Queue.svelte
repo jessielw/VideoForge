@@ -1533,7 +1533,7 @@
                 {#if job.index_held && job.status === 'index-queued'}
                   <Tip
                     class="mt-0.5 block truncate text-xs text-muted-foreground"
-                    text="Settings › Queue & indexing › Wait while an encode reads the same disk"
+                    text="Indexing waits while an encode reads this disk (Settings › Queue & indexing › Wait while an encode reads the same disk), and always while another job of this source runs."
                   >
                     Waiting for the encode reading this disk
                   </Tip>

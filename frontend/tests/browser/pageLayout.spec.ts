@@ -465,6 +465,43 @@ test('the sidebar keeps one left edge: logo, icons and status', async ({ page })
   expect(errors).toEqual([])
 })
 
+test('the side menu puts the version on its own line, and the logo keeps its size in a wide font', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.route('**/api/health', (route) => route.fulfill({ json: { ok: true, version: '10.10.10' } }))
+  await page.goto('/#/new')
+  await page.addStyleTag({ content: '*{font-family:Verdana,"DejaVu Sans",sans-serif!important}' }) // Linux CI's
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  const version = nav.getByText('10.10.10', { exact: true })
+  await expect(version).toBeVisible()
+  expect((await nav.locator('img').boundingBox())!.width).toBe(24)
+  const name = (await nav.getByText('VideoForge', { exact: true }).boundingBox())!
+  expect((await version.boundingBox())!.y).toBeGreaterThanOrEqual(name.y + name.height - 1) // under the name
+  expect(
+    await nav
+      .locator('> div')
+      .first()
+      .evaluate((row) => row.scrollWidth <= row.clientWidth),
+  ).toBe(true)
+  expect(errors).toEqual([])
+})
+
+test('a read-only choice shows the chosen item at full strength and dims the others', async ({ page }) => {
+  const errors = await layoutFixture(page)
+  await page.goto('/#/templates')
+  await page
+    .getByRole('list', { name: 'Templates' })
+    .getByRole('button', { name: /^Manual defaults/ })
+    .click()
+  const mkv = page.getByRole('radio', { name: 'MKV (mkvmerge)', exact: true })
+  await expect(mkv).toBeDisabled()
+  await expect(mkv).toHaveAttribute('data-state', 'on')
+  const opacity = (name: string) =>
+    page.getByRole('radio', { name, exact: true }).evaluate((el) => getComputedStyle(el).opacity)
+  expect(await opacity('MKV (mkvmerge)')).toBe('1') // its accent border keeps its contrast
+  expect(await opacity('MP4 (MP4Box)')).toBe('0.5')
+  expect(errors).toEqual([])
+})
+
 test('palette cards in one row start their name and swatch on one line', async ({ page }) => {
   const errors = await layoutFixture(page)
   await page.goto('/#/settings')

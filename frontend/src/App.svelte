@@ -101,12 +101,15 @@
       aria-label="Main navigation"
     >
       <div class="flex items-center gap-2 py-4 {navCollapsed ? 'justify-center' : 'px-5'}">
-        <Tip side="right" text={app.version ? `VideoForge ${app.version}` : undefined}>
+        <Tip side="right" class="shrink-0" text={app.version ? `VideoForge ${app.version}` : undefined}>
           <img src="/favicon.svg" alt="" class="size-6" />
         </Tip>
         {#if !navCollapsed}
-          <span class="text-base font-semibold">VideoForge</span>
-          {#if app.version}<span class="text-xs text-muted-foreground tabular-nums">{app.version}</span>{/if}
+          <!-- the version under the name: any version, in any font, leaves the logo its size -->
+          <div class="flex min-w-0 flex-col leading-tight">
+            <span class="text-base font-semibold">VideoForge</span>
+            {#if app.version}<span class="truncate text-xs text-muted-foreground tabular-nums">{app.version}</span>{/if}
+          </div>
         {/if}
       </div>
       <div class="flex flex-col gap-0.5 px-2">
@@ -197,7 +200,7 @@
             {#if held}
               <Tip
                 class="block truncate text-muted-foreground"
-                text="An encode is reading their disk. Settings › Queue & indexing › Wait while an encode reads the same disk"
+                text="An encode is reading their disk. Indexing waits for it (Settings › Queue & indexing › Wait while an encode reads the same disk), and always while another job of the same source runs."
               >
                 {held} to index after the encode
               </Tip>

@@ -37,7 +37,7 @@ Show.S01E01.mkv_tmp/
     video.vpy  video.hevc  audio0_eng.ac3  chapters.qpf
     videoforge.log
     Show.S01E01.mkv.videoforge.json
-  dubbed/                       the job labelled "dubbed"
+  dubbed/                       the job labeled "dubbed"
     video.vpy  video.hevc  audio0_jpn.ac3 ...
     videoforge.log
     Show.S01E01.dubbed.mkv.videoforge.json
