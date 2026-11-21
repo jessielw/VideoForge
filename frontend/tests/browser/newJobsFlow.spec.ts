@@ -18,7 +18,7 @@ const video: EncoderSettings = {
   dolby_vision: false,
 }
 
-async function fixture(page: Page, posted: Record<string, unknown>[]) {
+async function fixture(page: Page, posted: Record<string, unknown>[], qpf = true) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   const template: Template = {
@@ -39,7 +39,7 @@ async function fixture(page: Page, posted: Record<string, unknown>[]) {
       template_title: false,
       name_suffix: '',
     },
-    qpf: true,
+    qpf,
     crop_mode: 'keep',
     audio: null,
     subs: null,
@@ -232,6 +232,67 @@ test('Matched files keeps its size while the sources match again', async ({ page
   expect((await card.boundingBox())!.height).toBeGreaterThanOrEqual(Math.min(before, 192)) // no collapse to one line
   release()
   await expect(card.getByText('Show.S01E03.mkv')).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test("Matched files says AutoQPF where it runs, and From the source for a source's existing encode", async ({
+  page,
+}) => {
+  const { errors, sources } = await fixture(page, [])
+  await page.route('**/api/match', (route) =>
+    route.fulfill({
+      json: {
+        jobs: sources.map((source, i) => ({
+          source,
+          encode: i ? 'D:/Media/Show.S01E02.hevc' : null, // an existing encode: AutoQPF doesn't run
+          encode_state: i ? 'done' : null,
+          subtitles: [],
+          subtitle_info: [],
+          chapters: null,
+          existing_id: null,
+          existing_status: null,
+        })),
+        unmatched: [],
+      },
+    }),
+  )
+  await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
+  await expect(page.getByRole('row').filter({ hasText: 'Show.S01E01.mkv' })).toContainText('AutoQPF')
+  await expect(page.getByRole('row').filter({ hasText: 'Show.S01E02.mkv' })).toContainText('From the source')
+  expect(errors).toEqual([])
+})
+
+test('Matched files says From the source when the template turns AutoQPF off', async ({ page }) => {
+  const { errors, sources } = await fixture(page, [], false)
+  await paste(page, `"${sources[0]}"`)
+  const row = page.getByRole('row').filter({ hasText: 'Show.S01E01.mkv' })
+  await expect(row).toContainText('From the source')
+  await expect(row).not.toContainText('AutoQPF')
+  expect(errors).toEqual([])
+})
+
+test('in a narrow window the bar after Add puts its buttons on a second row, all inside it', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 })
+  const { errors, sources } = await fixture(page, [])
+  // one added and one kept: the sources stay, so the bar has all three buttons
+  await page.route('**/api/jobs', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ json: { added: ['a'], skipped: ['Show.S01E02.mkv'], unmatched: [], kept: [] } })
+      : route.fallback(),
+  )
+  await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
+  const bar = page.locator('footer[aria-label="Add to queue"]')
+  await bar.getByRole('button', { name: /Add 2 jobs/ }).click()
+  await expect(bar.getByRole('button', { name: 'Open queue' })).toBeVisible()
+  const edge = (await bar.boundingBox())!
+  const status = (await bar.getByRole('status').boundingBox())!
+  expect(status.width).toBeGreaterThan(200)
+  for (const name of ['Keep editing', 'Add more', 'Open queue']) {
+    const button = (await bar.getByRole('button', { name }).boundingBox())!
+    expect(button.x + button.width, name).toBeLessThanOrEqual(edge.x + edge.width)
+    expect(button.y + button.height, name).toBeLessThanOrEqual(edge.y + edge.height)
+    expect(button.y, name).toBeGreaterThanOrEqual(status.y + status.height) // below the status line
+  }
   expect(errors).toEqual([])
 })
 
