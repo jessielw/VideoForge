@@ -208,6 +208,48 @@ test('Files & folders keeps keyboard focus with the folder through pin, unpin an
   expect(errors).toEqual([])
 })
 
+test('Files & folders says when the saved folders could not be loaded, and Retry loads them', async ({ page }) => {
+  const errors = await fixture(page, [folder(1)])
+  let fail = true
+  await page.route('**/api/settings', (route) =>
+    fail ? route.fulfill({ status: 500, json: { detail: 'disk full' } }) : route.fallback(),
+  )
+  await page.goto('/#/settings')
+  await page.getByRole('button', { name: 'Files & folders', exact: true }).click()
+  const section = page.getByRole('region', { name: 'Saved output folders' })
+  await expect(section.getByRole('alert')).toContainText("Couldn't load the saved output folders: disk full")
+  await expect(section).not.toContainText('No saved output folders yet')
+  fail = false
+  await section.getByRole('button', { name: 'Retry' }).click()
+  await expect(section.getByRole('listitem')).toHaveText([/show-1/])
+  await expect(section.getByRole('alert')).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test('two quick clicks in Files & folders keep both changes', async ({ page }) => {
+  const { errors, state, section } = await settingsList(page, [folder(1, true), folder(2)])
+  // Each save waits until the test lets it through, as over a slow connection.
+  const held: (() => void)[] = []
+  await page.route('**/api/settings', async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback()
+    await new Promise<void>((resolve) => held.push(resolve))
+    await route.fallback()
+  })
+  await section.getByRole('button', { name: 'Pin D:/Out/show-2' }).click()
+  await expect(section.getByRole('button', { name: 'Unpin D:/Out/show-2' })).toBeVisible() // at once
+  await section.getByRole('button', { name: 'Make D:/Out/show-1 the default' }).click()
+  for (let n = 0; n < 2; n++) {
+    await expect.poll(() => held.length).toBeGreaterThan(0)
+    held.shift()!()
+  }
+  await expect
+    .poll(() => state.saved.at(-1))
+    .toEqual({ output_folders: [folder(1, true), folder(2, true)], output_default: 'D:/Out/show-1' })
+  await expect(section.getByRole('button', { name: 'Unpin D:/Out/show-2' })).toBeVisible()
+  await expect(section.getByRole('listitem').filter({ hasText: 'show-1' })).toContainText('Default')
+  expect(errors).toEqual([])
+})
+
 test('Files & folders says when nothing is saved yet', async ({ page }) => {
   const { errors, section } = await settingsList(page, [])
   await expect(section).toContainText(
