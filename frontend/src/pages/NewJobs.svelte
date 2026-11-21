@@ -423,7 +423,7 @@
 <div class="flex h-full flex-col">
   <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-6" bind:this={scroller}>
     <header class="flex shrink-0 flex-wrap items-center gap-3">
-      <h1 class="text-xl font-semibold">New jobs</h1>
+      <h1 tabindex="-1" class="text-xl font-semibold outline-none">New jobs</h1>
       <span class="text-sm text-muted-foreground"
         >Use Browse, or copy files as paths (Explorer: Ctrl+Shift+C) and paste them on any page, outside a text box.
         Each source file becomes one job. A folder adds a job for each source file in it, but not in its subfolders.</span
@@ -641,7 +641,16 @@
         </div>
         {#if result}
           <div class="min-h-0 flex-1 overflow-auto border-t" bind:this={matchList}>
-            <MatchTable {result} bind:replacements bind:excluded bind:assign {odd} {timing} onreview={review} />
+            <MatchTable
+              {result}
+              bind:replacements
+              bind:excluded
+              bind:assign
+              {odd}
+              {timing}
+              qpf={template?.data.qpf ?? true}
+              onreview={review}
+            />
           </div>
           <!-- Drag down to show more rows (arrow keys too); double-click goes back to filling the page. A
              focusable separator is the window splitter pattern, which Svelte's a11y check doesn't know. -->
@@ -700,10 +709,13 @@
       </ul>
     </details>
   {/if}
-  <footer class="h-(--bar-h) shrink-0 border-t bg-card" aria-label="Add to queue">
-    <div class="flex h-full items-center gap-3 overflow-hidden px-6">
+  <!-- one line, level with the side menu's status block; a narrow window: the text, then the buttons below it -->
+  <footer class="h-(--bar-h) shrink-0 border-t bg-card max-sm:h-auto" aria-label="Add to queue">
+    <div
+      class="flex h-full items-center gap-3 overflow-hidden px-6 max-sm:flex-wrap max-sm:justify-end max-sm:gap-2 max-sm:px-3 max-sm:py-2"
+    >
       {#if completion}
-        <p role="status" class="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">
+        <p role="status" class="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium max-sm:basis-full">
           {#if completion.added.length}<CheckIcon class="size-4 shrink-0 text-success" />{/if}
           <span class="truncate" title={completionText}>{completionText}</span>
         </p>
@@ -714,12 +726,15 @@
         {/if}
       {:else}
         {#if adding}
-          <p role="status" class="flex min-w-0 flex-1 items-center gap-2 text-sm">
+          <p role="status" class="flex min-w-0 flex-1 items-center gap-2 text-sm max-sm:basis-full">
             <LoaderCircleIcon class="size-4 shrink-0 animate-spin text-muted-foreground" />
             <span class="truncate">Adding {newJobs} job{newJobs === 1 ? '' : 's'} to the queue…</span>
           </p>
         {:else}
-          <p class="min-w-0 flex-1 truncate text-sm {sources.length ? '' : 'text-muted-foreground'}" title={summary}>
+          <p
+            class="min-w-0 flex-1 truncate text-sm max-sm:basis-full {sources.length ? '' : 'text-muted-foreground'}"
+            title={summary}
+          >
             {summary}
           </p>
         {/if}

@@ -32,7 +32,9 @@ from videoforge.core.jobs import ProbedInputs, external_tracks
 from videoforge.core.models import AudioCodec as C, SubFormat as F, VideoInfo
 from videoforge.core.pipeline.steps import Step, StepProgress
 from videoforge.core.plan_io import to_json
+from videoforge.core.template import Template
 from videoforge.core.video.settings import Crop
+from videoforge.core.video.vs import ScriptError
 from videoforge.core.workdir import keep_records, note_finished, work_dir
 from videoforge.rule_sets.manual import ManualRuleSet
 from videoforge.server.app import create_app
@@ -1440,7 +1442,7 @@ def test_templates(tmp_path):
         client.patch(f"/api/jobs/{ids[0]}", json={"mux": {"container": "mp4", "extra": "-y"}})
         client.post("/api/jobs/apply", json={"ids": ids, "container": "mkv"})
         assert [client.get(f"/api/jobs/{i}").json()["spec"]["mux"] for i in ids] == [
-            to_json(MuxSettings(container="mkv", extra="-y")),
+            to_json(MuxSettings(container="mkv", extra="-y", extra_container="mp4")),  # typed for MP4: warns
             to_json(MuxSettings(container="mkv", extra="-x")),
         ]
 
@@ -2232,6 +2234,126 @@ def test_the_page_is_never_served_stale(tmp_path):
         for path in ("/", "/queue"):
             r = client.get(path)
             assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
+
+
+def test_extra_muxer_arguments_warn_once_the_container_changes(tmp_path):
+    """The server saves the container a job's extra muxer arguments were typed for (mux.extra_container, never the
+    client's); a job whose container then changes warns, until the arguments change or the container goes back."""
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        get = lambda: client.get(f"/api/jobs/{job}").json()
+        warned = lambda: [i for i in get()["issues"] if i["code"] == "mux.extra_container"]
+        mux = get()["spec"]["mux"]
+        client.patch(
+            f"/api/jobs/{job}", json={"mux": mux | {"extra": "--split parts:00:10:00", "extra_container": "mp4"}}
+        )
+        assert get()["spec"]["mux"]["extra_container"] == mux["container"] and warned() == []
+        client.post("/api/jobs/apply", json={"ids": [job], "container": "mp4"})  # the batch panel
+        [issue] = warned()
+        assert (issue["severity"], issue["tab"]) == ("warn", "output")
+        assert issue["message"] == (
+            "The extra arguments were typed for MKV (mkvmerge), but the container is now MP4 (MP4Box). Change or clear them"
+        )
+        client.patch(f"/api/jobs/{job}", json={"container": "mkv"})  # back
+        assert warned() == []
+        client.patch(f"/api/jobs/{job}", json={"mux": get()["spec"]["mux"] | {"container": "mp4"}})  # the Output tab
+        assert warned()
+        client.patch(f"/api/jobs/{job}", json={"mux": get()["spec"]["mux"] | {"extra": "-split 600"}})  # typed again
+        assert get()["spec"]["mux"]["extra_container"] == "mp4" and warned() == []
+        client.patch(f"/api/jobs/{job}", json={"mux": get()["spec"]["mux"] | {"extra": ""}})
+        assert get()["spec"]["mux"]["extra_container"] is None
+
+        # saved before the container was kept: never warns
+        client.patch(f"/api/jobs/{job}", json={"mux": get()["spec"]["mux"] | {"extra": "-x"}})
+        entry = client.app.state.queue.get(job)
+        entry.spec.mux = replace(entry.spec.mux, extra_container=None)
+        client.patch(f"/api/jobs/{job}", json={"container": "mkv"})
+        assert warned() == []
+
+
+def test_a_template_brings_the_container_its_extra_arguments_were_typed_for(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        typed = to_json(Template(mux=MuxSettings(container="mp4", extra="-x", extra_container="mkv")))
+        job = add(client, tmp_path, template=typed)[0]
+        job = wait_for(client, job, "ready", "warn", "blocked")  # blocked: the source's PGS can't go into MP4
+        assert job["spec"]["mux"]["extra_container"] == "mkv"
+        assert "mux.extra_container" in [i["code"] for i in job["issues"]]
+
+
+def test_saving_a_template_keeps_the_container_its_extra_arguments_were_typed_for(tmp_path):
+    with make_client(tmp_path) as client:
+        data = to_json(Template(mux=MuxSettings(container="mp4", extra="-inter 500", extra_container="mkv")))
+
+        def save(**mux):
+            client.put("/api/presets/template/T", json=data | {"mux": data["mux"] | mux})
+            [saved] = [t["data"]["mux"] for t in client.get("/api/presets").json()["template"] if t["name"] == "T"]
+            return saved["extra_container"]
+
+        assert save() == "mp4"  # new: typed for its container (the client's value is ignored)
+        assert save(container="mkv", extra_container=None) == "mp4"  # the same arguments: kept
+        assert save(container="mkv", extra="-split 600") == "mkv"  # typed again
+        assert save(extra="") is None
+
+
+class MissingPlugin:
+    """A preview whose scripts fail on a source filter plugin that isn't installed (FFMS2, the default)."""
+
+    def has(self, *_args, **_kwargs) -> bool:
+        return True  # loaded: no index needed
+
+    def check(self, *_args, **_kwargs):
+        raise ScriptError(
+            "AttributeError: No attribute with the name ffms2 exists. Did you mistype a plugin namespace or forget to "
+            "install a plugin?",
+            3,
+        )
+
+    frame = info = check
+
+
+def test_the_video_tab_names_a_missing_plugin_above_the_raw_error(tmp_path):
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        client.app.state.preview = MissingPlugin()
+        checked = client.get(f"/api/jobs/{job}/video/check").json()
+        assert checked["hint"] == (
+            "VapourSynth can't find the FFMS2 plugin, which the Source filter needs. Install it, or choose another "
+            "Source filter."
+        )
+        assert checked["error"].startswith("AttributeError: No attribute with the name ffms2") and checked["line"] == 3
+        frame = client.get(f"/api/jobs/{job}/video/frame")
+        assert frame.status_code == 422
+        assert frame.json()["detail"] == f"{checked['hint']}\n\nLine 3: {checked['error']}"
+
+
+def test_removal_preview_marks_each_job_remove_keeps(tmp_path):
+    """A queued job and one running a test encode or CRF search are kept by remove(), so the preview says so."""
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        entry = client.app.state.queue.get(job)
+        kept = (
+            "Kept with its work folder: the job is queued or running, indexing, or running a test encode or CRF search"
+        )
+        preview = lambda: client.post("/api/jobs/removal-preview", json={"ids": [job]}).json()["folders"][0]
+        assert preview()["error"] == ""
+        entry.sampling = True
+        try:
+            assert preview()["error"] == kept
+            assert client.post("/api/jobs/remove", json={"ids": [job]}).json()["removed"] == []
+        finally:
+            entry.sampling = False
+        entry.queued = True
+        try:
+            assert preview()["error"] == kept
+        finally:
+            entry.queued = False
 
 
 def test_manual_cleanup_keeps_work_on_archive_failure(tmp_path, monkeypatch):

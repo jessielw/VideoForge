@@ -202,7 +202,8 @@
                   }}>Remove {plugin.name}…</Button
                 >{/if}
               {#if !plugin.removable && !plugin.pending}<span class="text-muted-foreground"
-                  >This plugin is loaded from outside the plugin folder, so VideoForge can't remove it.</span
+                  >VideoForge can't remove this plugin: it's loaded from outside the plugin folder, or its folder holds
+                  a link or junction, or its id isn't a valid folder name.</span
                 >{/if}
             </div>
           </details>

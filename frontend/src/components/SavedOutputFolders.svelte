@@ -7,33 +7,49 @@
   import StarIcon from '@lucide/svelte/icons/star'
   import XIcon from '@lucide/svelte/icons/x'
   import { toast } from 'svelte-sonner'
+  import { Button } from '$lib/components/ui/button'
   import { api } from '../lib/api'
   import type { OutputFolder } from '../lib/api'
-  import { forget, togglePin } from '../lib/outputFolders'
+  import { forget, savesInTurn, togglePin, type Saved } from '../lib/outputFolders'
   import Tip from './Tip.svelte'
 
   let folders = $state<OutputFolder[] | null>(null)
   let fallback = $state('')
+  let loadError = $state('')
   let section = $state<HTMLElement>()
 
-  onMount(async () => {
-    const s = await api.settings().catch(() => null)
-    folders = s?.output_folders ?? []
-    fallback = s?.output_default ?? ''
-  })
-
-  async function save(next: OutputFolder[], def: string): Promise<boolean> {
+  async function load() {
     try {
-      const s = await api.saveSettings({ output_folders: next, output_default: def })
-      folders = s.output_folders
-      fallback = s.output_default
-      return true
+      const s = await api.settings()
+      folders = s.output_folders ?? []
+      fallback = s.output_default ?? ''
+      loadError = ''
     } catch (e) {
-      toast.error("Couldn't save the output folders", { description: e instanceof Error ? e.message : String(e) })
-      return false
+      loadError = e instanceof Error ? e.message : String(e)
     }
   }
-  const apply = (r: { folders: OutputFolder[]; fallback: string }) => save(r.folders, r.fallback)
+  onMount(load)
+
+  const send = savesInTurn(async (s) => {
+    const r = await api.saveSettings({ output_folders: s.folders, output_default: s.fallback })
+    return { folders: r.output_folders, fallback: r.output_default }
+  })
+  // A click shows at once; the server's list replaces it once no newer click is waiting to be saved.
+  async function save(next: OutputFolder[], def: string) {
+    folders = next
+    fallback = def
+    try {
+      const reply = await send({ folders: next, fallback: def })
+      if (reply) {
+        folders = reply.folders
+        fallback = reply.fallback
+      }
+    } catch (e) {
+      toast.error("Couldn't save the output folders", { description: e instanceof Error ? e.message : String(e) })
+      await load()
+    }
+  }
+  const apply = (r: Saved) => save(r.folders, r.fallback)
 
   // Pin and Forget re-create or remove the row the focused button is in, so focus follows the folder: to its
   // button in the other list, or to the next folder's Forget (the heading when none is left).
@@ -42,14 +58,16 @@
     const el = selector ? section?.querySelector<HTMLElement>(selector) : null
     ;(el ?? section?.querySelector<HTMLElement>('h2'))?.focus()
   }
-  async function pin(f: OutputFolder) {
-    if (await apply(togglePin(folders!, f, fallback))) focusAfter(`[data-pin="${CSS.escape(f.path)}"]`)
+  function pin(f: OutputFolder) {
+    void apply(togglePin(folders!, f, fallback))
+    focusAfter(`[data-pin="${CSS.escape(f.path)}"]`)
   }
-  async function remove(f: OutputFolder) {
+  function remove(f: OutputFolder) {
     const shown = [...folders!.filter((x) => x.pinned), ...folders!.filter((x) => !x.pinned)]
     const i = shown.findIndex((x) => x.path === f.path)
     const next = shown[i + 1] ?? shown[i - 1]
-    if (await apply(forget(folders!, f, fallback))) focusAfter(next ? `[data-forget="${CSS.escape(next.path)}"]` : null)
+    void apply(forget(folders!, f, fallback))
+    focusAfter(next ? `[data-forget="${CSS.escape(next.path)}"]` : null)
   }
 </script>
 
@@ -106,7 +124,12 @@
 
 <section bind:this={section} class="col-span-full min-w-0 space-y-3" aria-label="Saved output folders">
   <h2 class="font-medium outline-none" tabindex="-1">Saved output folders</h2>
-  {#if folders === null}
+  {#if loadError}
+    <div role="alert" class="text-xs text-destructive">
+      Couldn't load the saved output folders: {loadError}
+      <Button size="sm" onclick={load}>Retry</Button>
+    </div>
+  {:else if folders === null}
     <p class="text-xs text-muted-foreground">Loading…</p>
   {:else if folders.length}
     <p class="text-xs text-muted-foreground">

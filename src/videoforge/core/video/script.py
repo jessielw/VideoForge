@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import glob
 from pathlib import Path
+import re
 from typing import Literal
 
 from videoforge.core.models import SubTrack
@@ -48,6 +49,30 @@ def source_line(source: Path, source_filter: SourceFilter, index_dir: Path, name
     if source_filter is SourceFilter.LSMASH:
         return f"{name} = core.lsmas.LWLibavSource({_q(source)}, cachefile={_q(index_dir / (source.name + '.lwi'))})"
     return f"{name} = core.ffms2.Source({_q(source)}, cachefile={_q(ffms2_index(source, index_dir))})"
+
+
+# Each source filter's plugin: its namespace (source_line's `core.<namespace>`) and name
+SOURCE_PLUGINS = {
+    SourceFilter.FFMS2: ("ffms2", "FFMS2"),
+    SourceFilter.LSMASH: ("lsmas", "L-SMASH Works"),
+    SourceFilter.BESTSOURCE: ("bs", "BestSource"),
+}
+_NO_PLUGIN = re.compile(r"No attribute with the name (\w+) exists")
+
+
+def plugin_hint(message: str, source_filter: SourceFilter) -> str:
+    """A plain line for VapourSynth's error on a plugin that isn't installed ("No attribute with the name ffms2
+    exists. Did you mistype a plugin namespace or forget to install a plugin?"), naming it; with the job's Source
+    filter's plugin, what to do. "" for any other error."""
+    if not (m := _NO_PLUGIN.search(message)):
+        return ""
+    namespace, name = SOURCE_PLUGINS[source_filter]
+    if m[1] == namespace:
+        return (
+            f"VapourSynth can't find the {name} plugin, which the Source filter needs. Install it, or choose "
+            "another Source filter."
+        )
+    return f"VapourSynth can't find a plugin for core.{m[1]}, which the script uses. Install it."
 
 
 def encoded_script(path: Path, index_dir: Path) -> str:

@@ -569,7 +569,7 @@
           >
         </Tip>
       </ToggleGroup.Root>
-      <Tip text="Shows both sides at once, on either side of a line you can drag. The side you picked is on the left">
+      <Tip text="Shows both sides at once, on either side of a line you can drag. The side you picked is on the left.">
         <Toggle
           pressed={vv.split}
           onPressedChange={(on) => (vv.split = on)}
@@ -598,9 +598,12 @@
     {#if saving || (infoError && !scripting)}
       <div class="flex items-center gap-2">
         {#if saving}<span class="text-xs text-muted-foreground">saving…</span>{/if}
-        {#if infoError && !scripting}<Tip class="block truncate text-xs text-destructive" text={infoError}
-            >{infoError}</Tip
-          >{/if}
+        <!-- in full: a missing plugin's line, then the raw error under it -->
+        {#if infoError && !scripting}<p
+            class="max-h-24 min-w-0 overflow-y-auto text-xs whitespace-pre-line text-destructive"
+          >
+            {infoError}
+          </p>{/if}
       </div>
     {/if}
     {#if !ready}
@@ -625,9 +628,9 @@
           <div class="text-base font-medium">Waiting to be indexed</div>
           <p class="max-w-md text-sm text-muted-foreground">
             {#if live?.index_held}
-              An encode is reading this source's disk, so indexing waits for it to finish. Index this one next moves it
-              to the front and skips that wait. It still waits while another job of this source runs. You can turn the
-              disk wait off in Settings › Queue & indexing.
+              An encode is reading this source's disk, so indexing waits for it to finish. If that encode is another job
+              of this source, indexing waits in any case. Otherwise Index this one next moves it to the front and skips
+              the wait, and you can turn the disk wait off in Settings › Queue & indexing.
             {:else}
               Sources are indexed one at a time. The preview opens by itself when this one is done.
             {/if}
@@ -850,6 +853,7 @@
           </div>
         {/if}
         {#if vv.checked && !vv.checked.ok}
+          {#if vv.checked.hint}<p class="shrink-0 text-sm text-destructive">{vv.checked.hint}</p>{/if}
           <pre
             class="max-h-40 shrink-0 overflow-auto rounded-lg border border-destructive/50 bg-destructive/10 p-2 text-xs whitespace-pre-wrap text-destructive">{vv
               .checked.line
@@ -911,14 +915,15 @@
                 {@const dv = job.tracks.video.hdr}
                 {#if dv.dv_profile === 5}
                   <p class="text-xs text-muted-foreground">
-                    With Encoder › Dolby Vision from the source on, an x265 encode keeps this Dolby Vision as profile 5.
-                    Its active area follows the crop and resize. The base layer isn't HDR10, so the preview's colors
-                    look off (green or purple). The encode's colors play correctly through the RPU.
+                    With Encoder › Dolby Vision from the source on, an x265 encode keeps this Dolby Vision as profile 5,
+                    and an SVT-AV1-HDR encode as profile 10.0. Its active area follows the crop and resize. The base
+                    layer isn't HDR10, so the preview's colors look off (green or purple). The encode's colors play
+                    correctly through the RPU.
                   </p>
                 {:else if (dv.dv_profile === 8 && dv.dv_compat !== 4) || (dv.dv_profile === 7 && (dv.dv_el === 'MEL' || dv.dv_el === 'FEL'))}
                   <p class="text-xs text-muted-foreground">
                     With Encoder › Dolby Vision from the source on, an x265 encode keeps this Dolby Vision as profile
-                    8.1. Its active area follows the crop and resize.
+                    8.1, and an SVT-AV1-HDR encode as profile 10.1. Its active area follows the crop and resize.
                   </p>
                   {#if dv.dv_el === 'FEL'}
                     <p class="text-xs text-muted-foreground">
@@ -935,8 +940,8 @@
               {/if}
               {#if job.tracks?.video?.hdr?.hdr10plus}
                 <p class="text-xs text-muted-foreground">
-                  With Encoder › HDR10+ from the source on, an x265 encode keeps HDR10+. It's left out when a FEL is
-                  baked in.
+                  With Encoder › HDR10+ from the source on, an x265 or SVT-AV1-HDR encode keeps HDR10+. It's left out
+                  when a FEL is baked in.
                 </p>
               {/if}
             </section>

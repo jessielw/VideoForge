@@ -29,6 +29,7 @@
     assign = $bindable({}),
     odd = new Map(),
     timing = {},
+    qpf = true,
     onreview,
   }: {
     result: MatchResult
@@ -37,6 +38,7 @@
     assign?: Record<string, string | null>
     odd?: ReadonlyMap<string, OddSubtitles>
     timing?: Record<string, SubtitleTiming> // subtitle timing checks, by timingKey
+    qpf?: boolean // the template's AutoQPF
     onreview?: (path: string) => void // open Review matches on this file
   } = $props()
 
@@ -245,11 +247,16 @@
             </div>
           {/each}
         </td>
+        <!-- no chapter file: AutoQPF writes them when the job encodes (no existing encode) with it on; else the source's -->
         <td class="text-muted-foreground">
           <span class="flex items-start gap-1.5"
             >{#if j.chapters}{@render how(j.chapters, j.matches?.[j.chapters], j.details?.[j.chapters])}{/if}{j.chapters
               ? basename(j.chapters)
-              : 'AutoQPF'}{#if j.chapters && j.matches?.[j.chapters] === 'manual'}{@render undo(j.chapters)}{/if}</span
+              : j.encode || !qpf
+                ? 'From the source'
+                : 'AutoQPF'}{#if j.chapters && j.matches?.[j.chapters] === 'manual'}{@render undo(
+                j.chapters,
+              )}{/if}</span
           >
         </td>
       </tr>

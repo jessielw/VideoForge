@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from videoforge.core.audio_io import read_audio_bundle
 from videoforge.core.audio_preset import AudioPresetSettings
 from videoforge.core.encoder_io import read_encoder_bundle
+from videoforge.core.execute.mux import MuxSettings, extra_container
 from videoforge.core.models import TemplateSubs
 from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template import Template
@@ -275,6 +276,9 @@ def save_preset(request: Request, kind: str, name: str, data: dict[str, Any] = B
     old = store.presets(kind).get(name, {})
     if kind in ("encoder", "audio") and "settings" in old:
         settings = {**old, "settings": settings}
+    if kind == "template":  # the container its extra muxer arguments were typed for: the server's to say
+        before = from_json(Template, old).mux if old else None
+        settings["mux"]["extra_container"] = extra_container(from_json(MuxSettings, settings["mux"]), before)
     store.save_preset(kind, name, settings)
     return _all(request)
 

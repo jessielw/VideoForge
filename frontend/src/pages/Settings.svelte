@@ -83,6 +83,8 @@
   }
 
   onMount(async () => {
+    // a narrow window's row of sections can start with the remembered one scrolled out of view
+    document.getElementById(`settings-tab-${tab}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
     try {
       await saves.flush()
       config = await api.config()
@@ -192,6 +194,11 @@
     change({ roots })
   }
 
+  function removeRoot(i: number) {
+    setRoots(config!.roots.filter((_, j) => j !== i))
+    focusAfterRemove('roots', i)
+  }
+
   async function addRoot(path: string) {
     const p = path.trim()
     if (!p || !config) return
@@ -240,10 +247,20 @@
       draft = { name: '', url: '', enabled: true, events: defaultEvents() }
   }
 
+  // A remove button's row goes, so focus moves to the next row's remove button (now in its place), else the one
+  // before it, else the list's heading.
+  async function focusAfterRemove(list: 'roots' | 'notifications' | 'actions', i: number) {
+    await tick()
+    const buttons = document.querySelectorAll<HTMLElement>(`[data-remove="${list}"]`)
+    ;(buttons[i] ?? buttons[i - 1] ?? document.getElementById(`${list}-heading`))?.focus()
+  }
+
   async function removeNotification(i: number) {
     if (!config) return
     const before = config.notifications
-    if (await setNotifications(before.filter((_, j) => j !== i)))
+    const saved = setNotifications(before.filter((_, j) => j !== i))
+    focusAfterRemove('notifications', i)
+    if (await saved)
       toast(`Removed ${before[i].name}`, { action: { label: 'Undo', onClick: () => setNotifications(before) } })
   }
 
@@ -306,7 +323,9 @@
   async function removeAction(i: number) {
     if (!config) return
     const before = config.actions
-    if (await setActions(before.filter((_, j) => j !== i)))
+    const saved = setActions(before.filter((_, j) => j !== i))
+    focusAfterRemove('actions', i)
+    if (await saved)
       toast(`Removed ${before[i].name}`, { action: { label: 'Undo', onClick: () => setActions(before) } })
   }
 
@@ -420,7 +439,7 @@
 <div class="@container/settings h-full overflow-auto p-4 sm:p-6">
   <div class="flex min-w-0 flex-col gap-6">
     <header class="col-span-full flex flex-wrap items-center gap-3">
-      <h1 class="text-xl font-semibold">Settings</h1>
+      <h1 tabindex="-1" class="text-xl font-semibold outline-none">Settings</h1>
       <span class="text-sm text-muted-foreground">Changes are saved as you make them. New jobs and runs use them.</span>
       {#if pending}<span class="text-sm text-muted-foreground">{saveError ? 'Unsaved changes' : 'Saving…'}</span>{/if}
     </header>
@@ -442,8 +461,9 @@
     {/each}
 
     <div class="flex min-w-0 flex-col gap-6 @min-[48rem]/settings:flex-row">
+      <!-- a column beside the section in a wide window: it stays in view while a long section scrolls -->
       <nav
-        class="flex gap-1 overflow-x-auto @min-[48rem]/settings:w-44 @min-[48rem]/settings:shrink-0 @min-[48rem]/settings:flex-col"
+        class="flex gap-1 overflow-x-auto @min-[48rem]/settings:sticky @min-[48rem]/settings:top-0 @min-[48rem]/settings:max-h-[calc(100dvh-3rem)] @min-[48rem]/settings:w-44 @min-[48rem]/settings:shrink-0 @min-[48rem]/settings:flex-col @min-[48rem]/settings:self-start @min-[48rem]/settings:overflow-y-auto"
         aria-label="Settings sections"
       >
         {#snippet divider()}
@@ -658,7 +678,7 @@
                   <span id="index-waits">Wait while an encode reads the same disk</span>
                   <span id="index-waits-help" class="block text-xs text-muted-foreground">
                     Indexing a job waits while the running job uses the disk its source is on, and jobs on other disks
-                    go first. Index now on a job never waits.
+                    go first. Index now on a job's Video tab skips this wait.
                   </span>
                 </span>
               </label>
@@ -784,7 +804,7 @@
 
             <section class="space-y-3">
               <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <h2 class="font-medium">Folder browser</h2>
+                <h2 id="roots-heading" tabindex="-1" class="font-medium outline-none">Folder browser</h2>
                 <span class="min-w-48 flex-1 text-xs text-muted-foreground">
                   {config.roots_custom
                     ? 'Only these folders (and what is under them) can be browsed.'
@@ -801,14 +821,15 @@
                 </Button>
               </div>
               <div class="flex flex-wrap gap-2">
-                {#each config.roots as r (r)}
+                {#each config.roots as r, i (r)}
                   <span class="flex items-center gap-1 rounded-md bg-muted px-2 py-1 font-mono text-xs">
                     {r}
                     {#if config.roots_custom}
                       <button
                         class="text-muted-foreground hover:text-destructive"
                         aria-label="Remove {r}"
-                        onclick={() => setRoots(config!.roots.filter((x) => x !== r))}><XIcon class="size-3" /></button
+                        data-remove="roots"
+                        onclick={() => removeRoot(i)}><XIcon class="size-3" /></button
                       >
                     {/if}
                   </span>
@@ -926,7 +947,7 @@
           {#if config}
             <section class="col-span-full min-w-0 space-y-3">
               <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <h2 class="font-medium">Notifications</h2>
+                <h2 id="notifications-heading" tabindex="-1" class="font-medium outline-none">Notifications</h2>
                 <span class="min-w-48 flex-1 text-xs text-muted-foreground">
                   Tell Discord, Telegram, ntfy, Pushover, email or
                   <a
@@ -991,6 +1012,7 @@
                         variant="ghost"
                         size="icon"
                         aria-label="Remove {d.name}"
+                        data-remove="notifications"
                         onclick={() => removeNotification(i)}
                       >
                         <XIcon />
@@ -1028,7 +1050,7 @@
 
             <section class="col-span-full min-w-0 space-y-3">
               <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <h2 class="font-medium">Actions</h2>
+                <h2 id="actions-heading" tabindex="-1" class="font-medium outline-none">Actions</h2>
                 <span class="min-w-48 flex-1 text-xs text-muted-foreground">
                   After a job ends or the queue finishes, actions can move or copy the output, run a command, call a
                   webhook, or shut down or sleep the computer. A job's actions run in this order, and after a move, the
@@ -1097,8 +1119,12 @@
                     >
                       <ArrowUpIcon />
                     </Button>
-                    <Button variant="ghost" size="icon" aria-label="Remove {a.name}" onclick={() => removeAction(index)}
-                      ><XIcon /></Button
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Remove {a.name}"
+                      data-remove="actions"
+                      onclick={() => removeAction(index)}><XIcon /></Button
                     >
                   {/if}
                 </div>

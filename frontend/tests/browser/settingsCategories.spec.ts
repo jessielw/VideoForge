@@ -1,7 +1,8 @@
 import { test, expect, type Page } from '@playwright/test'
-import type { ConfigState, RuleSet, Template } from '../../src/lib/types.ts'
+import type { ActionSetting, ConfigState, NotificationDestination, RuleSet, Template } from '../../src/lib/types.ts'
 
-async function fixture(page: Page) {
+// extra: config values a test needs; a PUT /api/config merges into the config and answers with it, as the server does
+async function fixture(page: Page, extra: Partial<ConfigState> = {}) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   const template: Template = {
@@ -102,10 +103,13 @@ async function fixture(page: Page) {
     },
     allow_commands: false,
     plugins: { folder: 'plugins', loaded: [], disabled: [], failures: [] },
+    ...extra,
   }
   await page.routeWebSocket('**/api/events', () => {})
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname
+    if (path === '/api/config' && route.request().method() === 'PUT')
+      Object.assign(config, route.request().postDataJSON())
     const responses: Record<string, unknown> = {
       '/api/preset-packs/managed': { presets: [], problems: [] },
       '/api/jobs': [],
@@ -355,6 +359,96 @@ test('Import & export points to template import and plugin install', async ({ pa
   await open(page, 'Import & export')
   await page.getByRole('button', { name: 'Open Templates', exact: true }).click()
   await expect(page).toHaveURL(/#\/templates$/)
+  expect(errors).toEqual([])
+})
+
+test('in a wide window the list of sections stays in view while a long section scrolls', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 700 })
+  const errors = await fixture(page, { notifications: ['a', 'b', 'c', 'd', 'e', 'f'].map(notification) })
+  await page.goto('/#/settings')
+  await open(page, 'Automation')
+  const settings = page.locator('[class*="@container/settings"]')
+  await expect(page.getByRole('heading', { name: 'Actions', exact: true })).toBeAttached()
+  await settings.evaluate((el) => el.scrollTo(0, el.scrollHeight))
+  expect(await settings.evaluate((el) => el.scrollTop)).toBeGreaterThan(200)
+  await expect(sections(page).getByRole('button', { name: 'Jobs', exact: true })).toBeInViewport({ ratio: 1 })
+  await expect(sections(page).getByRole('button', { name: 'Shut down…' })).toBeInViewport({ ratio: 1 })
+  expect(errors).toEqual([])
+})
+
+test('in a narrow window the remembered section is scrolled into view in the row of sections', async ({ page }) => {
+  await page.setViewportSize(NARROW)
+  const errors = await fixture(page)
+  await page.addInitScript(() => localStorage.setItem('videoforge.settingsTab', 'transfer'))
+  await page.goto('/#/settings')
+  const remembered = sections(page).getByRole('button', { name: 'Import & export', exact: true })
+  await expect(remembered).toHaveAttribute('aria-current', 'page')
+  await expect(remembered).toBeInViewport({ ratio: 0.95 }) // the row's edge can clip a fraction of a pixel
+  expect(errors).toEqual([])
+})
+
+const notification = (name: string): NotificationDestination => ({
+  name,
+  url: `ntfy://${name}`,
+  enabled: true,
+  events: [],
+})
+const action = (name: string): ActionSetting => ({
+  name,
+  kind: 'command',
+  target: 'scan.exe',
+  enabled: true,
+  events: ['job_done'],
+  overwrite: false,
+})
+
+test("removing a notification moves focus to the next one's remove button, the one before, then the heading", async ({
+  page,
+}) => {
+  const errors = await fixture(page, {
+    notifications: [notification('one'), notification('two'), notification('three')],
+  })
+  await page.goto('/#/settings')
+  await open(page, 'Automation')
+  await page.getByRole('button', { name: 'Remove two' }).press('Enter')
+  await expect(page.getByRole('button', { name: 'Remove three' })).toBeFocused()
+  await page.getByRole('button', { name: 'Remove three' }).press('Enter')
+  await expect(page.getByRole('button', { name: 'Remove one' })).toBeFocused()
+  await page.getByRole('button', { name: 'Remove one' }).press('Enter')
+  await expect(page.getByRole('heading', { name: 'Notifications', exact: true })).toBeFocused()
+  expect(errors).toEqual([])
+})
+
+test('removing a folder browser root or an action keeps keyboard focus in its list', async ({ page }) => {
+  const errors = await fixture(page, {
+    roots: ['D:\\A', 'D:\\B'],
+    roots_custom: true,
+    actions: [action('first'), action('second')],
+  })
+  await page.goto('/#/settings')
+  await open(page, 'Files & folders')
+  await page.getByRole('button', { name: 'Remove D:\\A' }).press('Enter')
+  await expect(page.getByRole('button', { name: 'Remove D:\\B' })).toBeFocused()
+  await open(page, 'Automation')
+  await page.getByRole('button', { name: 'Remove second' }).press('Enter')
+  await expect(page.getByRole('button', { name: 'Remove first' })).toBeFocused()
+  await page.getByRole('button', { name: 'Remove first' }).press('Enter')
+  await expect(page.getByRole('heading', { name: 'Actions', exact: true })).toBeFocused()
+  expect(errors).toEqual([])
+})
+
+test('a page change moves keyboard focus to the new page; a side menu click keeps it on the menu', async ({ page }) => {
+  const errors = await fixture(page)
+  await page.goto('/#/settings')
+  await open(page, 'Presets')
+  await page.getByRole('button', { name: 'Open Templates', exact: true }).press('Enter')
+  await expect(page.getByRole('heading', { name: 'Templates', level: 1 })).toBeFocused()
+  await page.evaluate(() => (location.hash = '#/queue')) // as the browser's Back would: the Queue has no heading
+  await expect(page.locator('main')).toBeFocused()
+  const menu = page.getByRole('navigation', { name: 'Main navigation' })
+  await menu.getByRole('button', { name: 'Log', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Log', level: 1 })).toBeVisible()
+  await expect(menu.getByRole('button', { name: 'Log', exact: true })).toBeFocused()
   expect(errors).toEqual([])
 })
 

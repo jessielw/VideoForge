@@ -634,7 +634,7 @@
               : 'VP8 holds none of it in the stream, so'} the output file is tagged with the color and the pixel aspect. An
             HDR10 mastering display and light levels aren't carried yet.
           {:else if svt}
-            AV1 holds them in the stream, and an MKV's video track is tagged with them too, along with the pixel aspect.
+            AV1 holds them in the stream, and the output file is tagged with them too, along with the pixel aspect.
           {/if}
           Untick it when the script changes the colors.
         </span>

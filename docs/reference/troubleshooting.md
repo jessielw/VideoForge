@@ -12,7 +12,7 @@ The portable build does not include all external media tools. See [Tools and Vap
 
 1. Select the job and use **Index** on the Queue toolbar.
 2. Check the job log for source-reader errors or an index waiting for another job's disk.
-3. Confirm the selected FFMS2, L-SMASH, or BestSource plugin is installed.
+3. Confirm the selected FFMS2, L-SMASH, or BestSource plugin is installed. When a plugin is missing, the Video tab names it above VapourSynth's error.
 4. Disable the last added filter or correct the custom script, then check preview again.
 5. If using BestSource, allow its first full-source decode to finish.
 
