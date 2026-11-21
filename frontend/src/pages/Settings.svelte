@@ -439,7 +439,7 @@
 <div class="@container/settings h-full overflow-auto p-4 sm:p-6">
   <div class="flex min-w-0 flex-col gap-6">
     <header class="col-span-full flex flex-wrap items-center gap-3">
-      <h1 class="text-xl font-semibold">Settings</h1>
+      <h1 tabindex="-1" class="text-xl font-semibold outline-none">Settings</h1>
       <span class="text-sm text-muted-foreground">Changes are saved as you make them. New jobs and runs use them.</span>
       {#if pending}<span class="text-sm text-muted-foreground">{saveError ? 'Unsaved changes' : 'Saving…'}</span>{/if}
     </header>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { ModeWatcher } from 'mode-watcher'
   import LayoutTemplateIcon from '@lucide/svelte/icons/layout-template'
   import ListVideoIcon from '@lucide/svelte/icons/list-video'
@@ -39,6 +39,22 @@
   onMount(() => {
     installDrops()
     void app.start()
+  })
+
+  // A page change: focus that was on the old page (gone with it, so on <body>) goes to the new page's heading, or to
+  // <main> on a page without one. Focus elsewhere, such as on the side menu, stays.
+  let main = $state<HTMLElement>()
+  let shownPage = router.page
+  $effect(() => {
+    const page = router.page
+    if (page === shownPage) return
+    shownPage = page
+    void tick().then(() => {
+      if (document.activeElement && document.activeElement !== document.body) return
+      const heading = main?.querySelector<HTMLElement>('h1')
+      heading?.focus()
+      if (!heading || document.activeElement !== heading) main?.focus() // none, or hidden (Templates' editor, narrow)
+    })
   })
 
   const navCollapsed = $derived(layout.navCollapsed || layout.compact)
@@ -195,7 +211,7 @@
       {/if}
     </nav>
 
-    <main id="main" tabindex="-1" class="flex min-w-0 flex-1 flex-col overflow-hidden outline-none">
+    <main bind:this={main} id="main" tabindex="-1" class="flex min-w-0 flex-1 flex-col overflow-hidden outline-none">
       {#if app.connectionError}
         <div class="m-6 shrink-0 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
           Couldn't reach the VideoForge server: {app.connectionError}

@@ -437,6 +437,21 @@ test('removing a folder browser root or an action keeps keyboard focus in its li
   expect(errors).toEqual([])
 })
 
+test('a page change moves keyboard focus to the new page; a side menu click keeps it on the menu', async ({ page }) => {
+  const errors = await fixture(page)
+  await page.goto('/#/settings')
+  await open(page, 'Presets')
+  await page.getByRole('button', { name: 'Open Templates', exact: true }).press('Enter')
+  await expect(page.getByRole('heading', { name: 'Templates', level: 1 })).toBeFocused()
+  await page.evaluate(() => (location.hash = '#/queue')) // as the browser's Back would: the Queue has no heading
+  await expect(page.locator('main')).toBeFocused()
+  const menu = page.getByRole('navigation', { name: 'Main navigation' })
+  await menu.getByRole('button', { name: 'Log', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Log', level: 1 })).toBeVisible()
+  await expect(menu.getByRole('button', { name: 'Log', exact: true })).toBeFocused()
+  expect(errors).toEqual([])
+})
+
 test('Shut down asks first and says how to start again', async ({ page }) => {
   const errors = await fixture(page)
   await page.goto('/#/settings')

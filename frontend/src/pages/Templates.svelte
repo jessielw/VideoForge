@@ -315,7 +315,7 @@
   <section class="flex shrink-0 flex-col {layout.small ? (editing ? 'hidden' : 'w-full') : 'w-72 border-r'}">
     <div class="space-y-3 border-b p-4">
       <div class="flex items-center justify-between gap-2">
-        <h1 class="text-xl font-semibold">Templates</h1>
+        <h1 tabindex="-1" class="text-xl font-semibold outline-none">Templates</h1>
         <Tip text="Select saved templates to delete several at once">
           <Button
             variant={selecting ? 'secondary' : 'ghost'}

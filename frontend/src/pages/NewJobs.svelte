@@ -423,7 +423,7 @@
 <div class="flex h-full flex-col">
   <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-6" bind:this={scroller}>
     <header class="flex shrink-0 flex-wrap items-center gap-3">
-      <h1 class="text-xl font-semibold">New jobs</h1>
+      <h1 tabindex="-1" class="text-xl font-semibold outline-none">New jobs</h1>
       <span class="text-sm text-muted-foreground"
         >Use Browse, or copy files as paths (Explorer: Ctrl+Shift+C) and paste them on any page, outside a text box.
         Each source file becomes one job. A folder adds a job for each source file in it, but not in its subfolders.</span
