@@ -294,6 +294,7 @@ export interface JobSpec {
 export interface MuxSettings {
   container: string
   extra: string
+  extra_container?: string | null // the container when extra last changed (the server sets it); null: from before
   pgs_zlib: boolean
   name_template: string // '' = the default template (NameTokens.default_template)
   template_file_name: boolean // the file is named from the template (a name typed for the job still wins)

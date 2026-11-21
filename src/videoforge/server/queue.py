@@ -42,7 +42,7 @@ from videoforge.core.disks import disks, low_space
 from videoforge.core.events import EventBus, IndexFinished, JobFinished, JobStarted, QueueFinished
 from videoforge.core.execute import process
 from videoforge.core.execute.control import Priority
-from videoforge.core.execute.mux import MuxSettings
+from videoforge.core.execute.mux import MuxSettings, extra_container
 from videoforge.core.execute.process import Cancelled, CancelToken, ToolError
 from videoforge.core.job import (
     STEP_TAIL,
@@ -854,7 +854,7 @@ class JobQueue:
             if qpf is not None:
                 s.qpf = qpf
             if mux is not None:
-                s.mux = mux
+                s.mux = replace(mux, extra_container=extra_container(mux, s.mux))
             if container is not None:
                 s.mux = replace(s.mux, container=container)
             if label is not None:

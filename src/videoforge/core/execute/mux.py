@@ -408,11 +408,22 @@ class MuxSettings:
 
     container: str = ""
     extra: str = ""
+    # `container` as it was when `extra` was last changed: the tool the arguments were typed for. The server sets it
+    # (JobQueue.update, a template's save). None: saved before it was kept, so it never warns (job.extra_issues).
+    extra_container: str | None = None
     pgs_zlib: bool = False
     name_template: str = ""  # "" = naming.DEFAULT_TEMPLATE
     template_file_name: bool = False  # the file is named from name_template (a name typed for the job still wins)
     template_title: bool = False  # an MKV's segment title is name_template's name (none otherwise)
     name_suffix: str = ""  # goes before the extension, after the label: <name>.<label>.<suffix>.mkv
+
+
+def extra_container(new: MuxSettings, old: MuxSettings | None) -> str | None:
+    """new's extra_container, against the settings new replaces (None: none, as for a new template): the old value
+    while the arguments stay the same, else the container they are typed for now (None once they're cleared)."""
+    if old is not None and new.extra == old.extra:
+        return old.extra_container
+    return new.container if new.extra else None
 
 
 class Muxer(Protocol):

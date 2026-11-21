@@ -1,8 +1,14 @@
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import type { ConfigState, NamePolicy, RuleSet, Template } from '../../src/lib/types.ts'
 
-/** others: rule sets installed beside Manual (a plugin's), each like Manual but for its id and name. */
-async function layoutFixture(page: Page, naming?: NamePolicy, others: Pick<RuleSet, 'id' | 'name'>[] = []) {
+/** others: rule sets installed beside Manual (a plugin's), each like Manual but for its id and name; mux: the
+ * template's muxer settings over its own. */
+async function layoutFixture(
+  page: Page,
+  naming?: NamePolicy,
+  others: Pick<RuleSet, 'id' | 'name'>[] = [],
+  mux: Partial<Template['mux']> = {},
+) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   const template: Template = {
@@ -37,6 +43,7 @@ async function layoutFixture(page: Page, naming?: NamePolicy, others: Pick<RuleS
       template_file_name: false,
       template_title: false,
       name_suffix: '',
+      ...mux,
     },
     qpf: true,
     crop_mode: 'keep',
@@ -174,6 +181,45 @@ test('Templates saves optional PGS compression and only shows it for MKV', async
   await expect(compression).toHaveCount(0)
   await page.getByRole('radio', { name: 'MKV (mkvmerge)', exact: true }).click()
   await expect(compression).toBeChecked()
+  expect(errors).toEqual([])
+})
+
+test('Templates warns when the extra arguments were typed for the other container, until they change', async ({
+  page,
+}) => {
+  const errors = await layoutFixture(page, undefined, [], {
+    container: 'mp4',
+    extra: '-split 600',
+    extra_container: 'mkv',
+  })
+  await page.route('**/api/presets/template/*', async (route) => {
+    const saved = route.request().postDataJSON() as Template
+    const stored = { ...saved, mux: { ...saved.mux, extra_container: 'mp4' } } // the server's: typed for MP4 now
+    await route.fulfill({
+      json: {
+        video: [],
+        encoder: [],
+        audio: [],
+        template: [{ name: 'Film 1080p CEL', data: stored }],
+        template_defaults: {},
+        encoder_starters: [],
+      },
+    })
+  })
+  await page.goto('/#/templates')
+  const warning = page.getByText(
+    'These were typed for MKV (mkvmerge), but the container is now MP4 (MP4Box). Change or clear them.',
+  )
+  await expect(warning).toBeVisible()
+  await page.getByRole('radio', { name: 'MKV (mkvmerge)', exact: true }).click()
+  await expect(warning).toHaveCount(0)
+  await page.getByRole('radio', { name: 'MP4 (MP4Box)', exact: true }).click()
+  await expect(warning).toBeVisible()
+  await page.getByRole('textbox', { name: 'Extra arguments for MP4Box' }).fill('-split 900')
+  await expect(warning).toHaveCount(0) // typed now, for MP4
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('Saved Film 1080p CEL')).toBeVisible()
+  await expect(warning).toHaveCount(0)
   expect(errors).toEqual([])
 })
 
