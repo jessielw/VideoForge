@@ -51,7 +51,7 @@ The source directory must be writable. Allow space for intermediate video and au
 
 **Settings → Work folders** can delete a done job's working files automatically, once no other job in the queue uses the source. Records and the text logs are copied to the data folder's `records/` first. Per-output `.jsonl` files are not archived there; the queue-wide event stream still has the same events until it rotates.
 
-The Queue's **Remove → Remove and delete work folders** shows the folders and their sizes for confirmation, then archives the same records and log before removing working files. If archiving fails, the folder is kept and the error is shown. Keep a work folder if you expect to reuse its encodes. Removing intermediate files means the affected steps must run again. Queue-only removal offers **Undo** while this server session remains open (the latest 100 removed jobs are retained).
+The Queue's **Remove → Remove and delete work folders** shows the folders and their sizes for confirmation, then archives the same records and log before removing working files. A job that is queued, running, indexing, or running a test encode or CRF search is kept with its folder, and the dialog marks it. If archiving fails, the folder is kept and the error is shown. Keep a work folder if you expect to reuse its encodes. Removing intermediate files means the affected steps must run again. Queue-only removal offers **Undo** while this server session remains open (the latest 100 removed jobs are retained).
 
 ## Back up
 
