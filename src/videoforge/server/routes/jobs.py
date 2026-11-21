@@ -373,7 +373,7 @@ def apply_to_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[st
 
 @router.post("/jobs/remove")
 def remove_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
-    """{ids, work_dirs}: remove jobs (queued, running or indexing ones stay); with work_dirs, also delete
+    """{ids, work_dirs}: remove jobs (queued, running, indexing or sampling ones stay); with work_dirs, also delete
     their work folders (queue.delete_work_dirs). Returns {removed, deleted, kept}."""
     q = queue_of(request)
     sources = {e.id: e.spec.inputs.source for e in q.entries()}
@@ -388,7 +388,11 @@ def removal_preview(request: Request, body: dict[str, Any] = Body(...)) -> dict[
     folders = []
     for job_id in dict.fromkeys(body.get("ids") or []):
         e = _entry(q, job_id)
-        error = "Job is queued, running or indexing" if e.busy or e.indexing else ""
+        error = (  # the jobs queue.remove() keeps
+            "Kept with its work folder: the job is queued or running, indexing, or running a test encode or CRF search"
+            if e.busy or e.indexing or e.sampling
+            else ""
+        )
         size = None
         try:
             size = work_dir_size(e.spec.inputs.source)

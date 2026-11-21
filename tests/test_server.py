@@ -2234,6 +2234,31 @@ def test_the_page_is_never_served_stale(tmp_path):
             assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
 
 
+def test_removal_preview_marks_each_job_remove_keeps(tmp_path):
+    """A queued job and one running a test encode or CRF search are kept by remove(), so the preview says so."""
+    make_files(tmp_path)
+    with make_client(tmp_path) as client:
+        job = add(client, tmp_path)[0]
+        wait_for(client, job, "ready", "warn")
+        entry = client.app.state.queue.get(job)
+        kept = (
+            "Kept with its work folder: the job is queued or running, indexing, or running a test encode or CRF search"
+        )
+        preview = lambda: client.post("/api/jobs/removal-preview", json={"ids": [job]}).json()["folders"][0]
+        assert preview()["error"] == ""
+        entry.sampling = True
+        try:
+            assert preview()["error"] == kept
+            assert client.post("/api/jobs/remove", json={"ids": [job]}).json()["removed"] == []
+        finally:
+            entry.sampling = False
+        entry.queued = True
+        try:
+            assert preview()["error"] == kept
+        finally:
+            entry.queued = False
+
+
 def test_manual_cleanup_keeps_work_on_archive_failure(tmp_path, monkeypatch):
     make_files(tmp_path)
     with make_client(tmp_path) as client:
