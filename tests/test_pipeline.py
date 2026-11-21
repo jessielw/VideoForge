@@ -1463,10 +1463,9 @@ def test_real_mp4_and_ts_sources_run_end_to_end(tmp_path, ext, container):
     plan = plan_spec(job, probe_spec(job, app), rule_set, app.tools)
     assert not plan.blocked, plan.issues
     ms = round(delay * 1000)
-    assert [(a.source.id, a.source.delay_ms, a.action) for a in plan.audio] == [
-        (1, ms, AudioAction.COPY),
-        (2, ms, AudioAction.FLAC),
-    ]
+    assert [(a.source.id, a.action) for a in plan.audio] == [(1, AudioAction.COPY), (2, AudioAction.FLAC)]
+    # The AC-3 encoder's 256 priming samples (5.8 ms) can survive the copy (ffmpeg 9.0): the audio starts 6 ms early
+    assert [a.source.delay_ms for a in plan.audio] == pytest.approx([ms, ms], abs=10)
 
     lines: list[str] = []
     result = run_job(job, plan, rule_set, app, log=lines.append)
