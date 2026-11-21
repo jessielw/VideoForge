@@ -27,7 +27,7 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:5173`. Vite proxies API requests to the backend.
+Open `http://localhost:5173`. Vite proxies API requests to the backend on port 8765. If the backend runs on another port, set `VIDEOFORGE_PORT` to it for both commands.
 
 ## Python checks
 
