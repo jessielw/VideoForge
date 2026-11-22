@@ -843,6 +843,7 @@ test('files are matched by hand in Matched files and in Review matches, sent wit
   await expect(
     dialog.getByRole('combobox', { name: 'Source for t2_c2.srt' }).locator('option', { hasText: '(like your match)' }),
   ).toHaveCount(1)
+  await expect(dialog.locator('button.bg-primary')).toHaveText(['Done']) // the one main action
   await dialog.getByRole('button', { name: 'Match them the same way' }).click()
   await expect.poll(() => asked.at(-1)).toEqual({ [setA]: e1, [setB]: e2 })
   await expect(files).toHaveCount(3) // changed here, so still listed

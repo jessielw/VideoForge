@@ -1007,7 +1007,11 @@
                 ? `Run the ${startJobs.length} queued jobs, in queue order`
                 : 'Nothing is queued. Tick the jobs to run, or select some and use Queue.'}
             >
-              <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())}>
+              <Button
+                variant={app.queue.paused ? 'outline' : 'default'}
+                disabled={starting || !startJobs.length}
+                onclick={() => act(() => run())}
+              >
                 <PlayIcon />{@render slotLabel(`Start queue (${startJobs.length})`)}
               </Button>
             </Tip>
@@ -1030,7 +1034,7 @@
                     ? 'The job stops after pass 1. Click to cancel that.'
                     : "Stops the running job when its video's pass 1 is done. It keeps what it finished, so you can close VideoForge. Running the job again goes on with pass 2."}
                 >
-                  <Button variant={pausing ? 'default' : 'outline'} onclick={pauseAfterPass1}>
+                  <Button variant="outline" class={pausing ? 'bg-muted dark:bg-muted' : ''} onclick={pauseAfterPass1}>
                     <PauseIcon />{pausing ? 'Pausing after pass 1' : 'Pause after pass 1'}
                   </Button>
                 </Tip>
