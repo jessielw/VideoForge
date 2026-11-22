@@ -1455,7 +1455,7 @@
                       ><Badge variant="outline" class="px-1.5 py-0 text-xs font-normal">{job.label}</Badge></Tip
                     >{/if}
                   {#if paused(job.status)}
-                    <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
+                    <span class="ml-auto shrink-0 text-xs text-info">Paused</span>
                   {:else if job.status === 'warn'}
                     <!-- the count under it says how many; "Ready with warnings" cut a narrow list's names -->
                     <span class="ml-auto shrink-0 text-xs {STATUS_TONE.warn}"

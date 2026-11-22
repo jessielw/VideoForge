@@ -250,7 +250,7 @@
                 <td>{t.format}</td>
                 <td>
                   <LanguagePicker
-                    class="w-28 {ov?.language ? 'border-warning/60' : ''}"
+                    class="w-28 {ov?.language ? 'border-foreground' : ''}"
                     show="tag"
                     clearable={false}
                     aria-label="Language"
@@ -262,7 +262,7 @@
                   <td>
                     <Tip text={flagPinned(t, f.key) ? 'Set by you' : 'As detected'}>
                       <Checkbox
-                        class={flagPinned(t, f.key) ? 'ring-2 ring-warning/70' : ''}
+                        class={flagPinned(t, f.key) ? 'ring-2 ring-foreground' : ''}
                         aria-label={f.label}
                         checked={flagValue(t, f.key)}
                         onCheckedChange={(v) => setFlag(t, f.key, v)}

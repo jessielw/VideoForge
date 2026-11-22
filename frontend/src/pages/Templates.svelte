@@ -389,7 +389,7 @@
               variant="ghost"
               size="icon-sm"
               class={c.name === starred
-                ? 'text-warning hover:text-warning'
+                ? 'text-foreground hover:text-foreground'
                 : 'text-muted-foreground opacity-50 hover:opacity-100'}
               aria-label="Default: {c.name}"
               aria-pressed={c.name === starred}

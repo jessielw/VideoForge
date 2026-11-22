@@ -21,7 +21,7 @@ const sub = (id: number, language: string, title: string, format: string, auto: 
   auto,
 })
 
-async function fixture(page: Page) {
+async function fixture(page: Page, seed?: (job: JobDetail) => void) {
   const errors: string[] = []
   const saves: Overrides[] = []
   page.on('pageerror', (error) => errors.push(error.message))
@@ -204,6 +204,7 @@ async function fixture(page: Page) {
       label: '',
     },
   }
+  seed?.(job)
   const ruleSet: RuleSet = {
     id: 'group',
     name: 'Group',
@@ -262,6 +263,9 @@ test("the editor shows the rule set's picks and saves only what differs from the
   await title.fill('English')
   await title.press('Enter')
   await expect.poll(() => saves.at(-1)?.tracks['id:2']?.title).toBe('English')
+  // a field changed by hand: a solid foreground border, never a status colour
+  await expect(title).toHaveClass(/(^|\s)border-foreground(\s|$)/)
+  await expect(title).not.toHaveClass(/border-(info|warning)/)
   await title.fill('English (SRT)') // back to the rules' title: no override
   await title.press('Enter')
   await expect.poll(() => saves.at(-1)?.tracks['id:2']).toBeUndefined()
@@ -277,5 +281,28 @@ test("the editor shows the rule set's picks and saves only what differs from the
   await expect.poll(() => saves.at(-1)?.tracks['id:1']?.action).toBe('copy')
   await action.selectOption('ddp')
   await expect.poll(() => saves.at(-1)?.tracks['id:1']).toBeUndefined()
+  expect(errors).toEqual([])
+})
+
+test('a field the template set has a dashed neutral border, not a status colour', async ({ page }) => {
+  const set = {
+    exclude: null,
+    language: null,
+    title: 'English',
+    flags: {},
+    action: null,
+    bitrate_kbps: null,
+    layout: null,
+    options: {},
+  }
+  const { errors } = await fixture(page, (job) => {
+    job.spec.overrides.tracks['id:2'] = set
+    job.spec.subs_from_template = { tracks: { 'id:2': set }, copies: [], order: null }
+  })
+  await page.getByRole('tab', { name: 'Subtitles', exact: true }).click()
+  const title = page.getByRole('listitem').nth(0).getByRole('textbox', { name: 'Title' })
+  await expect(title).toHaveClass(/(^|\s)border-dashed(\s|$)/)
+  await expect(title).toHaveClass(/(^|\s)border-muted-foreground(\s|$)/)
+  await expect(title).not.toHaveClass(/border-(info|warning)/)
   expect(errors).toEqual([])
 })

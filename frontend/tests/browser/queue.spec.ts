@@ -862,6 +862,27 @@ test('a paused queue has one primary button, and a pressed Pause after pass 1 is
   expect(fixture.errors).toEqual([])
 })
 
+test('a running job in a paused queue says Paused in the info colour', async ({ page }) => {
+  const fixture = await queueFixture(page, 3, ['running'])
+  fixture.send({
+    type: 'queue',
+    running: false,
+    current: null,
+    stop_after_current: false,
+    paused: true,
+    priority: null,
+    queued: 0,
+    indexing: null,
+    sampling: null,
+    index_queued: 0,
+    index_held: 0,
+  })
+  const label = page.getByText('Paused', { exact: true }).first()
+  await expect(label).toHaveClass(/(^|\s)text-info(\s|$)/)
+  await expect(label).not.toHaveClass(/text-warning/)
+  expect(fixture.errors).toEqual([])
+})
+
 test('a disabled Start queue is gray, not dimmed gold', async ({ page }) => {
   const { errors } = await queueFixture(page, 3, ['ready'])
   const start = page.getByRole('button', { name: /^Start queue/ })

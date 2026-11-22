@@ -991,7 +991,7 @@
         {#each marks ?? [] as m (m)}
           {#if m < frames}
             <span
-              class="pointer-events-none absolute top-1/2 h-2.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-warning"
+              class="pointer-events-none absolute top-1/2 h-2.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary ring-1 ring-background"
               style="left:calc(0.375rem + (100% - 0.75rem) * {frames > 1 ? m / (frames - 1) : 0})"
               data-mark={m}
             ></span>
@@ -1028,7 +1028,7 @@
               size="icon"
               onclick={() => onmark(frame)}
               aria-label="Bookmark this frame"
-              aria-pressed={marked}><BookmarkIcon class={marked ? 'fill-warning text-warning' : ''} /></Button
+              aria-pressed={marked}><BookmarkIcon class={marked ? 'fill-current' : ''} /></Button
             >
           </Tip>
         {/if}
