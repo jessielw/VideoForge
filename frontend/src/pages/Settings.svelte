@@ -501,8 +501,9 @@
         </div>
       </nav>
 
+      <!-- Help text (text-xs, muted) wraps at about 75 characters, wherever a section puts it. -->
       <div
-        class="grid max-w-4xl min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8"
+        class="grid max-w-4xl min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8 [&_.text-xs.text-muted-foreground]:max-w-[60ch]"
         role="group"
         aria-labelledby="settings-tab-{tab}"
         aria-describedby="settings-about"

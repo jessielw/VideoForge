@@ -270,6 +270,20 @@ test('Output names: a rule set can name its jobs from the template always, never
   expect(errors).toEqual([])
 })
 
+test('help text under a full-width Settings section is capped to a readable line length', async ({ page }) => {
+  const errors = await fixture(page)
+  await page.setViewportSize({ width: 1600, height: 900 })
+  await page.goto('/#/settings')
+  for (const help of [
+    page.locator('section[aria-labelledby="output-names"] > p'),
+    page.locator('#sample-quality-help'),
+  ]) {
+    await expect(help).toBeVisible()
+    expect((await help.boundingBox())!.width).toBeLessThan(520)
+  }
+  expect(errors).toEqual([])
+})
+
 test('Rule set names the default rule set, not its id', async ({ page }) => {
   const errors = await fixture(page)
   await page.goto('/#/settings')

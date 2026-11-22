@@ -422,6 +422,7 @@ test('a CRF search lists its tries, marks the CRF found and puts it on the job',
   await expect(rows.first().getByRole('img', { name: 'Reaches SSIMULACRA2 80' })).toBeVisible()
   await expect(rows.nth(1)).toContainText('2,000 kb/s')
   await expect(rows.first()).toHaveCSS('font-family', /^"?Cascadia Mono/)
+  await expect(card.getByText(/144 of 2,400 frames \(2%\)/)).toHaveCSS('font-family', /^"?Cascadia Mono/)
   await card.screenshot({ path: testInfo.outputPath('crf-search.png') })
 
   await card.getByRole('button', { name: 'Use CRF 20' }).click()
