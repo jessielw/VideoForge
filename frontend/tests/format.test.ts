@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { issueCounts, sizeLabel } from '../src/lib/format.ts'
+import { issueCounts, plural, sizeLabel } from '../src/lib/format.ts'
 
 test('a plain size reads with a times sign; a size class stays as it is', () => {
   assert.equal(sizeLabel('1920x1040'), '1920×1040')
@@ -14,4 +14,10 @@ test("a job's issues read as counts of errors and warnings, leaving out a kind w
   assert.deepEqual(issueCounts({ block: 3, warn: 1 }), ['3 errors', '1 warning'])
   assert.deepEqual(issueCounts({ block: 0, warn: 4 }), ['4 warnings'])
   assert.deepEqual(issueCounts({ block: 0, warn: 0 }), [])
+})
+
+test('plural adds an s for anything but one', () => {
+  assert.equal(plural(0, 'job'), '0 jobs')
+  assert.equal(plural(1, 'job'), '1 job')
+  assert.equal(plural(2, 'job'), '2 jobs')
 })

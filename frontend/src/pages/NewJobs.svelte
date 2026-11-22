@@ -1,5 +1,5 @@
 <script lang="ts">
-  // New jobs: input slots, output folder, rule set, language, template and its parts, live match preview, Add to queue.
+  // New jobs: input slots, output folder, rule set, language, template and its parts, live match preview, Add jobs.
   import { flushSync, onDestroy, onMount, untrack } from 'svelte'
   import CheckIcon from '@lucide/svelte/icons/check'
   import ListChecksIcon from '@lucide/svelte/icons/list-checks'
@@ -14,6 +14,7 @@
   import PathSlot from '../components/PathSlot.svelte'
   import EncoderPresetMenu from '../components/EncoderPresetMenu.svelte'
   import { api } from '../lib/api'
+  import { plural } from '../lib/format'
   import { incoming } from '../lib/incoming.svelte'
   import { drafts } from '../lib/drafts'
   import { LatestRequest } from '../lib/latestRequest'
@@ -347,15 +348,17 @@
           result?.jobs.filter((j) => !j.existing_id || replacements.includes(j.existing_id)).map((j) => j.source) ?? [],
         ),
   )
+  const existing = $derived(result?.jobs.filter((j) => j.existing_id).length ?? 0)
   const groupsJobs = $derived(grouping && newJobs > 1 && !!groupName.trim())
   const cropWillRun = $derived(autoCrop && template?.data.crop_mode !== 'fixed')
   // What pressing Add will do, in words.
   const summary = $derived.by(() => {
     if (!sources.length) return 'Paste file paths on any page, or Browse…'
     if (matching || !result) return 'Matching…'
+    if (!newJobs && result.jobs.length) return 'Nothing new to add: each matched source already has a job.'
     const after = cropWillRun ? 'index and auto-crop' : autoIndex ? 'index' : 'neither index nor crop'
     return [
-      `${newJobs} job${newJobs === 1 ? '' : 's'}${groupsJobs ? ` in group ${groupName.trim()}` : ''}`,
+      `${plural(newJobs, 'job')}${groupsJobs ? ` in group ${groupName.trim()}` : ''}`,
       template?.name ?? 'no template',
       `will ${after}`,
       output[0] ? `saved to ${output[0]}` : 'choose an output folder',
@@ -367,8 +370,8 @@
     if (!completion) return ''
     const n = completion.added.length
     return [
-      n ? `Added ${n} job${n === 1 ? '' : 's'}` : 'Nothing added',
-      completion.skipped.length ? `${completion.skipped.length} already in the queue, kept` : '',
+      n ? `Added ${plural(n, 'job')}` : 'Nothing added',
+      completion.skipped.length ? `kept ${plural(completion.skipped.length, 'existing job')}` : '',
       completion.unmatched.length ? `${completion.unmatched.length} unmatched` : '',
       n ? 'Next: check each job in the Queue, then tick its box to queue it.' : '',
     ]
@@ -623,9 +626,10 @@
         <div class="flex shrink-0 flex-wrap items-center gap-3 px-4 py-2">
           <h2 class="font-medium">Matched files</h2>
           <span class="text-sm text-muted-foreground">
-            {#if matching}Matching…{:else if result}{result.jobs.length} job(s){result.unmatched.length
-                ? ` · ${result.unmatched.length} unmatched`
-                : ''}{:else}Add a source to see the jobs{/if}
+            {#if matching}Matching…{:else if result}{plural(result.jobs.length, 'job')}{existing
+                ? ` · ${existing} existing`
+                : ''}{result.unmatched.length ? ` · ${result.unmatched.length} unmatched` : ''}{:else}Add a source to
+              see the jobs{/if}
           </span>
           {#if result && !matching && odd.size}<span class="text-sm text-warning">{oddSummary(odd)}</span>{/if}
           {#if result && !matching && wrongEpisode}<span class="text-sm text-destructive"
@@ -710,7 +714,7 @@
     </details>
   {/if}
   <!-- one line, level with the side menu's status block; a narrow window: the text, then the buttons below it -->
-  <footer class="h-(--bar-h) shrink-0 border-t bg-card max-sm:h-auto" aria-label="Add to queue">
+  <footer class="h-(--bar-h) shrink-0 border-t bg-card max-sm:h-auto" aria-label="Add jobs">
     <div
       class="flex h-full items-center gap-3 overflow-hidden px-6 max-sm:flex-wrap max-sm:justify-end max-sm:gap-2 max-sm:px-3 max-sm:py-2"
     >
@@ -728,7 +732,7 @@
         {#if adding}
           <p role="status" class="flex min-w-0 flex-1 items-center gap-2 text-sm max-sm:basis-full">
             <LoaderCircleIcon class="size-4 shrink-0 animate-spin text-muted-foreground" />
-            <span class="truncate">Adding {newJobs} job{newJobs === 1 ? '' : 's'} to the queue…</span>
+            <span class="truncate">Adding {plural(newJobs, 'job')}…</span>
           </p>
         {:else}
           <p
@@ -742,8 +746,8 @@
         {#if sources.length}<Button variant="outline" disabled={adding} onclick={clearAll}>Clear all</Button>{/if}
         <Button disabled={!newJobs || matching || settledKey !== inputKey || adding || !output.length} onclick={add}>
           {#if adding}<LoaderCircleIcon class="animate-spin" />Adding…{:else}<PlusIcon />Add {newJobs
-              ? `${newJobs} job${newJobs === 1 ? '' : 's'}`
-              : ''} to queue{/if}
+              ? plural(newJobs, 'job')
+              : 'jobs'}{/if}
         </Button>
       {/if}
     </div>

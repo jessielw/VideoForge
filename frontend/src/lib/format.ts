@@ -349,3 +349,8 @@ export function clipLength(frames: number, fpsNum: number, fpsDen: number): stri
   const pad = (n: number, w = 2) => String(n).padStart(w, '0')
   return `${h}:${pad(m)}:${pad(s)}.${pad(ms % 1000, 3)}`
 }
+
+/** "1 job", "3 jobs": a count with a regular "s" plural. */
+export function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
