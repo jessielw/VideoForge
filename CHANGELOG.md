@@ -17,10 +17,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Status colors (blue, green, amber and red) are kept for a job's state, so these marks change. In the track editor, a value from the template has a dashed gray border, and a value or flag you set has a solid border in the text color; the "(from the template)" and "(changed by you)" notes are unchanged. Frame bookmarks are accent-colored ticks on the scrub bar, and the bookmark button fills its icon in the text color when it is on. The default template's star on **Templates** is filled in the text color instead of amber. **Paused** in a queue row and in the job editor is blue, like **Paused after pass 1**.
 - The CRF search's progress line uses the monospaced font of the other figures.
 - Long help text in Settings wraps at about 75 characters per line.
+- On **New jobs**, the button says what it does: **Add 3 jobs**. It said **Add 3 jobs to queue**, although adding never queued the jobs. It reads **Adding 3 jobs…** while it works. When every matched source already has a job, the bar says "Nothing new to add: each matched source already has a job." instead of "0 jobs". The **Matched files** header counts the jobs that already exist ("3 jobs · 2 existing"), and after **Add** the bar says "kept 2 existing jobs".
+- The caption over the Queue's checkboxes reads **Queued**, and screen readers read it. It said **Queue** and was hidden from them.
+- The Queue's **Remove** menu offers **Remove and keep work folders** (it said **Remove from the queue**) and **Remove and delete work folders**.
+- An audio track's copy or encode menu has a visible label, **Copy or encode**.
 
 ### Fixed
 
 - The edge of each palette swatch in **Settings › Appearance** shows in dark mode too.
+- Counts read "1 job" or "3 jobs" instead of "job(s)" in the Queue's messages, on **New jobs** and in the **Shut down** dialog, and "Unqueued 1 jobs" reads "Unqueued 1 job".
 
 ## [0.1.14] - 2026-11-21
 

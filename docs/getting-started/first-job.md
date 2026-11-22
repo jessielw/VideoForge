@@ -47,7 +47,7 @@ The **manual** rule set copies tracks by default. An audio encode needs its corr
 
 ## 4. Set the output and run
 
-On **Output**, choose the output folder and MKV or MP4. Inspect any planning issues before starting. MKV accepts more track formats; an MP4 job can require different track selections. Use **Run selected** for the test. For a batch, tick each job's box under **Queue** in the list once it's set up. That queues and locks it, and its row shows a lock before **Queued**. Then **Start queue** runs the queued jobs.
+On **Output**, choose the output folder and MKV or MP4. Inspect any planning issues before starting. MKV accepts more track formats; an MP4 job can require different track selections. Use **Run selected** for the test. For a batch, tick each job's box under **Queued** in the list once it's set up. That queues and locks it, and its row shows a lock before **Queued**. Then **Start queue** runs the queued jobs.
 
 If the reuse dialog appears, choose which completed video or audio encodes to keep. A fresh job has no completed encodes to reuse.
 

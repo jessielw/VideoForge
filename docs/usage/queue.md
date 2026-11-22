@@ -5,7 +5,7 @@ The queue stores jobs and their settings in SQLite. One worker processes jobs in
 ## Add and edit a batch
 
 1. On **New jobs**, add a folder of episodes or select individual sources.
-2. Choose a template and add the jobs to the queue.
+2. Choose a template and add the jobs. Adding doesn't queue them; step 5 does.
 3. Open a job to check video processing, encoder settings, tracks, and output.
 4. Select several jobs to apply an edit or template to all of them.
 5. Tick each job that's set up to queue it, or select several and use **Queue**.
@@ -48,7 +48,7 @@ On small windows, opening one job collapses the list to a rail. **Show the queue
 
 ## Queue jobs
 
-A job runs only once it's queued. Queue it when its settings are final: tick its box in the queue list, in the column under **Queue**, or **Queue** at the top of its editor (they're the same switch), or select several jobs and use **Queue (N)** on the toolbar. A queued job is locked: its settings are read-only and its preview doesn't change, so what the queue will encode is what you see. Its row shows a lock before **Queued**. Untick it (or **Unqueue (N)**) to edit it again; the queue leaves it out until it's queued again.
+A job runs only once it's queued. Queue it when its settings are final: tick its box in the queue list, in the column under **Queued**, or **Queue** at the top of its editor (they're the same switch), or select several jobs and use **Queue (N)** on the toolbar. A queued job is locked: its settings are read-only and its preview doesn't change, so what the queue will encode is what you see. Its row shows a lock before **Queued**. Untick it (or **Unqueue (N)**) to edit it again; the queue leaves it out until it's queued again.
 
 A job queued while the queue runs is picked up in its turn, in queue order. Queueing a completed, failed or canceled job runs it again; unticking it before it runs keeps its last result. A job can't be queued while it's being probed, indexed or crop-detected, or while it's blocked.
 
