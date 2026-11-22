@@ -350,7 +350,7 @@ for (const width of [960, 800]) {
     expect(outputBounds!.y + outputBounds!.height).toBeLessThanOrEqual(formBounds!.y + formBounds!.height)
     await output.scrollIntoViewIfNeeded()
     await expect(output).toBeInViewport()
-    const add = page.getByRole('button', { name: /Add.*to queue/ })
+    const add = page.getByRole('button', { name: /^Add (\d+ )?jobs?$/ })
     await add.scrollIntoViewIfNeeded()
     await expect(add).toBeInViewport()
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)

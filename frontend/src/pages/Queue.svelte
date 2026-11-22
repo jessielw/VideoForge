@@ -72,6 +72,7 @@
     duration,
     issueCounts,
     percent,
+    plural,
     PRIORITY_LABEL,
     progressTimes,
     sizeLabel,
@@ -195,7 +196,7 @@
     await api.dequeue(ids)
     await app.refreshJobs()
     if (ids.length > 1)
-      toast.success(`Unqueued ${ids.length} jobs`, {
+      toast.success(`Unqueued ${plural(ids.length, 'job')}`, {
         description: 'You can edit them again, and the queue skips them.',
       })
   }
@@ -209,7 +210,7 @@
     const { enqueued } = await api.enqueue(ids, reuse)
     await app.refreshJobs()
     if (enqueued.length < ids.length) {
-      toast.warning(`Queued ${enqueued.length} of ${ids.length} jobs`, {
+      toast.warning(`Queued ${enqueued.length} of ${plural(ids.length, 'job')}`, {
         description:
           "The others can't be queued while VideoForge reads their tracks, indexes them, detects their crop or runs a test encode or CRF search, or while they're blocked.",
       })
@@ -629,14 +630,14 @@
       if (r.removed.length < ids.length)
         toast.info('Jobs that are queued or running, indexing, or running a test encode or CRF search were kept')
       if (!workDirs && r.removed.length)
-        toast.success(`Removed ${r.removed.length} job(s)`, {
+        toast.success(`Removed ${plural(r.removed.length, 'job')}`, {
           action: {
             label: 'Undo',
             onClick: () =>
               act(async () => {
                 const restored = await api.restore(r.removed)
                 await app.refreshJobs()
-                toast.info(`Restored ${restored.restored.length} job(s)`)
+                toast.info(`Restored ${plural(restored.restored.length, 'job')}`)
               }),
           },
         })
@@ -750,7 +751,8 @@
     await act(async () => {
       const r = await api.apply(selected, { encoder })
       toast.success(
-        `Encoder applied to ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
+        `Encoder applied to ${plural(r.updated.length, 'job')}` +
+          (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
       )
     })
   }
@@ -768,7 +770,7 @@
     await act(async () => {
       const r = await api.apply(ids, { template: $state.snapshot(picked.data) })
       toast.success(
-        `Template ${name} applied to ${r.updated.length} job(s)` +
+        `Template ${name} applied to ${plural(r.updated.length, 'job')}` +
           (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
       )
       const fresh = await api.job(ids[0])
@@ -782,7 +784,9 @@
     await act(async () => {
       const r = await api.apply(selected, { container })
       const label = batchContainers.find((c) => c.id === container)?.label ?? container
-      toast.success(`${label} for ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''))
+      toast.success(
+        `${label} for ${plural(r.updated.length, 'job')}` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
+      )
     })
   }
 
@@ -795,8 +799,8 @@
       const r = await api.apply(selected, { output_dir: path })
       toast.success(
         (path
-          ? `Output folder set for ${r.updated.length} job(s)`
-          : `Output folder cleared for ${r.updated.length} job(s)`) +
+          ? `Output folder set for ${plural(r.updated.length, 'job')}`
+          : `Output folder cleared for ${plural(r.updated.length, 'job')}`) +
           (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
       )
     })
@@ -870,7 +874,7 @@
       <Tip
         side="right"
         class="pb-1 text-xs text-muted-foreground"
-        text={`${matching.length} matching jobs of ${app.jobs.length}`}>{matching.length}</Tip
+        text={`${plural(matching.length, 'matching job')} of ${app.jobs.length}`}>{matching.length}</Tip
       >
       <div
         data-scroller
@@ -1189,7 +1193,7 @@
               </DropdownMenu.Trigger>
             </Tip>
             <DropdownMenu.Content align="end" class="w-auto">
-              <DropdownMenu.Item onSelect={() => remove()}>Remove from the queue</DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => remove()}>Remove and keep work folders</DropdownMenu.Item>
               <Tip class="block" side="left" text="Shows the work folders and their sizes before deleting them.">
                 <DropdownMenu.Item onSelect={confirmRemoval}>Remove and delete work folders</DropdownMenu.Item>
               </Tip>
@@ -1254,11 +1258,11 @@
           or every job when none is selected.
         </p>
         <!-- Over the column of checkboxes, which queue and lock a job (clicking a row selects it). Each box has its own
-             name, so a screen reader skips this. -->
+             name, and this caption is read as well. -->
         <Tip
           class="w-fit text-xs text-muted-foreground"
           text="A ticked job is queued and locked, so you can't edit it until you untick it. Start queue runs the queued jobs."
-          ><span aria-hidden="true">Queue</span></Tip
+          ><span>Queued</span></Tip
         >
         <!-- for screen readers, as the list's description: the Shortcuts dialog shows the keys -->
         <p id="queue-keys" class="sr-only">
@@ -1345,7 +1349,7 @@
                 class="min-w-0 flex-1 py-1 text-left focus-visible:outline-2 focus-visible:outline-ring"
                 tabindex={-1}
                 onclick={() => selectGroup(row)}
-                aria-label={`${row.name}: select its ${row.matching.length} jobs`}
+                aria-label={`${row.name}: select its ${plural(row.matching.length, 'job')}`}
               >
                 <span class="flex items-baseline gap-2">
                   <span class="truncate font-medium">{row.name}</span>

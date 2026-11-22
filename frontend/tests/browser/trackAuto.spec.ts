@@ -276,6 +276,8 @@ test("the editor shows the rule set's picks and saves only what differs from the
   await expect(page.getByRole('listitem').nth(0).getByLabel('Default (set by the rule set)')).toBeVisible()
   await expect(page.getByRole('button', { name: /^Default/ })).toHaveCount(0) // nothing to press
   const action = page.getByRole('combobox', { name: 'Copy or encode' })
+  await expect(page.locator('label', { hasText: 'Copy or encode' })).toBeVisible() // a visible label names it
+  await expect(page.getByLabel('Copy or encode')).toHaveValue('ddp')
   await expect(action).toHaveValue('ddp')
   await action.selectOption('copy')
   await expect.poll(() => saves.at(-1)?.tracks['id:1']?.action).toBe('copy')

@@ -123,6 +123,7 @@ async function queueFixture(
     else if (path === '/api/config/video-options/x265') json = { dashes: '--', options: [] }
     else if (path === '/api/jobs/reorder') json = { ids: request.postDataJSON().ids }
     else if (/^\/api\/jobs\/job-\d+$/.test(path)) json = detail(jobs.find((job) => job.id === path.split('/').at(-1))!)
+    else if (path === '/api/jobs/remove') json = { removed: request.postDataJSON().ids, deleted: [], kept: {} }
     else if (path === '/api/queue/start') json = {}
     else if (path === '/api/queue/enqueue') json = { enqueued: request.postDataJSON().ids }
     else if (['/api/rule-sets', '/api/config/encoders', '/api/filter-presets'].includes(path)) json = []
@@ -959,9 +960,10 @@ test('a Queue caption names the checkboxes, and a queued row shows a lock before
   await expect(list.getByRole('searchbox')).toHaveAccessibleName(
     'Search jobs by name, source path, encoder, resolution or HDR format',
   )
-  // The caption sits over the column of checkboxes; each box has its own name, so a screen reader skips it.
-  const caption = list.getByText('Queue', { exact: true })
-  await expect(caption).toHaveAttribute('aria-hidden', 'true')
+  // The caption sits over the column of checkboxes, visible and read by a screen reader.
+  const caption = list.locator('span', { hasText: /^Queued$/ }).first()
+  await expect(caption).toBeVisible()
+  expect(await caption.evaluate((el) => !!el.closest('[aria-hidden="true"]'))).toBe(false)
   const c = (await caption.boundingBox())!
   const box = (await list.getByRole('checkbox', { name: 'Queued: Episode 00000' }).boundingBox())!
   expect(Math.abs(c.x - box.x)).toBeLessThanOrEqual(1)
@@ -1746,4 +1748,14 @@ test('the Issues tab shows with issues, and stays saying none are left while it 
   await page.getByRole('tab', { name: 'Video', exact: true }).click()
   await expect(page.getByRole('tab', { name: /^Issues/ })).toHaveCount(0)
   expect(fixture.errors).toEqual([])
+})
+
+test('removing one job says "Removed 1 job", and the menu says the work folders stay', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1)
+  await page.getByRole('button', { name: 'Select matching jobs', exact: true }).click()
+  await page.getByRole('button', { name: 'Remove', exact: true }).click()
+  await expect(page.getByRole('menuitem', { name: 'Remove and delete work folders' })).toBeVisible()
+  await page.getByRole('menuitem', { name: 'Remove and keep work folders' }).click()
+  await expect(page.getByText('Removed 1 job', { exact: true })).toBeVisible()
+  expect(errors).toEqual([])
 })
