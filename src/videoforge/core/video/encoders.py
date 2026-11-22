@@ -16,12 +16,15 @@ runs the same command line (Encoder.svt), with presets from -3.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 import re
 
 from videoforge.core.arguments import split_args
+from videoforge.core.config import AppConfig
 from videoforge.core.models import Issue, Severity, VideoColor, VideoInfo
+from videoforge.core.tools import x265_avx512
 from videoforge.core.video.color import SVT_DV5_ARGS, color_args, color_choices, drop_source_flags, hdr10, untagged
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
 
@@ -143,6 +146,21 @@ def _setting(settings: EncoderSettings, name: str) -> str | None:
             nxt = args[i + 1] if i + 1 < len(args) else ""
             value = v if eq else ("" if nxt.startswith("--") else nxt)
     return value
+
+
+def effective_encoder(settings: EncoderSettings, app: AppConfig) -> EncoderSettings:
+    """Apply the server's x265 preference to a copy used for the encode."""
+    if not app.x265_avx512 or settings.encoder is not Encoder.X265:
+        return settings
+    try:
+        extra = split_args(settings.extra)
+    except ValueError:  # the job's argument validation reports this
+        return settings
+    if any(arg.partition("=")[0] in ("--asm", "--no-asm") for arg in _options(settings.options) + extra):
+        return settings
+    if x265_avx512(app.tools.x265):
+        return replace(settings, options={**settings.options, "asm": "avx512"})
+    return settings
 
 
 def level_vbv(settings: EncoderSettings) -> list[str] | None:

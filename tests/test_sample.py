@@ -24,8 +24,9 @@ from videoforge.core.config import AppConfig, load_app_config
 from videoforge.core.execute.process import Cancelled
 from videoforge.core.job import JobSpec, JobStatus
 from videoforge.core.models import JobInputs, Plan, SourceInfo, VideoInfo
-from videoforge.core.pipeline import sample
-from videoforge.core.video import metrics
+from videoforge.core.pipeline import crfsearch, sample
+from videoforge.core.pipeline.build import video_steps
+from videoforge.core.video import encoders, metrics
 from videoforge.core.video.info import ScriptInfo
 from videoforge.core.video.settings import Encoder, EncoderSettings, RateControl
 from videoforge.server.app import create_app
@@ -123,6 +124,40 @@ def test_result_and_its_estimates(tmp_path):
     assert result.key == sample.sample_key(spec, plan)
     spec.encoder = replace(spec.encoder, crf=20)
     assert result.key != sample.sample_key(spec, plan)  # out of date
+
+
+def test_x265_preference_reaches_full_and_sample_encodes_without_editing_the_job(tmp_path, monkeypatch):
+    spec, plan = _plan(tmp_path)
+    spec.encoder = EncoderSettings(Encoder.X265, RateControl.CRF, crf=20)
+    spec.qpf = False
+    spec.job_dir.mkdir(parents=True)
+    (spec.job_dir / "video.info.txt").write_text("Frames: 2400\nFPS: 24000/1001 (23.976 fps)\n")
+    app = replace(APP, x265_avx512=True)
+    monkeypatch.setattr(encoders, "x265_avx512", lambda _: True)
+
+    full = next(s for s in video_steps(spec, plan, app) if s.id == "video")
+    for step in (
+        full,
+        sample.sample_steps(spec, plan, app, "mkv", 5)[1],
+        crfsearch.try_steps(spec, plan, app, "mkv", 5, 20)[1],
+    ):
+        argv = step.argvs[-1]
+        assert argv[argv.index("--asm") + 1] == "avx512"
+    assert spec.encoder.options == {} and spec.encoder.extra == ""
+    assert sample.sample_key(spec, plan, app) != sample.sample_key(spec, plan, APP)
+    assert crfsearch.search_key(spec, plan, app) != crfsearch.search_key(spec, plan, APP)
+
+    for explicit in (
+        replace(spec.encoder, options={"--asm": "avx2"}),
+        replace(spec.encoder, extra="--asm=avx2"),
+        replace(spec.encoder, extra="--no-asm"),
+    ):
+        assert encoders.effective_encoder(explicit, app) is explicit
+    assert encoders.effective_encoder(EncoderSettings(Encoder.SVTAV1), app).options == {}
+
+    monkeypatch.setattr(encoders, "x265_avx512", lambda _: False)
+    assert "--asm" not in sample.sample_steps(spec, plan, app, "mkv", 5)[1].argvs[-1]
+    assert sample.sample_key(spec, plan, app) == sample.sample_key(spec, plan, APP)
 
 
 def test_quality_step_only_when_asked(tmp_path):

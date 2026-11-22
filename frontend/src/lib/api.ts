@@ -221,6 +221,7 @@ export const api = {
     ),
   saveConfig: (changes: {
     tools?: Record<string, string | null>
+    x265_avx512?: boolean
     roots?: string[] | null
     rule_set?: string | null
     index_waits_for_disk?: boolean

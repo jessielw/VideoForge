@@ -17,6 +17,7 @@ from videoforge.server.configuration import (
     MAX_BYTES,
     SETTING_KEYS,
     VERSION,
+    application_settings,
     read_configuration,
     storage_presets,
 )
@@ -46,7 +47,7 @@ def export_configuration(request: Request) -> dict[str, Any]:
         "format": FORMAT,
         "version": VERSION,
         "profile": profile,
-        "application": saved.get(BASE_KEY, to_json(state.base_config)),
+        "application": saved.get(BASE_KEY, application_settings(state.base_config)),
         "settings": to_json(SavedSettings()) | {key: saved[key] for key in SETTING_KEYS if key in saved},
         "folders": {key: saved.get(key, "") for key in FOLDER_KEYS},
         "presets": libraries,

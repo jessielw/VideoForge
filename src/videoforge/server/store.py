@@ -218,7 +218,7 @@ class Store:
             self._profile = pid
 
     def get_global(self, key: str, default: Any = None) -> Any:
-        """A setting every profile shares (GLOBAL_KEYS: the queue's)."""
+        """A setting every profile shares."""
         with self._lock:
             row = self._db.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
         return json.loads(row[0]) if row else default

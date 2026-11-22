@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Settings → Tools → x265 → Allow AVX-512** lets compatible x265 builds use AVX-512. The switch starts off and is saved across restarts and profiles. CPU flags set in a job or preset take priority, and plugin presets still receive updates at startup.
+
 ## [0.1.14] - 2026-11-21
 
 ### Added
@@ -550,7 +556,7 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 - **Bundled VapourSynth plugins.** Source filters (BestSource, L-SMASH-Works, FFMS2, d2vsource) and common filters (EdgeFixer, FillBorders, MVTools, znedi3, dfttest2, BM3D, zsmooth, vszip, fmtconv, descale, ...) plus havsfunc, mvsfunc and awsmfunc, from one list (`vsplugins/manifest.toml`): built from source in the Docker image, downloaded (pinned, checked) for the portable build or a source install (`scripts/fetch_plugins.py`).
 - **Profiles.** The built-in `manual` profile; other profiles (a release group's rules) install as separate packages under the `videoforge.profiles` entry point group.
 
-[Unreleased]: https://github.com/jessielw/VideoForge/compare/0.1.9...HEAD
+[Unreleased]: https://github.com/jessielw/VideoForge/compare/0.1.14...HEAD
 [0.1.9]: https://github.com/jessielw/VideoForge/releases/tag/0.1.9
 [0.1.8]: https://github.com/jessielw/VideoForge/releases/tag/0.1.8
 [0.1.7]: https://github.com/jessielw/VideoForge/releases/tag/0.1.7

@@ -250,6 +250,26 @@ def locate(path: str) -> str:
     return shutil.which(path) or dee.split_folder(path)
 
 
+def x265_avx512(path: str) -> bool | None:
+    """Ask the configured x265 which instructions it would use with AVX-512 enabled."""
+    found = locate(path)
+    if not found:
+        return None
+    try:
+        return _x265_avx512(found, Path(found).stat().st_mtime_ns)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+@functools.lru_cache(maxsize=8)
+def _x265_avx512(exe: str, _stamp: int) -> bool | None:
+    output = _run([exe, "--asm", "avx512", "--version"], 3.0)
+    flags = re.search(r"using cpu capabilities:[ \t]*([^\r\n]+)", output, re.IGNORECASE)
+    if flags is None:
+        return None
+    return bool(re.search(r"\bAVX-?512\b", flags[1], re.IGNORECASE))
+
+
 _SOURCE_FILTERS = {"bestsource": "BestSource", "lsmashsource": "L-SMASH", "vslsmashsource": "L-SMASH", "ffms2": "FFMS2"}
 
 

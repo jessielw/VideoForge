@@ -200,6 +200,40 @@ test('each settings group sits in its category', async ({ page }) => {
   expect(errors).toEqual([])
 })
 
+test('the x265 AVX-512 switch saves with the keyboard and reports unavailable hardware', async ({ page }) => {
+  const tool = { name: 'x265', label: 'x265', purpose: 'HEVC video encoder', path: 'x265' }
+  const errors = await fixture(page, {
+    tools: [{ ...tool, folder: false, default: 'x265', custom: null }],
+    x265_avx512: false,
+  })
+  let supported = true
+  await page.route('**/api/config/tools', (route) =>
+    route.fulfill({ json: [{ ...tool, found: 'x265', status: 'ok', avx512: supported }] }),
+  )
+  await page.goto('/#/settings')
+  await open(page, 'Tools')
+  const toggle = page.getByRole('switch', { name: 'Allow AVX-512' })
+  await expect(toggle).toBeEnabled()
+  await toggle.focus()
+  const saved = page.waitForResponse((r) => r.url().endsWith('/api/config') && r.request().method() === 'PUT')
+  await page.keyboard.press('Space')
+  expect((await saved).request().postDataJSON()).toEqual({ x265_avx512: true })
+  await expect(toggle).toBeChecked()
+  await page.reload()
+  await expect(toggle).toBeChecked()
+
+  supported = false
+  await page.getByRole('button', { name: 'Check again' }).click()
+  await expect(page.getByText('AVX-512 is unavailable with this CPU and x265 build.')).toBeVisible()
+  await page.getByText('Allow AVX-512', { exact: true }).click()
+  await expect(toggle).toBeDisabled()
+  await page.setViewportSize(NARROW)
+  await page.addStyleTag({ content: WIDE_FONT })
+  const settings = page.locator('[class*="@container/settings"]')
+  await expect.poll(() => settings.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
+  expect(errors).toEqual([])
+})
+
 for (const [saved, opens] of [
   ['general', 'Jobs'],
   ['encoding', 'Jobs'],

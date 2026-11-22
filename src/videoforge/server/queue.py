@@ -1759,6 +1759,7 @@ class JobQueue:
                     raise ToolError("The job has no plan")
                 spec, plan, container = e.spec, e.plan, e.spec.container(self.rule_set(e))
                 cancel, quality = self._index_cancel, self.sample_quality
+                app = self.app
             if cancel is None:
                 raise RuntimeError("index lane: no cancel event")
             if self.services.release_preview is not None:
@@ -1772,9 +1773,9 @@ class JobQueue:
                 on_record=on_record,
                 runner=self.services.runner,
             )
-            run(prepare_steps(spec, plan, self.app))
-            run(sample_steps(spec, plan, self.app, container, percent, quality))
-            result = finish(spec, plan, container, percent, e.state.steps, quality)
+            run(prepare_steps(spec, plan, app))
+            run(sample_steps(spec, plan, app, container, percent, quality))
+            result = finish(spec, plan, container, percent, e.state.steps, quality, app=app)
             rate = f"{result.kbps:.0f} kb/s" if result.kbps is not None else "no bitrate (no frame rate)"
             size = f", about {result.estimate_mb / 1000:.2f} GB for the whole video" if result.estimate_mb else ""
             score = f", SSIMULACRA2 {result.ssimulacra2:.2f}" if result.ssimulacra2 is not None else ""
@@ -1812,7 +1813,7 @@ class JobQueue:
                 if e.plan is None:
                     raise ToolError("The job has no plan")
                 spec, plan, container = e.spec, e.plan, e.spec.container(self.rule_set(e))
-                cancel = self._index_cancel
+                cancel, app = self._index_cancel, self.app
             if cancel is None:
                 raise RuntimeError("index lane: no cancel event")
             run = partial(
@@ -1823,7 +1824,7 @@ class JobQueue:
                 on_record=on_record,
                 runner=self.services.runner,
             )
-            run(prepare_steps(spec, plan, self.app), progress=progress)
+            run(prepare_steps(spec, plan, app), progress=progress)
 
             def run_try(steps: list[Step], n: int) -> None:
                 def tried(p: StepProgress) -> None:  # the tries share the bar, MAX_TRIES at most
@@ -1834,7 +1835,7 @@ class JobQueue:
                 run(steps, progress=tried)
                 self._changed(e)  # the try shows on the job
 
-            result = crfsearch.search(spec, plan, self.app, container, percent, target, e.state.steps, run_try, log)
+            result = crfsearch.search(spec, plan, app, container, percent, target, e.state.steps, run_try, log)
             if result.crf is None:
                 log(f"CRF search: no CRF tried reaches {target} (the lowest: {min(t.crf for t in result.tries)})")
             else:

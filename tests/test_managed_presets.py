@@ -176,6 +176,31 @@ def test_the_app_syncs_at_start_and_exposes_the_state(tmp_path):
         assert missing.status_code == 404
 
 
+def test_x265_preference_survives_profiles_and_plugin_updates(tmp_path):
+    plugin = write_plugin(tmp_path / "data" / "plugins")
+    with make_client(tmp_path) as client:
+        assert client.get("/api/config").json()["x265_avx512"] is False
+        assert client.put("/api/config", json={"x265_avx512": "true"}).status_code == 422
+        settings = client.put("/api/config", json={"x265_avx512": True})
+        assert settings.json()["x265_avx512"] is True and not settings.json()["restart"]
+        profiles = client.post("/api/profiles", json={"name": "Fresh"}).json()["profiles"]
+        fresh = next(profile["id"] for profile in profiles if profile["name"] == "Fresh")
+        assert client.post(f"/api/profiles/{fresh}/activate").json()["config"]["x265_avx512"] is True
+        response = client.get("/api/configuration/export")
+        assert response.status_code == 200, response.text
+        backup = response.json()
+        assert "x265_avx512" not in backup["application"] and "x265_avx512" not in backup["settings"]
+
+    update = doc(2)
+    update["presets"]["encoder"][0]["data"].update(encoder="x265", crf=19, options={"asm": "avx2"})
+    (plugin / "presets" / "pack.json").write_text(json.dumps(update))
+    with make_client(tmp_path) as client:
+        assert client.get("/api/config").json()["x265_avx512"] is True
+        encoder = next(p for p in client.get("/api/presets").json()["encoder"] if p["label"] == "UHD")["data"]
+        assert (encoder["crf"], encoder["options"]) == (19, {"asm": "avx2"})
+        assert client.put("/api/config", json={"x265_avx512": False}).json()["x265_avx512"] is False
+
+
 def test_a_reset_or_replaced_library_gets_the_plugins_presets_back(store):
     store.use_packs([pack()], {})
     store.reset_configuration((), ("template", "video", "encoder", "audio"))

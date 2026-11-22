@@ -909,6 +909,7 @@ export interface ToolSetting {
 
 export interface ConfigState {
   tools: ToolSetting[]
+  x265_avx512?: boolean // shared by every profile on the server
   roots: string[]
   roots_custom: boolean
   default_roots: string[]
@@ -1042,6 +1043,7 @@ export interface ToolCheck {
   status: ToolStatus
   version: string
   detail: string
+  avx512?: boolean | null // x265 only, null when support could not be checked
 }
 
 export type StepStatus = 'pending' | 'running' | 'done' | 'reused' | 'failed' | 'cancelled'

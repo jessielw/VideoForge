@@ -45,7 +45,7 @@ from videoforge.server.routes import (
     system,
     video,
 )
-from videoforge.server.settings import SavedSettings, ServerSettings
+from videoforge.server.settings import X265_AVX512, SavedSettings, ServerSettings
 from videoforge.server.store import Store
 
 logger = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ def create_app(
     use_folder(settings.plugins_dir, saved.disabled_plugins)
     ids = rule_set_ids or registered()
     default = default_rule_set_id(saved.rule_set or base.rule_set, ids)
-    cfg = saved.app_config(base, default)
+    cfg = saved.app_config(base, default, x265_avx512=store.get_global(X265_AVX512) is True)
     default_roots = list(settings.roots)
     if saved.roots:
         settings.roots = [Path(r) for r in saved.roots]

@@ -6,7 +6,7 @@ Settings has ten tabs in three groups: **Jobs**, **Queue & indexing**, **Presets
 
 ## Profiles
 
-A profile is a whole configuration: every **Settings** value, the templates, the encoder and video processing presets, and the default template selections. **Settings → Profiles** lists them: create, rename, switch to, or delete one. A new profile starts as a fresh install does, from `videoforge.toml`, or as a copy of the active profile. One profile is active at a time; the first one, made from an existing installation's configuration, is named **Default**.
+A profile holds its own settings, templates, encoder and video processing presets, and default template selections. **Settings → Profiles** lists them. You can create, rename, switch to, or delete a profile. A new profile starts as a fresh install does, from `videoforge.toml`, or as a copy of the active profile. One profile is active at a time. The first one, made from an existing installation's configuration, is named **Default**.
 
 The queue is shared: every profile sees the same jobs, and a job keeps the settings it was made with. Switching waits for the queue to stop and for indexing and test encodes to finish, then applies the other profile's settings at once. Installed plugins are shared; each profile keeps its own plugin settings and switches, which take effect when VideoForge starts again. The last profile, and the active one, can't be deleted.
 
@@ -26,6 +26,12 @@ Reset a setting in the UI to return to its default (from the imported backup, if
 Use **Settings → Configuration backup** to export the active profile's configuration and preset libraries, or import one into a new or existing profile, without creating a job. See [Storage and backups](storage.md#back-up).
 
 The command-line `plan`, `run`, and `validate` commands load file configuration; server UI overrides are not a replacement for their file configuration.
+
+## x265 AVX-512
+
+**Settings → Tools → x265 → Allow AVX-512** is off by default. VideoForge checks the configured x265 executable for support on the machine running the server. When the switch is on and support is verified, the next x265 encode adds `--asm avx512` unless its encoder options or extra arguments already specify `--asm` or `--no-asm`. Test encodes and CRF searches use the same preference.
+
+The switch is shared across profiles and saved in the installation's database. Plugin preset updates continue to apply at startup. A profile configuration export leaves this machine preference out.
 
 ## Local tool paths
 
