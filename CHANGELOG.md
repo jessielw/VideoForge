@@ -9,6 +9,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - **Settings → Tools → x265 → Allow AVX-512** lets compatible x265 builds use AVX-512. The switch starts off and is saved across restarts and profiles. CPU flags set in a job or preset take priority, and plugin presets still receive updates at startup.
+- VideoForge follows the operating system's reduce motion setting. With it on, menus, dialogs, popovers and tooltips fade in without zooming or sliding, and progress bars jump to their value. Spinners still turn, because they show that work is going on.
+
+### Changed
+
+- Each toolbar, bar and dialog has one button in the accent color: its main action. While the queue is paused, **Resume** is that button and **Start queue** is plain. **Pause after pass 1** stays plain when pressed, with a gray fill. While the preset manager asks **Save your preset changes before continuing?**, its apply button is plain, so **Save and continue** is the one in the accent color. In **Review matches**, **Match them the same way** is plain and **Done** keeps the accent color.
+- Status colors (blue, green, amber and red) are kept for a job's state, so these marks change. In the track editor, a value from the template has a dashed gray border, and a value or flag you set has a solid border in the text color; the "(from the template)" and "(changed by you)" notes are unchanged. Frame bookmarks are accent-colored ticks on the scrub bar, and the bookmark button fills its icon in the text color when it is on. The default template's star on **Templates** is filled in the text color instead of amber. **Paused** in a queue row and in the job editor is blue, like **Paused after pass 1**.
+- The CRF search's progress line uses the monospaced font of the other figures.
+- Long help text in Settings wraps at about 75 characters per line.
+
+### Fixed
+
+- The edge of each palette swatch in **Settings › Appearance** shows in dark mode too.
 
 ## [0.1.14] - 2026-11-21
 

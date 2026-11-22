@@ -1007,7 +1007,11 @@
                 ? `Run the ${startJobs.length} queued jobs, in queue order`
                 : 'Nothing is queued. Tick the jobs to run, or select some and use Queue.'}
             >
-              <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())}>
+              <Button
+                variant={app.queue.paused ? 'outline' : 'default'}
+                disabled={starting || !startJobs.length}
+                onclick={() => act(() => run())}
+              >
                 <PlayIcon />{@render slotLabel(`Start queue (${startJobs.length})`)}
               </Button>
             </Tip>
@@ -1030,7 +1034,7 @@
                     ? 'The job stops after pass 1. Click to cancel that.'
                     : "Stops the running job when its video's pass 1 is done. It keeps what it finished, so you can close VideoForge. Running the job again goes on with pass 2."}
                 >
-                  <Button variant={pausing ? 'default' : 'outline'} onclick={pauseAfterPass1}>
+                  <Button variant="outline" class={pausing ? 'bg-muted dark:bg-muted' : ''} onclick={pauseAfterPass1}>
                     <PauseIcon />{pausing ? 'Pausing after pass 1' : 'Pause after pass 1'}
                   </Button>
                 </Tip>
@@ -1451,7 +1455,7 @@
                       ><Badge variant="outline" class="px-1.5 py-0 text-xs font-normal">{job.label}</Badge></Tip
                     >{/if}
                   {#if paused(job.status)}
-                    <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
+                    <span class="ml-auto shrink-0 text-xs text-info">Paused</span>
                   {:else if job.status === 'warn'}
                     <!-- the count under it says how many; "Ready with warnings" cut a narrow list's names -->
                     <span class="ml-auto shrink-0 text-xs {STATUS_TONE.warn}"

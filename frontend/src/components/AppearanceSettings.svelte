@@ -98,7 +98,7 @@
             style="background-color: {sw[0]}"
             aria-hidden="true"
           >
-            <span class="h-6 flex-1 rounded-sm ring-1 ring-black/10" style="background-color: {sw[1]}"></span>
+            <span class="h-6 flex-1 rounded-sm ring-1 ring-foreground/10" style="background-color: {sw[1]}"></span>
             <span class="h-6 w-8 rounded-sm" style="background-color: {sw[2]}"></span>
           </div>
         </button>

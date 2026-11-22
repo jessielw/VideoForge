@@ -252,7 +252,7 @@
         <span class="flex-1"
           >{Object.keys(learned).length} more file{Object.keys(learned).length === 1 ? '' : 's'} named like the one you matched.</span
         >
-        <Button size="sm" onclick={() => apply(learned)}>Match them the same way</Button>
+        <Button size="sm" variant="outline" onclick={() => apply(learned)}>Match them the same way</Button>
       </div>
     {:else if Object.keys(suggested).length}
       <div class="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm">

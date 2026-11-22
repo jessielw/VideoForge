@@ -191,6 +191,12 @@ test('bookmarks mark frames on the scrub bar, and [ and ] go between them; a tim
   await page.keyboard.press('m')
   await expect(page.locator('[data-mark="0"]')).toHaveCount(1)
   await expect(page.getByRole('button', { name: 'Bookmark this frame' })).toHaveAttribute('aria-pressed', 'true')
+  // the tick is the accent, edged so it shows on the filled track; the pressed button is never the accent
+  await expect(page.locator('[data-mark="0"]')).toHaveClass(/(^|\s)bg-primary(\s|$)/)
+  await expect(page.locator('[data-mark="0"]')).toHaveClass(/(^|\s)ring-background(\s|$)/)
+  const icon = page.getByRole('button', { name: 'Bookmark this frame' }).locator('svg')
+  await expect(icon).toHaveClass(/(^|\s)fill-current(\s|$)/)
+  await expect(icon).not.toHaveClass(/primary/)
 
   await box.fill('0:05')
   await box.press('Enter')

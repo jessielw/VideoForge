@@ -422,6 +422,7 @@ test('a CRF search lists its tries, marks the CRF found and puts it on the job',
   await expect(rows.first().getByRole('img', { name: 'Reaches SSIMULACRA2 80' })).toBeVisible()
   await expect(rows.nth(1)).toContainText('2,000 kb/s')
   await expect(rows.first()).toHaveCSS('font-family', /^"?Cascadia Mono/)
+  await expect(card.getByText(/144 of 2,400 frames \(2%\)/)).toHaveCSS('font-family', /^"?Cascadia Mono/)
   await card.screenshot({ path: testInfo.outputPath('crf-search.png') })
 
   await card.getByRole('button', { name: 'Use CRF 20' }).click()
@@ -827,6 +828,59 @@ test("the toolbar's first row stays put when a job starts or indexing runs, so C
   await expect(page.getByRole('button', { name: 'Stop indexing', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toHaveCount(0)
   expect(await at()).toEqual(before)
+  expect(fixture.errors).toEqual([])
+})
+
+test('a paused queue has one primary button, and a pressed Pause after pass 1 is not primary', async ({ page }) => {
+  const fixture = await queueFixture(page, 3, ['ready'])
+  const primary = page.locator('button.bg-primary')
+  const idle = {
+    type: 'queue',
+    running: false,
+    current: null,
+    stop_after_current: false,
+    paused: false,
+    priority: null,
+    queued: 0,
+    indexing: null,
+    sampling: null,
+    index_queued: 0,
+    index_held: 0,
+  }
+  await expect(primary.filter({ hasText: /^Start queue/ })).toHaveCount(1)
+  fixture.send({ ...idle, paused: true, indexing: 'job-2' })
+  await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible()
+  await expect(primary.filter({ hasText: /^Start queue/ })).toHaveCount(0)
+  await expect(primary.filter({ hasText: 'Resume' })).toHaveCount(1)
+  fixture.send({ ...idle, running: true, current: 'job-0' })
+  await expect(page.getByRole('button', { name: 'Pause after pass 1', exact: true })).toBeVisible()
+  fixture.jobs[0].pause_after_pass1 = true
+  fixture.refresh()
+  const pressed = page.getByRole('button', { name: 'Pausing after pass 1', exact: true })
+  await expect(pressed).toBeVisible()
+  await expect(pressed).not.toHaveClass(/(^|\s)bg-primary(\s|$)/)
+  await expect(pressed).toHaveClass(/(^|\s)bg-muted(\s|$)/)
+  expect(fixture.errors).toEqual([])
+})
+
+test('a running job in a paused queue says Paused in the info colour', async ({ page }) => {
+  const fixture = await queueFixture(page, 3, ['running'])
+  fixture.send({
+    type: 'queue',
+    running: false,
+    current: null,
+    stop_after_current: false,
+    paused: true,
+    priority: null,
+    queued: 0,
+    indexing: null,
+    sampling: null,
+    index_queued: 0,
+    index_held: 0,
+  })
+  const label = page.getByText('Paused', { exact: true }).first()
+  await expect(label).toHaveClass(/(^|\s)text-info(\s|$)/)
+  await expect(label).not.toHaveClass(/text-warning/)
   expect(fixture.errors).toEqual([])
 })
 
