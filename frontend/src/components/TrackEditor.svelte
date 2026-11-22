@@ -712,11 +712,12 @@
             disabled={!editable}
             apply={(preset) => editTrack(t, (value) => Object.assign(value, applyAudioPreset(value, preset)))}
           />
+          <label class="text-muted-foreground" for="action-{t.key}">Copy or encode</label>
           <Tip text={actionMark ? `Copy or encode${note(actionMark)}` : undefined}>
             <NativeSelect
+              id="action-{t.key}"
               value={action}
               class={actionMark ? SELECT_MARK[actionMark] : ''}
-              aria-label="Copy or encode"
               onchange={(e) => setAction(t, e.currentTarget.value as AudioAction)}
             >
               <option value="copy">Copy</option>

@@ -1302,7 +1302,7 @@
         {:else}
           No job is running.
         {/if}
-        {#if app.queue.queued}{app.queue.queued} queued job(s) stay in the queue.{/if}
+        {#if app.queue.queued}{app.queue.queued} queued {app.queue.queued === 1 ? 'job stays' : 'jobs stay'} in the queue.{/if}
         Start VideoForge again with <code class="text-xs">videoforge serve</code> (or VideoForge.exe).
       </Dialog.Description>
     </Dialog.Header>
