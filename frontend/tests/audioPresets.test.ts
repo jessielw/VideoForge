@@ -5,32 +5,99 @@ import {
   audioPresetDefaults,
   audioPresetProblem,
   audioPresetSettings,
+  fitLayoutAndBitrate,
 } from '../src/lib/audioPresets.ts'
 import type { AudioEncodeInfo, AudioPresetSettings, AudioTrack, TrackOverride } from '../src/lib/types.ts'
 
+const limits = { bitrate_choices: [], bitrate_range: null, per_channel_max: null, layout_rates: {} }
+const choice = (key: string, label: string, ...values: [string, string][]) => ({
+  key,
+  label,
+  default: values[0][0],
+  help: '',
+  choices: values.map(([value, label]) => ({ value, label })),
+  range: null,
+  step: 1,
+  when: null,
+})
+// as the server describes them (GET /api/config/encoders), trimmed
 const ddp: AudioEncodeInfo = {
   id: 'ddp',
   label: 'DDP (DEE)',
   codec: 'eac3',
-  layouts: ['1.0', '2.0', '5.1', '7.1'],
+  layouts: ['1.0', '2.0', '5.0', '5.1', '7.1'],
   bitrates: { '1': 192, '2': 256, '6': 640, '8': 1024 },
-  bitrate_choices: [],
-  bitrate_range: null,
-  per_channel_max: null,
+  ...limits,
+  layout_rates: { '5.1': [192, 448, 576, 640, 704, 1024], '7.1': [384, 1024, 1280, 1536, 1792] },
   vbr_default: false,
   default_max: null,
+  adds_no_speakers: true,
+  modes: [
+    {
+      key: 'ddp_mode',
+      value: 'bluray',
+      layouts: ['7.1'],
+      bitrates: { '8': 1280 },
+      ...limits,
+      layout_rates: { '7.1': [768, 1024, 1280, 1536, 1664] },
+    },
+  ],
   missing: [],
-  options: [],
+  options: [choice('ddp_mode', 'DDP mode', ['standard', 'Standard'], ['bluray', 'Blu-ray'])],
 }
-const opus: AudioEncodeInfo = { ...ddp, id: 'opus', label: 'Opus', bitrate_range: [6, 2048], per_channel_max: 256 }
+const plain = { ...limits, adds_no_speakers: false, modes: [], options: [] }
+const opus: AudioEncodeInfo = {
+  ...ddp,
+  ...plain,
+  id: 'opus',
+  label: 'Opus',
+  bitrate_range: [6, 2048],
+  per_channel_max: 256,
+}
 const ac3: AudioEncodeInfo = {
   ...ddp,
+  ...plain,
   id: 'ac3',
   label: 'AC-3',
   layouts: ['1.0', '2.0', '5.0', '5.1'],
   bitrate_choices: [192, 224, 448, 640],
 }
-const atmos: AudioEncodeInfo = { ...ddp, id: 'atmos', label: 'Atmos', layouts: ['5.1'] }
+const atmos: AudioEncodeInfo = {
+  ...ddp,
+  ...plain,
+  id: 'atmos',
+  label: 'Atmos',
+  layouts: ['5.1'],
+  bitrates: { '6': 768 },
+  layout_rates: { '5.1': [384, 448, 576, 640, 768, 1024] },
+  modes: [
+    {
+      key: 'atmos_mode',
+      value: 'standard',
+      layouts: ['7.1'],
+      bitrates: { '8': 1152 },
+      ...limits,
+      bitrate_range: [448, 2048],
+    },
+    {
+      key: 'atmos_mode',
+      value: 'bluray',
+      layouts: ['7.1'],
+      bitrates: { '8': 1280 },
+      ...limits,
+      layout_rates: { '7.1': [1152, 1280, 1408, 1512, 1536, 1664] },
+    },
+  ],
+  options: [
+    choice(
+      'atmos_mode',
+      'Atmos mode',
+      ['streaming', 'Streaming (5.1)'],
+      ['standard', 'Standard (7.1)'],
+      ['bluray', 'Blu-ray (7.1, AC-3 core)'],
+    ),
+  ],
+}
 const encodes = [ddp, opus, ac3, atmos]
 const source = (layout: string, codec = 'flac', atmos = false) => ({ layout, codec, atmos }) as AudioTrack
 const preset: AudioPresetSettings = { action: 'ddp', layout: '5.1', bitrate_kbps: 640, options: { dialnorm: '-27' } }
@@ -74,7 +141,7 @@ test('a surround preset cannot upmix stereo; DDP retains its existing 5.0 except
 })
 
 test('Atmos requires TrueHD Atmos when applying directly to a source', () => {
-  const setting = { ...preset, action: 'atmos' } as AudioPresetSettings
+  const setting = { ...preset, action: 'atmos', bitrate_kbps: 768 } as AudioPresetSettings
   assert.match(audioPresetProblem(setting, encodes, source('7.1', 'truehd')), /TrueHD Atmos/)
   assert.match(audioPresetProblem(setting, encodes, source('7.1', 'eac3', true)), /TrueHD Atmos/)
   assert.equal(audioPresetProblem(setting, encodes, source('7.1', 'truehd', true)), '')
@@ -128,4 +195,50 @@ test('custom preset titles override output titles for encode and copy; untitled 
   assert.equal(applyAudioPreset(track, { ...preset, title: null }).title, 'Source title')
   assert.equal(audioPresetSettings({ ...track, action: 'copy', title: 'Bob' }).title, 'Bob')
   assert.equal(audioPresetSettings().title, null)
+})
+
+test('DDP takes DEE rates per layout and adds no speaker the source lacks', () => {
+  assert.match(
+    audioPresetProblem({ ...preset, bitrate_kbps: 650 }, encodes, source('5.1')),
+    /DDP \(DEE\) at 5.1 takes 640 or 704 kb\/s, not 650/,
+  )
+  assert.equal(audioPresetProblem({ ...preset, layout: '7.1', bitrate_kbps: 1792 }, encodes, source('7.1')), '')
+  assert.match(audioPresetProblem(preset, encodes, source('7.0')), /adds a speaker this 7.0 source doesn't have/)
+  const auto = { ...preset, layout: null, bitrate_kbps: null }
+  assert.equal(audioPresetProblem(auto, encodes, source('7.0')), '') // 7.0 defaults to 5.0
+  assert.equal(audioPresetProblem({ ...preset, layout: '5.0', bitrate_kbps: null }, encodes, source('5.1')), '')
+})
+
+test('Atmos modes bring their own 7.1 bed and rates, whatever the TrueHD core', () => {
+  const thd = source('5.1', 'truehd', true)
+  const standard: AudioPresetSettings = {
+    action: 'atmos',
+    layout: null,
+    bitrate_kbps: 1152,
+    options: { atmos_mode: 'standard' },
+  }
+  assert.equal(audioPresetProblem(standard, encodes, thd), '')
+  assert.equal(audioPresetProblem({ ...standard, layout: '7.1' }, encodes, thd), '')
+  assert.match(audioPresetProblem({ ...standard, layout: '5.1' }, encodes, thd), /does not support 5.1/)
+  const bluray = { ...standard, options: { atmos_mode: 'bluray' }, bitrate_kbps: 1024 }
+  assert.match(audioPresetProblem(bluray, encodes), /Atmos at 7.1 takes 1152 kb\/s, not 1024/)
+  assert.match(audioPresetProblem({ ...standard, options: {}, bitrate_kbps: 512 }, encodes), /takes 448 or 576/)
+})
+
+test('a layout and bitrate a new mode or layout does not take go back to auto', () => {
+  const fit = fitLayoutAndBitrate
+  assert.deepEqual(fit(ddp, { ddp_mode: 'bluray' }, '5.1', 640), { layout: null, bitrate_kbps: null })
+  assert.deepEqual(fit(ddp, { ddp_mode: 'bluray' }, '7.1', 1280), { layout: '7.1', bitrate_kbps: 1280 })
+  assert.deepEqual(fit(ddp, {}, '5.1', 1280), { layout: '5.1', bitrate_kbps: null })
+  assert.deepEqual(fit(atmos, { atmos_mode: 'standard' }, null, 1024), { layout: null, bitrate_kbps: 1024 })
+  assert.deepEqual(fit(atmos, { atmos_mode: 'bluray' }, null, 1024), { layout: null, bitrate_kbps: null })
+})
+
+test('built-ins include each mode, named after it', () => {
+  const byName = new Map(audioPresetDefaults(encodes).map((c) => [c.name, c]))
+  assert.equal(byName.get('ddp:ddp_mode=bluray:7.1')!.label, '7.1 1280 kb/s · Blu-ray')
+  assert.deepEqual(byName.get('ddp:ddp_mode=bluray:7.1')!.data.options, { ddp_mode: 'bluray' })
+  assert.equal(byName.get('atmos:atmos_mode=standard:7.1')!.label, '7.1 1152 kb/s · Standard')
+  assert.equal(byName.get('atmos:5.1')!.label, '5.1 768 kb/s')
+  assert.equal(byName.get('ddp:5.0')!.label, '5.0 640 kb/s')
 })

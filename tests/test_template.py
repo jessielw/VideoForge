@@ -132,6 +132,8 @@ def test_audio_slots_fit_each_track():
 
     to_atmos = TrackOverride(action=AudioAction.ATMOS, bitrate_kbps=1280, options={"atmos_mode": "bluray"})
     assert fit_audio(to_atmos, atmos) == to_atmos
+    bed = TrackOverride(action=AudioAction.ATMOS, layout=Layout.parse("7.1"), options={"atmos_mode": "standard"})
+    assert fit_audio(bed, audio(AudioCodec.TRUEHD, "5.1", atmos=True)) == bed  # the 7.1 bed comes from the objects
     assert fit_audio(to_atmos, truehd) == TrackOverride(action=AudioAction.DDP, options={"atmos_mode": "bluray"})
 
     opus = TrackOverride(action=AudioAction.OPUS, bitrate_kbps=600)

@@ -31,7 +31,14 @@
   import FileBrowser from './FileBrowser.svelte'
   import SubtitleSelectionMenu from './SubtitleSelectionMenu.svelte'
   import AudioPresetMenu from './AudioPresetMenu.svelte'
-  import { applyAudioPreset, audioEncodeLayouts, audioPresetSettings } from '../lib/audioPresets'
+  import {
+    applyAudioPreset,
+    audioPresetSettings,
+    bitrateChoices,
+    configuredEncode,
+    fitLayoutAndBitrate,
+    upmixes,
+  } from '../lib/audioPresets'
   import { selectSubtitles } from '../lib/subtitleSelection'
   import { pathDrop } from '../lib/dropPaths.svelte'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
@@ -342,7 +349,6 @@
     mp3: 'MP3',
     vorbis: 'Vorbis',
   }
-  const channels = (layout: string) => layout.split('.').reduce((n, x) => n + +x, 0)
   const autoAction = (t: AudioTrack): AudioAction => t.auto?.action ?? 'copy'
   const actionOf = (t: AudioTrack): AudioAction => ovOf(t)?.action ?? autoAction(t)
   // What the output actually gets: the user's override, else what the rule set planned (an encode the
@@ -366,11 +372,15 @@
   const offered = (t: AudioTrack, current: AudioAction) =>
     app.encodes.filter((e) => e.id !== 'atmos' || canAtmos(t) || current === 'atmos')
 
-  // The layouts an encode can make from this track: no upmix (DDP's 5.0 -> 5.1 aside).
+  // The layouts an encode can make from this track: none that needs a speaker it lacks (DDP's 5.0 -> 5.1 aside).
+  // Atmos is rendered from the objects: its bed is the mode's.
   function layoutChoices(t: AudioTrack, e: AudioEncodeInfo): string[] {
-    return audioEncodeLayouts(e, ovOf(t)?.options).filter(
-      (l) => channels(l) <= channels(t.layout) || (e.id === 'ddp' && t.layout === '5.0' && l === '5.1'),
-    )
+    return configuredEncode(e, ovOf(t)?.options).layouts.filter((l) => e.id === 'atmos' || !upmixes(e, t.layout, l))
+  }
+  // A layout or bitrate the encode no longer takes (after an option or the layout changed) goes back to auto.
+  function refit(t: AudioTrack, ov: TrackOverride) {
+    const e = encodeOf(actionOf(t))
+    if (e) Object.assign(ov, fitLayoutAndBitrate(e, ov.options ?? {}, ov.layout, ov.bitrate_kbps))
   }
 
   const setAction = (t: AudioTrack, a: AudioAction) =>
@@ -387,11 +397,15 @@
       ov.options ??= {}
       if (v.trim() === o.default || (!v.trim() && !o.choices.length && !o.range)) delete ov.options[o.key]
       else ov.options[o.key] = v.trim()
-      if (o.key === 'ddp_mode' && v.trim() === 'bluray' && ov.layout !== '7.1') ov.layout = null
+      refit(t, ov)
     })
   const changedOptions = (t: AudioTrack, e: AudioEncodeInfo) =>
     e.options.filter((o) => ovOf(t)?.options?.[o.key] !== undefined).length
-  const setLayout = (t: AudioTrack, v: string) => editTrack(t, (ov) => (ov.layout = v || null))
+  const setLayout = (t: AudioTrack, v: string) =>
+    editTrack(t, (ov) => {
+      ov.layout = v || null
+      refit(t, ov)
+    })
   function setDelay(t: AudioTrack, input: HTMLInputElement) {
     const v = input.value
     const n = Math.round(Number(v))
@@ -700,6 +714,9 @@
         {@const action = actionOf(t)}
         {@const planned = plannedAudio.get(t.key)?.a}
         {@const enc = encodeOf(action)}
+        {@const rates = enc
+          ? bitrateChoices(configuredEncode(enc, ov?.options), ov?.layout ?? planned?.out_layout ?? null)
+          : []}
         {@const actionMark = mark(t, (o) => o?.action)}
         {@const layoutMark = mark(t, (o) => o?.layout)}
         {@const bitrateMark = mark(t, (o) => o?.bitrate_kbps)}
@@ -744,7 +761,7 @@
           {#if enc && enc.bitrates !== null}
             <Tip text={bitrateMark ? `Bitrate${note(bitrateMark)}` : undefined}>
               <label class="flex items-center gap-1.5 text-muted-foreground">
-                {#if enc.bitrate_choices.length}
+                {#if rates.length}
                   <NativeSelect
                     value={ov?.bitrate_kbps ?? ''}
                     class={bitrateMark ? SELECT_MARK[bitrateMark] : ''}
@@ -754,7 +771,10 @@
                     <option value=""
                       >auto{planned?.bitrate_kbps && !ov?.bitrate_kbps ? ` (${planned.bitrate_kbps})` : ''}</option
                     >
-                    {#each enc.bitrate_choices as b (b)}<option value={b}>{b}</option>{/each}
+                    {#if ov?.bitrate_kbps && !rates.includes(ov.bitrate_kbps)}<option value={ov.bitrate_kbps}
+                        >{ov.bitrate_kbps} (not taken)</option
+                      >{/if}
+                    {#each rates as b (b)}<option value={b}>{b}</option>{/each}
                   </NativeSelect>
                 {:else}
                   <Input

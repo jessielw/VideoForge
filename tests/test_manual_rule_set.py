@@ -348,3 +348,17 @@ def test_atmos_mode_sets_the_bed_and_its_rates():
     bad = encoded(tracks, id_1=TrackOverride(action=AudioAction.ATMOS, bitrate_kbps=512))
     assert [(i.severity, i.code) for i in bad.issues] == [(Severity.BLOCK, "audio.bitrate")]
     assert "576" in bad.issues[0].message and "448" in bad.issues[0].message  # the nearest it takes
+
+
+def test_ddp_wont_add_a_speaker_the_source_lacks():
+    """DeeZy codes a source without an LFE without one: 7.0 to 5.1 is blocked; 5.0 to 5.1 is DeeZy's own upmix."""
+    plan = encoded(
+        [audio(C.DTS_HD_MA, "7.0", index=0)], id_1=TrackOverride(action=AudioAction.DDP, layout=Layout(5, 1))
+    )
+    assert [(i.code, i.message) for i in plan.issues] == [
+        ("audio.upmix", "Audio #1: DDP (DEE) codes the source's own speakers, and 7.0 has no 5.1 speakers")
+    ]
+    auto = encoded([audio(C.DTS_HD_MA, "7.0", index=0)], id_1=TrackOverride(action=AudioAction.DDP))
+    assert (str(auto.audio[0].out_layout), auto.issues) == ("5.0", [])
+    up = encoded([audio(C.DTS_HD_MA, "5.0", index=0)], id_1=TrackOverride(action=AudioAction.DDP, layout=Layout(5, 1)))
+    assert (up.audio[0].upmix_50, up.issues) == (True, [])

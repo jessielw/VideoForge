@@ -121,6 +121,17 @@ def test_audio_encoder_limits_are_exposed_for_source_compatibility(tmp_path):
         mode = next(o for o in encodes["ddp"]["options"] if o["key"] == "ddp_mode")
         assert mode["default"] == "standard"
         assert mode["choices"] == [{"value": "standard", "label": "Standard"}, {"value": "bluray", "label": "Blu-ray"}]
+        # the modes that change what an encode takes, with what each takes
+        assert [(m["key"], m["value"], m["layouts"]) for m in encodes["ddp"]["modes"]] == [
+            ("ddp_mode", "bluray", ["7.1"])
+        ]
+        assert encodes["ddp"]["modes"][0]["layout_rates"]["7.1"] == [768, 1024, 1280, 1536, 1664]
+        assert encodes["ddp"]["layout_rates"]["5.1"][:2] == [192, 200] and encodes["ddp"]["adds_no_speakers"]
+        atmos = {m["value"]: m for m in encodes["atmos"]["modes"]}
+        assert sorted(atmos) == ["bluray", "standard"]
+        assert (atmos["standard"]["layouts"], atmos["standard"]["bitrate_range"]) == (["7.1"], [448, 2048])
+        assert atmos["standard"]["layout_rates"] == {} and atmos["bluray"]["bitrates"] == {"8": 1280}
+        assert encodes["aac"]["modes"] == [] and not encodes["aac"]["adds_no_speakers"]
 
 
 def test_ddp_bluray_preset_persists_and_checks_layout(tmp_path):

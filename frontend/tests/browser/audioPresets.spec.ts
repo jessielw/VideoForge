@@ -83,8 +83,22 @@ async function fixture(page: Page) {
     bitrate_choices: [],
     bitrate_range: null,
     per_channel_max: null,
+    layout_rates: {},
     vbr_default: false,
     default_max: null,
+    adds_no_speakers: true,
+    modes: [
+      {
+        key: 'ddp_mode',
+        value: 'bluray',
+        layouts: ['7.1'],
+        bitrates: { '8': 1280 },
+        bitrate_choices: [],
+        bitrate_range: null,
+        per_channel_max: null,
+        layout_rates: { '7.1': [768, 1024, 1280, 1536, 1664] },
+      },
+    ],
     missing: [],
     options: [
       {
@@ -190,8 +204,10 @@ test('DDP mode saves in presets and applies to template outputs with mode-specif
     'Auto',
     '7.1',
   ])
-  await manager.getByRole('spinbutton', { name: 'Bitrate', exact: true }).fill('')
-  await manager.getByRole('spinbutton', { name: 'Bitrate', exact: true }).blur()
+  // Blu-ray takes DEE's 7.1 rates only: a list, and the 640 it doesn't take went back to auto
+  const bitrate = manager.getByRole('combobox', { name: 'Bitrate', exact: true })
+  await expect(bitrate).toHaveValue('')
+  await expect(bitrate.locator('option')).toHaveText(['Auto', '768', '1024', '1280', '1536', '1664'])
   await manager.getByRole('button', { name: 'Save preset', exact: true }).click()
   await manager.getByRole('button', { name: 'Apply to this output', exact: true }).click()
   await output.getByText('Advanced settings', { exact: false }).click()

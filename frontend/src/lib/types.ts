@@ -194,18 +194,31 @@ export interface Issue {
 export type AudioAction =
   'copy' | 'ddp' | 'atmos' | 'aac' | 'flac' | 'opus' | 'opusenc' | 'aac_ffmpeg' | 'ac3' | 'eac3' | 'mp3' | 'vorbis'
 
-// One audio encode as the server describes it (core.execute.audio.ENCODES).
-export interface AudioEncodeInfo {
-  id: Exclude<AudioAction, 'copy'>
-  label: string
-  codec: string
+// The layouts and bitrates an audio encode takes (or one of its modes does).
+export interface AudioEncodeLimits {
   layouts: string[]
   bitrates: Record<string, number> | null // default kb/s by channels; null = lossless (no bitrate)
   bitrate_choices: number[] // only these, when not empty
   bitrate_range: [number, number] | null
   per_channel_max: number | null
+  layout_rates: Record<string, number[]> // only these kb/s at a layout (DEE's rates); a layout not in it: any
+}
+
+// An option value that changes what an encode takes (DDP's Blu-ray mode, the 7.1 Atmos modes).
+export interface AudioEncodeMode extends AudioEncodeLimits {
+  key: string
+  value: string
+}
+
+// One audio encode as the server describes it (core.execute.audio.ENCODES).
+export interface AudioEncodeInfo extends AudioEncodeLimits {
+  id: Exclude<AudioAction, 'copy'>
+  label: string
+  codec: string
   vbr_default: boolean // no bitrate = the encoder's quality VBR
   default_max: string | null
+  adds_no_speakers: boolean // codes the source's own speakers: no center or LFE it lacks (DDP's 5.0 -> 5.1 aside)
+  modes: AudioEncodeMode[]
   missing: string[] // tools it lacks ([] = it can run)
   options: EncodeOptionInfo[]
 }

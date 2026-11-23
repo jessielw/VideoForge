@@ -138,7 +138,12 @@ def audio_output(
     if layout not in enc.layouts:
         issues.append(Issue(Severity.BLOCK, "audio.layout", f"Audio #{t.id}: {enc.label} can't be {layout}"))
     elif enc.upmixes(t.layout, layout):
-        issues.append(Issue(Severity.BLOCK, "audio.upmix", f"Audio #{t.id}: {t.layout} can't be upmixed to {layout}"))
+        why = (
+            f"{t.layout} can't be upmixed to {layout}"
+            if layout.channels > t.layout.channels
+            else f"{enc.label} codes the source's own speakers, and {t.layout} has no {layout} speakers"
+        )
+        issues.append(Issue(Severity.BLOCK, "audio.upmix", f"Audio #{t.id}: {why}"))
     bitrate = None
     if enc.bitrates is not None:  # lossless encodes take none
         bitrate = (ov.bitrate_kbps if ov else None) or enc.default_bitrate(layout)

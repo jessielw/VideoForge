@@ -130,7 +130,9 @@ def fit_audio(ov: TrackOverride, track: AudioTrack) -> TrackOverride:
         out.options["ddp_mode"] = "standard"
         out.layout, out.bitrate_kbps = None, None
     enc = enc.configured(out.options)
-    if out.layout and (out.layout not in enc.layouts or enc.upmixes(track.layout, out.layout)):
+    # Atmos is rendered from the objects: its bed is the mode's, whatever the TrueHD core has
+    upmix = out.action is not AudioAction.ATMOS and out.layout and enc.upmixes(track.layout, out.layout)
+    if out.layout and (out.layout not in enc.layouts or upmix):
         out.layout, out.bitrate_kbps = None, None
     if out.bitrate_kbps and enc.bitrate_problem(out.bitrate_kbps, out.layout or enc.default_layout(track.layout)):
         out.bitrate_kbps = None

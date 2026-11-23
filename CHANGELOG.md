@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A DDP or Atmos bitrate must be one of DEE's rates for the layout. Another one blocks the plan with the nearest rates it takes; DeeZy moved it to the next one before.
 - DDP has **Surround 3 dB attenuation**, off by default as in DEE 6.7. DeeZy 1 had it on, so a surround mix comes out 3 dB louder in the surrounds than with DeeZy 1 unless you turn it on.
 - **DRC** has a **None** choice. **Warp mode**'s default is DEE's (Warping); DeeZy 1 used Normal. It only applies to a TrueHD Atmos track that doesn't carry one.
+- The track editor and the preset editor follow the mode: picking Blu-ray DDP or a 7.1 Atmos mode offers its layouts and its bitrates, and a layout or bitrate the new mode doesn't take goes back to auto. For DDP and Atmos, **Bitrate** is a list of DEE's rates for the layout. The built-in presets add one per mode, such as **7.1 1280 kb/s · Blu-ray**.
 - VideoForge runs DeeZy with an empty config of its own, so a `deezy-conf.toml` beside DeeZy, in the user's config folder or in the working folder can't change its encodes.
 
 ### Removed
