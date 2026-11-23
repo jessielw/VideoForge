@@ -13,10 +13,13 @@ import {
   queueable,
   sameQueue,
   slotPage,
+  sharedFacts,
   QUEUE_PAGE_SIZE,
   type Dragged,
   type QueueRow,
 } from '../src/lib/queueView.ts'
+import { jobFacts } from '../src/lib/format.ts'
+import { factJob } from './factJob.ts'
 import type { JobSummary } from '../src/lib/types.ts'
 
 const jobs = [
@@ -195,4 +198,33 @@ test('a move that changes nothing is told apart from one that does', () => {
     movedQueue(plain, ['g1', 'g2', 'g3'], null, 'G').map((j) => j.id),
     ['a', 'b', 'h1', 'g1', 'g2', 'g3'],
   )
+})
+
+// sharedFacts takes each job's facts line: here, the jobs' own.
+const sharedOf = (jobs: JobSummary[]) => sharedFacts(jobs.map(jobFacts))
+
+test('sharedFacts: what every job in a group has the same, compared as a row shows it', () => {
+  const same = [factJob(), factJob(), factJob()]
+  assert.deepEqual([...sharedOf(same)].sort(), ['audio', 'encoder', 'hdr', 'length', 'resolution', 'subs'].sort())
+  // One value differs: only that fact leaves; the HDR tags compare as a set.
+  const differs = [
+    factJob(),
+    factJob({
+      encoder: 'x264',
+      source_facts: { resolution: '1920x1080', duration_ms: 1_560_000, hdr: ['HLG', 'HDR10'], interlaced: false },
+    }),
+  ]
+  assert.deepEqual([...sharedOf(differs)].sort(), ['audio', 'hdr', 'resolution', 'subs'].sort())
+  // A custom script, or the same crop, is shared; a different crop is not.
+  const crop = { left: 0, top: 42, right: 0, bottom: 42 }
+  assert.ok(sharedOf([factJob({ crop }), factJob({ crop: { ...crop } })]).has('extras'))
+  assert.ok(!sharedOf([factJob({ crop }), factJob({ crop: { ...crop, top: 40 } })]).has('extras'))
+  assert.ok(!sharedOf([factJob({ custom_script: true }), factJob()]).has('extras'))
+})
+
+test('sharedFacts: a group of one shares nothing, and a job without source facts shares no source fact', () => {
+  assert.equal(sharedOf([factJob()]).size, 0)
+  assert.equal(sharedOf([]).size, 0)
+  const reading = [factJob(), factJob({ source_facts: null })]
+  assert.deepEqual([...sharedOf(reading)].sort(), ['audio', 'encoder', 'subs'])
 })

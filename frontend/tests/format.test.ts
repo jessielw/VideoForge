@@ -1,6 +1,31 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { issueCounts, plural, sizeLabel } from '../src/lib/format.ts'
+import { factsText, issueCounts, jobFacts, needsDvNote, plural, sizeLabel } from '../src/lib/format.ts'
+import { factJob } from './factJob.ts'
+
+test('jobFacts: the facts line in order, only what the job has', () => {
+  assert.deepEqual(
+    jobFacts(
+      factJob({
+        custom_script: true,
+        source_facts: { resolution: '3840x2160', duration_ms: null, hdr: [], interlaced: true },
+      }),
+    ).map((f) => f.text),
+    ['3840×2160', 'interlaced', 'x265', 'custom script', '2 audio', '3 subs'],
+  )
+  assert.deepEqual(
+    jobFacts(factJob({ source_facts: null })).map((f) => f.key),
+    ['encoder', 'audio', 'subs'],
+  )
+})
+
+test('factsText joins a facts line with its HDR tags, and needsDvNote spots a profile 7 tag with its layer unread', () => {
+  const facts = jobFacts(factJob())
+  assert.equal(factsText(facts), '1920×1080 · 25:00 · HDR10 · HLG · x265 · 2 audio · 3 subs')
+  assert.equal(needsDvNote(facts), false)
+  const dv7 = jobFacts(factJob({ source_facts: { ...factJob().source_facts!, hdr: ['Dolby Vision 7?'] } }))
+  assert.equal(needsDvNote(dv7), true)
+})
 
 test('a plain size reads with a times sign; a size class stays as it is', () => {
   assert.equal(sizeLabel('1920x1040'), '1920×1040')
