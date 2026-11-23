@@ -138,10 +138,10 @@ def try_spec(spec: JobSpec, crf: int) -> JobSpec:
     return replace(spec, encoder=replace(spec.encoder, crf=float(crf)))
 
 
-def search_key(spec: JobSpec, plan: Plan) -> str:
+def search_key(spec: JobSpec, plan: Plan, app: AppConfig | None = None) -> str:
     """What a search depends on besides its target and percent: sample_key with the CRF left out (applying the
     CRF it found keeps it current)."""
-    return sample.sample_key(try_spec(spec, 0), plan)
+    return sample.sample_key(try_spec(spec, 0), plan, app)
 
 
 def check(spec: JobSpec) -> None:
@@ -248,7 +248,7 @@ def search(
         encoder=spec.encoder.encoder.label,
         frames=sel.frames(found.frames),
         total_frames=found.frames,
-        key=search_key(spec, plan),
+        key=search_key(spec, plan, app),
         started=datetime.now().isoformat(timespec="seconds"),
     )
     _write(spec, result)

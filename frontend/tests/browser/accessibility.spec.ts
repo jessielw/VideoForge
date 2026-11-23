@@ -408,6 +408,30 @@ for (const mode of ['light', 'dark'] as const) {
   })
 }
 
+// With the system's reduce-motion setting on, dialogs and the like fade in without zooming, and progress bars jump.
+for (const reduced of [false, true]) {
+  test(`a dialog ${reduced ? 'does not zoom' : 'zooms'} and a progress bar ${reduced ? 'jumps' : 'slides'} with reduce-motion ${reduced ? 'on' : 'off'}`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' })
+    const { errors } = await fixture(page, 'light')
+    await page.goto('/#/new')
+    await page.getByRole('button', { name: 'Keyboard shortcuts' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    const scale = await dialog.evaluate((el) => Number(getComputedStyle(el).getPropertyValue('--tw-enter-scale')))
+    expect(scale).toBe(reduced ? 1 : 0.95)
+    const slide = await page.evaluate(() => {
+      const bar = document.createElement('div')
+      bar.className = 'transition-[width]'
+      document.body.append(bar)
+      return getComputedStyle(bar).transitionDuration
+    })
+    expect(slide === '0s').toBe(reduced)
+    expect(errors).toEqual([])
+  })
+}
+
 test('a skip link jumps past the menu to the page', async ({ page }) => {
   const { errors } = await fixture(page, 'light')
   await page.goto('/#/new')

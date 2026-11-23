@@ -239,6 +239,7 @@ test('audio export includes the open draft; import preserves edits and selects e
   await page.screenshot({ path: testInfo.outputPath('audio-preset-manager.png') })
   await manager.getByRole('button', { name: 'Close preset manager', exact: true }).click()
   await expect(manager.getByRole('alert')).toContainText('Save your preset changes')
+  await expect(manager.locator('button.bg-primary')).toHaveText(['Save and continue']) // the footer's apply is not a second primary
   await manager.getByRole('button', { name: 'Discard changes', exact: true }).click()
   expect(errors).toEqual([])
 })

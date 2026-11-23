@@ -435,7 +435,10 @@
       <Button variant="outline" disabled={busy || !draft?.label.trim() || (!!draft.name && !dirty)} onclick={save}
         ><SaveIcon />{replacement ? 'Replace preset' : draft?.name ? 'Save preset' : 'Save new preset'}</Button
       >
-      {#if !manageOnly}<Button disabled={busy || !draft || !!applyProblem} onclick={applyDraft}>{applyLabel}</Button
+      {#if !manageOnly}<Button
+          variant={pending ? 'outline' : 'default'}
+          disabled={busy || !draft || !!applyProblem}
+          onclick={applyDraft}>{applyLabel}</Button
         >{/if}
     </footer>
   </Dialog.Content>

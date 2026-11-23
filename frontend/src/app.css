@@ -133,6 +133,27 @@ input[type='number']::-webkit-inner-spin-button {
   margin-left: 0.5rem;
 }
 
+/* Reduce motion (system setting): menus, dialogs, popovers and tooltips still fade but no longer zoom or
+   slide, and progress bars jump. Spinners keep turning (they show work is happening). */
+@media (prefers-reduced-motion: reduce) {
+  /* Unlayered, so these beat the zoom-in-95 and slide-in-from-* utilities (they sit in a cascade layer) */
+  * {
+    --tw-enter-scale: 1;
+    --tw-enter-rotate: 0;
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-exit-scale: 1;
+    --tw-exit-rotate: 0;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
+  }
+  /* progress bars, and the chevron that turns when a group opens */
+  .transition-\[width\],
+  .transition-transform {
+    transition: none;
+  }
+}
+
 /* Palettes picked in Settings > Appearance (lib/appearance.ts keeps the matching swatches).
    Gold, the default, is the :root / .dark block above; each of these overrides its surfaces and
    accent. The status colours (success / warning / info / destructive) stay the same in all. */

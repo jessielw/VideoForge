@@ -12,7 +12,7 @@ from videoforge.core.plan_io import from_json, to_json
 from videoforge.core.template_io import MAX_NAME, check_settings
 from videoforge.core.tools import TOOL_NAMES
 from videoforge.server.routes.presets import KINDS
-from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
+from videoforge.server.settings import MAX_PARALLEL_AUDIO, X265_AVX512, SavedSettings
 from videoforge.server.store import MAX_PROFILE_NAME
 
 FORMAT = "videoforge.configuration"
@@ -20,6 +20,7 @@ VERSION = 9  # 3: subs_default; 4: settings.sample_quality; 5: profile renamed r
 MAX_BYTES = 20 * 1024 * 1024
 BASE_KEY = "configuration_base"
 SETTING_KEYS = tuple(f.name for f in fields(SavedSettings))
+APPLICATION_KEYS = {f.name for f in fields(AppConfig)} - {X265_AVX512}
 # Saved settings added since version 1: the version each came in, and its value in an older backup
 SETTINGS_SINCE = {
     "plugin_settings": (2, {}),
@@ -30,6 +31,11 @@ SETTINGS_SINCE = {
     "naming": (9, {}),
 }
 FOLDER_KEYS = ("output_dir", "last_dir")
+
+
+def application_settings(config: AppConfig) -> dict[str, Any]:
+    """The file settings a profile backup carries."""
+    return {key: value for key, value in to_json(config).items() if key in APPLICATION_KEYS}
 
 
 def _object(value: Any, keys: set[str], path: str) -> None:
@@ -65,7 +71,7 @@ def read_configuration(doc: Any) -> dict[str, Any]:
         doc = doc | {"application": _rule_set(doc["application"]), "settings": _rule_set(doc["settings"])}
     # JSON-native values only, including plugin-owned settings; reject NaN/Infinity anywhere.
     json.dumps(doc, allow_nan=False)
-    _object(doc["application"], {f.name for f in fields(AppConfig)}, "Application settings")
+    _object(doc["application"], APPLICATION_KEYS, "Application settings")
     check_settings(AppConfig, doc["application"], "Application settings")
     application = from_json(AppConfig, doc["application"])
     if not 0 <= application.parallel_audio <= MAX_PARALLEL_AUDIO:
@@ -106,7 +112,7 @@ def read_configuration(doc: Any) -> dict[str, Any]:
         "format": FORMAT,
         "version": VERSION,
         "profile": profile,
-        "application": to_json(application),
+        "application": application_settings(application),
         "settings": to_json(settings),
         "folders": doc["folders"],
         "presets": libraries,

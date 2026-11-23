@@ -24,12 +24,21 @@ from videoforge.core.execute.control import Priority
 from videoforge.core.naming import NamePolicy
 from videoforge.core.notify import DEFAULT_EVENTS, EVENT_LABELS, Destination
 from videoforge.core.plan_io import from_json, to_json
-from videoforge.core.tools import TOOL_NAMES, TOOLS, check, detect, missing_for_encodes
+from videoforge.core.tools import (
+    TOOL_NAMES,
+    TOOLS,
+    ToolCheck,
+    ToolStatus,
+    check,
+    detect,
+    missing_for_encodes,
+    x265_avx512,
+)
 from videoforge.core.video import options as video_options, vs as vsx
 from videoforge.core.video.settings import Encoder
 from videoforge.plugins.loader import describe as describe_plugins
 from videoforge.rule_sets import default_rule_set_id
-from videoforge.server.settings import MAX_PARALLEL_AUDIO, SavedSettings
+from videoforge.server.settings import MAX_PARALLEL_AUDIO, X265_AVX512, SavedSettings
 
 router = APIRouter(prefix="/api/config")
 RESTART_FOR: dict[str, str] = {  # setting -> why VideoForge needs a restart for it
@@ -60,6 +69,7 @@ def _state(request: Request) -> dict[str, Any]:
             }
             for t in TOOLS
         ],
+        "x265_avx512": s.config.x265_avx512,
         "roots": [str(r) for r in s.settings.roots],
         "roots_custom": saved.roots is not None,
         "default_roots": [str(r) for r in s.default_roots],
@@ -106,7 +116,7 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     """Change any of: tools ({name: path, or "" / null for the default}), roots (a list, or null
     for every drive), rule_set (an id, or null for videoforge.toml's), index_waits_for_disk (bool),
     index_during_video (bool: with index_waits_for_disk, a job still goes while the encode only encodes video),
-    sample_quality (bool: a test encode measures its SSIMULACRA2 and XPSNR),
+    sample_quality (bool: a test encode measures its SSIMULACRA2 and XPSNR), x265_avx512 (bool: shared by profiles),
     auto_index (bool: new jobs are indexed once probed), auto_crop (bool: and their crop detected),
     naming ({rule set id: {file_name, title}}, each "template", "on" or "off": the name template's switches a job
     takes with a template or its rule set's defaults; the whole map),
@@ -117,6 +127,8 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     [{name, kind, target, enabled, events, overwrite}]), disabled_plugins (plugin ids)."""
     s = request.app.state
     saved: SavedSettings = s.saved
+    if X265_AVX512 in body and not isinstance(body[X265_AVX512], bool):
+        raise HTTPException(422, "x265_avx512: true or false")
     tools = dict(saved.tools)
     for name, path in (body.get("tools") or {}).items():
         if name not in TOOL_NAMES:
@@ -200,6 +212,8 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         **priorities,
     )
     new.save(s.store)
+    if X265_AVX512 in body:
+        s.store.set_global(X265_AVX512, body[X265_AVX512])
     apply_settings(request, new)
     return _state(request)
 
@@ -238,7 +252,7 @@ def apply_settings(request: Request, new: SavedSettings) -> None:
     else:
         s.restart_for.discard("plugin_settings")
     s.default_rule_set = default_rule_set_id(new.rule_set or s.base_config.rule_set, s.rule_set_ids)
-    cfg = new.app_config(s.base_config, s.default_rule_set)
+    cfg = new.app_config(s.base_config, s.default_rule_set, x265_avx512=s.store.get_global(X265_AVX512) is True)
     s.config = cfg
     s.queue.app = cfg  # new probes and runs use it; a running job keeps the one it started with
     s.settings.roots = [Path(r) for r in new.roots] if new.roots else list(s.default_roots)
@@ -314,7 +328,8 @@ def encoder_options(request: Request, encoder: Encoder) -> dict[str, Any]:
 @router.get("/tools")
 def tool_checks(request: Request) -> list[dict[str, Any]]:
     """Each tool: found or not, and its version (runs every tool's version command)."""
-    return [to_json(c) for c in detect(request.app.state.config.tools)]
+    tools = request.app.state.config.tools
+    return [_tool_report(c, tools.x265) for c in detect(tools)]
 
 
 @router.post("/tools/check")
@@ -325,4 +340,11 @@ def check_path(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     if info is None:
         raise HTTPException(422, f"Unknown tool {name!r}")
     resolved = getattr(with_tools(request.app.state.base_config, {info.name: path}).tools, info.name) if path else ""
-    return to_json(check(info, resolved))
+    return _tool_report(check(info, resolved), resolved)
+
+
+def _tool_report(result: ToolCheck, x265_path: str) -> dict[str, Any]:
+    report = to_json(result)
+    if result.name == "x265" and result.status is ToolStatus.OK:
+        report["avx512"] = x265_avx512(x265_path)
+    return report

@@ -189,18 +189,19 @@ def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
                 enc.target_mb, e.plan, e.spec.container(rule_set), info.read(e.spec.job_dir / info.SCRIPT_INFO)
             )
             out["target"] = to_json(found) | {"video": found.video, "kbps": found.kbps} if found else None
+        app = queue.app
         if e.spec.encodes_video and (result := read_result(e.spec)) is not None:
             out["sample"] = asdict(result) | {
                 "kbps": result.kbps,
                 "estimate_mb": result.estimate_mb,
                 "estimate_seconds": result.estimate_seconds,
                 "encode_fps": result.encode_fps,
-                "current": result.key == sample_key(e.spec, e.plan),
+                "current": result.key == sample_key(e.spec, e.plan, app),
                 "file": str(sample_dir(e.spec) / MKV),
             }
             out["compare"]["sample"] = True
         if e.spec.encodes_video and (found := crfsearch.read_result(e.spec)) is not None:
-            out["search"] = found.to_json() | {"current": found.key == crfsearch.search_key(e.spec, e.plan)}
+            out["search"] = found.to_json() | {"current": found.key == crfsearch.search_key(e.spec, e.plan, app)}
     if e.probed is not None:
         src = e.probed.source
         tracks = [*src.audio, *e.probed.external_audio, *src.subs, *e.probed.external_subs]

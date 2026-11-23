@@ -64,6 +64,7 @@ class AppConfig:
     # StaxRip's defaults: the video encode (the encoder and the vspipe feeding it) below normal, other tools normal
     encoder_priority: Priority = Priority.BELOW_NORMAL
     tool_priority: Priority = Priority.NORMAL
+    x265_avx512: bool = False  # server preference shared by all profiles
 
     @staticmethod
     def upgrade_json(data: dict) -> dict:

@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.15] - 2026-11-23
+
+### Added
+
+- **Settings → Tools → x265 → Allow AVX-512** lets compatible x265 builds use AVX-512. The switch starts off and is saved across restarts and profiles. CPU flags set in a job or preset take priority, and plugin presets still receive updates at startup.
+- VideoForge follows the operating system's reduce motion setting. With it on, menus, dialogs, popovers and tooltips fade in without zooming or sliding, and progress bars jump to their value. Spinners still turn, because they show that work is going on.
+
+### Changed
+
+- Updated guessit.
+- Each toolbar, bar and dialog has one button in the accent color: its main action. While the queue is paused, **Resume** is that button and **Start queue** is plain. **Pause after pass 1** stays plain when pressed, with a gray fill. While the preset manager asks **Save your preset changes before continuing?**, its apply button is plain, so **Save and continue** is the one in the accent color. In **Review matches**, **Match them the same way** is plain and **Done** keeps the accent color.
+- Status colors (blue, green, amber and red) are kept for a job's state, so these marks change. In the track editor, a value from the template has a dashed gray border, and a value or flag you set has a solid border in the text color; the "(from the template)" and "(changed by you)" notes are unchanged. Frame bookmarks are accent-colored ticks on the scrub bar, and the bookmark button fills its icon in the text color when it is on. The default template's star on **Templates** is filled in the text color instead of amber. **Paused** in a queue row and in the job editor is blue, like **Paused after pass 1**.
+- The CRF search's progress line uses the monospaced font of the other figures.
+- Long help text in Settings wraps at about 75 characters per line.
+- On **New jobs**, the button says what it does: **Add 3 jobs**. It said **Add 3 jobs to queue**, although adding never queued the jobs. It reads **Adding 3 jobs…** while it works. When every matched source already has a job, the bar says "Nothing new to add: each matched source already has a job." instead of "0 jobs". The **Matched files** header counts the jobs that already exist ("3 jobs · 2 existing"), and after **Add** the bar says "kept 2 existing jobs".
+- The caption over the Queue's checkboxes reads **Queued**, and screen readers read it. It said **Queue** and was hidden from them.
+- The Queue's **Remove** menu offers **Remove and keep work folders** (it said **Remove from the queue**) and **Remove and delete work folders**.
+- An audio track's copy or encode menu has a visible label, **Copy or encode**.
+- Queue rows take two lines instead of three to five. The first holds the name, the indexed icon and the status; a job ready with warnings shows its count there ("1 warning"), and another status with issues gets a small mark such as "⚠ 1". The second holds the source and encode facts on one line, cut off at the list's edge, with all of them in its tooltip. When the name and a long status don't fit on one line, the status moves under the name, so it's never cut off.
+- A group's header shows, on a second line, the facts all its jobs share, such as the resolution, encoder and track counts, and its rows show only what differs. A group named by its count ("6 jobs") no longer repeats the count.
+- With a job open in a window 1130 to 1439 px wide, the side menu collapses to icons and the queue list stays beside the editor, with each job's name and status. The rail of numbered chips appears only below 1130 px, and each chip shows its status with a small mark as well as its color.
+- The note about which jobs the selection's actions reach moved to **Shortcuts**, under **Queue list**. The status filter lists only the statuses that have jobs, and the one you picked.
+
+### Fixed
+
+- The edge of each palette swatch in **Settings › Appearance** shows in dark mode too.
+- Counts read "1 job" or "3 jobs" instead of "job(s)" in the Queue's messages, on **New jobs** and in the **Shut down** dialog, and "Unqueued 1 jobs" reads "Unqueued 1 job".
+
 ## [0.1.14] - 2026-11-21
 
 ### Added
@@ -550,7 +578,7 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 - **Bundled VapourSynth plugins.** Source filters (BestSource, L-SMASH-Works, FFMS2, d2vsource) and common filters (EdgeFixer, FillBorders, MVTools, znedi3, dfttest2, BM3D, zsmooth, vszip, fmtconv, descale, ...) plus havsfunc, mvsfunc and awsmfunc, from one list (`vsplugins/manifest.toml`): built from source in the Docker image, downloaded (pinned, checked) for the portable build or a source install (`scripts/fetch_plugins.py`).
 - **Profiles.** The built-in `manual` profile; other profiles (a release group's rules) install as separate packages under the `videoforge.profiles` entry point group.
 
-[Unreleased]: https://github.com/jessielw/VideoForge/compare/0.1.9...HEAD
+[Unreleased]: https://github.com/jessielw/VideoForge/compare/0.1.14...HEAD
 [0.1.9]: https://github.com/jessielw/VideoForge/releases/tag/0.1.9
 [0.1.8]: https://github.com/jessielw/VideoForge/releases/tag/0.1.8
 [0.1.7]: https://github.com/jessielw/VideoForge/releases/tag/0.1.7

@@ -16,6 +16,7 @@ from videoforge.core.notify import Destination, load_destinations
 from videoforge.core.plan_io import from_json, to_json
 
 MAX_PARALLEL_AUDIO = 8  # the Settings page's limit on audio encodes at once
+X265_AVX512 = "x265_avx512"  # Store's installation-wide setting
 
 
 def default_roots() -> list[Path]:
@@ -117,9 +118,9 @@ class SavedSettings:
     def save(self, store) -> None:
         store.set_settings(to_json(self))
 
-    def app_config(self, base: AppConfig, rule_set: str) -> AppConfig:
+    def app_config(self, base: AppConfig, rule_set: str, *, x265_avx512: bool = False) -> AppConfig:
         """base (videoforge.toml) with these settings over it."""
-        cfg = replace(with_tools(base, self.tools), rule_set=rule_set)
+        cfg = replace(with_tools(base, self.tools), rule_set=rule_set, x265_avx512=x265_avx512)
         if self.parallel_audio is not None:
             cfg = replace(cfg, parallel_audio=self.parallel_audio)
         if self.delete_work_dir is not None:

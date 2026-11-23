@@ -221,7 +221,7 @@ test('Matched files keeps its size while the sources match again', async ({ page
   const { errors, sources } = await fixture(page, [])
   await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
   const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
-  await expect(card).toContainText('2 job(s)')
+  await expect(card).toContainText('2 jobs')
   const before = (await card.boundingBox())!.height
   // Hold the next match, so the page stays in "Matching…" while it is measured.
   let release!: () => void
@@ -281,7 +281,7 @@ test('in a narrow window the bar after Add puts its buttons on a second row, all
       : route.fallback(),
   )
   await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
-  const bar = page.locator('footer[aria-label="Add to queue"]')
+  const bar = page.locator('footer[aria-label="Add jobs"]')
   await bar.getByRole('button', { name: /Add 2 jobs/ }).click()
   await expect(bar.getByRole('button', { name: 'Open queue' })).toBeVisible()
   const edge = (await bar.boundingBox())!
@@ -304,9 +304,37 @@ test('an Add that adds nothing says so, with no next step', async ({ page }) => 
       : route.fallback(),
   )
   await paste(page, `"${sources[0]}"`)
-  const bar = page.locator('footer[aria-label="Add to queue"]')
+  const bar = page.locator('footer[aria-label="Add jobs"]')
   await bar.getByRole('button', { name: /Add 1 job/ }).click()
-  await expect(bar.getByRole('status')).toHaveText('Nothing added · 1 already in the queue, kept')
+  await expect(bar.getByRole('status')).toHaveText('Nothing added · kept 1 existing job')
+  expect(errors).toEqual([])
+})
+
+test('when every matched source already has a job, the bar says nothing is new and Add stays off', async ({ page }) => {
+  const { errors, sources } = await fixture(page, [])
+  await page.route('**/api/match', (route) =>
+    route.fulfill({
+      json: {
+        jobs: sources.map((source, i) => ({
+          source,
+          encode: null,
+          encode_state: null,
+          subtitles: [],
+          subtitle_info: [],
+          chapters: null,
+          existing_id: `job-${i}`,
+          existing_status: 'pending',
+        })),
+        unmatched: [],
+      },
+    }),
+  )
+  await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
+  const bar = page.locator('footer[aria-label="Add jobs"]')
+  await expect(bar).toContainText('Nothing new to add: each matched source already has a job.')
+  await expect(bar.getByRole('button', { name: 'Add jobs', exact: true })).toBeDisabled()
+  const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
+  await expect(card).toContainText('2 jobs · 2 existing')
   expect(errors).toEqual([])
 })
 
@@ -324,10 +352,10 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
   await expect(page.getByText('Show.S01E02.mkv')).toBeVisible()
   const tops = await page.evaluate(() => [
     document.querySelector('nav')!.lastElementChild!.getBoundingClientRect().top,
-    document.querySelector('footer[aria-label="Add to queue"]')!.getBoundingClientRect().top,
+    document.querySelector('footer[aria-label="Add jobs"]')!.getBoundingClientRect().top,
   ])
   expect(tops[1]).toBe(tops[0]) // the bar's top line meets the nav's status block's
-  const bar = page.locator('footer[aria-label="Add to queue"]')
+  const bar = page.locator('footer[aria-label="Add jobs"]')
   // Two or more go in a queue group, named after the season; the name can be typed, and the box unticked.
   await expect(bar).toContainText('2 jobs in group Show S01 · Sized · will index and auto-crop · saved to D:/Output')
   const groupName = page.getByRole('textbox', { name: 'Group name' })
@@ -372,7 +400,7 @@ test('pasted paths land on New jobs; the bottom bar says what Add will do and th
 
   await paste(page, sources[0])
   await expect(page.getByRole('checkbox', { name: 'Group them' })).toHaveCount(0) // one job: no group
-  await bar.getByRole('button', { name: /Add 1 job to queue/ }).click()
+  await bar.getByRole('button', { name: /Add 1 job/ }).click()
   await expect.poll(() => posted.length).toBe(2)
   expect(posted[1].group_name).toBeUndefined()
   await bar.getByRole('button', { name: 'Open queue' }).click()
@@ -627,7 +655,7 @@ test('each slot counts its paths, scrolls a long list in its box, and clears on 
   await page.getByRole('button', { name: 'Clear all sources' }).click()
   await expect(page.getByRole('group', { name: 'Sources' })).toContainText('MKV, MP4 or M2TS')
   await expect(page.getByRole('button', { name: 'Clear all sources' })).toHaveCount(0)
-  await expect(page.locator('footer[aria-label="Add to queue"]')).toContainText('Paste file paths on any page')
+  await expect(page.locator('footer[aria-label="Add jobs"]')).toContainText('Paste file paths on any page')
   expect(errors).toEqual([])
 })
 
@@ -639,7 +667,7 @@ test('the grip under Matched files drags it taller past the page, without jumpin
   const many = Array.from({ length: 30 }, (_, i) => `"D:/Media/Show.S01E${String(i + 1).padStart(2, '0')}.mkv"`)
   await paste(page, many.join(String.fromCharCode(13, 10)))
   const card = page.locator('[data-slot=card]').filter({ has: page.getByRole('heading', { name: 'Matched files' }) })
-  await expect(card).toContainText('30 job(s)')
+  await expect(card).toContainText('30 jobs')
   const grip = page.getByRole('separator', { name: 'Resize Matched files' })
   const scrollTop = () => card.evaluate((el) => el.closest('.overflow-auto')!.scrollTop)
   // With "Group them" shown and Linux's wider fonts, the grip starts under the bottom bar, where a grab hits the bar
@@ -667,7 +695,7 @@ test('the grip under Matched files drags it taller past the page, without jumpin
   expect(await scrollTop()).toBe(top)
 
   await page.reload()
-  await expect(card).toContainText('30 job(s)')
+  await expect(card).toContainText('30 jobs')
   expect(Math.abs((await card.boundingBox())!.height - tall)).toBeLessThan(4) // remembered
   await grip.focus()
   await page.keyboard.press('ArrowDown')
@@ -751,7 +779,7 @@ test('Matched files tags each subtitle, flags odd rows, lists unmatched files fi
   await expect(card).not.toContainText('named for another episode') // unticked, so no longer counted
 
   await page
-    .locator('footer[aria-label="Add to queue"]')
+    .locator('footer[aria-label="Add jobs"]')
     .getByRole('button', { name: /Add 4 jobs/ })
     .click()
   await expect.poll(() => posted.length).toBe(1)
@@ -843,6 +871,7 @@ test('files are matched by hand in Matched files and in Review matches, sent wit
   await expect(
     dialog.getByRole('combobox', { name: 'Source for t2_c2.srt' }).locator('option', { hasText: '(like your match)' }),
   ).toHaveCount(1)
+  await expect(dialog.locator('button.bg-primary')).toHaveText(['Done']) // the one main action
   await dialog.getByRole('button', { name: 'Match them the same way' }).click()
   await expect.poll(() => asked.at(-1)).toEqual({ [setA]: e1, [setB]: e2 })
   await expect(files).toHaveCount(3) // changed here, so still listed
@@ -866,7 +895,7 @@ test('files are matched by hand in Matched files and in Review matches, sent wit
   await page.keyboard.press('Escape')
 
   await page
-    .locator('footer[aria-label="Add to queue"]')
+    .locator('footer[aria-label="Add jobs"]')
     .getByRole('button', { name: /Add 3 jobs/ })
     .click()
   await expect.poll(() => posted.length).toBe(1)
@@ -1126,10 +1155,10 @@ test('while Add runs the bar says so with a spinner, the inputs are locked, and 
     route.request().method() === 'POST' ? (await held, await route.fallback()) : route.fallback(),
   )
   await paste(page, sources.map((p) => `"${p}"`).join(String.fromCharCode(13, 10)))
-  const bar = page.locator('footer[aria-label="Add to queue"]')
+  const bar = page.locator('footer[aria-label="Add jobs"]')
   await bar.getByRole('button', { name: /Add 2 jobs/ }).click()
 
-  await expect(bar.getByRole('status')).toHaveText('Adding 2 jobs to the queue…')
+  await expect(bar.getByRole('status')).toHaveText('Adding 2 jobs…')
   await expect(bar.getByRole('button', { name: 'Adding…' })).toBeDisabled()
   await expect(bar.getByRole('button', { name: 'Clear all' })).toBeDisabled()
   await expect(

@@ -18,6 +18,7 @@
     queueSlots,
     queueable,
     slotPage,
+    sharedFacts,
     QUEUE_PAGE_SIZE,
     movedQueue,
     sameQueue,
@@ -28,6 +29,10 @@
   import { saves } from '../lib/saves'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
+  import CheckIcon from '@lucide/svelte/icons/check'
+  import CircleXIcon from '@lucide/svelte/icons/circle-x'
+  import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle'
+  import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down'
   import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left'
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
@@ -69,20 +74,23 @@
   import { pastedPaths, pathDrop } from '../lib/dropPaths.svelte'
   import {
     bytes,
-    duration,
+    factsText,
     issueCounts,
+    jobFacts,
+    needsDvNote,
     percent,
+    plural,
     PRIORITY_LABEL,
     progressTimes,
-    sizeLabel,
     STATUS_LABEL,
     STATUS_TONE,
+    type Fact,
   } from '../lib/format'
   import { router } from '../lib/router.svelte'
   import { layout } from '../lib/layout.svelte'
   import { reuseQuestion } from '../lib/reuse.svelte'
   import { app } from '../lib/state.svelte'
-  import type { EncoderSettings, JobDetail, Priority, Status } from '../lib/types'
+  import type { EncoderSettings, JobDetail, JobSummary, Priority, Status } from '../lib/types'
 
   let selected = $state<string[]>([])
   let anchor = $state<string | null>(null)
@@ -195,7 +203,7 @@
     await api.dequeue(ids)
     await app.refreshJobs()
     if (ids.length > 1)
-      toast.success(`Unqueued ${ids.length} jobs`, {
+      toast.success(`Unqueued ${plural(ids.length, 'job')}`, {
         description: 'You can edit them again, and the queue skips them.',
       })
   }
@@ -209,7 +217,7 @@
     const { enqueued } = await api.enqueue(ids, reuse)
     await app.refreshJobs()
     if (enqueued.length < ids.length) {
-      toast.warning(`Queued ${enqueued.length} of ${ids.length} jobs`, {
+      toast.warning(`Queued ${enqueued.length} of ${plural(ids.length, 'job')}`, {
         description:
           "The others can't be queued while VideoForge reads their tracks, indexes them, detects their crop or runs a test encode or CRF search, or while they're blocked.",
       })
@@ -494,16 +502,29 @@
   // The header's counts: its jobs (or how many match), then how many are done and failed, when any are.
   const groupCounts = (row: QueueRow & { kind: 'group' }, done: number, failed: number) => {
     const n = row.members.length
-    const parts = [
-      {
-        text: row.matching.length < n ? `${row.matching.length} of ${n} match` : `${n} ${n === 1 ? 'job' : 'jobs'}`,
-        tone: '',
-      },
-    ]
+    const parts: { text: string; tone: string }[] = []
+    if (row.matching.length < n) parts.push({ text: `${row.matching.length} of ${n} match`, tone: '' })
+    // The default name is the count, so the count isn't said twice.
+    else if (row.name !== `${n} jobs`) parts.push({ text: plural(n, 'job'), tone: '' })
     if (done) parts.push({ text: done === n ? 'all done' : `${done} done`, tone: done === n ? 'text-success' : '' })
     if (failed) parts.push({ text: `${failed} failed`, tone: 'text-destructive' })
     return parts
   }
+  // The facts each group's jobs share (all its members, whatever a filter shows): its header shows them once, and
+  // its rows leave them out.
+  const sharedByGroup = $derived(
+    new Map(
+      rows.flatMap((r) => (r.kind === 'group' ? [[r.group, sharedFacts(r.members.map(jobFacts))] as const] : [])),
+    ),
+  )
+  const sharedLineOf = (row: QueueRow & { kind: 'group' }) => {
+    const shared = sharedByGroup.get(row.group)
+    return row.members[0] && shared ? jobFacts(row.members[0]).filter((f) => shared.has(f.key)) : []
+  }
+  // One hidden note, which each Dolby Vision profile 7 row (and group header) points to as its description.
+  const needsNote = $derived(
+    rows.some((r) => (r.kind === 'group' ? needsDvNote(sharedLineOf(r)) : needsDvNote(jobFacts(r.job)))),
+  )
   // A collapsed group whose jobs are all selected shows as selected: its rows, which would, are hidden.
   const groupSelected = (row: QueueRow & { kind: 'group' }) =>
     row.collapsed && row.matching.length > 0 && row.matching.every((j) => selectedSet.has(j.id))
@@ -629,14 +650,14 @@
       if (r.removed.length < ids.length)
         toast.info('Jobs that are queued or running, indexing, or running a test encode or CRF search were kept')
       if (!workDirs && r.removed.length)
-        toast.success(`Removed ${r.removed.length} job(s)`, {
+        toast.success(`Removed ${plural(r.removed.length, 'job')}`, {
           action: {
             label: 'Undo',
             onClick: () =>
               act(async () => {
                 const restored = await api.restore(r.removed)
                 await app.refreshJobs()
-                toast.info(`Restored ${restored.restored.length} job(s)`)
+                toast.info(`Restored ${plural(restored.restored.length, 'job')}`)
               }),
           },
         })
@@ -686,7 +707,22 @@
   const indexing = $derived(!!app.queue.indexing || !!app.queue.sampling || app.queue.index_queued > 0)
   // tools running now (the job's, the index lane's, a test encode there): what Pause and the priority menu reach
   const working = $derived(!!app.queue.current || !!app.queue.indexing || !!app.queue.sampling)
+  const DV7_NOTE =
+    "Dolby Vision profile 7. Set dovi_tool in Settings › Tools so VideoForge can read whether its enhancement layer is FEL or MEL, which decides how it's encoded."
   const LIVE = ['running', 'indexing', 'sampling'] // statuses with progress
+  // A rail chip's corner mark, so its status doesn't rest on colour alone.
+  const CHIP_MARK: Partial<Record<Status, typeof CheckIcon>> = {
+    done: CheckIcon,
+    failed: CircleXIcon,
+    invalid: CircleXIcon,
+    error: CircleXIcon,
+    blocked: CircleXIcon,
+    warn: TriangleAlertIcon,
+    running: LoaderCircleIcon,
+    indexing: LoaderCircleIcon,
+    sampling: LoaderCircleIcon,
+    queued: LockIcon,
+  }
   const paused = (status: string) => app.queue.paused && LIVE.includes(status)
   // The toolbar's Index: the selected jobs, or every job when none is selected.
   const indexTarget = $derived(selected.length ? selected : app.jobs.map((j) => j.id))
@@ -701,14 +737,20 @@
   let peek = $state(false)
   let railEl = $state<HTMLElement>()
   let listEl = $state<HTMLElement>()
-  const rail = $derived(layout.small ? single !== null : layout.queueCollapsed || (layout.narrow && single !== null))
+  const rail = $derived(
+    layout.small ? single !== null : layout.queueCollapsed || (layout.railNarrow && single !== null),
+  )
   $effect(() => {
     if (!rail) peek = false
+  })
+  $effect(() => {
+    layout.jobOpen = single !== null
+    return () => (layout.jobOpen = false)
   })
 
   function showList() {
     layout.queueCollapsed = false
-    if (layout.narrow && single !== null) peek = true
+    if (layout.railNarrow && single !== null) peek = true
     tick().then(() => listEl?.querySelector<HTMLInputElement>('input[type="search"]')?.focus())
   }
 
@@ -750,7 +792,8 @@
     await act(async () => {
       const r = await api.apply(selected, { encoder })
       toast.success(
-        `Encoder applied to ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
+        `Encoder applied to ${plural(r.updated.length, 'job')}` +
+          (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
       )
     })
   }
@@ -768,7 +811,7 @@
     await act(async () => {
       const r = await api.apply(ids, { template: $state.snapshot(picked.data) })
       toast.success(
-        `Template ${name} applied to ${r.updated.length} job(s)` +
+        `Template ${name} applied to ${plural(r.updated.length, 'job')}` +
           (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
       )
       const fresh = await api.job(ids[0])
@@ -782,7 +825,9 @@
     await act(async () => {
       const r = await api.apply(selected, { container })
       const label = batchContainers.find((c) => c.id === container)?.label ?? container
-      toast.success(`${label} for ${r.updated.length} job(s)` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''))
+      toast.success(
+        `${label} for ${plural(r.updated.length, 'job')}` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
+      )
     })
   }
 
@@ -795,8 +840,8 @@
       const r = await api.apply(selected, { output_dir: path })
       toast.success(
         (path
-          ? `Output folder set for ${r.updated.length} job(s)`
-          : `Output folder cleared for ${r.updated.length} job(s)`) +
+          ? `Output folder set for ${plural(r.updated.length, 'job')}`
+          : `Output folder cleared for ${plural(r.updated.length, 'job')}`) +
           (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
       )
     })
@@ -859,7 +904,7 @@
       <Tip
         side="right"
         class="my-2"
-        text={layout.narrow && single !== null
+        text={layout.railNarrow && single !== null
           ? 'Show the queue list over the editor (the window is narrow)'
           : 'Show the queue list'}
       >
@@ -870,7 +915,7 @@
       <Tip
         side="right"
         class="pb-1 text-xs text-muted-foreground"
-        text={`${matching.length} matching jobs of ${app.jobs.length}`}>{matching.length}</Tip
+        text={`${plural(matching.length, 'matching job')} of ${app.jobs.length}`}>{matching.length}</Tip
       >
       <div
         data-scroller
@@ -900,17 +945,19 @@
             {/if}
           {:else}
             {@const job = row.job}
+            {@const Mark = CHIP_MARK[job.status]}
             <Tip
               side="right"
               class="shrink-0"
-              text="{job.name}{job.label ? ` (${job.label})` : ''}: {STATUS_LABEL[job.status]}{job.issue_counts.block ||
-              job.issue_counts.warn
+              text="{job.name}{job.label ? ` (${job.label})` : ''}: {paused(job.status)
+                ? 'Paused'
+                : STATUS_LABEL[job.status]}{job.issue_counts.block || job.issue_counts.warn
                 ? ` (${issueCounts(job.issue_counts).join(', ')})`
                 : ''}{row.group ? ` · ${job.group_name}` : ''}"
             >
               <button
                 data-job={job.id}
-                aria-label={`${job.name}${job.label ? ` (${job.label})` : ''}: ${STATUS_LABEL[job.status]}`}
+                aria-label={`${place.get(job.id)}. ${job.name}${job.label ? ` (${job.label})` : ''}, ${paused(job.status) ? 'Paused' : STATUS_LABEL[job.status]}`}
                 aria-pressed={selectedSet.has(job.id)}
                 tabindex={job.id === tabStop ? 0 : -1}
                 onfocus={() => (cursor = job.id)}
@@ -921,7 +968,16 @@
                 onpointerdown={(e) => dragStart(e, job.id)}
                 onclick={(e) => click(e, job.id)}
               >
-                {place.get(job.id)}
+                <!-- a place of three digits reaches the corner mark, so the number sits lower when a mark shows -->
+                <span class={Mark ? 'translate-y-1' : ''}>{place.get(job.id)}</span>
+                {#if Mark}
+                  <Mark
+                    aria-hidden="true"
+                    class="absolute top-0.5 right-0.5 size-3 {LIVE.includes(job.status) && !paused(job.status)
+                      ? 'animate-spin'
+                      : ''}"
+                  />
+                {/if}
                 {#if LIVE.includes(job.status) && job.progress}
                   <span class="absolute inset-x-0 bottom-0 h-1 bg-muted">
                     <span class="block h-full bg-info" style="width:{job.progress.overall * 100}%"></span>
@@ -957,7 +1013,10 @@
         'absolute inset-y-0 left-14 z-30 w-[28rem] max-w-[calc(100%-3.5rem)] bg-background shadow-xl',
       )}{/if}
   {:else}
-    {@render list('w-[28rem] max-w-full shrink-0 max-sm:w-full')}
+    <!-- With a job open in a narrow window the list shrinks to make room for the editor. -->
+    {@render list(
+      `${layout.narrow && single !== null ? 'w-[22.6rem]' : 'w-[28rem]'} max-w-full shrink-0 max-sm:w-full`,
+    )}
   {/if}
 
   {#snippet list(cls: string)}
@@ -966,6 +1025,7 @@
       class="flex min-w-0 flex-col overflow-y-auto border-r border-border {cls}"
       aria-label="Queue list"
     >
+      {#if needsNote}<span id="dv7-note" hidden>{DV7_NOTE}</span>{/if}
       <!-- Three rows. The first never moves: Start queue and Stop after current share one slot, as wide as the
            longer of the two, so Run selected stays under the pointer when a job starts (a double click on it used to
            land on Cancel). The second shows only while something runs, indexes or is paused. The third acts on the
@@ -1007,7 +1067,11 @@
                 ? `Run the ${startJobs.length} queued jobs, in queue order`
                 : 'Nothing is queued. Tick the jobs to run, or select some and use Queue.'}
             >
-              <Button disabled={starting || !startJobs.length} onclick={() => act(() => run())}>
+              <Button
+                variant={app.queue.paused ? 'outline' : 'default'}
+                disabled={starting || !startJobs.length}
+                onclick={() => act(() => run())}
+              >
                 <PlayIcon />{@render slotLabel(`Start queue (${startJobs.length})`)}
               </Button>
             </Tip>
@@ -1030,7 +1094,7 @@
                     ? 'The job stops after pass 1. Click to cancel that.'
                     : "Stops the running job when its video's pass 1 is done. It keeps what it finished, so you can close VideoForge. Running the job again goes on with pass 2."}
                 >
-                  <Button variant={pausing ? 'default' : 'outline'} onclick={pauseAfterPass1}>
+                  <Button variant="outline" class={pausing ? 'bg-muted dark:bg-muted' : ''} onclick={pauseAfterPass1}>
                     <PauseIcon />{pausing ? 'Pausing after pass 1' : 'Pause after pass 1'}
                   </Button>
                 </Tip>
@@ -1185,7 +1249,7 @@
               </DropdownMenu.Trigger>
             </Tip>
             <DropdownMenu.Content align="end" class="w-auto">
-              <DropdownMenu.Item onSelect={() => remove()}>Remove from the queue</DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => remove()}>Remove and keep work folders</DropdownMenu.Item>
               <Tip class="block" side="left" text="Shows the work folders and their sizes before deleting them.">
                 <DropdownMenu.Item onSelect={confirmRemoval}>Remove and delete work folders</DropdownMenu.Item>
               </Tip>
@@ -1228,7 +1292,9 @@
           >
             <option value="">All statuses ({searched.length})</option>
             {#each Object.entries(STATUS_LABEL) as [value, label] (value)}
-              <option {value}>{label} ({counts.get(value as Status) ?? 0})</option>
+              {#if counts.get(value as Status) || value === status}
+                <option {value}>{label} ({counts.get(value as Status) ?? 0})</option>
+              {/if}
             {/each}
           </NativeSelect>
           {#if query || status}<Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>{/if}
@@ -1245,16 +1311,12 @@
               >Clear selection</Button
             >{/if}
         </div>
-        <p class="text-xs text-muted-foreground">
-          Actions on the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs,
-          or every job when none is selected.
-        </p>
         <!-- Over the column of checkboxes, which queue and lock a job (clicking a row selects it). Each box has its own
-             name, so a screen reader skips this. -->
+             name, and this caption is read as well. -->
         <Tip
           class="w-fit text-xs text-muted-foreground"
           text="A ticked job is queued and locked, so you can't edit it until you untick it. Start queue runs the queued jobs."
-          ><span aria-hidden="true">Queue</span></Tip
+          ><span>Queued</span></Tip
         >
         <!-- for screen readers, as the list's description: the Shortcuts dialog shows the keys -->
         <p id="queue-keys" class="sr-only">
@@ -1277,6 +1339,33 @@
         aria-describedby="queue-keys"
         class="min-h-24 flex-1 overflow-auto select-none"
       >
+        {#snippet mark(n: number, error: boolean)}
+          {#if n}
+            {@const words = issueCounts(error ? { block: n, warn: 0 } : { block: 0, warn: n })[0]}
+            <Tip class="items-center" text={words}>
+              <span role="img" aria-label={words} class="inline-flex items-center gap-0.5 text-muted-foreground">
+                {#if error}<CircleXIcon aria-hidden="true" class="size-3.5 text-destructive" />{:else}<TriangleAlertIcon
+                    aria-hidden="true"
+                    class="size-3.5 text-warning"
+                  />{/if}{n}
+              </span>
+            </Tip>
+          {/if}
+        {/snippet}
+        <!-- One line that ends in an ellipsis at the list's edge. All of it stays in the DOM and in the tip. The
+             tags have no tips of their own (a tip inside this one): the Dolby Vision note is in this one. -->
+        {#snippet factsLine(facts: Fact[], margin: string)}
+          <Tip
+            class="readout {margin} block h-5 truncate text-xs leading-5 text-muted-foreground"
+            text={factsText(facts) + (needsDvNote(facts) ? '\n' + DV7_NOTE : '')}
+            >{#each facts as fact, n (fact.key)}{#if n && !fact.tags}{' · '}{/if}{#if fact.tags}{#each fact.tags as name (name)}{' '}<Badge
+                    variant="outline"
+                    class="inline-flex px-1 py-0 align-middle text-xs font-normal {name.endsWith('?')
+                      ? 'border-warning/40 text-warning'
+                      : ''}">{name}</Badge
+                  >{/each}{:else}<span>{fact.text}</span>{/if}{/each}</Tip
+          >
+        {/snippet}
         {#snippet dropLine(i: number)}
           {#if reordering?.drop && reordering.drop.row === i && reordering.drop.edge !== 'inside'}
             <!-- Indented (from the jobs' names): into the group; full width, with its dot at the edge: outside. -->
@@ -1306,9 +1395,10 @@
             {@const failed = groupFailed(row)}
             {@const outside = selectedOutside(row.group)}
             {@const inside = selectedInside(row.group)}
+            {@const sharedLine = sharedLineOf(row)}
             <div
               data-row={i}
-              class="relative flex h-10 items-center gap-1 border-b border-border/60 pl-2 text-sm
+              class="relative flex min-h-10 items-center gap-1 border-b border-border/60 pl-2 text-sm
               {groupSelected(row) ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]' : 'bg-muted/40'}
               {reordering?.drop?.row === i && reordering.drop.edge === 'inside' ? 'ring-2 ring-primary ring-inset' : ''}
               {moving.size && row.members.every((j) => moving.has(j.id)) ? 'opacity-50' : ''}"
@@ -1341,17 +1431,22 @@
                 class="min-w-0 flex-1 py-1 text-left focus-visible:outline-2 focus-visible:outline-ring"
                 tabindex={-1}
                 onclick={() => selectGroup(row)}
-                aria-label={`${row.name}: select its ${row.matching.length} jobs`}
+                aria-label={`${row.name}: select its ${plural(row.matching.length, 'job')}`}
+                aria-describedby={needsDvNote(sharedLine) ? 'dv7-note' : undefined}
               >
-                <span class="flex items-baseline gap-2">
-                  <span class="truncate font-medium">{row.name}</span>
+                <!-- Counts that don't fit beside the name take a line of their own, right-aligned. -->
+                <span class="flex flex-wrap items-baseline gap-x-2">
+                  <span class="min-w-[10ch] flex-1 basis-[10ch] truncate font-medium">{row.name}</span>
                   {#if row.continued}<span class="shrink-0 text-xs text-muted-foreground">(continued)</span>{/if}
-                  <span class="readout ml-auto flex shrink-0 gap-1 text-xs text-muted-foreground">
+                  <span
+                    class="readout ml-auto flex max-w-full shrink-0 flex-wrap justify-end gap-1 text-xs text-muted-foreground"
+                  >
                     {#each groupCounts(row, done, failed) as part, n (part.text)}
                       {#if n}<span aria-hidden="true">·</span>{/if}<span class={part.tone}>{part.text}</span>
                     {/each}
                   </span>
                 </span>
+                {#if sharedLine.length}{@render factsLine(sharedLine, 'mt-0')}{/if}
               </button>
               {#if progress !== null}
                 <!-- On the bottom edge, so a job starting doesn't change the header's height. -->
@@ -1405,6 +1500,8 @@
           {:else}
             {@const job = row.job}
             {@const queued = job.status === 'queued' || job.status === 'running'}
+            {@const shared = sharedByGroup.get(row.group)}
+            {@const facts = jobFacts(job).filter((f) => !shared?.has(f.key))}
             <div
               data-row={i}
               class="relative flex border-b border-border/60 {row.group ? 'pl-4' : ''} {selectedSet.has(job.id)
@@ -1438,6 +1535,7 @@
               <button
                 data-job={job.id}
                 aria-pressed={selectedSet.has(job.id)}
+                aria-describedby={needsDvNote(jobFacts(job)) ? 'dv7-note' : undefined}
                 tabindex={job.id === tabStop ? 0 : -1}
                 onfocus={() => (cursor = job.id)}
                 onkeydown={keys}
@@ -1445,72 +1543,57 @@
                 onpointerdown={(e) => dragStart(e, job.id)}
                 onclick={(e) => click(e, job.id)}
               >
-                <div class="flex items-center gap-2">
-                  <Tip class="block truncate font-medium" text={job.source}>{job.name}</Tip>
-                  {#if job.label}<Tip class="shrink-0" text="Label"
-                      ><Badge variant="outline" class="px-1.5 py-0 text-xs font-normal">{job.label}</Badge></Tip
-                    >{/if}
-                  {#if paused(job.status)}
-                    <span class="ml-auto shrink-0 text-xs text-warning">Paused</span>
-                  {:else if job.status === 'warn'}
-                    <!-- the count under it says how many; "Ready with warnings" cut a narrow list's names -->
-                    <span class="ml-auto shrink-0 text-xs {STATUS_TONE.warn}"
-                      >{job.issue_counts.warn === 1 ? 'Warning' : 'Warnings'}</span
-                    >
-                  {:else if job.status === 'queued'}
-                    <!-- locked: its box is ticked, so its settings can't change until it's unticked -->
-                    <span class="ml-auto flex shrink-0 items-center gap-1 text-xs {STATUS_TONE.queued}"
-                      ><LockIcon aria-hidden="true" class="size-3" />{STATUS_LABEL.queued}</span
-                    >
-                  {:else}
-                    <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
-                  {/if}
-                </div>
-                {#if job.source_facts}
-                  {@const f = job.source_facts}
-                  <!-- min-h-5: a 20 px tag doesn't change the row's height; a narrow list wraps whole figures -->
-                  <div
-                    class="readout mt-0.5 flex min-h-5 min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground"
-                  >
-                    <span class="shrink-0"
-                      >{sizeLabel(f.resolution)}{f.duration_ms
-                        ? ` · ${duration(f.duration_ms / 1000)}`
-                        : ''}{f.interlaced ? ' · interlaced' : ''}</span
-                    >
-                    {#each f.hdr as name (name)}
-                      <Tip
-                        class="shrink-0"
-                        text={name.endsWith('?')
-                          ? "Dolby Vision profile 7. Set dovi_tool in Settings › Tools so VideoForge can read whether its enhancement layer is FEL or MEL, which decides how it's encoded."
-                          : 'The source is ' + name}
-                      >
-                        <Badge
-                          variant="outline"
-                          class="px-1 py-0 text-xs font-normal {name.endsWith('?')
-                            ? 'border-warning/40 text-warning'
-                            : ''}">{name}</Badge
-                        >
-                      </Tip>
-                    {/each}
+                <!-- The name (at least 15 characters) and the label grow into the room the status leaves; where that
+                     is too little, the status takes a line of its own, right-aligned, and is never cut. -->
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <div class="flex min-w-[15ch] flex-1 basis-[15ch] items-center gap-2 font-medium">
+                    <Tip class="block min-w-[15ch] truncate" text={job.source}>{job.name}</Tip>
+                    {#if job.label}<Tip class="min-w-0 shrink-100" text="Label"
+                        ><Badge variant="outline" class="block shrink truncate px-1.5 py-0 text-xs font-normal"
+                          >{job.label}</Badge
+                        ></Tip
+                      >{/if}
                   </div>
-                {/if}
-                <!-- On a narrow list a figure moves whole to the next line instead of breaking inside itself. -->
-                <div
-                  class="readout mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground *:whitespace-nowrap"
-                >
-                  <span>{job.encoder}</span>
-                  {#if job.custom_script}
-                    <span>· custom script</span>
-                  {:else if job.crop && (job.crop.top || job.crop.bottom || job.crop.left || job.crop.right)}
-                    <span>· crop {job.crop.left}/{job.crop.top}/{job.crop.right}/{job.crop.bottom}</span>
-                  {/if}
-                  <span>· {job.audio.length} audio · {job.subs} subs</span>
-                  {#if job.indexed}
-                    <Tip class="ml-auto shrink-0 items-center" text="Indexed, so the preview opens at once"
-                      ><DatabaseCheckIcon class="size-3.5" /></Tip
-                    >
-                  {/if}
+                  <div class="ml-auto flex shrink-0 items-center gap-2 text-xs">
+                    {#if job.indexed}
+                      <Tip class="items-center" text="Indexed, so the preview opens at once"
+                        ><DatabaseCheckIcon class="size-3.5" /></Tip
+                      >
+                    {/if}
+                    {#if job.status === 'warn'}
+                      <span class="whitespace-nowrap {STATUS_TONE.warn}"
+                        >{#if job.issue_counts.warn}<IssueCounts
+                            counts={{ block: 0, warn: job.issue_counts.warn }}
+                          />{:else}{STATUS_LABEL.warn}{/if}</span
+                      >
+                    {:else if job.status === 'blocked'}
+                      <span class="whitespace-nowrap {STATUS_TONE.blocked}"
+                        >{#if job.issue_counts.block}<IssueCounts
+                            counts={{ block: job.issue_counts.block, warn: 0 }}
+                          />{:else}{STATUS_LABEL.blocked}{/if}</span
+                      >
+                      {@render mark(job.issue_counts.warn, false)}
+                    {:else}
+                      {#if paused(job.status)}
+                        <span class="text-info">Paused</span>
+                      {:else if job.status === 'queued'}
+                        <!-- locked: its box is ticked, so its settings can't change until it's unticked -->
+                        <span class="flex items-center gap-1 {STATUS_TONE.queued}"
+                          ><LockIcon aria-hidden="true" class="size-3" />{STATUS_LABEL.queued}</span
+                        >
+                      {:else}
+                        <span class={STATUS_TONE[job.status]}>{STATUS_LABEL[job.status]}</span>
+                      {/if}
+                      {@render mark(job.issue_counts.block, true)}
+                      {@render mark(job.issue_counts.warn, false)}
+                    {/if}
+                  </div>
                 </div>
+                {#if facts.length}{@render factsLine(facts, 'mt-0.5')}{/if}
+                {#if shared?.size}
+                  <!-- The header shows these once; a screen reader hears each row whole (the header's name is its own). -->
+                  <span class="sr-only">{'· ' + factsText(jobFacts(job).filter((f) => shared.has(f.key)))}</span>
+                {/if}
                 {#if LIVE.includes(job.status) && job.progress}
                   <div class="readout mt-1.5 flex items-center gap-2 text-xs text-info">
                     <div class="h-1 flex-1 overflow-hidden rounded bg-muted">
@@ -1526,9 +1609,6 @@
                       >{progressTimes(job.progress)}</Tip
                     >
                   </div>
-                {:else if job.issue_counts.block || job.issue_counts.warn}
-                  <!-- the counts only: the job's Issues tab says what they are -->
-                  <div class="mt-0.5 text-xs text-muted-foreground"><IssueCounts counts={job.issue_counts} /></div>
                 {/if}
                 {#if job.index_held && job.status === 'index-queued'}
                   <Tip

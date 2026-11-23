@@ -123,6 +123,7 @@ async function queueFixture(
     else if (path === '/api/config/video-options/x265') json = { dashes: '--', options: [] }
     else if (path === '/api/jobs/reorder') json = { ids: request.postDataJSON().ids }
     else if (/^\/api\/jobs\/job-\d+$/.test(path)) json = detail(jobs.find((job) => job.id === path.split('/').at(-1))!)
+    else if (path === '/api/jobs/remove') json = { removed: request.postDataJSON().ids, deleted: [], kept: {} }
     else if (path === '/api/queue/start') json = {}
     else if (path === '/api/queue/enqueue') json = { enqueued: request.postDataJSON().ids }
     else if (['/api/rule-sets', '/api/config/encoders', '/api/filter-presets'].includes(path)) json = []
@@ -330,6 +331,48 @@ test('? opens the keyboard shortcuts, but not while typing', async ({ page }, te
   expect(fixture.errors).toEqual([])
 })
 
+test('the Shortcuts dialog carries the note about actions on the selection', async ({ page }) => {
+  const fixture = await queueFixture(page, 2, ['ready'])
+  await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
+  await expect(
+    page.getByRole('dialog', { name: 'Keyboard shortcuts' }).getByRole('region', { name: 'Queue list' }),
+  ).toContainText(
+    'Actions on the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs, or every job when none is selected.',
+  )
+  expect(fixture.errors).toEqual([])
+})
+
+test('the status filter lists statuses with jobs, and keeps the chosen one at zero', async ({ page }) => {
+  const fixture = await queueFixture(page, 4, ['ready', 'done'])
+  const select = page.getByRole('combobox', { name: 'Filter jobs by status' })
+  const options = () => select.locator('option').allTextContents()
+  expect(await options()).toEqual(['All statuses (4)', 'Ready (2)', 'Done (2)'])
+  await select.selectOption('ready')
+  await page.getByRole('searchbox').fill('Episode 00001')
+  // Ready has no match now, but stays listed because it is chosen.
+  expect(await options()).toEqual(['All statuses (1)', 'Ready (0)', 'Done (1)'])
+  await select.selectOption('')
+  await page.getByRole('searchbox').fill('nothing matches')
+  expect(await options()).toEqual(['All statuses (0)'])
+  expect(fixture.errors).toEqual([])
+})
+
+test('at 1024 px the rail chips carry a status mark and a name with the status', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 700 })
+  const fixture = await queueFixture(page, 3, ['done', 'warn', 'ready'])
+  await page.goto('/#/queue/job-0')
+  const rail = page.getByRole('region', { name: 'Queue rail', exact: true })
+  const done = rail.locator('[data-job="job-0"]')
+  const warn = rail.locator('[data-job="job-1"]')
+  const ready = rail.locator('[data-job="job-2"]')
+  await expect(done).toHaveAccessibleName('1. Episode 00000, Done')
+  await expect(warn).toHaveAccessibleName('2. Episode 00001, Ready with warnings')
+  await expect(done.locator('svg.lucide-check[aria-hidden="true"]')).toHaveCount(1)
+  await expect(warn.locator('svg.lucide-triangle-alert[aria-hidden="true"]')).toHaveCount(1)
+  await expect(ready.locator('svg')).toHaveCount(0)
+  expect(fixture.errors).toEqual([])
+})
+
 test('a done job says what its run made', async ({ page }) => {
   const made = { output_bytes: 4.5 * 1024 ** 3, source_bytes: 18 * 1024 ** 3, seconds: 5025, reused: 2, kbps: 6120 }
   const fixture = await queueFixture(page, 1, ['done'], null, null, made)
@@ -422,6 +465,7 @@ test('a CRF search lists its tries, marks the CRF found and puts it on the job',
   await expect(rows.first().getByRole('img', { name: 'Reaches SSIMULACRA2 80' })).toBeVisible()
   await expect(rows.nth(1)).toContainText('2,000 kb/s')
   await expect(rows.first()).toHaveCSS('font-family', /^"?Cascadia Mono/)
+  await expect(card.getByText(/144 of 2,400 frames \(2%\)/)).toHaveCSS('font-family', /^"?Cascadia Mono/)
   await card.screenshot({ path: testInfo.outputPath('crf-search.png') })
 
   await card.getByRole('button', { name: 'Use CRF 20' }).click()
@@ -477,17 +521,17 @@ test('320 CSS pixel reflow keeps queue controls reachable without horizontal scr
 for (const [width, height, zoomed] of [
   [784, 450, true],
   [1024, 700, false],
+  [1280, 800, false],
+  [1366, 768, false],
   [1600, 900, false],
 ] as const)
-  test(`at ${width} px the menu, the job name and the Video tab ${zoomed ? 'make room' : 'stay as they are'}`, async ({
-    page,
-  }) => {
+  test(`at ${width} px the menu, the job name and the Video tab ${zoomed ? 'make room' : 'fit'}`, async ({ page }) => {
     await page.setViewportSize({ width, height })
     const { errors } = await queueFixture(page, 1, ['ready'])
     await page.goto('/#/queue/job-0')
-    // the menu: a rail below 1024 px, with no way to expand it there
+    // the menu: a rail below 1440 px with a job open; below 1024 px there is no way to expand it
     const nav = (await page.getByRole('navigation', { name: 'Main navigation' }).boundingBox())!
-    expect(nav.width < 100).toBe(zoomed)
+    expect(nav.width < 100).toBe(width < 1440)
     await expect(page.getByRole('button', { name: /^(Expand|Collapse) the menu$/ })).toBeVisible({ visible: !zoomed })
     // the job name: its own line when the header is narrow, beside the Queue box otherwise; never cut
     const name = page.getByRole('heading', { name: 'Episode 00000', level: 2 })
@@ -506,6 +550,146 @@ for (const [width, height, zoomed] of [
     expect([expanded.x, expanded.y, expanded.width, expanded.height]).toEqual([0, 0, width, height])
     expect(errors).toEqual([])
   })
+
+// the longest line 1 each status can have: [status, issue counts, indexed]
+const ROW_CASES = [
+  ['warn', { block: 0, warn: 2 }, true],
+  ['paused', { block: 0, warn: 1 }, true],
+  ['warn', { block: 0, warn: 0 }, true],
+  ['index-queued', { block: 0, warn: 0 }, false],
+  ['blocked', { block: 1, warn: 1 }, true],
+] as const
+// Verdana is about as wide as the fonts a Linux machine falls back to, so the same checks run with the room a row has there.
+const WIDE_FONT = ':root { --font-sans: Verdana, sans-serif }'
+for (const wide of [false, true])
+  for (const density of ['compact', 'default', 'comfortable'])
+    for (const width of [1130, 1280, 1366])
+      test(`at ${width} px, ${density}${wide ? ', in a wide font' : ''}, with a job open a row's status stays whole, its name keeps 15 characters and the menu is icons`, async ({
+        page,
+      }) => {
+        await page.addInitScript((d) => localStorage.setItem('videoforge.density', d), density)
+        await page.setViewportSize({ width, height: 800 })
+        const fixture = await queueFixture(page, ROW_CASES.length, ['warn'])
+        ROW_CASES.forEach(([status, issue_counts, indexed], i) =>
+          Object.assign(fixture.jobs[i], {
+            status,
+            label: 'Season 1',
+            indexed,
+            issue_counts,
+            source_facts: { resolution: '3840x2160', duration_ms: 3_600_000, hdr: [], interlaced: false },
+          }),
+        )
+        await page.route('**/video/info**', (route) => route.fulfill({ status: 404, json: {} })) // the indexed job's preview
+        await page.goto('/#/queue/job-0')
+        await expect(page.getByRole('region', { name: 'Queue rail', exact: true })).toHaveCount(0)
+        const list = page.getByRole('region', { name: 'Queue list', exact: true })
+        await expect(list.locator('[data-job="job-0"]').getByText('2 warnings', { exact: true })).toBeVisible()
+        if (wide) {
+          await page.addStyleTag({ content: WIDE_FONT })
+          expect(await list.evaluate((el) => getComputedStyle(el).fontFamily)).toContain('Verdana')
+        }
+        expect((await page.getByRole('navigation', { name: 'Main navigation' }).boundingBox())!.width).toBeLessThan(100)
+        // the editor keeps room for its header on one line (44rem, where the job name drops to its own line)
+        if (density === 'default' && !wide)
+          expect(
+            (await page.getByRole('region', { name: 'Job settings' }).boundingBox())!.width,
+          ).toBeGreaterThanOrEqual(704)
+        // Whether the status shares the name's line depends on the font; that it is whole, inside the list and clear of the name does not.
+        for (let i = 0; i < ROW_CASES.length; i++) {
+          const m = await list.locator(`[data-job="job-${i}"]`).evaluate((el) => {
+            const box = (n: Element) => n.getBoundingClientRect()
+            const group = el.querySelector<HTMLElement>('.ml-auto')! // the indexed icon, the status and the marks
+            const name = el.querySelector<HTMLElement>('.truncate')!
+            const probe = document.createElement('span')
+            probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre'
+            probe.style.font = getComputedStyle(name).font
+            probe.textContent = '0'.repeat(15)
+            document.body.append(probe)
+            const fifteen = probe.getBoundingClientRect().width
+            probe.remove()
+            const section = el.closest('section')!
+            const parts = [group, ...group.querySelectorAll('*')].map(box).filter((b) => b.width)
+            return {
+              text: group.textContent!.replace(/\s+/g, ' ').trim(),
+              partsLeft: Math.min(...parts.map((b) => b.left)),
+              partsRight: Math.max(...parts.map((b) => b.right)),
+              rowLeft: box(el).left,
+              rowRight: box(el).right - parseFloat(getComputedStyle(el).paddingRight), // the row's own edge, inside its padding
+              clearOfName: box(group).left >= box(name).right - 0.5 || box(group).top >= box(name).bottom - 0.5,
+              nameWidth: box(name).width,
+              fifteen,
+              rowOverflow: el.scrollWidth - el.clientWidth,
+              listOverflow: section.scrollWidth - section.clientWidth,
+              facts: el.querySelector('.readout')?.textContent,
+            }
+          })
+          const where = `job-${i} (${m.text})`
+          expect(m.partsRight, where).toBeLessThanOrEqual(m.rowRight + 0.5) // sub-pixel rounding
+          expect(m.partsLeft, where).toBeGreaterThanOrEqual(m.rowLeft)
+          expect(m.clearOfName, where).toBe(true)
+          expect(m.nameWidth, where).toBeGreaterThanOrEqual(m.fifteen - 1)
+          expect(m.rowOverflow, where).toBeLessThanOrEqual(0)
+          expect(m.listOverflow, where).toBeLessThanOrEqual(0)
+          expect(m.facts, where).toMatch(/^3840×2160 · 1:00:00/)
+        }
+        expect(fixture.errors).toEqual([])
+      })
+
+test('at 1024 px with a job open the list is a rail of chips', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 700 })
+  const fixture = await queueFixture(page, 3, ['ready'])
+  await page.goto('/#/queue/job-0')
+  await expect(page.getByRole('region', { name: 'Queue rail', exact: true })).toBeVisible()
+  expect(fixture.errors).toEqual([])
+})
+
+test('Expand opens the menu for now while a job is open, without remembering it', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const fixture = await queueFixture(page, 3, ['ready'])
+  await page.goto('/#/queue/job-0')
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect.poll(async () => (await nav.boundingBox())!.width).toBeLessThan(100)
+  await page.getByRole('button', { name: 'Expand the menu', exact: true }).click()
+  await expect.poll(async () => (await nav.boundingBox())!.width).toBeGreaterThan(150)
+  expect(await page.evaluate(() => localStorage.getItem('videoforge.navCollapsed'))).toBeNull()
+  // widening the window ends the override, so narrowing again collapses the menu once more
+  await page.setViewportSize({ width: 1600, height: 800 })
+  await expect(page.getByRole('button', { name: 'Collapse the menu', exact: true })).toBeVisible()
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await expect.poll(async () => (await nav.boundingBox())!.width).toBeLessThan(100)
+  expect(fixture.errors).toEqual([])
+})
+
+test('a menu collapsed for good stays so: Expand and Collapse with a job open leave what was remembered', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('videoforge.navCollapsed', '1'))
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const fixture = await queueFixture(page, 3, ['ready'])
+  await page.goto('/#/queue/job-0')
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  const width = async () => (await nav.boundingBox())!.width
+  const remembered = () => page.evaluate(() => localStorage.getItem('videoforge.navCollapsed'))
+  await expect.poll(width).toBeLessThan(100)
+  // with a job open: Expand opens it for now, Collapse closes it, and neither writes the choice
+  await page.getByRole('button', { name: 'Expand the menu', exact: true }).click()
+  await expect.poll(width).toBeGreaterThan(150)
+  expect(await remembered()).toBe('1')
+  await page.getByRole('button', { name: 'Collapse the menu', exact: true }).click()
+  await expect.poll(width).toBeLessThan(100)
+  expect(await remembered()).toBe('1')
+  // opened again, it is collapsed once the job closes
+  await page.getByRole('button', { name: 'Expand the menu', exact: true }).click()
+  await expect.poll(width).toBeGreaterThan(150)
+  await page.getByRole('button', { name: 'Clear selection', exact: true }).click() // closes the job
+  await expect.poll(width).toBeLessThan(100)
+  expect(await remembered()).toBe('1')
+  // with no job open the button is the choice itself
+  await page.getByRole('button', { name: 'Expand the menu', exact: true }).click()
+  await expect.poll(width).toBeGreaterThan(150)
+  expect(await remembered()).toBe('0')
+  expect(fixture.errors).toEqual([])
+})
 
 test('a disabled control shows its styled tooltip, and tipped text in a row keeps focus on the row', async ({
   page,
@@ -830,6 +1014,59 @@ test("the toolbar's first row stays put when a job starts or indexing runs, so C
   expect(fixture.errors).toEqual([])
 })
 
+test('a paused queue has one primary button, and a pressed Pause after pass 1 is not primary', async ({ page }) => {
+  const fixture = await queueFixture(page, 3, ['ready'])
+  const primary = page.locator('button.bg-primary')
+  const idle = {
+    type: 'queue',
+    running: false,
+    current: null,
+    stop_after_current: false,
+    paused: false,
+    priority: null,
+    queued: 0,
+    indexing: null,
+    sampling: null,
+    index_queued: 0,
+    index_held: 0,
+  }
+  await expect(primary.filter({ hasText: /^Start queue/ })).toHaveCount(1)
+  fixture.send({ ...idle, paused: true, indexing: 'job-2' })
+  await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible()
+  await expect(primary.filter({ hasText: /^Start queue/ })).toHaveCount(0)
+  await expect(primary.filter({ hasText: 'Resume' })).toHaveCount(1)
+  fixture.send({ ...idle, running: true, current: 'job-0' })
+  await expect(page.getByRole('button', { name: 'Pause after pass 1', exact: true })).toBeVisible()
+  fixture.jobs[0].pause_after_pass1 = true
+  fixture.refresh()
+  const pressed = page.getByRole('button', { name: 'Pausing after pass 1', exact: true })
+  await expect(pressed).toBeVisible()
+  await expect(pressed).not.toHaveClass(/(^|\s)bg-primary(\s|$)/)
+  await expect(pressed).toHaveClass(/(^|\s)bg-muted(\s|$)/)
+  expect(fixture.errors).toEqual([])
+})
+
+test('a running job in a paused queue says Paused in the info colour', async ({ page }) => {
+  const fixture = await queueFixture(page, 3, ['running'])
+  fixture.send({
+    type: 'queue',
+    running: false,
+    current: null,
+    stop_after_current: false,
+    paused: true,
+    priority: null,
+    queued: 0,
+    indexing: null,
+    sampling: null,
+    index_queued: 0,
+    index_held: 0,
+  })
+  const label = page.getByText('Paused', { exact: true }).first()
+  await expect(label).toHaveClass(/(^|\s)text-info(\s|$)/)
+  await expect(label).not.toHaveClass(/text-warning/)
+  expect(fixture.errors).toEqual([])
+})
+
 test('a disabled Start queue is gray, not dimmed gold', async ({ page }) => {
   const { errors } = await queueFixture(page, 3, ['ready'])
   const start = page.getByRole('button', { name: /^Start queue/ })
@@ -905,9 +1142,10 @@ test('a Queue caption names the checkboxes, and a queued row shows a lock before
   await expect(list.getByRole('searchbox')).toHaveAccessibleName(
     'Search jobs by name, source path, encoder, resolution or HDR format',
   )
-  // The caption sits over the column of checkboxes; each box has its own name, so a screen reader skips it.
-  const caption = list.getByText('Queue', { exact: true })
-  await expect(caption).toHaveAttribute('aria-hidden', 'true')
+  // The caption sits over the column of checkboxes, visible and read by a screen reader.
+  const caption = list.locator('span', { hasText: /^Queued$/ }).first()
+  await expect(caption).toBeVisible()
+  expect(await caption.evaluate((el) => !!el.closest('[aria-hidden="true"]'))).toBe(false)
   const c = (await caption.boundingBox())!
   const box = (await list.getByRole('checkbox', { name: 'Queued: Episode 00000' }).boundingBox())!
   expect(Math.abs(c.x - box.x)).toBeLessThanOrEqual(1)
@@ -916,10 +1154,8 @@ test('a Queue caption names the checkboxes, and a queued row shows a lock before
   await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
     "A ticked job is queued and locked, so you can't edit it until you untick it. Start queue runs the queued jobs.",
   )
-  // The paragraph keeps the rest.
-  await expect(list).toContainText(
-    'Actions on the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs, or every job when none is selected.',
-  )
+  // The selection note moved to the Shortcuts dialog.
+  await expect(list).not.toContainText('Actions on the selection')
   await expect(list).not.toContainText('A ticked job is queued')
   // A lock before "Queued", in its color; none on a ready row.
   const queued = page.locator('[data-job="job-0"]')
@@ -1040,7 +1276,7 @@ test('at 390 px the job header breaks its facts between figures, never inside on
   expect(errors).toEqual([])
 })
 
-test('queue rows show sizes with a times sign, and at 390 px their figures stay inside the row', async ({ page }) => {
+test('queue rows show sizes with a times sign, and at 390 px the facts stay on one line', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   const { errors } = await queueFixture(page, 3, ['ready'], null, null, null, () => ({
     resolution: '3840x2076',
@@ -1062,18 +1298,27 @@ test('queue rows show sizes with a times sign, and at 390 px their figures stay 
   const rows = page.locator('[data-job]')
   await expect(rows.first()).toContainText('3840×2076')
   await expect(rows.first()).toContainText('crop 0/42/0/42')
-  // No figure is cut off, and none wraps inside itself: a figure is one line, or moves whole to the next.
-  const problems = await rows.evaluateAll((all) =>
+  // The facts line is one line that ends in an ellipsis (its text stays whole in the DOM), never two.
+  const lines = await rows.evaluateAll((all) =>
     all.flatMap((row) =>
-      [...row.querySelectorAll<HTMLElement>('.readout')].flatMap((line) => [
-        ...(line.scrollWidth > line.clientWidth + 1 ? [`cut off: ${line.textContent}`] : []),
-        ...[...line.children]
-          .filter((part) => part.getBoundingClientRect().height > 20)
-          .map((part) => `wraps: ${part.textContent?.trim()}`),
-      ]),
+      [...row.querySelectorAll<HTMLElement>('.readout')].map((line) => line.getBoundingClientRect().height),
     ),
   )
+  const problems = lines.filter((h) => h > 21).map((h) => `wraps: ${h}`)
+  await expect(rows.first().locator('.readout')).toHaveCSS('text-overflow', 'ellipsis')
   expect(await rows.first().locator('.readout').count()).toBeGreaterThan(0)
+  // It is cut (wider than its box) with the whole text still in the DOM; the status beside the name is never cut.
+  const cut = await rows
+    .first()
+    .locator('.readout')
+    .first()
+    .evaluate((el) => [el.scrollWidth, el.clientWidth])
+  expect(cut[0]).toBeGreaterThan(cut[1])
+  await expect(rows.first().locator('.readout').first()).toContainText('4 subs')
+  const status = rows.first().getByText('Ready', { exact: true })
+  await expect(status).toHaveText('Ready')
+  const statusCut = await status.evaluate((el) => [el.scrollWidth, el.clientWidth])
+  expect(statusCut[0]).toBeLessThanOrEqual(statusCut[1])
   expect([...new Set(problems)]).toEqual([])
   expect(errors).toEqual([])
 })
@@ -1530,17 +1775,72 @@ test("a queue row and its rail button count the job's errors and warnings instea
   })
   fixture.refresh()
   const rows = page.getByRole('region', { name: 'Queue list', exact: true })
-  await expect(rows.locator('[data-job="job-0"]')).toContainText('1 error · 2 warnings')
-  await expect(rows.locator('[data-job="job-1"]')).toContainText('1 warning')
-  // The status says Warning(s), short enough that a narrow list keeps the name; the count is under it.
-  await expect(rows.locator('[data-job="job-1"]').getByText('Warning', { exact: true })).toBeVisible()
-  await expect(rows.locator('[data-job="job-2"]').getByText('Warnings', { exact: true })).toBeVisible()
+  // A blocked row's status is its error count; its warnings follow as a compact mark.
+  await expect(rows.locator('[data-job="job-0"]')).toContainText('1 error')
+  await expect(rows.locator('[data-job="job-0"]').getByRole('img', { name: '2 warnings' })).toBeVisible()
+  // A warn row's status is its warning count, so the old "Warning" word and the line under it are gone.
+  await expect(rows.locator('[data-job="job-1"]').getByText('1 warning', { exact: true })).toBeVisible()
+  await expect(rows.locator('[data-job="job-2"]').getByText('2 warnings', { exact: true })).toBeVisible()
+  await expect(rows.locator('[data-job="job-1"]').getByText('Warning', { exact: true })).toHaveCount(0)
   await expect(rows.locator('[data-job="job-1"]')).not.toContainText('Ready')
   await expect(rows.getByText('The output file is shared with another job')).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Collapse the queue list', exact: true }).click()
   await page.getByRole('region', { name: 'Queue rail', exact: true }).locator('[data-job="job-0"]').hover()
   await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText('Episode 00000: Blocked (1 error, 2 warnings)')
+  expect(fixture.errors).toEqual([])
+})
+
+test('a row is two lines: the name and status, then one facts line that truncates but keeps its text', async ({
+  page,
+}) => {
+  const long = (i: number) => ({
+    resolution: '3840x2160',
+    duration_ms: 3_600_000 + i,
+    hdr: ['HDR10', 'Dolby Vision 7?'],
+    interlaced: true,
+  })
+  const fixture = await queueFixture(page, 3, ['warn', 'queued', 'ready'], null, null, null, long)
+  fixture.jobs[0].issue_counts = { block: 0, warn: 1 }
+  fixture.jobs[1].issue_counts = { block: 0, warn: 1 }
+  Object.assign(fixture.jobs[2], { custom_script: true, audio: ['a', 'b', 'c'], subs: 4 })
+  fixture.refresh()
+  const rows = page.getByRole('region', { name: 'Queue list', exact: true })
+  const warn = rows.locator('[data-job="job-0"]')
+  await expect(warn.getByText('1 warning', { exact: true })).toBeVisible()
+  // The row's own padding plus its two lines (the name line, the facts line and its margin), so a third line fails.
+  for (const id of ['job-0', 'job-1']) {
+    const [height, expected] = await rows.locator(`[data-job="${id}"]`).evaluate((el) => {
+      const css = getComputedStyle(el)
+      const facts = el.querySelector<HTMLElement>('.readout')!
+      return [
+        el.getBoundingClientRect().height,
+        parseFloat(css.paddingTop) +
+          parseFloat(css.paddingBottom) +
+          el.firstElementChild!.getBoundingClientRect().height +
+          facts.getBoundingClientRect().height +
+          parseFloat(getComputedStyle(facts).marginTop),
+      ]
+    })
+    expect(height).toBeLessThanOrEqual(expected + 1)
+  }
+  // A Dolby Vision profile 7 row has the note as its description, not in its name; the page holds it once.
+  await expect(rows.locator('[data-job="job-2"]')).not.toHaveAccessibleName(/dovi_tool/)
+  for (const id of ['job-0', 'job-1', 'job-2'])
+    await expect(rows.locator(`[data-job="${id}"]`)).toHaveAccessibleDescription(
+      /^Dolby Vision profile 7\. .*dovi_tool/,
+    )
+  expect(await rows.evaluate((el) => el.textContent!.match(/dovi_tool/g))).toHaveLength(1)
+  await expect(rows.locator('#dv7-note')).toHaveCount(1)
+  // Queued keeps its status word and gets the compact mark, named for screen readers.
+  const queued = rows.locator('[data-job="job-1"]')
+  await expect(queued).toContainText('Queued')
+  await expect(queued.getByRole('img', { name: '1 warning' })).toHaveText('1')
+  // The facts line starts with the resolution and length, and holds the rest in the DOM.
+  const facts = rows.locator('[data-job="job-2"] .readout')
+  await expect(facts).toContainText(/^3840×2160 · 1:00:00 · interlaced/)
+  await expect(facts).toContainText('Dolby Vision 7?')
+  await expect(facts).toContainText('x265 · custom script · 3 audio · 4 subs')
   expect(fixture.errors).toEqual([])
 })
 
@@ -1691,5 +1991,183 @@ test('the Issues tab shows with issues, and stays saying none are left while it 
   await expect(page.getByRole('button', { name: 'Open the Issues tab', exact: true })).toHaveCount(0)
   await page.getByRole('tab', { name: 'Video', exact: true }).click()
   await expect(page.getByRole('tab', { name: /^Issues/ })).toHaveCount(0)
+  expect(fixture.errors).toEqual([])
+})
+
+test('removing one job says "Removed 1 job", and the menu says the work folders stay', async ({ page }) => {
+  const { errors } = await queueFixture(page, 1)
+  await page.getByRole('button', { name: 'Select matching jobs', exact: true }).click()
+  await page.getByRole('button', { name: 'Remove', exact: true }).click()
+  await expect(page.getByRole('menuitem', { name: 'Remove and delete work folders' })).toBeVisible()
+  await page.getByRole('menuitem', { name: 'Remove and keep work folders' }).click()
+  await expect(page.getByText('Removed 1 job', { exact: true })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test("a group's shared facts show once on its header; its rows keep only their own", async ({ page }) => {
+  const facts = (i: number) => ({
+    resolution: '1920x1080',
+    duration_ms: 1_500_000 + i * 60_000,
+    hdr: [],
+    interlaced: false,
+  })
+  const fixture = await queueFixture(page, 7, ['ready'], null, null, null, facts)
+  for (const j of fixture.jobs) Object.assign(j, { encoder: 'x264 CRF 18', audio: ['a', 'b'], subs: 3 })
+  for (const j of fixture.jobs.slice(0, 6)) [j.group, j.group_name] = ['g1', 'Show S01']
+  fixture.refresh()
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  const header = list.locator('[data-row]').first()
+  await expect(header.locator('.readout').last()).toHaveText('1920×1080 · x264 CRF 18 · 2 audio · 3 subs')
+  await expect(header.locator('.readout').last()).toHaveCSS('text-overflow', 'ellipsis')
+  // Its rows show their own length and not what the header says.
+  const member = list.locator('[data-job="job-1"]')
+  await expect(member.locator('.readout')).toHaveText('26:00')
+  // A screen reader still hears the whole row: the shared facts are in its name, not on screen.
+  await expect(member).toHaveAccessibleName(/26:00 · 1920×1080 · x264 CRF 18 · 2 audio · 3 subs/)
+  // An ungrouped job keeps everything.
+  await expect(list.locator('[data-job="job-6"] .readout')).toHaveText(
+    '1920×1080 · 31:00 · x264 CRF 18 · 2 audio · 3 subs',
+  )
+  // A collapsed group still shows the shared line.
+  await list.getByRole('button', { name: 'Collapse Show S01', exact: true }).click()
+  await expect(header.locator('.readout').last()).toContainText('x264 CRF 18')
+  expect(fixture.errors).toEqual([])
+})
+
+test('a row with nothing left to say after its group is one line', async ({ page }) => {
+  const fixture = await queueFixture(page, 3, ['ready'])
+  for (const j of fixture.jobs) [j.group, j.group_name] = ['g1', 'Show S01']
+  fixture.refresh()
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  await expect(list.locator('[data-row]').first().locator('.readout').last()).toHaveText('x265 · 0 audio · 0 subs')
+  await expect(list.locator('[data-job="job-0"] .readout')).toHaveCount(0)
+  expect(fixture.errors).toEqual([])
+})
+
+test('a group named for its count does not repeat the count in its header', async ({ page }) => {
+  const fixture = await queueFixture(page, 6, ['ready'])
+  for (const j of fixture.jobs) [j.group, j.group_name] = ['g1', '6 jobs']
+  fixture.refresh()
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  const header = list.locator('[data-row]').first()
+  await expect(header.getByRole('button', { name: '6 jobs: select its 6 jobs' })).toBeVisible()
+  await expect(header.getByText('6 jobs', { exact: true })).toHaveCount(1)
+  fixture.jobs[0].status = 'done'
+  fixture.refresh()
+  await expect(header).toContainText('1 done')
+  await expect(header.getByText('6 jobs', { exact: true })).toHaveCount(1)
+  expect(fixture.errors).toEqual([])
+})
+
+test('at 390 px a group header cuts its name and shared line, never its counts', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const fixture = await queueFixture(page, 3, ['done'], null, null, null, () => ({
+    resolution: '3840x2160',
+    duration_ms: 3_600_000,
+    hdr: ['HDR10', 'DV 7.6 FEL/MEL?'],
+    interlaced: false,
+  }))
+  for (const j of fixture.jobs) [j.group, j.group_name] = ['g1', 'A season with a very long name to cut off']
+  fixture.refresh()
+  const header = page.getByRole('region', { name: 'Queue list', exact: true }).locator('[data-row]').first()
+  await expect(header.getByText('all done', { exact: true })).toBeVisible()
+  const cut = await header.evaluate((el) => {
+    const over = (e: Element) => e.scrollWidth > e.clientWidth
+    return {
+      counts: over(el.querySelector('.ml-auto')!),
+      name: over(el.querySelector('.truncate')!),
+      line: over(el.querySelector('.readout.truncate')!),
+    }
+  })
+  expect(cut).toEqual({ counts: false, name: true, line: true })
+  await expect(header.locator('.readout.truncate')).toContainText(/^3840×2160 · 1:00:00/)
+  expect(fixture.errors).toEqual([])
+})
+
+// "(continued)" shows only on a later page of a group, so this has the counts the header has on its first page.
+for (const wide of [false, true])
+  test(`at 1130 px with a job open a group header shows all its counts beside its buttons${wide ? ', in a wide font' : ''}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1130, height: 800 })
+    const fixture = await queueFixture(page, 6, ['done', 'failed', 'ready'], null, null, null, () => ({
+      resolution: '3840x2160',
+      duration_ms: 3_600_000,
+      hdr: ['HDR10', 'DV 7.6 FEL/MEL?'],
+      interlaced: false,
+    }))
+    for (const j of fixture.jobs) [j.group, j.group_name] = ['g1', 'A season with a very long name to cut off']
+    fixture.refresh()
+    await page.goto('/#/queue/job-0')
+    if (wide) await page.addStyleTag({ content: WIDE_FONT })
+    await page.getByRole('combobox', { name: 'Filter jobs by status' }).selectOption('ready')
+    const list = page.getByRole('region', { name: 'Queue list', exact: true })
+    const header = list.locator('[data-row]').first()
+    await expect(header).toContainText(/2 of 6 match.*2 done.*2 failed/)
+    const m = await header.evaluate((el) => {
+      const box = (n: Element) => n.getBoundingClientRect()
+      const counts = el.querySelector<HTMLElement>('.ml-auto')!
+      const options = el.querySelector<HTMLElement>('[aria-label$=" options"]')!
+      const select = el.querySelector<HTMLElement>('button[aria-label*="select its"]')!
+      return {
+        countsCut: counts.scrollWidth - counts.clientWidth,
+        countsRight: box(counts).right,
+        selectRight: box(select).right,
+        optionsLeft: box(options).left,
+        headerOverflow: el.scrollWidth - el.clientWidth,
+        listOverflow: el.closest('section')!.scrollWidth - el.closest('section')!.clientWidth,
+      }
+    })
+    expect(m.countsCut).toBeLessThanOrEqual(0)
+    expect(m.countsRight).toBeLessThanOrEqual(m.selectRight + 0.5)
+    expect(m.selectRight).toBeLessThanOrEqual(m.optionsLeft + 0.5)
+    expect(m.headerOverflow).toBeLessThanOrEqual(0)
+    expect(m.listOverflow).toBeLessThanOrEqual(0)
+    // a group whose jobs all read profile 7 describes its header with the one note, as its rows do
+    await expect(header.getByRole('button', { name: /select its/ })).toHaveAccessibleDescription(/dovi_tool/)
+    expect(fixture.errors).toEqual([])
+  })
+
+test('rail chips: no spinner while the queue is paused, "Paused" in the name, and a place of three digits clear of the mark', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 700 })
+  const fixture = await queueFixture(page, 120, ['done', 'running', 'queued'])
+  await page.goto('/#/queue/job-0')
+  const rail = page.getByRole('region', { name: 'Queue rail', exact: true })
+  const running = rail.locator('[data-job="job-4"]')
+  await expect(running.locator('svg.animate-spin')).toHaveCount(1)
+  await expect(running).toHaveAccessibleName('5. Episode 00004, Running')
+  fixture.send({
+    type: 'queue',
+    running: false,
+    current: null,
+    stop_after_current: false,
+    paused: true,
+    priority: null,
+    queued: 0,
+    indexing: null,
+    sampling: null,
+    index_queued: 0,
+    index_held: 0,
+  })
+  await expect(running.locator('svg.animate-spin')).toHaveCount(0)
+  await expect(running).toHaveAccessibleName('5. Episode 00004, Paused')
+  await expect(rail.locator('[data-job="job-5"]')).toHaveAccessibleName('6. Episode 00005, Queued')
+  // places of three digits: the number's ink stays clear of the corner mark (the page's last chip is 100, the next page's is 120)
+  const clear = (id: string) =>
+    rail.locator(`[data-job="${id}"]`).evaluate((el) => {
+      const mark = el.querySelector('svg')!.getBoundingClientRect()
+      const text = el.querySelector('span')!.firstChild!
+      const range = document.createRange()
+      range.selectNodeContents(text)
+      const digits = range.getBoundingClientRect()
+      // the line box is taller than the digits: their ink is about 0.72 em tall, in the middle of it
+      const inkTop = digits.top + (digits.height - 0.72 * parseFloat(getComputedStyle(el).fontSize)) / 2
+      return digits.right <= mark.left + 0.5 || inkTop >= mark.bottom + 1
+    })
+  expect(await clear('job-99')).toBe(true)
+  await rail.getByRole('button', { name: 'Next queue page', exact: true }).click()
+  expect(await clear('job-119')).toBe(true)
   expect(fixture.errors).toEqual([])
 })

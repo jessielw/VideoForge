@@ -1,3 +1,4 @@
+import type { Fact, FactKey } from './format'
 import type { JobSummary, Status } from './types'
 
 export const QUEUE_PAGE_SIZE = 100
@@ -246,4 +247,17 @@ export function defaultGroupName(sources: string[]): string {
 // probed, indexed, test encoded or crop-detected, a blocked one, or one already queued or running.
 export function queueable(status: Status): boolean {
   return !['probing', 'error', 'cropping', 'indexing', 'sampling', 'blocked', 'queued', 'running'].includes(status)
+}
+
+// --- a row's facts line ------------------------------------------------------------------------------------
+
+/** Which facts every job of a group has alike, from each job's facts (a group of one shares none; the HDR tags
+ * compare as a set). */
+export function sharedFacts(perJob: Fact[][]): Set<FactKey> {
+  const shared = new Set<FactKey>()
+  if (perJob.length < 2) return shared
+  const sig = (f: Fact) => (f.tags ? [...f.tags].sort().join('|') : f.text)
+  const [first, ...rest] = perJob.map((facts) => new Map(facts.map((f) => [f.key, sig(f)])))
+  for (const [key, value] of first) if (rest.every((m) => m.get(key) === value)) shared.add(key)
+  return shared
 }

@@ -52,6 +52,28 @@ def test_check_tries_each_command_until_a_version(tmp_path):
     assert (c.status, c.version, c.found) == (ToolStatus.OK, "Version 5.2.1", str(exe))
 
 
+def test_x265_avx512_looks_at_the_selected_cpu_flags(tmp_path, monkeypatch):
+    exe = tmp_path / "x265"
+    exe.touch()
+    output = ["x265 [INFO]: using cpu capabilities: SSE2 AVX2 AVX512\n"]
+    calls = []
+
+    def runner(argv, _timeout):
+        calls.append(argv)
+        return output[0]
+
+    monkeypatch.setattr(tools, "_run", runner)
+    assert tools.x265_avx512(str(exe)) is True
+    assert tools.x265_avx512(str(exe)) is True
+    assert calls == [[str(exe), "--asm", "avx512", "--version"]]
+
+    output[0] = "x265 [WARN]: AVX512 is not supported\nx265 [INFO]: using cpu capabilities: AVX2\n"
+    assert tools._x265_avx512(str(exe), 0) is False
+    output[0] = "Usage: x265 [options]"
+    assert tools._x265_avx512(str(exe), 1) is None
+    assert tools.x265_avx512(str(tmp_path / "missing")) is None
+
+
 def test_missing_broken_and_unknown(tmp_path):
     assert check(INFO["x264"], str(tmp_path / "nope.exe")).status is ToolStatus.MISSING
     exe = tmp_path / "x264.exe"

@@ -34,7 +34,7 @@ from videoforge.core.pipeline.build import info_step, job_script
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.plan_io import to_json
 from videoforge.core.video import burn as burn_in, info, metrics, target
-from videoforge.core.video.encoders import TOOLS, encoder_command, output_name, vspipe_command
+from videoforge.core.video.encoders import TOOLS, effective_encoder, encoder_command, output_name, vspipe_command
 from videoforge.core.video.info import ScriptInfo
 from videoforge.core.video.script import ffms2_index
 from videoforge.core.video.settings import EncoderSettings, RateControl
@@ -92,10 +92,11 @@ def script_text(job_script: str, sel: Selection) -> str:
     )
 
 
-def sample_key(spec: JobSpec, plan: Plan) -> str:
+def sample_key(spec: JobSpec, plan: Plan, app: AppConfig | None = None) -> str:
     """What a sample depends on besides its percent: the job's script and encoder settings. A result made with
     another key is out of date."""
-    doc = json.dumps([job_script(spec, plan.source.video, plan.burn), to_json(spec.encoder)], default=str)
+    enc = effective_encoder(spec.encoder, app) if app is not None else spec.encoder
+    doc = json.dumps([job_script(spec, plan.source.video, plan.burn), to_json(enc)], default=str)
     return hashlib.sha1(doc.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
@@ -159,7 +160,7 @@ def sample_steps(
     sel = selection(found, percent, source_fps)
     text = script_text(job_script(spec, v, plan.burn), sel)
     script, mkv = where.script, home / MKV
-    enc = one_pass(spec.encoder, plan, container, found)
+    enc = one_pass(effective_encoder(spec.encoder, app), plan, container, found)
     out = home / output_name(enc)
 
     def write_script(_log: LogFn) -> None:
@@ -272,6 +273,8 @@ def finish(
     percent: int,
     records: dict[str, StepRecord],
     quality: bool = False,
+    *,
+    app: AppConfig | None = None,
 ) -> SampleResult:
     """The sample's result from its steps' files and records (with quality, the quality step's scores), written
     to sample.json."""
@@ -296,7 +299,7 @@ def finish(
         bytes=out.stat().st_size,
         seconds=record.seconds if record else 0.0,
         encoder=describe(enc),
-        key=sample_key(spec, plan),
+        key=sample_key(spec, plan, app),
         finished=datetime.now().isoformat(timespec="seconds"),
         ssimulacra2=scores.ssimulacra2 if scores else None,
         ssimulacra2_p5=scores.ssimulacra2_p5 if scores else None,

@@ -52,6 +52,7 @@ from videoforge.core.video.color import ContainerColor, effective_container_colo
 from videoforge.core.video.encoders import (
     TOOLS,
     analysis_file,
+    effective_encoder,
     encoder_command,
     forces_keyframes,
     qpfile_frames,
@@ -405,7 +406,8 @@ def video_steps(
 ) -> list[Step]:
     """encoded: plan.audio position -> its encoded file, which a target size's pass 2 counts."""
     # The source's extracts are in the shared work folder; the script, chapters and encode in the job's.
-    work, home, source, enc = spec.work_dir, spec.job_dir, spec.inputs.source, spec.encoder
+    work, home, source = spec.work_dir, spec.job_dir, spec.inputs.source
+    enc = effective_encoder(spec.encoder, app)
     script = home / "video.vpy"
     v = plan.source.video
     text = job_script(spec, v, plan.burn)

@@ -5,7 +5,7 @@ The queue stores jobs and their settings in SQLite. One worker processes jobs in
 ## Add and edit a batch
 
 1. On **New jobs**, add a folder of episodes or select individual sources.
-2. Choose a template and add the jobs to the queue.
+2. Choose a template and add the jobs. Adding doesn't queue them; step 5 does.
 3. Open a job to check video processing, encoder settings, tracks, and output.
 4. Select several jobs to apply an edit or template to all of them.
 5. Tick each job that's set up to queue it, or select several and use **Queue**.
@@ -28,7 +28,7 @@ A group shows a batch of jobs together under one header, such as a season. Addin
 A group's jobs always sit together in the queue, so the queue runs them one after another. Its header:
 
 - **Collapse/expand** (the arrow) hides or shows its jobs. Collapsing is remembered in this browser. A collapsed group counts as one row on a page, and the arrow keys skip it; a Shift range or Ctrl/Cmd+A still takes all of its jobs.
-- **The name** selects every job in it that the search and filter show, for the batch panel. The header counts the jobs (while a filter is on, how many match) and, when there are any, how many are done and how many failed. While one of its jobs runs, a bar along its bottom edge shows the whole group's progress. A collapsed group whose jobs are all selected shows as selected.
+- **The name** selects every job in it that the search and filter show, for the batch panel. The header counts the jobs (while a filter is on, how many match) and, when there are any, how many are done and how many failed. While one of its jobs runs, a bar along its bottom edge shows the whole group's progress. A collapsed group whose jobs are all selected shows as selected. Under the name, a second line shows what every job in the group shares, such as the resolution, encoder and track counts, and the group's rows show only what differs, usually the length.
 - **The box** queues every job in it that can be queued, or, when all are queued, unqueues the ones not running yet.
 - **⋯** has **Select its jobs**, **Move the selected jobs here** (to the end of the group), **Take the selected jobs out** (to just after it), **Rename…** and **Ungroup**. Ungroup removes the group; its jobs stay in the queue, where they are. The two Move items are the keyboard's way into and out of a group.
 
@@ -38,17 +38,17 @@ The **Move up** and **Move down** buttons keep a job inside its group (drag it t
 
 ## Find and select jobs
 
-Search matches job names, labels, source paths and each row's format, ignoring case: its encoder (`x265`), resolution (`3840`) and HDR tags (`HDR10`, `DV`). Every word must match somewhere in them. To give one kind of source its own encoder preset, search for it, use **Select matching jobs**, and set the preset once in the batch panel. Combine it with a status filter; status counts reflect the current search. The list shows 100 matching jobs per page, in queue order. **Previous** and **Next** change pages without changing the selection or the run order.
+Search matches job names, labels, source paths and each row's format, ignoring case: its encoder (`x265`), resolution (`3840`) and HDR tags (`HDR10`, `DV`). Every word must match somewhere in them. To give one kind of source its own encoder preset, search for it, use **Select matching jobs**, and set the preset once in the batch panel. Combine it with a status filter; status counts reflect the current search. The filter lists only the statuses that have jobs, and the one you picked. The list shows 100 matching jobs per page, in queue order. **Previous** and **Next** change pages without changing the selection or the run order.
 
 **Select matching jobs** selects every match across pages. Ctrl/Cmd+A does the same when a job row has focus; it keeps its usual text-selection behavior in Search. Use arrows or Home/End to move between matching jobs, including across pages. Shift extends a selection, Ctrl/Cmd-click toggles a row, and dragging selects a range of matching rows. Tab leaves the row group after one stop instead of visiting every job. Press **?** (outside a text field), or **Shortcuts** in the menu, for every keyboard shortcut in the app.
 
 Selections survive filters and live status changes. The count identifies jobs hidden by filters; **Clear selection** clears all selected jobs. **Run selected**, Index with a selection, and the other selected-job actions include selections on other pages and hidden by filters. **Start queue** runs every queued job, and Index without a selection uses all jobs. Move up/down changes positions in the full queue, including across filtered-out neighbors.
 
-On small windows, opening one job collapses the list to a rail. **Show the queue list** opens search and filters over the editor; Escape closes it and restores focus to the opener. Below 1024 CSS pixels, the menu also collapses to icons. Below 640 CSS pixels, the list fills the available width. Short windows allow scrolling to reach queue controls.
+Between 1130 and 1439 CSS pixels, opening one job collapses the menu to icons and keeps the list beside the editor, with each job's name and status. Below 1130 CSS pixels, opening one job collapses the list to a rail of numbered chips, each with a small mark for its status. **Show the queue list** opens search and filters over the editor; Escape closes it and restores focus to the opener. Below 1024 CSS pixels, the menu stays collapsed to icons even with no job open. Below 640 CSS pixels, the list fills the available width. Short windows allow scrolling to reach queue controls.
 
 ## Queue jobs
 
-A job runs only once it's queued. Queue it when its settings are final: tick its box in the queue list, in the column under **Queue**, or **Queue** at the top of its editor (they're the same switch), or select several jobs and use **Queue (N)** on the toolbar. A queued job is locked: its settings are read-only and its preview doesn't change, so what the queue will encode is what you see. Its row shows a lock before **Queued**. Untick it (or **Unqueue (N)**) to edit it again; the queue leaves it out until it's queued again.
+A job runs only once it's queued. Queue it when its settings are final: tick its box in the queue list, in the column under **Queued**, or **Queue** at the top of its editor (they're the same switch), or select several jobs and use **Queue (N)** on the toolbar. A queued job is locked: its settings are read-only and its preview doesn't change, so what the queue will encode is what you see. Its row shows a lock before **Queued**. Untick it (or **Unqueue (N)**) to edit it again; the queue leaves it out until it's queued again.
 
 A job queued while the queue runs is picked up in its turn, in queue order. Queueing a completed, failed or canceled job runs it again; unticking it before it runs keeps its last result. A job can't be queued while it's being probed, indexed or crop-detected, or while it's blocked.
 

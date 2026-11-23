@@ -501,8 +501,9 @@
         </div>
       </nav>
 
+      <!-- Help text (text-xs, muted) wraps at about 75 characters, wherever a section puts it. -->
       <div
-        class="grid max-w-4xl min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8"
+        class="grid max-w-4xl min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-8 [&_.text-xs.text-muted-foreground]:max-w-[60ch]"
         role="group"
         aria-labelledby="settings-tab-{tab}"
         aria-describedby="settings-about"
@@ -921,6 +922,48 @@
                           >{/if}
                       {/if}
                     </div>
+                    {#if t.name === 'x265'}
+                      <div class="mt-1 rounded-lg border bg-muted/30 px-3 py-2 @min-[40rem]/settings:col-start-2">
+                        <label
+                          class="flex cursor-pointer items-start justify-between gap-4 has-disabled:cursor-default"
+                        >
+                          <span class="min-w-0">
+                            <span id="x265-avx512-label" class="block text-sm font-medium">Allow AVX-512</span>
+                            <span id="x265-avx512-help" class="block text-xs text-muted-foreground">
+                              Applies across profiles. CPU flags set by a job or preset take priority.
+                            </span>
+                          </span>
+                          <span class="relative mt-0.5 flex shrink-0 items-center">
+                            <input
+                              type="checkbox"
+                              {...{ switch: '' } as { switch: string }}
+                              role="switch"
+                              class="peer sr-only"
+                              aria-labelledby="x265-avx512-label"
+                              aria-describedby="x265-avx512-help x265-avx512-status"
+                              checked={config.x265_avx512}
+                              disabled={checking[t.name] || (c?.avx512 !== true && !config.x265_avx512)}
+                              onchange={(event) => change({ x265_avx512: event.currentTarget.checked })}
+                            />
+                            <span
+                              aria-hidden="true"
+                              class="relative h-6 w-10 rounded-full border border-muted-foreground bg-muted before:absolute before:top-0.5 before:left-0.5 before:size-4 before:rounded-full before:bg-muted-foreground peer-checked:border-primary peer-checked:bg-primary peer-checked:before:translate-x-4 peer-checked:before:bg-primary-foreground peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring peer-disabled:opacity-60 forced-colors:peer-checked:before:bg-[Highlight]"
+                            ></span>
+                          </span>
+                        </label>
+                        <p id="x265-avx512-status" class="mt-1 text-xs text-muted-foreground" aria-live="polite">
+                          {#if checking[t.name]}
+                            Checking AVX-512 support…
+                          {:else if c?.avx512 === false}
+                            AVX-512 is unavailable with this CPU and x265 build.
+                          {:else if c?.avx512 === true}
+                            AVX-512 is available.
+                          {:else}
+                            AVX-512 support could not be verified.
+                          {/if}
+                        </p>
+                      </div>
+                    {/if}
                   </div>
                 {/each}
               </div>
@@ -1259,7 +1302,7 @@
         {:else}
           No job is running.
         {/if}
-        {#if app.queue.queued}{app.queue.queued} queued job(s) stay in the queue.{/if}
+        {#if app.queue.queued}{app.queue.queued} queued {app.queue.queued === 1 ? 'job stays' : 'jobs stay'} in the queue.{/if}
         Start VideoForge again with <code class="text-xs">videoforge serve</code> (or VideoForge.exe).
       </Dialog.Description>
     </Dialog.Header>

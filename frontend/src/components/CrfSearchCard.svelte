@@ -247,7 +247,7 @@
           </tbody>
         </table>
       </div>
-      <p class="text-xs text-muted-foreground">
+      <p class="readout text-xs text-muted-foreground">
         {r.frames.toLocaleString()} of {r.total_frames.toLocaleString()} frames ({r.percent}%), {r.encoder}, from CRF {r.start}
         · {new Date(r.started).toLocaleString()}
       </p>

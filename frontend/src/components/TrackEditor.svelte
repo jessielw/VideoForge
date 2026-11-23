@@ -281,11 +281,14 @@
   }
   const NOTE = { template: ' (from the template)', hand: ' (changed by you)' }
   const note = (m: Mark) => (m ? NOTE[m] : '')
-  const INPUT_MARK = { template: 'border-info/60', hand: 'border-warning/60' }
-  const SELECT_MARK = { template: '[&>select]:border-info/60', hand: '[&>select]:border-warning/60' }
+  const INPUT_MARK = { template: 'border-dashed border-muted-foreground', hand: 'border-foreground' }
+  const SELECT_MARK = {
+    template: '[&>select]:border-dashed [&>select]:border-muted-foreground',
+    hand: '[&>select]:border-foreground',
+  }
   const FLAG_MARK = {
-    template: 'underline decoration-info decoration-dotted underline-offset-2',
-    hand: 'underline decoration-warning decoration-dotted underline-offset-2',
+    template: 'underline decoration-muted-foreground decoration-dashed underline-offset-2',
+    hand: 'underline decoration-foreground underline-offset-2',
   }
 
   // The flag with no hand edit: Default is whatever the rule set plans (it picks one itself), the rest what it reads.
@@ -709,11 +712,12 @@
             disabled={!editable}
             apply={(preset) => editTrack(t, (value) => Object.assign(value, applyAudioPreset(value, preset)))}
           />
+          <label class="text-muted-foreground" for="action-{t.key}">Copy or encode</label>
           <Tip text={actionMark ? `Copy or encode${note(actionMark)}` : undefined}>
             <NativeSelect
+              id="action-{t.key}"
               value={action}
               class={actionMark ? SELECT_MARK[actionMark] : ''}
-              aria-label="Copy or encode"
               onchange={(e) => setAction(t, e.currentTarget.value as AudioAction)}
             >
               <option value="copy">Copy</option>

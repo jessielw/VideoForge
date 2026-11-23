@@ -249,7 +249,7 @@
             <div class="h-full bg-info transition-[width]" style="width:{p.overall * 100}%"></div>
           </div>
           <span class="readout">
-            {#if app.queue.paused}<span class="text-warning">Paused ·</span>{/if}
+            {#if app.queue.paused}<span class="text-info">Paused ·</span>{/if}
             {p.step} · {(p.fraction * 100).toFixed(1)}%{p.eta != null ? ` (${duration(p.eta)} left)` : ''}
             <Tip text="The bar and this number show the whole job. Each step counts for a set share of it."
               >· job {percent(p.overall)}</Tip
