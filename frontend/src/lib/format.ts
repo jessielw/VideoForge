@@ -363,7 +363,7 @@ export interface Fact {
 export function jobFacts(job: JobSummary): Fact[] {
   const f = job.source_facts
   const c = job.crop
-  const facts: unknown[] = [
+  const facts: (Fact | false | null | undefined)[] = [
     f && { key: 'resolution', text: sizeLabel(f.resolution) },
     !!f?.duration_ms && { key: 'length', text: duration(f.duration_ms / 1000) },
     f?.interlaced && { key: 'interlaced', text: 'interlaced' },
@@ -379,8 +379,16 @@ export function jobFacts(job: JobSummary): Fact[] {
     { key: 'audio', text: `${job.audio.length} audio` },
     { key: 'subs', text: `${job.subs} subs` },
   ]
-  return facts.filter(Boolean) as Fact[]
+  return facts.filter((x) => !!x)
 }
+
+/** A facts line as one string, the HDR set as its tags. */
+export function factsText(facts: Fact[]): string {
+  return facts.flatMap((f) => f.tags ?? f.text).join(' · ')
+}
+
+/** Whether a facts line has a Dolby Vision tag that ends in "?" (profile 7, enhancement layer not read yet). */
+export const needsDvNote = (facts: Fact[]): boolean => facts.some((f) => f.tags?.some((n) => n.endsWith('?')))
 
 /** "1 job", "3 jobs": a count with a regular "s" plural. */
 export function plural(n: number, word: string): string {

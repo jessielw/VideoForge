@@ -1,18 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { issueCounts, jobFacts, plural, sizeLabel } from '../src/lib/format.ts'
-import type { JobSummary } from '../src/lib/types.ts'
-
-const factJob = (over: Partial<JobSummary> = {}) =>
-  ({
-    encoder: 'x265',
-    crop: null,
-    custom_script: false,
-    audio: [{}, {}],
-    subs: 3,
-    source_facts: { resolution: '1920x1080', duration_ms: 1_500_000, hdr: ['HDR10', 'HLG'], interlaced: false },
-    ...over,
-  }) as unknown as JobSummary
+import { factsText, issueCounts, jobFacts, needsDvNote, plural, sizeLabel } from '../src/lib/format.ts'
+import { factJob } from './factJob.ts'
 
 test('jobFacts: the facts line in order, only what the job has', () => {
   assert.deepEqual(
@@ -28,6 +17,14 @@ test('jobFacts: the facts line in order, only what the job has', () => {
     jobFacts(factJob({ source_facts: null })).map((f) => f.key),
     ['encoder', 'audio', 'subs'],
   )
+})
+
+test('factsText joins a facts line with its HDR tags, and needsDvNote spots a profile 7 tag with its layer unread', () => {
+  const facts = jobFacts(factJob())
+  assert.equal(factsText(facts), '1920×1080 · 25:00 · HDR10 · HLG · x265 · 2 audio · 3 subs')
+  assert.equal(needsDvNote(facts), false)
+  const dv7 = jobFacts(factJob({ source_facts: { ...factJob().source_facts!, hdr: ['Dolby Vision 7?'] } }))
+  assert.equal(needsDvNote(dv7), true)
 })
 
 test('a plain size reads with a times sign; a size class stays as it is', () => {

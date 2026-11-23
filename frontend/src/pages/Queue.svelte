@@ -74,8 +74,10 @@
   import { pastedPaths, pathDrop } from '../lib/dropPaths.svelte'
   import {
     bytes,
+    factsText,
     issueCounts,
     jobFacts,
+    needsDvNote,
     percent,
     plural,
     PRIORITY_LABEL,
@@ -508,12 +510,21 @@
     if (failed) parts.push({ text: `${failed} failed`, tone: 'text-destructive' })
     return parts
   }
-  // The facts each group's jobs share: its header shows them once, and its rows leave them out.
-  const sharedByGroup = $derived.by(() => {
-    const members = new Map<string, JobSummary[]>()
-    for (const j of app.jobs) if (j.group) members.set(j.group, [...(members.get(j.group) ?? []), j])
-    return new Map([...members].map(([group, jobs]) => [group, sharedFacts(jobs.map(jobFacts))]))
-  })
+  // The facts each group's jobs share (all its members, whatever a filter shows): its header shows them once, and
+  // its rows leave them out.
+  const sharedByGroup = $derived(
+    new Map(
+      rows.flatMap((r) => (r.kind === 'group' ? [[r.group, sharedFacts(r.members.map(jobFacts))] as const] : [])),
+    ),
+  )
+  const sharedLineOf = (row: QueueRow & { kind: 'group' }) => {
+    const shared = sharedByGroup.get(row.group)
+    return row.members[0] && shared ? jobFacts(row.members[0]).filter((f) => shared.has(f.key)) : []
+  }
+  // One hidden note, which each Dolby Vision profile 7 row (and group header) points to as its description.
+  const needsNote = $derived(
+    rows.some((r) => (r.kind === 'group' ? needsDvNote(sharedLineOf(r)) : needsDvNote(jobFacts(r.job)))),
+  )
   // A collapsed group whose jobs are all selected shows as selected: its rows, which would, are hidden.
   const groupSelected = (row: QueueRow & { kind: 'group' }) =>
     row.collapsed && row.matching.length > 0 && row.matching.every((j) => selectedSet.has(j.id))
@@ -938,14 +949,15 @@
             <Tip
               side="right"
               class="shrink-0"
-              text="{job.name}{job.label ? ` (${job.label})` : ''}: {STATUS_LABEL[job.status]}{job.issue_counts.block ||
-              job.issue_counts.warn
+              text="{job.name}{job.label ? ` (${job.label})` : ''}: {paused(job.status)
+                ? 'Paused'
+                : STATUS_LABEL[job.status]}{job.issue_counts.block || job.issue_counts.warn
                 ? ` (${issueCounts(job.issue_counts).join(', ')})`
                 : ''}{row.group ? ` · ${job.group_name}` : ''}"
             >
               <button
                 data-job={job.id}
-                aria-label={`${place.get(job.id)}. ${job.name}${job.label ? ` (${job.label})` : ''}, ${STATUS_LABEL[job.status]}`}
+                aria-label={`${place.get(job.id)}. ${job.name}${job.label ? ` (${job.label})` : ''}, ${paused(job.status) ? 'Paused' : STATUS_LABEL[job.status]}`}
                 aria-pressed={selectedSet.has(job.id)}
                 tabindex={job.id === tabStop ? 0 : -1}
                 onfocus={() => (cursor = job.id)}
@@ -956,11 +968,14 @@
                 onpointerdown={(e) => dragStart(e, job.id)}
                 onclick={(e) => click(e, job.id)}
               >
-                {place.get(job.id)}
+                <!-- a place of three digits reaches the corner mark, so the number sits lower when a mark shows -->
+                <span class={Mark ? 'translate-y-1' : ''}>{place.get(job.id)}</span>
                 {#if Mark}
                   <Mark
                     aria-hidden="true"
-                    class="absolute top-0.5 right-0.5 size-3 {LIVE.includes(job.status) ? 'animate-spin' : ''}"
+                    class="absolute top-0.5 right-0.5 size-3 {LIVE.includes(job.status) && !paused(job.status)
+                      ? 'animate-spin'
+                      : ''}"
                   />
                 {/if}
                 {#if LIVE.includes(job.status) && job.progress}
@@ -1010,6 +1025,7 @@
       class="flex min-w-0 flex-col overflow-y-auto border-r border-border {cls}"
       aria-label="Queue list"
     >
+      {#if needsNote}<span id="dv7-note" hidden>{DV7_NOTE}</span>{/if}
       <!-- Three rows. The first never moves: Start queue and Stop after current share one slot, as wide as the
            longer of the two, so Run selected stays under the pointer when a job starts (a double click on it used to
            land on Cancel). The second shows only while something runs, indexes or is paused. The third acts on the
@@ -1341,17 +1357,13 @@
         {#snippet factsLine(facts: Fact[], margin: string)}
           <Tip
             class="readout {margin} block h-5 truncate text-xs leading-5 text-muted-foreground"
-            text={facts.flatMap((f) => f.tags ?? f.text).join(' · ') +
-              (facts.some((f) => f.tags?.some((n) => n.endsWith('?'))) ? '\n' + DV7_NOTE : '')}
+            text={factsText(facts) + (needsDvNote(facts) ? '\n' + DV7_NOTE : '')}
             >{#each facts as fact, n (fact.key)}{#if n && !fact.tags}{' · '}{/if}{#if fact.tags}{#each fact.tags as name (name)}{' '}<Badge
                     variant="outline"
                     class="inline-flex px-1 py-0 align-middle text-xs font-normal {name.endsWith('?')
                       ? 'border-warning/40 text-warning'
                       : ''}">{name}</Badge
-                  >{/each}{:else}<span>{fact.text}</span
-                >{/if}{/each}{#if facts.some((f) => f.tags?.some((n) => n.endsWith('?')))}<span class="sr-only"
-                >{'. ' + DV7_NOTE}</span
-              >{/if}</Tip
+                  >{/each}{:else}<span>{fact.text}</span>{/if}{/each}</Tip
           >
         {/snippet}
         {#snippet dropLine(i: number)}
@@ -1383,9 +1395,7 @@
             {@const failed = groupFailed(row)}
             {@const outside = selectedOutside(row.group)}
             {@const inside = selectedInside(row.group)}
-            {@const shared = sharedByGroup.get(row.group)}
-            {@const sharedLine =
-              row.members[0] && shared ? jobFacts(row.members[0]).filter((f) => shared.has(f.key)) : []}
+            {@const sharedLine = sharedLineOf(row)}
             <div
               data-row={i}
               class="relative flex min-h-10 items-center gap-1 border-b border-border/60 pl-2 text-sm
@@ -1422,11 +1432,15 @@
                 tabindex={-1}
                 onclick={() => selectGroup(row)}
                 aria-label={`${row.name}: select its ${plural(row.matching.length, 'job')}`}
+                aria-describedby={needsDvNote(sharedLine) ? 'dv7-note' : undefined}
               >
-                <span class="flex items-baseline gap-2">
-                  <span class="truncate font-medium">{row.name}</span>
+                <!-- Counts that don't fit beside the name take a line of their own, right-aligned. -->
+                <span class="flex flex-wrap items-baseline gap-x-2">
+                  <span class="min-w-[10ch] flex-1 basis-[10ch] truncate font-medium">{row.name}</span>
                   {#if row.continued}<span class="shrink-0 text-xs text-muted-foreground">(continued)</span>{/if}
-                  <span class="readout ml-auto flex shrink-0 gap-1 text-xs text-muted-foreground">
+                  <span
+                    class="readout ml-auto flex max-w-full shrink-0 flex-wrap justify-end gap-1 text-xs text-muted-foreground"
+                  >
                     {#each groupCounts(row, done, failed) as part, n (part.text)}
                       {#if n}<span aria-hidden="true">·</span>{/if}<span class={part.tone}>{part.text}</span>
                     {/each}
@@ -1521,6 +1535,7 @@
               <button
                 data-job={job.id}
                 aria-pressed={selectedSet.has(job.id)}
+                aria-describedby={needsDvNote(jobFacts(job)) ? 'dv7-note' : undefined}
                 tabindex={job.id === tabStop ? 0 : -1}
                 onfocus={() => (cursor = job.id)}
                 onkeydown={keys}
@@ -1528,13 +1543,17 @@
                 onpointerdown={(e) => dragStart(e, job.id)}
                 onclick={(e) => click(e, job.id)}
               >
-                <div class="flex items-center gap-2">
-                  <Tip class="block min-w-[15ch] truncate font-medium" text={job.source}>{job.name}</Tip>
-                  {#if job.label}<Tip class="min-w-0 shrink" text="Label"
-                      ><Badge variant="outline" class="block shrink truncate px-1.5 py-0 text-xs font-normal"
-                        >{job.label}</Badge
-                      ></Tip
-                    >{/if}
+                <!-- The name (at least 15 characters) and the label grow into the room the status leaves; where that
+                     is too little, the status takes a line of its own, right-aligned, and is never cut. -->
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <div class="flex min-w-[15ch] flex-1 basis-[15ch] items-center gap-2 font-medium">
+                    <Tip class="block min-w-[15ch] truncate" text={job.source}>{job.name}</Tip>
+                    {#if job.label}<Tip class="min-w-0 shrink-100" text="Label"
+                        ><Badge variant="outline" class="block shrink truncate px-1.5 py-0 text-xs font-normal"
+                          >{job.label}</Badge
+                        ></Tip
+                      >{/if}
+                  </div>
                   <div class="ml-auto flex shrink-0 items-center gap-2 text-xs">
                     {#if job.indexed}
                       <Tip class="items-center" text="Indexed, so the preview opens at once"
@@ -1573,14 +1592,7 @@
                 {#if facts.length}{@render factsLine(facts, 'mt-0.5')}{/if}
                 {#if shared?.size}
                   <!-- The header shows these once; a screen reader hears each row whole (the header's name is its own). -->
-                  {@const common = jobFacts(job).filter((f) => shared.has(f.key))}
-                  <span class="sr-only"
-                    >{'· ' + common.flatMap((f) => f.tags ?? f.text).join(' · ')}{common.some((f) =>
-                      f.tags?.some((n) => n.endsWith('?')),
-                    )
-                      ? '. ' + DV7_NOTE
-                      : ''}</span
-                  >
+                  <span class="sr-only">{'· ' + factsText(jobFacts(job).filter((f) => shared.has(f.key)))}</span>
                 {/if}
                 {#if LIVE.includes(job.status) && job.progress}
                   <div class="readout mt-1.5 flex items-center gap-2 text-xs text-info">

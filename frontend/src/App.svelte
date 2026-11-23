@@ -59,20 +59,16 @@
 
   // A narrow window with a job open collapses the menu too. Expand opens it for now (not remembered);
   // that ends when the job closes or the window widens.
-  const roomy = $derived(layout.narrow && layout.jobOpen)
+  const cramped = $derived(layout.narrow && layout.jobOpen)
   let menuOpened = $state(false)
   $effect(() => {
-    if (!roomy) menuOpened = false
+    if (!cramped) menuOpened = false
   })
-  const navCollapsed = $derived(layout.navCollapsed || layout.compact || (roomy && !menuOpened))
+  const navCollapsed = $derived(layout.compact || (cramped ? !menuOpened : layout.navCollapsed))
+  // While cramped the remembered choice is left alone: Expand and Collapse only open and close it for now.
   function toggleMenu() {
-    if (!navCollapsed) {
-      if (roomy && menuOpened) menuOpened = false
-      else layout.navCollapsed = true
-      return
-    }
-    if (layout.navCollapsed) layout.navCollapsed = false
-    if (roomy) menuOpened = true
+    if (cramped) menuOpened = navCollapsed
+    else layout.navCollapsed = !navCollapsed
   }
   const running = $derived(app.jobs.find((j) => j.status === 'running'))
 
