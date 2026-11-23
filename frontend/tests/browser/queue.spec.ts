@@ -479,6 +479,8 @@ test('320 CSS pixel reflow keeps queue controls reachable without horizontal scr
 for (const [width, height, zoomed] of [
   [784, 450, true],
   [1024, 700, false],
+  [1280, 800, false],
+  [1366, 768, false],
   [1600, 900, false],
 ] as const)
   test(`at ${width} px the menu, the job name and the Video tab ${zoomed ? 'make room' : 'stay as they are'}`, async ({
@@ -487,9 +489,9 @@ for (const [width, height, zoomed] of [
     await page.setViewportSize({ width, height })
     const { errors } = await queueFixture(page, 1, ['ready'])
     await page.goto('/#/queue/job-0')
-    // the menu: a rail below 1024 px, with no way to expand it there
+    // the menu: a rail below 1440 px with a job open; below 1024 px there is no way to expand it
     const nav = (await page.getByRole('navigation', { name: 'Main navigation' }).boundingBox())!
-    expect(nav.width < 100).toBe(zoomed)
+    expect(nav.width < 100).toBe(width < 1440)
     await expect(page.getByRole('button', { name: /^(Expand|Collapse) the menu$/ })).toBeVisible({ visible: !zoomed })
     // the job name: its own line when the header is narrow, beside the Queue box otherwise; never cut
     const name = page.getByRole('heading', { name: 'Episode 00000', level: 2 })
@@ -508,6 +510,101 @@ for (const [width, height, zoomed] of [
     expect([expanded.x, expanded.y, expanded.width, expanded.height]).toEqual([0, 0, width, height])
     expect(errors).toEqual([])
   })
+
+// the longest line 1 each status can have: [status, issue counts, indexed]
+const ROW_CASES = [
+  ['warn', { block: 0, warn: 2 }, true],
+  ['paused', { block: 0, warn: 1 }, true],
+  ['warn', { block: 0, warn: 0 }, true],
+  ['index-queued', { block: 0, warn: 0 }, false],
+  ['blocked', { block: 1, warn: 1 }, true],
+] as const
+for (const density of ['compact', 'default', 'comfortable'])
+  for (const width of [1130, 1280, 1366])
+    test(`at ${width} px, ${density}, with a job open the list keeps names and the menu is icons`, async ({ page }) => {
+      await page.addInitScript((d) => localStorage.setItem('videoforge.density', d), density)
+      await page.setViewportSize({ width, height: 800 })
+      const fixture = await queueFixture(page, ROW_CASES.length, ['warn'])
+      ROW_CASES.forEach(([status, issue_counts, indexed], i) =>
+        Object.assign(fixture.jobs[i], {
+          status,
+          label: 'Season 1',
+          indexed,
+          issue_counts,
+          source_facts: { resolution: '3840x2160', duration_ms: 3_600_000, hdr: [], interlaced: false },
+        }),
+      )
+      await page.route('**/video/info**', (route) => route.fulfill({ status: 404, json: {} })) // the indexed job's preview
+      await page.goto('/#/queue/job-0')
+      await expect(page.getByRole('region', { name: 'Queue rail', exact: true })).toHaveCount(0)
+      const list = page.getByRole('region', { name: 'Queue list', exact: true })
+      await expect(list.locator('[data-job="job-0"]').getByText('2 warnings', { exact: true })).toBeVisible()
+      expect((await page.getByRole('navigation', { name: 'Main navigation' }).boundingBox())!.width).toBeLessThan(100)
+      // the editor keeps room for its header on one line (44rem, where the job name drops to its own line)
+      if (density === 'default')
+        expect((await page.getByRole('region', { name: 'Job settings' }).boundingBox())!.width).toBeGreaterThanOrEqual(
+          704,
+        )
+      for (let i = 0; i < ROW_CASES.length; i++) {
+        const m = await list.locator(`[data-job="job-${i}"]`).evaluate((el) => {
+          const box = (n: Element) => n.getBoundingClientRect()
+          const group = el.querySelector<HTMLElement>('.ml-auto')! // the indexed icon, the status and the marks
+          const name = el.querySelector<HTMLElement>('.truncate')!
+          const probe = document.createElement('span')
+          probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre'
+          probe.style.font = getComputedStyle(name).font
+          probe.textContent = '0'.repeat(15)
+          document.body.append(probe)
+          const fifteen = probe.getBoundingClientRect().width
+          probe.remove()
+          const section = el.closest('section')!
+          return {
+            text: group.textContent!.replace(/\s+/g, ' ').trim(),
+            cut: Math.max(...[group, ...group.querySelectorAll('span')].map((n) => n.scrollWidth - n.clientWidth)),
+            groupRight: box(group).right,
+            listRight: box(el).right - parseFloat(getComputedStyle(el).paddingRight), // the row's own edge, inside its padding
+            nameWidth: box(name).width,
+            fifteen,
+            rowOverflow: el.scrollWidth - el.clientWidth,
+            listOverflow: section.scrollWidth - section.clientWidth,
+            facts: el.querySelector('.readout')?.textContent,
+          }
+        })
+        const where = `job-${i} (${m.text})`
+        expect(m.cut, where).toBeLessThanOrEqual(0)
+        expect(m.groupRight, where).toBeLessThanOrEqual(m.listRight + 0.5) // sub-pixel rounding
+        expect(m.nameWidth, where).toBeGreaterThanOrEqual(m.fifteen - 1)
+        expect(m.rowOverflow, where).toBeLessThanOrEqual(0)
+        expect(m.listOverflow, where).toBeLessThanOrEqual(0)
+        expect(m.facts, where).toMatch(/^3840×2160 · 1:00:00/)
+      }
+      expect(fixture.errors).toEqual([])
+    })
+
+test('at 1024 px with a job open the list is a rail of chips', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 700 })
+  const fixture = await queueFixture(page, 3, ['ready'])
+  await page.goto('/#/queue/job-0')
+  await expect(page.getByRole('region', { name: 'Queue rail', exact: true })).toBeVisible()
+  expect(fixture.errors).toEqual([])
+})
+
+test('Expand opens the menu for now while a job is open, without remembering it', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const fixture = await queueFixture(page, 3, ['ready'])
+  await page.goto('/#/queue/job-0')
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect.poll(async () => (await nav.boundingBox())!.width).toBeLessThan(100)
+  await page.getByRole('button', { name: 'Expand the menu', exact: true }).click()
+  await expect.poll(async () => (await nav.boundingBox())!.width).toBeGreaterThan(150)
+  expect(await page.evaluate(() => localStorage.getItem('videoforge.navCollapsed'))).toBeNull()
+  // widening the window ends the override, so narrowing again collapses the menu once more
+  await page.setViewportSize({ width: 1600, height: 800 })
+  await expect(page.getByRole('button', { name: 'Collapse the menu', exact: true })).toBeVisible()
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await expect.poll(async () => (await nav.boundingBox())!.width).toBeLessThan(100)
+  expect(fixture.errors).toEqual([])
+})
 
 test('a disabled control shows its styled tooltip, and tipped text in a row keeps focus on the row', async ({
   page,

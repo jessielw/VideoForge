@@ -57,7 +57,23 @@
     })
   })
 
-  const navCollapsed = $derived(layout.navCollapsed || layout.compact)
+  // A narrow window with a job open collapses the menu too. Expand opens it for now (not remembered);
+  // that ends when the job closes or the window widens.
+  const roomy = $derived(layout.narrow && layout.jobOpen)
+  let menuOpened = $state(false)
+  $effect(() => {
+    if (!roomy) menuOpened = false
+  })
+  const navCollapsed = $derived(layout.navCollapsed || layout.compact || (roomy && !menuOpened))
+  function toggleMenu() {
+    if (!navCollapsed) {
+      if (roomy && menuOpened) menuOpened = false
+      else layout.navCollapsed = true
+      return
+    }
+    if (layout.navCollapsed) layout.navCollapsed = false
+    if (roomy) menuOpened = true
+  }
   const running = $derived(app.jobs.find((j) => j.status === 'running'))
 
   // The tab's title follows the running job, so a background tab shows how far the queue is.
@@ -150,7 +166,7 @@
             variant="ghost"
             size={navCollapsed ? 'icon' : 'default'}
             class="text-muted-foreground {navCollapsed ? '' : 'justify-start gap-3 px-3'}"
-            onclick={() => (layout.navCollapsed = !layout.navCollapsed)}
+            onclick={toggleMenu}
             aria-label={navCollapsed ? 'Expand the menu' : 'Collapse the menu'}
           >
             {#if navCollapsed}<PanelLeftOpenIcon />{:else}<PanelLeftCloseIcon />Collapse{/if}

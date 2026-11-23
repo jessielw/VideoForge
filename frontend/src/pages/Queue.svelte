@@ -711,14 +711,20 @@
   let peek = $state(false)
   let railEl = $state<HTMLElement>()
   let listEl = $state<HTMLElement>()
-  const rail = $derived(layout.small ? single !== null : layout.queueCollapsed || (layout.narrow && single !== null))
+  const rail = $derived(
+    layout.small ? single !== null : layout.queueCollapsed || (layout.railNarrow && single !== null),
+  )
   $effect(() => {
     if (!rail) peek = false
+  })
+  $effect(() => {
+    layout.jobOpen = single !== null
+    return () => (layout.jobOpen = false)
   })
 
   function showList() {
     layout.queueCollapsed = false
-    if (layout.narrow && single !== null) peek = true
+    if (layout.railNarrow && single !== null) peek = true
     tick().then(() => listEl?.querySelector<HTMLInputElement>('input[type="search"]')?.focus())
   }
 
@@ -872,7 +878,7 @@
       <Tip
         side="right"
         class="my-2"
-        text={layout.narrow && single !== null
+        text={layout.railNarrow && single !== null
           ? 'Show the queue list over the editor (the window is narrow)'
           : 'Show the queue list'}
       >
@@ -970,7 +976,10 @@
         'absolute inset-y-0 left-14 z-30 w-[28rem] max-w-[calc(100%-3.5rem)] bg-background shadow-xl',
       )}{/if}
   {:else}
-    {@render list('w-[28rem] max-w-full shrink-0 max-sm:w-full')}
+    <!-- With a job open in a narrow window the list shrinks to make room for the editor. -->
+    {@render list(
+      `${layout.narrow && single !== null ? 'w-[22.6rem]' : 'w-[28rem]'} max-w-full shrink-0 max-sm:w-full`,
+    )}
   {/if}
 
   {#snippet list(cls: string)}
