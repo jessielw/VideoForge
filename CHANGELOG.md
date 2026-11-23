@@ -21,6 +21,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The caption over the Queue's checkboxes reads **Queued**, and screen readers read it. It said **Queue** and was hidden from them.
 - The Queue's **Remove** menu offers **Remove and keep work folders** (it said **Remove from the queue**) and **Remove and delete work folders**.
 - An audio track's copy or encode menu has a visible label, **Copy or encode**.
+- Queue rows take two lines instead of three to five. The first holds the name, the indexed icon and the status; a job ready with warnings shows its count there ("1 warning"), and another status with issues gets a small mark such as "⚠ 1". The second holds the source and encode facts on one line, cut off at the list's edge, with all of them in its tooltip. When the name and a long status don't fit on one line, the status moves under the name, so it's never cut off.
+- A group's header shows, on a second line, the facts all its jobs share, such as the resolution, encoder and track counts, and its rows show only what differs. A group named by its count ("6 jobs") no longer repeats the count.
+- With a job open in a window 1130 to 1439 px wide, the side menu collapses to icons and the queue list stays beside the editor, with each job's name and status. The rail of numbered chips appears only below 1130 px, and each chip shows its status with a small mark as well as its color.
+- The note about which jobs the selection's actions reach moved to **Shortcuts**, under **Queue list**. The status filter lists only the statuses that have jobs, and the one you picked.
 
 ### Fixed
 
