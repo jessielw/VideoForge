@@ -130,7 +130,7 @@ def test_audio_slots_fit_each_track():
     assert fit_audio(ddp51, surround) == ddp51  # DDP makes 5.1 from 5.0
     assert fit_audio(ddp51, truehd) == ddp51 and fit_audio(ddp51, truehd) is not ddp51
 
-    to_atmos = TrackOverride(action=AudioAction.ATMOS, bitrate_kbps=1024, options={"atmos_mode": "bluray"})
+    to_atmos = TrackOverride(action=AudioAction.ATMOS, bitrate_kbps=1280, options={"atmos_mode": "bluray"})
     assert fit_audio(to_atmos, atmos) == to_atmos
     assert fit_audio(to_atmos, truehd) == TrackOverride(action=AudioAction.DDP, options={"atmos_mode": "bluray"})
 

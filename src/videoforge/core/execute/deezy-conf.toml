@@ -1,0 +1,3 @@
+# VideoForge runs DeeZy with this config (`deezy --config <this file> encode ...`), so a deezy-conf.toml beside
+# DeeZy, in the user's config folder or in the working folder can't change its encodes: every setting a track
+# leaves out keeps DeeZy's own default. Keep it empty.

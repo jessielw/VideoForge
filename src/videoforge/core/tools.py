@@ -26,7 +26,7 @@ import subprocess
 
 from videoforge.core import dee
 from videoforge.core.config import Tools, wine_target
-from videoforge.core.execute.audio import ENCODES
+from videoforge.core.execute.audio import ENCODES, SHIM_ATMOS_MODES, AudioSettings, dee_shim, track_option
 from videoforge.core.execute.mux import MUXERS
 from videoforge.core.models import AudioAction, Issue, Plan, Severity, SubFormat
 
@@ -163,9 +163,9 @@ def missing_for_encodes(tools: Tools) -> dict[AudioAction, list[str]]:
     return out
 
 
-def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]:
+def tool_issues(plan: Plan, tools: Tools, container: str = "mkv", settings: AudioSettings | None = None) -> list[Issue]:
     """A BLOCK for each kind of audio encode the plan needs whose tools are missing, and for
-    the container's muxer and subtitle extraction."""
+    the container's muxer and subtitle extraction. settings: the rule set's (its Atmos mode)."""
     missing = missing_for_encodes(tools)
     issues = []
     muxer = MUXERS[container]
@@ -194,13 +194,14 @@ def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]
                     f"{ENCODES[action].label} needs {', '.join(missing[action])}. Set it in Settings › Tools",
                 )
             )
-    issues += _dee_issues(plan, tools)
+    issues += _dee_issues(plan, tools, settings)
     return issues
 
 
-def _dee_issues(plan: Plan, tools: Tools) -> list[Issue]:
+def _dee_issues(plan: Plan, tools: Tools, settings: AudioSettings | None = None) -> list[Issue]:
     """DeeZy's encodes: a DeeZy, DEE or dee_shim version DeeZy 2 won't run blocks them (dee_shim too, since VideoForge
-    hands DeeZy any dee_shim it finds); a loudness target can't be combined with a dialnorm, Blu-ray DDP or 7.1."""
+    hands DeeZy any dee_shim it finds), and so does a missing dee_shim for DDP 7.1 and the 7.1 Atmos modes; a
+    loudness target can't be combined with a dialnorm or Blu-ray DDP."""
     deezy = [a for a in plan.audio if a.action is not AudioAction.COPY and "deezy" in ENCODES[a.action].tools]
     if not deezy:
         return []
@@ -215,16 +216,40 @@ def _dee_issues(plan: Plan, tools: Tools) -> list[Issue]:
                     f"{label}: {c.detail}, not {c.version}. Set {c.label} in Settings › Tools",
                 )
             )
+    shim = bool(dee_shim(tools))
     for a in deezy:
+        bluray = track_option(a, "ddp_mode", settings) == "bluray"
+        if not shim and a.action is AudioAction.DDP and not bluray and a.out_layout.channels > 6:
+            issues.append(
+                Issue(
+                    Severity.BLOCK,
+                    "tools.dee_shim",
+                    f"{ENCODES[a.action].label} 7.1 needs dee_shim, or the Blu-ray DDP mode. Set dee_shim in "
+                    "Settings › Tools",
+                )
+            )
+        if (
+            not shim
+            and a.action is AudioAction.ATMOS
+            and (mode := track_option(a, "atmos_mode", settings)) in (SHIM_ATMOS_MODES)
+        ):
+            issues.append(
+                Issue(
+                    Severity.BLOCK,
+                    "tools.dee_shim",
+                    f"{ENCODES[a.action].label} {mode} mode (7.1) needs dee_shim, or the streaming mode. Set dee_shim "
+                    "in Settings › Tools",
+                )
+            )
         if a.action is not AudioAction.DDP or not a.options.get("loudness_target"):
             continue
         if a.options.get("dialnorm", "0") not in ("", "0"):
             issues.append(
                 Issue(Severity.BLOCK, "tools.dee_loudness", "A loudness target can't be combined with a dialnorm")
             )
-        if a.options.get("ddp_mode") == "bluray" or a.out_layout.channels > 6:
+        if bluray:
             issues.append(
-                Issue(Severity.BLOCK, "tools.dee_loudness", "A loudness target isn't available for Blu-ray DDP / 7.1")
+                Issue(Severity.BLOCK, "tools.dee_loudness", "A loudness target isn't available for Blu-ray DDP")
             )
     return issues
 

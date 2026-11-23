@@ -337,3 +337,28 @@ def test_friendly_errors_for_tools_that_cannot_start(monkeypatch):
     assert "Wine" in tools._friendly_error(OSError(errno.ENOEXEC, "x"), "/tools/wine/qaac/qaac64.exe")
     assert "PUID" in tools._friendly_error(PermissionError(errno.EACCES, "x"), "/tools/dee/dee")
     assert tools._friendly_error(OSError(errno.ENOENT, "x"), "/x") == ""
+
+
+def test_ddp_71_and_the_71_atmos_modes_need_dee_shim(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from types import SimpleNamespace as NS
+
+    from videoforge.core.execute.audio import AudioSettings
+    from videoforge.core.tools import _dee_issues
+
+    monkeypatch.setattr(tools, "checks", lambda *_a, **_k: {})  # versions aren't the point here
+    cfg = Tools(mkvmerge="", deezy="", dee="", truehdd="", qaac="", ffmpeg="", dee_shim=str(tmp_path / "none.exe"))
+    ddp71 = NS(action=AudioAction.DDP, options={}, out_layout=NS(channels=8))
+    bluray = NS(action=AudioAction.DDP, options={"ddp_mode": "bluray"}, out_layout=NS(channels=8))
+    atmos = NS(action=AudioAction.ATMOS, options={"atmos_mode": "standard"}, out_layout=NS(channels=8))
+    streaming = NS(action=AudioAction.ATMOS, options={}, out_layout=NS(channels=6))
+    issues = _dee_issues(NS(audio=[ddp71, bluray, atmos, streaming]), cfg)
+    assert [i.code for i in issues] == ["tools.dee_shim", "tools.dee_shim"]
+    assert issues[0].message.startswith("DDP (DEE) 7.1 needs dee_shim")
+    assert issues[1].message.startswith("DDP Atmos (DEE) standard mode (7.1) needs dee_shim")
+    # a rule set's Atmos mode counts too
+    blocked = _dee_issues(NS(audio=[streaming]), cfg, AudioSettings(atmos_mode="bluray"))
+    assert [i.code for i in blocked] == ["tools.dee_shim"]
+    shim = tmp_path / "dee_shim.exe"
+    shim.write_bytes(b"")
+    assert _dee_issues(NS(audio=[ddp71, bluray, atmos, streaming]), replace(cfg, dee_shim=str(shim))) == []

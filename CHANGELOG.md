@@ -16,6 +16,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - DDP and Atmos encodes need DeeZy 2 and the Dolby Encoding Engine 6.7 tools. **Settings › Tools › Dolby Encoding Engine** is the DEE 6.7 tools folder (the one with `dee_ddp_encoder`), and it shows the DEE version that folder reports. A path to one of its tools, or to the `dee.exe` of an older DEE, is read as its folder. The single `dee` program of older DEE releases isn't supported any more.
 - A DeeZy older than 2.0, another DEE version or a dee_shim older than 0.3.0 shows as **unsupported version** in **Settings › Tools**, and blocks the DDP and Atmos encodes that would run it, with a message that says which version is needed.
 - The DDP loudness options (loudness target, peak limit, user data) are always sent: DEE 6.7 has them for every DDP encode.
+- DDP 7.1 in the Standard mode is DeeZy's streaming 7.1, up to 1792 kb/s, and needs dee_shim. Without dee_shim the plan is blocked, with a message to set it or choose the Blu-ray mode. A loudness target now works for Standard 7.1; it is still blocked for Blu-ray DDP.
+- **DDP Atmos** has three **Atmos modes**: Streaming (5.1, the default), Standard (7.1, 448 to 2048 kb/s, 1152 by default) and Blu-ray (7.1 with an AC-3 core, 1152 to 1664 kb/s, 1280 by default). Standard and Blu-ray need dee_shim. Blu-ray Atmos was 5.1 before. The Atmos bitrate is now checked when the plan is made.
+- DDP codes a 5.0 source as 5.0, and a 7.0 source as 5.0, where it made 5.1 before. Choose 5.1 to have DeeZy add the LFE.
+- A DDP or Atmos bitrate must be one of DEE's rates for the layout. Another one blocks the plan with the nearest rates it takes; DeeZy moved it to the next one before.
+- DDP has **Surround 3 dB attenuation**, off by default as in DEE 6.7. DeeZy 1 had it on, so a surround mix comes out 3 dB louder in the surrounds than with DeeZy 1 unless you turn it on.
+- **DRC** has a **None** choice. **Warp mode**'s default is DEE's (Warping); DeeZy 1 used Normal. It only applies to a TrueHD Atmos track that doesn't carry one.
+- VideoForge runs DeeZy with an empty config of its own, so a `deezy-conf.toml` beside DeeZy, in the user's config folder or in the working folder can't change its encodes.
+
+### Removed
+
+- **Bed conformance** for DDP Atmos: DeeZy 2 has no such option. A saved audio preset that has it loads without it.
 
 ## [0.1.15] - 2026-11-23
 

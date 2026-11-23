@@ -135,3 +135,14 @@ def test_ddp_bluray_preset_persists_and_checks_layout(tmp_path):
             assert response.status_code == 422
     with make_client(tmp_path) as client:
         assert client.get("/api/presets").json()["audio"] == [saved]
+
+
+def test_a_preset_saved_with_a_retired_option_still_loads():
+    """DeeZy 2 has no bed conformance: a DDP Atmos preset that stored it loads without it."""
+    from videoforge.core.audio_preset import AudioPresetSettings
+    from videoforge.core.models import AudioAction, Layout
+
+    preset = AudioPresetSettings(AudioAction.ATMOS, Layout(5, 1), 1024, {"bed_conform": "off", "warp": "normal"})
+    assert preset.options == {"warp": "normal"}
+    with pytest.raises(ValueError, match="Unknown"):
+        AudioPresetSettings(AudioAction.DDP, None, None, {"bed_conform": "off"})  # DDP never had it

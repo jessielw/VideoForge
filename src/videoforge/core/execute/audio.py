@@ -1,6 +1,7 @@
 """Audio encodes: what each one makes (ENCODES) and the command for a planned track.
 
-DeeZy makes DDP and DDP Atmos, ffmpeg | qaac makes AAC, ffmpeg | opusenc makes Opus,
+DeeZy 2 (DEE 6.7, and dee_shim when it is there) makes DDP and DDP Atmos, ffmpeg | qaac makes AAC,
+ffmpeg | opusenc makes Opus,
 and ffmpeg's own encoders make FLAC, Opus, AAC, AC-3, E-AC-3, MP3 and Vorbis. ENCODES is the one list
 the planner, the tool checks and the UI read: a new encode is an AudioAction, an entry
 here and its command. Each encode's options are per-track settings; a rule set's
@@ -80,12 +81,13 @@ def _extra(tool: str, example: str) -> EncodeOption:
 
 _EXTRA = _extra("ffmpeg", "-cutoff 20000")
 _DRC = (
-    ("", "DeeZy's default"),
+    ("", "DeeZy's default (film light)"),
     ("film_standard", "Film standard"),
     ("film_light", "Film light"),
     ("music_standard", "Music standard"),
     ("music_light", "Music light"),
     ("speech", "Speech"),
+    ("none", "None"),
 )
 _DEEZY = (
     EncodeOption("drc_line", "DRC line mode", "", choices=_DRC, help="Dynamic range compression"),
@@ -101,7 +103,7 @@ _DDP_LOUDNESS = (
         "",
         int_range=(-31, -8),
         help="Measures and corrects the loudness. Can't be combined with a dialnorm other than 0, "
-        "and isn't available for Blu-ray DDP or 7.1",
+        "and isn't available for Blu-ray DDP",
     ),
     EncodeOption(
         "peak_limit",
@@ -148,6 +150,27 @@ _NORMALIZE = (
 )
 
 
+# DEE 6.7's data rates (`deezy bitrates`): DeeZy moves any other to the nearest one, so the plan checks them.
+_DDP_RATES = (
+    *(32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 144, 160, 176, 192, 200, 208, 216, 224, 232, 240),
+    *(248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 448, 512, 576, 640, 704, 768, 832, 896, 960, 1008, 1024),
+)
+DDP_RATES = {
+    "1.0": _DDP_RATES,
+    "2.0": tuple(r for r in _DDP_RATES if r >= 96),
+    "5.0": tuple(r for r in _DDP_RATES if r >= 192),  # coded as 5.1 without its LFE
+    "5.1": tuple(r for r in _DDP_RATES if r >= 192),
+    # through dee_shim (DEE alone has no streaming 7.1)
+    "7.1": (384, 448, 504, 576, 640, 704, 768, 832, 896, 960, 1008, 1024, 1152, 1280, 1408, 1512, 1536, 1664, 1792),
+}
+DDP_BLURAY_RATES = {"7.1": (768, 1024, 1280, 1536, 1664)}
+ATMOS_RATES = {
+    "streaming": {"5.1": (384, 448, 576, 640, 768, 1024)},
+    "bluray": {"7.1": (1152, 1280, 1408, 1512, 1536, 1664)},  # through dee_shim; "standard" takes 448 to 2048
+}
+# Each encode's modes that only DeeZy's dee_shim makes (tools.tool_issues blocks them without it)
+SHIM_ATMOS_MODES = ("standard", "bluray")
+
 MP3_BITRATES = (32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320)
 AC3_BITRATES = (32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 576, 640)
 
@@ -168,16 +191,24 @@ class AudioEncode:
     bitrate_range: tuple[int, int] | None = None  # allowed kb/s (None = not checked here)
     bitrate_choices: tuple[int, ...] = ()  # only these, when set
     per_channel_max: int | None = None  # kb/s per channel
-    channels_max: Mapping[int, int] | None = None  # the most kb/s for an output channel count
+    layout_rates: Mapping[str, tuple[int, ...]] | None = None  # only these kb/s, by output layout (others: any)
     vbr_default: bool = False  # no bitrate set = the encoder's quality VBR
     default_max: Layout | None = None  # the default layout is at most this (a downmix below it is chosen)
     delay_in_encode: bool = False  # it applies the source delay itself, so the mux must not
+    # it codes the source's own speakers: no center or LFE the source lacks (DDP's 5.0 to 5.1 aside)
+    adds_no_speakers: bool = False
     options: tuple[EncodeOption, ...] = ()
 
     def configured(self, options: Mapping[str, str]) -> AudioEncode:
-        """The layouts and defaults for the selected encoder mode."""
+        """The layouts, defaults and rates for the selected encoder mode."""
         if self.action is AudioAction.DDP and options.get("ddp_mode") == "bluray":
-            return replace(self, layouts=_layouts("7.1"), bitrates={8: 1280}, channels_max=None)
+            return replace(self, layouts=_layouts("7.1"), bitrates={8: 1280}, layout_rates=DDP_BLURAY_RATES)
+        if self.action is AudioAction.ATMOS and options.get("atmos_mode") == "standard":
+            return replace(
+                self, layouts=_layouts("7.1"), bitrates={8: 1152}, layout_rates=None, bitrate_range=(448, 2048)
+            )
+        if self.action is AudioAction.ATMOS and options.get("atmos_mode") == "bluray":
+            return replace(self, layouts=_layouts("7.1"), bitrates={8: 1280}, layout_rates=ATMOS_RATES["bluray"])
         return self
 
     def resolve_options(
@@ -198,14 +229,20 @@ class AudioEncode:
 
     def default_layout(self, source: Layout) -> Layout:
         """The source's layout when this encode takes it (up to its default_max); else the biggest one it
-        takes that is no bigger. DDP makes 5.1 from 5.0 (DeeZy adds the LFE)."""
-        if self.upmix_50(source, Layout(5, 1)):
-            return Layout(5, 1)
+        takes that is no bigger (and, for DDP, adds no speaker: a 7.0 source makes 5.0)."""
         cap = self.default_max.channels if self.default_max else source.channels
-        fits = [lay for lay in self.layouts if lay.channels <= min(source.channels, cap)]
+        fits = [
+            lay
+            for lay in self.layouts
+            if lay.channels <= min(source.channels, cap) and not (self.adds_no_speakers and self._adds(source, lay))
+        ]
         if source in fits:
             return source
         return max(fits, key=lambda lay: (lay.channels, lay.lfe)) if fits else self.layouts[0]
+
+    @staticmethod
+    def _adds(source: Layout, layout: Layout) -> bool:
+        return layout.main > source.main or layout.lfe > source.lfe
 
     def upmix_50(self, source: Layout, layout: Layout) -> bool:
         """True for DDP's 5.1 from a 5.0 source, the one upmix allowed (DeeZy adds the LFE)."""
@@ -217,8 +254,11 @@ class AudioEncode:
         )
 
     def upmixes(self, source: Layout, layout: Layout) -> bool:
-        """True when this layout needs channels the source doesn't have."""
-        return layout.channels > source.channels and not self.upmix_50(source, layout)
+        """True when this layout needs channels the source doesn't have (for DDP, any speaker it lacks:
+        DeeZy codes a source without an LFE without one)."""
+        if self.upmix_50(source, layout):
+            return False
+        return layout.channels > source.channels or (self.adds_no_speakers and self._adds(source, layout))
 
     def default_bitrate(self, layout: Layout) -> int | None:
         if not self.bitrates or self.vbr_default:
@@ -236,8 +276,16 @@ class AudioEncode:
             return f"{self.label} takes {self.bitrate_range[0]} to {self.bitrate_range[1]} kb/s"
         if self.per_channel_max and kbps > self.per_channel_max * layout.channels:
             return f"{self.label} takes at most {self.per_channel_max} kb/s per channel"
-        if self.channels_max and kbps > (most := self.channels_max.get(layout.channels, kbps)):
-            return f"{self.label} takes at most {most} kb/s at {layout}"
+        if self.layout_rates and (rates := self.layout_rates.get(str(layout))) and kbps not in rates:
+            near = [
+                r
+                for r in (
+                    max((r for r in rates if r < kbps), default=0),
+                    min((r for r in rates if r > kbps), default=0),
+                )
+                if r
+            ]
+            return f"{self.label} at {layout} takes {' or '.join(map(str, near))} kb/s, not {kbps} (DEE's rates)"
         return ""
 
 
@@ -251,22 +299,29 @@ ENCODES: dict[AudioAction, AudioEncode] = {
             "DDP (DEE)",
             AudioCodec.EAC3,
             ".ec3",
-            _layouts("1.0", "2.0", "5.1", "7.1"),
+            _layouts("1.0", "2.0", "5.0", "5.1", "7.1"),
             ("deezy", "dee", "ffmpeg"),
             bitrates={1: 192, 2: 256, 6: 640, 8: 1024},
-            # DEE's streaming DDP stops at 1024 for 7.1, and a higher bitrate comes out at that; Blu-ray goes higher
-            channels_max={8: 1024},
+            layout_rates=DDP_RATES,
             delay_in_encode=True,
+            adds_no_speakers=True,
             options=(
                 EncodeOption(
                     "ddp_mode",
                     "DDP mode",
                     "standard",
                     choices=(("standard", "Standard"), ("bluray", "Blu-ray")),
-                    help="Blu-ray needs 7.1 output. Its auto bitrate is 1280 kb/s",
+                    help="Blu-ray is 7.1 with an AC-3 core; its auto bitrate is 1280 kb/s. Standard 7.1 needs dee_shim",
                 ),
                 *_DEEZY,
                 *_DDP_LOUDNESS,
+                EncodeOption(
+                    "surround_3db",
+                    "Surround 3 dB attenuation",
+                    "off",
+                    choices=(("off", "Off"), ("on", "On")),
+                    help="Lowers the surround channels by 3 dB. Off is DEE's default; DeeZy 1 had it on",
+                ),
                 EncodeOption(
                     "stereo_downmix",
                     "Stereo downmix",
@@ -279,7 +334,7 @@ ENCODES: dict[AudioAction, AudioEncode] = {
                     ),
                     help="Used when making 2.0 from more channels",
                 ),
-                _extra("DeeZy", "--metering-mode 1770_3"),
+                _extra("DeeZy", "--no-low-pass-filter"),
             ),
         ),
         AudioEncode(
@@ -290,10 +345,19 @@ ENCODES: dict[AudioAction, AudioEncode] = {
             _layouts("5.1"),
             ("deezy", "dee", "ffmpeg", "truehdd"),
             bitrates={6: 768},
+            layout_rates=ATMOS_RATES["streaming"],
             delay_in_encode=True,
             options=(
                 EncodeOption(
-                    "atmos_mode", "Atmos mode", "streaming", choices=(("streaming", "Streaming"), ("bluray", "Blu-ray"))
+                    "atmos_mode",
+                    "Atmos mode",
+                    "streaming",
+                    choices=(
+                        ("streaming", "Streaming (5.1)"),
+                        ("standard", "Standard (7.1)"),
+                        ("bluray", "Blu-ray (7.1, AC-3 core)"),
+                    ),
+                    help="The bed Atmos is coded over. Standard and Blu-ray need dee_shim",
                 ),
                 *_DEEZY,
                 EncodeOption(
@@ -301,16 +365,15 @@ ENCODES: dict[AudioAction, AudioEncode] = {
                     "Warp mode",
                     "",
                     choices=(
-                        ("", "DeeZy's default"),
+                        ("", "DEE's default (warping)"),
                         ("normal", "Normal"),
                         ("warping", "Warping"),
                         ("prologiciix", "Pro Logic IIx"),
                         ("loro", "Lo/Ro"),
                     ),
-                    help="Used when the TrueHD doesn't say",
+                    help="For a TrueHD Atmos track that doesn't carry one (older disc authoring). DeeZy 1 used Normal",
                 ),
-                EncodeOption("bed_conform", "Bed conformance", "off", choices=(("off", "Off"), ("on", "On"))),
-                _extra("DeeZy", "--metering-mode 1770_3"),
+                _extra("DeeZy", "--no-oamd-as-is"),
             ),
         ),
         AudioEncode(
@@ -483,6 +546,10 @@ ENCODES: dict[AudioAction, AudioEncode] = {
 }
 
 
+# Options an encode had and lost: a saved preset or override that still names one has it dropped.
+RETIRED_OPTIONS = {AudioAction.ATMOS: frozenset({"bed_conform"})}  # DeeZy 2 has no --bed-conform
+
+
 def delay_in_encode(action: AudioAction) -> bool:
     """True when the encoder applies the source delay itself, so the mux must not."""
     enc = ENCODES.get(action)
@@ -628,6 +695,9 @@ def _deezy_temp(path: Path) -> tuple[str, ...]:
     return ("--temp-dir", str(path))
 
 
+DEEZY_CONFIG = Path(__file__).with_name("deezy-conf.toml")
+
+
 def dee_shim(tools: Tools) -> str:
     """The dee_shim DeeZy is given ("" for none): the configured one, when it is there."""
     if not tools.dee_shim:
@@ -660,14 +730,18 @@ def _deezy(
         *(("--dee-shim", shim) if (shim := dee_shim(tools)) else ("--no-shim",)),
     )
     if planned.action is AudioAction.ATMOS:
-        mode = ("encode", "atmos", f"--atmos-mode={_opt(planned, 'atmos_mode', settings)}")
+        mode = ("encode", "ddp-atmos", f"--atmos-mode={_opt(planned, 'atmos_mode', settings)}")
     else:
-        # DEE 6.7 makes streaming DD+ 7.1 only through dee_shim: without it, 7.1 goes to the Blu-ray encoder
-        bluray_71 = planned.out_layout.channels > 6 and not dee_shim(tools)
-        encoder = "ddp-bluray" if _opt(planned, "ddp_mode") == "bluray" or bluray_71 else "ddp"
-        mode = ("encode", encoder, f"--channels={planned.out_layout.channels}")
+        # standard 7.1 is DeeZy's `ddp --channels 8`, which needs dee_shim (tools.tool_issues blocks it without)
+        encoder = "ddp-bluray" if _opt(planned, "ddp_mode") == "bluray" else "ddp"
+        out = planned.out_layout
+        mode = ("encode", encoder, f"--channels={6 if out.channels == 5 else out.channels}")
         if planned.upmix_50:
             mode += ("--upmix-50-to-51",)
+        elif out.main >= 5 and not out.lfe:
+            mode += ("--disable-lfe",)  # 5.0: DeeZy's --channels counts the LFE
+        if _opt(planned, "surround_3db") == "on":
+            mode += ("--surround-3db",)
     chosen = ()
     for key, flag in (
         ("drc_line", "--drc-line-mode"),
@@ -685,9 +759,19 @@ def _deezy(
                 continue  # loudness correction isn't allowed on ddp-bluray
             if value := _opt(planned, key, settings):
                 chosen += (f"{flag}={value}",)
-    if _opt(planned, "bed_conform") == "on":
-        chosen += ("--bed-conform",)
-    return (tools.deezy, *mode, *common, *chosen, *settings.deezy_extra_args, *_extra_args(planned), str(source))
+    # DeeZy's own config (beside it, in the user's config folder or the working folder) would change the defaults
+    # of every option VideoForge leaves out: an empty one of VideoForge's keeps them DeeZy's.
+    config = ("--config", str(DEEZY_CONFIG))
+    return (
+        tools.deezy,
+        *config,
+        *mode,
+        *common,
+        *chosen,
+        *settings.deezy_extra_args,
+        *_extra_args(planned),
+        str(source),
+    )
 
 
 def _aac(
@@ -793,6 +877,11 @@ def _opusenc(
 # ffmpeg's name for each layout (aformat sets it exactly: libopus refuses 5.1(side), and a
 # downmix to a count alone could pick a layout the encoder doesn't take).
 _FFMPEG_LAYOUT = {"1.0": "mono", "2.0": "stereo"}
+
+
+def track_option(p: PlannedAudio, key: str, settings: AudioSettings | None = None) -> str:
+    """A planned track's option value, as its command reads it."""
+    return _opt(p, key, settings)
 
 
 def _opt(p: PlannedAudio, key: str, settings: AudioSettings | None = None) -> str:

@@ -11,7 +11,7 @@ from conftest import audio
 import pytest
 
 from videoforge.core.config import Tools
-from videoforge.core.execute.audio import AudioSettings, audio_command
+from videoforge.core.execute.audio import DEEZY_CONFIG, ENCODES, AudioSettings, audio_command
 from videoforge.core.models import AudioAction as A, AudioCodec as C, Layout, PlannedAudio
 
 TOOLS = Tools(mkvmerge="mkvmerge", deezy="deezy", dee="dee", truehdd="truehdd", qaac="qaac64", ffmpeg="ffmpeg")
@@ -40,6 +40,11 @@ def command(p: PlannedAudio, settings: AudioSettings | None = None):
     return audio_command(p, 1, SRC, TMP, settings or AudioSettings(), TOOLS)
 
 
+def deezy(*encode: str) -> tuple[str, ...]:
+    """How a DeeZy command starts: VideoForge's own empty config, then the encode."""
+    return ("deezy", "--config", str(DEEZY_CONFIG), "encode", *encode)
+
+
 def test_copy_has_no_command():
     assert command(planned(C.AC3, "5.1", A.COPY)) is None
 
@@ -47,7 +52,7 @@ def test_copy_has_no_command():
 def test_ddp_51():
     cmd = command(planned(C.TRUEHD, "5.1", A.DDP, bitrate=640, index=1))
     (argv,) = cmd.argvs
-    assert argv[:3] == ("deezy", "encode", "ddp")
+    assert argv[:5] == deezy("ddp")
     assert "--channels=6" in argv and "--bitrate=640" in argv
     assert "--track-index=1" in argv and "--delay=0ms" in argv
     assert "--upmix-50-to-51" not in argv
@@ -90,11 +95,33 @@ def test_ddp_71():
 
 
 @pytest.mark.parametrize(
+    ("source", "out", "flags"),
+    [
+        ("5.0", "5.0", ["--channels=6", "--disable-lfe"]),  # DEE 6.7 codes 5.0 as it is
+        ("5.1", "5.0", ["--channels=6", "--disable-lfe"]),
+        ("5.0", "5.1", ["--channels=6", "--upmix-50-to-51"]),
+        ("5.1", "5.1", ["--channels=6"]),
+    ],
+)
+def test_ddp_lfe(source, out, flags):
+    (argv,) = command(planned(C.DTS_HD_MA, source, A.DDP, out, 640, upmix=(source, out) == ("5.0", "5.1"))).argvs
+    deezy_flags = [a for a in argv if a.startswith(("--channels", "--disable-lfe", "--upmix"))]
+    assert deezy_flags == flags
+
+
+def test_ddp_surround_3db_is_off_unless_set():
+    p = planned(C.TRUEHD, "5.1", A.DDP, bitrate=640)
+    assert "--surround-3db" not in command(p).argvs[0]
+    p.options = {"surround_3db": "on"}
+    assert "--surround-3db" in command(p).argvs[0]
+
+
+@pytest.mark.parametrize(
     "mode, shim, encoder",
     [
         (None, True, "ddp"),
         ("standard", True, "ddp"),
-        ("standard", False, "ddp-bluray"),  # DEE 6.7 makes streaming 7.1 only through dee_shim
+        ("standard", False, "ddp"),  # DeeZy refuses it without dee_shim: the plan blocks it (tool_issues)
         ("bluray", True, "ddp-bluray"),
     ],
 )
@@ -106,7 +133,7 @@ def test_ddp_mode_selects_command_independently_of_bitrate(mode, shim, encoder, 
     exe.write_bytes(b"")
     tools = replace(TOOLS, dee_shim=str(exe) if shim else "")
     (argv,) = audio_command(p, 1, SRC, TMP, AudioSettings(), tools).argvs
-    assert argv[:3] == ("deezy", "encode", encoder)
+    assert argv[:5] == deezy(encoder)
     assert "--channels=8" in argv and "--bitrate=1536" in argv
     assert "--upmix-50-to-51" not in argv
     assert not any(a.startswith("--ddp-mode") for a in argv)
@@ -129,7 +156,7 @@ def test_deezy_is_given_the_dee_folder_and_the_dee_shim_videoforge_found(tmp_pat
 
 def test_atmos():
     (argv,) = command(planned(C.TRUEHD, "7.1", A.ATMOS, "5.1", 1024, atmos=True)).argvs
-    assert argv[:3] == ("deezy", "encode", "atmos")
+    assert argv[:5] == deezy("ddp-atmos")
     assert "--atmos-mode=streaming" in argv and "--bitrate=1024" in argv
     assert not any(a.startswith("--channels") for a in argv)
 
@@ -247,7 +274,7 @@ def test_deezy_options():
         "drc_rf": "speech",
         "dialnorm": "-27",
         "stereo_downmix": "dpl2",
-        "extra": "--metering-mode 1770_3",
+        "extra": "--no-low-pass-filter --lo-ro-center -3",
     }
     (argv,) = command(ddp, AudioSettings(deezy_extra_args=("--x",))).argvs
     assert {
@@ -256,12 +283,47 @@ def test_deezy_options():
         "--custom-dialnorm=-27",
         "--stereo-down-mix=dpl2",
     } <= set(argv)
-    assert argv[-4:] == ("--x", "--metering-mode", "1770_3", str(SRC))  # the rule set's extras, then the track's
+    # the rule set's extras, then the track's
+    assert argv[-5:] == ("--x", "--no-low-pass-filter", "--lo-ro-center", "-3", str(SRC))
+    ddp.options = {"drc_line": "none"}
+    assert "--drc-line-mode=none" in command(ddp).argvs[0]
 
-    atmos = planned(C.TRUEHD, "7.1", A.ATMOS, "5.1", 1024, atmos=True)
-    atmos.options = {"atmos_mode": "bluray", "warp": "loro", "bed_conform": "on"}
+    atmos = planned(C.TRUEHD, "7.1", A.ATMOS, "7.1", 1280, atmos=True)
+    atmos.options = {"atmos_mode": "bluray", "warp": "loro", "bed_conform": "on"}  # bed conformance: gone in DeeZy 2
     (argv,) = command(atmos).argvs
-    assert {"--atmos-mode=bluray", "--thd-warp-mode=loro", "--bed-conform"} <= set(argv)
+    assert {"--atmos-mode=bluray", "--thd-warp-mode=loro"} <= set(argv) and "--bed-conform" not in argv
+
+
+def test_deezy_runs_with_videoforges_empty_config():
+    """A deezy-conf.toml of the user's (2.0 applies its [global_defaults]) mustn't change an encode."""
+    assert DEEZY_CONFIG.is_file()
+    assert all(line.startswith("#") for line in DEEZY_CONFIG.read_text(encoding="utf-8").splitlines() if line)
+
+
+def test_deezy_rates_are_dees():
+    ddp, atmos = ENCODES[A.DDP], ENCODES[A.ATMOS]
+    assert ddp.bitrate_problem(640, Layout(5, 1)) == ""
+    assert ddp.bitrate_problem(650, Layout(5, 1)) == "DDP (DEE) at 5.1 takes 640 or 704 kb/s, not 650 (DEE's rates)"
+    assert ddp.bitrate_problem(1792, Layout(7, 1)) == ""  # through dee_shim
+    assert ddp.bitrate_problem(2000, Layout(7, 1)) == "DDP (DEE) at 7.1 takes 1792 kb/s, not 2000 (DEE's rates)"
+    bluray = ddp.configured({"ddp_mode": "bluray"})
+    assert bluray.bitrate_problem(1664, Layout(7, 1)) == "" and bluray.bitrate_problem(1792, Layout(7, 1))
+    assert atmos.bitrate_problem(1024, Layout(5, 1)) == "" and atmos.bitrate_problem(512, Layout(5, 1))
+    standard = atmos.configured({"atmos_mode": "standard"})
+    assert (standard.layouts, standard.default_bitrate(Layout(7, 1))) == ((Layout(7, 1),), 1152)
+    assert standard.bitrate_problem(2048, Layout(7, 1)) == "" and standard.bitrate_problem(400, Layout(7, 1))
+    assert atmos.configured({"atmos_mode": "bluray"}).default_bitrate(Layout(7, 1)) == 1280
+
+
+@pytest.mark.parametrize(
+    ("source", "default"),
+    [("5.0", "5.0"), ("7.0", "5.0"), ("5.1", "5.1"), ("6.1", "5.1"), ("7.1", "7.1"), ("4.1", "2.0"), ("3.0", "2.0")],
+)
+def test_ddp_defaults_add_no_speaker(source, default):
+    """DEE 6.7 codes 5.0 as 5.0, and DeeZy codes a source without an LFE without one."""
+    ddp = ENCODES[A.DDP]
+    assert str(ddp.default_layout(Layout.parse(source))) == default
+    assert ddp.upmixes(Layout(7, 0), Layout(5, 1)) and not ddp.upmixes(Layout(5, 0), Layout(5, 1))
 
 
 def test_rule_set_defaults_stand_in_for_unset_options():
@@ -326,11 +388,8 @@ def test_opusenc_for_real(tmp_path, out_layout, channels):
     assert "Audio: opus" in probe and ("5.1" if channels == 6 else "stereo") in probe
 
 
-def test_standard_ddp_71_takes_at_most_1024_and_blu_ray_more():
-    from videoforge.core.execute.audio import ENCODES
-
+def test_standard_ddp_71_goes_past_1024_through_dee_shim():
     ddp = ENCODES[A.DDP]
-    assert ddp.bitrate_problem(1280, Layout(7, 1)) == "DDP (DEE) takes at most 1024 kb/s at 7.1"
-    assert ddp.bitrate_problem(1024, Layout(7, 1)) == ""
-    assert ddp.bitrate_problem(1024, Layout(5, 1)) == ""
+    assert ddp.bitrate_problem(1280, Layout(7, 1)) == ""  # DeeZy 1.5 stopped at 1024
+    assert ddp.bitrate_problem(1280, Layout(5, 1)) == "DDP (DEE) at 5.1 takes 1024 kb/s, not 1280 (DEE's rates)"
     assert ddp.configured({"ddp_mode": "bluray"}).bitrate_problem(1280, Layout(7, 1)) == ""
