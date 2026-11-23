@@ -12,9 +12,10 @@
   let open = $state(false)
 
   // Each row's keys are pressed together (shown with +); a slash in one is either of two keys.
-  const SECTIONS: { title: string; keys: [string[], string][] }[] = [
+  const SECTIONS: { title: string; note?: string; keys: [string[], string][] }[] = [
     {
       title: 'Queue list',
+      note: 'Actions on the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs, or every job when none is selected.',
       keys: [
         [['Click'], 'Select a job'],
         [['Ctrl / ⌘', 'Click'], 'Add a job to the selection, or take it out'],
@@ -111,6 +112,7 @@
       {#each SECTIONS as section (section.title)}
         <section aria-label={section.title}>
           <h3 class="section-label mb-2">{section.title}</h3>
+          {#if section.note}<p class="mb-2 text-xs text-muted-foreground">{section.note}</p>{/if}
           <dl class="space-y-1.5 text-sm">
             {#each section.keys as [keys, what] (what)}
               <div class="flex items-baseline justify-between gap-4">

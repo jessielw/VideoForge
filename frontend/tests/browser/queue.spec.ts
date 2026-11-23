@@ -331,6 +331,48 @@ test('? opens the keyboard shortcuts, but not while typing', async ({ page }, te
   expect(fixture.errors).toEqual([])
 })
 
+test('the Shortcuts dialog carries the note about actions on the selection', async ({ page }) => {
+  const fixture = await queueFixture(page, 2, ['ready'])
+  await page.getByRole('button', { name: 'Keyboard shortcuts', exact: true }).click()
+  await expect(
+    page.getByRole('dialog', { name: 'Keyboard shortcuts' }).getByRole('region', { name: 'Queue list' }),
+  ).toContainText(
+    'Actions on the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs, or every job when none is selected.',
+  )
+  expect(fixture.errors).toEqual([])
+})
+
+test('the status filter lists statuses with jobs, and keeps the chosen one at zero', async ({ page }) => {
+  const fixture = await queueFixture(page, 4, ['ready', 'done'])
+  const select = page.getByRole('combobox', { name: 'Filter jobs by status' })
+  const options = () => select.locator('option').allTextContents()
+  expect(await options()).toEqual(['All statuses (4)', 'Ready (2)', 'Done (2)'])
+  await select.selectOption('ready')
+  await page.getByRole('searchbox').fill('Episode 00001')
+  // Ready has no match now, but stays listed because it is chosen.
+  expect(await options()).toEqual(['All statuses (1)', 'Ready (0)', 'Done (1)'])
+  await select.selectOption('')
+  await page.getByRole('searchbox').fill('nothing matches')
+  expect(await options()).toEqual(['All statuses (0)'])
+  expect(fixture.errors).toEqual([])
+})
+
+test('at 1024 px the rail chips carry a status mark and a name with the status', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 700 })
+  const fixture = await queueFixture(page, 3, ['done', 'warn', 'ready'])
+  await page.goto('/#/queue/job-0')
+  const rail = page.getByRole('region', { name: 'Queue rail', exact: true })
+  const done = rail.locator('[data-job="job-0"]')
+  const warn = rail.locator('[data-job="job-1"]')
+  const ready = rail.locator('[data-job="job-2"]')
+  await expect(done).toHaveAccessibleName('1. Episode 00000, Done')
+  await expect(warn).toHaveAccessibleName('2. Episode 00001, Ready with warnings')
+  await expect(done.locator('svg.lucide-check[aria-hidden="true"]')).toHaveCount(1)
+  await expect(warn.locator('svg.lucide-triangle-alert[aria-hidden="true"]')).toHaveCount(1)
+  await expect(ready.locator('svg')).toHaveCount(0)
+  expect(fixture.errors).toEqual([])
+})
+
 test('a done job says what its run made', async ({ page }) => {
   const made = { output_bytes: 4.5 * 1024 ** 3, source_bytes: 18 * 1024 ** 3, seconds: 5025, reused: 2, kbps: 6120 }
   const fixture = await queueFixture(page, 1, ['done'], null, null, made)
@@ -1069,10 +1111,8 @@ test('a Queue caption names the checkboxes, and a queued row shows a lock before
   await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
     "A ticked job is queued and locked, so you can't edit it until you untick it. Start queue runs the queued jobs.",
   )
-  // The paragraph keeps the rest.
-  await expect(list).toContainText(
-    'Actions on the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs, or every job when none is selected.',
-  )
+  // The selection note moved to the Shortcuts dialog.
+  await expect(list).not.toContainText('Actions on the selection')
   await expect(list).not.toContainText('A ticked job is queued')
   // A lock before "Queued", in its color; none on a ready row.
   const queued = page.locator('[data-job="job-0"]')

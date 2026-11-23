@@ -29,7 +29,9 @@
   import { saves } from '../lib/saves'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
+  import CheckIcon from '@lucide/svelte/icons/check'
   import CircleXIcon from '@lucide/svelte/icons/circle-x'
+  import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle'
   import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down'
   import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left'
@@ -697,6 +699,19 @@
   const DV7_NOTE =
     "Dolby Vision profile 7. Set dovi_tool in Settings › Tools so VideoForge can read whether its enhancement layer is FEL or MEL, which decides how it's encoded."
   const LIVE = ['running', 'indexing', 'sampling'] // statuses with progress
+  // A rail chip's corner mark, so its status doesn't rest on colour alone.
+  const CHIP_MARK: Partial<Record<Status, typeof CheckIcon>> = {
+    done: CheckIcon,
+    failed: CircleXIcon,
+    invalid: CircleXIcon,
+    error: CircleXIcon,
+    blocked: CircleXIcon,
+    warn: TriangleAlertIcon,
+    running: LoaderCircleIcon,
+    indexing: LoaderCircleIcon,
+    sampling: LoaderCircleIcon,
+    queued: LockIcon,
+  }
   const paused = (status: string) => app.queue.paused && LIVE.includes(status)
   // The toolbar's Index: the selected jobs, or every job when none is selected.
   const indexTarget = $derived(selected.length ? selected : app.jobs.map((j) => j.id))
@@ -919,6 +934,7 @@
             {/if}
           {:else}
             {@const job = row.job}
+            {@const Mark = CHIP_MARK[job.status]}
             <Tip
               side="right"
               class="shrink-0"
@@ -929,7 +945,7 @@
             >
               <button
                 data-job={job.id}
-                aria-label={`${job.name}${job.label ? ` (${job.label})` : ''}: ${STATUS_LABEL[job.status]}`}
+                aria-label={`${place.get(job.id)}. ${job.name}${job.label ? ` (${job.label})` : ''}, ${STATUS_LABEL[job.status]}`}
                 aria-pressed={selectedSet.has(job.id)}
                 tabindex={job.id === tabStop ? 0 : -1}
                 onfocus={() => (cursor = job.id)}
@@ -941,6 +957,12 @@
                 onclick={(e) => click(e, job.id)}
               >
                 {place.get(job.id)}
+                {#if Mark}
+                  <Mark
+                    aria-hidden="true"
+                    class="absolute top-0.5 right-0.5 size-3 {LIVE.includes(job.status) ? 'animate-spin' : ''}"
+                  />
+                {/if}
                 {#if LIVE.includes(job.status) && job.progress}
                   <span class="absolute inset-x-0 bottom-0 h-1 bg-muted">
                     <span class="block h-full bg-info" style="width:{job.progress.overall * 100}%"></span>
@@ -1254,7 +1276,9 @@
           >
             <option value="">All statuses ({searched.length})</option>
             {#each Object.entries(STATUS_LABEL) as [value, label] (value)}
-              <option {value}>{label} ({counts.get(value as Status) ?? 0})</option>
+              {#if counts.get(value as Status) || value === status}
+                <option {value}>{label} ({counts.get(value as Status) ?? 0})</option>
+              {/if}
             {/each}
           </NativeSelect>
           {#if query || status}<Button variant="ghost" size="sm" onclick={clearFilters}>Clear filters</Button>{/if}
@@ -1271,10 +1295,6 @@
               >Clear selection</Button
             >{/if}
         </div>
-        <p class="text-xs text-muted-foreground">
-          Actions on the selection include jobs on other pages and jobs hidden by filters. Index uses the selected jobs,
-          or every job when none is selected.
-        </p>
         <!-- Over the column of checkboxes, which queue and lock a job (clicking a row selects it). Each box has its own
              name, and this caption is read as well. -->
         <Tip
