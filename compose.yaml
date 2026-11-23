@@ -14,6 +14,6 @@ services:
       - "127.0.0.1:8765:8765" # there's no login: keep it on this machine (or behind your own proxy and auth)
     volumes:
       - ./data:/data # the queue, templates, settings, logs
-      - ./tools:/tools # your own tools: dee/dee (DEE, Linux) or wine/dee/dee.exe (Windows), wine/qaac/qaac64.exe + QTfiles64, vs-plugins/*.so
+      - ./tools:/tools # your own tools: dee/ (the Linux DEE 6.7 tools folder + license.lic), wine/qaac/qaac64.exe + QTfiles64, vs-plugins/*.so
       - /path/to/media:/media # sources and outputs (work folders go next to the sources)
     restart: unless-stopped

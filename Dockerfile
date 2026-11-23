@@ -2,14 +2,20 @@
 # VideoForge in a container: the server and its free tools. The native ones (FFmpeg, MP4Box, x264, the
 # VapourSynth plugins) come from the plugins image (vsplugins/), built rarely; x265 (with HDR10+), SVT-AV1 and
 # SVT-AV1-HDR (with Dolby Vision and HDR10+) are built here; MKVToolNix and opus-tools from Debian; DeeZy, truehdd, dovi_tool and hdr10plus_tool from their
-# releases; Wine for Windows tools. DEE, qaac and other tools of your own go in /tools (docker/entrypoint.sh).
+# releases; dee_shim from its release; Wine for qaac. DEE (the Linux 6.7 tools folder), qaac and other tools of
+# your own go in /tools (docker/entrypoint.sh).
 # See README "Docker".
 #   docker build -t videoforge .                      (with the published plugins image)
 #   docker build -t videoforge-plugins vsplugins && docker build --build-arg PLUGINS_IMAGE=videoforge-plugins -t videoforge .
 
 ARG PYTHON_IMAGE=python:3.12-slim-trixie
 ARG PLUGINS_IMAGE=ghcr.io/jessielw/videoforge-plugins:latest
-ARG DEEZY_VERSION=1.5.0
+# DeeZy 2 (DEE 6.7 only) and dee_shim, which runs the Linux DEE: scripts/tools.toml's versions for Windows
+ARG DEEZY_VERSION=2.0.0-beta.2
+ARG DEEZY_SHA256=763dc43eea8ba327c2ddd94955da0dc3b031201067135ddb9d17f301e136300b
+ARG DEE_SHIM_VERSION=0.3.0
+ARG DEE_SHIM_BUILD=2ae7f95
+ARG DEE_SHIM_SHA256=829fb9c5bd78c54eadaaff9e45d8c042d61c5f1ae687a4c4166c43f9b3e32c63
 # x265 from source: Patman's mod (the Windows build's, scripts/tools.toml), at its release tag; Debian's is built
 # without HDR10+ (--dhdr10-info)
 ARG X265_VERSION=4.3+22+73
@@ -140,6 +146,10 @@ RUN { /SvtAv1EncApp-HDR --help > help.txt 2>&1 || true; } \
 # --- release binaries ---------------------------------------------------------------------------------
 FROM ${PYTHON_IMAGE} AS downloads
 ARG DEEZY_VERSION
+ARG DEEZY_SHA256
+ARG DEE_SHIM_VERSION
+ARG DEE_SHIM_BUILD
+ARG DEE_SHIM_SHA256
 ARG TRUEHDD_VERSION
 ARG DOVI_TOOL_VERSION
 ARG DOVI_TOOL_SHA256
@@ -150,8 +160,16 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /out
 RUN curl -fsSL -o deezy.zip "https://github.com/jessielw/DeeZy/releases/download/${DEEZY_VERSION}/deezy-linux-x64.zip" \
+    && echo "${DEEZY_SHA256}  deezy.zip" | sha256sum -c - \
     && unzip -q deezy.zip -d deezy && rm deezy.zip \
     && find deezy -type f -name deezy -exec install -m 0755 {} /out/deezy-bin \;
+RUN base="dee-shim-${DEE_SHIM_VERSION}-${DEE_SHIM_BUILD}-linux-x86_64" \
+    && curl -fsSL -o "$base.tar.gz" "https://github.com/truehdd/dee-shim/releases/download/v${DEE_SHIM_VERSION}/$base.tar.gz" \
+    && echo "${DEE_SHIM_SHA256}  $base.tar.gz" | sha256sum -c - \
+    && tar -xzf "$base.tar.gz" \
+    && install -m 0755 "$base/dee_shim" /out/dee_shim-bin \
+    && mkdir -p /out/dee_shim-notices \
+    && cp "$base/LICENSE" "$base/NOTICE" "$base/THIRD_PARTY_LICENSES.txt" /out/dee_shim-notices/
 RUN base="truehdd-${TRUEHDD_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
     && curl -fsSL -o "$base" "https://github.com/truehdd/truehdd/releases/download/${TRUEHDD_VERSION}/$base" \
     && sum="$(curl -fsSL "https://github.com/truehdd/truehdd/releases/download/${TRUEHDD_VERSION}/$base.sha256")" \
@@ -177,13 +195,15 @@ COPY --from=plugins /opt/vf /opt/vf
 RUN echo /opt/vf/lib > /etc/ld.so.conf.d/vf.conf && ldconfig
 COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
 COPY --from=downloads /out/deezy-bin /usr/local/bin/deezy
+COPY --from=downloads /out/dee_shim-bin /usr/local/bin/dee_shim
+COPY --from=downloads /out/dee_shim-notices /usr/local/share/doc/dee_shim
 COPY --from=downloads /out/truehdd-bin /usr/local/bin/truehdd
 COPY --from=x265 /x265 /usr/local/bin/x265
 COPY --from=svtav1 /SvtAv1EncApp /usr/local/bin/SvtAv1EncApp
 COPY --from=svtav1hdr /SvtAv1EncApp-HDR /usr/local/bin/SvtAv1EncApp-HDR
 COPY --from=downloads /out/dovi_tool-bin /usr/local/bin/dovi_tool
 COPY --from=downloads /out/hdr10plus_tool-bin /usr/local/bin/hdr10plus_tool
-# Wine for the Windows tools in /tools/wine (qaac, DEE's Windows build). Its DLLs lose their debug info
+# Wine for the Windows tools in /tools/wine (qaac). Its DLLs lose their debug info
 # (711 MB -> 237 MB), and a template prefix is made for docker/wine-run to copy (docker/wine-prefix.sh).
 COPY docker/wine-prefix.sh /tmp/wine-prefix.sh
 RUN apt-get update \

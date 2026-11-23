@@ -52,16 +52,15 @@ These files are not included in the image. Restart the container after adding th
 
 | Tool | Location inside the container |
 | --- | --- |
-| DEE, Linux | `/tools/dee/dee`, with its license beside it |
-| DEE, Windows through Wine | `/tools/wine/dee/dee.exe`, with its license beside it |
-| DEE, split encoders, Linux | `/tools/dee/dee_ddp_encoder` and the other `dee_*_encoder` files |
-| DEE, split encoders, Windows through Wine | `/tools/wine/dee/dee_ddp_encoder.exe` and the other `dee_*_encoder.exe` files |
+| DEE 6.7, Linux | `/tools/dee/`: the DEE 6.7 tools folder (`dee_ddp_encoder` and the rest), with `license.lic` in it |
 | qaac through Wine | `/tools/wine/qaac/qaac64.exe`, with the `QTfiles64` folder beside it |
 | Extra VapourSynth plugins | `/tools/vs-plugins/*.so` |
 
-Nothing needs setting in **Settings**: DEE and qaac are found in these folders. A path to a Windows `.exe` also works, and is run through Wine.
+Nothing needs setting in **Settings**: DEE and qaac are found in these folders. A path to a Windows `.exe` (such as qaac) also works, and is run through Wine.
 
-You don't need to `chmod` anything on the host. With `PUID` / `PGID` set (the Compose example does), the container starts as root, makes `/tools` readable, makes DEE's Linux programs executable, then runs as that user. On a read-only `/tools` mount it runs DEE from a copy made at start. The container's log says what it found (`docker logs videoforge`). Without `PUID` / `PGID` (`user:` or `--user`) it can't change permissions: make the files readable and executable on the host (`chmod -R a+rX tools`).
+The image's DeeZy 2 runs only DEE 6.7, and only its Linux build. The image includes dee_shim, which DeeZy needs for DDP 7.1 and the 7.1 Atmos modes. dee_shim runs the DEE tool inside its own process, so it can't drive DEE's Windows build under Wine. An older DEE (`/tools/dee/dee`) or a DEE in `/tools/wine/dee` isn't used: the container's log says so at start.
+
+You don't need to `chmod` anything on the host. With `PUID` / `PGID` set (the Compose example does), the container starts as root, makes `/tools` readable, makes DEE's tools executable, then runs as that user. On a read-only `/tools` mount it runs DEE from a copy made at start. The container's log says what it found (`docker logs videoforge`). Without `PUID` / `PGID` (`user:` or `--user`) it can't change permissions: make the files readable and executable on the host (`chmod -R a+rX tools`).
 
 ## Network access
 

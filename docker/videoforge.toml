@@ -16,11 +16,12 @@ deezy = "deezy"
 truehdd = "truehdd"
 dovi_tool = "dovi_tool"
 hdr10plus_tool = "hdr10plus_tool"
-# DEE and qaac aren't free to ship: the entrypoint puts a launcher on PATH for each one in /tools.
-# Dolby Encoding Engine: the Linux build as /tools/dee/dee, or the Windows build as /tools/wine/dee/dee.exe
-# (run under Wine), each with its license next to it. Newer split encoders (dee_ddp_encoder, ...) work the same way,
-# in /tools/dee or /tools/wine/dee; DeeZy is given their folder.
+# DEE and qaac aren't free to ship: the entrypoint puts each one in /tools on PATH.
+# Dolby Encoding Engine: the Linux DEE 6.7 tools folder (dee_ddp_encoder and the rest) as /tools/dee, with its
+# license.lic in it. "dee" finds that folder by its dee_ddp_encoder on PATH, and DeeZy is given the folder.
 dee = "dee"
+# dee_shim (in the image) for DDP 7.1 and the 7.1 Atmos modes; it runs the Linux DEE.
+dee_shim = "dee_shim"
 # qaac: qaac64.exe and its QTfiles64 folder (Apple's CoreAudioToolbox) in /tools/wine/qaac, run under Wine.
 # Without it AAC (qaac) shows as unavailable (ffmpeg's AAC is there).
 qaac = "qaac"
