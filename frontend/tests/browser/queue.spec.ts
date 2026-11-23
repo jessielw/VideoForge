@@ -1096,7 +1096,7 @@ test('at 390 px the job header breaks its facts between figures, never inside on
   expect(errors).toEqual([])
 })
 
-test('queue rows show sizes with a times sign, and at 390 px their figures stay inside the row', async ({ page }) => {
+test('queue rows show sizes with a times sign, and at 390 px the facts stay on one line', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   const { errors } = await queueFixture(page, 3, ['ready'], null, null, null, () => ({
     resolution: '3840x2076',
@@ -1118,17 +1118,14 @@ test('queue rows show sizes with a times sign, and at 390 px their figures stay 
   const rows = page.locator('[data-job]')
   await expect(rows.first()).toContainText('3840×2076')
   await expect(rows.first()).toContainText('crop 0/42/0/42')
-  // No figure is cut off, and none wraps inside itself: a figure is one line, or moves whole to the next.
-  const problems = await rows.evaluateAll((all) =>
+  // The facts line is one line that ends in an ellipsis (its text stays whole in the DOM), never two.
+  const lines = await rows.evaluateAll((all) =>
     all.flatMap((row) =>
-      [...row.querySelectorAll<HTMLElement>('.readout')].flatMap((line) => [
-        ...(line.scrollWidth > line.clientWidth + 1 ? [`cut off: ${line.textContent}`] : []),
-        ...[...line.children]
-          .filter((part) => part.getBoundingClientRect().height > 20)
-          .map((part) => `wraps: ${part.textContent?.trim()}`),
-      ]),
+      [...row.querySelectorAll<HTMLElement>('.readout')].map((line) => line.getBoundingClientRect().height),
     ),
   )
+  const problems = lines.filter((h) => h > 21).map((h) => `wraps: ${h}`)
+  await expect(rows.first().locator('.readout')).toHaveCSS('text-overflow', 'ellipsis')
   expect(await rows.first().locator('.readout').count()).toBeGreaterThan(0)
   expect([...new Set(problems)]).toEqual([])
   expect(errors).toEqual([])
@@ -1586,11 +1583,13 @@ test("a queue row and its rail button count the job's errors and warnings instea
   })
   fixture.refresh()
   const rows = page.getByRole('region', { name: 'Queue list', exact: true })
-  await expect(rows.locator('[data-job="job-0"]')).toContainText('1 error · 2 warnings')
-  await expect(rows.locator('[data-job="job-1"]')).toContainText('1 warning')
-  // The status says Warning(s), short enough that a narrow list keeps the name; the count is under it.
-  await expect(rows.locator('[data-job="job-1"]').getByText('Warning', { exact: true })).toBeVisible()
-  await expect(rows.locator('[data-job="job-2"]').getByText('Warnings', { exact: true })).toBeVisible()
+  // A blocked row's status is its error count; its warnings follow as a compact mark.
+  await expect(rows.locator('[data-job="job-0"]')).toContainText('1 error')
+  await expect(rows.locator('[data-job="job-0"]').getByRole('img', { name: '2 warnings' })).toBeVisible()
+  // A warn row's status is its warning count, so the old "Warning" word and the line under it are gone.
+  await expect(rows.locator('[data-job="job-1"]').getByText('1 warning', { exact: true })).toBeVisible()
+  await expect(rows.locator('[data-job="job-2"]').getByText('2 warnings', { exact: true })).toBeVisible()
+  await expect(rows.locator('[data-job="job-1"]').getByText('Warning', { exact: true })).toHaveCount(0)
   await expect(rows.locator('[data-job="job-1"]')).not.toContainText('Ready')
   await expect(rows.getByText('The output file is shared with another job')).toHaveCount(0)
 
@@ -1598,6 +1597,41 @@ test("a queue row and its rail button count the job's errors and warnings instea
   await page.getByRole('region', { name: 'Queue rail', exact: true }).locator('[data-job="job-0"]').hover()
   await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText('Episode 00000: Blocked (1 error, 2 warnings)')
   expect(fixture.errors).toEqual([])
+})
+
+test('a row is two lines: the name and status, then one facts line that truncates but keeps its text', async ({
+  page,
+}) => {
+  const long = (i: number) => ({
+    resolution: '3840x2160',
+    duration_ms: 3_600_000 + i,
+    hdr: ['HDR10', 'Dolby Vision 7?'],
+    interlaced: true,
+  })
+  const fixture = await queueFixture(page, 3, ['warn', 'queued', 'ready'], null, null, null, long)
+  fixture.jobs[0].issue_counts = { block: 0, warn: 1 }
+  fixture.jobs[1].issue_counts = { block: 0, warn: 1 }
+  Object.assign(fixture.jobs[2], { custom_script: true, audio: ['a', 'b', 'c'], subs: 4 })
+  fixture.refresh()
+  const rows = page.getByRole('region', { name: 'Queue list', exact: true })
+  const warn = rows.locator('[data-job="job-0"]')
+  await expect(warn.getByText('1 warning', { exact: true })).toBeVisible()
+  const lineHeight = await warn.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight))
+  for (const id of ['job-0', 'job-1']) {
+    expect((await rows.locator(`[data-job="${id}"]`).boundingBox())!.height).toBeLessThanOrEqual(
+      lineHeight * 2 + 16 + 4,
+    )
+  }
+  // Queued keeps its status word and gets the compact mark, named for screen readers.
+  const queued = rows.locator('[data-job="job-1"]')
+  await expect(queued).toContainText('Queued')
+  await expect(queued.getByRole('img', { name: '1 warning' })).toHaveText('1')
+  // The facts line starts with the resolution and length, and holds the rest in the DOM.
+  const facts = rows.locator('[data-job="job-2"] .readout')
+  await expect(facts).toContainText(/^3840×2160 · 1:00:00 · interlaced/)
+  await expect(facts).toContainText('Dolby Vision 7?')
+  await expect(facts).toContainText('x265 · custom script · 3 audio · 4 subs')
+  fixture.errors.length = 0
 })
 
 const HLG = "Dolby Vision 8.4 (HLG) isn't carried yet. Untick Dolby Vision from the source on the Encoder tab"

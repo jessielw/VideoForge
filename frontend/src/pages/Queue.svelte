@@ -28,6 +28,8 @@
   import { saves } from '../lib/saves'
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down'
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up'
+  import CircleXIcon from '@lucide/svelte/icons/circle-x'
+  import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert'
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down'
   import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left'
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right'
@@ -687,6 +689,8 @@
   const indexing = $derived(!!app.queue.indexing || !!app.queue.sampling || app.queue.index_queued > 0)
   // tools running now (the job's, the index lane's, a test encode there): what Pause and the priority menu reach
   const working = $derived(!!app.queue.current || !!app.queue.indexing || !!app.queue.sampling)
+  const DV7_NOTE =
+    "Dolby Vision profile 7. Set dovi_tool in Settings › Tools so VideoForge can read whether its enhancement layer is FEL or MEL, which decides how it's encoded."
   const LIVE = ['running', 'indexing', 'sampling'] // statuses with progress
   const paused = (status: string) => app.queue.paused && LIVE.includes(status)
   // The toolbar's Index: the selected jobs, or every job when none is selected.
@@ -1285,6 +1289,19 @@
         aria-describedby="queue-keys"
         class="min-h-24 flex-1 overflow-auto select-none"
       >
+        {#snippet mark(n: number, error: boolean)}
+          {#if n}
+            {@const words = issueCounts(error ? { block: n, warn: 0 } : { block: 0, warn: n })[0]}
+            <Tip class="items-center" text={words}>
+              <span role="img" aria-label={words} class="inline-flex items-center gap-0.5 text-muted-foreground">
+                {#if error}<CircleXIcon aria-hidden="true" class="size-3.5 text-destructive" />{:else}<TriangleAlertIcon
+                    aria-hidden="true"
+                    class="size-3.5 text-warning"
+                  />{/if}{n}
+              </span>
+            </Tip>
+          {/if}
+        {/snippet}
         {#snippet dropLine(i: number)}
           {#if reordering?.drop && reordering.drop.row === i && reordering.drop.edge !== 'inside'}
             <!-- Indented (from the jobs' names): into the group; full width, with its dot at the edge: outside. -->
@@ -1413,6 +1430,15 @@
           {:else}
             {@const job = row.job}
             {@const queued = job.status === 'queued' || job.status === 'running'}
+            {@const f = job.source_facts}
+            {@const size = f
+              ? `${sizeLabel(f.resolution)}${f.duration_ms ? ` · ${duration(f.duration_ms / 1000)}` : ''}${f.interlaced ? ' · interlaced' : ''}`
+              : ''}
+            {@const crop =
+              job.crop && (job.crop.top || job.crop.bottom || job.crop.left || job.crop.right)
+                ? ` · crop ${job.crop.left}/${job.crop.top}/${job.crop.right}/${job.crop.bottom}`
+                : ''}
+            {@const rest = `${job.encoder}${job.custom_script ? ' · custom script' : crop} · ${job.audio.length} audio · ${job.subs} subs`}
             <div
               data-row={i}
               class="relative flex border-b border-border/60 {row.group ? 'pl-4' : ''} {selectedSet.has(job.id)
@@ -1454,71 +1480,56 @@
                 onclick={(e) => click(e, job.id)}
               >
                 <div class="flex items-center gap-2">
-                  <Tip class="block truncate font-medium" text={job.source}>{job.name}</Tip>
-                  {#if job.label}<Tip class="shrink-0" text="Label"
-                      ><Badge variant="outline" class="px-1.5 py-0 text-xs font-normal">{job.label}</Badge></Tip
+                  <Tip class="block min-w-[15ch] truncate font-medium" text={job.source}>{job.name}</Tip>
+                  {#if job.label}<Tip class="min-w-0 shrink" text="Label"
+                      ><Badge variant="outline" class="block shrink truncate px-1.5 py-0 text-xs font-normal"
+                        >{job.label}</Badge
+                      ></Tip
                     >{/if}
-                  {#if paused(job.status)}
-                    <span class="ml-auto shrink-0 text-xs text-info">Paused</span>
-                  {:else if job.status === 'warn'}
-                    <!-- the count under it says how many; "Ready with warnings" cut a narrow list's names -->
-                    <span class="ml-auto shrink-0 text-xs {STATUS_TONE.warn}"
-                      >{job.issue_counts.warn === 1 ? 'Warning' : 'Warnings'}</span
-                    >
-                  {:else if job.status === 'queued'}
-                    <!-- locked: its box is ticked, so its settings can't change until it's unticked -->
-                    <span class="ml-auto flex shrink-0 items-center gap-1 text-xs {STATUS_TONE.queued}"
-                      ><LockIcon aria-hidden="true" class="size-3" />{STATUS_LABEL.queued}</span
-                    >
-                  {:else}
-                    <span class="ml-auto shrink-0 text-xs {STATUS_TONE[job.status]}">{STATUS_LABEL[job.status]}</span>
-                  {/if}
-                </div>
-                {#if job.source_facts}
-                  {@const f = job.source_facts}
-                  <!-- min-h-5: a 20 px tag doesn't change the row's height; a narrow list wraps whole figures -->
-                  <div
-                    class="readout mt-0.5 flex min-h-5 min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground"
-                  >
-                    <span class="shrink-0"
-                      >{sizeLabel(f.resolution)}{f.duration_ms
-                        ? ` · ${duration(f.duration_ms / 1000)}`
-                        : ''}{f.interlaced ? ' · interlaced' : ''}</span
-                    >
-                    {#each f.hdr as name (name)}
-                      <Tip
-                        class="shrink-0"
-                        text={name.endsWith('?')
-                          ? "Dolby Vision profile 7. Set dovi_tool in Settings › Tools so VideoForge can read whether its enhancement layer is FEL or MEL, which decides how it's encoded."
-                          : 'The source is ' + name}
+                  <div class="ml-auto flex shrink-0 items-center gap-2 text-xs">
+                    {#if job.indexed}
+                      <Tip class="items-center" text="Indexed, so the preview opens at once"
+                        ><DatabaseCheckIcon class="size-3.5" /></Tip
                       >
-                        <Badge
-                          variant="outline"
-                          class="px-1 py-0 text-xs font-normal {name.endsWith('?')
-                            ? 'border-warning/40 text-warning'
-                            : ''}">{name}</Badge
+                    {/if}
+                    {#if job.status === 'warn'}
+                      <span class="whitespace-nowrap {STATUS_TONE.warn}"
+                        ><IssueCounts counts={{ block: 0, warn: job.issue_counts.warn }} /></span
+                      >
+                    {:else if job.status === 'blocked'}
+                      <span class="whitespace-nowrap {STATUS_TONE.blocked}"
+                        ><IssueCounts counts={{ block: job.issue_counts.block, warn: 0 }} /></span
+                      >
+                      {@render mark(job.issue_counts.warn, false)}
+                    {:else}
+                      {#if paused(job.status)}
+                        <span class="text-info">Paused</span>
+                      {:else if job.status === 'queued'}
+                        <!-- locked: its box is ticked, so its settings can't change until it's unticked -->
+                        <span class="flex items-center gap-1 {STATUS_TONE.queued}"
+                          ><LockIcon aria-hidden="true" class="size-3" />{STATUS_LABEL.queued}</span
                         >
-                      </Tip>
-                    {/each}
+                      {:else}
+                        <span class={STATUS_TONE[job.status]}>{STATUS_LABEL[job.status]}</span>
+                      {/if}
+                      {@render mark(job.issue_counts.block, true)}
+                      {@render mark(job.issue_counts.warn, false)}
+                    {/if}
                   </div>
-                {/if}
-                <!-- On a narrow list a figure moves whole to the next line instead of breaking inside itself. -->
-                <div
-                  class="readout mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground *:whitespace-nowrap"
-                >
-                  <span>{job.encoder}</span>
-                  {#if job.custom_script}
-                    <span>· custom script</span>
-                  {:else if job.crop && (job.crop.top || job.crop.bottom || job.crop.left || job.crop.right)}
-                    <span>· crop {job.crop.left}/{job.crop.top}/{job.crop.right}/{job.crop.bottom}</span>
-                  {/if}
-                  <span>· {job.audio.length} audio · {job.subs} subs</span>
-                  {#if job.indexed}
-                    <Tip class="ml-auto shrink-0 items-center" text="Indexed, so the preview opens at once"
-                      ><DatabaseCheckIcon class="size-3.5" /></Tip
-                    >
-                  {/if}
                 </div>
+                <!-- One line that ends in an ellipsis at the list's edge. All of it stays in the DOM and in the tip. The
+                     tags have no tips of their own (a tip inside this one): the Dolby Vision note is in this one. -->
+                <Tip
+                  class="readout mt-0.5 block h-5 truncate text-xs leading-5 text-muted-foreground"
+                  text={[f && size, ...(f?.hdr ?? []), rest].filter(Boolean).join(' · ') +
+                    (f?.hdr.some((n) => n.endsWith('?')) ? '\n' + DV7_NOTE : '')}
+                  >{#if f}<span>{size}</span>{#each f.hdr as name (name)}{' '}<Badge
+                        variant="outline"
+                        class="inline-flex px-1 py-0 align-middle text-xs font-normal {name.endsWith('?')
+                          ? 'border-warning/40 text-warning'
+                          : ''}">{name}</Badge
+                      >{/each}<span> · </span>{/if}<span>{rest}</span></Tip
+                >
                 {#if LIVE.includes(job.status) && job.progress}
                   <div class="readout mt-1.5 flex items-center gap-2 text-xs text-info">
                     <div class="h-1 flex-1 overflow-hidden rounded bg-muted">
@@ -1534,9 +1545,6 @@
                       >{progressTimes(job.progress)}</Tip
                     >
                   </div>
-                {:else if job.issue_counts.block || job.issue_counts.warn}
-                  <!-- the counts only: the job's Issues tab says what they are -->
-                  <div class="mt-0.5 text-xs text-muted-foreground"><IssueCounts counts={job.issue_counts} /></div>
                 {/if}
                 {#if job.index_held && job.status === 'index-queued'}
                   <Tip
