@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - The Queue's batch panel can set **Original language** for every selected job, so a whole season or group can be switched at once. This helps with anime discs that put the English dub first, where the language read from the source is English. Each job keeps its other track choices. Clearing the box has each job read the language from its source again.
+- **dee_shim** (optional) is a new tool in **Settings › Tools**, and the Windows tools bundle includes dee_shim 0.3.0. DeeZy needs it for DDP 7.1 and the 7.1 Atmos modes, and runs Atmos encodes through it. VideoForge gives DeeZy the dee_shim it found, or tells DeeZy to run without one, so a dee_shim lying beside DEE or on `PATH` can't change an encode.
+
+### Changed
+
+- DDP and Atmos encodes need DeeZy 2 and the Dolby Encoding Engine 6.7 tools. **Settings › Tools › Dolby Encoding Engine** is the DEE 6.7 tools folder (the one with `dee_ddp_encoder`), and it shows the DEE version that folder reports. A path to one of its tools, or to the `dee.exe` of an older DEE, is read as its folder. The single `dee` program of older DEE releases isn't supported any more.
+- A DeeZy older than 2.0, another DEE version or a dee_shim older than 0.3.0 shows as **unsupported version** in **Settings › Tools**, and blocks the DDP and Atmos encodes that would run it, with a message that says which version is needed.
+- The DDP loudness options (loudness target, peak limit, user data) are always sent: DEE 6.7 has them for every DDP encode.
 
 ## [0.1.15] - 2026-11-23
 

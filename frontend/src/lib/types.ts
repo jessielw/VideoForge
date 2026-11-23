@@ -1032,7 +1032,7 @@ export interface NotificationDestination {
   events: NotificationEvent[]
 }
 
-export type ToolStatus = 'ok' | 'unknown' | 'missing' | 'broken'
+export type ToolStatus = 'ok' | 'unknown' | 'unsupported' | 'missing' | 'broken'
 
 export interface ToolCheck {
   name: string

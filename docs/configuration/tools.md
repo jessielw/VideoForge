@@ -20,13 +20,20 @@ On macOS or Linux ARM64, supply native tools and plugins and override the Window
 | [MP4Box](https://gpac.io/) (GPAC) | `tools/GPAC/mp4box.exe` | MP4 output |
 | ffmpeg | `tools/ffmpeg/bin/ffmpeg.exe` | FLAC / Opus / AAC / AC-3 / E-AC-3 / MP3 / Vorbis encodes, and decoding for the other audio encoders |
 | ffprobe | next to ffmpeg | an MP4 / TS source's timing (track starts, frame rate); without it, MediaInfo's |
-| [DeeZy](https://github.com/jessielw/DeeZy) + Dolby Encoding Engine | `tools/DeeZy/deezy.exe`, `tools/DEE/dee.exe` | DDP / DDP Atmos |
+| [DeeZy](https://github.com/jessielw/DeeZy) 2 + Dolby Encoding Engine 6.7 | `tools/DeeZy/deezy.exe`, the DEE tools folder `tools/DEE` | DDP / DDP Atmos |
 | truehdd | `tools/truehdd/truehdd.exe` | DDP Atmos from TrueHD Atmos |
+| [dee_shim](https://github.com/truehdd/dee-shim) (optional) | `tools/dee_shim/dee_shim.exe` | DDP 7.1 and the 7.1 Atmos modes; Atmos encodes run through it |
 | qaac | `tools/qaac/qaac64.exe` | AAC (Apple) |
 | opus-tools | `tools/opus-tools/opusenc.exe` | Opus (opusenc) |
 | [dovi_tool](https://github.com/quietvoid/dovi_tool), [hdr10plus_tool](https://github.com/quietvoid/hdr10plus_tool) | `tools/dovi_tool/dovi_tool.exe`, `tools/hdr10plus_tool/hdr10plus_tool.exe` | Dolby Vision and HDR10+ metadata (bundled; `scripts/fetch_tools.py` provisions all free Windows tools) |
 
 The qaac frontend and its resampler are bundled; its Apple runtime is supplied separately in `tools/qaac/QTfiles64/`. DeeZy is bundled; DEE and its license go in `tools/DEE/`. FFmpeg AAC needs neither.
+
+### DEE and DeeZy
+
+DeeZy 2 runs only Dolby Encoding Engine 6.7, which is a folder of tools, one per job (`dee_ddp_encoder`, `dee_ddpjoc_encoder` and more). Set `dee` to that folder, keep it whole and put its `license.lic` in it. A path to one of its tools, or to the `dee.exe` an older DEE had, is read as the folder. The **Settings** page shows the DEE version the folder reports. Another DEE version, a DeeZy older than 2.0 or a dee_shim older than 0.3.0 shows as an unsupported version, and the DDP and Atmos encodes it would run are blocked until it is replaced.
+
+dee_shim is optional. When VideoForge finds it, it gives DeeZy its path; otherwise it tells DeeZy to run without one, so a dee_shim lying beside DEE or on `PATH` never changes an encode the plan didn't expect.
 
 Inspect the pinned inventory with `uv run python scripts/fetch_tools.py --list`. Fetch selected packages with `--only x264 x265`, or recheck the complete toolchain with `uv run python scripts/verify_toolchain.py --smoke`. Downloads and installed-file hashes are verified; repeat provisioning repairs missing files and preserves unrelated files. `tools/THIRD_PARTY.md` records versions, source/build links and licenses. See [toolchain maintenance](../development/toolchain.md).
 

@@ -14,6 +14,7 @@ import sysconfig
 import tempfile
 import tomllib
 
+from videoforge.core import dee
 from videoforge.core.execute.control import Priority
 from videoforge.core.pairing import MatchRules
 
@@ -32,7 +33,7 @@ def app_data_dir() -> Path:
 class Tools:
     mkvmerge: str
     deezy: str
-    dee: str
+    dee: str  # the DEE 6.7 tools folder (dee_ddp_encoder, ...)
     truehdd: str
     qaac: str
     ffmpeg: str
@@ -47,6 +48,7 @@ class Tools:
     mp4box: str = "MP4Box"
     dovi_tool: str = "dovi_tool"  # Dolby Vision RPU extract / edit
     hdr10plus_tool: str = "hdr10plus_tool"  # HDR10+ metadata extract
+    dee_shim: str = "dee_shim"  # optional: DeeZy is given it when it is found, else told to run without one
     vspipe: str = ""  # default: the one pip's vapoursynth installs next to this Python
     vs_plugins: str = ""  # extra VapourSynth plugin folder (VAPOURSYNTH_EXTRA_PLUGIN_PATH)
 
@@ -122,13 +124,14 @@ def mkv_ui(tool: str) -> tuple[str, str]:
 # Where the Docker image's /tools folder keeps a tool, for one that isn't on PATH (added after the container
 # started, so it has no launcher yet).
 _TOOLS_FOLDER = {
-    "dee": ("/tools/dee/dee", "/tools/wine/dee/dee.exe"),
     "qaac": ("/tools/wine/qaac/qaac64.exe",),
 }
 
 
-def _resolve_tool(value: str, base: Path) -> str:
+def _resolve_tool(name: str, value: str, base: Path) -> str:
     candidate = base / value
+    if name == "dee" and (folder := dee.folder(str(candidate))):
+        return folder  # DEE is its tools folder, also for a config that names one of them or an old dee.exe
     if candidate.exists():
         return _wine_launcher(candidate) if candidate.is_file() else str(candidate)
     found = shutil.which(_BUNDLED_FALLBACKS.get(value.replace("\\", "/"), value))
@@ -164,7 +167,7 @@ def with_tools(cfg: AppConfig, paths: dict[str, str], base: Path = PROJECT_ROOT)
     names = asdict(cfg.tools)
     for name, value in paths.items():
         if name in names and value:
-            names[name] = _resolve_tool(value, base)
+            names[name] = _resolve_tool(name, value, base)
     for tool, beside in _SIBLINGS.items():
         if paths.get(beside) and not paths.get(tool):
             main = Path(names[beside])
@@ -181,11 +184,11 @@ def load_app_config(path: Path | None = None) -> AppConfig:
     if local.is_file():
         data = _merged(data, tomllib.loads(local.read_text(encoding="utf-8")))
     base = path.parent
-    names = {name: _resolve_tool(v, base) for name, v in data["tools"].items()}
+    names = {name: _resolve_tool(name, v, base) for name, v in data["tools"].items()}
     for tool, beside in _SIBLINGS.items():
         if tool not in names and beside in names:
             sibling = Path(names[beside]).with_name(tool + Path(names[beside]).suffix)
-            names[tool] = str(sibling) if sibling.is_file() else _resolve_tool(tool, base)
+            names[tool] = str(sibling) if sibling.is_file() else _resolve_tool(tool, tool, base)
     if "vspipe" not in names:
         names["vspipe"] = default_vspipe()
     tools = Tools(**names)

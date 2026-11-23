@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 import shutil
 import subprocess
@@ -88,16 +89,42 @@ def test_ddp_71():
     assert "--channels=8" in argv and "--bitrate=1280" in argv
 
 
-@pytest.mark.parametrize("mode, encoder", [(None, "ddp"), ("standard", "ddp"), ("bluray", "ddp-bluray")])
-def test_ddp_mode_selects_command_independently_of_bitrate(mode, encoder):
+@pytest.mark.parametrize(
+    "mode, shim, encoder",
+    [
+        (None, True, "ddp"),
+        ("standard", True, "ddp"),
+        ("standard", False, "ddp-bluray"),  # DEE 6.7 makes streaming 7.1 only through dee_shim
+        ("bluray", True, "ddp-bluray"),
+    ],
+)
+def test_ddp_mode_selects_command_independently_of_bitrate(mode, shim, encoder, tmp_path):
     p = planned(C.TRUEHD, "7.1", A.DDP, bitrate=1536)
     if mode:
         p.options = {"ddp_mode": mode}
-    (argv,) = command(p).argvs
+    exe = tmp_path / "dee_shim.exe"
+    exe.write_bytes(b"")
+    tools = replace(TOOLS, dee_shim=str(exe) if shim else "")
+    (argv,) = audio_command(p, 1, SRC, TMP, AudioSettings(), tools).argvs
     assert argv[:3] == ("deezy", "encode", encoder)
     assert "--channels=8" in argv and "--bitrate=1536" in argv
     assert "--upmix-50-to-51" not in argv
     assert not any(a.startswith("--ddp-mode") for a in argv)
+
+
+def test_deezy_is_given_the_dee_folder_and_the_dee_shim_videoforge_found(tmp_path):
+    dee = tmp_path / "DEE"
+    dee.mkdir()
+    (dee / "dee_ddp_encoder.exe").write_bytes(b"")
+    shim = tmp_path / "dee_shim.exe"
+    shim.write_bytes(b"")
+    p = planned(C.TRUEHD, "5.1", A.DDP, bitrate=640)
+    tools = replace(TOOLS, dee=str(dee / "dee.exe"), dee_shim=str(shim))  # an old config's dee.exe: its folder
+    (argv,) = audio_command(p, 1, SRC, TMP, AudioSettings(), tools).argvs
+    assert argv[argv.index("--dee") + 1] == str(dee)
+    assert argv[argv.index("--dee-shim") + 1] == str(shim) and "--no-shim" not in argv
+    (argv,) = audio_command(p, 1, SRC, TMP, AudioSettings(), replace(tools, dee_shim=str(tmp_path / "no.exe"))).argvs
+    assert "--no-shim" in argv and "--dee-shim" not in argv  # never one DeeZy finds by itself
 
 
 def test_atmos():

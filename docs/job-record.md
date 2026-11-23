@@ -190,7 +190,7 @@ Subtitle entries have `format` (`"srt"`, `"pgs"`, `"ass"`, `"tx3g"`, ...: as the
 
 ### `tools`
 
-The version line of each tool the run used, keyed by VideoForge's tool name (`vspipe`, `x264`, `x265`, `ffmpeg`, `qaac`, `opusenc`, `deezy`, `dee`, `truehdd`, `mkvmerge`, `mp4box`, `dovi_tool`, `hdr10plus_tool`); `""` when the tool printed none.
+The version line of each tool the run used, keyed by VideoForge's tool name (`vspipe`, `x264`, `x265`, `ffmpeg`, `qaac`, `opusenc`, `deezy`, `dee`, `dee_shim`, `truehdd`, `mkvmerge`, `mp4box`, `dovi_tool`, `hdr10plus_tool`); `""` when the tool printed none or wasn't there. A DeeZy encode also lists `dee_shim`, which is `""` when the encode ran without it.
 
 ## Events
 

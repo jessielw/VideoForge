@@ -46,9 +46,16 @@ def fake_tool_files(*names: str) -> dict[str, str]:
     """Empty files standing in for tools that must exist (audio encodes are blocked without them);
     the fake runner never starts them, and their stems are the tool names."""
     folder = Path(tempfile.mkdtemp(prefix="vf-tools-"))
+    out = {}
     for name in names:
+        if name == "dee":  # DEE 6.7 is a folder of tools, found by its dee_ddp_encoder
+            (folder / "dee").mkdir()
+            (folder / "dee" / "dee_ddp_encoder.exe").write_bytes(b"")
+            out[name] = str(folder / "dee")
+            continue
         (folder / f"{name}.exe").write_bytes(b"")
-    return {name: str(folder / f"{name}.exe") for name in names}
+        out[name] = str(folder / f"{name}.exe")
+    return out
 
 
 _TOOLS = fake_tool_files("mkvmerge", "deezy", "dee", "truehdd", "qaac64", "ffmpeg")

@@ -215,6 +215,7 @@
   const LOOK: Record<ToolStatus, { icon: typeof CheckIcon; tone: string; text: string }> = {
     ok: { icon: CheckIcon, tone: 'text-success', text: 'found' },
     unknown: { icon: TriangleAlertIcon, tone: 'text-warning', text: 'found, no version' },
+    unsupported: { icon: XIcon, tone: 'text-destructive', text: 'unsupported version' },
     missing: { icon: XIcon, tone: 'text-destructive', text: 'missing' },
     broken: { icon: XIcon, tone: 'text-destructive', text: "won't start" },
   }
@@ -969,7 +970,8 @@
               </div>
               <p class="text-xs text-muted-foreground">
                 VideoForge can't include Dolby Encoding Engine or qaac's CoreAudioToolbox, so install them yourself and
-                set them here. DDP encodes need DeeZy and DEE, plus truehdd for Atmos. AAC encodes need ffmpeg and qaac.
+                set them here. DDP encodes need DeeZy 2 and the DEE 6.7 tools folder, plus truehdd for Atmos; dee_shim
+                adds DDP 7.1 and the 7.1 Atmos modes. AAC encodes need ffmpeg and qaac.
               </p>
             </section>
           {:else}

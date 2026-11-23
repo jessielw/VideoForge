@@ -21,7 +21,7 @@ provider = "Python dependency: pymediainfo (uv.lock), including its Windows libr
 [[external]]
 name = "Dolby Encoding Engine"
 provides = ["dee"]
-provider = "User supplied: tools/DEE/dee.exe and its license; required for DeeZy DDP / Atmos"
+provider = "User supplied: the DEE 6.7 tools folder, tools/DEE/, with its license; required for DeeZy DDP / Atmos"
 
 [[external]]
 name = "Apple CoreAudioToolbox"
@@ -228,6 +228,20 @@ url = "https://raw.githubusercontent.com/truehdd/truehdd/0.6.3/NOTICE"
 sha256 = "890e1719d44d434c6433f2dcf0ab8affe5e028552095fc65a7b560f432710f98"
 
 [[tool]]
+name = "dee_shim"
+version = "0.3.0"
+license = "Apache-2.0; see LICENSE, NOTICE and THIRD_PARTY_LICENSES.txt"
+source = "https://github.com/truehdd/dee-shim/tree/v0.3.0"
+purpose = "Runs the DEE 6.7 tools for DeeZy: DDP 7.1, the 7.1 Atmos modes and faster Atmos encodes"
+[tool.windows]
+url = "https://github.com/truehdd/dee-shim/releases/download/v0.3.0/dee-shim-0.3.0-2ae7f95-windows-x86_64.zip"
+sha256 = "58412bc915ad9de430f04db70a77df04a29923f0d4cf7537734ec44fa1f98c95"
+directory = "dee_shim"
+prefix = "dee-shim-0.3.0-2ae7f95-windows-x86_64"
+include = ["dee_shim.exe", "LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.txt"]
+executables = { dee_shim = "dee_shim.exe" }
+
+[[tool]]
 name = "qaac"
 version = "v3.07"
 license = "Public domain and dependency licenses; see COPYING"
@@ -298,7 +312,7 @@ executables = {}
 container = { offset = 685168, size = 18084433, member = "a4" }
 installer_files = { "LICENSE.rtf" = "u4" }
 # Destinations of native executables and dynamically loaded plugins.
-deploy = ["GPAC", "dovi_tool", "hdr10plus_tool", "truehdd", "vs-plugins"]
+deploy = ["GPAC", "dovi_tool", "hdr10plus_tool", "truehdd", "dee_shim", "vs-plugins"]
 [tool.windows.files]
 "concrt140.dll" = "concrt140.dll_amd64"
 "msvcp140.dll" = "msvcp140.dll_amd64"

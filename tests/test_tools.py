@@ -9,16 +9,18 @@ from conftest import audio, plan_for, source, sub
 
 from videoforge.core import tools
 from videoforge.core.config import AppConfig, Tools, with_tools
-from videoforge.core.dee import split_folder
+from videoforge.core.dee import folder as dee_folder
 from videoforge.core.models import AudioAction, AudioCodec as C, Severity, SubFormat
 from videoforge.core.tools import (
     TOOL_NAMES,
     TOOLS,
+    ToolInfo,
     ToolStatus,
     check,
     detect,
     missing_for_encodes,
     tool_issues,
+    unsupported,
     version_line,
 )
 
@@ -39,15 +41,15 @@ def test_version_lines_from_real_tool_output():
 
 
 def test_check_tries_each_command_until_a_version(tmp_path):
-    exe = tmp_path / "dee.exe"
+    exe = tmp_path / "tool.exe"
     exe.write_bytes(b"")
     calls = []
 
     def runner(argv, _timeout):
         calls.append(list(argv[1:]))
-        return "Unknown option --version" if argv[1:] else "Dolby Encoding Engine\nVersion 5.2.1\n"
+        return "Unknown option --version" if argv[1:] else "Some Tool\nVersion 5.2.1\n"
 
-    c = check(INFO["dee"], str(exe), runner=runner)
+    c = check(ToolInfo("tool", "Tool", "", (("--help",), ())), str(exe), runner=runner)
     assert calls == [["--help"], []]
     assert (c.status, c.version, c.found) == (ToolStatus.OK, "Version 5.2.1", str(exe))
 
@@ -89,15 +91,22 @@ def test_missing_broken_and_unknown(tmp_path):
 
 
 def test_a_folder_or_a_file_that_cant_run_says_why(tmp_path):
-    c = check(INFO["dee"], str(tmp_path))
+    c = check(INFO["x264"], str(tmp_path))
     assert (c.status, c.detail) == (ToolStatus.MISSING, "This is a folder. Choose the program in it")
-    exe = tmp_path / "dee"
+    c = check(INFO["dee"], str(tmp_path))
+    assert (c.status, c.detail) == (ToolStatus.MISSING, "No DEE 6.7 tools (dee_ddp_encoder) in this folder")
+    exe = tmp_path / "x264"
     exe.write_bytes(b"")
+    c = check(INFO["dee"], str(exe))  # a program, but not in a DEE tools folder
+    assert (c.status, c.detail) == (
+        ToolStatus.MISSING,
+        "Choose the DEE 6.7 tools folder (the one with dee_ddp_encoder)",
+    )
 
     def denied(_argv, _timeout):
         raise PermissionError(13, "Permission denied")
 
-    c = check(INFO["dee"], str(exe), runner=denied)
+    c = check(INFO["x264"], str(exe), runner=denied)
     assert c.status is ToolStatus.BROKEN
     assert ("Permission denied" in c.detail) is (sys.platform == "win32")  # elsewhere it's put in plain words
     assert ("chmod" in c.detail) is (sys.platform != "win32")
@@ -228,53 +237,95 @@ def test_with_tools_layers_paths_and_brings_mkvpropedit(tmp_path):
     assert with_tools(base, {"ffmpeg": "ff/ffmpeg.exe", "ffprobe": "fp"}, tmp_path).tools.ffprobe == "fp"
 
 
-def test_dee_split_encoders_folder_is_found_and_asked_for_a_version(tmp_path, monkeypatch):
-    marker = tmp_path / "dee_ddp_encoder.exe"
-    marker.write_bytes(b"")
+DEE_HELP = (
+    "Dolby Digital Plus encoder.\nSupported channel configurations: 1.0, 2.0, 5.1 and 7.1.\n\n"
+    "This tool belongs to the Dolby Encoding Engine version {}\nInterface version: 2.0.0 (Oct 27 2026):\n"
+)
+
+
+def _dee(tmp_path):
+    folder = tmp_path / "dee"
+    folder.mkdir()
+    (folder / "dee_ddp_encoder.exe").write_bytes(b"")
+    return folder
+
+
+def test_dee_is_a_tools_folder_asked_for_its_version(tmp_path, monkeypatch):
+    folder = _dee(tmp_path)
     calls = []
 
     def runner(argv, _timeout):
-        calls.append(argv[0])
-        return "dee_ddp_encoder Version 6.0.0\n"
+        calls.append(argv)
+        return DEE_HELP.format("6.7.0+8e353f99")
 
-    c = check(INFO["dee"], str(tmp_path), runner=runner)
-    assert (c.status, c.found, calls) == (ToolStatus.OK, str(tmp_path), [str(marker)])
+    c = check(INFO["dee"], str(folder), runner=runner)
+    assert (c.status, c.found, c.version) == (
+        ToolStatus.OK,
+        str(folder),
+        "Dolby Encoding Engine version 6.7.0+8e353f99",  # not the channel line, which also has numbers
+    )
+    assert calls == [[str(folder / "dee_ddp_encoder.exe"), "--help"]]
+    c = check(INFO["dee"], str(folder), runner=lambda *_: DEE_HELP.format("5.7.2.aec4fa9c-master"))
+    assert (c.status, c.detail) == (ToolStatus.UNSUPPORTED, "DeeZy 2 needs DEE 6.7")
 
-    # a bare "dee" with only the split encoders on PATH resolves to their folder
+    # one of its tools, or an old dee.exe that isn't there any more, means the folder
+    assert dee_folder(str(folder / "dee_ddp_encoder.exe")) == str(folder)
+    assert dee_folder(str(folder / "dee.exe")) == str(folder)
+    assert dee_folder(str(tmp_path / "dee.exe")) == ""
+    # a bare "dee" (Docker) finds the folder on PATH by its dee_ddp_encoder
+    marker = folder / "dee_ddp_encoder"
+    marker.write_bytes(b"")
     marker.chmod(0o755)  # PATH lookup wants an executable file on POSIX
-    monkeypatch.setenv("PATH", str(tmp_path))
-    assert split_folder("dee") == str(tmp_path)
-    for name in ("dee", "dee.exe"):  # PATHEXT finds the .exe on Windows, the bare name on POSIX
-        single = tmp_path / name
-        single.write_bytes(b"")
-        single.chmod(0o755)
-    assert split_folder("dee") == ""  # a single dee wins
+    monkeypatch.setenv("PATH", str(folder))
+    assert dee_folder("dee") == str(folder)
 
 
-def test_dee_split_encoder_file_means_its_folder(tmp_path):
-    exe = tmp_path / "dee_ddp_encoder.exe"
-    exe.write_bytes(b"")
-    assert split_folder(str(exe)) == str(tmp_path)
+def test_versions_deezy_2_wont_run():
+    assert unsupported("deezy", "DeeZy 1.5.0") == "VideoForge needs DeeZy 2.0 or newer"
+    assert unsupported("deezy", "DeeZy 2.0.0b2") == ""
+    assert unsupported("dee_shim", "dee_shim v0.2.1+gc1141a0") == "DeeZy needs dee_shim 0.3.0 or newer"
+    assert unsupported("dee_shim", "dee_shim v0.3.0+g2ae7f95") == ""
+    assert unsupported("dee", "Dolby Encoding Engine version 6.7.1+0") == ""
+    assert unsupported("dee", "Dolby Encoding Engine version 5.7.2.aec4fa9c-master") == "DeeZy 2 needs DEE 6.7"
+    assert unsupported("deezy", "no version") == "" and unsupported("x264", "x264 0.1") == ""
 
 
-def test_dee_issues_gate_split_only_options(tmp_path):
+def test_dee_issues_block_unsupported_versions_and_loudness_mixes(tmp_path, monkeypatch):
+    from dataclasses import replace
     from types import SimpleNamespace as NS
 
     from videoforge.core.tools import _dee_issues
 
-    (tmp_path / "dee_ddp_encoder.exe").write_bytes(b"")
-    single = tmp_path / "single"
-    single.mkdir()
-    (single / "dee.exe").write_bytes(b"")
-    loud = NS(action=AudioAction.DDP, options={"loudness_target": "-24"}, out_layout=NS(channels=6))
-    assert _dee_issues(NS(audio=[loud]), NS(dee=str(tmp_path))) == []
-    assert [i.severity for i in _dee_issues(NS(audio=[loud]), NS(dee=str(single / "dee.exe")))] == [Severity.WARN]
+    folder = _dee(tmp_path)
+    deezy, shim = tmp_path / "deezy.exe", tmp_path / "dee_shim.exe"
+    deezy.write_bytes(b"")
+    shim.write_bytes(b"")
+    said = {
+        str(deezy): "DeeZy 2.0.0b2",
+        str(folder / "dee_ddp_encoder.exe"): DEE_HELP.format("6.7.0+8e353f99"),
+        str(shim): "dee_shim v0.3.0+g2ae7f95",
+    }
+    monkeypatch.setattr(tools, "_run", lambda argv, _t: said[argv[0]])
+    cfg = Tools(mkvmerge="", deezy=str(deezy), dee=str(folder), truehdd="", qaac="", ffmpeg="", dee_shim=str(shim))
+    ddp = NS(action=AudioAction.DDP, options={"loudness_target": "-24"}, out_layout=NS(channels=6))
+    assert _dee_issues(NS(audio=[ddp]), cfg) == []
     bad = NS(
         action=AudioAction.DDP,
         options={"loudness_target": "-24", "dialnorm": "-27", "ddp_mode": "bluray"},
         out_layout=NS(channels=8),
     )
-    assert [i.severity for i in _dee_issues(NS(audio=[bad]), NS(dee=str(tmp_path)))] == [Severity.BLOCK] * 2
+    assert [i.severity for i in _dee_issues(NS(audio=[bad]), cfg)] == [Severity.BLOCK] * 2
+
+    old = tmp_path / "old_shim.exe"
+    old.write_bytes(b"")
+    said[str(old)] = "dee_shim v0.2.1+gc1141a0"
+    issues = _dee_issues(NS(audio=[ddp]), replace(cfg, dee_shim=str(old)))
+    assert [(i.severity, i.code) for i in issues] == [(Severity.BLOCK, "tools.version")]
+    assert issues[0].message == (
+        "DDP (DEE): DeeZy needs dee_shim 0.3.0 or newer, not dee_shim v0.2.1+gc1141a0. Set dee_shim in Settings › Tools"
+    )
+    copy = NS(action=AudioAction.COPY, options={}, out_layout=NS(channels=6))
+    assert _dee_issues(NS(audio=[copy]), replace(cfg, dee_shim=str(old))) == []  # no DeeZy encode
 
 
 def test_friendly_errors_for_tools_that_cannot_start(monkeypatch):

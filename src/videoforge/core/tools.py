@@ -3,6 +3,9 @@
 detect() runs every tool's version command in parallel (with a timeout) and keeps
 the first output line that looks like a version, so the Settings page can show
 "mkvmerge v100.0 ('...') 64-bit" next to the path it found.
+
+DeeZy 2 runs only DEE 6.7 (a folder of tools) and, when it is given one, dee_shim 0.3.0 or newer: a version it
+would refuse is UNSUPPORTED here and blocks the encodes that need it (dee_issues).
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ import subprocess
 
 from videoforge.core import dee
 from videoforge.core.config import Tools, wine_target
-from videoforge.core.execute.audio import ENCODES, SPLIT_ONLY_OPTIONS
+from videoforge.core.execute.audio import ENCODES
 from videoforge.core.execute.mux import MUXERS
 from videoforge.core.models import AudioAction, Issue, Plan, Severity, SubFormat
 
@@ -39,6 +42,7 @@ class ToolInfo:
     purpose: str
     args: tuple[tuple[str, ...], ...] = (("--version",),)  # tried in order until one prints a version
     folder: bool = False  # a folder (the VapourSynth plugins), not a program
+    pattern: re.Pattern[str] | None = None  # the version is this match in the output, not the first version line
 
 
 TOOLS: tuple[ToolInfo, ...] = (
@@ -71,11 +75,20 @@ TOOLS: tuple[ToolInfo, ...] = (
     ),
     ToolInfo("qaac", "qaac", "AAC encoder (needs Apple's CoreAudioToolbox)", (("--check",),)),
     ToolInfo("opusenc", "opusenc", "Opus encoder (opus-tools)"),
-    ToolInfo("deezy", "DeeZy", "Runs DEE for DDP and DDP Atmos encodes"),
+    ToolInfo("deezy", "DeeZy", "Runs DEE for DDP and DDP Atmos encodes (DeeZy 2)"),
     ToolInfo(
-        "dee", "Dolby Encoding Engine", "DDP / Atmos encoder used by DeeZy (not redistributable)", (("--help",), ())
+        "dee",
+        "Dolby Encoding Engine",
+        "The DEE 6.7 tools folder DeeZy encodes DDP / Atmos with (not redistributable)",
+        (("--help",),),
+        pattern=dee.VERSION,
     ),
     ToolInfo("truehdd", "truehdd", "Decodes TrueHD Atmos for DDP Atmos encodes"),
+    ToolInfo(
+        "dee_shim",
+        "dee_shim",
+        "Optional, for DeeZy: DDP 7.1 and the 7.1 Atmos modes need it, and Atmos encodes run through it (faster)",
+    ),
     ToolInfo("dovi_tool", "dovi_tool", "Carries a source's Dolby Vision metadata (RPU) into the encode"),
     ToolInfo("hdr10plus_tool", "hdr10plus_tool", "Carries a source's HDR10+ metadata into the encode"),
 )
@@ -85,6 +98,7 @@ TOOL_NAMES = tuple(t.name for t in TOOLS)
 class ToolStatus(StrEnum):
     OK = "ok"  # found, and it printed a version
     UNKNOWN = "unknown"  # found and it ran, but no version line
+    UNSUPPORTED = "unsupported"  # found, but a version DeeZy 2 won't run (detail says which it needs)
     MISSING = "missing"  # not at that path, not on PATH
     BROKEN = "broken"  # found, but it wouldn't start
 
@@ -138,7 +152,7 @@ def missing_for_encodes(tools: Tools) -> dict[AudioAction, list[str]]:
     """Each audio encode's missing tools (by label), from execute.audio.ENCODES; an empty list =
     it can run. Looks for the files, and asks ffmpeg (once per build) which encoders it has."""
     paths = asdict(tools)
-    gone = {name: not locate(paths[name]) for name in {n for e in ENCODES.values() for n in e.tools}}
+    gone = {name: not find(name, paths[name]) for name in {n for e in ENCODES.values() for n in e.tools}}
     have = None if gone.get("ffmpeg", True) else ffmpeg_encoders(tools.ffmpeg)
     out: dict[AudioAction, list[str]] = {}
     for action, e in ENCODES.items():
@@ -185,32 +199,33 @@ def tool_issues(plan: Plan, tools: Tools, container: str = "mkv") -> list[Issue]
 
 
 def _dee_issues(plan: Plan, tools: Tools) -> list[Issue]:
-    """DeeZy 1.5 options that depend on the DEE layout: loudness target, peak limit and user data need the split
-    encoders (WARN on the single dee: they are left out); a loudness target can't be combined with a dialnorm or
-    Blu-ray DDP, which DeeZy refuses (BLOCK)."""
-    split = bool(dee.split_folder(tools.dee))
+    """DeeZy's encodes: a DeeZy, DEE or dee_shim version DeeZy 2 won't run blocks them (dee_shim too, since VideoForge
+    hands DeeZy any dee_shim it finds); a loudness target can't be combined with a dialnorm, Blu-ray DDP or 7.1."""
+    deezy = [a for a in plan.audio if a.action is not AudioAction.COPY and "deezy" in ENCODES[a.action].tools]
+    if not deezy:
+        return []
     issues = []
-    for a in plan.audio:
-        if a.action is not AudioAction.DDP:
-            continue
-        used = [k for k in SPLIT_ONLY_OPTIONS if a.options.get(k)]
-        if used and not split:
+    label = ", ".join(dict.fromkeys(ENCODES[a.action].label for a in deezy))
+    for c in checks(tools, ("deezy", "dee", "dee_shim")).values():
+        if c is not None and c.status is ToolStatus.UNSUPPORTED:
             issues.append(
                 Issue(
-                    Severity.WARN,
-                    "tools.dee_split",
-                    f"{ENCODES[a.action].label}: {', '.join(used)} need the split DEE encoders, so they're left out",
+                    Severity.BLOCK,
+                    "tools.version",
+                    f"{label}: {c.detail}, not {c.version}. Set {c.label} in Settings › Tools",
                 )
             )
-        if split and a.options.get("loudness_target"):
-            if a.options.get("dialnorm", "0") not in ("", "0"):
-                issues.append(
-                    Issue(Severity.BLOCK, "tools.dee_split", "A loudness target can't be combined with a dialnorm")
-                )
-            if a.options.get("ddp_mode") == "bluray" or a.out_layout.channels > 6:
-                issues.append(
-                    Issue(Severity.BLOCK, "tools.dee_split", "A loudness target isn't available for Blu-ray DDP / 7.1")
-                )
+    for a in deezy:
+        if a.action is not AudioAction.DDP or not a.options.get("loudness_target"):
+            continue
+        if a.options.get("dialnorm", "0") not in ("", "0"):
+            issues.append(
+                Issue(Severity.BLOCK, "tools.dee_loudness", "A loudness target can't be combined with a dialnorm")
+            )
+        if a.options.get("ddp_mode") == "bluray" or a.out_layout.channels > 6:
+            issues.append(
+                Issue(Severity.BLOCK, "tools.dee_loudness", "A loudness target isn't available for Blu-ray DDP / 7.1")
+            )
     return issues
 
 
@@ -247,7 +262,36 @@ def locate(path: str) -> str:
         return ""
     if Path(path).is_file():
         return path
-    return shutil.which(path) or dee.split_folder(path)
+    return shutil.which(path) or ""
+
+
+def find(name: str, path: str) -> str:
+    """Where a tool's configured path leads ("" when nowhere): the DEE tools folder for dee, else the program."""
+    return dee.folder(path) if name == "dee" else locate(path)
+
+
+# The oldest of each that works with VideoForge's DeeZy arguments: (major, minor, patch), and why.
+_MINIMUM = {
+    "deezy": ((2, 0, 0), "VideoForge needs DeeZy 2.0 or newer"),
+    "dee_shim": ((0, 3, 0), "DeeZy needs dee_shim 0.3.0 or newer"),
+}
+
+
+def _numbers(version: str) -> tuple[int, ...] | None:
+    match = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", version)
+    return tuple(int(g or 0) for g in match.groups()) if match else None
+
+
+def unsupported(name: str, version: str) -> str:
+    """Why DeeZy 2 won't run this version of a tool ("" when it will, or for a version it can't read)."""
+    if name == "dee":
+        found = dee.version(version)
+        return f"DeeZy 2 needs DEE {dee.SUPPORTED}" if found and not dee.supported(found) else ""
+    if name in _MINIMUM:
+        least, why = _MINIMUM[name]
+        numbers = _numbers(version)
+        return why if numbers is not None and numbers < least else ""
+    return ""
 
 
 def x265_avx512(path: str) -> bool | None:
@@ -346,13 +390,10 @@ def check(info: ToolInfo, path: str, *, runner: Runner = _run, timeout: float = 
 def _check(info: ToolInfo, path: str, *, runner: Runner, timeout: float) -> ToolCheck:
     if info.folder:
         return _plugins(path)
-    found = locate(path)
+    found = find(info.name, path)
     base = (info.name, info.label, info.purpose, path)
     if not found:
-        detail = (
-            "This is a folder. Choose the program in it" if Path(path).is_dir() else "Not found at this path or on PATH"
-        )
-        return ToolCheck(*base, "", ToolStatus.MISSING, detail=detail)
+        return ToolCheck(*base, "", ToolStatus.MISSING, detail=_missing(info.name, path))
     output, error = "", ""
     for args in info.args:
         try:
@@ -361,12 +402,30 @@ def _check(info: ToolInfo, path: str, *, runner: Runner, timeout: float) -> Tool
             error = f"{type(e).__name__}: {e}"
             error = _friendly_error(e, found) or error
             continue
-        if line := version_line(output):
+        if line := _version(info, output):
+            if why := unsupported(info.name, line):
+                return ToolCheck(*base, found, ToolStatus.UNSUPPORTED, version=line, detail=why)
             return ToolCheck(*base, found, ToolStatus.OK, version=line)
     if error and not output:
         return ToolCheck(*base, found, ToolStatus.BROKEN, detail=error)
     first = next((ln.strip() for ln in output.splitlines() if ln.strip()), "")
     return ToolCheck(*base, found, ToolStatus.UNKNOWN, detail=first[:160])
+
+
+def _missing(name: str, path: str) -> str:
+    p = Path(path)
+    if name == "dee" and p.is_dir():
+        return f"No DEE {dee.SUPPORTED} tools ({dee.MARKER}) in this folder"
+    if name == "dee" and p.is_file():
+        return f"Choose the DEE {dee.SUPPORTED} tools folder (the one with {dee.MARKER})"
+    return "This is a folder. Choose the program in it" if p.is_dir() else "Not found at this path or on PATH"
+
+
+def _version(info: ToolInfo, output: str) -> str:
+    if info.pattern is None:
+        return version_line(output)
+    match = info.pattern.search(output)
+    return match.group(0) if match else ""
 
 
 def detect(tools: Tools, *, runner: Runner = _run, timeout: float = 8.0) -> list[ToolCheck]:
@@ -376,27 +435,36 @@ def detect(tools: Tools, *, runner: Runner = _run, timeout: float = 8.0) -> list
         return list(pool.map(lambda info: check(info, paths[info.name], runner=runner, timeout=timeout), TOOLS))
 
 
-_VERSIONS: dict[tuple[str, str, int], str] = {}  # (tool, file, mtime ns) -> version line
+_CHECKS: dict[tuple[str, str, int], ToolCheck] = {}  # (tool, file, mtime ns) -> its check
 
 
-def versions(tools: Tools, names: Sequence[str], *, runner: Runner = _run, timeout: float = 8.0) -> dict[str, str]:
-    """The version line of each named tool ("" when it printed none or is missing), cached per file
-    and mtime so a queue of jobs asks each tool once."""
+def checks(
+    tools: Tools, names: Sequence[str], *, runner: Runner | None = None, timeout: float = 8.0
+) -> dict[str, ToolCheck | None]:
+    """Each named tool's check (None when it is missing), cached per file and mtime so a queue of jobs asks each
+    tool once. DEE's file is its folder's dee_ddp_encoder."""
     paths = asdict(tools)
     infos = {t.name: t for t in TOOLS if not t.folder}
-    out: dict[str, str] = {}
+    out: dict[str, ToolCheck | None] = {}
     for name in names:
         info = infos.get(name)
-        found = locate(paths.get(name, "")) if info else ""
+        found = find(name, paths.get(name, "")) if info else ""
+        out[name] = None
         if info is None or not found:
-            out[name] = ""
             continue
         try:
-            key = (name, os.path.normcase(os.path.abspath(found)), Path(found).stat().st_mtime_ns)
+            key = (name, os.path.normcase(os.path.abspath(found)), Path(dee.program(found)).stat().st_mtime_ns)
         except OSError:
-            out[name] = ""
             continue
-        if key not in _VERSIONS:
-            _VERSIONS[key] = check(info, found, runner=runner, timeout=timeout).version
-        out[name] = _VERSIONS[key]
+        if key not in _CHECKS:
+            _CHECKS[key] = check(info, found, runner=runner or _run, timeout=timeout)
+        out[name] = _CHECKS[key]
     return out
+
+
+def versions(
+    tools: Tools, names: Sequence[str], *, runner: Runner | None = None, timeout: float = 8.0
+) -> dict[str, str]:
+    """The version line of each named tool ("" when it printed none or is missing), cached as checks() is."""
+    found = checks(tools, names, runner=runner, timeout=timeout)
+    return {name: c.version if c is not None else "" for name, c in found.items()}
