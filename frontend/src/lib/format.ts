@@ -1,5 +1,6 @@
 import type {
   EncodeOptionInfo,
+  JobSummary,
   PreviewStage,
   Priority,
   Progress,
@@ -348,6 +349,37 @@ export function clipLength(frames: number, fpsNum: number, fpsDen: number): stri
   const s = Math.floor(ms / 1000) % 60
   const pad = (n: number, w = 2) => String(n).padStart(w, '0')
   return `${h}:${pad(m)}:${pad(s)}.${pad(ms % 1000, 3)}`
+}
+
+export type FactKey = 'resolution' | 'length' | 'interlaced' | 'hdr' | 'encoder' | 'extras' | 'audio' | 'subs'
+/** One fact of a job's facts line, as shown; `tags` is the HDR set (shown as badges). */
+export interface Fact {
+  key: FactKey
+  text: string
+  tags?: string[]
+}
+
+/** A job's facts, in the order its row shows them; one it has no value for (or no source facts yet) is left out. */
+export function jobFacts(job: JobSummary): Fact[] {
+  const f = job.source_facts
+  const c = job.crop
+  const facts: unknown[] = [
+    f && { key: 'resolution', text: sizeLabel(f.resolution) },
+    !!f?.duration_ms && { key: 'length', text: duration(f.duration_ms / 1000) },
+    f?.interlaced && { key: 'interlaced', text: 'interlaced' },
+    !!f?.hdr.length && { key: 'hdr', text: f.hdr.join(' '), tags: f.hdr },
+    { key: 'encoder', text: job.encoder },
+    job.custom_script
+      ? { key: 'extras', text: 'custom script' }
+      : c &&
+        !!(c.top || c.bottom || c.left || c.right) && {
+          key: 'extras',
+          text: `crop ${c.left}/${c.top}/${c.right}/${c.bottom}`,
+        },
+    { key: 'audio', text: `${job.audio.length} audio` },
+    { key: 'subs', text: `${job.subs} subs` },
+  ]
+  return facts.filter(Boolean) as Fact[]
 }
 
 /** "1 job", "3 jobs": a count with a regular "s" plural. */

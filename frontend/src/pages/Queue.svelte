@@ -18,6 +18,7 @@
     queueSlots,
     queueable,
     slotPage,
+    sharedFacts,
     QUEUE_PAGE_SIZE,
     movedQueue,
     sameQueue,
@@ -71,21 +72,21 @@
   import { pastedPaths, pathDrop } from '../lib/dropPaths.svelte'
   import {
     bytes,
-    duration,
     issueCounts,
+    jobFacts,
     percent,
     plural,
     PRIORITY_LABEL,
     progressTimes,
-    sizeLabel,
     STATUS_LABEL,
     STATUS_TONE,
+    type Fact,
   } from '../lib/format'
   import { router } from '../lib/router.svelte'
   import { layout } from '../lib/layout.svelte'
   import { reuseQuestion } from '../lib/reuse.svelte'
   import { app } from '../lib/state.svelte'
-  import type { EncoderSettings, JobDetail, Priority, Status } from '../lib/types'
+  import type { EncoderSettings, JobDetail, JobSummary, Priority, Status } from '../lib/types'
 
   let selected = $state<string[]>([])
   let anchor = $state<string | null>(null)
@@ -497,16 +498,20 @@
   // The header's counts: its jobs (or how many match), then how many are done and failed, when any are.
   const groupCounts = (row: QueueRow & { kind: 'group' }, done: number, failed: number) => {
     const n = row.members.length
-    const parts = [
-      {
-        text: row.matching.length < n ? `${row.matching.length} of ${n} match` : `${n} ${n === 1 ? 'job' : 'jobs'}`,
-        tone: '',
-      },
-    ]
+    const parts: { text: string; tone: string }[] = []
+    if (row.matching.length < n) parts.push({ text: `${row.matching.length} of ${n} match`, tone: '' })
+    // The default name is the count, so the count isn't said twice.
+    else if (row.name !== `${n} jobs`) parts.push({ text: plural(n, 'job'), tone: '' })
     if (done) parts.push({ text: done === n ? 'all done' : `${done} done`, tone: done === n ? 'text-success' : '' })
     if (failed) parts.push({ text: `${failed} failed`, tone: 'text-destructive' })
     return parts
   }
+  // The facts each group's jobs share: its header shows them once, and its rows leave them out.
+  const sharedByGroup = $derived.by(() => {
+    const members = new Map<string, JobSummary[]>()
+    for (const j of app.jobs) if (j.group) members.set(j.group, [...(members.get(j.group) ?? []), j])
+    return new Map([...members].map(([group, jobs]) => [group, sharedFacts(jobs.map(jobFacts))]))
+  })
   // A collapsed group whose jobs are all selected shows as selected: its rows, which would, are hidden.
   const groupSelected = (row: QueueRow & { kind: 'group' }) =>
     row.collapsed && row.matching.length > 0 && row.matching.every((j) => selectedSet.has(j.id))
@@ -1302,6 +1307,24 @@
             </Tip>
           {/if}
         {/snippet}
+        <!-- One line that ends in an ellipsis at the list's edge. All of it stays in the DOM and in the tip. The
+             tags have no tips of their own (a tip inside this one): the Dolby Vision note is in this one. -->
+        {#snippet factsLine(facts: Fact[], margin: string)}
+          <Tip
+            class="readout {margin} block h-5 truncate text-xs leading-5 text-muted-foreground"
+            text={facts.flatMap((f) => f.tags ?? f.text).join(' · ') +
+              (facts.some((f) => f.tags?.some((n) => n.endsWith('?'))) ? '\n' + DV7_NOTE : '')}
+            >{#each facts as fact, n (fact.key)}{#if n && !fact.tags}{' · '}{/if}{#if fact.tags}{#each fact.tags as name (name)}{' '}<Badge
+                    variant="outline"
+                    class="inline-flex px-1 py-0 align-middle text-xs font-normal {name.endsWith('?')
+                      ? 'border-warning/40 text-warning'
+                      : ''}">{name}</Badge
+                  >{/each}{:else}<span>{fact.text}</span
+                >{/if}{/each}{#if facts.some((f) => f.tags?.some((n) => n.endsWith('?')))}<span class="sr-only"
+                >{'. ' + DV7_NOTE}</span
+              >{/if}</Tip
+          >
+        {/snippet}
         {#snippet dropLine(i: number)}
           {#if reordering?.drop && reordering.drop.row === i && reordering.drop.edge !== 'inside'}
             <!-- Indented (from the jobs' names): into the group; full width, with its dot at the edge: outside. -->
@@ -1331,9 +1354,12 @@
             {@const failed = groupFailed(row)}
             {@const outside = selectedOutside(row.group)}
             {@const inside = selectedInside(row.group)}
+            {@const shared = sharedByGroup.get(row.group)}
+            {@const sharedLine =
+              row.members[0] && shared ? jobFacts(row.members[0]).filter((f) => shared.has(f.key)) : []}
             <div
               data-row={i}
-              class="relative flex h-10 items-center gap-1 border-b border-border/60 pl-2 text-sm
+              class="relative flex min-h-10 items-center gap-1 border-b border-border/60 pl-2 text-sm
               {groupSelected(row) ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]' : 'bg-muted/40'}
               {reordering?.drop?.row === i && reordering.drop.edge === 'inside' ? 'ring-2 ring-primary ring-inset' : ''}
               {moving.size && row.members.every((j) => moving.has(j.id)) ? 'opacity-50' : ''}"
@@ -1377,6 +1403,7 @@
                     {/each}
                   </span>
                 </span>
+                {#if sharedLine.length}{@render factsLine(sharedLine, 'mt-0')}{/if}
               </button>
               {#if progress !== null}
                 <!-- On the bottom edge, so a job starting doesn't change the header's height. -->
@@ -1430,15 +1457,8 @@
           {:else}
             {@const job = row.job}
             {@const queued = job.status === 'queued' || job.status === 'running'}
-            {@const f = job.source_facts}
-            {@const size = f
-              ? `${sizeLabel(f.resolution)}${f.duration_ms ? ` · ${duration(f.duration_ms / 1000)}` : ''}${f.interlaced ? ' · interlaced' : ''}`
-              : ''}
-            {@const crop =
-              job.crop && (job.crop.top || job.crop.bottom || job.crop.left || job.crop.right)
-                ? ` · crop ${job.crop.left}/${job.crop.top}/${job.crop.right}/${job.crop.bottom}`
-                : ''}
-            {@const rest = `${job.encoder}${job.custom_script ? ' · custom script' : crop} · ${job.audio.length} audio · ${job.subs} subs`}
+            {@const shared = sharedByGroup.get(row.group)}
+            {@const facts = jobFacts(job).filter((f) => !shared?.has(f.key))}
             <div
               data-row={i}
               class="relative flex border-b border-border/60 {row.group ? 'pl-4' : ''} {selectedSet.has(job.id)
@@ -1494,11 +1514,15 @@
                     {/if}
                     {#if job.status === 'warn'}
                       <span class="whitespace-nowrap {STATUS_TONE.warn}"
-                        ><IssueCounts counts={{ block: 0, warn: job.issue_counts.warn }} /></span
+                        >{#if job.issue_counts.warn}<IssueCounts
+                            counts={{ block: 0, warn: job.issue_counts.warn }}
+                          />{:else}{STATUS_LABEL.warn}{/if}</span
                       >
                     {:else if job.status === 'blocked'}
                       <span class="whitespace-nowrap {STATUS_TONE.blocked}"
-                        ><IssueCounts counts={{ block: job.issue_counts.block, warn: 0 }} /></span
+                        >{#if job.issue_counts.block}<IssueCounts
+                            counts={{ block: job.issue_counts.block, warn: 0 }}
+                          />{:else}{STATUS_LABEL.blocked}{/if}</span
                       >
                       {@render mark(job.issue_counts.warn, false)}
                     {:else}
@@ -1517,19 +1541,18 @@
                     {/if}
                   </div>
                 </div>
-                <!-- One line that ends in an ellipsis at the list's edge. All of it stays in the DOM and in the tip. The
-                     tags have no tips of their own (a tip inside this one): the Dolby Vision note is in this one. -->
-                <Tip
-                  class="readout mt-0.5 block h-5 truncate text-xs leading-5 text-muted-foreground"
-                  text={[f && size, ...(f?.hdr ?? []), rest].filter(Boolean).join(' · ') +
-                    (f?.hdr.some((n) => n.endsWith('?')) ? '\n' + DV7_NOTE : '')}
-                  >{#if f}<span>{size}</span>{#each f.hdr as name (name)}{' '}<Badge
-                        variant="outline"
-                        class="inline-flex px-1 py-0 align-middle text-xs font-normal {name.endsWith('?')
-                          ? 'border-warning/40 text-warning'
-                          : ''}">{name}</Badge
-                      >{/each}<span> · </span>{/if}<span>{rest}</span></Tip
-                >
+                {#if facts.length}{@render factsLine(facts, 'mt-0.5')}{/if}
+                {#if shared?.size}
+                  <!-- The header shows these once; a screen reader hears each row whole (the header's name is its own). -->
+                  {@const common = jobFacts(job).filter((f) => shared.has(f.key))}
+                  <span class="sr-only"
+                    >{'· ' + common.flatMap((f) => f.tags ?? f.text).join(' · ')}{common.some((f) =>
+                      f.tags?.some((n) => n.endsWith('?')),
+                    )
+                      ? '. ' + DV7_NOTE
+                      : ''}</span
+                  >
+                {/if}
                 {#if LIVE.includes(job.status) && job.progress}
                   <div class="readout mt-1.5 flex items-center gap-2 text-xs text-info">
                     <div class="h-1 flex-1 overflow-hidden rounded bg-muted">

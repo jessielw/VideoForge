@@ -1127,6 +1127,18 @@ test('queue rows show sizes with a times sign, and at 390 px the facts stay on o
   const problems = lines.filter((h) => h > 21).map((h) => `wraps: ${h}`)
   await expect(rows.first().locator('.readout')).toHaveCSS('text-overflow', 'ellipsis')
   expect(await rows.first().locator('.readout').count()).toBeGreaterThan(0)
+  // It is cut (wider than its box) with the whole text still in the DOM; the status beside the name is never cut.
+  const cut = await rows
+    .first()
+    .locator('.readout')
+    .first()
+    .evaluate((el) => [el.scrollWidth, el.clientWidth])
+  expect(cut[0]).toBeGreaterThan(cut[1])
+  await expect(rows.first().locator('.readout').first()).toContainText('4 subs')
+  const status = rows.first().getByText('Ready', { exact: true })
+  await expect(status).toHaveText('Ready')
+  const statusCut = await status.evaluate((el) => [el.scrollWidth, el.clientWidth])
+  expect(statusCut[0]).toBeLessThanOrEqual(statusCut[1])
   expect([...new Set(problems)]).toEqual([])
   expect(errors).toEqual([])
 })
@@ -1616,12 +1628,26 @@ test('a row is two lines: the name and status, then one facts line that truncate
   const rows = page.getByRole('region', { name: 'Queue list', exact: true })
   const warn = rows.locator('[data-job="job-0"]')
   await expect(warn.getByText('1 warning', { exact: true })).toBeVisible()
-  const lineHeight = await warn.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight))
+  // The row's own padding plus its two lines (the name line, the facts line and its margin), so a third line fails.
   for (const id of ['job-0', 'job-1']) {
-    expect((await rows.locator(`[data-job="${id}"]`).boundingBox())!.height).toBeLessThanOrEqual(
-      lineHeight * 2 + 16 + 4,
-    )
+    const [height, expected] = await rows.locator(`[data-job="${id}"]`).evaluate((el) => {
+      const css = getComputedStyle(el)
+      const facts = el.querySelector<HTMLElement>('.readout')!
+      return [
+        el.getBoundingClientRect().height,
+        parseFloat(css.paddingTop) +
+          parseFloat(css.paddingBottom) +
+          el.firstElementChild!.getBoundingClientRect().height +
+          facts.getBoundingClientRect().height +
+          parseFloat(getComputedStyle(facts).marginTop),
+      ]
+    })
+    expect(height).toBeLessThanOrEqual(expected + 1)
   }
+  // A Dolby Vision profile 7 row carries the note in its accessible name, once.
+  const dv7 = await rows.locator('[data-job="job-2"]').evaluate((el) => el.textContent!)
+  expect(dv7.match(/dovi_tool/g)).toHaveLength(1)
+  await expect(rows.getByRole('button', { name: /dovi_tool/ })).toHaveCount(3)
   // Queued keeps its status word and gets the compact mark, named for screen readers.
   const queued = rows.locator('[data-job="job-1"]')
   await expect(queued).toContainText('Queued')
@@ -1792,4 +1818,81 @@ test('removing one job says "Removed 1 job", and the menu says the work folders 
   await page.getByRole('menuitem', { name: 'Remove and keep work folders' }).click()
   await expect(page.getByText('Removed 1 job', { exact: true })).toBeVisible()
   expect(errors).toEqual([])
+})
+
+test("a group's shared facts show once on its header; its rows keep only their own", async ({ page }) => {
+  const facts = (i: number) => ({
+    resolution: '1920x1080',
+    duration_ms: 1_500_000 + i * 60_000,
+    hdr: [],
+    interlaced: false,
+  })
+  const fixture = await queueFixture(page, 7, ['ready'], null, null, null, facts)
+  for (const j of fixture.jobs) Object.assign(j, { encoder: 'x264 CRF 18', audio: ['a', 'b'], subs: 3 })
+  for (const j of fixture.jobs.slice(0, 6)) [j.group, j.group_name] = ['g1', 'Show S01']
+  fixture.refresh()
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  const header = list.locator('[data-row]').first()
+  await expect(header.locator('.readout').last()).toHaveText('1920×1080 · x264 CRF 18 · 2 audio · 3 subs')
+  await expect(header.locator('.readout').last()).toHaveCSS('text-overflow', 'ellipsis')
+  // Its rows show their own length and not what the header says.
+  const member = list.locator('[data-job="job-1"]')
+  await expect(member.locator('.readout')).toHaveText('26:00')
+  // A screen reader still hears the whole row: the shared facts are in its name, not on screen.
+  await expect(member).toHaveAccessibleName(/26:00 · 1920×1080 · x264 CRF 18 · 2 audio · 3 subs/)
+  // An ungrouped job keeps everything.
+  await expect(list.locator('[data-job="job-6"] .readout')).toHaveText(
+    '1920×1080 · 31:00 · x264 CRF 18 · 2 audio · 3 subs',
+  )
+  // A collapsed group still shows the shared line.
+  await list.getByRole('button', { name: 'Collapse Show S01', exact: true }).click()
+  await expect(header.locator('.readout').last()).toContainText('x264 CRF 18')
+  expect(fixture.errors).toEqual([])
+})
+
+test('a row with nothing left to say after its group is one line', async ({ page }) => {
+  const fixture = await queueFixture(page, 3, ['ready'])
+  for (const j of fixture.jobs) [j.group, j.group_name] = ['g1', 'Show S01']
+  fixture.refresh()
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  await expect(list.locator('[data-row]').first().locator('.readout').last()).toHaveText('x265 · 0 audio · 0 subs')
+  await expect(list.locator('[data-job="job-0"] .readout')).toHaveCount(0)
+})
+
+test('a group named for its count does not repeat the count in its header', async ({ page }) => {
+  const fixture = await queueFixture(page, 6, ['ready'])
+  for (const j of fixture.jobs) [j.group, j.group_name] = ['g1', '6 jobs']
+  fixture.refresh()
+  const list = page.getByRole('region', { name: 'Queue list', exact: true })
+  const header = list.locator('[data-row]').first()
+  await expect(header.getByRole('button', { name: '6 jobs: select its 6 jobs' })).toBeVisible()
+  await expect(header.getByText('6 jobs', { exact: true })).toHaveCount(1)
+  fixture.jobs[0].status = 'done'
+  fixture.refresh()
+  await expect(header).toContainText('1 done')
+  await expect(header.getByText('6 jobs', { exact: true })).toHaveCount(1)
+})
+
+test('at 390 px a group header cuts its name and shared line, never its counts', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const fixture = await queueFixture(page, 3, ['done'], null, null, null, () => ({
+    resolution: '3840x2160',
+    duration_ms: 3_600_000,
+    hdr: ['HDR10', 'DV 7.6 FEL/MEL?'],
+    interlaced: false,
+  }))
+  for (const j of fixture.jobs) [j.group, j.group_name] = ['g1', 'A season with a very long name to cut off']
+  fixture.refresh()
+  const header = page.getByRole('region', { name: 'Queue list', exact: true }).locator('[data-row]').first()
+  await expect(header.getByText('all done', { exact: true })).toBeVisible()
+  const cut = await header.evaluate((el) => {
+    const over = (e: Element) => e.scrollWidth > e.clientWidth
+    return {
+      counts: over(el.querySelector('.ml-auto')!),
+      name: over(el.querySelector('.truncate')!),
+      line: over(el.querySelector('.readout.truncate')!),
+    }
+  })
+  expect(cut).toEqual({ counts: false, name: true, line: true })
+  await expect(header.locator('.readout.truncate')).toContainText(/^3840×2160 · 1:00:00/)
 })

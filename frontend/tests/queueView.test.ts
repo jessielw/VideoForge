@@ -13,10 +13,12 @@ import {
   queueable,
   sameQueue,
   slotPage,
+  sharedFacts as sharedOf,
   QUEUE_PAGE_SIZE,
   type Dragged,
   type QueueRow,
 } from '../src/lib/queueView.ts'
+import { jobFacts } from '../src/lib/format.ts'
 import type { JobSummary } from '../src/lib/types.ts'
 
 const jobs = [
@@ -195,4 +197,43 @@ test('a move that changes nothing is told apart from one that does', () => {
     movedQueue(plain, ['g1', 'g2', 'g3'], null, 'G').map((j) => j.id),
     ['a', 'b', 'h1', 'g1', 'g2', 'g3'],
   )
+})
+
+const factJob = (over: Partial<JobSummary> = {}) =>
+  ({
+    encoder: 'x265',
+    crop: null,
+    custom_script: false,
+    audio: [{}, {}],
+    subs: 3,
+    source_facts: { resolution: '1920x1080', duration_ms: 1_500_000, hdr: ['HDR10', 'HLG'], interlaced: false },
+    ...over,
+  }) as unknown as JobSummary
+
+const sharedFacts = (jobs: JobSummary[]) => sharedOf(jobs.map(jobFacts))
+
+test('sharedFacts: what every job in a group has the same, compared as a row shows it', () => {
+  const same = [factJob(), factJob(), factJob()]
+  assert.deepEqual([...sharedFacts(same)].sort(), ['audio', 'encoder', 'hdr', 'length', 'resolution', 'subs'].sort())
+  // One value differs: only that fact leaves; the HDR tags compare as a set.
+  const differs = [
+    factJob(),
+    factJob({
+      encoder: 'x264',
+      source_facts: { resolution: '1920x1080', duration_ms: 1_560_000, hdr: ['HLG', 'HDR10'], interlaced: false },
+    }),
+  ]
+  assert.deepEqual([...sharedFacts(differs)].sort(), ['audio', 'hdr', 'resolution', 'subs'].sort())
+  // A custom script, or the same crop, is shared; a different crop is not.
+  const crop = { left: 0, top: 42, right: 0, bottom: 42 }
+  assert.ok(sharedFacts([factJob({ crop }), factJob({ crop: { ...crop } })]).has('extras'))
+  assert.ok(!sharedFacts([factJob({ crop }), factJob({ crop: { ...crop, top: 40 } })]).has('extras'))
+  assert.ok(!sharedFacts([factJob({ custom_script: true }), factJob()]).has('extras'))
+})
+
+test('sharedFacts: a group of one shares nothing, and a job without source facts shares no source fact', () => {
+  assert.equal(sharedFacts([factJob()]).size, 0)
+  assert.equal(sharedFacts([]).size, 0)
+  const reading = [factJob(), factJob({ source_facts: null })]
+  assert.deepEqual([...sharedFacts(reading)].sort(), ['audio', 'encoder', 'subs'])
 })

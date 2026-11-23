@@ -1,6 +1,34 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { issueCounts, plural, sizeLabel } from '../src/lib/format.ts'
+import { issueCounts, jobFacts, plural, sizeLabel } from '../src/lib/format.ts'
+import type { JobSummary } from '../src/lib/types.ts'
+
+const factJob = (over: Partial<JobSummary> = {}) =>
+  ({
+    encoder: 'x265',
+    crop: null,
+    custom_script: false,
+    audio: [{}, {}],
+    subs: 3,
+    source_facts: { resolution: '1920x1080', duration_ms: 1_500_000, hdr: ['HDR10', 'HLG'], interlaced: false },
+    ...over,
+  }) as unknown as JobSummary
+
+test('jobFacts: the facts line in order, only what the job has', () => {
+  assert.deepEqual(
+    jobFacts(
+      factJob({
+        custom_script: true,
+        source_facts: { resolution: '3840x2160', duration_ms: null, hdr: [], interlaced: true },
+      }),
+    ).map((f) => f.text),
+    ['3840×2160', 'interlaced', 'x265', 'custom script', '2 audio', '3 subs'],
+  )
+  assert.deepEqual(
+    jobFacts(factJob({ source_facts: null })).map((f) => f.key),
+    ['encoder', 'audio', 'subs'],
+  )
+})
 
 test('a plain size reads with a times sign; a size class stays as it is', () => {
   assert.equal(sizeLabel('1920x1040'), '1920×1040')
