@@ -68,6 +68,7 @@
   import IssueCounts from '../components/IssueCounts.svelte'
   import JobEditor from '../components/JobEditor.svelte'
   import Kbd from '../components/Kbd.svelte'
+  import LanguagePicker from '../components/LanguagePicker.svelte'
   import ReuseDialog from '../components/ReuseDialog.svelte'
   import Tip from '../components/Tip.svelte'
   import { api } from '../lib/api'
@@ -77,6 +78,7 @@
     factsText,
     issueCounts,
     jobFacts,
+    languageName,
     needsDvNote,
     percent,
     plural,
@@ -828,6 +830,25 @@
       toast.success(
         `${label} for ${plural(r.updated.length, 'job')}` + (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
       )
+    })
+  }
+
+  // One original language for the whole batch (a season of anime with the dub first). Each job keeps its other
+  // track choices; cleared, each job reads it from its source again, so the first job's guess is fetched back.
+  async function applyOriginal(tag: string | null) {
+    if (!batchSource) return
+    batchSource.spec.overrides.original_language = tag
+    const ids = [...selected]
+    await act(async () => {
+      const r = await api.apply(ids, { original_language: tag })
+      toast.success(
+        (tag
+          ? `Original language ${languageName(tag)} for ${plural(r.updated.length, 'job')}`
+          : `Original language read again for ${plural(r.updated.length, 'job')}`) +
+          (r.skipped.length ? `, ${r.skipped.length} busy` : ''),
+      )
+      const fresh = await api.job(ids[0])
+      if (selected.length > 1 && selected[0] === ids[0]) batchSource = fresh
     })
   }
 
@@ -1737,6 +1758,23 @@
                   : picked?.data.crop_mode === 'fixed'
                     ? `; crop ${picked.data.video.crop.left}/${picked.data.video.crop.top}/${picked.data.video.crop.right}/${picked.data.video.crop.bottom} on every job`
                     : '; each job keeps its crop'}. Save templates from a job's Template menu.
+              </p>
+            </Card.Root>
+            <Card.Root class="gap-2 p-4">
+              <div class="flex flex-wrap items-center gap-3">
+                <span class="text-sm">Original language</span>
+                <LanguagePicker
+                  class="w-48"
+                  aria-label="Original language for the selected jobs"
+                  placeholder="Read from each source"
+                  value={batchSource.spec.overrides.original_language ?? ''}
+                  onchange={(v: string) => applyOriginal(v || null)}
+                />
+              </div>
+              <p class="text-xs text-muted-foreground">
+                The language the content was made in, such as Japanese for anime whose English dub comes first. Template
+                audio rules and some rule sets choose and flag tracks by it. Each job keeps its other track choices.
+                Cleared, each job reads it from its source again.
               </p>
             </Card.Root>
             {#if batchContainers.length > 1}

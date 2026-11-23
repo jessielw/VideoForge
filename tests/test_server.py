@@ -432,6 +432,17 @@ def test_add_inspect_and_edit(tmp_path):
         client.post("/api/jobs/apply", json={"ids": ids, "output_dir": None})
         assert client.get(f"/api/jobs/{ids[1]}").json()["spec"]["output_dir"] is None
         client.post("/api/jobs/apply", json={"ids": ids, "output_dir": str(tmp_path / "out")})
+        # One original language for the batch (an ISO 639-2 tag is normalized); each job keeps its track edits.
+        guessed = client.get(f"/api/jobs/{ids[1]}").json()["plan"]["original_language"]
+        assert guessed not in ("fr", "und")
+        assert client.post("/api/jobs/apply", json={"ids": ids, "original_language": "fra"}).json()["updated"] == ids
+        jobs = [client.get(f"/api/jobs/{i}").json() for i in ids]
+        assert [j["spec"]["overrides"]["original_language"] for j in jobs] == ["fr", "fr"]
+        assert [j["plan"]["original_language"] for j in jobs] == ["fr", "fr"]
+        assert jobs[0]["spec"]["overrides"]["tracks"]["id:11"]["exclude"] is True
+        # Cleared, each job reads it from its source again (and pins that).
+        client.post("/api/jobs/apply", json={"ids": ids, "original_language": None})
+        assert client.get(f"/api/jobs/{ids[1]}").json()["spec"]["overrides"]["original_language"] == guessed
 
         commands = client.get(f"/api/jobs/{ids[0]}/commands").json()
         steps = ["script", "index", "script.info", "chapters", "video", "mux"]  # audio is copied

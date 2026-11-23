@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- The Queue's batch panel can set **Original language** for every selected job, so a whole season or group can be switched at once. This helps with anime discs that put the English dub first, where the language read from the source is English. Each job keeps its other track choices. Clearing the box has each job read the language from its source again.
+
 ## [0.1.15] - 2026-11-23
 
 ### Added

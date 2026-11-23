@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Request
 
-from videoforge.core import sub_timing
+from videoforge.core import lang, sub_timing
 from videoforge.core.execute.mux import MuxSettings
 from videoforge.core.execute.process import ToolError
 from videoforge.core.job import OutputPolicy
@@ -358,13 +358,18 @@ def update_job(request: Request, job_id: str, body: dict[str, Any] = Body(...)) 
 @router.post("/jobs/apply")
 def apply_to_jobs(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
     """The same settings on several jobs (a batch): {ids, template?, video?, encoder?, output_dir?, qpf?, mux?,
-    container?}. A template's auto crop is detected per job afterwards."""
+    container?, original_language?}. A template's auto crop is detected per job afterwards. original_language
+    (a tag, or null to read it from each source again) changes only that in each job's track choices."""
     q = queue_of(request)
     body = {k: v for k, v in body.items() if k not in ("overrides", "output_name")}  # these are per job
+    original = {}
+    if "original_language" in body:
+        tag = body["original_language"]
+        original["original_language"] = lang.normalize(tag) if tag else None
     updated, skipped = [], []
     for job_id in body.get("ids") or []:
         try:
-            q.update(job_id, **_changes(body))
+            q.update(job_id, **_changes(body), **original)  # parsed per job: no settings object is shared
             updated.append(job_id)
         except (Busy, KeyError):
             skipped.append(job_id)

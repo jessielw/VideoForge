@@ -75,3 +75,5 @@ Burned subtitles become part of the picture and are removed from the muxed subti
 ## Reuse choices across a season
 
 Use [template audio and subtitle rules](templates.md) when language or track order changes between episodes. Set the job's original language when a rule matches **original language**.
+
+To set the original language for a whole season, select its jobs (or click the group's name in the Queue) and choose it under **Original language** in the batch panel. Use this when the source's own tracks give the wrong answer, such as anime with the English dub as the first and default audio track. Each job keeps its other track choices. Clear the box to have each job read the language from its source again.

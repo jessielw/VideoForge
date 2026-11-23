@@ -7,7 +7,7 @@ The queue stores jobs and their settings in SQLite. One worker processes jobs in
 1. On **New jobs**, add a folder of episodes or select individual sources.
 2. Choose a template and add the jobs. Adding doesn't queue them; step 5 does.
 3. Open a job to check video processing, encoder settings, tracks, and output.
-4. Select several jobs to apply an edit or template to all of them.
+4. Select several jobs to apply an edit or template to all of them, or to set their original language ([Tracks](tracks.md#reuse-choices-across-a-season)).
 5. Tick each job that's set up to queue it, or select several and use **Queue**.
 6. Use **Start queue** to run the queued jobs, or **Run selected** to queue and run a selection at once.
 
