@@ -93,6 +93,13 @@ _DEEZY = (
     EncodeOption("drc_line", "DRC line mode", "", choices=_DRC, help="Dynamic range compression"),
     EncodeOption("drc_rf", "DRC RF mode", "", choices=_DRC, help="Dynamic range compression"),
     EncodeOption("dialnorm", "Dialogue level (dialnorm)", "0", int_range=(-31, 0), help="0 lets DEE measure it"),
+    EncodeOption(
+        "deezy_debug",
+        "DeeZy debug mode",
+        "off",
+        choices=(("off", "Off"), ("on", "On")),
+        help="Enables DeeZy debug logging for this encode",
+    ),
 )
 # DeeZy's DD+ loudness options, by option key
 DDP_LOUDNESS_FLAGS = {"loudness_target": "--loudness-target", "peak_limit": "--peak-limit", "user_data": "--user-data"}
@@ -808,9 +815,11 @@ def _deezy(
     # DeeZy's own config (beside it, in the user's config folder or the working folder) would change the defaults
     # of every option VideoForge leaves out: an empty one of VideoForge's keeps them DeeZy's.
     config = ("--config", str(DEEZY_CONFIG))
+    logging_args = ("--log-level", "debug") if _opt(planned, "deezy_debug") == "on" else ()
     return (
         tools.deezy,
         *config,
+        *logging_args,
         *mode,
         *common,
         *chosen,

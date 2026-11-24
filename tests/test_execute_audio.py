@@ -325,6 +325,21 @@ def test_deezy_options():
     assert {"--atmos-mode=bluray", "--thd-warp-mode=loro"} <= set(argv) and "--bed-conform" not in argv
 
 
+@pytest.mark.parametrize(
+    ("action", "options", "encoder"),
+    [(A.DDP, {}, "ddp"), (A.DDP, {"ddp_mode": "bluray"}, "ddp-bluray"), (A.ATMOS, {}, "ddp-atmos")],
+)
+def test_deezy_debug_is_a_global_option(action, options, encoder):
+    p = planned(C.TRUEHD, "7.1", action, bitrate=1280, atmos=action is A.ATMOS)
+    p.options = options
+    (argv,) = command(p).argvs
+    assert "--log-level" not in argv
+
+    p.options = {**options, "deezy_debug": "on"}
+    (argv,) = command(p).argvs
+    assert argv[:7] == ("deezy", "--config", str(DEEZY_CONFIG), "--log-level", "debug", "encode", encoder)
+
+
 def test_deezy_runs_with_videoforges_empty_config():
     """A deezy-conf.toml of the user's (2.0 applies its [global_defaults]) mustn't change an encode."""
     assert DEEZY_CONFIG.is_file()

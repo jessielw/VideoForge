@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Settings → Queue & indexing → Run multiple full jobs at once** lets jobs run concurrently in queue order. It starts off. Enable it for two full-job slots by default, with up to two x264 jobs or one x265 job running alone. You can change the total, each encoder’s limit, and whether samples and CRF searches count toward those limits.
 - Variants of the same source can share a finished audio or video encode while different encodes run in parallel. If the job making a shared encode fails or is cancelled, a waiting variant can finish the work. Each variant keeps its own output.
 - The sidebar and browser tab show how many jobs are active. The next queued job shows why it is waiting. Use **Cancel job** or **Pause after pass 1** on an individual row, or **Stop after active jobs** to finish the running jobs and leave the rest queued.
+- **DeeZy debug mode** in **Advanced settings** enables detailed logging for DDP, Blu-ray DDP and DDP Atmos encodes. It is off by default. When enabled, VideoForge passes `--log-level debug` before DeeZy's `encode` subcommand.
 
 ## [0.1.17] - 2026-11-24
 
