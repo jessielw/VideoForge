@@ -180,6 +180,36 @@ const sections = (page: Page) => page.getByRole('navigation', { name: 'Settings 
 const open = (page: Page, category: string) =>
   sections(page).getByRole('button', { name: category, exact: true }).click()
 
+test('concurrent job limits survive a settings reload', async ({ page }) => {
+  const errors = await fixture(page, {
+    concurrency: {
+      enabled: false,
+      total: 2,
+      limit_samples: false,
+      encoders: { x264: { cap: 2, run_alone: false }, x265: { cap: 1, run_alone: true } },
+    },
+  })
+  await page.goto('/#/settings')
+  await open(page, 'Queue & indexing')
+  await page.getByLabel('Run multiple full jobs at once').check()
+  await page.getByLabel('Total job slots').fill('3')
+  await page.getByLabel('Total job slots').press('Tab')
+  await page.getByRole('group', { name: 'x265' }).getByLabel('Run alone').uncheck()
+  const saved = page.waitForResponse(
+    (r) =>
+      r.url().endsWith('/api/config') &&
+      r.request().method() === 'PUT' &&
+      r.request().postDataJSON().concurrency.limit_samples,
+  )
+  await page.getByLabel('Count samples and CRF searches toward job limits').check()
+  await saved
+  await page.reload()
+  await expect(page.getByLabel('Total job slots')).toHaveValue('3')
+  await expect(page.getByRole('group', { name: 'x265' }).getByLabel('Run alone')).not.toBeChecked()
+  await expect(page.getByLabel('Count samples and CRF searches toward job limits')).toBeChecked()
+  expect(errors).toEqual([])
+})
+
 test('Settings lists ten categories in order, with the version and Shut down below', async ({ page }) => {
   const errors = await fixture(page)
   await page.goto('/#/settings')

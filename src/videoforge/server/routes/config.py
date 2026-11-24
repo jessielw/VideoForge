@@ -38,6 +38,7 @@ from videoforge.core.video import options as video_options, vs as vsx
 from videoforge.core.video.settings import Encoder
 from videoforge.plugins.loader import describe as describe_plugins
 from videoforge.rule_sets import default_rule_set_id
+from videoforge.server.concurrency import Concurrency
 from videoforge.server.settings import MAX_PARALLEL_AUDIO, X265_AVX512, SavedSettings
 
 router = APIRouter(prefix="/api/config")
@@ -70,6 +71,7 @@ def _state(request: Request) -> dict[str, Any]:
             for t in TOOLS
         ],
         "x265_avx512": s.config.x265_avx512,
+        "concurrency": s.queue.concurrency.model_dump(),
         "roots": [str(r) for r in s.settings.roots],
         "roots_custom": saved.roots is not None,
         "default_roots": [str(r) for r in s.default_roots],
@@ -127,6 +129,12 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
     [{name, kind, target, enabled, events, overwrite}]), disabled_plugins (plugin ids)."""
     s = request.app.state
     saved: SavedSettings = s.saved
+    concurrency = None
+    if "concurrency" in body:
+        try:
+            concurrency = Concurrency.model_validate(body["concurrency"])
+        except ValueError as ex:
+            raise HTTPException(422, str(ex)) from None
     if X265_AVX512 in body and not isinstance(body[X265_AVX512], bool):
         raise HTTPException(422, "x265_avx512: true or false")
     tools = dict(saved.tools)
@@ -212,6 +220,8 @@ def put_config(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, 
         **priorities,
     )
     new.save(s.store)
+    if concurrency is not None:
+        s.queue.set_concurrency(concurrency)
     if X265_AVX512 in body:
         s.store.set_global(X265_AVX512, body[X265_AVX512])
     apply_settings(request, new)

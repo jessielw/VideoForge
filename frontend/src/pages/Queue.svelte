@@ -590,13 +590,9 @@
     })
   }
 
-  // Stop the running job once its video's pass 1 is done (status paused: VideoForge can be closed, and Run goes on
-  // with pass 2), or take that back.
-  const pausing = $derived(app.jobs.find((j) => j.id === app.queue.current)?.pause_after_pass1 ?? false)
-  async function pauseAfterPass1() {
+  async function pauseAfterPass1(job: JobSummary) {
     await act(async () => {
-      const { set } = await api.pauseAfterPass1(!pausing)
-      if (!set.length) toast.info('Only a 2-pass encode has a pass 1 to stop after')
+      await api.pauseAfterPass1(!job.pause_after_pass1, [job.id])
       await app.refreshJobs()
     })
   }
@@ -1047,7 +1043,7 @@
       aria-label="Queue list"
     >
       {#if needsNote}<span id="dv7-note" hidden>{DV7_NOTE}</span>{/if}
-      <!-- Three rows. The first never moves: Start queue and Stop after current share one slot, as wide as the
+      <!-- Three rows. The first never moves: Start queue and Stop after active jobs share one slot, as wide as the
            longer of the two, so Run selected stays under the pointer when a job starts (a double click on it used to
            land on Cancel). The second shows only while something runs, indexes or is paused. The third acts on the
            selection; Queue and Unqueue end it, so one showing up doesn't wrap the first row and move the list. -->
@@ -1055,7 +1051,7 @@
         <!-- each of the slot's labels in one cell, the others hidden: the slot is as wide as the longest -->
         <span class="inline-grid"
           ><span class="col-start-1 row-start-1">{label}</span
-          >{#each [`Start queue (${startJobs.length})`, 'Stop after current', 'Stopping…'] as other (other)}<span
+          >{#each [`Start queue (${startJobs.length})`, 'Stop after active jobs', 'Stopping…'] as other (other)}<span
               class="invisible col-start-1 row-start-1"
               aria-hidden="true">{other}</span
             >{/each}</span
@@ -1077,9 +1073,11 @@
             </Button>
           </Tip>
           {#if app.queue.running}
-            <Tip text="Finish the current job, then stop">
+            <Tip text="Finish active jobs and leave the remaining jobs queued">
               <Button variant="outline" onclick={() => act(api.stop)}>
-                <ListEndIcon />{@render slotLabel(app.queue.stop_after_current ? 'Stopping…' : 'Stop after current')}
+                <ListEndIcon />{@render slotLabel(
+                  app.queue.stop_after_current ? 'Stopping…' : 'Stop after active jobs',
+                )}
               </Button>
             </Tip>
           {:else}
@@ -1106,20 +1104,9 @@
         {#if app.queue.running || working || app.queue.paused || indexing}
           <div class="flex flex-wrap items-center gap-1">
             {#if app.queue.running}
-              <Tip text="Cancel the running job">
-                <Button variant="outline" onclick={() => act(api.cancel)}><SquareIcon />Cancel</Button>
-              </Tip>
-              {#if app.queue.current}
-                <Tip
-                  text={pausing
-                    ? 'The job stops after pass 1. Click to cancel that.'
-                    : "Stops the running job when its video's pass 1 is done. It keeps what it finished, so you can close VideoForge. Running the job again goes on with pass 2."}
-                >
-                  <Button variant="outline" class={pausing ? 'bg-muted dark:bg-muted' : ''} onclick={pauseAfterPass1}>
-                    <PauseIcon />{pausing ? 'Pausing after pass 1' : 'Pause after pass 1'}
-                  </Button>
-                </Tip>
-              {/if}
+              <Button variant="outline" onclick={() => act(api.cancel)}>
+                <SquareIcon />Cancel active jobs and stop
+              </Button>
             {/if}
             {#if working || app.queue.paused}
               {#if app.queue.paused}
@@ -1631,12 +1618,19 @@
                     >
                   </div>
                 {/if}
+                {#if job.status === 'queued' && app.queue.running}
+                  <div class="text-xs text-muted-foreground">
+                    {app.queue.stop_after_current
+                      ? 'Queue is stopping'
+                      : (app.queue.waiting?.[job.id] ?? 'Waiting for earlier jobs')}
+                  </div>
+                {/if}
                 {#if job.index_held && job.status === 'index-queued'}
                   <Tip
                     class="mt-0.5 block truncate text-xs text-muted-foreground"
-                    text="Indexing waits while an encode reads this disk (Settings › Queue & indexing › Wait while an encode reads the same disk), and always while another job of this source runs."
+                    text={job.index_wait_reason || 'Waiting for the encode reading this disk'}
                   >
-                    Waiting for the encode reading this disk
+                    {job.index_wait_reason || 'Waiting for the encode reading this disk'}
                   </Tip>
                 {/if}
                 {#if job.index_error && job.status !== 'indexing'}
@@ -1645,6 +1639,33 @@
                   </Tip>
                 {/if}
               </button>
+              {#if job.status === 'running'}
+                {@const name = job.label ? `${job.name} (${job.label})` : job.name}
+                <div class="flex shrink-0 flex-col items-end justify-center gap-1 pr-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label={`Cancel job ${name}`}
+                    tabindex={job.id === tabStop ? 0 : -1}
+                    onclick={() => act(() => api.cancelJob(job.id))}
+                  >
+                    Cancel job
+                  </Button>
+                  {#if job.two_pass}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class={job.pause_after_pass1 ? 'bg-muted dark:bg-muted' : ''}
+                      aria-pressed={job.pause_after_pass1}
+                      aria-label={`Pause after pass 1 for ${name}`}
+                      tabindex={job.id === tabStop ? 0 : -1}
+                      onclick={() => pauseAfterPass1(job)}
+                    >
+                      Pause after pass 1
+                    </Button>
+                  {/if}
+                </div>
+              {/if}
               {@render grip(
                 selectedSet.has(job.id) && selected.length > 1
                   ? `Drag to move the ${selected.length} selected jobs`

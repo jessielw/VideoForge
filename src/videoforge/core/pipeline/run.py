@@ -7,7 +7,7 @@ server's queue worker and the CLI drive the same code.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import os
 from pathlib import Path
 import time
@@ -56,11 +56,28 @@ def _identity(path: Path) -> tuple[int, int, int] | None:
         return None
 
 
+@dataclass(frozen=True)
+class OutputTarget:
+    path: Path
+    original: tuple[int, int, int] | None
+
+    @classmethod
+    def select(cls, base: Path, policy: OutputPolicy, state: JobState) -> OutputTarget:
+        path = base
+        original = _identity(path)
+        own = state.steps.get("mux")
+        if original is not None and policy is OutputPolicy.RENAME and not (own and own.outputs_match([path])):
+            number = 2
+            while original is not None:
+                path = base.with_name(f"{base.stem}.{number}{base.suffix}")
+                original = _identity(path)
+                number += 1
+        return cls(path, original)
+
+
 def missing_inputs(spec: JobSpec) -> list[Path]:
     """The user's input files that aren't there (generated files are the steps' business)."""
-    i = spec.inputs
-    paths = [i.source, i.encode, i.chapters, *i.subtitles]
-    return [p for p in paths if p is not None and not p.exists()]
+    return [p for p in spec.inputs.files() if not p.exists()]
 
 
 def run_job(
@@ -78,6 +95,7 @@ def run_job(
     step_log: Callable[[StepRun, str], None] | None = None,
     runner: Runner = process.run,
     prober: Prober = probe,
+    target: OutputTarget | None = None,
 ) -> JobResult:
     """state.steps (the finished steps of earlier runs) is read and updated; state.run is this
     run's steps (the pipeline's, then Validate), and on_step hears each change to one of them
@@ -91,7 +109,9 @@ def run_job(
     state.run = []
     log = log or (lambda _line: None)
     on_step = on_step or (lambda _run: None)
-    result = _run(spec, plan, rule_set, app, state, log, cancel, progress, on_record, on_step, step_log, runner, prober)
+    result = _run(
+        spec, plan, rule_set, app, state, log, cancel, progress, on_record, on_step, step_log, runner, prober, target
+    )
     state.status, state.output, state.issues, state.error = result.status, result.output, result.issues, result.error
     return result
 
@@ -109,7 +129,7 @@ def _failed_step(state: JobState, error: str) -> str:
 
 
 def _run(
-    spec, plan, rule_set, app, state, log, cancel, progress, on_record, on_step, step_log, runner, prober
+    spec, plan, rule_set, app, state, log, cancel, progress, on_record, on_step, step_log, runner, prober, target
 ) -> JobResult:
     if plan.blocked:
         reasons = "; ".join(i.message for i in plan.issues if i.severity is Severity.BLOCK)
@@ -128,6 +148,11 @@ def _run(
     if spec.output_dir is None:
         return JobResult(plan, JobStatus.FAILED, error="No output folder is set. Choose one on the Output tab")
     output = output_path(spec, plan, rule_set, spec.output_dir)
+    try:
+        target = target or OutputTarget.select(output, spec.output_policy, state)
+    except OSError as ex:
+        return JobResult(plan, JobStatus.FAILED, error=str(ex))
+    output = target.path
     if output.resolve() == spec.inputs.source.resolve():
         return JobResult(
             plan,
@@ -135,6 +160,9 @@ def _run(
             error=f"The output would overwrite the source ({output}). Change the output name or folder",
         )
 
+    partial = output.with_name(output.name + ".partial")
+    if {output.resolve(), partial.resolve()} & {p.resolve() for p in spec.inputs.files()}:
+        return JobResult(plan, JobStatus.FAILED, error="The output or its partial file would overwrite a job input")
     work = spec.job_dir
     encoded: dict[int, Path] = {}
     rejected: Path | None = None
@@ -145,7 +173,9 @@ def _run(
         return JobResult(plan, status, work_dir=work, encoded_audio=encoded, **kw)
 
     try:
-        original = _identity(output)
+        original = target.original
+        if _identity(output) != original:
+            return result(JobStatus.FAILED, error=f"The output changed after it was reserved ({output})")
         own = state.steps.get("mux")
         owned = own is not None and own.outputs_match([output])
         if original is not None and not owned:
@@ -157,13 +187,6 @@ def _run(
                 )
             if spec.output_policy is OutputPolicy.SKIP:
                 return result(JobStatus.SKIPPED, error=f"Kept existing output: {output}")
-            if spec.output_policy is OutputPolicy.RENAME:
-                base = output
-                number = 2
-                while output.exists():
-                    output = base.with_name(f"{base.stem}.{number}{base.suffix}")
-                    number += 1
-                original = None
 
         def validate_output(path: Path) -> None:
             nonlocal issues

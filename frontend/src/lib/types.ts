@@ -161,6 +161,7 @@ export interface JobSummary {
   rule_set: string
   status: Status
   pause_after_pass1: boolean // stop once the video's pass 1 is done (a 2-pass encode)
+  two_pass?: boolean
   progress: Progress | null
   issue: string
   issue_counts: { block: number; warn: number } // its errors and warnings (the Issues tab lists them)
@@ -171,6 +172,7 @@ export interface JobSummary {
   indexed: boolean // the source index is in the work folder: the video opens at once
   index_error: string // the last batch index failed: why
   index_held: boolean // waiting in the index lane while an encode reads its disk
+  index_wait_reason?: string
   sample_waiting: boolean // in the index lane for a test encode
   sample_error: string // the last test encode failed: why
   searching: boolean // the index lane's test encode for the job is a CRF search
@@ -805,6 +807,8 @@ export type PresetKind = 'video' | 'encoder' | 'audio' | 'template'
 export type Priority = 'idle' | 'below_normal' | 'normal' | 'above_normal' | 'high'
 
 export interface QueueState {
+  active_ids: string[]
+  waiting: Record<string, string>
   running: boolean
   current: string | null
   stop_after_current: boolean
@@ -921,6 +925,12 @@ export interface ToolSetting {
 }
 
 export interface ConfigState {
+  concurrency?: {
+    enabled: boolean
+    total: number
+    limit_samples: boolean
+    encoders: Record<string, { cap: number; run_alone: boolean }>
+  }
   tools: ToolSetting[]
   x265_avx512?: boolean // shared by every profile on the server
   roots: string[]

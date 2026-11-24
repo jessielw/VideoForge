@@ -252,6 +252,11 @@ class JobInputs:
     encode_state: EncodeState = EncodeState.UNKNOWN
     audio: list[Path] = field(default_factory=list)  # added audio files; their tracks join the source's
 
+    def files(self) -> tuple[Path, ...]:
+        paths = (self.source, self.encode, self.chapters, *self.subtitles, *self.audio)
+        paired = (p.with_suffix(".sub") for p in self.subtitles if p.suffix.lower() == ".idx")
+        return tuple(p for p in paths if p is not None) + tuple(paired)
+
 
 # --- Plan -----------------------------------------------------------------------
 

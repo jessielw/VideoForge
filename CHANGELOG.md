@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Settings → Queue & indexing → Run multiple full jobs at once** lets jobs run concurrently in queue order. It starts off. Enable it for two full-job slots by default, with up to two x264 jobs or one x265 job running alone. You can change the total, each encoder’s limit, and whether samples and CRF searches count toward those limits.
+- Variants of the same source can share a finished audio or video encode while different encodes run in parallel. If the job making a shared encode fails or is cancelled, a waiting variant can finish the work. Each variant keeps its own output.
+- The sidebar and browser tab show how many jobs are active. The next queued job shows why it is waiting. Use **Cancel job** or **Pause after pass 1** on an individual row, or **Stop after active jobs** to finish the running jobs and leave the rest queued.
+
 ## [0.1.17] - 2026-11-24
 
 ### Changed
@@ -611,7 +619,7 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 - **Bundled VapourSynth plugins.** Source filters (BestSource, L-SMASH-Works, FFMS2, d2vsource) and common filters (EdgeFixer, FillBorders, MVTools, znedi3, dfttest2, BM3D, zsmooth, vszip, fmtconv, descale, ...) plus havsfunc, mvsfunc and awsmfunc, from one list (`vsplugins/manifest.toml`): built from source in the Docker image, downloaded (pinned, checked) for the portable build or a source install (`scripts/fetch_plugins.py`).
 - **Profiles.** The built-in `manual` profile; other profiles (a release group's rules) install as separate packages under the `videoforge.profiles` entry point group.
 
-[Unreleased]: https://github.com/jessielw/VideoForge/compare/0.1.14...HEAD
+[Unreleased]: https://github.com/jessielw/VideoForge/compare/0.1.17...HEAD
 [0.1.9]: https://github.com/jessielw/VideoForge/releases/tag/0.1.9
 [0.1.8]: https://github.com/jessielw/VideoForge/releases/tag/0.1.8
 [0.1.7]: https://github.com/jessielw/VideoForge/releases/tag/0.1.7

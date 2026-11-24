@@ -44,6 +44,8 @@ class AppState {
   queue = $state<QueueState>({
     running: false,
     current: null,
+    active_ids: [],
+    waiting: {},
     stop_after_current: false,
     paused: false,
     priority: null,

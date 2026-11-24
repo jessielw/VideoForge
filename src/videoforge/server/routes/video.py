@@ -16,7 +16,8 @@ a job never starts reading a whole remux.
 
 from __future__ import annotations
 
-from contextlib import AbstractContextManager, nullcontext
+from collections.abc import Iterator
+from contextlib import contextmanager, nullcontext
 from fractions import Fraction
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -25,7 +26,8 @@ from fastapi import APIRouter, HTTPException, Request, Response
 
 from videoforge.core.job import JobSpec
 from videoforge.core.models import SubTrack
-from videoforge.core.pipeline.build import auto_crop, baked_el, indexed
+from videoforge.core.pipeline import claims
+from videoforge.core.pipeline.build import auto_crop, baked_el, indexed, script_reads, source_rpu
 from videoforge.core.pipeline.sample import MKV, SCRIPT, read_result, sample_dir
 from videoforge.core.plan_io import to_json
 from videoforge.core.video.info import length_warning
@@ -57,13 +59,20 @@ def _entry(request: Request, job_id: str) -> Entry:
         raise HTTPException(404, f"No job {job_id}") from None
 
 
-def _loading(e: Entry, preview: Preview, script: str, slot: str) -> AbstractContextManager[object]:
-    """For a clip the preview has to load: 409 while the source isn't indexed, else the job's source lock
-    (the index lane may be checking the index: it reads the finished one after)."""
-    if preview.has(script, slot):
-        return nullcontext()
-    _indexed(e)
-    return e.source_lock
+@contextmanager
+def _loading(e: Entry, preview: Preview, script: str, slot: str) -> Iterator[None]:
+    cached = preview.has(script, slot)
+    if not cached:
+        _indexed(e)
+    reads = list(script_reads(e.spec, e.source_video, e.burn))
+    if ":encode:" in slot and e.state.output:
+        reads.append(e.state.output)
+    if ":sample:" in slot:
+        reads.append(sample_dir(e.spec) / MKV)
+    with nullcontext() if cached else e.source_lock, claims.files.hold(reads):
+        if not cached:
+            _indexed(e)
+        yield
 
 
 def _indexed(e: Entry) -> None:
@@ -235,11 +244,14 @@ def detect_crop(request: Request, job_id: str, samples: int = 20) -> dict[str, A
     (checked against the detected borders), else the detected borders. origin says which."""
     e = _entry(request, job_id)
     try:
-        _indexed(e)
-        with e.source_lock:
+        reads = list(script_reads(e.spec, e.source_video, e.burn))
+        if rpu := source_rpu(e.spec, e.source_video):
+            reads.append(rpu)
+        with e.source_lock, claims.files.hold(reads):
+            _indexed(e)
             detected = source_crop(_preview(request), e.spec, max(3, min(samples, 60)))
+            q: JobQueue = request.app.state.queue
+            crop, origin = auto_crop(e.spec, e.source_video, q.app.tools.dovi_tool, detected)
     except (ScriptError, FrameError, PreviewError) as ex:
         raise _failed(ex, e) from None
-    q: JobQueue = request.app.state.queue
-    crop, origin = auto_crop(e.spec, e.source_video, q.app.tools.dovi_tool, detected)
     return to_json(crop) | {"origin": origin}

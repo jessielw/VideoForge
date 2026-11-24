@@ -100,8 +100,14 @@ def stop(request: Request) -> dict[str, Any]:
 @router.post("/cancel")
 def cancel(request: Request) -> dict[str, Any]:
     q = queue_of(request)
-    q.stop_after_current()
-    q.cancel_current()
+    q.stop_after_current(cancel=True)
+    return q.queue_state()
+
+
+@router.post("/cancel/{job_id}")
+def cancel_job(request: Request, job_id: str) -> dict[str, Any]:
+    q = queue_of(request)
+    q.cancel_current(job_id)
     return q.queue_state()
 
 

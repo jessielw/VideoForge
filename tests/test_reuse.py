@@ -178,7 +178,7 @@ def test_jobs_on_one_source_keep_their_own_folders_and_link_identical_encodes(ru
     subbed, subbed_plan = variant(dubbed, dubbed_plan, "subbed")
     state = JobState()
     tools, lines = run_logged(subbed, subbed_plan, rule_set, state)
-    assert tools == ["python", "mkvmerge"]  # the indexer keeps the source's index; every encode is linked
+    assert tools == ["mkvmerge"]  # the completed source index and matching encodes are reused
     assert any("Video (x264): made by the job in dubbed/, reused" in line for line in lines)
     assert os.path.samefile(subbed.video_output, dubbed.video_output)
     assert subbed.video_output.parent == subbed.job_dir
@@ -225,3 +225,40 @@ def test_a_linked_file_brings_the_files_its_tool_wrote_beside_it(tmp_path):
     _link(source, target)
     assert os.path.samefile(source, target) and (target.parent / "video.stats.cutree").read_bytes() == b"cutree"
     assert not (target.parent / FINISHED_NAME).exists()
+
+
+def test_reordered_audio_adopts_the_matching_tracks(rule_set, tmp_path):
+    plan = make_plan(tmp_path)
+    first, first_plan = variant(video_job(plan, tmp_path), plan, "dubbed")
+    run_logged(first, first_plan, rule_set, JobState())
+    second, second_plan = variant(first, first_plan, "reordered")
+    second_plan.audio = list(reversed(second_plan.audio))
+    tools, _ = run_logged(second, second_plan, rule_set, JobState())
+    assert "qaac64" not in tools and "deezy" not in tools
+
+
+def test_redo_detaches_pass_one_sidecars(tmp_path):
+    from videoforge.core.pipeline.share import Sharing
+    from videoforge.core.pipeline.steps import Step, run_steps
+
+    homes = [tmp_path / name for name in ("producer", "consumer")]
+    for home in homes:
+        home.mkdir()
+
+    def make_step(home, data):
+        stats = home / "video.stats"
+
+        def write(_log):
+            stats.write_bytes(data)
+            stats.with_suffix(".stats.mbtree").write_bytes(data)
+
+        return Step("video.pass1", "Pass 1", call=write, outputs=(stats,))
+
+    for home in homes:
+        run_steps([make_step(home, b"first")], {}, log=lambda _: None, share=Sharing(tmp_path, home))
+    sidecars = [home / "video.stats.mbtree" for home in homes]
+    assert os.path.samefile(*sidecars)
+    run_steps(
+        [make_step(homes[1], b"redo")], {}, log=lambda _: None, share=Sharing(tmp_path, homes[1]), redo=["video.pass1"]
+    )
+    assert [p.read_bytes() for p in sidecars] == [b"first", b"redo"]

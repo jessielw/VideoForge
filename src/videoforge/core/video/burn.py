@@ -13,6 +13,7 @@ SubText stretches onto a clip of another size: it's drawn before the crop, on th
 from __future__ import annotations
 
 from collections.abc import Iterable
+import hashlib
 from pathlib import Path
 
 from videoforge.core.config import mkv_ui
@@ -61,7 +62,12 @@ def file(track: SubTrack, work: Path) -> Path:
     if track.external_path is not None and track.extracted_from is None:
         path = track.external_path
         return path.with_suffix(".idx") if track.format is SubFormat.VOBSUB else path
-    return work / f"burn.{track.id}{EXTENSIONS.get(track.format, '.sub')}"
+    stem = f"burn.{track.id}"
+    if track.external_path is not None:
+        # Variants may map different external files to the same source track.
+        identity = str(track.external_path.resolve()).encode("utf-8")
+        stem += "." + hashlib.sha256(identity).hexdigest()[:16]
+    return work / (stem + EXTENSIONS.get(track.format, ".sub"))
 
 
 def shift_ms(track: SubTrack, source: Path, video: VideoInfo | None) -> int:

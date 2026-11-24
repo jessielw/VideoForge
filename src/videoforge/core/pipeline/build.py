@@ -19,7 +19,7 @@ an existing encode has no script/index/chapters/video steps.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
 from functools import partial
@@ -256,6 +256,19 @@ def mp4_audio_steps(plan: Plan, work: Path, app: AppConfig) -> tuple[list[Step],
     return steps, replace(plan, audio=audio)
 
 
+def index_key(source: Path, source_filter: SourceFilter) -> tuple[Path, SourceFilter]:
+    return source.resolve(), source_filter
+
+
+def script_reads(spec: JobSpec, video: VideoInfo | None, burn: SubTrack | None) -> tuple[Hashable, ...]:
+    reads: list[Hashable] = [index_key(spec.inputs.source, spec.video.source_filter)]
+    if el := baked_el(spec, video):
+        reads.extend((el, index_key(el, spec.video.source_filter)))
+    if burn:
+        reads.extend(burn_in.dependencies(burn, spec.work_dir))
+    return tuple(reads)
+
+
 def index_steps(
     spec: JobSpec, app: AppConfig, video: VideoInfo | None = None, burn: SubTrack | None = None
 ) -> list[Step]:
@@ -333,6 +346,10 @@ def index_steps(
         # Opening the script makes the source filter build its index (minutes on a big remux).
         # With a FEL to bake, the script opens its enhancement layer too: both are indexed.
         argv, inputs = (app.tools.vspipe, "--info", str(script), "-"), (source, script)
+    marker = work / f".{source_filter.value}.indexed"
+    owns = [index_key(source, source_filter)]
+    if el is not None and source_filter is not SourceFilter.FFMS2:
+        owns.append(index_key(el, source_filter))
     steps.append(
         # Reused while the index is there (BestSource names its file after the track).
         Step(
@@ -340,6 +357,11 @@ def index_steps(
             "Index the source",
             argvs=(argv,),
             inputs=inputs,
+            outputs=(marker,),
+            writes=(),
+            owns=tuple(owns),
+            reads=script_reads(spec, video, burn) if source_filter is not SourceFilter.FFMS2 else (),
+            finalize=marker.touch,
             key=source_filter.value,
             weight=2,
             present=lambda: _index_present(spec, video),
@@ -353,6 +375,7 @@ def index_steps(
                 "Index the enhancement layer",
                 argvs=(el_index,),
                 inputs=(el,),
+                owns=(index_key(el, source_filter),),
                 weight=0.5,
                 present=lambda: index_exists(el, source_filter, work),
             )
@@ -825,4 +848,9 @@ def build_steps(
         )
 
     steps.append(mux_step(None, timestamps))
+    if spec.encodes_video:
+        script_files = script_reads(spec, video, plan.burn)
+        for i, step in enumerate(steps):
+            if step.id in {"video", "video.pass1", "video.pass2", "script.info", "hdr10plus.check", "dovi.check"}:
+                steps[i] = replace(step, reads=script_files)
     return JobSteps(steps, output, encoded)

@@ -908,7 +908,8 @@ if role == "parent":
     subprocess.Popen([sys.executable, __file__, "child"])
 n = 0
 while True:
-    print(role, n, priority(), flush=True)
+    # Both processes share the pipe. Emit each observation in one write.
+    os.write(sys.stdout.fileno(), f"{role} {n} {priority()}\\n".encode())
     n += 1
     time.sleep(0.02)
 """

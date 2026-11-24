@@ -1,5 +1,5 @@
 """The job queue: jobs in memory (spec, state, cached probe and plan), persisted in the
-store, probed in a small thread pool, and run one at a time by a worker thread.
+store, probed in a small thread pool, and admitted in order by the queue scheduler.
 
 Next to it, the index lane: jobs asked to be indexed get their work folder, script and source
 index, one at a time by a thread of its own (alongside a running encode), and nothing else. The
@@ -33,6 +33,7 @@ from pathlib import Path
 import re
 import sqlite3
 import threading
+import time
 from typing import Any
 import uuid
 
@@ -75,10 +76,10 @@ from videoforge.core.models import (
 )
 from videoforge.core.naming import NamePolicy
 from videoforge.core.notify import Sender, send as notify_send
-from videoforge.core.pipeline import crfsearch
-from videoforge.core.pipeline.build import auto_crop, index_steps, job_output
+from videoforge.core.pipeline import claims, crfsearch
+from videoforge.core.pipeline.build import auto_crop, index_steps, job_output, script_reads, source_rpu
 from videoforge.core.pipeline.reuse import ReuseOffer, reuse_offers
-from videoforge.core.pipeline.run import missing_inputs, run_job
+from videoforge.core.pipeline.run import OutputTarget, missing_inputs, run_job
 from videoforge.core.pipeline.sample import PERCENTS, finish, prepare_steps, sample_steps
 from videoforge.core.pipeline.share import Sharing
 from videoforge.core.pipeline.steps import ProgressFn, Step, StepProgress, run_steps
@@ -90,6 +91,7 @@ from videoforge.core.tools import versions as tool_versions
 from videoforge.core.video.script import ffms2_index
 from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
 from videoforge.core.workdir import clean_work_dir, work_dir
+from videoforge.server.concurrency import Concurrency, RunPaths, encoder_type
 from videoforge.server.events import EventHub
 from videoforge.server.store import Store
 
@@ -189,6 +191,7 @@ class Entry:
     index_now: bool = False  # asked for by itself (Index now): doesn't wait for an encode on its disk
     index_held: bool = False  # waiting in the lane while an encode reads its disk
     index_error: str = ""
+    index_wait_reason: str = ""
     sample_percent: int | None = None  # in the lane for a test encode of this much of the video
     sampling: bool = False  # the lane runs its test encode (indexed by now: the preview opens)
     sample_error: str = ""
@@ -267,6 +270,17 @@ class Entry:
 
 
 @dataclass
+class ActiveRun:
+    entry: Entry
+    token: CancelToken
+    kind: str
+    paths: RunPaths
+    target: OutputTarget | None
+    error: str = ""
+    status: JobStatus = JobStatus.FAILED
+
+
+@dataclass
 class Services:
     """The slow core calls the queue makes; tests swap in fakes."""
 
@@ -307,7 +321,12 @@ class JobQueue:
         self._probes = ThreadPoolExecutor(max_workers=probe_workers, thread_name_prefix="probe")
         self._worker: threading.Thread | None = None
         self._active = False  # a worker owns the queue; cleared (under the lock) when it decides to stop
-        self._cancel: CancelToken | None = None
+        self._runs: dict[str, ActiveRun] = {}  # insertion order is admission order
+        self._admission = threading.Condition(self._lock)
+        self.concurrency = Concurrency.model_validate(store.get_global("concurrency", {}))
+        self._waiting: dict[str, str] = {}
+        self._lane_paths: RunPaths | None = None
+        self._sample_kind: str | None = None
         self._stop_after_current = False
         self._closing = False  # shutdown() began: a job starting now is cancelled at once
         self._paused = False  # pause(): the running job's and the index lane's tools are suspended
@@ -345,23 +364,28 @@ class JobQueue:
         return self._active
 
     def queue_state(self) -> dict[str, Any]:
-        current = next((e.id for e in self.entries() if e.running), None)
-        return {
-            "running": self.running,
-            "current": current,
-            "stop_after_current": self._stop_after_current,
-            "paused": self._paused,
-            "priority": next((t.priority for t in self._tokens()), None),  # the Queue's choice, while running
-            "queued": sum(e.queued for e in self.entries()),
-            "indexing": next((e.id for e in self.entries() if e.indexing), None),
-            "sampling": next((e.id for e in self.entries() if e.sampling), None),
-            "index_queued": sum(e.index_queued for e in self.entries()),
-            "index_held": sum(e.index_queued and e.index_held for e in self.entries()),  # of those, waiting for a disk
-        }
+        with self._lock:
+            return {
+                "running": self.running,
+                "active_ids": list(self._runs),
+                "waiting": dict(self._waiting),
+                "current": next(iter(self._runs), None),
+                "stop_after_current": self._stop_after_current,
+                "paused": self._paused,
+                "priority": next((t.priority for t in self._tokens()), None),  # the Queue's choice, while running
+                "queued": sum(e.queued for e in self.entries()),
+                "indexing": next((e.id for e in self.entries() if e.indexing), None),
+                "sampling": next((e.id for e in self.entries() if e.sampling), None),
+                "index_queued": sum(e.index_queued for e in self.entries()),
+                "index_held": sum(
+                    e.index_queued and e.index_held for e in self.entries()
+                ),  # of those, waiting for a disk
+            }
 
     def _save(self, e: Entry) -> None:
         try:
-            self.store.save_job(e.spec, e.state, queued=e.queued, running=e.running, group=e.group)
+            interrupted = self._closing and e.id in self._runs and e.state.status is JobStatus.CANCELLED
+            self.store.save_job(e.spec, e.state, queued=e.queued, running=e.running or interrupted, group=e.group)
         except sqlite3.ProgrammingError:
             # The store closed after a shutdown that stopped waiting for this job: the store keeps it as
             # running, so the next start queues it again, as after a crash.
@@ -372,7 +396,9 @@ class JobQueue:
         self.events.publish("job", id=e.id, status=e.status.value)
 
     def _queue_changed(self) -> None:
-        self.events.publish("queue", **self.queue_state())
+        with self._admission:
+            self._admission.notify_all()
+            self.events.publish("queue", **self.queue_state())
 
     def rule_set(self, e: Entry) -> RuleSet:
         return self.rule_sets(e.spec.rule_set)
@@ -382,8 +408,7 @@ class JobQueue:
         e.source_lock = self._source_locks.setdefault(_same_file(e.spec.work_dir), threading.Lock())
 
     def _siblings(self, e: Entry) -> list[Entry]:
-        """Under the lock: the other jobs on e's source (variants). They share its work folder, whose script,
-        index and encodes have fixed names, so one's run and another's index never overlap."""
+        """Under the lock: other variants sharing the source's work folder."""
         folder = _same_file(e.spec.work_dir)
         return [o for o in self._entries.values() if o is not e and _same_file(o.spec.work_dir) == folder]
 
@@ -629,6 +654,9 @@ class JobQueue:
         except Exception as ex:  # shown on the job
             with self._lock:
                 e.probing, e.probe_error = False, f"{type(ex).__name__}: {ex}"
+                if e.queued:
+                    e.queued = False
+                    self._save(e)
             self._log(e, f"Probe failed: {e.probe_error}")
             logger.warning("%s: probe failed: %s", e.spec.name, e.probe_error)
         else:
@@ -637,6 +665,9 @@ class JobQueue:
                 if self._apply_tracks(e):
                     self._save(e)
                 self._replan(e)
+                if e.queued and e.plan is None:
+                    e.queued = False
+                    self._save(e)
                 if self._claim_crop(e):
                     self.index([e.id])  # under the lock: the job never shows ready in between
                 elif e.index_on_probe:
@@ -644,6 +675,7 @@ class JobQueue:
                 e.index_on_probe = False
         self._changed(e)
         self._index_wake.set()
+        self._queue_changed()
 
     def _apply_tracks(self, e: Entry) -> bool:
         """Under the lock: a template's pending audio and subtitles become the job's overrides once its
@@ -690,7 +722,11 @@ class JobQueue:
             detect = self.services.detect_crop
             if detect is None:  # _crop_due checked it
                 raise RuntimeError("No crop detection")
-            crop, origin = auto_crop(e.spec, e.source_video, self.app.tools.dovi_tool, detect(e.spec))
+            reads = list(script_reads(e.spec, e.source_video, e.burn))
+            if rpu := source_rpu(e.spec, e.source_video):
+                reads.append(rpu)
+            with claims.files.hold(reads, cancel=self._index_cancel):
+                crop, origin = auto_crop(e.spec, e.source_video, self.app.tools.dovi_tool, detect(e.spec))
         except Exception as ex:  # shown in the job's log; the crop stays as it was
             self._log(e, f"Auto-crop failed: {type(ex).__name__}: {ex}")
             logger.warning("%s: auto-crop failed: %s: %s", e.spec.name, type(ex).__name__, ex)
@@ -934,6 +970,7 @@ class JobQueue:
             self._order = known + [i for i in self._order if i not in known]
             self._normalize_groups()
             self.store.reorder(self._order)
+            self._admission.notify_all()
         self.events.publish("order", ids=list(self._order))
 
     # --- queue groups ------------------------------------------------------------------
@@ -971,6 +1008,7 @@ class JobQueue:
             self._changed(e)
         self._normalize_groups()
         self.store.reorder(self._order)
+        self._admission.notify_all()
         self.events.publish("order", ids=list(self._order))
 
     def move(self, ids: Iterable[str], before: str | None, group: str) -> None:
@@ -1049,6 +1087,7 @@ class JobQueue:
                 if (e.state.status is None if wanted is None else e.id in wanted) and e.runnable:
                     e.queued = True
                     e.index_queued = e.index_now = e.index_held = False  # the run indexes it first anyway
+                    e.sample_percent = e.search = None
                     self._save(e)  # its last result stays until it runs: unqueued again, it shows as it was
                     queued.append(e.id)
             self._save_lane()
@@ -1124,6 +1163,8 @@ class JobQueue:
                 continue
             offers, wanted = self.reuse_offers(e), set(chosen)
             with self._lock:
+                if e.running or self._entries.get(job_id) is not e:
+                    continue
                 e.state.keep = [s for o in offers if o.id in wanted for s in o.steps]
                 e.state.redo = [s for o in offers if o.id not in wanted for s in o.steps]
                 for o in offers:
@@ -1141,6 +1182,8 @@ class JobQueue:
     def start(self) -> None:
         self.resume()
         with self._lock:
+            if self._closing:
+                return
             self._stop_after_current = False
             if not self._active:
                 self._active = True
@@ -1154,7 +1197,8 @@ class JobQueue:
         pass 1: the others are left out. Returns the jobs it set."""
         changed = []
         with self._lock:
-            targets = [e for e in self.entries() if (e.running if ids is None else e.id in set(ids))]
+            wanted = set(ids) if ids is not None else set(list(self._runs)[:1])
+            targets = [e for e in self.entries() if e.id in wanted]
             for e in targets:
                 if not (e.spec.encodes_video and e.spec.encoder.passes == 2) or e.state.pause_after_pass1 == on:
                     continue
@@ -1165,13 +1209,18 @@ class JobQueue:
             self._changed(e)
         return [e.id for e in changed]
 
-    def stop_after_current(self) -> None:
-        self._stop_after_current = True
-        self._queue_changed()
+    def stop_after_current(self, *, cancel: bool = False) -> None:
+        with self._lock:
+            self._stop_after_current = True
+            if cancel:
+                self.cancel_current()
+            self._queue_changed()
 
-    def cancel_current(self) -> None:
-        if self._cancel is not None:
-            self._cancel.cancel()
+    def cancel_current(self, job_id: str | None = None) -> None:
+        with self._lock:
+            for run in self._runs.values():
+                if job_id is None or run.entry.id == job_id:
+                    run.token.cancel()
 
     def _token(self) -> CancelToken:
         """Under the lock: a new run's token, with the Settings' priorities, paused if the queue is."""
@@ -1183,7 +1232,8 @@ class JobQueue:
         return token
 
     def _tokens(self) -> list[CancelToken]:
-        return [t for t in (self._cancel, self._index_cancel) if t is not None]
+        tokens = [run.token for run in self._runs.values()]
+        return tokens + ([self._index_cancel] if self._index_cancel is not None else [])
 
     def pause(self) -> None:
         """Suspend the running job's tools and the index lane's (nothing running: nothing to pause)."""
@@ -1225,67 +1275,154 @@ class JobQueue:
         with self._lock:
             self._closing = True
             self._stop_after_current = True
-        self.cancel_current()
+            deadline = time.monotonic() + timeout
+            for token in self._tokens():
+                token.cancel()
+            self._admission.notify_all()
         self.stop_indexing()
-        self.wait(timeout)
+        self.wait(max(0, deadline - time.monotonic()))
         if self._indexer is not None:
-            self._indexer.join(timeout)
+            self._indexer.join(max(0, deadline - time.monotonic()))
         self._probes.shutdown(wait=False, cancel_futures=True)
 
     def _next(self) -> Entry | None:
         with self._lock:
-            return next((e for e in self.entries() if e.queued and e.plan is not None), None)
+            return next((e for e in self.entries() if e.queued), None)
 
-    def _take_next(self) -> Entry | None:
-        """The next job to run, or None after giving up the queue (so the last event says not running, and a
-        start() from then on starts a new worker instead of relying on this one)."""
-        with self._lock:
-            e = None if self._stop_after_current else self._next()
-            if e is None:
-                self._active = False
-            return e
+    def set_concurrency(self, policy: Concurrency) -> None:
+        with self._admission:
+            self.store.set_global("concurrency", policy.model_dump())
+            self.concurrency = policy
+            self._admission.notify_all()
+            self._index_wake.set()
+
+    def _capacity(self, kind: str) -> str:
+        active = [run.kind for run in self._runs.values()]
+        if self.concurrency.limit_samples and self._sample_kind is not None:
+            active.append(self._sample_kind)
+        return self.concurrency.waiting(kind, active)
+
+    def _candidate(self, e: Entry) -> tuple[ActiveRun | None, str]:
+        if self._paused:
+            return None, "Queue paused"
+        if e.plan is None:
+            return None, "Waiting for the source probe"
+        kind = encoder_type(e.spec)
+        if reason := self._capacity(kind):
+            return None, reason
+        target, error = None, ""
+        try:
+            output = job_output(e.spec, e.plan, self.rule_set(e))
+            if output is not None:
+                target = OutputTarget.select(output, e.spec.output_policy, e.state)
+            paths = RunPaths.for_job(e.spec, target.path if target else None)
+        except Exception as ex:  # includes a rule set's output naming callback
+            # Let the worker record and report this job's failure in the usual order.
+            paths = RunPaths(e.spec.job_dir, e.spec.work_dir, frozenset(), frozenset())
+            error = str(ex)
+        for run in self._runs.values():
+            if paths.conflicts(run.paths):
+                return None, f"Waiting for {_variant(run.entry)} to release its files"
+        if self._lane_paths and paths.conflicts(self._lane_paths):
+            return None, "The index/sample lane is using this job's files"
+        return ActiveRun(e, self._token(), kind, paths, target, error), ""
+
+    def _take_next(self) -> ActiveRun | None:
+        """Claim the queue head and its token before launching its thread."""
+        with self._admission:
+            while True:
+                e = None if self._stop_after_current else self._next()
+                run, reason = self._candidate(e) if e else (None, "")
+                waiting = {e.id: reason} if e and reason else {}
+                if waiting != self._waiting:
+                    self._waiting = waiting
+                    if reason:
+                        self.events.publish("queue", **self.queue_state())
+                if e is None and not self._runs:
+                    return None
+                if run is not None and e is not None:
+                    self._runs[e.id] = run
+                    e.queued, e.running, e.progress = False, True, None
+                    e.state.status, e.state.error = None, ""
+                    try:
+                        self._save(e)
+                        self._changed(e)
+                        self._queue_changed()
+                    except Exception as ex:
+                        run.error = f"Could not start the job: {ex}"
+                    return run
+                self._admission.wait()
 
     def _work(self) -> None:
-        ran: list[JobStatus] = []
-        started = _now()
-        try:
-            while (e := self._take_next()) is not None:
-                ran.append(self._run(e))
-        finally:
-            with self._lock:
-                if self._worker is threading.current_thread():
+        batch: list[ActiveRun] = []
+        started = time.monotonic()
+        while True:
+            with self._admission:
+                run = self._take_next()
+                if run is None:
+                    left = sum(e.queued for e in self.entries()) if self._stop_after_current else 0
                     self._active = False
-                self._cancel = None
-                self._settle()
-            self._queue_changed()
-            if ran and not self._closing:
-                left = sum(e.queued for e in self.entries()) if self._stop_after_current else 0
-                seconds = _now() - started
-                self.bus.emit(QueueFinished(tuple(ran), seconds, left))
-                # The page's toast, and its desktop notification while it isn't in front.
-                self.events.publish("queue.finished", statuses=[s.value for s in ran], seconds=seconds, left=left)
+                    self._settle()
+                    self._queue_changed()
+                    break
+            batch.append(run)
+            try:
+                threading.Thread(target=self._execute, args=(run,), name=f"job-{run.entry.id}", daemon=True).start()
+            except RuntimeError as ex:
+                self._finish_run(run, ex)
+        if batch and not self._closing:
+            statuses = tuple(run.status for run in batch)
+            seconds = time.monotonic() - started
+            self.bus.emit(QueueFinished(statuses, seconds, left))
+            self.events.publish("queue.finished", statuses=[s.value for s in statuses], seconds=seconds, left=left)
 
-    def _run(self, e: Entry) -> JobStatus:
+    def _execute(self, run: ActiveRun) -> None:
+        error = None
+        try:
+            if run.error:
+                raise ToolError(run.error)
+            with _open_log(run.entry) or contextlib.nullcontext() as log_file:
+                run.status = self._run(run, log_file)
+        except Exception as ex:
+            logger.exception("%s: job worker failed", run.entry.spec.name)
+            error = ex
+        finally:
+            self._finish_run(run, error)
+
+    def _finish_run(self, run: ActiveRun, error: Exception | None) -> None:
+        e = run.entry
+        with self._admission:
+            try:
+                if error is not None:
+                    e.state.status, e.state.error = JobStatus.FAILED, str(error)
+                    if not self._closing and e.plan is not None:
+                        result = JobResult(e.plan, JobStatus.FAILED, error=str(error))
+                        self.bus.emit(JobFinished(_copy(e.spec), result, 0, None))
+                e.running, e.progress = False, None
+                self._save(e)
+                self._refresh_outputs([e])
+                self._changed(e)
+            finally:
+                self._runs.pop(e.id)
+                self._index_wake.set()
+                if self._runs:
+                    self._queue_changed()
+                self._admission.notify_all()
+
+    def _run(self, run: ActiveRun, log_file) -> JobStatus:
+        e, token = run.entry, run.token
         if e.plan is None:
             raise RuntimeError(f"{e.spec.name}: run without a plan")
         started = _now()
-        with self._lock:
-            e.queued, e.running, e.progress = False, True, None
-            e.state.status, e.state.error = None, ""
-            self._cancel = self._token()
-            self._save(e)
-        self._changed(e)
-        self._queue_changed()
         if self.services.release_preview is not None:
-            self.services.release_preview([f"{e.id}:encode"])  # the compare's clip holds the output open
-        log_file = _open_log(e)
+            self.services.release_preview([f"{e.id}:encode"])
         logger.info("Job %s started (%s)", e.spec.name, e.id)
         self.save_job_file(e)
         recorder = RunRecorder(
             e.spec,
             e.plan,
             self.rule_set(e),
-            job_output(e.spec, e.plan, self.rule_set(e)),
+            run.target.path if run.target else None,
             queue_events=self.queue_events,
             versions=self._versions,
         )
@@ -1298,7 +1435,7 @@ class JobQueue:
         def log(line: str) -> None:
             self._log(e, line, log_file)
 
-        progress = self._progress(e, self._cancel)
+        progress = self._progress(e, token)
 
         def on_record(_r: StepRecord) -> None:
             self._save(e)  # a crash after this step resumes after it
@@ -1330,7 +1467,8 @@ class JobQueue:
         with self._lock:
             e.step_lines = {}
         log(f"### {_variant(e)} ({datetime.now().isoformat(timespec='seconds')})")
-        self._wait_for_siblings(e, log)
+        if not self.concurrency.enabled:
+            self._wait_for_siblings(e, token, log)
         try:
             if short := low_space([e.spec.work_dir, *filter(None, [e.spec.output_dir])], self.app.min_free_gb):
                 # Before any step: a run that would fill the disk hours in fails now (and the next job is tried).
@@ -1346,7 +1484,8 @@ class JobQueue:
                     self.app,
                     state=e.state,
                     log=log,
-                    cancel=self._cancel,
+                    cancel=token,
+                    target=run.target,
                     progress=progress,
                     on_record=on_record,
                     on_step=on_step,
@@ -1356,6 +1495,7 @@ class JobQueue:
             logger.exception("%s: the run raised", e.spec.name)
             result = JobResult(e.plan, JobStatus.FAILED, error=f"{type(ex).__name__}: {ex}")
             e.state.status, e.state.error = result.status, result.error
+        e.state.status = result.status
         if result.status in (JobStatus.DONE, JobStatus.INVALID) and result.output is not None:
             e.state.made = _made(e, result.output, _now() - started)
         if record := recorder.finished(result, e.state):
@@ -1376,38 +1516,32 @@ class JobQueue:
             f" -> {result.output}" if result.output else "",
             f" ({result.error})" if result.error else "",
         )
+        if result.status is JobStatus.PAUSED:
+            log(f"{e.spec.name}: paused after pass 1; run it again to go on with pass 2")
         if log_file is not None:
             log_file.close()
         if result.status is JobStatus.DONE and self.app.delete_work_dir:
             record = self._clean_up(e, record)
-        with self._lock:
-            e.running, e.progress = False, None
-            self._save(e)
-            self._refresh_outputs([e])  # its output is its own now; jobs it held back may run
-        self._changed(e)
-        self._index_wake.set()  # a job held back for this one's disk may go
-        if result.status is JobStatus.PAUSED:
-            log(f"{e.spec.name}: paused after pass 1; run it again to go on with pass 2")
         # A shutdown's cancel isn't news (the job resumes on the next start), nor is a pause (no output, not an end).
         if not self._closing and result.status is not JobStatus.PAUSED:
             self.bus.emit(JobFinished(_copy(e.spec), result, _now() - started, record))
         return result.status
 
-    def _wait_for_siblings(self, e: Entry, log: Callable[[str], None]) -> None:
+    def _wait_for_siblings(self, e: Entry, token: CancelToken, log: Callable[[str], None]) -> None:
         """Before a run: wait while another job on the source is being indexed or cropped (its index steps
         write the shared script). The lane takes no other one while e runs (_take_index). A cancel ends the
         wait, and the run then ends cancelled."""
         said = False
         while True:
             with self._lock:
-                busy = next((o for o in self._siblings(e) if o.indexing or o.cropping), None)
-                cancel = self._cancel
-            if busy is None or cancel is None or cancel.cancelled:
+                busy = next((o for o in self._siblings(e) if (o.indexing or o.cropping) and not o.sample_percent), None)
+            if busy is None or token.cancelled:
                 return
             if not said:
                 log(f"Waiting for {_variant(busy)}, which is indexing this source")
                 said = True
-            self._index_wake.wait(0.2)
+            with self._admission:
+                self._admission.wait(0.2)
 
     def _progress(self, e: Entry, token: CancelToken | None) -> ProgressFn:
         """A run's progress callback (a job's or the index lane's): sets e.progress, with the step's fps and eta
@@ -1455,26 +1589,40 @@ class JobQueue:
 
         return progress
 
+    def _contains_job_files(self, folder: Path) -> bool:
+        """Under the lock: cleanup must preserve declared inputs and reserved or published outputs."""
+        folder = folder.resolve()
+        if any(path.is_relative_to(folder) for run in self._runs.values() for path in run.paths.outputs):
+            return True
+        for entry in self._entries.values():
+            if entry.state.output and entry.state.output.resolve().is_relative_to(folder):
+                return True
+            if any(path.resolve().is_relative_to(folder) for path in entry.spec.inputs.files()):
+                return True
+        return False
+
     def _clean_up(self, e: Entry, record: Path | None) -> Path | None:
         """A done job's work folder, deleted (AppConfig.delete_work_dir) once its records and log are copied
         to records_dir; kept while a preview is indexing the source or another job on the source needs it.
         Returns where the job record is now."""
         with self._lock:
             sharing = self._siblings(e)
-        if sharing:
-            self._log(e, f"Work folder kept: {_variant(sharing[0])} uses it too")
-            return record
-        if not e.source_lock.acquire(blocking=False):
-            self._log(e, "Work folder kept: a preview is reading it")
-            return record
-        source = e.spec.inputs.source
-        try:
-            kept = clean_work_dir(source, self.records_dir)
-        except OSError as ex:
-            self._log(e, f"Work folder not deleted: {ex}")
-            return record
-        finally:
-            e.source_lock.release()
+            if sharing:
+                self._log(e, f"Work folder kept: {_variant(sharing[0])} uses it too")
+                return record
+            if self._contains_job_files(e.spec.work_dir):
+                self._log(e, "Work folder kept: it contains a job input or output")
+                return record
+            if not e.source_lock.acquire(blocking=False):
+                self._log(e, "Work folder kept: a preview is reading it")
+                return record
+            try:
+                kept = clean_work_dir(e.spec.inputs.source, self.records_dir)
+            except OSError as ex:
+                self._log(e, f"Work folder not deleted: {ex}")
+                return record
+            finally:
+                e.source_lock.release()
         self._log(e, f"Work folder deleted: {e.spec.work_dir}")
         logger.info("%s: work folder deleted (records kept in %s)", e.spec.name, self.records_dir)
         return kept.get(record) if record is not None else None
@@ -1491,6 +1639,9 @@ class JobQueue:
                 shared = self._find_source(source)
                 if shared is not None:
                     kept[str(folder)] = f"{shared.spec.name} uses it too"
+                    continue
+                if self._contains_job_files(folder):
+                    kept[str(folder)] = "It contains a job input or output"
                     continue
                 try:
                     clean_work_dir(source, self.records_dir)
@@ -1542,7 +1693,7 @@ class JobQueue:
             e = self.get(job_id)
             if search is not None:
                 crfsearch.check(e.spec)
-            if e.plan is None or e.probe_error:
+            if e.plan is None or e.probe_error or e.busy or e.indexing or e.cropping or e.sampling:
                 return False
             e.sample_percent, e.search = percent, search
             if search is None:
@@ -1571,8 +1722,8 @@ class JobQueue:
             for e in dropped:
                 e.index_queued = e.index_now = e.index_held = False
                 e.sample_percent = e.search = None
-            current = next((e for e in self.entries() if e.indexing or e.sampling), None)
-            if current is not None and (wanted is None or current.id in wanted) and self._index_cancel is not None:
+            current = next((e for e in self.entries() if e.indexing or e.sampling or e.cropping), None)
+            if self._index_cancel is not None and (wanted is None or current is not None and current.id in wanted):
                 self._index_cancel.cancel()
             self._save_lane()
         self._index_wake.set()
@@ -1592,21 +1743,31 @@ class JobQueue:
 
     def _encode_disks(self) -> frozenset[str]:
         """Under the lock: the disks the encode queue reads now, or is about to (between two jobs)."""
-        e = next((x for x in self.entries() if x.running), None)
-        if e is not None and self.index_during_video and _video_only(e):
-            return frozenset()  # the encoder reads the source at its own pace: an index beside it costs little
-        if e is None and self._active and not self._stop_after_current:
-            e = self._next()
-        if e is None:
-            return frozenset()
-        s = e.spec
-        paths = [
-            s.inputs.source,
-            s.work_dir,
-            *([s.output_dir] if s.output_dir else []),
-            *([s.inputs.encode] if s.inputs.encode else []),
-        ]
+        entries = [run.entry for run in self._runs.values()]
+        if not entries and self._active and not self._stop_after_current and (head := self._next()):
+            entries.append(head)
+        paths = set()
+        for entry in entries:
+            if self.index_during_video and _video_only(entry):
+                continue
+            spec = entry.spec
+            paths.update(filter(None, (spec.inputs.source, spec.inputs.encode, spec.work_dir, spec.output_dir)))
+            paths.update(spec.inputs.audio + spec.inputs.subtitles)
         return frozenset().union(*(disks(p) for p in paths))
+
+    def _index_wait(self, e: Entry, busy: frozenset[str]) -> str:
+        if self._runs:
+            paths = RunPaths.for_job(e.spec, None)
+            if any(paths.conflicts(run.paths) for run in self._runs.values()):
+                return "A running job is using these files"
+            if not self.concurrency.enabled and e.sample_percent is None and any(o.running for o in self._siblings(e)):
+                return "A running job is using this source"
+        if e.sample_percent is not None and self.concurrency.limit_samples:
+            if reason := self._capacity(encoder_type(e.spec)):
+                return reason
+        if not e.index_now and busy and busy & disks(e.spec.inputs.source):
+            return "Waiting for the encode reading this disk"
+        return ""
 
     def _take_index(self) -> tuple[Entry | None, bool, list[Entry]]:
         """(the next job to index, whether any are left, jobs held back or let go). A job still probing
@@ -1622,16 +1783,16 @@ class JobQueue:
             busy = self._encode_disks() if self.index_waits_for_disk else frozenset()
             taken, changed = None, []
             for e in waiting:
-                held = not e.probing and (
-                    any(o.running for o in self._siblings(e))  # its run writes the script this index writes
-                    or (not e.index_now and bool(busy and busy & disks(e.spec.inputs.source)))
-                )
-                if held != e.index_held:
-                    e.index_held = held
+                reason = "" if e.probing else self._index_wait(e, busy)
+                held = bool(reason)
+                if held != e.index_held or reason != e.index_wait_reason:
+                    e.index_held, e.index_wait_reason = held, reason
                     changed.append(e)
                 if taken is None and not e.probing and not held:
                     taken = e
-            if taken is not None:
+            if taken is not None and not self._closing:
+                self._lane_paths = RunPaths.for_job(taken.spec, None)
+                self._sample_kind = encoder_type(taken.spec) if taken.sample_percent is not None else None
                 self._index_order.remove(taken.id)
                 taken.index_queued, taken.index_now, taken.indexing, taken.progress = False, False, True, None
                 self._index_cancel = self._token()
@@ -1654,7 +1815,21 @@ class JobQueue:
             if e is not None:
                 self._changed(e)
                 self._queue_changed()
-                self._index(e)
+                try:
+                    self._index(e)
+                except Exception as ex:
+                    logger.exception("%s: index worker failed", e.spec.name)
+                    e.index_error = str(ex)
+                finally:
+                    with self._lock:
+                        e.indexing = e.sampling = e.crop_pending = False
+                        e.progress = e.sample_percent = e.search = None
+                        self._index_cancel = None
+                        self._sample_kind = self._lane_paths = None
+                        self._save(e)
+                        self._save_lane()
+                        self._changed(e)
+                        self._queue_changed()
             elif left:
                 self._index_wake.wait(1.0)
             else:
@@ -1738,15 +1913,7 @@ class JobQueue:
                 self._sample(e, percent, log, progress, on_record)
         if log_file is not None:
             log_file.close()
-        with self._lock:
-            e.indexing, e.progress, e.index_error = False, None, "" if error == "Cancelled" else error
-            e.sampling, e.sample_percent, e.search = False, None, None
-            e.crop_pending = False
-            self._index_cancel = None
-            self._save(e)
-            self._save_lane()
-        self._changed(e)
-        self._queue_changed()
+        e.index_error = "" if error == "Cancelled" else error
 
     def _sample(
         self, e: Entry, percent: int, log: Callable[[str], None], progress: ProgressFn, on_record: Callable

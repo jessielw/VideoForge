@@ -11,7 +11,7 @@ from another job on the source (pipeline/share.py).
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Hashable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
@@ -21,20 +21,18 @@ import re
 import subprocess
 import threading
 import time
-from typing import TYPE_CHECKING
 
 from videoforge.core.execute import process
 from videoforge.core.execute.process import CancelToken, LogFn, ToolError
 from videoforge.core.job import StepRecord, StepRun, StepStatus
+from videoforge.core.pipeline import claims
+from videoforge.core.pipeline.share import Sharing, stats_sidecars
 from videoforge.core.video.encoders import (
     progress as encoder_progress,
     progress_line as encoder_progress_line,
     rate as encoder_rate,
 )
 from videoforge.core.workdir import finished_files, forget_finished
-
-if TYPE_CHECKING:
-    from videoforge.core.pipeline.share import Sharing
 
 Runner = Callable[[Sequence[Sequence[str]], LogFn, CancelToken | None], None]
 _MKV_PROGRESS = re.compile(r"Progress:\s*(\d+)%")
@@ -72,6 +70,9 @@ class Step:
     # HDR10 values come from the RPU the job extracts first). run_steps calls it before the reuse check.
     refresh: Callable[[], Step] | None = None
     frames: int | None = None  # the frames it reads, when known: a tool that prints a count (ffmpeg's) gets a bar
+
+    reads: tuple[Hashable, ...] = ()  # implicit dependencies, e.g. an index opened by the script
+    owns: tuple[Hashable, ...] = ()  # index files whose names the source filter chooses
 
     @property
     def written(self) -> tuple[Path, ...]:
@@ -240,9 +241,17 @@ def run_steps(
                 log(line)
 
         try:
-            forget_finished(step.outputs)
-            for path in step.written:  # a stale file from an earlier run must not pass for this one's
-                path.unlink(missing_ok=True)
+            with claims.finished_lock:
+                forget_finished(step.outputs)
+                if step.id == "index":
+                    # A failed rebuild must also invalidate older jobs' records of the index.
+                    for marker in step.outputs:
+                        marker.unlink(missing_ok=True)
+                for path in step.written:
+                    path.unlink(missing_ok=True)
+                    if step.id == "video.pass1":
+                        for sidecar in stats_sidecars(path):
+                            sidecar.unlink(missing_ok=True)
             if step.call is not None:
                 step.call(out)
             else:
@@ -305,8 +314,7 @@ def run_steps(
         report(i, 1.0)
         finished(i)
 
-    def reused(i: int) -> bool:
-        """Refresh step i, then reuse it if an earlier run did it: True when it did."""
+    def refresh(i: int) -> None:
         step, run = steps[i], runs[i]
         if step.refresh is not None:
             step = step.refresh()
@@ -315,6 +323,11 @@ def run_steps(
             if run.command != step.command_line:
                 run.command = step.command_line
                 changed(run)
+
+    def reused(i: int) -> bool:
+        step, run = steps[i], runs[i]
+        if step.id in redo:
+            return False
         with lock:
             prior = records.get(step.id)
             if step.id in keep and not _reusable(step, prior) and _present(step) and _finished(step, prior):
@@ -325,7 +338,8 @@ def run_steps(
                     on_record(prior)
         origin = ""
         if (prior is None or not _reusable(step, prior)) and share is not None and step.id not in redo:
-            adopted = share.adopt(step)
+            with claims.finished_lock:
+                adopted = share.adopt(step)
             if adopted is not None:
                 prior, origin = adopted
                 with lock:
@@ -342,6 +356,43 @@ def run_steps(
         finished(i)
         return True
 
+    def perform(i: int, *, foreground: bool) -> None:
+        nonlocal lead
+        initial = steps[i]
+        if initial.refresh:
+            with claims.files.hold((*initial.inputs, *initial.reads), cancel=stop):
+                refresh(i)
+        step = steps[i]
+        reads = (*initial.reads, *step.reads, *step.inputs)
+        writes = (*initial.owns, *step.owns, *step.outputs, *step.written)
+        with claims.files.hold(reads, cancel=stop):
+            portable = (
+                share.portable(step)
+                if share and step.outputs and all(p.parent in (share.work, share.home) for p in step.outputs)
+                else None
+            )
+        # Producers acquire these keys before checking their notes. A waiter always checks again
+        # after success, failure or cancellation, even if both jobs initially found no file.
+        keys = list(writes)
+        if portable and share:
+            keys.append((share.work.resolve(), portable))
+        with claims.producers.hold(writes=keys, cancel=stop):
+            if share and step.outputs and all(p.parent == share.work for p in step.outputs):
+                # Other variants can keep reading a finished source extract during this check.
+                with claims.files.hold((*reads, *writes), cancel=stop):
+                    if reused(i):
+                        return
+            with claims.files.hold(reads, writes, stop):
+                if reused(i):
+                    return
+                if foreground:
+                    lead = i
+                try:
+                    execute(i)
+                finally:
+                    if foreground:
+                        lead = None
+
     def background(i: int, after: list[Future[None]]) -> None:
         if stop.cancelled:  # never started: it stays pending
             return
@@ -349,8 +400,8 @@ def run_steps(
             # The background steps it reads: submitted before it, so they hold a thread or are done (no deadlock).
             for f in after:
                 f.result()
-            if not stop.cancelled and not reused(i):
-                execute(i)
+            if not stop.cancelled:
+                perform(i, foreground=False)
         except BaseException:
             stop.cancel()
             raise
@@ -367,14 +418,7 @@ def run_steps(
                 continue
             for j in reads:
                 pending.pop(j).result()  # raises what stopped it
-            if not reused(i):
-                if stop.cancelled:
-                    raise process.Cancelled()
-                lead = i
-                try:
-                    execute(i)
-                finally:
-                    lead = None
+            perform(i, foreground=True)
             if hold is not None and hold(steps[i]):
                 raise Held(steps[i].id)
         for j in list(pending):

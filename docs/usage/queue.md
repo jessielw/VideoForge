@@ -56,6 +56,14 @@ A job queued while the queue runs is picked up in its turn, in queue order. Queu
 
 **Start queue** runs the queued jobs; with none queued it's disabled. **Run selected** queues the selected jobs and starts, including completed jobs and failed or canceled runs to rerun or retry. Start and Index wait for pending editor saves. Failed saves offer **Retry saves** or **Discard unsaved changes** before work can start. Batch crop reports updated, skipped and failed jobs; imported encodes and busy jobs are skipped without stopping later eligible jobs. For episodes with different track orders, prefer template rules over track positions.
 
+## Concurrent jobs
+
+In **Settings → Queue & indexing**, enable **Run multiple full jobs at once** to use more than one slot. These settings apply to every profile on the installation. The starting limits are two full jobs, two x264 jobs, and one job of each other type. x265 starts with **Run alone** selected.
+
+Each job holds its slot through validation and cleanup. The next queued row shows why it is waiting. For two x264 jobs and one x265 job to run together, set three total slots and clear **Run alone** for x265. Lowering a cap lets active jobs finish. Audio parallelism is configured per job.
+
+Variants with separate job folders can run together. Matching encodes share a finished file. Cancelling a producer lets a waiting variant try the step again. Give custom scripts and raw tool arguments distinct paths for extra files they write.
+
 ## Batch indexing
 
 Use **Index** on the Queue toolbar to index selected jobs, or all jobs if none are selected. Indexing creates the source index and working script without starting an encode. A job's preview opens only after its source is indexed; opening an editor never starts a full-source read by itself.
@@ -68,15 +76,15 @@ BestSource's first index decodes the whole video and can take substantially long
 
 ## Pause, stop, and cancel
 
-While a job runs, something indexes or the queue is paused, a second row of the Queue toolbar holds **Cancel**, **Pause after pass 1**, **Pause** or **Resume**, the process priority menu and **Stop indexing**. **Start queue** becomes **Stop after current** in its own place, so **Run selected** stays where it is. Pause and resume control the running tools, and the priority menu changes the running job's process priority. Default priorities for later runs are on **Settings**.
+Use **Cancel job** on a running job’s row to cancel that job. **Stop after active jobs** leaves the remaining jobs queued while active runs finish. **Cancel active jobs and stop** cancels every active full job and leaves pending jobs queued.
 
-Stopping the queue after the current job leaves the remaining jobs queued. Canceling interrupts the running work. When VideoForge shuts down, its child tools stop too; a partially encoded stream is not a finished reusable step.
+**Pause**, **Resume**, and **Priority** apply to all running tools, including the index/sample lane. **Stop indexing** controls that lane separately. By default one sample or CRF search can run alongside full jobs, including an exclusive encode. Select **Count samples and CRF searches toward job limits** to apply the total, encoder limits and exclusivity to samples too.
 
 Untick a queued job, or use **Unqueue** on selected queued jobs, to unlock their settings without removing the jobs or files. This does not cancel a running job.
 
 ## Pause after pass 1
 
-A 2-pass encode can be stopped between its passes. **Pause after pass 1** in the Queue toolbar (while the job runs, or click it again to take it back) lets pass 1 finish, then ends the run as **Paused**. Nothing is canceled and the finished steps stay recorded, so you can close VideoForge. Run the job again, even after a restart, and it reuses pass 1 and goes on with pass 2. Audio encodes still running beside the video when the job pauses are stopped and made again on the next run. A job that is not a 2-pass encode has no pass 1 to stop after.
+A 2-pass encode can be stopped between its passes. **Pause after pass 1** on the job’s row (while the job runs, or click it again to take it back) lets pass 1 finish, then ends the run as **Paused**. Nothing is canceled and the finished steps stay recorded, so you can close VideoForge. Run the job again, even after a restart, and it reuses pass 1 and goes on with pass 2. Audio encodes still running beside the video when the job pauses are stopped and made again on the next run. A job that is not a 2-pass encode has no pass 1 to stop after.
 
 ## Job files
 

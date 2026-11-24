@@ -115,6 +115,7 @@ def summary(e: Entry, groups: Mapping[str, str] | None = None) -> dict[str, Any]
         "rule_set": s.rule_set,
         "status": e.status.value,
         "pause_after_pass1": e.state.pause_after_pass1,
+        "two_pass": s.encodes_video and s.encoder.passes == 2,
         "progress": e.progress,
         "issue": first.message if first else "",
         # the queue row's counts: errors and warnings (the job's Issues tab lists them)
@@ -130,6 +131,7 @@ def summary(e: Entry, groups: Mapping[str, str] | None = None) -> dict[str, Any]
         # The source index is in the work folder (the video opens at once); a failed batch index says why.
         "indexed": s.encodes_video and not e.indexing and indexed(s, e.source_video, e.burn),
         "index_error": e.index_error,
+        "index_wait_reason": e.index_wait_reason if e.index_held else "",
         "index_held": e.index_held,  # waiting in the lane while an encode reads its disk
         "sample_waiting": e.sample_percent is not None and not e.sampling,  # in the lane for a test encode
         "sample_error": e.sample_error,
