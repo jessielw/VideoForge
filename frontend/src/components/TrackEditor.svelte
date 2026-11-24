@@ -430,7 +430,9 @@
       : encodeOf(p.action as AudioAction)?.bitrates === null
         ? 'lossless'
         : 'quality VBR'
-    return `${codec} ${p.out_layout} · ${rate}${p.upmix_50 ? ' · 5.0 upmixed to 5.1' : ''}`
+    const upmix =
+      p.source.layout === '5.0' ? ' · 5.0 upmixed to 5.1' : ` · ${p.source.layout} downmixed to 5.0, upmixed to 5.1`
+    return `${codec} ${p.out_layout} · ${rate}${p.upmix_50 ? upmix : ''}`
   }
 
   // --- the source at a glance ---

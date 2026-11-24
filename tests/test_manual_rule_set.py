@@ -351,14 +351,17 @@ def test_atmos_mode_sets_the_bed_and_its_rates():
 
 
 def test_ddp_wont_add_a_speaker_the_source_lacks():
-    """DeeZy codes a source without an LFE without one: 7.0 to 5.1 is blocked; 5.0 to 5.1 is DeeZy's own upmix."""
+    """DDP codes the source's own speakers: 4.1 to 5.0 is blocked; 5.1 from 5.0 (6.0, 7.0 by a 5.0 downmix) is the upmix."""
     plan = encoded(
-        [audio(C.DTS_HD_MA, "7.0", index=0)], id_1=TrackOverride(action=AudioAction.DDP, layout=Layout(5, 1))
+        [audio(C.DTS_HD_MA, "4.1", index=0)], id_1=TrackOverride(action=AudioAction.DDP, layout=Layout(5, 0))
     )
     assert [(i.code, i.message) for i in plan.issues] == [
-        ("audio.upmix", "Audio #1: DDP (DEE) codes the source's own speakers, and 7.0 has no 5.1 speakers")
+        ("audio.upmix", "Audio #1: DDP (DEE) codes the source's own speakers, and 4.1 has no 5.0 speakers")
     ]
     auto = encoded([audio(C.DTS_HD_MA, "7.0", index=0)], id_1=TrackOverride(action=AudioAction.DDP))
     assert (str(auto.audio[0].out_layout), auto.issues) == ("5.0", [])
-    up = encoded([audio(C.DTS_HD_MA, "5.0", index=0)], id_1=TrackOverride(action=AudioAction.DDP, layout=Layout(5, 1)))
-    assert (up.audio[0].upmix_50, up.issues) == (True, [])
+    for layout in ("5.0", "6.0", "7.0"):  # 6.0 and 7.0 by a 5.0 downmix (needs_downmix)
+        up = encoded(
+            [audio(C.DTS_HD_MA, layout, index=0)], id_1=TrackOverride(action=AudioAction.DDP, layout=Layout(5, 1))
+        )
+        assert (up.audio[0].upmix_50, up.issues) == (True, []), layout

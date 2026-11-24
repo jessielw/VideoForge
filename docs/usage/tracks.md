@@ -64,7 +64,7 @@ Open **Settings → Encoder presets → Manage audio presets** to manage the sam
 
 Applying a preset preserves the track's language, flags, inclusion, timing, and position. It replaces encoder options rather than keeping options from a previous encoder. Copy clears encoding settings and copies the source audio.
 
-In the compact picker for an individual track, incompatible choices are disabled with a reason: for example, a 5.1 preset cannot upmix stereo, Atmos needs TrueHD Atmos, and required tools must be installed. The manager allows editing these presets for other sources, while disabling **Apply to this output** until they fit the current track. DDP can still make 5.1 from a 5.0 source. Template outputs have no source yet, so their presets are fitted to each track when applied, following the existing [template audio rules](templates.md#audio-by-rules).
+In the compact picker for an individual track, incompatible choices are disabled with a reason: for example, a 5.1 preset cannot upmix stereo, Atmos needs TrueHD Atmos, and required tools must be installed. The manager allows editing these presets for other sources, while disabling **Apply to this output** until they fit the current track. DDP can still make 5.1 from a 5.0, 6.0 or 7.0 source: DeeZy adds a silent LFE to 5.0, and VideoForge first downmixes a 6.0 or 7.0 track to 5.0 with ffmpeg (the extra speakers fold into the surrounds at −3 dB; the other channels keep their level). Template outputs have no source yet, so their presets are fitted to each track when applied, following the existing [template audio rules](templates.md#audio-by-rules).
 
 ## External files
 

@@ -245,10 +245,13 @@ class AudioEncode:
         return layout.main > source.main or layout.lfe > source.lfe
 
     def upmix_50(self, source: Layout, layout: Layout) -> bool:
-        """True for DDP's 5.1 from a 5.0 source, the one upmix allowed (DeeZy adds the LFE)."""
+        """True for DDP's 5.1 from a source of five or more speakers and no LFE (5.0, 6.0, 7.0), the one upmix
+        allowed: DeeZy adds a silent LFE to a 5.0 source (--upmix-50-to-51), so a bigger one is downmixed to 5.0
+        for it first (needs_downmix)."""
         return (
             self.action is AudioAction.DDP
-            and source == Layout(5, 0)
+            and source.main >= 5
+            and not source.lfe
             and layout == Layout(5, 1)
             and layout in self.layouts
         )
@@ -596,6 +599,43 @@ def measure_path(planned: PlannedAudio, position: int, temp_dir: Path) -> Path:
     return output_path(planned, position, temp_dir).with_suffix(".loudness.json")
 
 
+def needs_downmix(planned: PlannedAudio) -> bool:
+    """True for DDP's 5.1 from a 6.0 or 7.0 source: DeeZy adds an LFE to a 5.0 source alone (and codes a bigger
+    one without an LFE as 5.0), so a downmix step makes the track 5.0 first (downmix_argv)."""
+    return planned.upmix_50 and planned.source.layout.main > 5
+
+
+def downmix_path(planned: PlannedAudio, position: int, temp_dir: Path) -> Path:
+    """The downmix step's 5.0 of a track (needs_downmix), beside its encode."""
+    return output_path(planned, position, temp_dir).with_suffix(".5.0.flac")
+
+
+def downmix_argv(planned: PlannedAudio, source: Path, out: Path, tools: Tools) -> tuple[str, ...]:
+    """ffmpeg downmixes the track to 5.0 for DeeZy, as 24-bit FLAC. In float: the speakers it folds in come in
+    at -3 dB and the rest keep their level (an integer downmix turns every channel down to stay under clipping,
+    the fronts of a 7.0 by 4.6 dB)."""
+    return (
+        tools.ffmpeg,
+        "-hide_banner",
+        "-nostdin",
+        "-y",
+        "-i",
+        str(source),
+        "-map",
+        f"0:a:{planned.source.index}",
+        "-vn",
+        "-sn",
+        "-dn",
+        "-af",
+        "aformat=sample_fmts=flt:channel_layouts=5.0(side)",
+        "-c:a",
+        "flac",
+        "-sample_fmt",
+        "s32",
+        str(out),
+    )
+
+
 def _normalize(planned: PlannedAudio) -> str:
     """The track's normalize mode; "" for none, or an encode without the option (a copy, DeeZy's)."""
     enc = ENCODES.get(planned.action)
@@ -706,11 +746,17 @@ def dee_shim(tools: Tools) -> str:
 
 
 def _deezy(
-    planned: PlannedAudio, source: Path, output: Path, temp_dir: Path, settings: AudioSettings, tools: Tools
+    planned: PlannedAudio,
+    source: Path,
+    track_index: int,
+    output: Path,
+    temp_dir: Path,
+    settings: AudioSettings,
+    tools: Tools,
 ) -> tuple[str, ...]:
     track = planned.source
     common = (
-        f"--track-index={track.index}",
+        f"--track-index={track_index}",
         f"--delay={track.delay_ms}ms",
         f"--bitrate={planned.bitrate_kbps}",
         "--output",
@@ -997,6 +1043,8 @@ def audio_command(
         argvs = _opusenc(planned, source, output, tools, measured)
     elif planned.action in _FFMPEG_ARGS:
         argvs = (_ffmpeg(planned, source, output, tools, measured),)
+    elif needs_downmix(planned):  # DeeZy reads the downmix step's 5.0 (its only track), not the source
+        argvs = (_deezy(planned, downmix_path(planned, position, temp_dir), 0, output, temp_dir, settings, tools),)
     else:
-        argvs = (_deezy(planned, source, output, temp_dir, settings, tools),)
+        argvs = (_deezy(planned, source, planned.source.index, output, temp_dir, settings, tools),)
     return AudioCommand(planned, output, argvs)

@@ -203,7 +203,10 @@ test('DDP takes DEE rates per layout and adds no speaker the source lacks', () =
     /DDP \(DEE\) at 5.1 takes 640 or 704 kb\/s, not 650/,
   )
   assert.equal(audioPresetProblem({ ...preset, layout: '7.1', bitrate_kbps: 1792 }, encodes, source('7.1')), '')
-  assert.match(audioPresetProblem(preset, encodes, source('7.0')), /adds a speaker this 7.0 source doesn't have/)
+  // 5.1 from 5.0, 6.0 or 7.0 is DDP's upmix (6.0 and 7.0 by a 5.0 downmix); 4.1 has no center for 5.0
+  for (const layout of ['5.0', '6.0', '7.0']) assert.equal(audioPresetProblem(preset, encodes, source(layout)), '')
+  const quad = { ...preset, layout: '5.0', bitrate_kbps: null }
+  assert.match(audioPresetProblem(quad, encodes, source('4.1')), /adds a speaker this 4.1 source doesn't have/)
   const auto = { ...preset, layout: null, bitrate_kbps: null }
   assert.equal(audioPresetProblem(auto, encodes, source('7.0')), '') // 7.0 defaults to 5.0
   assert.equal(audioPresetProblem({ ...preset, layout: '5.0', bitrate_kbps: null }, encodes, source('5.1')), '')

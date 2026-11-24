@@ -34,11 +34,12 @@ export function bitrateChoices(enc: AudioEncodeInfo, layout: string | null): num
 }
 
 // True when this layout needs speakers the source doesn't have (AudioEncode.upmixes): more channels, or for an
-// encode that codes the source's own speakers, a center or LFE it lacks. DDP may make 5.1 from 5.0.
+// encode that codes the source's own speakers, a center or LFE it lacks. DDP may make 5.1 from 5.0, 6.0 or 7.0.
 export function upmixes(enc: AudioEncodeInfo, source: string, layout: string): boolean {
-  if (enc.id === 'ddp' && source === '5.0' && layout === '5.1') return false
   const [main, lfe] = speakers(layout)
   const [srcMain, srcLfe] = speakers(source)
+  // DDP's one upmix: 5.1 from 5.0, 6.0 or 7.0 (VideoForge downmixes a bigger one to 5.0, DeeZy adds the LFE)
+  if (enc.id === 'ddp' && layout === '5.1' && srcMain >= 5 && !srcLfe) return false
   return channels(layout) > channels(source) || (enc.adds_no_speakers && (main > srcMain || lfe > srcLfe))
 }
 

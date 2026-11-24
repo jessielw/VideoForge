@@ -11,7 +11,15 @@ from conftest import audio
 import pytest
 
 from videoforge.core.config import Tools
-from videoforge.core.execute.audio import DEEZY_CONFIG, ENCODES, AudioSettings, audio_command
+from videoforge.core.execute.audio import (
+    DEEZY_CONFIG,
+    ENCODES,
+    AudioSettings,
+    audio_command,
+    downmix_argv,
+    downmix_path,
+    needs_downmix,
+)
 from videoforge.core.models import AudioAction as A, AudioCodec as C, Layout, PlannedAudio
 
 TOOLS = Tools(mkvmerge="mkvmerge", deezy="deezy", dee="dee", truehdd="truehdd", qaac="qaac64", ffmpeg="ffmpeg")
@@ -87,6 +95,29 @@ def test_deezy_working_dir_is_in_the_job_folder():
 def test_ddp_50_upmixes():
     (argv,) = command(planned(C.DTS_HD_MA, "5.0", A.DDP, "5.1", 640, upmix=True)).argvs
     assert "--upmix-50-to-51" in argv and "--channels=6" in argv
+
+
+def test_ddp_50_upmix_reads_the_source():
+    p = planned(C.DTS_HD_MA, "5.0", A.DDP, "5.1", 640, upmix=True, index=2)
+    (argv,) = command(p).argvs
+    assert not needs_downmix(p) and argv[-1] == str(SRC) and "--track-index=2" in argv
+
+
+@pytest.mark.parametrize("source", ["6.0", "7.0"])
+def test_ddp_51_from_60_or_70_upmixes_a_50_downmix(source):
+    """DeeZy adds an LFE to a 5.0 source alone (it codes 6.0 and 7.0 as 5.0): ffmpeg makes the 5.0 first."""
+    assert ENCODES[A.DDP].upmix_50(Layout.parse(source), Layout(5, 1))
+    p = planned(C.DTS_HD_MA, source, A.DDP, "5.1", 640, upmix=True, index=2)
+    mixed = downmix_path(p, 1, TMP)
+    (argv,) = command(p).argvs
+    assert needs_downmix(p) and mixed == TMP / "audio1_en.5.0.flac"
+    assert argv[-1] == str(mixed) and "--track-index=0" in argv  # its only track
+    assert "--upmix-50-to-51" in argv and "--channels=6" in argv
+    dm = downmix_argv(p, SRC, mixed, TOOLS)
+    assert dm[dm.index("-i") + 1] == str(SRC) and dm[dm.index("-map") + 1] == "0:a:2"
+    # float, so the fronts keep their level (an integer downmix turns every channel down)
+    assert dm[dm.index("-af") + 1] == "aformat=sample_fmts=flt:channel_layouts=5.0(side)"
+    assert dm[-5:] == ("-c:a", "flac", "-sample_fmt", "s32", str(mixed))
 
 
 def test_ddp_71():
@@ -323,7 +354,9 @@ def test_ddp_defaults_add_no_speaker(source, default):
     """DEE 6.7 codes 5.0 as 5.0, and DeeZy codes a source without an LFE without one."""
     ddp = ENCODES[A.DDP]
     assert str(ddp.default_layout(Layout.parse(source))) == default
-    assert ddp.upmixes(Layout(7, 0), Layout(5, 1)) and not ddp.upmixes(Layout(5, 0), Layout(5, 1))
+    # 5.1 from 5.0, 6.0 or 7.0 takes the upmix (needs_downmix); a 4.1 has no center for it
+    assert not any(ddp.upmixes(Layout.parse(s), Layout(5, 1)) for s in ("5.0", "6.0", "7.0"))
+    assert ddp.upmixes(Layout(4, 1), Layout(5, 0)) and ddp.upmixes(Layout(7, 0), Layout(7, 1))
 
 
 def test_rule_set_defaults_stand_in_for_unset_options():
