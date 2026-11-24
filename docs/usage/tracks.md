@@ -32,7 +32,11 @@ A rule set with its own rules can also offer the full editor. Its rules then pic
 
 The editor exposes each encoder's supported layouts and bitrates. An Atmos encode requires a suitable TrueHD Atmos source. Manually chosen settings that cannot be satisfied block the plan.
 
-For **DDP (DEE)**, open the track's **Settings** and select **DDP mode → Standard / Blu-ray**. Standard is the default. Blu-ray uses DeeZy's `ddp-bluray` encoder, requires a source with at least eight channels and 7.1 output, and defaults to 1280 kb/s when bitrate is automatic. Bitrate never switches the mode automatically. The mode is saved with audio presets and template outputs under **Advanced settings**. When a template is fitted to a source with fewer than eight channels, it uses Standard DDP and the source's default layout and bitrate.
+For **DDP (DEE)**, open the track's **Settings** and select **DDP mode → Standard / Blu-ray**. Standard is the default. Blu-ray uses DeeZy's `ddp-bluray` encoder (7.1 with an AC-3 core), requires a source with at least eight channels and 7.1 output, and defaults to 1280 kb/s when bitrate is automatic. Standard 7.1 needs [dee_shim](../configuration/tools.md#dee-and-deezy); without it the plan is blocked until you set dee_shim or choose Blu-ray. Bitrate never switches the mode automatically. The mode is saved with audio presets and template outputs under **Advanced settings**. When a template is fitted to a source with fewer than eight channels, it uses Standard DDP and the source's default layout and bitrate.
+
+DDP codes the speakers the source has: a 5.0 source is 5.0 by default, and a 7.0 source is 5.0. Choose 5.1 for a 5.0 source to have DeeZy add the LFE. The bitrate must be one of DEE's rates for the layout (for 5.1, 192 to 1024 kb/s in DEE's steps, such as 640 or 704); another is blocked with the nearest rates it takes. Once the layout is known, **Bitrate** lists only those rates. Changing the mode or the layout clears a bitrate the new one doesn't take, and a saved bitrate that isn't taken shows as *(not taken)*. The built-in presets include each mode, such as **7.1 1280 kb/s · Blu-ray** and **7.1 1152 kb/s · Standard** for Atmos. **Surround 3 dB attenuation** is off by default, as in DEE; DeeZy 1 had it on. **DRC** offers **None** besides the Dolby profiles.
+
+For **DDP Atmos (DEE)**, **Atmos mode** picks the bed Atmos is coded over: **Streaming** is 5.1 (384 to 1024 kb/s, 768 by default), **Standard** is 7.1 (448 to 2048 kb/s, 1152 by default) and **Blu-ray** is 7.1 with an AC-3 core (1152 to 1664 kb/s, 1280 by default). Standard and Blu-ray need dee_shim. **Warp mode** only applies to a TrueHD Atmos track that doesn't carry one, from older disc authoring: DEE's default is Warping, where DeeZy 1 used Normal. Saved presets with the old **Bed conformance** option load without it, since DeeZy 2 has no such option.
 
 You can make more than one output from a source audio track, for example a copied original plus an encoded compatibility track. Each encoded output is a separate reusable step.
 
@@ -60,7 +64,7 @@ Open **Settings → Encoder presets → Manage audio presets** to manage the sam
 
 Applying a preset preserves the track's language, flags, inclusion, timing, and position. It replaces encoder options rather than keeping options from a previous encoder. Copy clears encoding settings and copies the source audio.
 
-In the compact picker for an individual track, incompatible choices are disabled with a reason: for example, a 5.1 preset cannot upmix stereo, Atmos needs TrueHD Atmos, and required tools must be installed. The manager allows editing these presets for other sources, while disabling **Apply to this output** until they fit the current track. DDP retains its supported 5.0-to-5.1 treatment. Template outputs have no source yet, so their presets are fitted to each track when applied, following the existing [template audio rules](templates.md#audio-by-rules).
+In the compact picker for an individual track, incompatible choices are disabled with a reason: for example, a 5.1 preset cannot upmix stereo, Atmos needs TrueHD Atmos, and required tools must be installed. The manager allows editing these presets for other sources, while disabling **Apply to this output** until they fit the current track. DDP can still make 5.1 from a 5.0, 6.0 or 7.0 source: DeeZy adds a silent LFE to 5.0, and VideoForge first downmixes a 6.0 or 7.0 track to 5.0 with ffmpeg (the extra speakers fold into the surrounds at −3 dB; the other channels keep their level). Template outputs have no source yet, so their presets are fitted to each track when applied, following the existing [template audio rules](templates.md#audio-by-rules).
 
 ## External files
 
@@ -75,3 +79,5 @@ Burned subtitles become part of the picture and are removed from the muxed subti
 ## Reuse choices across a season
 
 Use [template audio and subtitle rules](templates.md) when language or track order changes between episodes. Set the job's original language when a rule matches **original language**.
+
+To set the original language for a whole season, select its jobs (or click the group's name in the Queue) and choose it under **Original language** in the batch panel. Use this when the source's own tracks give the wrong answer, such as anime with the English dub as the first and default audio track. Each job keeps its other track choices. Clear the box to have each job read the language from its source again.

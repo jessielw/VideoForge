@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.16] - 2026-11-24
+
+### Added
+
+- The Queue's batch panel can set **Original language** for every selected job, so a whole season or group can be switched at once. This helps with anime discs that put the English dub first, where the language read from the source is English. Each job keeps its other track choices. Clearing the box has each job read the language from its source again.
+- **dee_shim** (optional) is a new tool in **Settings › Tools**, and the Windows tools bundle includes dee_shim 0.3.0. DeeZy needs it for DDP 7.1 and the 7.1 Atmos modes, and runs Atmos encodes through it. VideoForge gives DeeZy the dee_shim it found, or tells DeeZy to run without one, so a dee_shim lying beside DEE or on `PATH` can't change an encode.
+
+### Changed
+
+- DDP and Atmos encodes need DeeZy 2 and the Dolby Encoding Engine 6.7 tools. **Settings › Tools › Dolby Encoding Engine** is the DEE 6.7 tools folder (the one with `dee_ddp_encoder`), and it shows the DEE version that folder reports. A path to one of its tools, or to the `dee.exe` of an older DEE, is read as its folder. The single `dee` program of older DEE releases isn't supported any more.
+- A DeeZy older than 2.0, another DEE version or a dee_shim older than 0.3.0 shows as **unsupported version** in **Settings › Tools**, and blocks the DDP and Atmos encodes that would run it, with a message that says which version is needed.
+- The DDP loudness options (loudness target, peak limit, user data) are always sent: DEE 6.7 has them for every DDP encode.
+- DDP 7.1 in the Standard mode is DeeZy's streaming 7.1, up to 1792 kb/s, and needs dee_shim. Without dee_shim the plan is blocked, with a message to set it or choose the Blu-ray mode. A loudness target now works for Standard 7.1; it is still blocked for Blu-ray DDP.
+- **DDP Atmos** has three **Atmos modes**: Streaming (5.1, the default), Standard (7.1, 448 to 2048 kb/s, 1152 by default) and Blu-ray (7.1 with an AC-3 core, 1152 to 1664 kb/s, 1280 by default). Standard and Blu-ray need dee_shim. The plan, the output name and the editors show their 7.1 bed; VideoForge planned every Atmos track as 5.1 before. The Atmos bitrate is now checked when the plan is made.
+- DDP codes a 5.0 source as 5.0, and a 6.0 or 7.0 source as 5.0, where it made 5.1 before. Choose 5.1 for a silent LFE: DeeZy adds it to a 5.0 track only, so VideoForge first downmixes a 6.0 or 7.0 track to 5.0 with ffmpeg, in a **Downmix audio to 5.0** step. The extra speakers fold into the surrounds at -3 dB and the other channels keep their level.
+- A DDP or Atmos bitrate must be one of DEE's rates for the layout. Another one blocks the plan with the nearest rates it takes; DeeZy moved it to the next one before.
+- DDP has **Surround 3 dB attenuation**, off by default as in DEE 6.7. DeeZy 1 had it on, so a surround mix comes out 3 dB louder in the surrounds than with DeeZy 1 unless you turn it on.
+- **DRC** has a **None** choice. **Warp mode**'s default is DEE's (Warping); DeeZy 1 used Normal. It only applies to a TrueHD Atmos track that doesn't carry one.
+- The track editor and the preset editor follow the mode: picking Blu-ray DDP or a 7.1 Atmos mode offers its layouts and its bitrates, and a layout or bitrate the new mode doesn't take goes back to auto. For DDP and Atmos, **Bitrate** is a list of DEE's rates for the layout. The built-in presets add one per mode, such as **7.1 1280 kb/s · Blu-ray**.
+- The Windows tools bundle and the Docker image have DeeZy 2.0.0. The Docker image adds dee_shim 0.3.0 and checks the DeeZy download's checksum.
+- Docker: DEE is the Linux DEE 6.7 tools folder in `/tools/dee`, put on PATH as it is. DEE's Windows build in `/tools/wine/dee` and the older single `dee` program aren't used any more, and the container's log says so at start: dee_shim runs the DEE tool in its own process, so it needs the Linux build.
+- VideoForge runs DeeZy with an empty config of its own, so a `deezy-conf.toml` beside DeeZy, in the user's config folder or in the working folder can't change its encodes.
+
+### Removed
+
+- **Bed conformance** for DDP Atmos: DeeZy 2 has no such option. A saved audio preset that has it loads without it.
+
 ## [0.1.15] - 2026-11-23
 
 ### Added

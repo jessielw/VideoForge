@@ -130,7 +130,10 @@ def test_a_finished_run_writes_its_record_and_events(rule_set, tmp_path):
     )
     assert [s["id"] for s in doc["steps"]] == ["audio.1", "audio.2", "mux", "validate"]
     assert all(s["status"] == "done" for s in doc["steps"])
-    assert set(doc["tools"]) == {"qaac", "ffmpeg", "deezy", "dee", "mkvmerge"} and doc["tools"]["mkvmerge"] == "v1"
+    assert (
+        set(doc["tools"]) == {"qaac", "ffmpeg", "deezy", "dee", "dee_shim", "mkvmerge"}
+        and doc["tools"]["mkvmerge"] == "v1"
+    )
     assert doc["log"] == str(work / "videoforge.log")
     assert doc["job_dir"] == str(work) and doc["work_dir"] == str(work.parent)
 

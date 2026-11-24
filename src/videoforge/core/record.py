@@ -372,6 +372,8 @@ def used_tools(spec: JobSpec, plan: Plan, container: str) -> list[str]:
     for a in plan.audio:
         if a.action is not AudioAction.COPY:
             names += ENCODES[a.action].tools
+            if "deezy" in ENCODES[a.action].tools:
+                names.append("dee_shim")  # DeeZy runs Atmos through it when it's there, which changes the output
     names.append(MUXERS[container].tool)
     return list(dict.fromkeys(names))
 

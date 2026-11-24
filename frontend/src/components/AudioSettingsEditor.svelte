@@ -3,7 +3,7 @@
   import { NativeSelect } from '$lib/components/ui/native-select'
   import Tip from './Tip.svelte'
   import { shownOptions } from '../lib/format'
-  import { audioEncodeLayouts } from '../lib/audioPresets'
+  import { bitrateChoices, configuredEncode, fitLayoutAndBitrate } from '../lib/audioPresets'
   import { app } from '../lib/state.svelte'
   import type { AudioAction, AudioPresetSettings, EncodeOptionInfo } from '../lib/types'
 
@@ -20,6 +20,9 @@
   } = $props()
   const uid = $props.id()
   const enc = $derived(app.encodes.find((e) => e.id === value.action))
+  // as its options make it (DDP Blu-ray, the 7.1 Atmos modes: their own layouts and bitrates)
+  const conf = $derived(enc && configuredEncode(enc, value.options))
+  const rates = $derived(conf ? bitrateChoices(conf, value.layout) : [])
   const changed = $derived(Object.keys(value.options).length)
 
   function set(change: Partial<AudioPresetSettings>) {
@@ -30,8 +33,10 @@
     const v = raw.trim()
     if (v === option.default || (!v && !option.choices.length && !option.range)) delete options[option.key]
     else options[option.key] = v
-    set({ options, ...(option.key === 'ddp_mode' && v === 'bluray' && value.layout !== '7.1' ? { layout: null } : {}) })
+    set({ options, ...(enc ? fitLayoutAndBitrate(enc, options, value.layout, value.bitrate_kbps) : {}) })
   }
+  const setLayout = (layout: string | null) =>
+    set(enc ? fitLayoutAndBitrate(enc, value.options, layout, value.bitrate_kbps) : { layout })
 </script>
 
 <fieldset class="min-w-0 space-y-4" {disabled}>
@@ -70,31 +75,33 @@
         <NativeSelect
           value={value.layout ?? ''}
           aria-label="Channels"
-          onchange={(e) => set({ layout: e.currentTarget.value || null })}
+          onchange={(e) => setLayout(e.currentTarget.value || null)}
         >
           <option value="">Auto</option>
-          {#each audioEncodeLayouts(enc, value.options) as layout (layout)}<option value={layout}>{layout}</option
-            >{/each}
+          {#each conf?.layouts ?? [] as layout (layout)}<option value={layout}>{layout}</option>{/each}
         </NativeSelect>
       </label>
       {#if enc.bitrates !== null}
         <label class="grid gap-1 text-xs text-muted-foreground"
           >Bitrate (kb/s)
-          {#if enc.bitrate_choices.length}
+          {#if rates.length}
             <NativeSelect
               value={value.bitrate_kbps ?? ''}
               aria-label="Bitrate"
               onchange={(e) => set({ bitrate_kbps: e.currentTarget.value ? Number(e.currentTarget.value) : null })}
             >
               <option value="">Auto</option>
-              {#each enc.bitrate_choices as bitrate (bitrate)}<option value={bitrate}>{bitrate}</option>{/each}
+              {#if value.bitrate_kbps && !rates.includes(value.bitrate_kbps)}<option value={value.bitrate_kbps}
+                  >{value.bitrate_kbps} (not taken)</option
+                >{/if}
+              {#each rates as bitrate (bitrate)}<option value={bitrate}>{bitrate}</option>{/each}
             </NativeSelect>
           {:else}
             <Input
               class="w-28"
               type="number"
-              min={enc.bitrate_range?.[0] ?? 1}
-              max={enc.bitrate_range?.[1]}
+              min={conf?.bitrate_range?.[0] ?? 1}
+              max={conf?.bitrate_range?.[1]}
               step="1"
               aria-label="Bitrate"
               placeholder={enc.vbr_default ? 'VBR' : 'Auto'}

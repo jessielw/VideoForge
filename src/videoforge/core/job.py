@@ -317,7 +317,7 @@ def plan_spec(spec: JobSpec, probed: ProbedInputs, rule_set: RuleSet, tools: Too
     plan = plan_job(rule_set, replan(spec, probed), spec.overrides.original_language, spec.overrides)
     plan.inputs = spec.inputs  # what the user gave; generated files aren't inputs
     if tools is not None:
-        plan.issues += tool_issues(plan, tools, spec.container(rule_set))
+        plan.issues += tool_issues(plan, tools, spec.container(rule_set), rule_set.audio_settings())
     plan.issues += mux_issues(plan, spec.container(rule_set))
     plan.issues += extra_issues(spec, rule_set)
     plan.issues += naming.issues(spec)

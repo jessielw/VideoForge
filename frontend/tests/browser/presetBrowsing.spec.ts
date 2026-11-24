@@ -86,8 +86,11 @@ async function fixture(page: Page, empty = false) {
     bitrate_choices: [],
     bitrate_range: null,
     per_channel_max: null,
+    layout_rates: {},
     vbr_default: false,
     default_max: null,
+    adds_no_speakers: false,
+    modes: [],
     missing: [],
     options: [],
   }

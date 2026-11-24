@@ -120,7 +120,7 @@ def test_audio_encodes_with_default_layouts_and_bitrates():
     got = [(a.action, a.out_codec, str(a.out_layout), a.out_atmos, a.bitrate_kbps, a.upmix_50) for a in plan.audio]
     assert got == [
         (AudioAction.ATMOS, C.EAC3, "5.1", True, 768, False),
-        (AudioAction.DDP, C.EAC3, "5.1", False, 640, True),  # 5.0 gets the LFE upmix
+        (AudioAction.DDP, C.EAC3, "5.0", False, 640, False),  # DEE 6.7 codes 5.0 as it is
         (AudioAction.AAC, C.AAC, "2.0", False, None, False),  # AAC defaults to stereo, quality mode
         (AudioAction.AAC, C.AAC, "2.0", False, 160, False),
     ]
@@ -336,3 +336,32 @@ def test_detected_still_calls_a_rule_set_written_before_original_language():
     assert New().detected(track, "ja") == {"original": True}
     assert Loose().detected(track, "ja") == {"original": True}
     assert ManualRuleSet().detected(track, None) == ManualRuleSet().detected_flags(track)
+
+
+def test_atmos_mode_sets_the_bed_and_its_rates():
+    """DeeZy 2's Atmos modes: streaming has a 5.1 bed, standard and Blu-ray a 7.1 one, each with DEE's rates."""
+    tracks = [audio(C.TRUEHD, "7.1", index=0, atmos=True)]
+    std = encoded(tracks, id_1=TrackOverride(action=AudioAction.ATMOS, options={"atmos_mode": "standard"}))
+    assert (str(std.audio[0].out_layout), std.audio[0].bitrate_kbps, std.issues) == ("7.1", 1152, [])
+    br = encoded(tracks, id_1=TrackOverride(action=AudioAction.ATMOS, options={"atmos_mode": "bluray"}))
+    assert (str(br.audio[0].out_layout), br.audio[0].bitrate_kbps) == ("7.1", 1280)
+    bad = encoded(tracks, id_1=TrackOverride(action=AudioAction.ATMOS, bitrate_kbps=512))
+    assert [(i.severity, i.code) for i in bad.issues] == [(Severity.BLOCK, "audio.bitrate")]
+    assert "576" in bad.issues[0].message and "448" in bad.issues[0].message  # the nearest it takes
+
+
+def test_ddp_wont_add_a_speaker_the_source_lacks():
+    """DDP codes the source's own speakers: 4.1 to 5.0 is blocked; 5.1 from 5.0 (6.0, 7.0 by a 5.0 downmix) is the upmix."""
+    plan = encoded(
+        [audio(C.DTS_HD_MA, "4.1", index=0)], id_1=TrackOverride(action=AudioAction.DDP, layout=Layout(5, 0))
+    )
+    assert [(i.code, i.message) for i in plan.issues] == [
+        ("audio.upmix", "Audio #1: DDP (DEE) codes the source's own speakers, and 4.1 has no 5.0 speakers")
+    ]
+    auto = encoded([audio(C.DTS_HD_MA, "7.0", index=0)], id_1=TrackOverride(action=AudioAction.DDP))
+    assert (str(auto.audio[0].out_layout), auto.issues) == ("5.0", [])
+    for layout in ("5.0", "6.0", "7.0"):  # 6.0 and 7.0 by a 5.0 downmix (needs_downmix)
+        up = encoded(
+            [audio(C.DTS_HD_MA, layout, index=0)], id_1=TrackOverride(action=AudioAction.DDP, layout=Layout(5, 1))
+        )
+        assert (up.audio[0].upmix_50, up.issues) == (True, []), layout

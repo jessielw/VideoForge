@@ -31,7 +31,15 @@ from typing import TYPE_CHECKING
 from videoforge.core import naming
 from videoforge.core.config import AppConfig, mkv_ui
 from videoforge.core.execute import chapters as ogm, loudness
-from videoforge.core.execute.audio import audio_command, measure_argv, measure_path, needs_measure
+from videoforge.core.execute.audio import (
+    audio_command,
+    downmix_argv,
+    downmix_path,
+    measure_argv,
+    measure_path,
+    needs_downmix,
+    needs_measure,
+)
 from videoforge.core.execute.mux import MUXERS, MuxError, frame_rate, split_args
 from videoforge.core.execute.process import LogFn, ToolError
 from videoforge.core.job import JobSpec
@@ -664,6 +672,22 @@ def build_steps(
             weight=4,
             background=True,
         )
+        if needs_downmix(a):
+            # DDP 5.1 from 6.0 or 7.0: DeeZy adds the LFE to a 5.0 track alone, which this step makes first. The
+            # encode reads it, so it waits for it (run_steps).
+            mixed = downmix_path(a, pos, home)
+            audio.append(
+                Step(
+                    f"audio.{pos + 1}.downmix",
+                    f"Downmix audio {pos + 1} to 5.0: {a.title}",
+                    argvs=(downmix_argv(a, src, mixed, app.tools),),
+                    outputs=(mixed,),
+                    inputs=(src,),
+                    weight=1,
+                    background=True,
+                )
+            )
+            encode = replace(encode, inputs=(mixed,))
         if needs_measure(a):
             # Normalizing by a peak or a loudness: the encode applies what the measure step read, when its
             # turn comes (on its own thread, beside the video: run_steps).

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from videoforge.core.execute.audio import ENCODES
+from videoforge.core.execute.audio import ENCODES, RETIRED_OPTIONS
 from videoforge.core.models import AudioAction, Layout
 
 
@@ -26,6 +26,8 @@ class AudioPresetSettings:
                 raise ValueError("Copy does not take channels, bitrate, or encoder options")
             return
         enc = ENCODES[self.action]
+        retired = RETIRED_OPTIONS.get(self.action, frozenset())
+        self.options = {k: v for k, v in self.options.items() if k not in retired}  # saved before the option went
         if any(not isinstance(v, str) for v in self.options.values()):
             raise ValueError("Encoder option values must be text")
         unknown = self.options.keys() - {o.key for o in enc.options}

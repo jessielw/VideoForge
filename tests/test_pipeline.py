@@ -46,9 +46,16 @@ def fake_tool_files(*names: str) -> dict[str, str]:
     """Empty files standing in for tools that must exist (audio encodes are blocked without them);
     the fake runner never starts them, and their stems are the tool names."""
     folder = Path(tempfile.mkdtemp(prefix="vf-tools-"))
+    out = {}
     for name in names:
+        if name == "dee":  # DEE 6.7 is a folder of tools, found by its dee_ddp_encoder
+            (folder / "dee").mkdir()
+            (folder / "dee" / "dee_ddp_encoder.exe").write_bytes(b"")
+            out[name] = str(folder / "dee")
+            continue
         (folder / f"{name}.exe").write_bytes(b"")
-    return {name: str(folder / f"{name}.exe") for name in names}
+        out[name] = str(folder / f"{name}.exe")
+    return out
 
 
 _TOOLS = fake_tool_files("mkvmerge", "deezy", "dee", "truehdd", "qaac64", "ffmpeg")
@@ -130,6 +137,8 @@ class FakeRunner:
                 Path(last[last.index(flag) + 1]).write_bytes(b"out")
         if "--info" in last and last[-1] != "-":  # the script info step: vspipe writes the clip's info
             Path(last[-1]).write_text(self.script_info, encoding="utf-8")
+        if last[-1].endswith(".5.0.flac"):  # an audio downmix step (ffmpeg): its output last
+            Path(last[-1]).write_bytes(b"out")
         if "videoforge.core.execute.loudness" in last:  # an audio measure step: <out.json> after the module
             Path(last[3]).write_text('{"max_volume": -4.5}', encoding="utf-8")
         if "timestamps_v2" in last:  # mkvextract: <track>:<file>, one timestamp per frame
@@ -788,6 +797,25 @@ def test_a_normalized_track_is_measured_first(rule_set, tmp_path, parallel):
         assert any({"measure", "x264"} <= t for t in runner.together)  # the measure beside the video
     (ffmpeg, _), *_ = [c for c in runner.calls if Path(c[-1][0]).stem == "qaac64"]
     assert ffmpeg[ffmpeg.index("-af") + 1] == "volume=4.5dB"  # FakeRunner's measure: -4.5 dB
+
+
+def test_ddp_51_from_70_encodes_a_50_downmix(rule_set, tmp_path):
+    plan = make_plan(tmp_path)
+    en = plan.audio[1]  # TrueHD -> DDP 5.1
+    en.source.layout, en.upmix_50 = Layout(7, 0), True
+    job = video_job(plan, tmp_path)
+    built = build_steps(job, plan, rule_set, APP, tmp_path / "out" / "Show.S01E01.mkv")
+    ids = [s.id for s in built.steps]
+    assert ids.index("audio.2.downmix") + 1 == ids.index("audio.2") and "audio.1.downmix" not in ids
+    step = {s.id: s for s in built.steps}
+    mixed = step["audio.2.downmix"].outputs[0]
+    assert step["audio.2"].inputs == (mixed,) and step["audio.2"].argvs[0][-1] == str(mixed)
+
+    runner = FakeRunner()
+    result = run_job(job, plan, rule_set, APP, state=JobState(), runner=runner, prober=lambda *_: simulate_output(plan))
+    assert result.status is JobStatus.DONE, result.error
+    called = [(Path(c[-1][0]).stem, c[-1][-1]) for c in runner.calls]
+    assert called.index(("ffmpeg", str(mixed))) < called.index(("deezy", str(mixed)))
 
 
 @pytest.mark.parametrize("parallel", [1, 2])

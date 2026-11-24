@@ -31,11 +31,11 @@ def test_exe_path_runs_through_wine_on_linux(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(config.os, "getuid", lambda: 1000, raising=False)
     monkeypatch.setattr(config.tempfile, "gettempdir", lambda: str(tmp_path))
-    out = config._resolve_tool(str(exe), tmp_path)
+    out = config._resolve_tool("qaac", str(exe), tmp_path)
     assert out != str(exe)
     assert str(exe) in open(out).read()
     monkeypatch.setattr(sys, "platform", "win32")
-    assert config._resolve_tool(str(exe), tmp_path) == str(exe)
+    assert config._resolve_tool("qaac", str(exe), tmp_path) == str(exe)
 
 
 def test_wine_launcher_shows_the_exe_and_tools_folder_is_found(tmp_path, monkeypatch):
@@ -54,7 +54,7 @@ def test_wine_launcher_shows_the_exe_and_tools_folder_is_found(tmp_path, monkeyp
     monkeypatch.setattr(config.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setattr(config.shutil, "which", lambda name: None)
     monkeypatch.setattr(config, "_TOOLS_FOLDER", {"qaac": (str(exe),)})
-    launcher = config._resolve_tool("qaac", tmp_path)  # not on PATH: found in the tools folder
+    launcher = config._resolve_tool("qaac", "qaac", tmp_path)  # not on PATH: found in the tools folder
     assert launcher != "qaac"
     assert config.wine_target(launcher) == str(exe)
     assert config.wine_target(str(exe)) == ""
@@ -73,3 +73,15 @@ def test_mkvtoolnix_english_is_named_by_its_platform(tmp_path, monkeypatch):
     assert config.mkv_ui(str(launcher)) == ("--ui-language", "en")  # a Windows build under Wine
     monkeypatch.setattr(config.sys, "platform", "win32")
     assert config.mkv_ui("mkvextract") == ("--ui-language", "en")
+
+
+def test_dee_is_its_tools_folder_also_from_an_old_dee_exe_path(tmp_path):
+    """DEE 6.7 is a folder of tools: a config naming one of them, or the dee.exe an older DEE had, means the folder."""
+    from videoforge.core import config
+
+    folder = tmp_path / "tools" / "DEE"
+    folder.mkdir(parents=True)
+    (folder / "dee_ddp_encoder.exe").write_bytes(b"")
+    for value in ("tools/DEE", "tools/DEE/dee.exe", "tools/DEE/dee_ddp_encoder.exe"):
+        assert config._resolve_tool("dee", value, tmp_path) == str(folder)
+    assert config._resolve_tool("dee", "tools/none/dee.exe", tmp_path) == "tools/none/dee.exe"  # missing: as given

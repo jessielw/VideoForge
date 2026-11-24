@@ -3,7 +3,7 @@
 #   TZ:          the container's time zone (log and job record times)
 #   PUID / PGID: run as that user and group (set both), as with `docker run --user`. /data (the app's own
 #                folder) is handed over first, so a queue made while it ran as root stays usable; your media
-#                is left as it is. /tools is made readable (and DEE's Linux programs executable) so it just works.
+#                is left as it is. /tools is made readable (and DEE's tools executable) so it just works.
 #   UMASK:       the file-creation mask for what it writes (022, 002, 000)
 set -eu
 
@@ -30,11 +30,11 @@ if [ "$(id -u)" = 0 ]; then
         ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime
         echo "$TZ" >/etc/timezone
     fi
-    # Your tools just work: readable by whoever it runs as, and DEE's Linux programs executable. A read-only
-    # mount can't be changed (it is copied below instead).
+    # Your tools just work: readable by whoever it runs as, and DEE's tools executable. A read-only mount can't be
+    # changed (it is copied below instead).
     if [ -d /tools ]; then
         chmod -R a+rX /tools 2>/dev/null || true
-        find /tools/dee -maxdepth 1 -type f \( -name dee -o -name 'dee_*_encoder' \) -exec chmod a+x {} + 2>/dev/null || true
+        find /tools/dee -maxdepth 1 -type f -name 'dee_*' ! -name '*.*' -exec chmod a+x {} + 2>/dev/null || true
     fi
     if [ -n "${PUID:-}" ] && { [ "$PUID" != 0 ] || [ "$PGID" != 0 ]; }; then
         # A named user for the ids (an existing one if the image has it), so gosu sets its groups. A restarted
@@ -71,11 +71,13 @@ if [ -n "${UMASK:-}" ]; then
     umask "$UMASK"
 fi
 
-# Your tools in /tools, found on PATH by the image's config (dee = "dee", qaac = "qaac"): a launcher each in a
-# folder of this container's own, only for what's there, so a missing tool shows as missing.
-#   dee:  /tools/dee/dee (the Linux build), else /tools/wine/dee/dee.exe (the Windows build, under Wine);
-#         or the split encoders (dee_ddp_encoder, ...): /tools/dee/ (Linux), else /tools/wine/dee/ (Windows, under Wine)
-#   qaac: /tools/wine/qaac/qaac64.exe (with its QTfiles64 folder), under Wine
+# Your tools in /tools, found on PATH by the image's config (dee = "dee", qaac = "qaac"), only for what's there, so a
+# missing tool shows as missing:
+#   dee:  /tools/dee, the Linux Dolby Encoding Engine 6.7 tools folder (dee_ddp_encoder and the rest, with its
+#         license.lic): on PATH, where VideoForge finds its folder by dee_ddp_encoder. DeeZy 2 and dee_shim (in the
+#         image) run only DEE 6.7, and dee_shim runs the DEE tool in its own process, so the Linux build: DEE's
+#         Windows build under Wine isn't used any more.
+#   qaac: /tools/wine/qaac/qaac64.exe (with its QTfiles64 folder), under Wine, as a launcher
 bin="/tmp/videoforge-bin-$(id -u)"
 rm -rf "$bin"
 mkdir -p "$bin"
@@ -83,10 +85,10 @@ launcher() {
     printf '#!/bin/sh\nexec %s "$@"\n' "$2" >"$bin/$1"
     chmod 0755 "$bin/$1"
 }
-# The Linux DEE folder, as it is, or (if its programs aren't executable and weren't fixed above, e.g. a read-only
-# mount) a copy of it of this container's own with them executable. A copy is only disk, made once per start.
+# The DEE folder, as it is, or (if its tools aren't executable and weren't fixed above, e.g. a read-only mount) a
+# copy of it of this container's own with them executable. A copy is only disk, made once per start.
 dee_dir=/tools/dee
-if [ -d /tools/dee ] && [ -n "$(find /tools/dee -maxdepth 1 -type f \( -name dee -o -name 'dee_*_encoder' \) ! -executable -print -quit 2>/dev/null)" ]; then
+if [ -f /tools/dee/dee_ddp_encoder ] && [ -n "$(find /tools/dee -maxdepth 1 -type f -name 'dee_*' ! -name '*.*' ! -executable -print -quit 2>/dev/null)" ]; then
     stage="/tmp/videoforge-tools-$(id -u)"
     rm -rf "$stage"
     mkdir -p "$stage"
@@ -96,22 +98,8 @@ if [ -d /tools/dee ] && [ -n "$(find /tools/dee -maxdepth 1 -type f \( -name dee
         echo "videoforge: /tools/dee can't be read or run by this container: chmod -R a+rX /tools (on the host), or set PUID and PGID" >&2
     fi
 fi
-if [ -f "$dee_dir/dee" ]; then
-    launcher dee "$dee_dir/dee"
-elif [ -f /tools/wine/dee/dee.exe ]; then
-    launcher dee "/opt/wine/bin/wine-run /tools/wine/dee/dee.exe"
-elif [ -f "$dee_dir/dee_ddp_encoder" ]; then
-    # split encoders, Linux build: a folder of them, which VideoForge finds by dee_ddp_encoder on PATH
+if [ -f "$dee_dir/dee_ddp_encoder" ]; then
     PATH="$dee_dir:$PATH"
-elif [ -f /tools/wine/dee/dee_ddp_encoder.exe ]; then
-    # split encoders, Windows build: DeeZy wants extensionless names, so a folder of launchers, one per .exe
-    mkdir -p "$bin/dee-split"
-    for exe in /tools/wine/dee/dee_*.exe; do
-        name="$(basename "$exe" .exe)"
-        printf '#!/bin/sh\nexec /opt/wine/bin/wine-run "%s" "$@"\n' "$exe" >"$bin/dee-split/$name"
-        chmod 0755 "$bin/dee-split/$name"
-    done
-    PATH="$bin/dee-split:$PATH"
 fi
 if [ -f /tools/wine/qaac/qaac64.exe ]; then
     launcher qaac "/opt/wine/bin/wine-run /tools/wine/qaac/qaac64.exe"
@@ -126,20 +114,22 @@ export PATH
 report() {
     echo "videoforge: $1: $2"
 }
-if [ -x "$bin/dee" ]; then
+if [ -f "$dee_dir/dee_ddp_encoder" ]; then
     case "$dee_dir" in /tmp/*) report dee "found, run from a copy ($dee_dir): /tools is read-only" ;; *) report dee found ;; esac
-elif [ -d "$bin/dee-split" ] || [ -f "$dee_dir/dee_ddp_encoder" ]; then
-    report dee "found (split encoders)"
+elif [ -f /tools/dee/dee ]; then
+    report dee "/tools/dee has an older DEE (dee): DeeZy 2 needs the Linux DEE 6.7 tools folder (dee_ddp_encoder) there"
+elif [ -d /tools/wine/dee ]; then
+    report dee "/tools/wine/dee isn't used any more: put the Linux DEE 6.7 tools folder in /tools/dee"
 else
-    report dee "not in /tools (optional: /tools/dee/dee or /tools/wine/dee/dee.exe)"
+    report dee "not in /tools (optional: the Linux DEE 6.7 tools folder as /tools/dee)"
 fi
 if [ -x "$bin/qaac" ]; then
     report qaac "found (Wine)"
 else
     report qaac "not in /tools (optional: /tools/wine/qaac/qaac64.exe)"
 fi
-# Set up Wine's files now, in the background, so the first qaac or DEE run isn't the slow one.
-if [ -x "$bin/qaac" ] || { [ -x "$bin/dee" ] && grep -q wine-run "$bin/dee"; } || [ -d "$bin/dee-split" ]; then
+# Set up Wine's files now, in the background, so the first qaac run isn't the slow one.
+if [ -x "$bin/qaac" ]; then
     /opt/wine/bin/wine-run --init >/dev/null 2>&1 &
 fi
 exec "$@"

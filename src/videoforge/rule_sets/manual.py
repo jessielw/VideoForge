@@ -120,13 +120,16 @@ def audio_output(
             issues.append(
                 Issue(Severity.BLOCK, "audio.atmos_source", f"Audio #{t.id}: DDP Atmos needs a TrueHD Atmos source")
             )
-        layout = Layout(5, 1)
+        layout = enc.layouts[0]  # the Atmos mode's bed: 5.1 streaming, 7.1 standard or Blu-ray
+        bitrate = (ov.bitrate_kbps if ov else None) or enc.default_bitrate(layout)
+        if bitrate and (problem := enc.bitrate_problem(bitrate, layout)):
+            issues.append(Issue(Severity.BLOCK, "audio.bitrate", f"Audio #{t.id}: {problem}"))
         return {
             "action": action,
             "out_codec": enc.codec,
             "out_layout": layout,
             "out_atmos": True,
-            "bitrate_kbps": (ov.bitrate_kbps if ov else None) or enc.default_bitrate(layout),
+            "bitrate_kbps": bitrate,
             "upmix_50": False,
             "options": options,
         }
@@ -135,7 +138,12 @@ def audio_output(
     if layout not in enc.layouts:
         issues.append(Issue(Severity.BLOCK, "audio.layout", f"Audio #{t.id}: {enc.label} can't be {layout}"))
     elif enc.upmixes(t.layout, layout):
-        issues.append(Issue(Severity.BLOCK, "audio.upmix", f"Audio #{t.id}: {t.layout} can't be upmixed to {layout}"))
+        why = (
+            f"{t.layout} can't be upmixed to {layout}"
+            if layout.channels > t.layout.channels
+            else f"{enc.label} codes the source's own speakers, and {t.layout} has no {layout} speakers"
+        )
+        issues.append(Issue(Severity.BLOCK, "audio.upmix", f"Audio #{t.id}: {why}"))
     bitrate = None
     if enc.bitrates is not None:  # lossless encodes take none
         bitrate = (ov.bitrate_kbps if ov else None) or enc.default_bitrate(layout)

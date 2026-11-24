@@ -28,7 +28,8 @@ TOOLS_README = """The free tools and VapourSynth plugins are already included.
 See THIRD_PARTY.md for versions, sources and licenses; keep the bundled notices.
 
 You supply these only for features that need them:
-  DEE\\dee.exe and its license: Dolby Encoding Engine for DDP / Atmos through DeeZy.
+  DEE\\: the Dolby Encoding Engine 6.7 tools folder (dee_ddp_encoder.exe and the rest) and its
+    license.lic, for DDP / Atmos through DeeZy 2. dee_shim is included.
   qaac\\QTfiles64\\: Apple's CoreAudioToolbox runtime for qaac AAC encoding.
 The qaac frontend and libsoxr64.dll are included; FFmpeg AAC works without Apple's runtime.
 

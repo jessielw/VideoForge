@@ -19,7 +19,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 
 from videoforge.core.actions import ACTION_LABELS, JOB_TOKENS, QUEUE_TOKENS, Action
 from videoforge.core.config import with_tools
-from videoforge.core.execute.audio import ENCODES
+from videoforge.core.execute.audio import ENCODES, AudioEncode
 from videoforge.core.execute.control import Priority
 from videoforge.core.naming import NamePolicy
 from videoforge.core.notify import DEFAULT_EVENTS, EVENT_LABELS, Destination
@@ -278,23 +278,44 @@ def test_notification(request: Request, body: dict[str, Any] = Body(...)) -> dic
     return {"ok": True}
 
 
+def _limits(e: AudioEncode) -> dict[str, Any]:
+    """The layouts and bitrates an encode takes."""
+    return {
+        "layouts": [str(x) for x in e.layouts],
+        "bitrates": None if e.bitrates is None else {str(c): k for c, k in e.bitrates.items()},
+        "bitrate_choices": list(e.bitrate_choices),
+        "bitrate_range": e.bitrate_range,
+        "per_channel_max": e.per_channel_max,
+        "layout_rates": {lay: list(rates) for lay, rates in (e.layout_rates or {}).items()},
+    }
+
+
+def _modes(e: AudioEncode) -> list[dict[str, Any]]:
+    """The option values that change the layouts and bitrates (AudioEncode.configured: DDP's Blu-ray mode,
+    the 7.1 Atmos modes), each with what it takes."""
+    return [
+        {"key": o.key, "value": value, **_limits(c)}
+        for o in e.options
+        for value, _ in o.choices
+        if (c := e.configured({o.key: value})) is not e
+    ]
+
+
 @router.get("/encoders")
 def encoders(request: Request) -> list[dict[str, Any]]:
-    """The audio encodes (execute.audio.ENCODES) for the track editor: layouts, bitrates, and the
-    tools each one is missing ([] = it can run)."""
+    """The audio encodes (execute.audio.ENCODES) for the track editor: layouts, bitrates (and those of each mode),
+    and the tools each one is missing ([] = it can run)."""
     missing = missing_for_encodes(request.app.state.config.tools)
     return [
         {
             "id": e.action.value,
             "label": e.label,
             "codec": e.codec.value,
-            "layouts": [str(x) for x in e.layouts],
-            "bitrates": None if e.bitrates is None else {str(c): k for c, k in e.bitrates.items()},
-            "bitrate_choices": list(e.bitrate_choices),
-            "bitrate_range": e.bitrate_range,
-            "per_channel_max": e.per_channel_max,
+            **_limits(e),
             "vbr_default": e.vbr_default,
             "default_max": str(e.default_max) if e.default_max else None,
+            "adds_no_speakers": e.adds_no_speakers,
+            "modes": _modes(e),
             "missing": missing[e.action],
             "options": [
                 {

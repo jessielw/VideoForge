@@ -9,8 +9,11 @@ rule_set = "manual"
 [tools]
 mkvmerge = "tools/MKVToolNix/mkvmerge.exe"
 deezy = "tools/DeeZy/deezy.exe"
-dee = "tools/DEE/dee.exe"
+# Dolby Encoding Engine 6.7: its tools folder (dee_ddp_encoder.exe, ...) and license. DeeZy 2 runs no other DEE.
+dee = "tools/DEE"
 truehdd = "tools/truehdd/truehdd.exe"
+# Optional: DeeZy makes DDP 7.1 and the 7.1 Atmos modes through dee_shim, and runs Atmos encodes through it.
+dee_shim = "tools/dee_shim/dee_shim.exe"
 qaac = "tools/qaac/qaac64.exe"
 opusenc = "tools/opus-tools/opusenc.exe"
 ffmpeg = "tools/ffmpeg/bin/ffmpeg.exe"

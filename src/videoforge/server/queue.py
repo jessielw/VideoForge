@@ -813,10 +813,12 @@ class JobQueue:
         label: str | None = None,
         output_name: str | None = None,
         output_policy: OutputPolicy | None = None,
+        original_language: str | None | _Unchanged = _Unchanged.VALUE,
     ) -> Entry:
         """Change a job's settings and replan: the template first, then the given settings (container
         alone keeps the job's extra muxer arguments). New inputs (added subtitle files, chapters) are
-        read at once; a different encode means probing again."""
+        read at once; a different encode means probing again. original_language changes only that in
+        the job's overrides; None has the rule set read it from the source again (and pins it)."""
         e = self.get(job_id)
         reprobe = False
         with self._lock:
@@ -849,6 +851,8 @@ class JobQueue:
                 s.encoder = encoder
             if overrides is not None:
                 s.overrides = overrides
+            if not isinstance(original_language, _Unchanged):
+                s.overrides = replace(s.overrides, original_language=original_language)
             if not isinstance(output_dir, _Unchanged):
                 s.output_dir = output_dir
             if qpf is not None:

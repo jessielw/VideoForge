@@ -137,6 +137,7 @@ export type SpecChanges = Partial<
   inputs?: InputChanges
   template?: Template // applied first: the whole run's settings
   container?: string // the container alone; the job keeps its extra muxer arguments
+  original_language?: string | null // a batch's (apply): only that in each job's overrides; null reads it again
 }
 
 export const api = {

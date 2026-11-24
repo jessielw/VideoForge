@@ -65,8 +65,11 @@ async function fixture(page: Page, seed?: (job: JobDetail) => void) {
     bitrate_choices: [],
     bitrate_range: [32, 1024],
     per_channel_max: null,
+    layout_rates: {},
     vbr_default: false,
     default_max: null,
+    adds_no_speakers: false,
+    modes: [],
     missing: [],
     options: [],
   }
