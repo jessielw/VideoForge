@@ -171,7 +171,7 @@ def test_subtitle_label_reads_the_name():
     synced = subtitle_label(Path("Show.S01E01.Part.1.NF.WEB-DL-GNOME_USA_23.976fps.en.synced.srt"))
     assert synced["language"] == "en" and synced["format"] == "srt" and synced["tags"] == ["synced"]
     assert synced["track"] is None and synced["language_name"] == "English"
-    extracted = subtitle_label(Path("Show.S01E01.1080p.REMUX-FraMeSToR_track7_[eng].forced.ass"))
+    extracted = subtitle_label(Path("Show.S01E01.1080p.REMUX-ExampleGroup_track7_[eng].forced.ass"))
     assert extracted["format"] == "ass" and extracted["track"] == 7 and extracted["tags"] == ["forced"]
     assert subtitle_label(Path("Show.S01E01.srt"))["language"] == "und"
     assert subtitle_label(Path("Show.S01E01.srt"))["match"] is None  # no source given
