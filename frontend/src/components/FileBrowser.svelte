@@ -2,7 +2,7 @@
   // Browses the server's file system (the browser can't hand us real paths).
   // mode "files": tick files and/or folders; mode "folder": choose one folder.
   // programs: list only programs (the server decides what one is on its OS), and one has to be ticked,
-  // unless orFolder: then the folder you're in will do (DEE's split encoders are a folder of programs).
+  // unless orFolder: then the folder you're in will do (DEE 6.7 is a folder of tools).
   // Folders can be made here, and one made here deleted again while it's empty: the undo for a mistake.
   // Other file work belongs in a file manager (the server only deletes empty folders).
   // Ticking: a click (on a file's row or any box) toggles one, Shift+click ticks or unticks the range
@@ -513,7 +513,7 @@
             ? `${picked.length} selected${programs ? '' : '. Drag or Shift+click ticks a range, Ctrl+A every file.'}`
             : programs
               ? orFolder
-                ? "Tick the program, or use this folder for DEE's split encoders."
+                ? 'Tick the program, or use this folder when it is the DEE 6.7 tools folder.'
                 : 'Tick the program'
               : "With nothing ticked, Add uses the folder you're in."}
         {:else}
