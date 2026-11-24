@@ -188,21 +188,21 @@ sha256 = "7866ee98760fc1f0156b4fe6bf530257e02be487ab3fd94e2b63799dd32d6b2c"
 
 [[tool]]
 name = "deezy"
-version = "2.0.0"
+version = "2.0.1"
 license = "MIT"
-source = "https://github.com/jessielw/DeeZy/tree/2.0.0"
+source = "https://github.com/jessielw/DeeZy/tree/2.0.1"
 purpose = "DEE 6.7 frontend; DEE and its license remain user supplied"
 [tool.windows]
 # The bundle, deezy.exe beside its bundle/ folder: the one-file exe unpacks itself on every run.
-url = "https://github.com/jessielw/DeeZy/releases/download/2.0.0/bundle-deezy-windows-x64.exe.zip"
-sha256 = "925424f30d2e7a8ad8c1d7f324a209fb431082ab428b6062cbe2b9b183f6cef5"
+url = "https://github.com/jessielw/DeeZy/releases/download/2.0.1/bundle-deezy-windows-x64.exe.zip"
+sha256 = "0f9931d71c9a85e712206111e408281739cc9341c2fc1dde9de4bae9df1449d8"
 directory = "DeeZy"
 prefix = ""
 include = ["deezy.exe", "bundle/*"]
 executables = { deezy = "deezy.exe" }
 [[tool.notice]]
 file = "LICENSE"
-url = "https://raw.githubusercontent.com/jessielw/DeeZy/2.0.0/LICENSE"
+url = "https://raw.githubusercontent.com/jessielw/DeeZy/2.0.1/LICENSE"
 sha256 = "4f4f2823a6b2644d049561528371bea1dca2022e5611069b5a60e254c954e4ce"
 
 [[tool]]
