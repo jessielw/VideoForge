@@ -71,8 +71,8 @@ def reuse_offers(
         # Another job's, made as this one would make it (a run links it, and a 2-pass video's pass 1 with it).
         if not own and noted is None:
             found = share.find(last)
-            if found is not None and found.folder != home:
-                file, origin, noted = found.folder / file.name, found.folder.name, found.notes[file.name]
+            if found is not None and found.source(file) != file:
+                file, origin, noted = found.source(file), found.folder.name, found.notes[file.name]
         if not own and noted is None:
             continue
         try:

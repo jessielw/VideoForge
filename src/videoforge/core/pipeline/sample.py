@@ -30,7 +30,7 @@ from videoforge.core.execute.mux import frame_rate
 from videoforge.core.execute.process import LogFn
 from videoforge.core.job import JobSpec, StepRecord
 from videoforge.core.models import Plan
-from videoforge.core.pipeline.build import info_step, job_script
+from videoforge.core.pipeline.build import info_step, job_script, script_reads
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.plan_io import to_json
 from videoforge.core.video import burn as burn_in, info, metrics, target
@@ -121,7 +121,8 @@ def describe(enc: EncoderSettings) -> str:
 def prepare_steps(spec: JobSpec, plan: Plan, app: AppConfig) -> list[Step]:
     """What the sample needs first, after the job's index steps (index_steps): the script's info, which lays
     out the blocks."""
-    return [info_step(spec, app, job_script(spec, plan.source.video, plan.burn))]
+    step = info_step(spec, app, job_script(spec, plan.source.video, plan.burn))
+    return [replace(step, reads=script_reads(spec, plan.source.video, plan.burn))]
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +199,7 @@ def sample_steps(
             argvs=(tuple(vspipe_command(app.tools.vspipe, script)), tuple(argv)),
             outputs=(out,),
             inputs=inputs,
+            reads=script_reads(spec, v, plan.burn),
             key=text,
             weight=60,
         ),
@@ -221,6 +223,7 @@ def sample_steps(
                 argvs=((sys.executable, "-m", "videoforge.core.video.metrics", str(script), str(mkv), str(scores)),),
                 outputs=(scores,),
                 inputs=(script, mkv),
+                reads=script_reads(spec, v, plan.burn),
                 key=_METRICS,
                 weight=20,
             )

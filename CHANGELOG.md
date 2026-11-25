@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.18] - 2026-11-24
+
+### Added
+
+- **Settings → Queue & indexing → Run multiple full jobs at once** lets jobs run concurrently in queue order. It starts off. Enable it for two full-job slots by default, with up to two x264 jobs or one x265 job running alone. You can change the total, each encoder’s limit, and whether samples and CRF searches count toward those limits.
+- Variants of the same source can share a finished audio or video encode while different encodes run in parallel. If the job making a shared encode fails or is cancelled, a waiting variant can finish the work. Each variant keeps its own output.
+- The sidebar and browser tab show how many jobs are active. The next queued job shows why it is waiting. Use **Cancel job** or **Pause after pass 1** on an individual row, or **Stop after active jobs** to finish the running jobs and leave the rest queued.
+- **DeeZy debug mode** in **Advanced settings** enables detailed logging for DDP, Blu-ray DDP and DDP Atmos encodes. It is off by default. When enabled, VideoForge passes `--log-level debug` before DeeZy's `encode` subcommand.
+- In **Browse…** dialogs, hover over a file or folder name or focus its row with the keyboard to see the full name in a tooltip.
+
+### Changed
+
+- Updated DeeZy to 2.0.2 in the Windows tools bundle and Docker image.
+- **Browse…** dialogs across VideoForge share the last folder you visited, even if you cancel the picker or reload the app. After you pick a video in **Sources**, **Subtitles** opens in the same folder.
+
+### Fixed
+
+- **Browse…** dialogs focus the folder contents when opened, so the up and down arrows work as soon as the folder is listed. You can also go back up with the keyboard after opening an empty folder.
+
 ## [0.1.17] - 2026-11-24
 
 ### Changed
@@ -611,7 +630,7 @@ The first beta: an encode and mux job queue in the browser, for one user: on Win
 - **Bundled VapourSynth plugins.** Source filters (BestSource, L-SMASH-Works, FFMS2, d2vsource) and common filters (EdgeFixer, FillBorders, MVTools, znedi3, dfttest2, BM3D, zsmooth, vszip, fmtconv, descale, ...) plus havsfunc, mvsfunc and awsmfunc, from one list (`vsplugins/manifest.toml`): built from source in the Docker image, downloaded (pinned, checked) for the portable build or a source install (`scripts/fetch_plugins.py`).
 - **Profiles.** The built-in `manual` profile; other profiles (a release group's rules) install as separate packages under the `videoforge.profiles` entry point group.
 
-[Unreleased]: https://github.com/jessielw/VideoForge/compare/0.1.14...HEAD
+[Unreleased]: https://github.com/jessielw/VideoForge/compare/0.1.17...HEAD
 [0.1.9]: https://github.com/jessielw/VideoForge/releases/tag/0.1.9
 [0.1.8]: https://github.com/jessielw/VideoForge/releases/tag/0.1.8
 [0.1.7]: https://github.com/jessielw/VideoForge/releases/tag/0.1.7

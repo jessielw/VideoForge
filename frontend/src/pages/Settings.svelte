@@ -144,6 +144,21 @@
     }
   }
 
+  function setJobLimit(input: HTMLInputElement, kind?: string) {
+    if (!config?.concurrency) return
+    const policy = config.concurrency
+    if (!input.reportValidity()) {
+      input.value = String(kind ? policy.encoders[kind].cap : policy.total)
+      return
+    }
+    const cap = input.valueAsNumber
+    change({
+      concurrency: kind
+        ? { ...policy, encoders: { ...policy.encoders, [kind]: { ...policy.encoders[kind], cap } } }
+        : { ...policy, total: cap },
+    })
+  }
+
   async function setParallelAudio(input: HTMLInputElement) {
     if (!config) return
     const { parallel_audio: now, parallel_audio_default: fallback } = config
@@ -206,7 +221,7 @@
     if (await change({ roots: [...current.filter((r) => r.toLowerCase() !== p.toLowerCase()), p] })) newRoot = ''
   }
 
-  // Where Browse opens: the tool's folder (or the plugin folder itself).
+  // If there's no recent folder, Browse can start at the tool's folder (or the plugin folder itself).
   function startFolder(t: ToolSetting): string {
     const found = checks[t.name]?.found ?? ''
     return t.folder ? found : found.replace(/[\\/][^\\/]*$/, '')
@@ -635,6 +650,83 @@
         {:else if tab === 'queue'}
           {#if config}
             <section class="space-y-3">
+              {#if config.concurrency}
+                {@const policy = config.concurrency}
+                <h2 class="font-medium">Concurrent jobs</h2>
+                <div class="flex items-center gap-2">
+                  <input
+                    id="concurrent-jobs"
+                    type="checkbox"
+                    checked={policy.enabled}
+                    onchange={(e) => change({ concurrency: { ...policy, enabled: e.currentTarget.checked } })}
+                  />
+                  <label for="concurrent-jobs">Run multiple full jobs at once</label>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                  These limits apply to every profile on this installation. Jobs start in queue order. Changes apply to
+                  future starts.
+                </p>
+                {#if policy.enabled}
+                  <label class="block" for="total-job-cap">Total job slots</label>
+                  <Input
+                    id="total-job-cap"
+                    type="number"
+                    required
+                    min="1"
+                    step="1"
+                    class="w-20"
+                    value={policy.total}
+                    onchange={(e) => setJobLimit(e.currentTarget)}
+                  />
+                  {#each Object.entries(policy.encoders) as [kind, limit] (kind)}
+                    <fieldset class="flex items-center gap-3">
+                      <legend class="font-medium">{kind === 'remux' ? 'Remux / reuse' : kind}</legend>
+                      <label for={'cap-' + kind}>Job limit</label>
+                      <Input
+                        id={'cap-' + kind}
+                        type="number"
+                        required
+                        min="1"
+                        step="1"
+                        class="w-20"
+                        value={limit.cap}
+                        onchange={(e) => setJobLimit(e.currentTarget, kind)}
+                      />
+                      <input
+                        id={'alone-' + kind}
+                        type="checkbox"
+                        checked={limit.run_alone}
+                        onchange={(e) =>
+                          change({
+                            concurrency: {
+                              ...policy,
+                              encoders: {
+                                ...policy.encoders,
+                                [kind]: { ...limit, run_alone: e.currentTarget.checked },
+                              },
+                            },
+                          })}
+                      />
+                      <label for={'alone-' + kind}>Run alone</label>
+                    </fieldset>
+                  {/each}
+                  <p class="text-xs text-muted-foreground">
+                    Give each custom script or raw tool argument its own paths for any extra files it writes.
+                  </p>
+                {/if}
+                <div class="flex items-center gap-2">
+                  <input
+                    id="limit-samples"
+                    type="checkbox"
+                    checked={policy.limit_samples}
+                    onchange={(e) => change({ concurrency: { ...policy, limit_samples: e.currentTarget.checked } })}
+                  />
+                  <label for="limit-samples">Count samples and CRF searches toward job limits</label>
+                </div>
+              {/if}
+            </section>
+
+            <section class="space-y-3">
               <h2 class="font-medium">Batch indexing</h2>
               <label class="flex items-start gap-3 text-sm">
                 <Checkbox
@@ -717,7 +809,7 @@
                   onchange={(e) => setParallelAudio(e.currentTarget)}
                 />
                 <span>
-                  <span id="parallel-audio">At once, beside the video encode</span>
+                  <span id="parallel-audio">At once per job, beside its video encode</span>
                   <span id="parallel-audio-help" class="block text-xs text-muted-foreground">
                     A job's audio encodes start once its source is indexed and run while the video encodes. The output
                     file is built when they're done. 0 encodes them one at a time, before the video. Default: {config.parallel_audio_default}

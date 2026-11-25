@@ -157,7 +157,15 @@ def forget_finished(outputs: tuple[Path, ...]) -> None:
                 continue
 
 
+_archive_lock = threading.Lock()
+
+
 def keep_records(source: Path, dest: Path, keep: int = KEEP_RECORDS) -> dict[Path, Path]:
+    with _archive_lock:
+        return _copy_and_prune(source, dest, keep)
+
+
+def _copy_and_prune(source: Path, dest: Path, keep: int) -> dict[Path, Path]:
     """Copy a work folder's job records and logs into dest before the folder is deleted: the records
     by their own names, a job folder's log as `<source name>.<label>.videoforge.log` (`main`'s, and one
     at the top from before job folders, as `<source name>.videoforge.log`). dest keeps the newest `keep`
@@ -172,8 +180,14 @@ def keep_records(source: Path, dest: Path, keep: int = KEEP_RECORDS) -> dict[Pat
     dest.mkdir(parents=True, exist_ok=True)
     copied = {}
     for path, name in files:
-        shutil.copyfile(path, dest / name)  # a fresh mtime: the newest copies are the ones kept
-        copied[path] = dest / name
+        target = dest / name
+        suffix = KEPT_LOG_SUFFIX if name.lower().endswith(KEPT_LOG_SUFFIX) else RECORD_GLOB[1:]
+        number = 2
+        while target.exists():
+            target = dest / f"{name[: -len(suffix)]}.{number}{suffix}"
+            number += 1
+        shutil.copyfile(path, target)  # a fresh mtime: the newest copies are the ones kept
+        copied[path] = target
     for pattern in (RECORD_GLOB, "*" + KEPT_LOG_SUFFIX):
         old = sorted(dest.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)[keep:]
         for path in old:

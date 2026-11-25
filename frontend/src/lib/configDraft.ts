@@ -13,6 +13,7 @@ export function configDraft(config: ConfigState, changes: ConfigChanges): Config
     'index_during_video',
     'sample_quality',
     'x265_avx512',
+    'concurrency',
     'auto_index',
     'auto_crop',
     'naming',

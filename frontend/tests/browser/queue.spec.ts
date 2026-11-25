@@ -30,6 +30,7 @@ async function queueFixture(
     crop: null,
     custom_script: false,
     pause_after_pass1: false,
+    two_pass: false,
     indexed: false,
     source_facts: facts(i),
     index_error: '',
@@ -302,8 +303,10 @@ test('the tab title follows the running job', async ({ page }) => {
     left: 1200,
   }
   fixture.refresh()
-  await expect(page).toHaveTitle('job 42% · Episode 00001 · VideoForge')
+  fixture.send({ type: 'queue', running: true, current: 'job-1', active_ids: ['job-1', 'job-2'], waiting: {} })
+  await expect(page).toHaveTitle('2 active · job 42% · Episode 00001 · VideoForge')
   fixture.jobs[1].status = 'done'
+  fixture.send({ type: 'queue', running: false, current: null, active_ids: [], waiting: {} })
   fixture.jobs[1].progress = null
   fixture.refresh()
   await expect(page).toHaveTitle('VideoForge')
@@ -803,7 +806,8 @@ test('Encoder tab: the test encode and CRF search cards sit 16 px apart', async 
 })
 
 test('the menu marks the running job with an icon, in both widths', async ({ page }) => {
-  const { errors } = await queueFixture(page, 1, ['running'])
+  const { errors, send } = await queueFixture(page, 1, ['running'])
+  send({ type: 'queue', running: true, current: 'job-0', active_ids: ['job-0'], waiting: {} })
   const nav = page.getByRole('navigation', { name: 'Main navigation' })
   await expect(nav).toContainText('Episode 00000')
   await expect(nav).not.toContainText('▶')
@@ -989,10 +993,9 @@ test("the toolbar's first row stays put when a job starts or indexing runs, so C
   }
 
   fixture.send({ ...idle, running: true, current: 'job-0', queued: 1 })
-  await expect(page.getByRole('button', { name: 'Stop after current', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Stop after active jobs', exact: true })).toBeVisible()
   expect(await at()).toEqual(before)
-  await below('Cancel')
-  await below('Pause after pass 1')
+  await below('Cancel active jobs and stop')
   await below('Pause')
 
   fixture.send({ ...idle, running: true, current: 'job-0', stop_after_current: true })
@@ -1005,7 +1008,7 @@ test("the toolbar's first row stays put when a job starts or indexing runs, so C
   expect(await at()).toEqual(before)
   await below('Stop indexing')
   await below('Pause')
-  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Cancel active jobs and stop', exact: true })).toHaveCount(0)
 
   fixture.send(idle)
   await expect(page.getByRole('button', { name: 'Stop indexing', exact: true })).toHaveCount(0)
@@ -1036,11 +1039,14 @@ test('a paused queue has one primary button, and a pressed Pause after pass 1 is
   await expect(primary.filter({ hasText: /^Start queue/ })).toHaveCount(0)
   await expect(primary.filter({ hasText: 'Resume' })).toHaveCount(1)
   fixture.send({ ...idle, running: true, current: 'job-0' })
-  await expect(page.getByRole('button', { name: 'Pause after pass 1', exact: true })).toBeVisible()
+  fixture.jobs[0].status = 'running'
+  fixture.jobs[0].two_pass = true
+  fixture.refresh()
+  const pressed = page.getByRole('button', { name: /Pause after pass 1 for Episode 00000/ })
+  await expect(pressed).toHaveAttribute('aria-pressed', 'false')
   fixture.jobs[0].pause_after_pass1 = true
   fixture.refresh()
-  const pressed = page.getByRole('button', { name: 'Pausing after pass 1', exact: true })
-  await expect(pressed).toBeVisible()
+  await expect(pressed).toHaveAttribute('aria-pressed', 'true')
   await expect(pressed).not.toHaveClass(/(^|\s)bg-primary(\s|$)/)
   await expect(pressed).toHaveClass(/(^|\s)bg-muted(\s|$)/)
   expect(fixture.errors).toEqual([])

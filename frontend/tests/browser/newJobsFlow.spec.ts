@@ -170,7 +170,7 @@ async function fixture(page: Page, posted: Record<string, unknown>[], qpf = true
     await route.fulfill({ json: responses[path] })
   })
   await page.goto('/#/queue')
-  return { errors, sources, removed, files }
+  return { errors, sources, removed, files, folders }
 }
 
 async function paste(page: Page, text: string) {
@@ -181,39 +181,68 @@ async function paste(page: Page, text: string) {
   }, text)
 }
 
-test("each Browse on New jobs opens at its own last folder, not at another Browse's", async ({ page }) => {
+test('file and folder pickers share the last browsed folder across inputs and reloads', async ({ page }) => {
   const { errors } = await fixture(page, [])
-  // Sources were last browsed in D:/Media; the output folder was browsed since (the shared last_dir).
   const settings = {
     output_dir: 'D:/Output',
-    last_dir: 'D:/Output',
-    last_dirs: { sources: 'D:/Media' },
+    last_dir: 'D:/Missing',
+    last_dirs: { sources: 'D:/Old Sources', subtitles: 'D:/Old Subtitles' },
     output_folders: [],
     output_default: '',
   }
-  const saved: Record<string, unknown>[] = []
-  await page.route('**/api/settings', (route) => {
-    if (route.request().method() === 'PUT') saved.push(route.request().postDataJSON())
+  let releaseMediaSave!: () => void
+  const mediaSave = new Promise<void>((resolve) => (releaseMediaSave = resolve))
+  await page.route('**/api/settings', async (route) => {
+    if (route.request().method() === 'PUT') {
+      const update = route.request().postDataJSON()
+      if (update.last_dir === 'D:/Media') await mediaSave
+      Object.assign(settings, update)
+    }
     return route.fulfill({ json: settings })
   })
-  const opened: string[] = []
   await page.route(/\/api\/fs\/list\?/, (route) => {
     const path = new URL(route.request().url()).searchParams.get('path')!
-    opened.push(path)
-    return route.fulfill({ json: { path, parent: 'D:/', dirs: [], files: [] } })
+    if (path === 'D:/Missing') return route.fulfill({ status: 404, json: { detail: 'No folder' } })
+    const dirs =
+      path === 'D:/'
+        ? [{ name: 'Media', path: 'D:/Media', mtime: 0 }]
+        : path === 'D:/Media'
+          ? [{ name: 'Subs', path: 'D:/Media/Subs', mtime: 0 }]
+          : []
+    const files = path === 'D:/Media' ? [{ name: 'Show.mkv', path: 'D:/Media/Show.mkv', mtime: 0, size: 1 }] : []
+    return route.fulfill({ json: { path, parent: 'D:/', dirs, files } })
   })
   await page.goto('/#/new')
-  const main = page.locator('main')
-  const browse = main.getByRole('button', { name: 'Browse…', exact: true })
+  const browse = page.locator('main').getByRole('button', { name: 'Browse…', exact: true })
+  const picker = page.getByRole('dialog')
+  const path = picker.getByRole('textbox', { name: 'Path' })
+  const cancel = picker.getByRole('button', { name: 'Cancel', exact: true })
 
-  await browse.first().click() // Sources
-  await expect.poll(() => opened).toEqual(['D:/Media'])
-  await expect.poll(() => saved).toEqual([{ last_dir: 'D:/Media', last_dirs: { sources: 'D:/Media' } }])
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
+  await browse.first().click()
+  await expect(path).toHaveValue('D:/')
+  try {
+    await picker.getByRole('button', { name: 'Media', exact: true }).click()
+    await picker.getByRole('checkbox', { name: 'Pick Show.mkv' }).click()
+    await picker.getByRole('button', { name: 'Add', exact: true }).click()
 
-  await browse.nth(1).click() // Output folder: no folder of its own yet, so the shared one
-  await expect.poll(() => opened.at(-1)).toBe('D:/Output')
-  await expect.poll(() => saved.at(-1)).toEqual({ last_dir: 'D:/Output', last_dirs: { output: 'D:/Output' } })
+    await page.getByText('More inputs: encodes, subtitles, chapters', { exact: true }).click()
+    await browse.nth(2).click() // Subtitles, while the source folder save is held
+    await expect(path).toHaveValue('D:/Media')
+    await picker.getByRole('button', { name: 'Subs', exact: true }).click()
+    await expect(path).toHaveValue('D:/Media/Subs')
+    await cancel.click()
+  } finally {
+    releaseMediaSave()
+  }
+
+  await browse.nth(4).click() // Output folder remembers where Subtitles was left on cancel
+  await expect(path).toHaveValue('D:/Media/Subs')
+  await cancel.click()
+  await expect.poll(() => settings.last_dir).toBe('D:/Media/Subs')
+
+  await page.reload()
+  await browse.first().click()
+  await expect(path).toHaveValue('D:/Media/Subs')
   expect(errors).toEqual([])
 })
 
@@ -431,6 +460,44 @@ test('the folder picker offers Delete only on a folder made in it, and asks to d
   expect(errors).toEqual([])
 })
 
+test('the file picker reveals long file and folder names on hover and keyboard focus', async ({ page }) => {
+  const { errors, folders, files } = await fixture(page, [])
+  const stem = 'A.Very.Long.Video.Name.With.Edition.Information.'.repeat(4)
+  const folder = `${stem}mkv_tmp`
+  const file = `${stem}mkv`
+  folders.push(`D:/Media/${folder}`)
+  files.push(`D:/Media/${file}`)
+  await page.goto('/#/new')
+  await page.getByRole('button', { name: 'Browse…' }).first().click()
+
+  const picker = page.getByRole('dialog', { name: 'Sources' })
+  const tooltip = page.locator('[data-slot="tooltip-content"]:not([data-state="closed"])')
+  for (const name of [folder, file]) {
+    const label = picker.getByText(name, { exact: true })
+    await expect(label).toBeVisible()
+    expect(await label.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+    await label.hover()
+    await expect(tooltip).toHaveText(name)
+  }
+
+  await page.mouse.move(0, 0)
+  await picker.getByRole('searchbox', { name: 'Filter this folder' }).press('ArrowDown')
+  const folderBox = picker.getByRole('checkbox', { name: `Pick ${folder}`, exact: true })
+  await expect(folderBox).toBeFocused()
+  await expect(tooltip).toHaveText(folder)
+
+  await folderBox.press('End')
+  const fileBox = picker.getByRole('checkbox', { name: `Pick ${file}`, exact: true })
+  await expect(fileBox).toBeFocused()
+  await expect(tooltip).toHaveText(file)
+  await fileBox.press('Escape')
+  await expect(tooltip).toBeHidden()
+  await expect(fileBox).toBeFocused()
+  await fileBox.press('Space')
+  await expect(fileBox).toBeChecked()
+  expect(errors).toEqual([])
+})
+
 test('the file picker ticks a range with Shift+click and every file with Ctrl+A or the All box', async ({ page }) => {
   const { errors, files } = await fixture(page, [])
   files.push(...[1, 2, 3, 4, 5].map((n) => `D:/Media/E0${n}.mkv`))
@@ -586,7 +653,7 @@ test('the file picker moves, ticks, opens and adds from the keyboard', async ({ 
   const shows = (path: string) => expect(picker.getByRole('textbox', { name: 'Path' })).toHaveValue(path)
 
   await shows('D:/') // listed: before that, ArrowDown has no row to go to
-  await picker.getByRole('searchbox', { name: 'Filter this folder' }).press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
   await expect(box('Old')).toBeFocused()
   await page.keyboard.press('ArrowDown')
   await expect(box('E01.mkv')).toBeFocused()
@@ -625,6 +692,32 @@ test('the file picker moves, ticks, opens and adds from the keyboard', async ({ 
   await page.keyboard.press('Enter') // adds what's ticked
   await expect(picker).toBeHidden()
   await expect(page.getByRole('list', { name: 'Sources' }).getByRole('listitem')).toHaveCount(4)
+  expect(errors).toEqual([])
+})
+
+test('the folder picker keeps keyboard navigation when opening an empty folder', async ({ page }) => {
+  const { errors } = await fixture(page, [])
+  await page.route(/\/api\/fs\/list\?/, (route) => {
+    const path = new URL(route.request().url()).searchParams.get('path')
+    const empty = path === 'D:/Old'
+    const dirs = empty ? [] : [{ name: 'Old', path: 'D:/Old', mtime: 0 }]
+    return route.fulfill({ json: { path, parent: empty ? 'D:/' : null, dirs, files: [] } })
+  })
+  await page.goto('/#/new')
+  await page.getByRole('button', { name: 'Browse…' }).nth(1).click()
+  const picker = page.getByRole('dialog', { name: 'Output folder' })
+  const path = picker.getByRole('textbox', { name: 'Path' })
+  const folder = picker.getByRole('button', { name: 'Old', exact: true })
+
+  await expect(path).toHaveValue('D:/')
+  await page.keyboard.press('ArrowUp')
+  await expect(folder).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(path).toHaveValue('D:/Old')
+  await expect(picker.getByRole('group', { name: 'Folder contents' })).toBeFocused()
+  await page.keyboard.press('Alt+ArrowUp')
+  await expect(path).toHaveValue('D:/')
+  await expect(folder).toBeFocused()
   expect(errors).toEqual([])
 })
 

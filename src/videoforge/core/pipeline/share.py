@@ -13,7 +13,6 @@ question), an input the job's folder doesn't have yet is told by the step that w
 from __future__ import annotations
 
 from dataclasses import dataclass
-import glob
 import hashlib
 import json
 import os
@@ -22,7 +21,7 @@ import shutil
 from typing import TYPE_CHECKING
 
 from videoforge.core.job import StepRecord
-from videoforge.core.workdir import FINISHED_NAME, FinishedFile, finished_files, note_finished
+from videoforge.core.workdir import FinishedFile, finished_files, forget_finished, note_finished
 
 if TYPE_CHECKING:
     from videoforge.core.pipeline.steps import Step
@@ -36,7 +35,11 @@ class Found:
     """A finished file a step could take: where it is, and what its note says."""
 
     folder: Path  # the job folder (or the work folder, for a shared file) it's in
-    notes: dict[str, FinishedFile]  # the step's outputs' notes there, by file name
+    notes: dict[str, FinishedFile]  # keyed by the consumer's file names
+    audio_name: str = ""  # a matching track at another mux position
+
+    def source(self, output: Path) -> Path:
+        return self.folder / (self.audio_name or output.name)
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,11 +67,23 @@ class Sharing:
         except OSError:
             return "missing"
 
-    def portable(self, step: Step) -> str | None:
+    def portable(self, step: Step, *, normalize_audio: bool = True) -> str | None:
         """The step's fingerprint, the same in any job's folder; None when an input can't be told apart."""
         home = str(self.home)
 
+        audio = normalize_audio and step.id.startswith("audio.")
+        names = {}
+        if audio:
+            # Track order and the language used to name the file are mux choices. Retain the
+            # format and every command argument (including the source track selector).
+            for role, paths in (("input", step.inputs), ("output", step.outputs)):
+                for i, path in enumerate(paths):
+                    if path.parent == self.home:
+                        names[str(path)] = f"{JOB}/{role}{i}{path.suffix}"
+
         def swap(text: str) -> str:
+            for name, portable_name in names.items():
+                text = text.replace(name, portable_name)
             return text.replace(home, JOB)
 
         inputs: list[list[object]] = []
@@ -77,16 +92,26 @@ class Sharing:
                 identity = self._identity(path)
                 if identity is None:
                     return None
-                inputs.append([f"{JOB}/{path.name}", identity])
+                inputs.append([names.get(str(path), f"{JOB}/{path.name}"), identity])
             else:
                 try:
                     st = path.stat()
                     inputs.append([str(path), st.st_size, st.st_mtime_ns])
                 except OSError:
                     inputs.append([str(path), None, None])
-        argvs = [[swap(str(a)) for a in argv] for argv in step.argvs]
+        argvs = []
+        for argv in step.argvs:
+            if audio and "--temp-dir" in argv and step.outputs:
+                at = argv.index("--temp-dir")
+                scratch = self.home / f"deezy.{step.outputs[0].stem}"
+                if argv[at + 1 : at + 2] == (str(scratch),):
+                    # This generated scratch directory is omitted completely on long Windows paths.
+                    argv = argv[:at] + argv[at + 2 :]
+            argvs.append([swap(str(a)) for a in argv])
         outputs = [swap(str(p)) for p in step.outputs]
-        doc = json.dumps([step.id, argvs, swap(step.key), inputs, outputs], default=str)
+        family = step.id.split(".")
+        step_id = ".".join([family[0], *family[2:]]) if audio else step.id
+        doc = json.dumps([step_id, argvs, swap(step.key), inputs, outputs], default=str)
         return hashlib.sha1(doc.encode("utf-8"), usedforsecurity=False).hexdigest()
 
     def note(self, step: Step, record: StepRecord) -> None:
@@ -117,8 +142,16 @@ class Sharing:
         own = [p for p in outputs if p.parent == self.home]
         if not own:
             return Found(self.work, {p.name: shared[p.name] for p in outputs})
+        audio = step.id.startswith("audio.") and len(own) == len(outputs) == 1
+        legacy = self.portable(step, normalize_audio=False) if audio else None
         for folder in self._job_folders():
             notes = finished_files(folder)
+            if audio:
+                for name, note in notes.items():
+                    if note.portable == portable or (
+                        name == own[0].name and note.step == step.id and note.portable == legacy
+                    ):
+                        return Found(folder, {own[0].name: note}, name)
             if all(matches(notes.get(p.name)) for p in own):
                 return Found(folder, {p.name: (notes if p.parent == self.home else shared)[p.name] for p in outputs})
         return None
@@ -136,11 +169,12 @@ class Sharing:
         found = self.find(step)
         if found is None:
             return None
-        if found.folder != self.home and found.folder != self.work:
+        targets = tuple(p for p in step.outputs if p.parent == self.home and found.source(p) != p)
+        if targets:
             self.home.mkdir(parents=True, exist_ok=True)
-            for path in step.outputs:
-                if path.parent == self.home:
-                    _link(found.folder / path.name, path)
+            forget_finished(targets)
+            for path in targets:
+                _link(found.source(path), path)
         seconds = max((n.seconds for n in found.notes.values()), default=0.0)
         record = StepRecord(step.id, step.fingerprint(), list(step.outputs), seconds)
         record.capture_outputs()
@@ -149,14 +183,20 @@ class Sharing:
         return record, origin
 
 
+def stats_sidecars(path: Path) -> tuple[Path, ...]:
+    if path.name != "video.stats":
+        return ()
+    return tuple(path.with_name(path.name + suffix) for suffix in (".cutree", ".mbtree"))
+
+
 def _link(source: Path, target: Path) -> None:
     """target: the same file as source (a hard link, else a copy), with the files a tool writes beside it
     (x265's `<stats>.cutree`, which its pass 2 reads)."""
-    pairs = [(source, target)] + [
-        (Path(c), target.with_name(Path(c).name.replace(source.name, target.name, 1)))
-        for c in glob.glob(glob.escape(str(source)) + ".*")
-        if Path(c).name != FINISHED_NAME
-    ]
+    pairs = [(source, target)]
+    for src, dst in zip(stats_sidecars(source), stats_sidecars(target), strict=True):
+        dst.unlink(missing_ok=True)
+        if src.is_file():
+            pairs.append((src, dst))
     for src, dst in pairs:
         dst.unlink(missing_ok=True)
         try:

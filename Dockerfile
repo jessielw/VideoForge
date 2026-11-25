@@ -11,8 +11,8 @@
 ARG PYTHON_IMAGE=python:3.12-slim-trixie
 ARG PLUGINS_IMAGE=ghcr.io/jessielw/videoforge-plugins:latest
 # DeeZy 2 (DEE 6.7 only) and dee_shim, which runs the Linux DEE: scripts/tools.toml's versions for Windows
-ARG DEEZY_VERSION=2.0.1
-ARG DEEZY_SHA256=b11c4dc2c4ec5076a381093ceaee6fadaf0e146e67ee1752e24200f875f58997
+ARG DEEZY_VERSION=2.0.2
+ARG DEEZY_SHA256=ba7d295109abb3dfe6274b6407cf9947c0b2b756ff01eaf9eb48a80d2672a6f9
 ARG DEE_SHIM_VERSION=0.3.0
 ARG DEE_SHIM_BUILD=2ae7f95
 ARG DEE_SHIM_SHA256=829fb9c5bd78c54eadaaff9e45d8c042d61c5f1ae687a4c4166c43f9b3e32c63

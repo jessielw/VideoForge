@@ -70,16 +70,17 @@
     if (cramped) menuOpened = navCollapsed
     else layout.navCollapsed = !navCollapsed
   }
-  const running = $derived(app.jobs.find((j) => j.status === 'running'))
+  const activeCount = $derived(app.queue.active_ids?.length ?? (app.queue.current ? 1 : 0))
+  const running = $derived(app.jobs.find((j) => j.id === app.queue.current))
 
   // The tab's title follows the running job, so a background tab shows how far the queue is.
   $effect(() => {
-    if (!running) {
+    if (!activeCount) {
       document.title = 'VideoForge'
       return
     }
-    const pct = running.progress ? `job ${Math.floor(running.progress.overall * 100)}% · ` : ''
-    document.title = `${app.queue.paused ? 'Paused · ' : ''}${pct}${running.name} · VideoForge`
+    const pct = running?.progress ? `job ${Math.floor(running.progress.overall * 100)}% · ` : ''
+    document.title = `${app.queue.paused ? 'Paused · ' : ''}${activeCount} active · ${pct}${running?.name ?? 'Queue'} · VideoForge`
   })
 </script>
 
@@ -178,10 +179,9 @@
               side="right"
               class="text-info"
               text="Running {running.name}{running.progress ? `: ${running.progress.step}` : ''}"
-              >{#if running.progress}{Math.round(running.progress.overall * 100) + '%'}{:else}<PlayIcon
-                  class="size-3"
-                  aria-hidden="true"
-                />{/if}</Tip
+              >{#if activeCount > 1}{activeCount} active{:else if running.progress}{Math.round(
+                  running.progress.overall * 100,
+                ) + '%'}{:else}<PlayIcon class="size-3" aria-hidden="true" />{/if}</Tip
             >
           {/if}
           <Tip
@@ -194,7 +194,7 @@
         <div class="h-(--bar-h) shrink-0 space-y-1 overflow-y-auto border-t px-5 py-1.5 text-xs text-muted-foreground">
           {#if running}
             <Tip class="block truncate text-info" text={running.name}
-              ><PlayIcon class="mr-1 inline size-3 align-[-1px]" aria-hidden="true" />{running.name}</Tip
+              ><PlayIcon class="mr-1 inline size-3 align-[-1px]" aria-hidden="true" />{activeCount} active · {running.name}</Tip
             >
             {#if running.progress}
               <div class="h-1.5 overflow-hidden rounded bg-muted">
@@ -212,7 +212,7 @@
             {#if held}
               <Tip
                 class="block truncate text-muted-foreground"
-                text="An encode is reading their disk. Indexing waits for it (Settings › Queue & indexing › Wait while an encode reads the same disk), and always while another job of the same source runs."
+                text="An encode is reading their disk. Indexing waits for it (Settings › Queue & indexing › Wait while an encode reads the same disk), or for files and encoder slots in use."
               >
                 {held} to index after the encode
               </Tip>

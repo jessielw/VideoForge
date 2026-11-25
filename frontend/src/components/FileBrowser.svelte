@@ -1,3 +1,22 @@
+<script module lang="ts">
+  import { api } from '../lib/api'
+
+  // A picker can reopen before the previous folder has finished saving.
+  let pendingFolder: { path: string; saved: Promise<unknown> } | undefined
+
+  function rememberFolder(path: string) {
+    if (pendingFolder?.path === path) return
+    const saved = (pendingFolder?.saved ?? Promise.resolve())
+      .then(() => api.saveSettings({ last_dir: path }))
+      .catch(() => {})
+    const pending = { path, saved }
+    pendingFolder = pending
+    void saved.then(() => {
+      if (pendingFolder === pending) pendingFolder = undefined
+    })
+  }
+</script>
+
 <script lang="ts">
   // Browses the server's file system (the browser can't hand us real paths).
   // mode "files": tick files and/or folders; mode "folder": choose one folder.
@@ -10,11 +29,11 @@
   // one went, and Ctrl+A or the All box ticks every file here (not the folders). The filter narrows the
   // rows to names with every word in them; ranges and Ctrl+A only take the rows it shows. The column
   // headers sort by name, date or size (folders stay first), remembered in this browser.
-  // Keys on a row: arrows, Home and End move (Shift+arrows tick on the way), Space ticks, Enter opens a
-  // folder or adds (the file under the cursor when nothing is ticked), Backspace or Alt+Up goes up.
+  // Focus starts on the folder contents. Arrows, Home and End move to a row (Shift+arrows tick on the way).
+  // On a row, Space ticks and Enter opens a folder or adds (the file under the cursor when nothing is
+  // ticked). Backspace or Alt+Up goes up a folder.
   // KeyboardShortcuts lists them: keep it in step.
-  import { onMount, tick } from 'svelte'
-  import { api } from '../lib/api'
+  import { onDestroy, onMount, tick } from 'svelte'
   import { filterEntries, sortEntries, type FileSort, type SortKey } from '../lib/fileList'
   import { bytes } from '../lib/format'
   import { pickAll, pickClick, pickRange } from '../lib/pickPaths'
@@ -33,6 +52,7 @@
   import * as Dialog from '$lib/components/ui/dialog'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
+  import * as Tooltip from '$lib/components/ui/tooltip'
   import Tip from './Tip.svelte'
 
   let {
@@ -42,7 +62,6 @@
     programs = false,
     orFolder = false,
     start = '',
-    remember = '',
     onpick,
     onclose,
   }: {
@@ -51,9 +70,7 @@
     extensions?: string[]
     programs?: boolean
     orFolder?: boolean
-    start?: string
-    // a kind of Browse ("sources", "output"...) that opens where it was last used, not where any Browse was
-    remember?: string
+    start?: string // fallback when the last browsed folder is absent or unavailable
     onpick: (paths: string[]) => void
     onclose: () => void
   } = $props()
@@ -73,6 +90,11 @@
   let deleting = $state<{ name: string; path: string } | null>(null)
   let busy = $state(false)
   let list = $state<HTMLElement | null>(null)
+  let navigation: number | null = 0
+
+  onDestroy(() => {
+    navigation = null
+  })
 
   const message = (e: unknown) => String(e instanceof Error ? e.message : e)
 
@@ -104,22 +126,27 @@
 
   // focus: from the keyboard, put the cursor on this row once it's listed (true: the first row).
   async function open(path: string, focus?: string | true) {
+    if (navigation === null) return
+    const request = ++navigation
+    const previousFocus = document.activeElement
     error = ''
     try {
       const next = await api.list(path, extensions, programs)
-      if (next.path !== listing?.path) filter = ''
+      if (request !== navigation) return
+      if (next.path !== listing?.path) {
+        filter = ''
+        rememberFolder(next.path)
+      }
+      const focusTarget = document.activeElement === previousFocus ? focus : undefined
       listing = next
       anchor = null
       pathInput = listing.path
-      api
-        .saveSettings({ last_dir: listing.path, ...(remember ? { last_dirs: { [remember]: listing.path } } : {}) })
-        .catch(() => {})
-      if (focus) {
+      if (focusTarget) {
         await tick()
-        focusRow(focus === true ? null : focus)
+        if (request === navigation) focusRow(focusTarget === true ? null : focusTarget)
       }
     } catch (e) {
-      error = message(e)
+      if (request === navigation) error = message(e)
     }
   }
 
@@ -128,7 +155,7 @@
 
   function focusRow(path: string | null) {
     const all = rows()
-    ;(all.find((r) => r.dataset.row === path) ?? all[0])?.focus()
+    ;(all.find((r) => r.dataset.row === path) ?? all[0] ?? list)?.focus()
   }
 
   async function makeDir() {
@@ -166,10 +193,23 @@
   }
 
   onMount(async () => {
-    roots = await api.roots()
-    const settings = await api.settings().catch(() => ({ last_dir: '', last_dirs: undefined }))
-    await open(start || (remember && settings.last_dirs?.[remember]) || settings.last_dir || roots[0] || 'C:\\')
-    if (!listing && roots[0]) await open(roots[0])
+    const [availableRoots, lastFolder] = await Promise.all([
+      api.roots(),
+      pendingFolder?.path ??
+        api
+          .settings()
+          .then((settings) => settings.last_dir)
+          .catch(() => ''),
+    ])
+    roots = availableRoots
+    if (navigation !== 0) return
+    for (const path of new Set([lastFolder, start, roots[0] || 'C:\\'])) {
+      if (!path) continue
+      const opening = open(path)
+      const request: number = navigation
+      await opening
+      if (listing || request !== navigation) break
+    }
   })
 
   // The rows as shown, in the order Shift+click ranges over; picking one program means no ranges or All.
@@ -238,7 +278,13 @@
     } else if (!typing && ((e.key === 'Backspace' && plain) || (e.key === 'ArrowUp' && e.altKey))) {
       e.preventDefault()
       if (listing?.parent) open(listing.parent, listing.path) // the cursor lands on the folder left
-    } else if (row !== undefined && plain && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+    } else if (
+      el &&
+      list?.contains(el) &&
+      !typing &&
+      plain &&
+      ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)
+    ) {
       e.preventDefault()
       move(row, e.key, e.shiftKey)
     } else if (row !== undefined && plain && e.key === 'Enter') {
@@ -255,15 +301,15 @@
   }
 
   // Shift ticks every row from where the moving started (the anchor) to the one it lands on.
-  function move(row: string, key: string, shift: boolean) {
+  function move(row: string | undefined, key: string, shift: boolean) {
     const all = rows()
-    const at = all.findIndex((r) => r.dataset.row === row)
+    const at = row === undefined && key === 'ArrowUp' ? all.length : all.findIndex((r) => r.dataset.row === row)
     const to = key === 'Home' ? 0 : key === 'End' ? all.length - 1 : at + (key === 'ArrowDown' ? 1 : -1)
     const next = all[Math.max(0, Math.min(to, all.length - 1))]
     const path = next?.dataset.row
     if (!next || path === undefined) return
     next.focus()
-    if (shift && mode === 'files' && !programs) {
+    if (row !== undefined && shift && mode === 'files' && !programs) {
       anchor ??= row
       picked = pickRange(picked, order, anchor, path, true)
     } else anchor = path
@@ -277,6 +323,33 @@
     }
   }
 </script>
+
+{#snippet fullName(name: string)}
+  <Tooltip.Content
+    aria-hidden="true"
+    align="start"
+    collisionPadding={8}
+    class="max-w-[min(28rem,calc(100vw-1rem))] whitespace-pre-wrap wrap-anywhere"
+  >
+    {name}
+  </Tooltip.Content>
+{/snippet}
+
+{#snippet pickBox(path: string, name: string, folder = false)}
+  <Tooltip.Trigger onclick={(e) => click(path, e)} onpointerdown={folder ? (e) => press(path, e) : undefined}>
+    {#snippet child({ props })}
+      {@const { 'aria-describedby': _description, 'data-state': _state, ...trigger } = props}
+      <Checkbox
+        {...trigger}
+        class="scroll-mt-9"
+        data-row={path}
+        checked={picked.includes(path)}
+        onkeydown={(e: KeyboardEvent) => spaceRow(path, e)}
+        aria-label="Pick {name}"
+      />
+    {/snippet}
+  </Tooltip.Trigger>
+{/snippet}
 
 {#snippet column(key: SortKey, label: string, cls: string)}
   <button
@@ -299,6 +372,11 @@
     class="flex h-[80vh] flex-col gap-0 p-0 sm:max-w-3xl"
     showCloseButton={false}
     aria-label={title}
+    onOpenAutoFocus={(e) => {
+      if (!list) return
+      e.preventDefault()
+      list.focus()
+    }}
     onkeydown={keys}
   >
     <header class="flex items-center gap-2 border-b p-3">
@@ -318,7 +396,7 @@
           variant="ghost"
           size="icon"
           disabled={!listing?.parent}
-          onclick={() => listing?.parent && open(listing.parent)}
+          onclick={() => listing?.parent && open(listing.parent, listing.path)}
           aria-label="Up"
         >
           <ArrowUpIcon />
@@ -328,7 +406,7 @@
         class="flex-1 font-mono text-xs"
         aria-label="Path"
         bind:value={pathInput}
-        onkeydown={(e) => e.key === 'Enter' && open(pathInput)}
+        onkeydown={(e) => e.key === 'Enter' && open(pathInput, true)}
       />
       <Tip text="Refresh (F5)">
         <Button
@@ -369,7 +447,13 @@
 
     {#if error}<div class="px-3 py-2 text-sm text-destructive">{error}</div>{/if}
 
-    <div class="min-h-0 flex-1 overflow-auto p-1" bind:this={list}>
+    <div
+      class="min-h-0 flex-1 overflow-auto p-1 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+      role="group"
+      aria-label="Folder contents"
+      tabindex="-1"
+      bind:this={list}
+    >
       {#if listing}
         {#if newName !== null}
           <form
@@ -429,24 +513,22 @@
             role="presentation"
             onpointerenter={() => over(d.path)}
           >
-            {#if mode === 'files'}
-              <Checkbox
-                class="scroll-mt-9"
-                data-row={d.path}
-                checked={picked.includes(d.path)}
-                onpointerdown={(e: PointerEvent) => press(d.path, e)}
-                onclick={(e: MouseEvent) => click(d.path, e)}
-                onkeydown={(e: KeyboardEvent) => spaceRow(d.path, e)}
-                aria-label="Pick {d.name}"
-              />
-            {/if}
-            <button
-              class="flex min-w-0 flex-1 scroll-mt-9 items-center gap-2 text-left"
-              data-row={mode === 'folder' ? d.path : undefined}
-              onclick={() => open(d.path)}
-            >
-              <FolderIcon class="size-4 shrink-0 text-primary" /><span class="truncate">{d.name}</span>
-            </button>
+            <Tooltip.Root ignoreNonKeyboardFocus>
+              {#if mode === 'files'}{@render pickBox(d.path, d.name, true)}{/if}
+              <Tooltip.Trigger
+                class="flex min-w-0 flex-1 scroll-mt-9 items-center gap-2 text-left"
+                data-row={mode === 'folder' ? d.path : undefined}
+                onclick={() => open(d.path, true)}
+              >
+                {#snippet child({ props })}
+                  {@const { 'aria-describedby': _description, ...trigger } = props}
+                  <button {...trigger}>
+                    <FolderIcon class="size-4 shrink-0 text-primary" /><span class="truncate">{d.name}</span>
+                  </button>
+                {/snippet}
+              </Tooltip.Trigger>
+              {@render fullName(d.name)}
+            </Tooltip.Root>
             {#if made.includes(d.path)}
               <Tip text="Delete {d.name}">
                 <Button
@@ -477,16 +559,23 @@
               onpointerenter={() => over(f.path)}
               onclick={(e) => click(f.path, e)}
             >
-              <Checkbox
-                class="scroll-mt-9"
-                data-row={f.path}
-                checked={picked.includes(f.path)}
-                onclick={(e: MouseEvent) => click(f.path, e)}
-                onkeydown={(e: KeyboardEvent) => spaceRow(f.path, e)}
-                aria-label="Pick {f.name}"
-              />
-              <FileIcon class="size-4 text-muted-foreground" />
-              <span class="flex-1 truncate">{f.name}</span>
+              <Tooltip.Root ignoreNonKeyboardFocus>
+                {@render pickBox(f.path, f.name)}
+                <FileIcon class="size-4 text-muted-foreground" />
+                <Tooltip.Trigger>
+                  {#snippet child({ props })}
+                    {@const {
+                      tabindex: _tabindex,
+                      type: _type,
+                      disabled: _disabled,
+                      'aria-describedby': _description,
+                      ...trigger
+                    } = props}
+                    <span {...trigger} class="min-w-0 flex-1 truncate">{f.name}</span>
+                  {/snippet}
+                </Tooltip.Trigger>
+                {@render fullName(f.name)}
+              </Tooltip.Root>
               <span class="hidden w-36 text-xs text-muted-foreground sm:block">{modified(f.mtime)}</span>
               <span class="w-20 text-right text-xs text-muted-foreground">{bytes(f.size)}</span>
             </div>

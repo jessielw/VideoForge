@@ -54,7 +54,6 @@ export type OutputFolder = { path: string; pinned: boolean }
 export type Settings = {
   output_dir: string
   last_dir: string
-  last_dirs?: Record<string, string> // the last folder of each kind of Browse ("sources", "output"...)
   output_folders: OutputFolder[]
   output_default: string
 }
@@ -223,6 +222,7 @@ export const api = {
   saveConfig: (changes: {
     tools?: Record<string, string | null>
     x265_avx512?: boolean
+    concurrency?: ConfigState['concurrency']
     roots?: string[] | null
     rule_set?: string | null
     index_waits_for_disk?: boolean
@@ -343,6 +343,7 @@ export const api = {
   dequeue: (ids: string[]) => post<QueueState>('/api/queue/dequeue', { ids }),
   stop: () => post<QueueState>('/api/queue/stop'),
   cancel: () => post<QueueState>('/api/queue/cancel'),
+  cancelJob: (id: string) => post<QueueState>(`/api/queue/cancel/${encodeURIComponent(id)}`),
   pause: () => post<QueueState>('/api/queue/pause'),
   // stop the jobs (default: the running one) once the video's pass 1 is done, or take that back; set: the ones it applied to
   pauseAfterPass1: (on: boolean, ids?: string[]) =>

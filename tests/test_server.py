@@ -86,7 +86,9 @@ class FakeRun:
         self.block = block
         self.beside = beside  # a step running beside the video (e.g. "audio.1"), until the run ends
 
-    def __call__(self, spec, plan, rule_set, app, *, state, log, cancel, progress, on_record, on_step, step_log):
+    def __call__(
+        self, spec, plan, rule_set, app, *, state, log, cancel, progress, on_record, on_step, step_log, **kwargs
+    ):
         self.runs.append(spec.name)
         step = Step("video", "Video (x264)", argvs=(("x264", "--crf", "18"),))
         run = step.to_run()
@@ -1087,30 +1089,27 @@ def test_restart_requeues_an_interrupted_job(tmp_path):
 
 
 def test_shutdown_cancels_a_job_that_starts_as_it_begins(tmp_path):
-    """The worker takes a job, then shutdown() cancels before that job has its cancel token: the job must still
-    be cancelled at once, not run until shutdown gives up waiting."""
+    """A job claimed just before shutdown receives its cancellation even if its thread starts late."""
     make_files(tmp_path)
     with make_client(tmp_path, run=FakeRun(block=True)) as client:
         (job_id,) = add(client, tmp_path)
         wait_for(client, job_id, "ready", "warn")
         q = client.app.state.queue
         taken, go_on = threading.Event(), threading.Event()
-        take = q._take_next
+        execute = q._execute
 
-        def held_take_next():
-            e = take()
-            if e is not None:
-                taken.set()
-                go_on.wait(5)
-            return e
+        def held_execute(run):
+            taken.set()
+            go_on.wait(5)
+            execute(run)
 
-        q._take_next = held_take_next
+        q._execute = held_execute
         client.post("/api/queue/start", json={"ids": [job_id]})
         assert taken.wait(5)
         stopper = threading.Thread(target=q.shutdown, kwargs={"timeout": 5})
         t0 = time.monotonic()
         stopper.start()
-        time.sleep(0.2)  # shutdown() has cancelled: there was no token yet
+        time.sleep(0.2)  # shutdown sees the token even before the worker starts
         go_on.set()
         stopper.join()
         assert time.monotonic() - t0 < 2
@@ -1124,7 +1123,9 @@ def test_a_job_that_wont_stop_is_requeued_after_shutdown(tmp_path):
     release = threading.Event()
 
     class Stubborn(FakeRun):
-        def __call__(self, spec, plan, rule_set, app, *, state, log, cancel, progress, on_record, on_step, step_log):
+        def __call__(
+            self, spec, plan, rule_set, app, *, state, log, cancel, progress, on_record, on_step, step_log, **kwargs
+        ):
             run = Step("video", "Video (x264)", argvs=(("x264",),)).to_run()
             state.run = [run]
             run.status = StepStatus.RUNNING
@@ -1860,6 +1861,8 @@ def test_index_lane_stop(tmp_path):
         assert len(indexer.calls) == 1
         assert client.get("/api/queue").json() | {"running": False} == {
             "running": False,
+            "active_ids": [],
+            "waiting": {},
             "current": None,
             "stop_after_current": False,
             "paused": False,
