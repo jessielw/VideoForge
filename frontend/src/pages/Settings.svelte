@@ -221,7 +221,7 @@
     if (await change({ roots: [...current.filter((r) => r.toLowerCase() !== p.toLowerCase()), p] })) newRoot = ''
   }
 
-  // Where Browse opens: the tool's folder (or the plugin folder itself).
+  // If there's no recent folder, Browse can start at the tool's folder (or the plugin folder itself).
   function startFolder(t: ToolSetting): string {
     const found = checks[t.name]?.found ?? ''
     return t.folder ? found : found.replace(/[\\/][^\\/]*$/, '')

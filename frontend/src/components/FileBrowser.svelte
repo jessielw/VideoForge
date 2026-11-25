@@ -1,3 +1,22 @@
+<script module lang="ts">
+  import { api } from '../lib/api'
+
+  // A picker can reopen before the previous folder has finished saving.
+  let pendingFolder: { path: string; saved: Promise<unknown> } | undefined
+
+  function rememberFolder(path: string) {
+    if (pendingFolder?.path === path) return
+    const saved = (pendingFolder?.saved ?? Promise.resolve())
+      .then(() => api.saveSettings({ last_dir: path }))
+      .catch(() => {})
+    const pending = { path, saved }
+    pendingFolder = pending
+    void saved.then(() => {
+      if (pendingFolder === pending) pendingFolder = undefined
+    })
+  }
+</script>
+
 <script lang="ts">
   // Browses the server's file system (the browser can't hand us real paths).
   // mode "files": tick files and/or folders; mode "folder": choose one folder.
@@ -13,8 +32,7 @@
   // Keys on a row: arrows, Home and End move (Shift+arrows tick on the way), Space ticks, Enter opens a
   // folder or adds (the file under the cursor when nothing is ticked), Backspace or Alt+Up goes up.
   // KeyboardShortcuts lists them: keep it in step.
-  import { onMount, tick } from 'svelte'
-  import { api } from '../lib/api'
+  import { onDestroy, onMount, tick } from 'svelte'
   import { filterEntries, sortEntries, type FileSort, type SortKey } from '../lib/fileList'
   import { bytes } from '../lib/format'
   import { pickAll, pickClick, pickRange } from '../lib/pickPaths'
@@ -42,7 +60,6 @@
     programs = false,
     orFolder = false,
     start = '',
-    remember = '',
     onpick,
     onclose,
   }: {
@@ -51,9 +68,7 @@
     extensions?: string[]
     programs?: boolean
     orFolder?: boolean
-    start?: string
-    // a kind of Browse ("sources", "output"...) that opens where it was last used, not where any Browse was
-    remember?: string
+    start?: string // fallback when the last browsed folder is absent or unavailable
     onpick: (paths: string[]) => void
     onclose: () => void
   } = $props()
@@ -73,6 +88,11 @@
   let deleting = $state<{ name: string; path: string } | null>(null)
   let busy = $state(false)
   let list = $state<HTMLElement | null>(null)
+  let navigation: number | null = 0
+
+  onDestroy(() => {
+    navigation = null
+  })
 
   const message = (e: unknown) => String(e instanceof Error ? e.message : e)
 
@@ -104,22 +124,25 @@
 
   // focus: from the keyboard, put the cursor on this row once it's listed (true: the first row).
   async function open(path: string, focus?: string | true) {
+    if (navigation === null) return
+    const request = ++navigation
     error = ''
     try {
       const next = await api.list(path, extensions, programs)
-      if (next.path !== listing?.path) filter = ''
+      if (request !== navigation) return
+      if (next.path !== listing?.path) {
+        filter = ''
+        rememberFolder(next.path)
+      }
       listing = next
       anchor = null
       pathInput = listing.path
-      api
-        .saveSettings({ last_dir: listing.path, ...(remember ? { last_dirs: { [remember]: listing.path } } : {}) })
-        .catch(() => {})
       if (focus) {
         await tick()
-        focusRow(focus === true ? null : focus)
+        if (request === navigation) focusRow(focus === true ? null : focus)
       }
     } catch (e) {
-      error = message(e)
+      if (request === navigation) error = message(e)
     }
   }
 
@@ -166,10 +189,23 @@
   }
 
   onMount(async () => {
-    roots = await api.roots()
-    const settings = await api.settings().catch(() => ({ last_dir: '', last_dirs: undefined }))
-    await open(start || (remember && settings.last_dirs?.[remember]) || settings.last_dir || roots[0] || 'C:\\')
-    if (!listing && roots[0]) await open(roots[0])
+    const [availableRoots, lastFolder] = await Promise.all([
+      api.roots(),
+      pendingFolder?.path ??
+        api
+          .settings()
+          .then((settings) => settings.last_dir)
+          .catch(() => ''),
+    ])
+    roots = availableRoots
+    if (navigation !== 0) return
+    for (const path of new Set([lastFolder, start, roots[0] || 'C:\\'])) {
+      if (!path) continue
+      const opening = open(path)
+      const request: number = navigation
+      await opening
+      if (listing || request !== navigation) break
+    }
   })
 
   // The rows as shown, in the order Shift+click ranges over; picking one program means no ranges or All.

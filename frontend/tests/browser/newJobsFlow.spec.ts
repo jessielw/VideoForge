@@ -181,39 +181,68 @@ async function paste(page: Page, text: string) {
   }, text)
 }
 
-test("each Browse on New jobs opens at its own last folder, not at another Browse's", async ({ page }) => {
+test('file and folder pickers share the last browsed folder across inputs and reloads', async ({ page }) => {
   const { errors } = await fixture(page, [])
-  // Sources were last browsed in D:/Media; the output folder was browsed since (the shared last_dir).
   const settings = {
     output_dir: 'D:/Output',
-    last_dir: 'D:/Output',
-    last_dirs: { sources: 'D:/Media' },
+    last_dir: 'D:/Missing',
+    last_dirs: { sources: 'D:/Old Sources', subtitles: 'D:/Old Subtitles' },
     output_folders: [],
     output_default: '',
   }
-  const saved: Record<string, unknown>[] = []
-  await page.route('**/api/settings', (route) => {
-    if (route.request().method() === 'PUT') saved.push(route.request().postDataJSON())
+  let releaseMediaSave!: () => void
+  const mediaSave = new Promise<void>((resolve) => (releaseMediaSave = resolve))
+  await page.route('**/api/settings', async (route) => {
+    if (route.request().method() === 'PUT') {
+      const update = route.request().postDataJSON()
+      if (update.last_dir === 'D:/Media') await mediaSave
+      Object.assign(settings, update)
+    }
     return route.fulfill({ json: settings })
   })
-  const opened: string[] = []
   await page.route(/\/api\/fs\/list\?/, (route) => {
     const path = new URL(route.request().url()).searchParams.get('path')!
-    opened.push(path)
-    return route.fulfill({ json: { path, parent: 'D:/', dirs: [], files: [] } })
+    if (path === 'D:/Missing') return route.fulfill({ status: 404, json: { detail: 'No folder' } })
+    const dirs =
+      path === 'D:/'
+        ? [{ name: 'Media', path: 'D:/Media', mtime: 0 }]
+        : path === 'D:/Media'
+          ? [{ name: 'Subs', path: 'D:/Media/Subs', mtime: 0 }]
+          : []
+    const files = path === 'D:/Media' ? [{ name: 'Show.mkv', path: 'D:/Media/Show.mkv', mtime: 0, size: 1 }] : []
+    return route.fulfill({ json: { path, parent: 'D:/', dirs, files } })
   })
   await page.goto('/#/new')
-  const main = page.locator('main')
-  const browse = main.getByRole('button', { name: 'Browse…', exact: true })
+  const browse = page.locator('main').getByRole('button', { name: 'Browse…', exact: true })
+  const picker = page.getByRole('dialog')
+  const path = picker.getByRole('textbox', { name: 'Path' })
+  const cancel = picker.getByRole('button', { name: 'Cancel', exact: true })
 
-  await browse.first().click() // Sources
-  await expect.poll(() => opened).toEqual(['D:/Media'])
-  await expect.poll(() => saved).toEqual([{ last_dir: 'D:/Media', last_dirs: { sources: 'D:/Media' } }])
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click()
+  await browse.first().click()
+  await expect(path).toHaveValue('D:/')
+  try {
+    await picker.getByRole('button', { name: 'Media', exact: true }).click()
+    await picker.getByRole('checkbox', { name: 'Pick Show.mkv' }).click()
+    await picker.getByRole('button', { name: 'Add', exact: true }).click()
 
-  await browse.nth(1).click() // Output folder: no folder of its own yet, so the shared one
-  await expect.poll(() => opened.at(-1)).toBe('D:/Output')
-  await expect.poll(() => saved.at(-1)).toEqual({ last_dir: 'D:/Output', last_dirs: { output: 'D:/Output' } })
+    await page.getByText('More inputs: encodes, subtitles, chapters', { exact: true }).click()
+    await browse.nth(2).click() // Subtitles, while the source folder save is held
+    await expect(path).toHaveValue('D:/Media')
+    await picker.getByRole('button', { name: 'Subs', exact: true }).click()
+    await expect(path).toHaveValue('D:/Media/Subs')
+    await cancel.click()
+  } finally {
+    releaseMediaSave()
+  }
+
+  await browse.nth(4).click() // Output folder remembers where Subtitles was left on cancel
+  await expect(path).toHaveValue('D:/Media/Subs')
+  await cancel.click()
+  await expect.poll(() => settings.last_dir).toBe('D:/Media/Subs')
+
+  await page.reload()
+  await browse.first().click()
+  await expect(path).toHaveValue('D:/Media/Subs')
   expect(errors).toEqual([])
 })
 

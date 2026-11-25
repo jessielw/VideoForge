@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Updated DeeZy to 2.0.2 in the Windows tools bundle and Docker image.
+- **Browse…** dialogs across VideoForge share the last folder you visited, even if you cancel the picker or reload the app. After you pick a video in **Sources**, **Subtitles** opens in the same folder.
 
 ## [0.1.17] - 2026-11-24
 

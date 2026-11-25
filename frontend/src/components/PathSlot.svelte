@@ -17,7 +17,6 @@
     paths = $bindable([]),
     extensions = [],
     mode = 'files',
-    remember = '',
     actions,
   }: {
     label: string
@@ -25,7 +24,6 @@
     paths?: string[]
     extensions?: string[]
     mode?: 'files' | 'folder'
-    remember?: string // its Browse's own last folder (FileBrowser)
     actions?: Snippet
   } = $props()
 
@@ -100,5 +98,5 @@
 </div>
 
 {#if browsing}
-  <FileBrowser title={label} {mode} {extensions} {remember} onpick={add} onclose={() => (browsing = false)} />
+  <FileBrowser title={label} {mode} {extensions} onpick={add} onclose={() => (browsing = false)} />
 {/if}
