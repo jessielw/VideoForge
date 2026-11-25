@@ -1594,7 +1594,7 @@ def test_process_run_cancel_ends_the_tools_children(tmp_path):
         try:
             if stat.is_file() and stat.read_text().split()[2] == "Z":
                 return
-        except FileNotFoundError:  # reaped between the kill and the read: gone
+        except (FileNotFoundError, ProcessLookupError):  # reaped during the /proc check
             return
         time.sleep(0.1)
     raise AssertionError(f"the tool's child {child} outlived the cancel")
