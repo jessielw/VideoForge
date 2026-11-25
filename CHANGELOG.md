@@ -13,6 +13,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The sidebar and browser tab show how many jobs are active. The next queued job shows why it is waiting. Use **Cancel job** or **Pause after pass 1** on an individual row, or **Stop after active jobs** to finish the running jobs and leave the rest queued.
 - **DeeZy debug mode** in **Advanced settings** enables detailed logging for DDP, Blu-ray DDP and DDP Atmos encodes. It is off by default. When enabled, VideoForge passes `--log-level debug` before DeeZy's `encode` subcommand.
 
+### Changed
+
+- Updated DeeZy to 2.0.2 in the Windows tools bundle and Docker image.
+
 ## [0.1.17] - 2026-11-24
 
 ### Changed
