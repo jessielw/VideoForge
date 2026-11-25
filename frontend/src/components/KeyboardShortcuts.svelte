@@ -35,7 +35,7 @@
         [['Shift', 'Click'], 'Tick or untick the files between'],
         [['Drag'], 'Tick or untick the rows dragged across'],
         [['Ctrl / ⌘', 'A'], 'Tick every file shown, or untick them'],
-        [['↑ / ↓'], 'The previous or next row (↓ from the filter: the first row)'],
+        [['↑ / ↓'], 'Move between rows. Press ↓ to start at the first row, or ↑ to start at the last.'],
         [['Home / End'], 'The first or last row'],
         [['Shift', '↑ / ↓'], 'Tick the rows on the way'],
         [['Space'], 'Tick the row, or untick it'],

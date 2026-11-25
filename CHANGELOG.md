@@ -12,11 +12,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Variants of the same source can share a finished audio or video encode while different encodes run in parallel. If the job making a shared encode fails or is cancelled, a waiting variant can finish the work. Each variant keeps its own output.
 - The sidebar and browser tab show how many jobs are active. The next queued job shows why it is waiting. Use **Cancel job** or **Pause after pass 1** on an individual row, or **Stop after active jobs** to finish the running jobs and leave the rest queued.
 - **DeeZy debug mode** in **Advanced settings** enables detailed logging for DDP, Blu-ray DDP and DDP Atmos encodes. It is off by default. When enabled, VideoForge passes `--log-level debug` before DeeZy's `encode` subcommand.
+- In **Browse…** dialogs, hover over a file or folder name or focus its row with the keyboard to see the full name in a tooltip.
 
 ### Changed
 
 - Updated DeeZy to 2.0.2 in the Windows tools bundle and Docker image.
 - **Browse…** dialogs across VideoForge share the last folder you visited, even if you cancel the picker or reload the app. After you pick a video in **Sources**, **Subtitles** opens in the same folder.
+
+### Fixed
+
+- **Browse…** dialogs focus the folder contents when opened, so the up and down arrows work as soon as the folder is listed. You can also go back up with the keyboard after opening an empty folder.
 
 ## [0.1.17] - 2026-11-24
 

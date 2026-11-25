@@ -170,7 +170,7 @@ async function fixture(page: Page, posted: Record<string, unknown>[], qpf = true
     await route.fulfill({ json: responses[path] })
   })
   await page.goto('/#/queue')
-  return { errors, sources, removed, files }
+  return { errors, sources, removed, files, folders }
 }
 
 async function paste(page: Page, text: string) {
@@ -460,6 +460,44 @@ test('the folder picker offers Delete only on a folder made in it, and asks to d
   expect(errors).toEqual([])
 })
 
+test('the file picker reveals long file and folder names on hover and keyboard focus', async ({ page }) => {
+  const { errors, folders, files } = await fixture(page, [])
+  const stem = 'A.Very.Long.Video.Name.With.Edition.Information.'.repeat(4)
+  const folder = `${stem}mkv_tmp`
+  const file = `${stem}mkv`
+  folders.push(`D:/Media/${folder}`)
+  files.push(`D:/Media/${file}`)
+  await page.goto('/#/new')
+  await page.getByRole('button', { name: 'Browse…' }).first().click()
+
+  const picker = page.getByRole('dialog', { name: 'Sources' })
+  const tooltip = page.locator('[data-slot="tooltip-content"]:not([data-state="closed"])')
+  for (const name of [folder, file]) {
+    const label = picker.getByText(name, { exact: true })
+    await expect(label).toBeVisible()
+    expect(await label.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+    await label.hover()
+    await expect(tooltip).toHaveText(name)
+  }
+
+  await page.mouse.move(0, 0)
+  await picker.getByRole('searchbox', { name: 'Filter this folder' }).press('ArrowDown')
+  const folderBox = picker.getByRole('checkbox', { name: `Pick ${folder}`, exact: true })
+  await expect(folderBox).toBeFocused()
+  await expect(tooltip).toHaveText(folder)
+
+  await folderBox.press('End')
+  const fileBox = picker.getByRole('checkbox', { name: `Pick ${file}`, exact: true })
+  await expect(fileBox).toBeFocused()
+  await expect(tooltip).toHaveText(file)
+  await fileBox.press('Escape')
+  await expect(tooltip).toBeHidden()
+  await expect(fileBox).toBeFocused()
+  await fileBox.press('Space')
+  await expect(fileBox).toBeChecked()
+  expect(errors).toEqual([])
+})
+
 test('the file picker ticks a range with Shift+click and every file with Ctrl+A or the All box', async ({ page }) => {
   const { errors, files } = await fixture(page, [])
   files.push(...[1, 2, 3, 4, 5].map((n) => `D:/Media/E0${n}.mkv`))
@@ -615,7 +653,7 @@ test('the file picker moves, ticks, opens and adds from the keyboard', async ({ 
   const shows = (path: string) => expect(picker.getByRole('textbox', { name: 'Path' })).toHaveValue(path)
 
   await shows('D:/') // listed: before that, ArrowDown has no row to go to
-  await picker.getByRole('searchbox', { name: 'Filter this folder' }).press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
   await expect(box('Old')).toBeFocused()
   await page.keyboard.press('ArrowDown')
   await expect(box('E01.mkv')).toBeFocused()
@@ -654,6 +692,32 @@ test('the file picker moves, ticks, opens and adds from the keyboard', async ({ 
   await page.keyboard.press('Enter') // adds what's ticked
   await expect(picker).toBeHidden()
   await expect(page.getByRole('list', { name: 'Sources' }).getByRole('listitem')).toHaveCount(4)
+  expect(errors).toEqual([])
+})
+
+test('the folder picker keeps keyboard navigation when opening an empty folder', async ({ page }) => {
+  const { errors } = await fixture(page, [])
+  await page.route(/\/api\/fs\/list\?/, (route) => {
+    const path = new URL(route.request().url()).searchParams.get('path')
+    const empty = path === 'D:/Old'
+    const dirs = empty ? [] : [{ name: 'Old', path: 'D:/Old', mtime: 0 }]
+    return route.fulfill({ json: { path, parent: empty ? 'D:/' : null, dirs, files: [] } })
+  })
+  await page.goto('/#/new')
+  await page.getByRole('button', { name: 'Browse…' }).nth(1).click()
+  const picker = page.getByRole('dialog', { name: 'Output folder' })
+  const path = picker.getByRole('textbox', { name: 'Path' })
+  const folder = picker.getByRole('button', { name: 'Old', exact: true })
+
+  await expect(path).toHaveValue('D:/')
+  await page.keyboard.press('ArrowUp')
+  await expect(folder).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(path).toHaveValue('D:/Old')
+  await expect(picker.getByRole('group', { name: 'Folder contents' })).toBeFocused()
+  await page.keyboard.press('Alt+ArrowUp')
+  await expect(path).toHaveValue('D:/')
+  await expect(folder).toBeFocused()
   expect(errors).toEqual([])
 })
 
