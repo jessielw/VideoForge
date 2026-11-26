@@ -229,15 +229,15 @@ sha256 = "890e1719d44d434c6433f2dcf0ab8affe5e028552095fc65a7b560f432710f98"
 
 [[tool]]
 name = "dee_shim"
-version = "0.4.0"
+version = "0.5.0"
 license = "Apache-2.0; see LICENSE, NOTICE and THIRD_PARTY_LICENSES.txt"
-source = "https://github.com/truehdd/dee-shim/tree/v0.4.0"
+source = "https://github.com/truehdd/dee-shim/tree/v0.5.0"
 purpose = "Runs the DEE 6.7 tools for DeeZy: DDP 7.1, the 7.1 Atmos modes and faster Atmos encodes"
 [tool.windows]
-url = "https://github.com/truehdd/dee-shim/releases/download/v0.4.0/dee-shim-0.4.0-790d050-windows-x86_64.zip"
-sha256 = "948a1ebe9d8c433907f6443b54473fa2b922976c48df71e2982bb9f27f707249"
+url = "https://github.com/truehdd/dee-shim/releases/download/v0.5.0/dee-shim-0.5.0-6a82dad-windows-x86_64.zip"
+sha256 = "92483e1617822eb08c4d95b002fb829267ba07dc4f7843d823caa7b3b6b818e1"
 directory = "dee_shim"
-prefix = "dee-shim-0.4.0-790d050-windows-x86_64"
+prefix = "dee-shim-0.5.0-6a82dad-windows-x86_64"
 include = ["dee_shim.exe", "LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.txt"]
 executables = { dee_shim = "dee_shim.exe" }
 

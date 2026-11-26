@@ -13,9 +13,9 @@ ARG PLUGINS_IMAGE=ghcr.io/jessielw/videoforge-plugins:latest
 # DeeZy 2 (DEE 6.7 only) and dee_shim, which runs the Linux DEE: scripts/tools.toml's versions for Windows
 ARG DEEZY_VERSION=2.0.4
 ARG DEEZY_SHA256=9353b86c4f1d3bacd3562503ca1a893bc4daf692dd26f388b599bc77b683a935
-ARG DEE_SHIM_VERSION=0.4.0
-ARG DEE_SHIM_BUILD=790d050
-ARG DEE_SHIM_SHA256=f90766c00b8842674373a5543595200353f7ef82f854b5e0e9e2732d949854e8
+ARG DEE_SHIM_VERSION=0.5.0
+ARG DEE_SHIM_BUILD=6a82dad
+ARG DEE_SHIM_SHA256=6f773d3474f279966fbc2fcbc3f73d4622f161a3f3b3bee9ea9a159e6c43b315
 # x265 from source: Patman's mod (the Windows build's, scripts/tools.toml), at its release tag; Debian's is built
 # without HDR10+ (--dhdr10-info)
 ARG X265_VERSION=4.3+22+73

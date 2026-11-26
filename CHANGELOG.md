@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Updated DeeZy to 2.0.4 in the Windows tools bundle and Docker image.
-- Updated dee_shim to 0.4.0 in the Windows tools bundle and Docker image.
+- Updated dee_shim to 0.5.0 in the Windows tools bundle and Docker image.
 
 ## [0.1.18] - 2026-11-24
 
