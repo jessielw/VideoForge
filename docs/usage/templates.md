@@ -58,7 +58,7 @@ Choose Auto for sources whose borders vary. Fixed crop assumes the same border d
 | Policy | Behavior |
 | --- | --- |
 | As in the filters | Every job gets the template's Field filters (IVTC, a deinterlacer), if any |
-| Scan per job | Each source's [field scan](video.md#field-scan) sets the job's Field filter |
+| Scan per job | Each source's [field scan](fields.md#field-scan) sets the job's Field filter |
 
 Choose **Scan per job** for a batch whose sources differ: a season with telecined and interlaced episodes, or a DVD set with soft and hard telecine. Each job gets the chain its own scan suggests, the same as the scan's **Apply**: IVTC, VFM alone, IVTC with QTGMC on the frames left combed, Bwdif, or no Field filter. A source with pulldown flags also gets **Apply pulldown**, and moves from FFMS2 to BestSource. The template's own Field filters are left out.
 

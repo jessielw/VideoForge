@@ -59,7 +59,7 @@ def test_a_vfr_source_checks_its_frames():
 
 def test_applied_pulldown_checks_only_the_length():
     """Pulldown applied, a hybrid DVD (soft telecine and parts telecined for real: VFR) comes out at a constant
-    rate, so its stored frames don't count; the length still does. Futurama S01E01's figures."""
+    rate, so its stored frames don't count; the length still does. A real DVD episode's figures."""
     dvd = VideoInfo(720, 480, frames=34415, vfr=True, duration_ms=1398997, scan_order="2:3 Pulldown")
     ivtc, telecined = Fraction(24000, 1001), Fraction(30000, 1001)
     assert length_warning(dvd, 33543, ivtc, pulldown=True) == ""  # applied, then IVTC

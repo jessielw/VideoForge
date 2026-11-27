@@ -70,6 +70,8 @@ Use **Index** on the Queue toolbar to index selected jobs, or all jobs if none a
 
 By default a new job is indexed as soon as it is probed (**Settings → Index new jobs**), and its crop is detected after the index (**Auto-crop new jobs**, which indexes the job even with the first option off). Turn them off to index only when you ask. A template with a fixed crop keeps its crop, and a crop you set by hand always wins.
 
+For a source MediaInfo reports as interlaced or with pulldown flags, the lane then runs a [field scan](fields.md#field-scan). The job shows **Scanning fields**: its preview opens and it can be edited, and it can be queued once the scan is done. A template with **Field: Scan per job** puts such a job in the lane even with **Index new jobs** off.
+
 Indexing can run while another job encodes. By default, a source on the same physical disk that the encode is reading waits while that job extracts, encodes audio, indexes, or muxes, and sources on other disks go first. Once the job is only encoding video, which reads the source slowly, the waiting sources are indexed beside it. **Settings → Wait while an encode reads the same disk** controls the wait, and **Index anyway while it only encodes video** turns off the video-only exception. The sidebar shows waiting jobs as _to index after the encode_, apart from the ones being indexed.
 
 BestSource's first index decodes the whole video and can take substantially longer than FFMS2. Check the job log before assuming an index is stuck.
