@@ -20,7 +20,7 @@ Many NTSC DVDs store film as its own 23.976 progressive frames, with pulldown fl
 
 **Apply pulldown**, under **Advanced**, repeats the fields as a player does, so the whole source comes out telecined at 29.97 fps. Then **IVTC** matches every part back into 23.976 film frames, the same way. It needs **BestSource** or **L-SMASH Works**: FFMS2 can't apply pulldown flags, and a job with it set on FFMS2 is blocked. BestSource and L-SMASH read the same index with it on or off.
 
-- A source that is soft telecine throughout doesn't need it: its frames are film already.
+- A source that is soft telecine throughout doesn't need it: its frames are film already. The [field scan](#field-scan)'s **Apply** turns it on with IVTC for any source with pulldown flags, which gives the same film frames either way.
 - With it on and no Field filter, the job warns: the telecined frames comb until IVTC matches them.
 - With it off on a source with pulldown flags, a chain whose IVTC decimates warns: VDecimate would get the soft-telecined parts as film frames already, and can drop real ones.
 
@@ -56,7 +56,31 @@ Press **M** in the preview (or the bookmark button under it) to mark the frame, 
 
 ## Interlaced sources
 
-When MediaInfo reports the source as interlaced (Interlaced, MBAFF, or PAFF), the Video tab shows its scan type and field order. A job whose chain has no enabled Field filter warns before the run. Add **IVTC** for telecined film or a deinterlacer (**QTGMC**, **Bwdif**). These filters take the field order from the source, so they follow its top or bottom field first on their own. Their own order setting (`order=`, `field=`, `TFF=`) only counts when the source doesn't give one. If the source is flagged with the wrong order (the preview still combs after IVTC, or motion steps back and forth after deinterlacing), uncomment the step's `SetFieldBased` line: `2` for top field first, `1` for bottom field first. Some progressive video is stored as interlaced: if the preview shows no combing, the warning can be ignored. A custom script body is not checked.
+When MediaInfo reports the source as interlaced (Interlaced, MBAFF, or PAFF) or with pulldown flags, the Video tab's **Scan** section shows its scan type and field order, and indexing also runs a **field scan** (below). Add **IVTC** for telecined film or a deinterlacer (**QTGMC**, **Bwdif**) from the Field filters, or apply the scan's chain. These filters take the field order from the source, so they follow its top or bottom field first on their own. Their own order setting (`order=`, `field=`, `TFF=`) only counts when the source doesn't give one. If the source is flagged with the wrong order (the preview still combs after IVTC, or motion steps back and forth after deinterlacing), uncomment the step's `SetFieldBased` line: `2` for top field first, `1` for bottom field first. A custom script body is not checked.
+
+### Field scan
+
+MediaInfo says how a source is stored, not what its fields hold: it can't tell telecined film from interlaced video, it calls progressive video stored as fields (PsF) interlaced, and it calls a DVD with pulldown flags progressive even where parts of it comb. The field scan reads every frame after the index, with the pulldown flags applied, and matches each frame's fields at both field orders (VIVTC's VFM). It takes about 20 seconds for a DVD episode and 2 to 3 minutes for a 1080i one. The preview opens as soon as the index is done. For a job indexed before the field scan existed, **Scan fields** in the Scan section puts it back in the index lane.
+
+| Verdict | What it means | The scan's chain |
+| --- | --- | --- |
+| Progressive | No frame combs (including PsF) | None |
+| Telecined film | Film in 3:2 pulldown: field matching leaves next to nothing combed | IVTC: VFM + VDecimate |
+| Progressive, fields shifted | Field matching fixes every frame, but not in the 3:2 pattern | VFM alone: no frame is dropped |
+| Telecined film with combed parts | Field matching leaves some frames combed (layers telecined out of step, fades, video inserts) | IVTC, with QTGMC Fast on those frames only |
+| Interlaced video | Each field is its own moment: frames stay combed after field matching | Bwdif |
+| Too little motion to tell | Fewer than 30 frames move | None: check the preview |
+
+The section shows the verdict, a strip of the source (one cell per stretch of time, colored by what field matching does there), how many moving frames field matching leaves combed, and for combed parts the times they are at. The order is the one that leaves less combing; for video, the one Bwdif bobs without jitter. When the stream is flagged with the other order, the section says so.
+
+**Apply** makes the scan's chain the only Field filter, first in the chain, with a `SetFieldBased` line for the order it found. For a source with pulldown flags it also turns on **Apply pulldown**, and moves an FFMS2 job to BestSource (whose index the scan made). On a progressive verdict, Apply removes the Field filters. The note beside the button lists what it changes.
+
+With a verdict, the job's warnings follow the scan instead of MediaInfo:
+
+- No Field filter where the scan found combing.
+- A Field filter of the wrong kind: deinterlacing telecined film, field matching interlaced video, VDecimate on a source that repeats no frames, or no deinterlacer for the frames field matching leaves combed.
+- A field order the filter would get wrong: the stream's flag, an override line, or (when the source gives no order) the filter's own argument.
+- A Field filter on progressive video, which isn't needed.
 
 ## Custom VapourSynth code
 

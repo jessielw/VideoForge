@@ -77,7 +77,14 @@ from videoforge.core.models import (
 from videoforge.core.naming import NamePolicy
 from videoforge.core.notify import Sender, send as notify_send
 from videoforge.core.pipeline import claims, crfsearch
-from videoforge.core.pipeline.build import auto_crop, index_steps, job_output, script_reads, source_rpu
+from videoforge.core.pipeline.build import (
+    auto_crop,
+    field_scan_steps,
+    index_steps,
+    job_output,
+    script_reads,
+    source_rpu,
+)
 from videoforge.core.pipeline.reuse import ReuseOffer, reuse_offers
 from videoforge.core.pipeline.run import OutputTarget, missing_inputs, run_job
 from videoforge.core.pipeline.sample import PERCENTS, finish, prepare_steps, sample_steps
@@ -746,6 +753,17 @@ class JobQueue:
             self._log(e, f"Auto-crop: {sides}, from {origin}")
         self._changed(e)
         self._index_wake.set()
+
+    def _scanned(self, e: Entry) -> None:
+        """After the lane's steps: the jobs on the source (its variants share the work folder and its field scan)
+        planned again, so their field issues follow the scan."""
+        if not field_scan_steps(e.spec, e.source_video):
+            return
+        with self._lock:
+            for other in self._entries.values():
+                if other.spec.work_dir == e.spec.work_dir and other.plan is not None:
+                    self._replan(other)
+                    self._changed(other)
 
     def _replan(self, e: Entry) -> None:
         if e.probed is None:
@@ -1857,7 +1875,8 @@ class JobQueue:
             if missing := missing_inputs(e.spec):
                 raise ToolError("Missing input: " + ", ".join(str(p) for p in missing))
             with self._lock:
-                steps = index_steps(e.spec, self.app, e.source_video, e.burn)
+                # The field scan last: the preview can open once the index is there
+                steps = index_steps(e.spec, self.app, e.source_video, e.burn) + field_scan_steps(e.spec, e.source_video)
                 cancel = self._index_cancel
                 sharing = [o.id for o in self._entries.values() if o.spec.work_dir == e.spec.work_dir]
             if self.services.release_preview is not None:
@@ -1881,6 +1900,7 @@ class JobQueue:
                     runner=self.services.runner,
                     share=Sharing(e.spec.work_dir, e.spec.job_dir),
                 )
+                self._scanned(e)
                 if e.spec.autocrop and self.services.detect_crop is not None:  # a template's auto crop
                     with self._lock:
                         e.indexing, e.progress = False, None  # it can be edited again (a hand crop wins)

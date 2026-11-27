@@ -27,12 +27,22 @@
   import { layout } from '../lib/layout.svelte'
   import { videoView } from '../lib/videoView.svelte'
   import { clipLength, hdrFormats } from '../lib/format'
+  import {
+    applyFieldFix,
+    fixChanges,
+    share,
+    STRIP_KINDS,
+    stretchTimes,
+    stripCells,
+    verdictNote,
+  } from '../lib/fieldScan'
   import { sampleMarks, scriptFrame, toggleMark, writeMarks } from '../lib/marks'
   import { fitted, previewShape, resizeInput, type Geometry } from '../lib/resize'
   import {
     SOURCE_FILTERS,
     type ClipInfo,
     type Crop,
+    type FieldScanFix,
     type JobDetail,
     type PreviewStage,
     type SourceFilter,
@@ -509,6 +519,17 @@
   const interlaced = $derived(['Interlaced', 'MBAFF', 'PAFF'].includes(job.tracks?.video?.scan_type ?? ''))
   // Pulldown flags (soft telecine): MediaInfo's scan order, such as "2:3 Pulldown" (core VideoInfo.pulldown)
   const pulldownFlags = $derived((job.tracks?.video?.scan_order ?? '').toLowerCase().includes('pulldown'))
+  // The source's field scan (lib/fieldScan.ts): the index lane's, after the index
+  const fieldScan = $derived(job.field_scan ?? null)
+  const scanCells = $derived(fieldScan?.report ? stripCells(fieldScan.report, 96) : [])
+
+  // Apply: the scan's chain as the Field step, and Apply pulldown and the source filter as it needs them
+  function applyScan(fix: FieldScanFix) {
+    const frames = fix.pulldown !== video.pulldown || fix.source_filter !== video.source_filter
+    video = applyFieldFix(video, fix)
+    if (frames) info = { crop: null, output: null } // other frames: the preview follows the saved job
+    commit(0)
+  }
 </script>
 
 <svelte:window {onkeydown} />
@@ -899,25 +920,100 @@
         />
         <!-- min-w-0: a fieldset is as wide as its widest content by default, which ran past the panel. -->
         <fieldset disabled={!editable} class="min-w-0 space-y-5">
-          {#if interlaced}
+          {#if fieldScan || interlaced || pulldownFlags}
             {@const v = job.tracks?.video}
-            <section class="space-y-1">
+            {@const r = fieldScan?.report ?? null}
+            <section class="space-y-2">
               <span class="section-label">Scan</span>
-              <p class="text-sm">{v?.scan_type}{v?.scan_order ? ` · ${v.scan_order}` : ''}</p>
-              <p class="text-xs text-muted-foreground">
-                The source is stored as fields. Add IVTC or a deinterlacer from the Field filters, unless the preview
-                shows no combing.
+              <p class="text-sm">
+                {v?.scan_type}{v?.scan_order ? ` · ${v.scan_order}` : ''}
+                <span class="text-xs text-muted-foreground">(MediaInfo)</span>
               </p>
-            </section>
-          {:else if pulldownFlags}
-            {@const v = job.tracks?.video}
-            <section class="space-y-1">
-              <span class="section-label">Scan</span>
-              <p class="text-sm">{v?.scan_type}{v?.scan_order ? ` · ${v.scan_order}` : ''}</p>
-              <p class="text-xs text-muted-foreground">
-                The source has pulldown flags (soft telecine). If parts of it comb, turn on Apply pulldown under
-                Advanced and add IVTC from the Field filters.
-              </p>
+              {#if r && fieldScan}
+                {@const left = r.order === 'bff' ? r.left_bff : r.left_tff}
+                <p class="text-sm font-medium">{fieldScan.summary}</p>
+                <p class="text-xs text-muted-foreground">{verdictNote(r)}</p>
+                {#if scanCells.length}
+                  <div
+                    class="flex h-3 w-full gap-px overflow-hidden rounded-sm"
+                    role="img"
+                    aria-label="Field scan, per second"
+                  >
+                    {#each scanCells as c, i (i)}
+                      <span
+                        class="min-w-px flex-1 {c.kind.cell}"
+                        title="{Math.floor(c.from / 60)}:{String(Math.floor(c.from % 60)).padStart(2, '0')}: {c.kind
+                          .label}"
+                      ></span>
+                    {/each}
+                  </div>
+                  <p class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    {#each STRIP_KINDS.filter((k) => r.strip.includes(k.id)) as k (k.id)}
+                      <span class="inline-flex items-center gap-1"
+                        ><span class="size-2 rounded-xs {k.cell}"></span>{k.label}</span
+                      >
+                    {/each}
+                  </p>
+                {/if}
+                {#if r.order}
+                  <p class="text-xs text-muted-foreground">
+                    {share(left, r.moving)} of {r.moving} moving frames left combed after field matching ({share(
+                      r.combed,
+                      r.moving,
+                    )} combed as decoded).
+                    {#if fieldScan.mismatch}The stream is flagged {r.stream_order === 'bff' ? 'bottom' : 'top'} field first:
+                      the scan's chain sets the order it found.{/if}
+                  </p>
+                {/if}
+                {#if r.verdict === 'hybrid' && r.stretches.length}
+                  <p class="text-xs text-muted-foreground">
+                    Left combed: {stretchTimes(r).join(', ')}{r.stretches.length > 5
+                      ? `, and ${r.stretches.length - 5} more`
+                      : ''}.
+                  </p>
+                {/if}
+                {#if fieldScan.fix}
+                  {#if fieldScan.fix.applied}
+                    <p class="text-xs text-muted-foreground">The filter chain has the scan's Field step.</p>
+                  {:else}
+                    <div class="flex items-start gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={video.custom !== null}
+                        onclick={() => fieldScan.fix && applyScan(fieldScan.fix)}>Apply</Button
+                      >
+                      <p class="text-xs text-muted-foreground">{fixChanges(video, fieldScan.fix)}</p>
+                    </div>
+                  {/if}
+                {/if}
+              {:else if fieldScan}
+                <p class="text-xs text-muted-foreground">
+                  The field scan reads every frame after the index and tells telecined film (IVTC) from interlaced video
+                  (a deinterlacer){pulldownFlags ? ', with the pulldown flags applied' : ''}.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={indexStatus === 'indexing' || indexStatus === 'index-queued'}
+                  onclick={indexNow}
+                  >{indexStatus === 'indexing'
+                    ? 'Scanning…'
+                    : indexStatus === 'index-queued'
+                      ? 'Waiting to scan…'
+                      : 'Scan fields'}</Button
+                >
+              {:else if interlaced}
+                <p class="text-xs text-muted-foreground">
+                  The source is stored as fields. Add IVTC or a deinterlacer from the Field filters, unless the preview
+                  shows no combing.
+                </p>
+              {:else}
+                <p class="text-xs text-muted-foreground">
+                  The source has pulldown flags (soft telecine). If parts of it comb, turn on Apply pulldown under
+                  Advanced and add IVTC from the Field filters.
+                </p>
+              {/if}
             </section>
           {/if}
           {#if hdr.length}

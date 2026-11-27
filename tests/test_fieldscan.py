@@ -4,6 +4,7 @@ chains and report on their own."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 import io
 from pathlib import Path
 import shutil
@@ -13,10 +14,14 @@ import sys
 import pytest
 
 from videoforge.core.config import PROJECT_ROOT
-from videoforge.core.video import fieldscan as fs, vs as vsx
+from videoforge.core.job import JobSpec
+from videoforge.core.models import JobInputs, VideoInfo
+from videoforge.core.pipeline import build
+from videoforge.core.video import fieldscan as fs, filters, vs as vsx
 from videoforge.core.video.fieldscan import FieldScan, Verdict
+from videoforge.core.video.filters import PRESETS, field_issues
 from videoforge.core.video.script import build_script
-from videoforge.core.video.settings import SourceFilter, VideoSettings
+from videoforge.core.video.settings import FilterCategory, FilterStep, SourceFilter, VideoSettings
 
 TOOLS = PROJECT_ROOT / "tools"
 PLUGINS = TOOLS / "vs-plugins"
@@ -311,3 +316,173 @@ def test_report_round_trip_and_summary(tmp_path):
     path.write_text('{"version": 0}', encoding="utf-8")
     assert fs.read(path) is None
     assert fs.read(tmp_path / "missing.json") is None
+
+
+# --- the scan in a job: issues, Apply, the index lane's steps -------------------------------------------------
+
+
+def _report(verdict: Verdict, order: str = "tff", stream: str = "tff", fallback: int = 0) -> FieldScan:
+    return FieldScan(
+        verdict=verdict, order=order if verdict not in (Verdict.PROGRESSIVE, Verdict.UNKNOWN) else "",
+        stream_order=stream, frames=1000, fps_num=30000, fps_den=1001, moving=500, combed=200, left_tff=0,
+        left_bff=200, fallback=fallback, cadence=1.0, jitter=None, strip="T",
+    )  # fmt: skip
+
+
+def _preset(family: str) -> FilterStep:
+    return next(p for p in PRESETS if p.family == family).step()
+
+
+def _codes(video: VideoInfo, scan: FieldScan, *steps: FilterStep, **settings) -> list[str]:
+    return [i.code for i in field_issues(video, VideoSettings(filters=list(steps), **settings), scan)]
+
+
+BLURAY = VideoInfo(1920, 1080, scan_type="MBAFF", scan_order="TFF")
+DVD = VideoInfo(720, 480, scan_type="Progressive", scan_order="2:3 Pulldown")
+
+
+def test_the_scan_replaces_mediainfos_warning():
+    """Progressive video stored as fields (PsF) no longer warns; the verdict's chain is what to add; a Field step of
+    the wrong kind says why; the scan's own chain leaves nothing to say. Without a verdict, MediaInfo's warning."""
+    ivtc, bwdif = _preset("IVTC (VIVTC)"), _preset("Bwdif")
+    progressive, telecine = _report(Verdict.PROGRESSIVE), _report(Verdict.TELECINE)
+    assert _codes(BLURAY, progressive) == []
+    unneeded = field_issues(BLURAY, VideoSettings(filters=[ivtc]), progressive)
+    assert [i.code for i in unneeded] == ["video.field_unneeded"]
+    assert "stored as fields" in unneeded[0].message and "VDecimate drops real frames" in unneeded[0].message
+    assert "softens" in field_issues(BLURAY, VideoSettings(filters=[bwdif]), progressive)[0].message
+
+    missing = field_issues(BLURAY, VideoSettings(), telecine)
+    assert [i.code for i in missing] == ["video.field"]
+    assert "telecined film, top field first" in missing[0].message and "IVTC (VFM + VDecimate)" in missing[0].message
+    assert _codes(BLURAY, telecine, ivtc) == []
+    assert _codes(BLURAY, telecine, bwdif) == ["video.field_kind"]  # deinterlacing film
+
+    shifted = FilterStep(FilterCategory.FIELD, "VFM", fs.chain(Verdict.SHIFTED, "tff"))
+    kind = field_issues(BLURAY, VideoSettings(filters=[shifted]), telecine)[0]
+    assert kind.code == "video.field_kind" and "no VDecimate" in kind.message
+    video = field_issues(BLURAY, VideoSettings(filters=[ivtc]), _report(Verdict.INTERLACED))[0]
+    assert video.code == "video.field_kind" and "VDecimate drops real frames" in video.message
+    assert (
+        "repeats no frames" in field_issues(BLURAY, VideoSettings(filters=[ivtc]), _report(Verdict.SHIFTED))[0].message
+    )
+    hybrid = _report(Verdict.HYBRID, fallback=2146)
+    leftover = field_issues(BLURAY, VideoSettings(filters=[ivtc]), hybrid)[0]
+    assert leftover.code == "video.field_kind" and "2146 frames combed" in leftover.message
+    assert _codes(BLURAY, _report(Verdict.UNKNOWN)) == ["video.interlaced"]  # MediaInfo's, as before
+
+    for verdict in Verdict:
+        scan = _report(verdict, fallback=10)
+        fix = filters.field_fix(scan, BLURAY, VideoSettings(filters=[bwdif]))
+        if verdict is Verdict.UNKNOWN:
+            assert fix is None
+            continue
+        assert fix is not None
+        assert field_issues(BLURAY, fix.apply(VideoSettings(filters=[bwdif])), scan) == [], verdict
+
+
+def test_the_scan_checks_the_field_order_the_step_gets():
+    """The Field step follows the stream's flag (or, with no flag, its own argument) unless an override line sets
+    one: a flag or an argument that isn't the content's order warns, as does an override set to the other one."""
+    ivtc, qtgmc = _preset("IVTC (VIVTC)"), next(p for p in PRESETS if p.name == "QTGMC Fast").step()
+    flagged_wrong = _report(Verdict.TELECINE, order="tff", stream="bff")
+    issue = field_issues(BLURAY, VideoSettings(filters=[ivtc]), flagged_wrong)[0]
+    assert issue.code == "video.field_order" and "flagged bottom field first" in issue.message
+    assert "clip = core.std.SetFieldBased(clip, 2)" in issue.message
+
+    def override(step: FilterStep, value: int) -> FilterStep:
+        line = "# clip = core.std.SetFieldBased(clip, 2)"
+        return replace(step, script=step.script.replace(line, f"clip = core.std.SetFieldBased(clip, {value})"))
+
+    assert _codes(BLURAY, flagged_wrong, override(ivtc, 2)) == []
+    assert (
+        "sets bottom field first"
+        in field_issues(BLURAY, VideoSettings(filters=[override(ivtc, 1)]), flagged_wrong)[0].message
+    )
+    untagged = _report(Verdict.TELECINE, order="bff", stream="")  # BestSource applying pulldown tags no order
+    assert "gives no field order" in field_issues(DVD, VideoSettings(filters=[ivtc]), untagged)[0].message
+    bottom = replace(ivtc, script=ivtc.script.replace("order=1", "order=0"))
+    assert _codes(DVD, untagged, bottom, source_filter=SourceFilter.BESTSOURCE, pulldown=True) == []
+    # QTGMC's preset tags only untagged frames (an indented line): a bottom-first flag is followed
+    assert _codes(BLURAY, _report(Verdict.INTERLACED, order="bff", stream="bff"), qtgmc) == []
+
+
+def test_apply_on_a_soft_telecined_source_turns_on_pulldown():
+    """The scan's frames have the pulldown flags applied: Apply turns Apply pulldown on, and an FFMS2 job moves to
+    BestSource (whose index the scan made). The Field steps make way for the scan's, first in the chain."""
+    hybrid = _report(Verdict.HYBRID, stream="", fallback=2146)
+    issue = field_issues(DVD, VideoSettings(), hybrid)[0]
+    assert issue.code == "video.field" and "turns on Apply pulldown" in issue.message and "2146 frames" in issue.message
+    settings = VideoSettings(filters=[_preset("Bwdif"), *VideoSettings().filters, INVERT_STEP])
+    fix = filters.field_fix(hybrid, DVD, settings)
+    assert fix is not None and fix.step is not None
+    assert (fix.pulldown, fix.source_filter, fix.step.name) == (
+        True,
+        SourceFilter.BESTSOURCE,
+        "Field scan: IVTC + QTGMC",
+    )
+    assert not fix.applied(settings)
+    applied = fix.apply(settings)
+    assert [s.name for s in applied.filters] == ["Field scan: IVTC + QTGMC", "Crop", "Resize", "Invert"]
+    assert fix.applied(applied) and field_issues(DVD, applied, hybrid) == []
+    lsmash = filters.field_fix(hybrid, DVD, VideoSettings(source_filter=SourceFilter.LSMASH))
+    assert lsmash is not None and lsmash.source_filter is SourceFilter.LSMASH  # it can apply them already
+    gone = filters.field_fix(_report(Verdict.PROGRESSIVE), BLURAY, settings)
+    assert gone is not None and gone.step is None and not gone.pulldown
+    assert [s.name for s in gone.apply(settings).filters] == ["Crop", "Resize", "Invert"]
+
+
+INVERT_STEP = FilterStep(FilterCategory.CUSTOM, "Invert", "clip = clip.std.Invert()")
+
+
+def _job(source: Path, video: VideoSettings | None = None) -> JobSpec:
+    return JobSpec(inputs=JobInputs(source), rule_set="manual", video=video or VideoSettings())
+
+
+def test_field_scan_steps(tmp_path):
+    """A source stored as fields or with pulldown flags gets the scan after its index; its script decodes as the job
+    does, flags applied (BestSource for an FFMS2 job, whose index the scan then makes)."""
+    source = tmp_path / "E01.mkv"
+    assert build.field_scan_steps(_job(source), VideoInfo(1920, 1080, scan_type="Progressive")) == []
+    assert build.field_scan_steps(_job(source), None) == []
+    reused = JobSpec(inputs=JobInputs(source, encode=tmp_path / "enc.mkv"), rule_set="manual")
+    assert build.field_scan_steps(reused, BLURAY) == []
+
+    spec = _job(source)
+    script, scan = build.field_scan_steps(spec, BLURAY)
+    assert script.outputs == (spec.work_dir / fs.SCRIPT,) and "ffms2.Source" in script.key
+    assert scan.argvs[0][1:] == (
+        "-m",
+        "videoforge.core.video.fieldscan",
+        str(script.outputs[0]),
+        str(spec.work_dir / fs.REPORT),
+    )
+    assert scan.reads == (build.index_key(source, SourceFilter.FFMS2),) and scan.owns == ()
+    assert scan.inputs == (source,) and "ffms2" not in scan.key  # a new source filter doesn't scan again
+
+    script, scan = build.field_scan_steps(spec, DVD)
+    assert "bs.VideoSource" in script.key and "rff=1" in script.key
+    assert scan.owns == (build.index_key(source, SourceFilter.BESTSOURCE),) and scan.reads == ()
+    lsmash = build.field_scan_steps(_job(source, VideoSettings(source_filter=SourceFilter.LSMASH)), DVD)
+    assert "repeat=1" in lsmash[0].key and lsmash[1].reads == (build.index_key(source, SourceFilter.LSMASH),)
+
+
+@needs_vs
+def test_the_lanes_scan_steps_write_the_report_the_plan_reads(clips, tmp_path):
+    """The scan's steps run (as the index lane runs them) and job.field_scan reads what they wrote."""
+    from videoforge.core.job import field_scan
+    from videoforge.core.pipeline.steps import run_steps
+
+    source = tmp_path / "Telecined.mkv"
+    shutil.copy(clips["telecine_bff"], source)
+    spec = _job(source)
+    assert field_scan(spec) is None
+    spec.work_dir.mkdir()  # the lane's log makes it
+    records: dict = {}
+    run_steps(build.field_scan_steps(spec, BLURAY), records, log=lambda _line: None)
+    report = field_scan(spec)
+    assert report is not None and (report.verdict, report.order) == (Verdict.TELECINE, "bff")
+    assert [i.code for i in field_issues(BLURAY, spec.video, report)] == ["video.field"]
+    lines: list[str] = []
+    run_steps(build.field_scan_steps(spec, BLURAY), records, log=lines.append)
+    assert any("reused" in line for line in lines)  # done once per source

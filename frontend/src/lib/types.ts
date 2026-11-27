@@ -490,6 +490,7 @@ export interface JobDetail extends JobSummary {
   sample: SampleResult | null // the last test encode (core/pipeline/sample.py)
   search: SearchResult | null // the last CRF search, or the one running (core/pipeline/crfsearch.py)
   compare: { encode: boolean; sample: boolean; filters: boolean } // what the Video tab can compare the script's frames with (filters: without them)
+  field_scan?: FieldScanView | null // the source's field scan (lib/fieldScan.ts); null when it gets none
 }
 
 // A test encode: the job's script and encoder on `length` frames of every `cycle` (POST /api/queue/sample)
@@ -1086,4 +1087,44 @@ export interface StepRun {
 export interface StepOutput extends StepRun {
   lines: string[]
   partial: boolean // only the saved tail is left (after a restart)
+}
+
+// The source's field scan (core/video/fieldscan.py), as the job view sends it (server/views.py field_scan_view):
+// what its fields hold, and what the Video tab's Apply sets (core filters.FieldFix). Helpers: lib/fieldScan.ts
+export type FieldVerdict = 'progressive' | 'telecine' | 'shifted' | 'hybrid' | 'interlaced' | 'unknown'
+
+export interface FieldScanReport {
+  verdict: FieldVerdict
+  order: '' | 'tff' | 'bff' // the content's; "" when there is nothing to match
+  stream_order: '' | 'tff' | 'bff' | 'progressive' // the source's flag ("" when it sets none)
+  frames: number
+  fps_num: number
+  fps_den: number
+  moving: number // frames with motion
+  combed: number // moving frames combed as decoded
+  left_tff: number // moving frames field matching leaves combed, at each order
+  left_bff: number
+  fallback: number // frames (moving or not) left combed at `order`: the hybrid chain deinterlaces them
+  cadence: number | null // the share of combed frames on 2 of every 5 positions (telecine's 3:2)
+  jitter: number | null // Bwdif's frame-to-frame difference BFF over TFF (>1: top field first)
+  strip: string // one character per `chunk` frames: . P T h I (STRIP_KINDS)
+  stretches: [number, number, number][] // first, last, frames left combed
+  seconds: number
+  chunk: number
+  version: number
+}
+
+export interface FieldScanFix {
+  step: FilterStep | null // the only Field step to have (null: none, progressive video)
+  pulldown: boolean
+  source_filter: SourceFilter
+  applied: boolean // the job's settings have it already
+}
+
+export interface FieldScanView {
+  report: FieldScanReport | null // null until the index lane has scanned the source
+  label?: string
+  summary?: string // "Telecined film, top field first"
+  mismatch?: boolean // the stream's field order isn't the content's
+  fix?: FieldScanFix | null // null without a verdict
 }

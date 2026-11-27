@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from videoforge.core import naming
-from videoforge.core.job import JobStatus, track_defaults
+from videoforge.core.job import JobStatus, field_scan, track_defaults
 from videoforge.core.models import AudioTrack, Issue, Severity, SubTrack, track_key, with_copies
 from videoforge.core.pipeline import crfsearch
 from videoforge.core.pipeline.build import indexed, output_path
 from videoforge.core.pipeline.sample import MKV, read_result, sample_dir, sample_key
 from videoforge.core.plan_io import to_json
-from videoforge.core.video import hdr, info, target
+from videoforge.core.video import fieldscan, filters, hdr, info, target
 from videoforge.core.video.color import color_args
 from videoforge.core.video.script import compares_filters
 from videoforge.core.video.settings import EncoderSettings, RateControl
@@ -63,6 +63,7 @@ ISSUE_TABS: tuple[tuple[str, str], ...] = (
     ("hdr.dv_bake_bs", "video"),
     ("hdr.dv_custom", "video"),
     ("video.interlaced", "video"),
+    ("video.field", "video"),
     ("video.pulldown", "video"),
     ("video.", "encoder"),
     ("hdr.", "encoder"),
@@ -157,12 +158,39 @@ def source_facts(e: Entry) -> dict[str, Any] | None:
     }
 
 
+def field_scan_view(e: Entry) -> dict[str, Any] | None:
+    """The Video tab's Scan section: the source's field scan (core/video/fieldscan.py) and what its Apply sets
+    (filters.field_fix). None for a source that gets none; a report of None until the index lane has scanned it."""
+    s, video = e.spec, e.source_video
+    if not s.encodes_video or not fieldscan.scans(video):
+        return None
+    scan = field_scan(s)
+    if scan is None:
+        return {"report": None}
+    fix = filters.field_fix(scan, video, s.video)
+    return {
+        "report": asdict(scan),
+        "label": scan.verdict.label,
+        "summary": fieldscan.summary(scan),
+        "mismatch": scan.mismatch,
+        "fix": None
+        if fix is None
+        else {
+            "step": to_json(fix.step) if fix.step else None,
+            "pulldown": fix.pulldown,
+            "source_filter": fix.source_filter.value,
+            "applied": fix.applied(s.video),
+        },
+    }
+
+
 def detail(e: Entry, queue: JobQueue) -> dict[str, Any]:
     rule_set = queue.rule_set(e)
     out = summary(e, queue.group_names())
     out["spec"] = to_json(e.spec)
     out["issues"] = [to_json(i) | {"tab": issue_tab(i.code)} for i in issues(e)]
     out["steps"] = to_json(e.state.steps)
+    out["field_scan"] = field_scan_view(e)
     out["made"] = made(e)  # the last run that wrote the output: sizes, time, bitrate
     out["plan"] = None
     out["output_name"] = None

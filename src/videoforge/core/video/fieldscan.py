@@ -42,7 +42,11 @@ from typing import TYPE_CHECKING, Any, TextIO
 if TYPE_CHECKING:
     import vapoursynth as vs
 
+    from videoforge.core.models import VideoInfo
+
 VERSION = 1  # the report's layout
+REPORT = "fieldscan.json"  # in the source's work folder (one per source: the frames don't depend on the filter)
+SCRIPT = "fieldscan.vpy"  # the source as the scan decodes it, beside it
 
 _MOVING = 0.004  # luma PlaneStatsDiff against the last frame
 _MI = 80  # VFM's default mi: a match whose mic is above it is combed
@@ -128,6 +132,26 @@ STRIP_LEGEND = {
 
 
 _TAG_NOTE = "# the field order the scan found: 2 top first, 1 bottom first"
+
+
+def scans(video: VideoInfo | None) -> bool:
+    """Whether a source gets a field scan: MediaInfo says it's stored as fields (Interlaced, MBAFF, PAFF) or it has
+    pulldown flags, which a DVD MediaInfo calls Progressive can carry over hard-telecined parts."""
+    return video is not None and (video.interlaced or video.pulldown)
+
+
+_STEP_NAMES = {
+    Verdict.TELECINE: "IVTC",
+    Verdict.SHIFTED: "VFM",
+    Verdict.HYBRID: "IVTC + QTGMC",
+    Verdict.INTERLACED: "Bwdif",
+}
+
+
+def step_name(verdict: Verdict) -> str:
+    """The name of the Field step the scan's chain goes in as; "" when there's no chain."""
+    name = _STEP_NAMES.get(verdict)
+    return f"Field scan: {name}" if name else ""
 
 
 def chain(verdict: Verdict, order: str) -> str:

@@ -39,7 +39,7 @@ from videoforge.core.models import (
     track_key,
 )
 from videoforge.core.tools import tool_issues
-from videoforge.core.video import encoders, filters, hdr, options, target
+from videoforge.core.video import encoders, fieldscan, filters, hdr, options, target
 from videoforge.core.video.qpf import qpf_paths
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
 from videoforge.core.workdir import job_dir, work_dir
@@ -312,6 +312,11 @@ def replan(spec: JobSpec, probed: ProbedInputs) -> ProbedInputs:
     return replace(probed, inputs=spec_inputs(spec))
 
 
+def field_scan(spec: JobSpec) -> fieldscan.FieldScan | None:
+    """The source's field scan (the index lane's, in its work folder), once there is one."""
+    return fieldscan.read(spec.work_dir / fieldscan.REPORT) if spec.encodes_video else None
+
+
 def plan_spec(spec: JobSpec, probed: ProbedInputs, rule_set: RuleSet, tools: Tools | None = None) -> Plan:
     """The rule set's plan for the job. With tools, an audio encode whose tools are missing blocks it."""
     plan = plan_job(rule_set, replan(spec, probed), spec.overrides.original_language, spec.overrides)
@@ -325,7 +330,7 @@ def plan_spec(spec: JobSpec, probed: ProbedInputs, rule_set: RuleSet, tools: Too
         plan.issues += encoders.issues(spec.encoder, probed.source.video, spec.makes_qpfile)
         plan.issues += options.option_issues(spec.encoder, tools)
         plan.issues += hdr.issues(probed.source.video, spec.encoder, tools, spec.video)
-        plan.issues += filters.field_issues(probed.source.video, spec.video)
+        plan.issues += filters.field_issues(probed.source.video, spec.video, field_scan(spec))
         plan.issues += target.issues(spec.encoder, plan, spec.container(rule_set))
     return plan
 

@@ -2731,6 +2731,11 @@ def test_an_invalid_jobs_issues_say_each_check_once():
         ("subs.language", "subs"),
         ("subs.burn_many", "subs"),
         ("video.interlaced", "video"),
+        ("video.field", "video"),
+        ("video.field_kind", "video"),
+        ("video.field_order", "video"),
+        ("video.field_unneeded", "video"),
+        ("video.pulldown_filter", "video"),
         ("hdr.dv_bake_bs", "video"),
         ("hdr.dv_custom", "video"),
         ("video.option_unknown", "encoder"),
@@ -2784,3 +2789,47 @@ def test_adding_never_resolves_a_path(tmp_path, monkeypatch):
         preview = client.post("/api/match", json={"sources": [str(tmp_path / "src")]}).json()
         assert all(j["existing_id"] for j in preview["jobs"])  # still found, by text
         assert client.post("/api/jobs", json={"sources": [str(tmp_path / "src")]}).json()["added"] == []
+
+
+def test_the_job_view_carries_the_field_scan(tmp_path):
+    """A source stored as fields: no report until the index lane has scanned it; then its verdict, the issue it
+    gives (in place of MediaInfo's) and what Apply sets."""
+    from videoforge.core.video import fieldscan as fs
+
+    def interlaced(spec: JobSpec, _app=None) -> ProbedInputs:
+        probed = fake_probe(spec)
+        probed.source.video = VideoInfo(1920, 1080, default_duration_ns=33366667, scan_type="MBAFF", scan_order="TFF")
+        return probed
+
+    make_files(tmp_path, "S01E01", "S01E02")
+    work = tmp_path / "src" / "Show.S01E02.mkv_tmp"
+    work.mkdir()
+    report = fs.FieldScan(
+        verdict=fs.Verdict.TELECINE, order="tff", stream_order="tff", frames=43038, fps_num=30000, fps_den=1001,
+        moving=19954, combed=7291, left_tff=0, left_bff=7115, fallback=0, cadence=0.99, jitter=None, strip="TT.T",
+    )  # fmt: skip
+    (work / fs.REPORT).write_text(fs.to_json(report), encoding="utf-8")
+    app = create_app(
+        ServerSettings(data_dir=tmp_path / "data", roots=[tmp_path], frontend_dir=tmp_path / "none"),
+        APP,
+        services=Services(probe=interlaced, run=FakeRun()),
+        setup_vapoursynth=False,
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+        first, second = add(client, tmp_path, auto_index=False)
+        unscanned = wait_for(client, first, "ready", "warn")
+        assert unscanned["field_scan"] == {"report": None}
+        assert "video.interlaced" in [i["code"] for i in unscanned["issues"]]
+        job = wait_for(client, second, "ready", "warn")
+        scan = job["field_scan"]
+        assert scan["report"]["verdict"] == "telecine" and scan["summary"] == "Telecined film, top field first"
+        assert scan["fix"]["step"]["name"] == "Field scan: IVTC" and not scan["fix"]["applied"]
+        assert (scan["fix"]["pulldown"], scan["fix"]["source_filter"]) == (False, "ffms2")
+        codes = {i["code"]: i["tab"] for i in job["issues"]}
+        assert codes.get("video.field") == "video" and "video.interlaced" not in codes
+        video = job["spec"]["video"]
+        video["filters"] = [scan["fix"]["step"], *video["filters"]]
+        saved = client.patch(f"/api/jobs/{second}", json={"video": video})
+        assert saved.status_code == 200, saved.text
+        job = wait_for(client, second, "ready", "warn")
+        assert job["field_scan"]["fix"]["applied"] and "video.field" not in [i["code"] for i in job["issues"]]
