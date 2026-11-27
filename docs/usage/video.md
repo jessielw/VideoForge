@@ -46,7 +46,7 @@ Press **M** in the preview (or the bookmark button under it) to mark the frame, 
 
 ## Interlaced sources
 
-When MediaInfo reports the source as interlaced (Interlaced, MBAFF, or PAFF), the Video tab shows its scan type and field order. A job whose chain has no enabled Field filter warns before the run. Add **IVTC** for telecined film or a deinterlacer (**QTGMC**, **Bwdif**) and set its field order to match. Some progressive video is stored as interlaced: if the preview shows no combing, the warning can be ignored. A custom script body is not checked.
+When MediaInfo reports the source as interlaced (Interlaced, MBAFF, or PAFF), the Video tab shows its scan type and field order. A job whose chain has no enabled Field filter warns before the run. Add **IVTC** for telecined film or a deinterlacer (**QTGMC**, **Bwdif**). These filters take the field order from the source, so they follow its top or bottom field first on their own. Their own order setting (`order=`, `field=`, `TFF=`) only counts when the source doesn't give one. If the source is flagged with the wrong order (the preview still combs after IVTC, or motion steps back and forth after deinterlacing), uncomment the step's `SetFieldBased` line: `2` for top field first, `1` for bottom field first. Some progressive video is stored as interlaced: if the preview shows no combing, the warning can be ignored. A custom script body is not checked.
 
 ## Custom VapourSynth code
 

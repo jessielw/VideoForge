@@ -15,6 +15,12 @@ from videoforge.core.video.settings import FilterCategory, FilterStep, VideoSett
 
 C = FilterCategory
 _ORDER = {"TFF": "top field first", "BFF": "bottom field first"}
+# VFM, Bwdif and QTGMC take the field order from the frames' _FieldBased tag (the source filter's, from the stream)
+# over their own argument, which only counts for frames tagged progressive or not at all. So the field presets
+# follow the source, and carry this line, commented out, to override a source flagged with the wrong order.
+_OVERRIDE_ORDER = (
+    "# clip = core.std.SetFieldBased(clip, 2)  # overrides the source's field order: 2 top first, 1 bottom first\n"
+)
 
 
 def field_issues(video: VideoInfo | None, settings: VideoSettings) -> list[Issue]:
@@ -73,15 +79,20 @@ PRESETS: list[FilterPreset] = [
         C.FIELD,
         "IVTC (VIVTC)",
         "",
-        "clip = core.vivtc.VFM(clip, order=1)  # order=0: bottom field first\nclip = core.vivtc.VDecimate(clip)",
+        _OVERRIDE_ORDER
+        + "clip = core.vivtc.VFM(clip, order=1)  # order if the source has none: 1 top first, 0 bottom\n"
+        "clip = core.vivtc.VDecimate(clip)",
         "Telecined film back to 23.976 fps (8-bit sources)",
     ),
     *_variants(
         C.FIELD,
         "QTGMC",
         "import havsfunc\n"
-        "clip = core.std.SetFieldBased(clip, 2)  # 1: bottom field first, 2: top field first\n"
-        "clip = havsfunc.QTGMC(clip, TFF=True, Preset={}, FPSDivisor=2)  # FPSDivisor=1: double rate",
+        + _OVERRIDE_ORDER
+        + "if '_FieldBased' not in clip.get_frame(0).props:  # QTGMC can't run without a field order\n"
+        "    clip = core.std.SetFieldBased(clip, 2)\n"
+        "clip = havsfunc.QTGMC(clip, TFF=True, Preset={}, FPSDivisor=2)"
+        "  # TFF only counts where the source gives no order; FPSDivisor=1: double rate",
         {"Fast": "'Fast'", "Medium": "'Medium'", "Slower": "'Slower'"},
         "Deinterlace, same frame rate",
     ),
@@ -89,7 +100,8 @@ PRESETS: list[FilterPreset] = [
         C.FIELD,
         "Bwdif",
         "",
-        "clip = core.bwdif.Bwdif(clip, field=1)  # 0: bottom field first, 1: top field first",
+        _OVERRIDE_ORDER
+        + "clip = core.bwdif.Bwdif(clip, field=1)  # field if the source has none: 1 top first, 0 bottom",
         "Quick deinterlace, same frame rate",
     ),
     FilterPreset(

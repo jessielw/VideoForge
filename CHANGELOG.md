@@ -11,6 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Updated DeeZy to 2.0.4 in the Windows tools bundle and Docker image.
 - Updated dee_shim to 0.5.0 in the Windows tools bundle and Docker image.
 
+### Fixed
+
+- The **QTGMC** filter presets no longer force top field first. Like **IVTC** and **Bwdif**, they now follow the source's field order, so bottom-field-first sources are deinterlaced correctly. QTGMC steps already in a chain keep their old lines.
+- The **IVTC**, **QTGMC** and **Bwdif** presets' field order comments were wrong: changing `order=`, `field=` or `TFF=` had no effect when the source gives a field order. Each preset now has a commented-out `SetFieldBased` line that overrides the source's field order when its flag is wrong.
+
 ## [0.1.18] - 2026-11-24
 
 ### Added
