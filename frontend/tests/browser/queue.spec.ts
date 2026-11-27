@@ -1010,6 +1010,17 @@ test("the toolbar's first row stays put when a job starts or indexing runs, so C
   await below('Stop indexing')
   await below('Pause')
   await expect(page.getByRole('button', { name: 'Cancel active jobs and stop', exact: true })).toHaveCount(0)
+  // Its tooltip says what it cancels: the lane's work running now, and the jobs waiting in the lane.
+  const tip = page.locator('[data-slot="tooltip-content"]')
+  await page.getByRole('button', { name: 'Stop indexing', exact: true }).hover()
+  await expect(tip).toHaveText("Cancels the indexing that's running.")
+  fixture.send({ ...idle, scanning: 'job-2', index_queued: 1 })
+  await expect(tip).toHaveText(
+    "Cancels the field scan that's running, and takes the 1 job waiting out of the index lane.",
+  )
+  fixture.send({ ...idle, index_queued: 2 })
+  await expect(tip).toHaveText('Takes the 2 jobs waiting out of the index lane.')
+  await page.mouse.move(0, 0)
 
   fixture.send(idle)
   await expect(page.getByRole('button', { name: 'Stop indexing', exact: true })).toHaveCount(0)

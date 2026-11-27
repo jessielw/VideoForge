@@ -705,6 +705,22 @@
   const indexing = $derived(
     !!app.queue.indexing || !!app.queue.scanning || !!app.queue.sampling || app.queue.index_queued > 0,
   )
+  // What Stop indexing cancels: the lane's work running now, and the jobs waiting in it
+  const laneStop = $derived.by(() => {
+    const q = app.queue
+    const now = q.scanning
+      ? 'the field scan'
+      : q.sampling
+        ? 'the test encode or CRF search'
+        : q.indexing
+          ? 'the indexing'
+          : ''
+    const n = q.index_queued
+    const waiting = `${n} job${n === 1 ? '' : 's'} waiting`
+    if (now && n) return `Cancels ${now} that's running, and takes the ${waiting} out of the index lane.`
+    if (now) return `Cancels ${now} that's running.`
+    return `Takes the ${waiting} out of the index lane.`
+  })
   // tools running now (the job's, the index lane's, a test encode there): what Pause and the priority menu reach
   const working = $derived(!!app.queue.current || !!app.queue.indexing || !!app.queue.scanning || !!app.queue.sampling)
   const DV7_NOTE =
@@ -1152,7 +1168,7 @@
               </DropdownMenu.Root>
             {/if}
             {#if indexing}
-              <Tip text="Cancels the indexing, test encode or CRF search that's running, and the ones waiting.">
+              <Tip text={laneStop}>
                 <Button variant="outline" onclick={() => act(() => app.stopIndexing())}>
                   <DatabaseXIcon /><span class="max-sm:sr-only">Stop indexing</span>
                 </Button>
