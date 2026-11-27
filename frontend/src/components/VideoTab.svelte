@@ -992,6 +992,12 @@
                   The field scan reads every frame after the index and tells telecined film (IVTC) from interlaced video
                   (a deinterlacer){pulldownFlags ? ', with the pulldown flags applied' : ''}.
                 </p>
+                {#if job.spec.autofield}
+                  <p class="text-xs text-muted-foreground">
+                    Field: Auto (from the template): the scan's Field step goes in once it's done. A Field step chosen
+                    by hand meanwhile wins.
+                  </p>
+                {/if}
                 {#if indexStatus === 'scanning'}
                   {@const p = live?.progress}
                   <div class="flex items-center gap-3 text-xs text-info" aria-label="Field scan progress">

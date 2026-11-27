@@ -297,6 +297,7 @@ export interface JobSpec {
   output_policy: 'stop' | 'skip' | 'rename' | 'replace'
   mux: MuxSettings
   autocrop: boolean // the crop is detected once the source can be read (a template's auto crop)
+  autofield?: boolean // the Field step is set from the source's field scan once there is one (Field: Auto)
   audio_template: TemplateAudio | null // a template's audio, waiting for the source's tracks
   subs_template: TemplateSubs | null // ... and its subtitle rules
   audio_from_template: TemplateChoice | null // what the last template set for the audio
@@ -644,12 +645,15 @@ export interface Preset<T> {
 }
 // A job's whole run (src/videoforge/core/template.py). video.crop is used when crop_mode is 'fixed'.
 export type CropMode = 'keep' | 'fixed' | 'auto'
+// 'manual': the template's Field steps; 'auto': each source's field scan sets the Field step instead
+export type FieldMode = 'manual' | 'auto'
 export interface Template {
   video: VideoSettings
   encoder: EncoderSettings
   mux: MuxSettings
   qpf: boolean
   crop_mode: CropMode
+  field_mode?: FieldMode // missing: 'manual'
   audio: TemplateAudio | null // null: the template leaves each job's audio alone
   subs?: TemplateSubs | null // null (or missing, from before subtitle rules): ... and its subtitles
 }

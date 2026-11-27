@@ -1781,7 +1781,9 @@
                   ? '; the crop is detected for each job'
                   : picked?.data.crop_mode === 'fixed'
                     ? `; crop ${picked.data.video.crop.left}/${picked.data.video.crop.top}/${picked.data.video.crop.right}/${picked.data.video.crop.bottom} on every job`
-                    : '; each job keeps its crop'}. Save templates from a job's Template menu.
+                    : '; each job keeps its crop'}{picked?.data.field_mode === 'auto'
+                  ? "; each job's field scan sets its Field step"
+                  : ''}. Save templates from a job's Template menu.
               </p>
             </Card.Root>
             <Card.Root class="gap-2 p-4">

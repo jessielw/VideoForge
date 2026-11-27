@@ -45,7 +45,12 @@ const HYBRID: FieldScanView = {
   },
 }
 
-async function fixture(page: Page, fieldScan: FieldScanView, over: Partial<JobSummary> = {}) {
+async function fixture(
+  page: Page,
+  fieldScan: FieldScanView,
+  over: Partial<JobSummary> = {},
+  specOver: Partial<JobDetail['spec']> = {},
+) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   const saved: unknown[] = []
@@ -161,6 +166,7 @@ async function fixture(page: Page, fieldScan: FieldScanView, over: Partial<JobSu
       subs_from_template: null,
       output_name: '',
       label: '',
+      ...specOver,
     },
   } as unknown as JobDetail
   const indexed: unknown[] = []
@@ -240,5 +246,12 @@ test('during the scan the job is open, and the section shows its progress', asyn
   await expect(page.getByText('The job can be edited meanwhile')).toBeVisible()
   await expect(page.getByText(/locked/)).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Scan fields' })).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test("a template's Field: Auto says the scan's step goes in once it's done", async ({ page }) => {
+  const { errors } = await fixture(page, { report: null }, {}, { autofield: true })
+  await expect(page.getByText("Field: Auto (from the template): the scan's Field step goes in")).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Scan fields' })).toBeVisible()
   expect(errors).toEqual([])
 })

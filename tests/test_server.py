@@ -2898,3 +2898,49 @@ def test_the_field_scan_runs_after_the_index_with_the_job_open(tmp_path):
         stopped = wait_for(client, job, "ready", "warn")
         assert runner.calls == ["index", "scan", "scan"]
         assert not stopped["index_error"] and stopped["field_scan"] == {"report": None}
+
+
+def test_a_templates_field_auto_sets_each_jobs_field_step_from_its_scan(tmp_path):
+    """Field: Auto puts the job in the index lane (no auto index needed); it's blocked until the scan is done,
+    then the scan's chain is its Field step and the log says so. Applied again with the scan there, it's set at
+    once. A Field step chosen by hand while it waits wins."""
+    from videoforge.core.video import fieldscan as fs
+
+    make_files(tmp_path)
+    runner = FakeScanner()
+    template = {"field_mode": "auto", "video": {"filters": [{"category": "field", "name": "Bwdif", "script": "x"}]}}
+    with make_client(tmp_path, runner=runner, probe=interlaced_probe) as client:
+        (job,) = add(client, tmp_path, template=template)
+        waiting = wait_for(client, job, "scanning")
+        assert waiting["spec"]["autofield"] and "video.field_auto" in [i["code"] for i in waiting["issues"]]
+        assert [f["category"] for f in waiting["spec"]["video"]["filters"]] == ["crop", "resize"]  # not the template's
+        assert client.post("/api/queue/enqueue", json={"ids": [job]}).json()["enqueued"] == []
+        runner.gate.set()
+        done = wait_for(client, job, "ready", "warn")
+        assert not done["spec"]["autofield"] and done["field_scan"]["fix"]["applied"]
+        assert [f["name"] for f in done["spec"]["video"]["filters"]][0] == "Field scan: IVTC"
+        assert not {"video.field", "video.field_auto"} & {i["code"] for i in done["issues"]}
+        lines = client.get(f"/api/jobs/{job}/log").json()["lines"]
+        assert "Field: Auto: Telecined film, top field first: the Field scan: IVTC step" in lines
+        assert runner.calls == ["index", "scan"]
+
+        # Again, with the scan there: set at once, no lane.
+        client.patch(f"/api/jobs/{job}", json={"template": {"field_mode": "manual"}})
+        assert client.get(f"/api/jobs/{job}").json()["spec"]["video"]["filters"][0]["category"] == "crop"
+        again = client.patch(f"/api/jobs/{job}", json={"template": template}).json()
+        assert not again["spec"]["autofield"] and again["spec"]["video"]["filters"][0]["name"] == "Field scan: IVTC"
+        assert runner.calls == ["index", "scan"]
+
+        # Waiting for a new scan: a Field step by hand meanwhile wins.
+        runner.gate.clear()
+        (client.app.state.queue.get(job).spec.work_dir / fs.REPORT).unlink()
+        client.patch(f"/api/jobs/{job}", json={"template": template})
+        waiting = wait_for(client, job, "scanning")
+        assert waiting["spec"]["autofield"]
+        video = waiting["spec"]["video"]
+        video["filters"] = [{"category": "field", "name": "Bwdif", "script": "clip = clip"}, *video["filters"]]
+        assert not client.patch(f"/api/jobs/{job}", json={"video": video}).json()["spec"]["autofield"]
+        runner.gate.set()
+        done = wait_for(client, job, "ready", "warn")
+        assert [f["name"] for f in done["spec"]["video"]["filters"]][0] == "Bwdif"
+        assert "video.field_kind" in [i["code"] for i in done["issues"]]  # deinterlacing film, as the scan says

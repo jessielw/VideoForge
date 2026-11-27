@@ -73,7 +73,7 @@ MediaInfo says how a source is stored, not what its fields hold: it can't tell t
 
 The section shows the verdict, a strip of the source (one cell per stretch of time, colored by what field matching does there), how many moving frames field matching leaves combed, and for combed parts the times they are at. The order is the one that leaves less combing; for video, the one Bwdif bobs without jitter. When the stream is flagged with the other order, the section says so.
 
-**Apply** makes the scan's chain the only Field filter, first in the chain, with a `SetFieldBased` line for the order it found. For a source with pulldown flags it also turns on **Apply pulldown**, and moves an FFMS2 job to BestSource (whose index the scan made). On a progressive verdict, Apply removes the Field filters. The note beside the button lists what it changes.
+**Apply** makes the scan's chain the only Field filter, first in the chain, with a `SetFieldBased` line for the order it found. For a source with pulldown flags it also turns on **Apply pulldown**, and moves an FFMS2 job to BestSource (whose index the scan made). On a progressive verdict, Apply removes the Field filters. The note beside the button lists what it changes. A template with **Field: Scan per job** does the same on each job once its scan is done (see [field policy](templates.md#field-policy)).
 
 With a verdict, the job's warnings follow the scan instead of MediaInfo:
 

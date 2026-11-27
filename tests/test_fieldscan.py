@@ -486,3 +486,96 @@ def test_the_lanes_scan_steps_write_the_report_the_plan_reads(clips, tmp_path):
     lines: list[str] = []
     run_steps(build.field_scan_steps(spec, BLURAY), records, log=lines.append)
     assert any("reused" in line for line in lines)  # done once per source
+
+
+# --- a template's Field: Auto and the job record ----------------------------------------------------------------
+
+
+def _write_report(spec: JobSpec, report: FieldScan) -> None:
+    spec.work_dir.mkdir(parents=True, exist_ok=True)
+    (spec.work_dir / fs.REPORT).write_text(fs.to_json(report), encoding="utf-8")
+
+
+def test_a_templates_field_auto_waits_for_the_scan_then_sets_its_fix(tmp_path):
+    """Field: Auto leaves the template's Field steps out and blocks the job until the source's scan is there; then
+    the scan's fix goes in (on a soft-telecined DVD: Apply pulldown, BestSource) and the scan's issues are back."""
+    from videoforge.core.job import auto_field, field_issues as job_field_issues
+    from videoforge.core.models import Severity
+    from videoforge.core.plan_io import from_json, to_json
+    from videoforge.core.template import FieldMode, Template
+
+    template = Template(VideoSettings(filters=[_preset("Bwdif"), *VideoSettings().filters, INVERT_STEP]))
+    assert from_json(Template, {}).field_mode is FieldMode.MANUAL  # templates saved before it
+    spec = _job(tmp_path / "Show.S01E01.mkv")
+    template.apply(spec)
+    assert not spec.autofield and spec.video.filters[0].category is FilterCategory.FIELD  # the template's own
+
+    template.field_mode = FieldMode.AUTO
+    template.apply(spec)
+    assert spec.autofield and [s.name for s in spec.video.filters] == ["Crop", "Resize", "Invert"]
+    assert from_json(JobSpec, to_json(spec)).autofield
+    assert template.video.filters[0].name == "Bwdif"  # the template itself keeps them
+
+    [block] = job_field_issues(spec, DVD)
+    assert (block.severity, block.code) == (Severity.BLOCK, "video.field_auto")
+    assert auto_field(spec, DVD) is None and spec.autofield  # no scan yet: still waiting
+
+    _write_report(spec, _report(Verdict.HYBRID, stream="", fallback=2146))
+    line = auto_field(spec, DVD)
+    assert line == (
+        "Field: Auto: Telecined film with combed parts, top field first (2146 frames left combed): "
+        "the Field scan: IVTC + QTGMC step, Apply pulldown on, source filter BestSource"
+    )
+    assert not spec.autofield and spec.video.pulldown and spec.video.source_filter is SourceFilter.BESTSOURCE
+    assert [s.name for s in spec.video.filters] == ["Field scan: IVTC + QTGMC", "Crop", "Resize", "Invert"]
+    assert job_field_issues(spec, DVD) == [] and auto_field(spec, DVD) is None  # done once
+
+    reuses = JobSpec(inputs=JobInputs(tmp_path / "E02.mkv", encode=tmp_path / "E02.264"), rule_set="manual")
+    template.apply(reuses)
+    assert not reuses.autofield  # nothing to field-match: the video isn't encoded here
+
+
+def test_field_auto_on_a_source_with_no_scan_or_no_verdict(tmp_path):
+    """A source MediaInfo calls progressive gets no scan: Field: Auto is done at once, with no Field step. A scan
+    with too little motion to tell sets none either, and MediaInfo's warning stays."""
+    from videoforge.core.job import auto_field, field_issues as job_field_issues
+
+    progressive = VideoInfo(1920, 1080, scan_type="Progressive")
+    spec = _job(tmp_path / "E01.mkv")
+    spec.autofield = True
+    assert job_field_issues(spec, progressive) == []
+    assert (
+        auto_field(spec, progressive) == "Field: Auto: no Field step (MediaInfo: progressive, without pulldown flags)"
+    )
+    assert not spec.autofield
+
+    spec = _job(tmp_path / "E02.mkv")
+    spec.autofield = True
+    _write_report(spec, _report(Verdict.UNKNOWN))
+    assert auto_field(spec, BLURAY) == "Field: Auto: Too little motion to tell, so no Field step"
+    assert not spec.autofield and [i.code for i in job_field_issues(spec, BLURAY)] == ["video.interlaced"]
+
+
+def test_the_job_record_has_the_field_scan(tmp_path):
+    """The record carries the source's scan and whether the job ran with its fix; null for a source with none."""
+    from videoforge.core.models import Plan, SourceInfo
+    from videoforge.core.record import _field_scan
+
+    spec = _job(tmp_path / "Show.S02E01.mkv")
+    source = SourceInfo(path=spec.inputs.source, name=spec.name, video=BLURAY)
+    plan = Plan(source=source, encode_path=None, resolution="1080p", original_language="en")
+    assert _field_scan(spec, plan) is None
+    _write_report(spec, _report(Verdict.TELECINE))
+    record = _field_scan(spec, plan)
+    assert record is not None
+    assert (record["verdict"], record["order"], record["summary"]) == (
+        "telecine",
+        "tff",
+        "Telecined film, top field first",
+    )
+    assert record["chain"].startswith("clip = core.std.SetFieldBased(clip, 2)") and record["applied"] is False
+    fix = filters.field_fix(_report(Verdict.TELECINE), BLURAY, spec.video)
+    assert fix is not None
+    spec.video = fix.apply(spec.video)
+    applied = _field_scan(spec, plan)
+    assert applied is not None and applied["applied"] is True

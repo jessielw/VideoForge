@@ -56,6 +56,7 @@ from videoforge.core.job import (
     StepRecord,
     StepRun,
     StepStatus,
+    auto_field,
     clean_label,
     clean_output_name,
     plan_spec,
@@ -96,7 +97,7 @@ from videoforge.core.rule_set import RuleSet
 from videoforge.core.template import CropMode, Template, apply_audio, apply_subs, template_choice
 from videoforge.core.tools import versions as tool_versions
 from videoforge.core.video.script import ffms2_index
-from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
+from videoforge.core.video.settings import Crop, EncoderSettings, FilterCategory, VideoSettings
 from videoforge.core.workdir import clean_work_dir, work_dir
 from videoforge.server.concurrency import Concurrency, RunPaths, encoder_type
 from videoforge.server.events import EventHub
@@ -531,6 +532,7 @@ class JobQueue:
                     spec.subs_template = _copy(subs_default)
                 if video:
                     spec.video = _copy(video)
+                    spec.autofield = False  # its Field steps are the given settings'
                 if encoder:
                     spec.encoder = _copy(encoder)
                 e = Entry(spec, JobState(), index_on_probe=index_new and not video and spec.encodes_video)
@@ -630,7 +632,7 @@ class JobQueue:
                 self._entries[c.id] = c
                 self._order.insert(self._order.index(e.id) + 1, c.id)
                 self._replan(c)
-                if self._claim_crop(c):
+                if self._claim_lane(c):
                     self.index([c.id])
                 self._save(c)
                 copies.append(c)
@@ -683,7 +685,7 @@ class JobQueue:
                 if e.queued and e.plan is None:
                     e.queued = False
                     self._save(e)
-                if self._claim_crop(e):
+                if self._claim_lane(e):
                     self.index([e.id])  # under the lock: the job never shows ready in between
                 elif e.index_on_probe:
                     self.index([e.id])
@@ -711,6 +713,32 @@ class JobQueue:
                 s.overrides = apply_subs(s.overrides, s.subs_template, subs)
                 s.subs_from_template = template_choice(s.overrides, [track_key(t) for t in subs])
         s.audio_template = s.subs_template = None
+        return True
+
+    def _claim_lane(self, e: Entry) -> bool:
+        """Under the lock: whether a probed job has a template's auto crop or Field: Auto for the index lane. The
+        caller then puts the job in the lane."""
+        crop = self._claim_crop(e)
+        field = self._claim_field(e)
+        return crop or field
+
+    def _claim_field(self, e: Entry) -> bool:
+        """Under the lock: a template's Field: Auto once the job is probed. A source with a field scan already, or
+        none to have, gets its Field step now (_auto_field); True when the lane's scan comes first. The job blocks
+        meanwhile (job.field_issues), and _scanned sets its step."""
+        if not e.spec.autofield or e.probed is None or e.busy or self._auto_field(e):
+            return False
+        return not e.scanning  # (a scan under way: _scanned)
+
+    def _auto_field(self, e: Entry) -> bool:
+        """Under the lock: job.auto_field on the job; when it set the Field step (or found none was needed), the job
+        is planned again, saved, and the job's log says what it did."""
+        line = auto_field(e.spec, e.source_video)
+        if line is None:
+            return False
+        self._replan(e)
+        self._save(e)
+        self._log(e, line)
         return True
 
     def _claim_crop(self, e: Entry) -> bool:
@@ -764,13 +792,14 @@ class JobQueue:
 
     def _scanned(self, e: Entry) -> None:
         """After the lane's steps: the jobs on the source (its variants share the work folder and its field scan)
-        planned again, so their field issues follow the scan."""
+        planned again, so their field issues follow the scan, and a template's Field: Auto on them set from it."""
         if not field_scan_steps(e.spec, e.source_video):
             return
         with self._lock:
             for other in self._entries.values():
                 if other.spec.work_dir == e.spec.work_dir and other.plan is not None and not other.busy:
-                    self._replan(other)
+                    if not self._auto_field(other):
+                        self._replan(other)
                     self._changed(other)
 
     def _replan(self, e: Entry) -> None:
@@ -908,6 +937,8 @@ class JobQueue:
             if video is not None:
                 if video.crop != s.video.crop:
                     s.autocrop = False  # a crop set by hand wins over a pending detection
+                if _field_steps(video) != _field_steps(s.video):
+                    s.autofield = False  # ... and a Field step over a pending Field: Auto
                 s.video = video
             if encoder is not None:
                 s.encoder = encoder
@@ -934,7 +965,7 @@ class JobQueue:
                 self._apply_tracks(e)
             self._replan(e)
             self._save(e)
-            if not reprobe and self._claim_crop(e):
+            if not reprobe and self._claim_lane(e):
                 self.index([e.id])
         self._changed(e)
         if reprobe:
@@ -2164,6 +2195,11 @@ def _made(e: Entry, output: Path, seconds: float) -> RunMade | None:
 def _variant(e: Entry) -> str:
     """A job as told apart from the others on its source."""
     return f"{e.spec.name} ({e.spec.label})" if e.spec.label else e.spec.name
+
+
+def _field_steps(video: VideoSettings) -> list[tuple[str, bool]]:
+    """A job's Field steps, as a hand edit changes them."""
+    return [(f.script, f.enabled) for f in video.filters if f.category is FilterCategory.FIELD]
 
 
 def _copy(obj):

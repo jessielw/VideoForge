@@ -89,6 +89,31 @@ When VideoForge encoded the video:
     { "category": "resize", "name": "Resize", "script": "", "enabled": true },
   ],
   "custom_script": false, // true: the user wrote the script body
+  "field_scan": {
+    // the source's field scan, or null when it had none (MediaInfo: progressive, no pulldown flags)
+    "verdict": "telecine", // "progressive" | "telecine" | "shifted" | "hybrid" | "interlaced" | "unknown"
+    "order": "tff", // the content's field order: "tff" | "bff" | "" (nothing to match)
+    "stream_order": "tff", // what the stream says: "tff" | "bff" | "progressive" | "" (none)
+    "frames": 34415,
+    "fps_num": 30000,
+    "fps_den": 1001,
+    "moving": 19954, // frames with motion; the counts below are of these
+    "combed": 7100, // combed as decoded
+    "left_tff": 0, // left combed after field matching, at each order
+    "left_bff": 7115,
+    "fallback": 0, // frames (moving or not) left combed at `order`: the hybrid chain deinterlaces them
+    "cadence": 0.99, // 3:2: the share of combed frames on 2 of every 5 positions (null: too few)
+    "jitter": null, // a bob deinterlacer's frame-to-frame difference at BFF over TFF (null: not run)
+    "strip": "..TTTTP...", // 1 character per `chunk` frames: . little motion, P progressive, T telecine,
+    "chunk": 30, //            h partly combed after matching, I combed after matching (video)
+    "stretches": [[1200, 1260, 35]], // [first, last, frames] left combed after matching (frames as decoded)
+    "seconds": 156.2, // how long the scan took
+    "version": 1,
+    "summary": "Telecined film, top field first",
+    "mismatch": false, // the stream's order isn't the content's
+    "chain": "clip = core.std.SetFieldBased(clip, 2) ...", // the script lines the scan suggests ("" for none)
+    "applied": true, // the job ran with the scan's fix (its Apply, or a template's Field: Auto); null: no verdict
+  },
   "encoder": {
     "name": "x264", // "x264" | "x265" | "vp8" | "vp9" | "svtav1" | "svtav1hdr"
     "rate_control": "crf", // "crf" | "abr" | "2pass"

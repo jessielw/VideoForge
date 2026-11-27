@@ -275,7 +275,9 @@
               </label>
               <p class="text-xs text-muted-foreground">
                 {entry.data.encoder.encoder} · {entry.data.mux.container.toUpperCase()} · Crop: {entry.data
-                  .crop_mode}{entry.data.audio ? ' · Audio' : ''}{entry.data.subs ? ' · Subtitles' : ''}
+                  .crop_mode}{entry.data.field_mode === 'auto' ? ' · Field: auto' : ''}{entry.data.audio
+                  ? ' · Audio'
+                  : ''}{entry.data.subs ? ' · Subtitles' : ''}
               </p>
               {#if scripts.length}
                 <details class="text-xs">

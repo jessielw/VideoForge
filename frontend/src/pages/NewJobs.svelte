@@ -528,6 +528,9 @@
               {@const c = template.data.video.crop}
               <span>Crop {c.left}/{c.top}/{c.right}/{c.bottom} on every job</span>
             {/if}
+            {#if template?.data.field_mode === 'auto'}
+              <span>Field step from each source's field scan</span>
+            {/if}
           </div>
           {#if encoder}
             <div class="text-sm text-muted-foreground">Encoder preset</div>

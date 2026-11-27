@@ -8,7 +8,7 @@
   import { app } from '../lib/state.svelte'
   import { splitName } from '../lib/templateFolders'
   import { Checkbox } from '$lib/components/ui/checkbox'
-  import type { CropMode, JobSpec, Template, TemplateAudio, TrackOverride } from '../lib/types'
+  import type { CropMode, FieldMode, JobSpec, Template, TemplateAudio, TrackOverride } from '../lib/types'
   import CheckIcon from '@lucide/svelte/icons/check'
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down'
   import Trash2Icon from '@lucide/svelte/icons/trash-2'
@@ -35,6 +35,7 @@
   let open = $state(false)
   let name = $state('')
   let cropMode = $state<CropMode>('keep')
+  let fieldMode = $state<FieldMode>('manual')
   let withAudio = $state(true)
   let error = $state('')
   let busy = $state(false)
@@ -52,6 +53,7 @@
     mux: spec.mux,
     qpf: spec.qpf,
     crop_mode: cropMode,
+    field_mode: fieldMode,
     audio: withAudio && trackEditor ? jobAudio() : null,
   })
 
@@ -78,11 +80,16 @@
     }))
     return { mode: 'position', slots, rules: [], others: 'keep' }
   }
-  // The job's settings match a template when all but the crop and tracks do (per source, or rules), and the
-  // container its extra arguments were typed for (when they were typed, not a setting).
+  // The job's settings match a template when all but the crop, Field mode and tracks do (per source, or rules),
+  // and the container its extra arguments were typed for (when they were typed, not a setting).
   function canon(v: unknown): string {
     return JSON.stringify(v, (key, val) =>
-      key === 'crop' || key === 'crop_mode' || key === 'audio' || key === 'subs' || key === 'extra_container'
+      key === 'crop' ||
+      key === 'crop_mode' ||
+      key === 'field_mode' ||
+      key === 'audio' ||
+      key === 'subs' ||
+      key === 'extra_container'
         ? undefined
         : val && typeof val === 'object' && !Array.isArray(val)
           ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b)))
@@ -90,8 +97,14 @@
     )
   }
   const same = (a: unknown, b: unknown) => canon(a) === canon(b)
+  // Field: Auto sets each job's Field step from its source's scan: a template with it matches any, and saves none
+  const fieldless = (t: Template): Template => ({
+    ...t,
+    video: { ...t.video, filters: t.video.filters.filter((f) => f.category !== 'field') },
+  })
+  const fits = (t: Template) => (t.field_mode === 'auto' ? same(fieldless(t), fieldless(current)) : same(t, current))
 
-  const matched = $derived(choices.find((c) => same(c.data, current))?.name ?? null)
+  const matched = $derived(choices.find((c) => fits(c.data))?.name ?? null)
   // No exact match (a crop-fitted resize or filter chain, an encoder preset on top): the template whose
   // muxer settings and AutoQPF the job has, with a note on the encoder.
   // (the container is left out: a template that sets none gets the rule set's on the job)
@@ -120,7 +133,8 @@
   const cropText = (c: Template['video']['crop']) => `${c.left}/${c.top}/${c.right}/${c.bottom}`
 
   function cropNote(t: Template): string {
-    return t.crop_mode === 'auto' ? 'auto crop' : t.crop_mode === 'fixed' ? `crop ${cropText(t.video.crop)}` : ''
+    const crop = t.crop_mode === 'auto' ? 'auto crop' : t.crop_mode === 'fixed' ? `crop ${cropText(t.video.crop)}` : ''
+    return [crop, t.field_mode === 'auto' ? 'auto field' : ''].filter(Boolean).join(', ')
   }
 
   async function load(data: Template) {
@@ -135,8 +149,9 @@
     try {
       const old = app.presets.template.find((p) => p.name === n)?.data
       const audio = old?.audio?.mode === 'rules' ? old.audio : current.audio
+      const data = structuredClone($state.snapshot(current)) as Template
       app.presets = await api.savePreset('template', n, {
-        ...structuredClone($state.snapshot(current)),
+        ...(fieldMode === 'auto' ? fieldless(data) : data),
         audio,
         subs: old?.subs ?? null,
       })
@@ -222,6 +237,10 @@
         <option value="keep">Crop: keep each job's own</option>
         <option value="fixed">Crop: this job's ({cropText(crop)}) on every job</option>
         <option value="auto">Crop: detect it for each job</option>
+      </NativeSelect>
+      <NativeSelect class="w-full" aria-label="Field step in the template" bind:value={fieldMode}>
+        <option value="manual">Field: this job's Field steps, if any</option>
+        <option value="auto">Field: from each job's field scan</option>
       </NativeSelect>
       {#if keepsRules}
         <p class="text-xs text-muted-foreground">
