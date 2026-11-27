@@ -60,6 +60,7 @@ async function fixture(page: Page, mode: 'light' | 'dark', palette = 'gold') {
     resize: null,
     filters: [],
     custom: null,
+    pulldown: false,
   }
   const encoder = {
     encoder: 'x264' as const,

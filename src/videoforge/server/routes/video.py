@@ -84,7 +84,8 @@ def _indexed(e: Entry) -> None:
 
 def _info_json(e: Entry, i: ClipInfo, stage: Stage) -> dict[str, Any]:
     """The clip's info for the page; the output's carries length_warning when its length isn't the source's."""
-    warning = length_warning(e.source_video, i.frames, Fraction(i.fps_num, i.fps_den) if i.fps_num else None)
+    fps = Fraction(i.fps_num, i.fps_den) if i.fps_num else None
+    warning = length_warning(e.source_video, i.frames, fps, pulldown=e.spec.video.pulldown)
     return to_json(i) | {"fps": i.fps, "length_warning": warning if stage == "output" else ""}
 
 

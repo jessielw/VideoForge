@@ -85,6 +85,7 @@ export interface VideoSettings {
   resize: Resize | null
   filters: FilterStep[] // in order; always one crop and one resize step
   custom: string | null
+  pulldown: boolean // the source's pulldown flags applied (BestSource or L-SMASH; FFMS2 can't)
 }
 
 export type EncoderName = 'x264' | 'x265' | 'vp8' | 'vp9' | 'svtav1' | 'svtav1hdr'

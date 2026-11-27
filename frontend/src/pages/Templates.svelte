@@ -545,6 +545,19 @@
             <div
               class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-2 text-sm @min-[24rem]/video:grid-cols-[7rem_minmax(0,1fr)]"
             >
+              <span class="hidden @min-[24rem]/video:block"></span>
+              <label class="flex items-center gap-2">
+                <Checkbox
+                  checked={draft.video.pulldown}
+                  disabled={readOnly || (draft.video.source_filter === 'ffms2' && !draft.video.pulldown)}
+                  onCheckedChange={(v) => (draft!.video.pulldown = v)}
+                />
+                Apply pulldown (soft telecine; BestSource or L-SMASH Works)
+              </label>
+            </div>
+            <div
+              class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-2 text-sm @min-[24rem]/video:grid-cols-[7rem_minmax(0,1fr)]"
+            >
               <span class="text-muted-foreground">Crop</span>
               <div class="min-w-0 space-y-2">
                 <ToggleGroup.Root

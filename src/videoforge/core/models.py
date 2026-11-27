@@ -216,6 +216,12 @@ class VideoInfo:
         return self.scan_type in ("Interlaced", "MBAFF", "PAFF")
 
     @property
+    def pulldown(self) -> bool:
+        """Pulldown flags in the stream (ScanOrder "2:3 Pulldown", ...): soft telecine, film stored as its own
+        frames with flags to repeat fields. MediaInfo can call such a source Progressive while parts of it comb."""
+        return "pulldown" in self.scan_order.lower()
+
+    @property
     def sar(self) -> Fraction:
         return Fraction(self.sar_num, self.sar_den) if self.sar_num > 0 and self.sar_den > 0 else Fraction(1)
 

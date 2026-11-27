@@ -63,6 +63,7 @@ ISSUE_TABS: tuple[tuple[str, str], ...] = (
     ("hdr.dv_bake_bs", "video"),
     ("hdr.dv_custom", "video"),
     ("video.interlaced", "video"),
+    ("video.pulldown", "video"),
     ("video.", "encoder"),
     ("hdr.", "encoder"),
     ("audio.", "audio"),

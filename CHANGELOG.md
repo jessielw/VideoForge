@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Apply pulldown** under the Video tab's **Advanced** (and in templates) repeats fields by the source's pulldown flags, as a player does. NTSC DVDs that mix soft telecine with hard-telecined parts then come out telecined throughout, so **IVTC** returns all of it to 23.976 fps film at the source's length. It needs BestSource or L-SMASH Works and reuses their existing index. A job with it on and FFMS2 selected is blocked, because FFMS2 can't apply the flags. The Video tab notes a source with pulldown flags.
+- New warnings for sources with pulldown flags. With **Apply pulldown** on and no Field filter, the job warns that the frames will comb until IVTC matches them. With it off and an IVTC that decimates, the job warns that VDecimate can drop real frames from the soft-telecined parts.
+
 ### Changed
 
 - Updated DeeZy to 2.0.4 in the Windows tools bundle and Docker image.

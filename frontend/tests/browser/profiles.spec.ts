@@ -12,6 +12,7 @@ test('Settings: profiles are created, renamed, switched to and deleted', async (
       resize: null,
       filters: [],
       custom: null,
+      pulldown: false,
     },
     encoder: {
       encoder: 'x264',

@@ -25,6 +25,7 @@ async function fixture(page: Page) {
       resize: null,
       filters: [],
       custom: 'clip = src',
+      pulldown: false,
     },
     encoder: {
       encoder: 'x264',

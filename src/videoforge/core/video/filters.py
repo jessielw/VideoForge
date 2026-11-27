@@ -26,23 +26,61 @@ _OVERRIDE_ORDER = (
 def field_issues(video: VideoInfo | None, settings: VideoSettings) -> list[Issue]:
     """An interlaced source with no field step in the chain: the encode would keep its combing. StaxRip shows
     the scan type and leaves it to the user; this says so before the run. A custom body isn't read (it may
-    deinterlace in its own lines)."""
-    if video is None or not video.interlaced or settings.custom is not None:
-        return []
-    if any(s.category is C.FIELD and s.enabled for s in settings.filters):
-        return []
-    how = ", ".join(
-        x for x in (video.scan_type if video.scan_type != "Interlaced" else "", _ORDER.get(video.scan_order, "")) if x
-    )
-    return [
-        Issue(
-            Severity.WARN,
-            "video.interlaced",
-            f"The source is interlaced{f' ({how})' if how else ''}, and the filter chain doesn't deinterlace it. "
-            "Add IVTC (for telecined film) or a deinterlacer (QTGMC, Bwdif) from the Field filters, or check the "
-            "preview for combing first. Some progressive video is stored as interlaced",
+    deinterlace in its own lines).
+
+    Pulldown (soft telecine): applying it needs a source filter that can (FFMS2 can't: blocked). Applied, the film
+    comes out telecined, which combs like an interlaced source without a field step. Not applied while an IVTC
+    decimates, the soft-telecined parts reach VDecimate as film frames already, so it can drop real ones."""
+    out: list[Issue] = []
+    if settings.pulldown and not settings.source_filter.applies_pulldown:
+        out.append(
+            Issue(
+                Severity.BLOCK,
+                "video.pulldown_filter",
+                "FFMS2 can't apply pulldown flags. Pick BestSource or L-SMASH Works as the Source filter (Video tab, "
+                "Advanced), or turn off Apply pulldown",
+            )
         )
-    ]
+    if video is None or settings.custom is not None:
+        return out
+    field_steps = [s for s in settings.filters if s.category is C.FIELD and s.enabled]
+    if video.interlaced and not field_steps:
+        how = ", ".join(
+            x
+            for x in (video.scan_type if video.scan_type != "Interlaced" else "", _ORDER.get(video.scan_order, ""))
+            if x
+        )
+        out.append(
+            Issue(
+                Severity.WARN,
+                "video.interlaced",
+                f"The source is interlaced{f' ({how})' if how else ''}, and the filter chain doesn't deinterlace it. "
+                "Add IVTC (for telecined film) or a deinterlacer (QTGMC, Bwdif) from the Field filters, or check the "
+                "preview for combing first. Some progressive video is stored as interlaced",
+            )
+        )
+    elif video.pulldown and settings.pulldown and not field_steps:
+        out.append(
+            Issue(
+                Severity.WARN,
+                "video.interlaced",
+                f"Apply pulldown repeats the source's fields as a player shows them ({video.scan_order}), so its film "
+                "frames come out telecined and comb. Add IVTC from the Field filters to match them back into film "
+                "frames, or turn off Apply pulldown",
+            )
+        )
+    if video.pulldown and not settings.pulldown and any("VDecimate" in s.script for s in field_steps):
+        out.append(
+            Issue(
+                Severity.WARN,
+                "video.pulldown",
+                f"The source has pulldown flags ({video.scan_order}) and the IVTC decimates, but Apply pulldown is "
+                "off. The source's soft-telecined parts then reach VDecimate as film frames already, and it can drop "
+                "real ones. Turn on Apply pulldown (Video tab, Advanced; BestSource or L-SMASH Works), or remove the "
+                "IVTC if no part of the source is telecined for real",
+            )
+        )
+    return out
 
 
 @dataclass(frozen=True, slots=True)

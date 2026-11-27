@@ -18,6 +18,11 @@ class SourceFilter(StrEnum):
     BESTSOURCE = "bestsource"  # core.bs.VideoSource: exact seeking, slow first index (decodes the whole video)
     LSMASH = "lsmash"  # core.lsmas.LWLibavSource
 
+    @property
+    def applies_pulldown(self) -> bool:
+        """It can repeat fields by the stream's pulldown flags (BestSource's rff, L-SMASH's repeat); FFMS2 can't."""
+        return self is not SourceFilter.FFMS2
+
 
 @dataclass(slots=True)
 class Crop:
@@ -117,6 +122,10 @@ class VideoSettings:
     filters: list[FilterStep] = field(default_factory=default_chain)
     # A whole processing body instead of the filters (also reads `src`, assigns `clip`).
     custom: str | None = None
+    # The source's pulldown flags applied (soft telecine, a DVD's 2:3 pulldown): its fields repeated as a player
+    # shows them, so film comes out telecined at 29.97 for an IVTC to match, like the parts telecined for real.
+    # Off, the source filter gives the stored frames. BestSource and L-SMASH Works only (field_issues).
+    pulldown: bool = False
 
     def __post_init__(self) -> None:
         # Exactly one crop and one resize step: a missing one goes in at its category's place.

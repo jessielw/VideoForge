@@ -52,6 +52,7 @@
   import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw'
   import WandSparklesIcon from '@lucide/svelte/icons/wand-sparkles'
   import { Button } from '$lib/components/ui/button'
+  import { Checkbox } from '$lib/components/ui/checkbox'
   import { Input } from '$lib/components/ui/input'
   import { NativeSelect } from '$lib/components/ui/native-select'
   import * as Tabs from '$lib/components/ui/tabs'
@@ -506,6 +507,8 @@
   // The source's HDR formats (HDR10, HDR10+, Dolby Vision ...), for the HDR section
   const hdr = $derived(job.tracks?.video ? hdrFormats(job.tracks.video.color, job.tracks.video.hdr) : [])
   const interlaced = $derived(['Interlaced', 'MBAFF', 'PAFF'].includes(job.tracks?.video?.scan_type ?? ''))
+  // Pulldown flags (soft telecine): MediaInfo's scan order, such as "2:3 Pulldown" (core VideoInfo.pulldown)
+  const pulldownFlags = $derived((job.tracks?.video?.scan_order ?? '').toLowerCase().includes('pulldown'))
 </script>
 
 <svelte:window {onkeydown} />
@@ -906,6 +909,16 @@
                 shows no combing.
               </p>
             </section>
+          {:else if pulldownFlags}
+            {@const v = job.tracks?.video}
+            <section class="space-y-1">
+              <span class="section-label">Scan</span>
+              <p class="text-sm">{v?.scan_type}{v?.scan_order ? ` · ${v.scan_order}` : ''}</p>
+              <p class="text-xs text-muted-foreground">
+                The source has pulldown flags (soft telecine). If parts of it comb, turn on Apply pulldown under
+                Advanced and add IVTC from the Field filters.
+              </p>
+            </section>
           {/if}
           {#if hdr.length}
             <section class="space-y-1">
@@ -1009,8 +1022,12 @@
             {/if}
           </section>
 
-          <!-- counts a source filter other than FFMS2, the default -->
-          <Advanced area="video" title="Advanced" count={video.source_filter === 'ffms2' ? 0 : 1}>
+          <!-- counts what isn't the default: a source filter other than FFMS2, Apply pulldown -->
+          <Advanced
+            area="video"
+            title="Advanced"
+            count={(video.source_filter === 'ffms2' ? 0 : 1) + (video.pulldown ? 1 : 0)}
+          >
             <section class="space-y-2">
               <span class="section-label">Source filter</span>
               <NativeSelect
@@ -1025,6 +1042,25 @@
               >
                 {#each SOURCE_FILTERS as f (f.id)}<option value={f.id} title={f.title}>{f.label}</option>{/each}
               </NativeSelect>
+              <label class="flex items-start gap-2 text-sm">
+                <Checkbox
+                  class="mt-0.5"
+                  checked={video.pulldown}
+                  disabled={video.source_filter === 'ffms2' && !video.pulldown}
+                  onCheckedChange={(on) => {
+                    video.pulldown = on
+                    info = { crop: null, output: null }
+                    commit(0) // the frames change (29.97 telecined): the preview follows the saved job
+                  }}
+                />
+                <span class="min-w-0">
+                  Apply pulldown
+                  <span class="block text-xs text-muted-foreground">
+                    Repeats fields by the source's pulldown flags (soft telecine), as a player does, so IVTC sees every
+                    part telecined. BestSource or L-SMASH Works; FFMS2 can't.
+                  </span>
+                </span>
+              </label>
             </section>
             {#if video.custom === null}
               <Button variant="outline" size="sm" onclick={openScript}>Edit the whole script…</Button>

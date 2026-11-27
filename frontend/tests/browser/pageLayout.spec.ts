@@ -18,6 +18,7 @@ async function layoutFixture(
       resize: null,
       filters: [],
       custom: null,
+      pulldown: false,
     },
     encoder: {
       encoder: 'x264',

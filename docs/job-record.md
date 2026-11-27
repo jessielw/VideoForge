@@ -80,6 +80,7 @@ When VideoForge encoded the video:
     "text": "import vapoursynth as vs\n...",
   },
   "source_filter": "ffms2", // "ffms2" | "lsmash" | "bestsource"
+  "pulldown": false, // the source's pulldown flags applied (BestSource or L-SMASH)
   "crop": { "left": 0, "top": 140, "right": 0, "bottom": 140 },
   "resize": null, // or { "width", "height", "kernel" }
   "filters": [

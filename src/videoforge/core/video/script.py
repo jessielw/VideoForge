@@ -41,13 +41,20 @@ def _q(path: Path | str) -> str:
     return repr(str(path))  # a valid Python string literal for any Windows path
 
 
-def source_line(source: Path, source_filter: SourceFilter, index_dir: Path, name: str = "src") -> str:
+def source_line(
+    source: Path, source_filter: SourceFilter, index_dir: Path, name: str = "src", *, pulldown: bool = False
+) -> str:
+    """pulldown applies the stream's pulldown flags (VideoSettings.pulldown): BestSource's rff, L-SMASH's repeat.
+    FFMS2 can't (filters.field_issues blocks the job). Either way the source filter reads the same index."""
     if source_filter is SourceFilter.BESTSOURCE:
         # cachemode 4: always read/write the index at cachepath + track + extension.
         index = index_dir / source.name
-        return f"{name} = core.bs.VideoSource({_q(source)}, cachemode=4, cachepath={_q(index)})"
+        rff = ", rff=1" if pulldown else ""
+        return f"{name} = core.bs.VideoSource({_q(source)}{rff}, cachemode=4, cachepath={_q(index)})"
     if source_filter is SourceFilter.LSMASH:
-        return f"{name} = core.lsmas.LWLibavSource({_q(source)}, cachefile={_q(index_dir / (source.name + '.lwi'))})"
+        repeat = ", repeat=1" if pulldown else ""
+        index = index_dir / (source.name + ".lwi")
+        return f"{name} = core.lsmas.LWLibavSource({_q(source)}{repeat}, cachefile={_q(index)})"
     return f"{name} = core.ffms2.Source({_q(source)}, cachefile={_q(ffms2_index(source, index_dir))})"
 
 
@@ -202,7 +209,7 @@ def script_parts(
     head = [
         "import vapoursynth as vs",
         "core = vs.core",
-        source_line(source, settings.source_filter, index_dir),
+        source_line(source, settings.source_filter, index_dir, pulldown=settings.pulldown),
         "clip = src",
     ]
     if stage == "source":

@@ -37,6 +37,7 @@ async function fixture(page: Page, extra: SubTrack[] = []) {
     resize: null,
     filters: [],
     custom: null,
+    pulldown: false,
   }
   const encoder = {
     encoder: 'x265' as const,

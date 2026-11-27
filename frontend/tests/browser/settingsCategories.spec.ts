@@ -12,6 +12,7 @@ async function fixture(page: Page, extra: Partial<ConfigState> = {}) {
       resize: null,
       filters: [],
       custom: null,
+      pulldown: false,
     },
     encoder: {
       encoder: 'x264',

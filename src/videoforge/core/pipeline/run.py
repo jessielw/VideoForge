@@ -199,7 +199,8 @@ def _run(
             issues = rule_set.validate_output(plan, found)
             if spec.encodes_video:
                 issues += hdr.output_issues(plan.source.video, spec.encoder, found, spec.video_output)
-                issues += info.length_issues(plan.source.video, info.read(work / info.SCRIPT_INFO))
+                found_info = info.read(work / info.SCRIPT_INFO)
+                issues += info.length_issues(plan.source.video, found_info, pulldown=spec.video.pulldown)
             blocking = [i.message for i in issues if i.severity is Severity.BLOCK]
             for issue in issues:
                 validate.log(f"{issue.severity.value}: {issue.message}")

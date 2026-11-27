@@ -12,7 +12,17 @@ The **Video** tab edits the VapourSynth processing used by both preview and enco
 | L-SMASH-Works | `lsmas` | Alternative source reader |
 | BestSource | `bs` | Exact seeking; the first index decodes the whole video |
 
-Select an installed filter under **Advanced**, at the bottom of the side panel. Its title shows **(1)** when the filter isn't FFMS2. Changing the source reader can require a new index. See [Tools and VapourSynth plugins](../configuration/tools.md) if a reader is missing.
+Select an installed filter under **Advanced**, at the bottom of the side panel. Its title counts the settings there that aren't the default: a filter other than FFMS2, and **Apply pulldown**. Changing the source reader can require a new index. See [Tools and VapourSynth plugins](../configuration/tools.md) if a reader is missing.
+
+### Apply pulldown
+
+Many NTSC DVDs store film as its own 23.976 progressive frames, with pulldown flags telling the player to repeat fields (soft telecine). MediaInfo shows such a source as **Progressive** with a scan order such as **2:3 Pulldown**. By default the source filter gives the stored frames. Some discs mix soft telecine with parts that are telecined for real (credits, effects shots): those parts comb, and the frame rate varies.
+
+**Apply pulldown**, under **Advanced**, repeats the fields as a player does, so the whole source comes out telecined at 29.97 fps. Then **IVTC** matches every part back into 23.976 film frames, the same way. It needs **BestSource** or **L-SMASH Works**: FFMS2 can't apply pulldown flags, and a job with it set on FFMS2 is blocked. BestSource and L-SMASH read the same index with it on or off.
+
+- A source that is soft telecine throughout doesn't need it: its frames are film already.
+- With it on and no Field filter, the job warns: the telecined frames comb until IVTC matches them.
+- With it off on a source with pulldown flags, a chain whose IVTC decimates warns: VDecimate would get the soft-telecined parts as film frames already, and can drop real ones.
 
 ## Crop and resize
 

@@ -45,6 +45,7 @@ async function fixture(page: Page, empty = false) {
       resize: null,
       filters: [],
       custom: null,
+      pulldown: false,
     },
     encoder: video,
     mux: {

@@ -75,6 +75,7 @@ async function phoneFixture(page: Page) {
         resize: null,
         filters: [],
         custom: null,
+        pulldown: false,
       },
       encoder: {
         encoder: 'x265',

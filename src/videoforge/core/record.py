@@ -223,6 +223,7 @@ def _video(spec: JobSpec, plan: Plan, commands: dict[str, str], summary: list[st
         "language": _video_language(plan),
         "script": {"path": str(script), "text": text},
         "source_filter": v.source_filter.value,
+        "pulldown": v.pulldown,
         "crop": to_json(v.crop),
         "resize": to_json(v.resize) if v.resize else None,
         "filters": [to_json(s) for s in v.filters if s.enabled],
