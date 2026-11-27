@@ -17,7 +17,7 @@ MediaInfo can't tell these apart. It says how a source is stored, so it calls te
 
 When MediaInfo reports the source as interlaced (Interlaced, MBAFF, or PAFF) or with pulldown flags, the index lane scans its fields after the index. The scan reads every frame, with the pulldown flags applied, and matches each frame's fields at both field orders (VIVTC's VFM). It takes about 20 seconds for a DVD episode and 2 to 3 minutes for a 1080i one.
 
-Once the index is done, the job shows **Scanning fields**. The preview opens and the job can be edited while the scan runs, but the job can only be queued after the scan. A test encode asked for meanwhile starts when the scan ends. **Stop indexing** stops the scan too. For a job indexed before the field scan existed, **Scan fields** in the Video tab's **Scan** section puts it back in the index lane. Each source is scanned once: other jobs on it (labels, copies) use the same scan, and changing the source filter doesn't scan again.
+Once the index is done, the job shows **Scanning fields**. The preview opens and the job can be edited while the scan runs, but the job can only be queued after the scan. A test encode asked for meanwhile starts when the scan ends. **Stop field scan** on the Queue toolbar cancels it. For a job indexed before the field scan existed, **Scan fields** in the Video tab's **Scan** section puts it back in the index lane. Each source is scanned once: other jobs on it (labels, copies) use the same scan, and changing the source filter doesn't scan again.
 
 ### Verdicts
 

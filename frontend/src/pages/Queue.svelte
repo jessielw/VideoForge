@@ -705,18 +705,23 @@
   const indexing = $derived(
     !!app.queue.indexing || !!app.queue.scanning || !!app.queue.sampling || app.queue.index_queued > 0,
   )
-  // What Stop indexing cancels: the lane's work running now, and the jobs waiting in it
-  const laneStop = $derived.by(() => {
+  // The index lane's stop: named for the work running now, as its job's row names it (the field scan, a test
+  // encode or CRF search, else indexing); its tooltip adds the jobs it takes out of the lane.
+  const laneWork = $derived.by(() => {
     const q = app.queue
-    const now = q.scanning
-      ? 'the field scan'
-      : q.sampling
-        ? 'the test encode or CRF search'
-        : q.indexing
-          ? 'the indexing'
-          : ''
-    const n = q.index_queued
+    if (q.scanning) return { label: 'Stop field scan', now: 'the field scan' }
+    if (q.sampling) {
+      const search = app.jobs.find((j) => j.id === q.sampling)?.searching
+      return search
+        ? { label: 'Stop CRF search', now: 'the CRF search' }
+        : { label: 'Stop test encode', now: 'the test encode' }
+    }
+    return { label: 'Stop indexing', now: q.indexing ? 'the indexing' : '' }
+  })
+  const laneStop = $derived.by(() => {
+    const n = app.queue.index_queued
     const waiting = `${n} job${n === 1 ? '' : 's'} waiting`
+    const now = laneWork.now
     if (now && n) return `Cancels ${now} that's running, and takes the ${waiting} out of the index lane.`
     if (now) return `Cancels ${now} that's running.`
     return `Takes the ${waiting} out of the index lane.`
@@ -1170,7 +1175,7 @@
             {#if indexing}
               <Tip text={laneStop}>
                 <Button variant="outline" onclick={() => act(() => app.stopIndexing())}>
-                  <DatabaseXIcon /><span class="max-sm:sr-only">Stop indexing</span>
+                  <DatabaseXIcon /><span class="max-sm:sr-only">{laneWork.label}</span>
                 </Button>
               </Tip>
             {/if}

@@ -69,7 +69,7 @@ Two-pass target size uses **decimal MB**. VideoForge budgets for audio, subtitle
 
 A two-pass job is tested as one pass at its bitrate (a target size's, as its first pass works it out). HDR10+ and Dolby Vision metadata and the chapters' keyframes are left out of the sample; the source color and HDR10 go in as they do for the job.
 
-The test encode runs in the index lane, beside the queue: it indexes the source first if it has to, and jobs waiting to be indexed wait for it. The job is locked meanwhile, but its preview opens. **Stop** (or Stop indexing on the Queue toolbar) cancels it. The result stays with the job until a settings change marks it out of date ("settings changed since"); running the same sample again reuses it. Its files are in the job's folder, under `sample/` (`sample.mkv` plays in any player).
+The test encode runs in the index lane, beside the queue: it indexes the source first if it has to, and jobs waiting to be indexed wait for it. The job is locked meanwhile, but its preview opens. **Stop** (or **Stop test encode** on the Queue toolbar) cancels it. The result stays with the job until a settings change marks it out of date ("settings changed since"); running the same sample again reuses it. Its files are in the job's folder, under `sample/` (`sample.mkv` plays in any player).
 
 **Compare** opens the sample's frames on the Video tab, against the encoder's input (see [Compare frames](video.md#compare-frames)).
 

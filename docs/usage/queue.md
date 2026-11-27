@@ -80,7 +80,7 @@ BestSource's first index decodes the whole video and can take substantially long
 
 Use **Cancel job** on a running job’s row to cancel that job. **Stop after active jobs** leaves the remaining jobs queued while active runs finish. **Cancel active jobs and stop** cancels every active full job and leaves pending jobs queued.
 
-**Pause**, **Resume**, and **Priority** apply to all running tools, including the index/sample lane. **Stop indexing** controls that lane separately: it cancels what the lane is running (an index, a field scan, a test encode or a CRF search) and takes out the jobs waiting in it. By default one sample or CRF search can run alongside full jobs, including an exclusive encode. Select **Count samples and CRF searches toward job limits** to apply the total, encoder limits and exclusivity to samples too.
+**Pause**, **Resume**, and **Priority** apply to all running tools, including the index/sample lane. **Stop indexing** controls that lane separately: it cancels what the lane is running and takes out the jobs waiting in it. The button is named for what's running: **Stop field scan**, **Stop test encode** or **Stop CRF search** while those run, otherwise **Stop indexing**. Its tooltip says how many waiting jobs it takes out. By default one sample or CRF search can run alongside full jobs, including an exclusive encode. Select **Count samples and CRF searches toward job limits** to apply the total, encoder limits and exclusivity to samples too.
 
 Untick a queued job, or use **Unqueue** on selected queued jobs, to unlock their settings without removing the jobs or files. This does not cancel a running job.
 
