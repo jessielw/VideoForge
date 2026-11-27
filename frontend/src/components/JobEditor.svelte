@@ -242,7 +242,7 @@
           >
         {/if}
       </div>
-      {#if live?.progress && ['running', 'indexing', 'sampling'].includes(live.status)}
+      {#if live?.progress && ['running', 'indexing', 'scanning', 'sampling'].includes(live.status)}
         {@const p = live.progress}
         <div class="flex items-center gap-3 text-xs text-muted-foreground max-sm:flex-wrap max-sm:gap-y-1">
           <div class="h-1.5 flex-1 overflow-hidden rounded bg-muted max-sm:basis-full">

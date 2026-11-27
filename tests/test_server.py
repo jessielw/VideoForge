@@ -118,8 +118,15 @@ class FakeRun:
         return JobResult(plan, JobStatus.DONE, out)
 
 
-def make_client(tmp_path: Path, run=None, detect_crop=None, runner=None, send=None) -> TestClient:
-    services = Services(probe=fake_probe, run=run or FakeRun(), detect_crop=detect_crop)
+def interlaced_probe(spec: JobSpec, _app=None) -> ProbedInputs:
+    """fake_probe's, with the video stored as fields (1080i MBAFF, top field first): the lane scans it."""
+    probed = fake_probe(spec)
+    probed.source.video = VideoInfo(1920, 1080, default_duration_ns=33366667, scan_type="MBAFF", scan_order="TFF")
+    return probed
+
+
+def make_client(tmp_path: Path, run=None, detect_crop=None, runner=None, send=None, probe=None) -> TestClient:
+    services = Services(probe=probe or fake_probe, run=run or FakeRun(), detect_crop=detect_crop)
     if runner is not None:
         services.runner = runner
     if send is not None:
@@ -1870,6 +1877,7 @@ def test_index_lane_stop(tmp_path):
             "queued": 0,
             "indexing": None,
             "sampling": None,
+            "scanning": None,
             "index_queued": 0,
             "index_held": 0,
         }
@@ -2796,11 +2804,6 @@ def test_the_job_view_carries_the_field_scan(tmp_path):
     gives (in place of MediaInfo's) and what Apply sets."""
     from videoforge.core.video import fieldscan as fs
 
-    def interlaced(spec: JobSpec, _app=None) -> ProbedInputs:
-        probed = fake_probe(spec)
-        probed.source.video = VideoInfo(1920, 1080, default_duration_ns=33366667, scan_type="MBAFF", scan_order="TFF")
-        return probed
-
     make_files(tmp_path, "S01E01", "S01E02")
     work = tmp_path / "src" / "Show.S01E02.mkv_tmp"
     work.mkdir()
@@ -2809,13 +2812,7 @@ def test_the_job_view_carries_the_field_scan(tmp_path):
         moving=19954, combed=7291, left_tff=0, left_bff=7115, fallback=0, cadence=0.99, jitter=None, strip="TT.T",
     )  # fmt: skip
     (work / fs.REPORT).write_text(fs.to_json(report), encoding="utf-8")
-    app = create_app(
-        ServerSettings(data_dir=tmp_path / "data", roots=[tmp_path], frontend_dir=tmp_path / "none"),
-        APP,
-        services=Services(probe=interlaced, run=FakeRun()),
-        setup_vapoursynth=False,
-    )
-    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+    with make_client(tmp_path, probe=interlaced_probe) as client:
         first, second = add(client, tmp_path, auto_index=False)
         unscanned = wait_for(client, first, "ready", "warn")
         assert unscanned["field_scan"] == {"report": None}
@@ -2833,3 +2830,71 @@ def test_the_job_view_carries_the_field_scan(tmp_path):
         assert saved.status_code == 200, saved.text
         job = wait_for(client, second, "ready", "warn")
         assert job["field_scan"]["fix"]["applied"] and "video.field" not in [i["code"] for i in job["issues"]]
+
+
+class FakeScanner:
+    """The index lane's runner for a source stored as fields: the index, then the field scan, which waits for
+    `gate` (or a cancel) and writes a telecine report."""
+
+    def __init__(self):
+        self.calls: list[str] = []
+        self.gate = threading.Event()
+
+    def __call__(self, argvs, log, cancel=None):
+        from videoforge.core.video import fieldscan as fs
+
+        argv = [str(a) for a in argvs[-1]]
+        if "videoforge.core.video.fieldscan" in argv:
+            self.calls.append("scan")
+            while not self.gate.is_set():
+                if cancel is not None and cancel.cancelled:
+                    raise Cancelled()
+                time.sleep(0.01)
+            report = fs.FieldScan(
+                verdict=fs.Verdict.TELECINE, order="tff", stream_order="tff", frames=43038, fps_num=30000,
+                fps_den=1001, moving=19954, combed=7291, left_tff=0, left_bff=7115, fallback=0, cadence=0.99,
+                jitter=None, strip="TT.T",
+            )  # fmt: skip
+            Path(argv[-1]).write_text(fs.to_json(report), encoding="utf-8")
+        else:
+            self.calls.append("index")
+            Path(argv[-1]).write_bytes(b"index")
+
+
+def test_the_field_scan_runs_after_the_index_with_the_job_open(tmp_path):
+    """The lane indexes the source, then scans its fields as a status of its own (scanning): indexed by then, so
+    the preview opens and the job can be edited, but it isn't queued until the scan is done. Stop cancels it."""
+    from videoforge.core.video import fieldscan as fs
+
+    make_files(tmp_path)
+    runner = FakeScanner()
+    with make_client(tmp_path, runner=runner, probe=interlaced_probe) as client:
+        (job,) = add(client, tmp_path, auto_index=True)
+        scanning = wait_for(client, job, "scanning")
+        assert scanning["indexed"] and scanning["field_scan"] == {"report": None}
+        queue = client.get("/api/queue").json()
+        assert (queue["scanning"], queue["indexing"]) == (job, None)
+        saved = client.patch(f"/api/jobs/{job}", json={"qpf": True})
+        assert saved.status_code == 200, saved.text
+        assert client.post("/api/queue/enqueue", json={"ids": [job]}).json()["enqueued"] == []
+        runner.gate.set()
+        done = wait_for(client, job, "ready", "warn")
+        assert done["field_scan"]["report"]["verdict"] == "telecine" and done["spec"]["qpf"]
+        assert "video.field" in [i["code"] for i in done["issues"]]
+        assert runner.calls == ["index", "scan"]
+        e = client.app.state.queue.get(job)
+        assert "fieldscan" in e.state.steps and any("index done" in line for line in e.log)
+
+        # Scanned again (the report gone): the index is reused; Stop cancels the scan and says nothing.
+        runner.gate.clear()
+        (e.spec.work_dir / fs.REPORT).unlink()
+        client.post("/api/queue/index", json={"ids": [job], "first": True})
+        wait_for(client, job, "scanning")
+        for _ in range(500):  # stop once the scan runs
+            if runner.calls[-1] == "scan" and len(runner.calls) == 3:
+                break
+            time.sleep(0.01)
+        client.post("/api/queue/index/stop", json={"ids": [job]})
+        stopped = wait_for(client, job, "ready", "warn")
+        assert runner.calls == ["index", "scan", "scan"]
+        assert not stopped["index_error"] and stopped["field_scan"] == {"report": None}

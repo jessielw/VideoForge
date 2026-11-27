@@ -96,11 +96,13 @@
         <div class="h-full bg-info transition-[width]" style="width:{(p?.overall ?? 0) * 100}%"></div>
       </div>
       <span class="readout"
-        >{#if !sampling}{status === 'indexing' ? 'Indexing first' : 'Waiting its turn'}{:else if p}{(
-            p.overall * 100
-          ).toFixed(0)}%{p.eta != null ? ` · ${duration(p.eta)} left` : ''}{p.fps != null
-            ? ` · ${p.fps.toFixed(1)} fps`
-            : ''}{:else}Starting…{/if}</span
+        >{#if !sampling}{status === 'indexing'
+            ? 'Indexing first'
+            : status === 'scanning'
+              ? 'After the field scan'
+              : 'Waiting its turn'}{:else if p}{(p.overall * 100).toFixed(0)}%{p.eta != null
+            ? ` · ${duration(p.eta)} left`
+            : ''}{p.fps != null ? ` · ${p.fps.toFixed(1)} fps` : ''}{:else}Starting…{/if}</span
       >
       <Button variant="outline" size="sm" onclick={() => app.stopSample(job.id)}><SquareIcon />Stop</Button>
     </div>

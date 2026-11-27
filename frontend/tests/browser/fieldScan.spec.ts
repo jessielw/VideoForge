@@ -3,7 +3,8 @@ import type { FieldScanView, JobDetail, JobSummary } from '../../src/lib/types.t
 
 // The Video tab's Scan section: the field scan's verdict, its strip and numbers, and Apply, which saves the
 // scan's chain as the Field step with the pulldown flags applied (a soft-telecined DVD on FFMS2 moves to
-// BestSource). Before a scan, a button puts the job in the index lane.
+// BestSource). Before a scan, a button puts the job in the index lane; during it (after the index), the job is
+// open to edits and the section shows the scan's progress.
 const HYBRID: FieldScanView = {
   report: {
     verdict: 'hybrid',
@@ -44,7 +45,7 @@ const HYBRID: FieldScanView = {
   },
 }
 
-async function fixture(page: Page, fieldScan: FieldScanView) {
+async function fixture(page: Page, fieldScan: FieldScanView, over: Partial<JobSummary> = {}) {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   const saved: unknown[] = []
@@ -75,6 +76,7 @@ async function fixture(page: Page, fieldScan: FieldScanView) {
     search_error: '',
     audio: [],
     subs: 0,
+    ...over,
   }
   const detail = {
     ...job,
@@ -223,5 +225,20 @@ test('before a scan, a button puts the job in the index lane', async ({ page }) 
   await expect(page.getByText('with the pulldown flags applied')).toBeVisible()
   await page.getByRole('button', { name: 'Scan fields' }).click()
   await expect.poll(() => indexed).toEqual([{ ids: ['job-0'], first: true }])
+  expect(errors).toEqual([])
+})
+
+test('during the scan the job is open, and the section shows its progress', async ({ page }) => {
+  const progress = { step: 'Field scan', index: 1, total: 2, fraction: 0.4, overall: 0.42, reused: false }
+  const { errors } = await fixture(
+    page,
+    { report: null },
+    { status: 'scanning', progress: { ...progress, fps: null, eta: null, elapsed: 8, left: 11 } },
+  )
+  await expect(page.locator('[data-job="job-0"]').getByText('Scanning fields')).toBeVisible()
+  await expect(page.getByLabel('Field scan progress')).toContainText('42%')
+  await expect(page.getByText('The job can be edited meanwhile')).toBeVisible()
+  await expect(page.getByText(/locked/)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Scan fields' })).toHaveCount(0)
   expect(errors).toEqual([])
 })

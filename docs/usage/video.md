@@ -60,7 +60,7 @@ When MediaInfo reports the source as interlaced (Interlaced, MBAFF, or PAFF) or 
 
 ### Field scan
 
-MediaInfo says how a source is stored, not what its fields hold: it can't tell telecined film from interlaced video, it calls progressive video stored as fields (PsF) interlaced, and it calls a DVD with pulldown flags progressive even where parts of it comb. The field scan reads every frame after the index, with the pulldown flags applied, and matches each frame's fields at both field orders (VIVTC's VFM). It takes about 20 seconds for a DVD episode and 2 to 3 minutes for a 1080i one. The preview opens as soon as the index is done. For a job indexed before the field scan existed, **Scan fields** in the Scan section puts it back in the index lane.
+MediaInfo says how a source is stored, not what its fields hold: it can't tell telecined film from interlaced video, it calls progressive video stored as fields (PsF) interlaced, and it calls a DVD with pulldown flags progressive even where parts of it comb. The field scan reads every frame after the index, with the pulldown flags applied, and matches each frame's fields at both field orders (VIVTC's VFM). It takes about 20 seconds for a DVD episode and 2 to 3 minutes for a 1080i one. Once the index is done the job shows **Scanning fields**: the preview opens and the job can be edited while the scan runs, but it can only be queued after the scan. A test encode asked for meanwhile starts when the scan ends. **Stop indexing** stops the scan too. For a job indexed before the field scan existed, **Scan fields** in the Scan section puts it back in the index lane.
 
 | Verdict | What it means | The scan's chain |
 | --- | --- | --- |

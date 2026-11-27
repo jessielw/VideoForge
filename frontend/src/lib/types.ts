@@ -6,6 +6,7 @@ export type Status =
   | 'cropping'
   | 'indexing' // the index lane is on it
   | 'sampling' // the index lane runs its test encode (indexed: the preview opens)
+  | 'scanning' // the index lane runs its field scan (indexed: the preview opens, and the job can be edited)
   | 'index-queued' // waiting in the index lane
   | 'ready'
   | 'warn'
@@ -819,6 +820,7 @@ export interface QueueState {
   queued: number
   indexing: string | null // the job the index lane is on
   sampling: string | null // the job whose test encode the index lane runs
+  scanning: string | null // the job whose field scan the index lane runs
   index_queued: number
   index_held: number // of index_queued, the ones waiting while an encode reads their disk
 }

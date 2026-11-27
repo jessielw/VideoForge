@@ -992,17 +992,31 @@
                   The field scan reads every frame after the index and tells telecined film (IVTC) from interlaced video
                   (a deinterlacer){pulldownFlags ? ', with the pulldown flags applied' : ''}.
                 </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={indexStatus === 'indexing' || indexStatus === 'index-queued'}
-                  onclick={indexNow}
-                  >{indexStatus === 'indexing'
-                    ? 'Scanning…'
-                    : indexStatus === 'index-queued'
-                      ? 'Waiting to scan…'
-                      : 'Scan fields'}</Button
-                >
+                {#if indexStatus === 'scanning'}
+                  {@const p = live?.progress}
+                  <div class="flex items-center gap-3 text-xs text-info" aria-label="Field scan progress">
+                    <span>Scanning fields…</span>
+                    <div class="h-1.5 flex-1 overflow-hidden rounded bg-muted">
+                      <div class="h-full bg-info transition-[width]" style="width:{(p?.overall ?? 0) * 100}%"></div>
+                    </div>
+                    <span class="readout w-10 text-right">{p ? `${(p.overall * 100).toFixed(0)}%` : '…'}</span>
+                  </div>
+                  <p class="text-xs text-muted-foreground">
+                    The job can be edited meanwhile; it can be queued once the scan is done.
+                  </p>
+                {:else}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={indexStatus === 'indexing' || indexStatus === 'index-queued'}
+                    onclick={indexNow}
+                    >{indexStatus === 'indexing'
+                      ? 'Indexing first…'
+                      : indexStatus === 'index-queued'
+                        ? 'Waiting to scan…'
+                        : 'Scan fields'}</Button
+                  >
+                {/if}
               {:else if interlaced}
                 <p class="text-xs text-muted-foreground">
                   The source is stored as fields. Add IVTC or a deinterlacer from the Field filters, unless the preview

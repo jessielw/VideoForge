@@ -29,7 +29,7 @@ def _list(request: Request) -> dict[str, Any]:
 def idle(request: Request) -> None:
     """409 while the queue runs or a job is busy: settings that change under a run would mix two setups."""
     q = request.app.state.queue
-    if q.running or any(e.busy or e.indexing or e.sampling for e in q.entries()):
+    if q.running or any(e.busy or e.indexing or e.sampling or e.scanning for e in q.entries()):
         raise HTTPException(409, "Stop the queue and wait for indexing and test encodes to finish first")
 
 

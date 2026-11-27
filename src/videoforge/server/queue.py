@@ -158,6 +158,7 @@ class JobView(StrEnum):
     CROPPING = "cropping"  # detecting the crop (a template's auto crop)
     INDEXING = "indexing"  # the index lane is on it
     SAMPLING = "sampling"  # the index lane runs its test encode (core/pipeline/sample.py)
+    SCANNING = "scanning"  # the index lane runs its field scan (core/video/fieldscan.py)
     INDEX_QUEUED = "index-queued"  # waiting in the index lane
     READY = "ready"
     WARN = "warn"
@@ -201,6 +202,9 @@ class Entry:
     index_wait_reason: str = ""
     sample_percent: int | None = None  # in the lane for a test encode of this much of the video
     sampling: bool = False  # the lane runs its test encode (indexed by now: the preview opens)
+    # The lane runs its field scan (indexed by now: the preview opens, and it can be edited, since the scan
+    # doesn't read its settings; not runnable until it's done, as for a test encode)
+    scanning: bool = False
     sample_error: str = ""
     search: crfsearch.Target | None = None  # the lane's sample is a CRF search for it (core/pipeline/crfsearch.py)
     search_error: str = ""
@@ -246,6 +250,7 @@ class Entry:
             and not self.cropping
             and not self.indexing
             and not self.sampling
+            and not self.scanning
             and not self.crop_pending
         )
 
@@ -259,6 +264,8 @@ class Entry:
             return JobView.INDEXING
         if self.sampling:
             return JobView.SAMPLING
+        if self.scanning:
+            return JobView.SCANNING
         if self.index_queued:
             return JobView.INDEX_QUEUED
         if self.state.status is not None:
@@ -383,6 +390,7 @@ class JobQueue:
                 "queued": sum(e.queued for e in self.entries()),
                 "indexing": next((e.id for e in self.entries() if e.indexing), None),
                 "sampling": next((e.id for e in self.entries() if e.sampling), None),
+                "scanning": next((e.id for e in self.entries() if e.scanning), None),
                 "index_queued": sum(e.index_queued for e in self.entries()),
                 "index_held": sum(
                     e.index_queued and e.index_held for e in self.entries()
@@ -493,7 +501,7 @@ class JobQueue:
             for inputs in found:
                 existing = self._find_source(inputs.source)
                 if existing is not None:
-                    if existing.id not in replacements or existing.busy or existing.indexing:
+                    if existing.id not in replacements or existing.busy or existing.indexing or existing.scanning:
                         skipped.append(existing.spec.name)
                         continue
                     if not self.remove([existing.id]):
@@ -761,7 +769,7 @@ class JobQueue:
             return
         with self._lock:
             for other in self._entries.values():
-                if other.spec.work_dir == e.spec.work_dir and other.plan is not None:
+                if other.spec.work_dir == e.spec.work_dir and other.plan is not None and not other.busy:
                     self._replan(other)
                     self._changed(other)
 
@@ -938,7 +946,7 @@ class JobQueue:
         with self._lock:
             for job_id in ids:
                 e = self._entries.get(job_id)
-                if e is None or e.busy or e.indexing or e.sampling:
+                if e is None or e.busy or e.indexing or e.sampling or e.scanning:
                     continue
                 self._removed[job_id] = (e, self._order.index(job_id))
                 while len(self._removed) > 100:
@@ -1680,7 +1688,7 @@ class JobQueue:
         taken = []
         with self._lock:
             for e in self.entries():
-                if e.id not in wanted or not e.spec.encodes_video or e.busy or e.indexing or e.sampling:
+                if e.id not in wanted or not e.spec.encodes_video or e.busy or e.indexing or e.sampling or e.scanning:
                     continue
                 if not e.index_queued or first:
                     e.index_queued, e.index_error = True, ""
@@ -1704,7 +1712,8 @@ class JobQueue:
         has to, then encodes percent of the video. The job is locked meanwhile, but its preview opens once it's
         indexed (one waiting in the lane moves up). With search, a CRF search for that target instead
         (core/pipeline/crfsearch.py; ValueError for a job that doesn't encode at a CRF). False for a job that
-        reuses an encode, has no plan yet, or is queued, running or being indexed."""
+        reuses an encode, has no plan yet, or is queued, running or being indexed. During its field scan it follows
+        the scan."""
         if percent not in PERCENTS:
             raise ValueError(f"percent: one of {', '.join(map(str, PERCENTS))}")
         with self._lock:
@@ -1718,6 +1727,8 @@ class JobQueue:
                 e.sample_error = ""
             else:
                 e.search_error = ""
+            if e.scanning:  # the lane is on the job: _index reads it when the scan ends
+                return True
             if self.index([job_id], first=True):
                 return True
             e.sample_percent = e.search = None
@@ -1740,7 +1751,7 @@ class JobQueue:
             for e in dropped:
                 e.index_queued = e.index_now = e.index_held = False
                 e.sample_percent = e.search = None
-            current = next((e for e in self.entries() if e.indexing or e.sampling or e.cropping), None)
+            current = next((e for e in self.entries() if e.indexing or e.sampling or e.scanning or e.cropping), None)
             if self._index_cancel is not None and (wanted is None or current is not None and current.id in wanted):
                 self._index_cancel.cancel()
             self._save_lane()
@@ -1754,7 +1765,7 @@ class JobQueue:
         down: stopping the lane then keeps it for the next start."""
         if self._closing:
             return
-        ids = [e.id for e in self.entries() if e.indexing] + [
+        ids = [e.id for e in self.entries() if e.indexing or e.scanning] + [
             i for i in self._index_order if i in self._entries and self._entries[i].index_queued
         ]
         self.store.set_global(LANE_SETTING, ids)
@@ -1840,7 +1851,7 @@ class JobQueue:
                     e.index_error = str(ex)
                 finally:
                     with self._lock:
-                        e.indexing = e.sampling = e.crop_pending = False
+                        e.indexing = e.sampling = e.scanning = e.crop_pending = False
                         e.progress = e.sample_percent = e.search = None
                         self._index_cancel = None
                         self._sample_kind = self._lane_paths = None
@@ -1875,8 +1886,8 @@ class JobQueue:
             if missing := missing_inputs(e.spec):
                 raise ToolError("Missing input: " + ", ".join(str(p) for p in missing))
             with self._lock:
-                # The field scan last: the preview can open once the index is there
-                steps = index_steps(e.spec, self.app, e.source_video, e.burn) + field_scan_steps(e.spec, e.source_video)
+                steps = index_steps(e.spec, self.app, e.source_video, e.burn)
+                scan = field_scan_steps(e.spec, e.source_video)
                 cancel = self._index_cancel
                 sharing = [o.id for o in self._entries.values() if o.spec.work_dir == e.spec.work_dir]
             if self.services.release_preview is not None:
@@ -1900,13 +1911,14 @@ class JobQueue:
                     runner=self.services.runner,
                     share=Sharing(e.spec.work_dir, e.spec.job_dir),
                 )
-                self._scanned(e)
                 if e.spec.autocrop and self.services.detect_crop is not None:  # a template's auto crop
                     with self._lock:
                         e.indexing, e.progress = False, None  # it can be edited again (a hand crop wins)
                     self._detect_crop(e)
             finally:
                 e.source_lock.release()
+            if scan:
+                self._scan(e, scan, cancel, log)
         except Cancelled:
             error = "Cancelled"
         except (ToolError, OSError, ValueError) as ex:
@@ -1922,9 +1934,13 @@ class JobQueue:
         self._queue_event("index.finished", e, error=error or None)
         if not self._closing:
             self.bus.emit(IndexFinished(_copy(e.spec), error or None))
-        if (percent := e.sample_percent) is not None and not error:
-            with self._lock:
-                e.indexing, e.sampling, e.progress = False, True, None
+        with self._lock:  # a test encode asked for during the scan (sample) is read with the scan's end
+            percent = None if error else e.sample_percent
+            if percent is not None:
+                e.indexing, e.scanning, e.sampling, e.progress = False, False, True, None
+            else:
+                e.scanning = False  # one asked for from here goes in the lane again
+        if percent is not None:
             self._changed(e)
             self._queue_changed()
             if e.search is not None:
@@ -1934,6 +1950,33 @@ class JobQueue:
         if log_file is not None:
             log_file.close()
         e.index_error = "" if error == "Cancelled" else error
+
+    def _scan(self, e: Entry, steps: list[Step], cancel: CancelToken, log: Callable[[str], None]) -> None:
+        """The lane's field scan of an indexed job (build.field_scan_steps), with the source unlocked: the preview
+        opens and the job can be edited meanwhile (JobView.SCANNING). An edit saves the job, so the steps' records
+        go to their own dict and into the job's under the lock. Then the jobs on the source are planned again."""
+        with self._lock:
+            e.indexing, e.scanning, e.progress = False, True, None
+            records = {s.id: r for s in steps if (r := e.state.steps.get(s.id)) is not None}
+        self._changed(e)
+        self._queue_changed()
+
+        def on_record(r: StepRecord) -> None:
+            with self._lock:
+                e.state.steps[r.id] = r
+                self._save(e)
+
+        run_steps(
+            steps,
+            records,
+            log=log,
+            cancel=cancel,
+            progress=self._progress(e, cancel),
+            on_record=on_record,
+            runner=self.services.runner,
+            share=Sharing(e.spec.work_dir, e.spec.job_dir),
+        )
+        self._scanned(e)
 
     def _sample(
         self, e: Entry, percent: int, log: Callable[[str], None], progress: ProgressFn, on_record: Callable

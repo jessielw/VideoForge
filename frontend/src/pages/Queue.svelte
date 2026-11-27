@@ -702,12 +702,14 @@
         })
     })
   }
-  const indexing = $derived(!!app.queue.indexing || !!app.queue.sampling || app.queue.index_queued > 0)
+  const indexing = $derived(
+    !!app.queue.indexing || !!app.queue.scanning || !!app.queue.sampling || app.queue.index_queued > 0,
+  )
   // tools running now (the job's, the index lane's, a test encode there): what Pause and the priority menu reach
-  const working = $derived(!!app.queue.current || !!app.queue.indexing || !!app.queue.sampling)
+  const working = $derived(!!app.queue.current || !!app.queue.indexing || !!app.queue.scanning || !!app.queue.sampling)
   const DV7_NOTE =
     "Dolby Vision profile 7. Set dovi_tool in Settings › Tools so VideoForge can read whether its enhancement layer is FEL or MEL, which decides how it's encoded."
-  const LIVE = ['running', 'indexing', 'sampling'] // statuses with progress
+  const LIVE = ['running', 'indexing', 'scanning', 'sampling'] // statuses with progress
   // A rail chip's corner mark, so its status doesn't rest on colour alone.
   const CHIP_MARK: Partial<Record<Status, typeof CheckIcon>> = {
     done: CheckIcon,
@@ -719,6 +721,7 @@
     running: LoaderCircleIcon,
     indexing: LoaderCircleIcon,
     sampling: LoaderCircleIcon,
+    scanning: LoaderCircleIcon,
     queued: LockIcon,
   }
   const paused = (status: string) => app.queue.paused && LIVE.includes(status)

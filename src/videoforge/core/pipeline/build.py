@@ -407,7 +407,8 @@ def field_scan_steps(spec: JobSpec, video: VideoInfo | None) -> list[Step]:
     """The source's field scan (core/video/fieldscan.py), after its index, for a source MediaInfo says is stored as
     fields or has pulldown flags (fieldscan.scans): its frames as the job's source filter decodes them, with the
     flags applied (scan_filter). One report per source, in its work folder: a new source filter doesn't scan
-    again (the frames are the same). The index lane runs it; a job's run doesn't wait for it."""
+    again (the frames are the same). The index lane runs it after the index, with the source unlocked
+    (JobQueue._scan); a job's run doesn't wait for it."""
     if not spec.encodes_video or video is None or not fieldscan.scans(video):
         return []
     work, source = spec.work_dir, spec.inputs.source
@@ -433,7 +434,7 @@ def field_scan_steps(spec: JobSpec, video: VideoInfo | None) -> list[Step]:
         ),
         Step(
             "fieldscan",
-            "Field scan (IVTC or deinterlace)",
+            "Field scan",
             argvs=((sys.executable, "-m", "videoforge.core.video.fieldscan", str(script), str(report)),),
             outputs=(report,),
             inputs=(source,),

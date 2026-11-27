@@ -244,9 +244,11 @@ export function defaultGroupName(sources: string[]): string {
 }
 
 // Whether a job can be queued: queued is locked (read-only), and the queue runs it. Not one still being
-// probed, indexed, test encoded or crop-detected, a blocked one, or one already queued or running.
+// probed, indexed, field scanned, test encoded or crop-detected, a blocked one, or one already queued or running.
 export function queueable(status: Status): boolean {
-  return !['probing', 'error', 'cropping', 'indexing', 'sampling', 'blocked', 'queued', 'running'].includes(status)
+  return !['probing', 'error', 'cropping', 'indexing', 'scanning', 'sampling', 'blocked', 'queued', 'running'].includes(
+    status,
+  )
 }
 
 // --- a row's facts line ------------------------------------------------------------------------------------

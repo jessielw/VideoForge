@@ -132,10 +132,14 @@
         <div class="h-full bg-info transition-[width]" style="width:{(p?.overall ?? 0) * 100}%"></div>
       </div>
       <span class="readout"
-        >{#if !searching}{status === 'indexing' ? 'Indexing first' : 'Waiting its turn'}{:else if p}{p.step}{p.fps !=
+        >{#if !searching}{status === 'indexing'
+            ? 'Indexing first'
+            : status === 'scanning'
+              ? 'After the field scan'
+              : 'Waiting its turn'}{:else if p}{p.step}{p.fps != null ? ` · ${p.fps.toFixed(1)} fps` : ''}{p.left !=
           null
-            ? ` · ${p.fps.toFixed(1)} fps`
-            : ''}{p.left != null ? ` · at most ${duration(p.left)} left` : ''}{:else}Starting…{/if}</span
+            ? ` · at most ${duration(p.left)} left`
+            : ''}{:else}Starting…{/if}</span
       >
       <Button variant="outline" size="sm" onclick={() => app.stopSample(job.id)}><SquareIcon />Stop</Button>
     </div>
