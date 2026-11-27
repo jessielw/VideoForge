@@ -42,6 +42,10 @@ src/videoforge/
       ffindex.py         FFMS2's index with progress, through the plugin's own ffms2.dll (ctypes)
       metrics.py         A test encode's quality (vszip SSIMULACRA2, XPSNR) against its script, as JSON; run as
                          `python -m`, out of the server process
+      fieldscan.py       The field scan: every frame of the source through VFM at both field orders (combed as
+                         decoded, left combed after matching), the 3:2 cadence, Bwdif's order check -> progressive /
+                         telecine / shifted / hybrid / interlaced and the chain that fits, as JSON; run as
+                         `python -m`, out of the server process
       crop.py            Auto-crop detection (RGB lightness on sampled lines, read straight from YUV)
       encoders.py        x264 / x265, VP8 / VP9 (ffmpeg's libvpx, into an IVF), SVT-AV1 and SVT-AV1-HDR
                          (SvtAv1EncApp, into an IVF): settings -> argv (1 or 2 pass), progress parsing (fraction,
