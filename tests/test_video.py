@@ -81,6 +81,31 @@ def test_script_layout():
     assert "lsmas.LWLibavSource" in custom and "clip = src[10:20]" in custom and "Crop" not in custom
 
 
+def test_pulldown_applies_the_flags_in_bestsource_and_lsmash():
+    """Apply pulldown: BestSource's rff, L-SMASH's repeat, the same index either way. FFMS2 has nothing to take
+    (field_issues blocks it)."""
+    src, work = Path("D:/DVD/E01.mkv"), Path("D:/DVD/E01.mkv_tmp")
+
+    def head(source_filter: SourceFilter, pulldown: bool) -> str:
+        settings = VideoSettings(source_filter=source_filter, pulldown=pulldown)
+        return build_script(settings, src, work, stage="source").splitlines()[2]
+
+    bs, lwi = str(work / "E01.mkv"), str(work / "E01.mkv.lwi")
+    assert (
+        head(SourceFilter.BESTSOURCE, True)
+        == f"src = core.bs.VideoSource({str(src)!r}, rff=1, cachemode=4, cachepath={bs!r})"
+    )
+    assert (
+        head(SourceFilter.LSMASH, True) == f"src = core.lsmas.LWLibavSource({str(src)!r}, repeat=1, cachefile={lwi!r})"
+    )
+    for f in SourceFilter:
+        off = head(f, False)
+        assert "rff" not in off and "repeat" not in off
+        assert head(f, True).replace(", rff=1", "").replace(", repeat=1", "") == off
+    assert SourceFilter.BESTSOURCE.applies_pulldown and SourceFilter.LSMASH.applies_pulldown
+    assert not SourceFilter.FFMS2.applies_pulldown
+
+
 def test_script_parts_split_the_editable_body():
     s = VideoSettings(crop=Crop(0, 22, 0, 22), filters=[INVERT])
     head, body, tail = script_parts(s, Path("a.mkv"), Path("w"), depth=10)
@@ -666,6 +691,49 @@ def test_an_interlaced_source_without_a_field_filter_warns():
         assert field_issues(replace(video, scan_type=progressive), VideoSettings()) == []
 
 
+def test_pulldown_issues():
+    """Pulldown flags (soft telecine): applying them needs BestSource or L-SMASH; applied, the frames comb until an
+    IVTC matches them; not applied, an IVTC's VDecimate gets the soft-telecined parts as film frames already."""
+    dvd = VideoInfo(720, 480, scan_type="Progressive", scan_order="2:3 Pulldown")
+    assert dvd.pulldown and not dvd.interlaced
+    ivtc = next(p for p in PRESETS if p.family == "IVTC (VIVTC)").step()
+    bwdif = next(p for p in PRESETS if p.family == "Bwdif").step()
+
+    def codes(video: VideoInfo | None, **settings) -> list[str]:
+        return [i.code for i in field_issues(video, VideoSettings(**settings))]
+
+    bs, lsmash = SourceFilter.BESTSOURCE, SourceFilter.LSMASH
+    assert codes(dvd) == []  # the stored film frames: nothing to do
+    assert codes(dvd, source_filter=bs, pulldown=True) == ["video.interlaced"]
+    applied = field_issues(dvd, VideoSettings(source_filter=lsmash, pulldown=True))[0]
+    assert "(2:3 Pulldown)" in applied.message and "Add IVTC" in applied.message
+    assert codes(dvd, source_filter=bs, pulldown=True, filters=[ivtc]) == []
+    assert codes(dvd, filters=[ivtc]) == ["video.pulldown"]  # off, and VDecimate thins the film frames
+    assert codes(dvd, source_filter=lsmash, filters=[ivtc]) == ["video.pulldown"]
+    assert codes(dvd, filters=[bwdif]) == []  # nothing decimates
+    assert codes(replace(dvd, scan_order=""), source_filter=bs, pulldown=True) == []  # no flags: nothing changes
+    blocked = field_issues(None, VideoSettings(pulldown=True))  # FFMS2 can't, whatever the source
+    assert [(i.code, i.severity) for i in blocked] == [("video.pulldown_filter", Severity.BLOCK)]
+    assert codes(dvd, pulldown=True, filters=[ivtc]) == ["video.pulldown_filter"]
+    assert codes(dvd, pulldown=True, custom="clip = src") == ["video.pulldown_filter"]  # the source line isn't custom
+
+
+FIELD_ORDER_PRESETS = [p for p in PRESETS if p.family in ("IVTC (VIVTC)", "QTGMC", "Bwdif")]
+
+
+def test_field_presets_follow_the_source_field_order():
+    """VFM, Bwdif and QTGMC take the field order from the source's tag over their own argument, so a preset that set
+    the tag would force top field first on every bottom-field-first source: the line is there, commented out."""
+    assert len(FIELD_ORDER_PRESETS) == 5
+    for p in FIELD_ORDER_PRESETS:
+        assert "# clip = core.std.SetFieldBased(clip, 2)" in p.script
+        assert not any(line.startswith("clip = core.std.SetFieldBased") for line in p.script.splitlines())
+    # Untagged frames (BestSource applying pulldown) get top field first for QTGMC only: it can't run without one.
+    assert all(
+        ("    clip = core.std.SetFieldBased(clip, 2)" in p.script) == (p.family == "QTGMC") for p in FIELD_ORDER_PRESETS
+    )
+
+
 @pytest.mark.parametrize("preset", [p for p in PRESETS if p.script], ids=lambda p: p.name)
 def test_filter_presets_run(preset, tmp_path):
     """Each preset runs on 8- and 16-bit video (skipped when its plugin or filter script isn't installed); a file
@@ -741,6 +809,123 @@ def test_ffms2_index_with_progress(clip_file, tmp_path):
     again = io.StringIO()
     make_index(clip_file, index, str(PLUGINS / "ffms2.dll"), again)
     assert again.getvalue() == "ffms2 index: already there\n" and index.stat().st_mtime_ns == written
+
+
+@pytest.fixture(scope="module")
+def telecined_bff(tmp_path_factory) -> Path:
+    """2 s of a box crossing grey, 3:2 telecined to 29.97 bottom field first and flagged so."""
+    out = tmp_path_factory.mktemp("field") / "Telecined.mkv"
+    subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error",
+         "-f", "lavfi", "-i", "color=c=gray:size=320x180:rate=24000/1001:duration=2",
+         "-f", "lavfi", "-i", "color=c=white:size=40x80:rate=24000/1001:duration=2",
+         "-filter_complex", r"[0][1]overlay=x='mod(t*200\,260)':y=50,telecine=first_field=bottom:pattern=23,setfield=bff",
+         "-c:v", "libx264", "-flags", "+ildct+ilme", "-top", "0", "-x264-params", "bff=1", "-pix_fmt", "yuv420p",
+         "-y", str(out)],
+        check=True,
+    )  # fmt: skip
+    return out
+
+
+def _run_field_preset(src, script: str, order: int | None = None):
+    """The preset's lines on src; with order, its override line uncommented and set to it."""
+    import vapoursynth as vs
+
+    if order is not None:
+        script = script.replace(
+            "# clip = core.std.SetFieldBased(clip, 2)", f"clip = core.std.SetFieldBased(clip, {order})"
+        )
+    ns = {"vs": vs, "core": vs.core, "clip": src}
+    exec(script, ns)  # noqa: S102 - the built-in presets
+    return ns["clip"]
+
+
+@needs_vs
+def test_ivtc_preset_follows_the_source_field_order_and_its_override_applies(telecined_bff, tmp_path):
+    """The source says bottom field first: the IVTC preset as added matches every combed frame (VFM takes the
+    source's order over its order=1), and its override line, uncommented to top field first, does change it."""
+    import vapoursynth as vs
+
+    src = vsx.load_clip(build_script(VideoSettings(), telecined_bff, tmp_path, stage="source"))
+    combed_as_decoded = sum(f.props["VFMMics"][1] > 80 for f in vs.core.vivtc.VFM(src, order=1, micout=1).frames())
+    assert combed_as_decoded >= 20  # 2 of every 5 of its 60 frames
+    ivtc = next(p for p in FIELD_ORDER_PRESETS if p.family == "IVTC (VIVTC)").script
+    as_added, forced_top = _run_field_preset(src, ivtc), _run_field_preset(src, ivtc, 2)
+    assert as_added.num_frames == 48  # back to the 24 fps frames
+    assert sum(f.props["_Combed"] for f in as_added.frames()) == 0
+    assert sum(f.props["_Combed"] for f in forced_top.frames()) >= 10
+
+
+@needs_vs
+@pytest.mark.parametrize("family", ["Bwdif", "QTGMC"])
+def test_deinterlace_presets_follow_the_source_field_order(telecined_bff, tmp_path, family):
+    """As added, Bwdif and QTGMC draw what their override set to the source's order (bottom first) draws, and not
+    what it draws set to top first (skipped when the plugin or filter script isn't installed)."""
+    import vapoursynth as vs
+
+    src = vsx.load_clip(build_script(VideoSettings(), telecined_bff, tmp_path, stage="source"))
+    script = next(p for p in FIELD_ORDER_PRESETS if p.family == family).script
+    try:
+        as_added = _run_field_preset(src, script)
+    except ImportError as e:
+        pytest.skip(f"no filter script: {e}")
+
+    def same(a, b) -> bool:
+        return all(f.props["PlaneStatsDiff"] == 0 for f in vs.core.std.PlaneStats(a, b).frames())
+
+    assert same(as_added, _run_field_preset(src, script, 1))
+    assert not same(as_added, _run_field_preset(src, script, 2))
+
+
+@pytest.fixture(scope="module")
+def soft_telecined(tmp_path_factory) -> Path:
+    """The same box crossing grey, 48 film frames soft telecined: x264's pulldown flags, no field stored twice."""
+    x264 = TOOLS / "x264" / "x264.exe"
+    if FFMPEG is None or not x264.exists():
+        pytest.skip(f"needs ffmpeg and {x264}")
+    out = tmp_path_factory.mktemp("pulldown") / "Soft.mkv"
+    frames = subprocess.run(
+        [FFMPEG, "-hide_banner", "-loglevel", "error",
+         "-f", "lavfi", "-i", "color=c=gray:size=320x180:rate=24000/1001:duration=2",
+         "-f", "lavfi", "-i", "color=c=white:size=40x80:rate=24000/1001:duration=2",
+         "-filter_complex", r"[0][1]overlay=x='mod(t*200\,260)':y=50,format=yuv420p", "-f", "yuv4mpegpipe", "-"],
+        check=True, capture_output=True,
+    ).stdout  # fmt: skip
+    subprocess.run(
+        [str(x264), "--quiet", "--demuxer", "y4m", "--pulldown", "32", "--fake-interlaced", "--crf", "18",
+         "-o", str(out), "-"],
+        input=frames, check=True, capture_output=True,
+    )  # fmt: skip
+    return out
+
+
+@needs_vs
+@pytest.mark.parametrize("source_filter", [SourceFilter.BESTSOURCE, SourceFilter.LSMASH])
+def test_pulldown_gives_ivtc_telecined_frames(soft_telecined, tmp_path, source_filter):
+    """Applied, the 48 film frames come out as 60 telecined ones (2 of every 5 combed), from the index made with it
+    off, and the IVTC preset matches them back into 48 clean ones. Off, BestSource gives the 48 stored frames
+    (L-SMASH repeats this H.264 stream's fields either way)."""
+    import vapoursynth as vs
+
+    ivtc = next(p for p in PRESETS if p.family == "IVTC (VIVTC)").step()
+
+    def clip(pulldown: bool, filters: list[FilterStep]) -> vs.VideoNode:
+        settings = VideoSettings(source_filter=source_filter, pulldown=pulldown, filters=filters)
+        return vsx.load_clip(build_script(settings, soft_telecined, tmp_path))
+
+    def combed_as_decoded(c: vs.VideoNode) -> int:
+        matched = vs.core.vivtc.VFM(vs.core.std.SetFieldBased(c, 2), order=1, micout=1)
+        return sum(f.props["VFMMics"][1] > 80 for f in matched.frames())  # pyright: ignore[reportOperatorIssue]
+
+    off = clip(False, [])
+    index = {p.name: p.stat().st_mtime_ns for p in tmp_path.iterdir()}
+    if source_filter is SourceFilter.BESTSOURCE:
+        assert off.num_frames == 48 and combed_as_decoded(off) == 0
+    on = clip(True, [])
+    assert {p.name: p.stat().st_mtime_ns for p in tmp_path.iterdir()} == index  # the same index, not rebuilt
+    assert on.num_frames == 60 and combed_as_decoded(on) == 24
+    matched = clip(True, [ivtc])
+    assert matched.num_frames == 48 and sum(f.props["_Combed"] for f in matched.frames()) == 0
 
 
 @needs_vs

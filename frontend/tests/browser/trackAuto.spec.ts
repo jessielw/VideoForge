@@ -79,6 +79,7 @@ async function fixture(page: Page, seed?: (job: JobDetail) => void) {
     resize: null,
     filters: [],
     custom: null,
+    pulldown: false,
   }
   const encoder = {
     encoder: 'x265' as const,

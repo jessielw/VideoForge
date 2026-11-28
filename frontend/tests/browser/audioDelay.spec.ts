@@ -110,6 +110,7 @@ async function fixture(page: Page, delay: number, correction = 0, title = '', tr
         resize: null,
         filters: [],
         custom: null,
+        pulldown: false,
       },
       encoder: {
         encoder: 'x265',

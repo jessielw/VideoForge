@@ -37,7 +37,7 @@
   import { router } from '../lib/router.svelte'
   import { app } from '../lib/state.svelte'
   import { buildTree, joinName, SEP, splitName, type TreeNode } from '../lib/templateFolders'
-  import { SOURCE_FILTERS, type CropMode, type SourceFilter, type Template } from '../lib/types'
+  import { SOURCE_FILTERS, type CropMode, type FieldMode, type SourceFilter, type Template } from '../lib/types'
 
   type Choice = { name: string; data: Template; builtin: boolean }
   // What the editor holds: the saved template it started from (name null = not saved yet).
@@ -75,6 +75,10 @@
     { id: 'keep', label: "Keep each job's" },
     { id: 'fixed', label: 'Fixed' },
     { id: 'auto', label: 'Detect per job' },
+  ]
+  const FIELD_MODES: { id: FieldMode; label: string }[] = [
+    { id: 'manual', label: 'As in the filters' },
+    { id: 'auto', label: 'Scan per job' },
   ]
 
   const choices = $derived<Choice[]>(app.presetChoices('template', ruleSet))
@@ -545,6 +549,19 @@
             <div
               class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-2 text-sm @min-[24rem]/video:grid-cols-[7rem_minmax(0,1fr)]"
             >
+              <span class="hidden @min-[24rem]/video:block"></span>
+              <label class="flex items-center gap-2">
+                <Checkbox
+                  checked={draft.video.pulldown}
+                  disabled={readOnly || (draft.video.source_filter === 'ffms2' && !draft.video.pulldown)}
+                  onCheckedChange={(v) => (draft!.video.pulldown = v)}
+                />
+                Apply pulldown (soft telecine; BestSource or L-SMASH Works)
+              </label>
+            </div>
+            <div
+              class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-2 text-sm @min-[24rem]/video:grid-cols-[7rem_minmax(0,1fr)]"
+            >
               <span class="text-muted-foreground">Crop</span>
               <div class="min-w-0 space-y-2">
                 <ToggleGroup.Root
@@ -581,6 +598,41 @@
                   </p>
                 {:else}
                   <p class="text-xs text-muted-foreground">Applying the template leaves each job's crop as it is.</p>
+                {/if}
+              </div>
+            </div>
+            <div
+              class="grid grid-cols-[minmax(0,1fr)] items-baseline gap-2 text-sm @min-[24rem]/video:grid-cols-[7rem_minmax(0,1fr)]"
+            >
+              <span class="text-muted-foreground">Field</span>
+              <div class="min-w-0 space-y-2">
+                <ToggleGroup.Root
+                  type="single"
+                  variant="outline"
+                  spacing={1}
+                  class="w-fit max-w-full flex-wrap"
+                  disabled={readOnly}
+                  value={draft.field_mode ?? 'manual'}
+                  onValueChange={(v) => v && (draft!.field_mode = v as FieldMode)}
+                >
+                  {#each FIELD_MODES as m (m.id)}
+                    <ToggleGroup.Item
+                      value={m.id}
+                      class="px-3 data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground"
+                      >{m.label}</ToggleGroup.Item
+                    >
+                  {/each}
+                </ToggleGroup.Root>
+                {#if draft.field_mode === 'auto'}
+                  <p class="text-xs text-muted-foreground">
+                    Each interlaced or pulldown-flagged source gets a field scan after its index, and its result is the
+                    job's Field step (IVTC, a deinterlacer, or none), with Apply pulldown where the scan needs it. Field
+                    steps in the filters below are left out. Progressive sources get none and aren't scanned.
+                  </p>
+                {:else}
+                  <p class="text-xs text-muted-foreground">
+                    Every job gets the Field steps in the filters below, if any.
+                  </p>
                 {/if}
               </div>
             </div>

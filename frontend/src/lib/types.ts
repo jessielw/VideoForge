@@ -6,6 +6,7 @@ export type Status =
   | 'cropping'
   | 'indexing' // the index lane is on it
   | 'sampling' // the index lane runs its test encode (indexed: the preview opens)
+  | 'scanning' // the index lane runs its field scan (indexed: the preview opens, and the job can be edited)
   | 'index-queued' // waiting in the index lane
   | 'ready'
   | 'warn'
@@ -85,6 +86,7 @@ export interface VideoSettings {
   resize: Resize | null
   filters: FilterStep[] // in order; always one crop and one resize step
   custom: string | null
+  pulldown: boolean // the source's pulldown flags applied (BestSource or L-SMASH; FFMS2 can't)
 }
 
 export type EncoderName = 'x264' | 'x265' | 'vp8' | 'vp9' | 'svtav1' | 'svtav1hdr'
@@ -295,6 +297,7 @@ export interface JobSpec {
   output_policy: 'stop' | 'skip' | 'rename' | 'replace'
   mux: MuxSettings
   autocrop: boolean // the crop is detected once the source can be read (a template's auto crop)
+  autofield?: boolean // the Field step is set from the source's field scan once there is one (Field: Auto)
   audio_template: TemplateAudio | null // a template's audio, waiting for the source's tracks
   subs_template: TemplateSubs | null // ... and its subtitle rules
   audio_from_template: TemplateChoice | null // what the last template set for the audio
@@ -489,6 +492,7 @@ export interface JobDetail extends JobSummary {
   sample: SampleResult | null // the last test encode (core/pipeline/sample.py)
   search: SearchResult | null // the last CRF search, or the one running (core/pipeline/crfsearch.py)
   compare: { encode: boolean; sample: boolean; filters: boolean } // what the Video tab can compare the script's frames with (filters: without them)
+  field_scan?: FieldScanView | null // the source's field scan (lib/fieldScan.ts); null when it gets none
 }
 
 // A test encode: the job's script and encoder on `length` frames of every `cycle` (POST /api/queue/sample)
@@ -641,12 +645,15 @@ export interface Preset<T> {
 }
 // A job's whole run (src/videoforge/core/template.py). video.crop is used when crop_mode is 'fixed'.
 export type CropMode = 'keep' | 'fixed' | 'auto'
+// 'manual': the template's Field steps; 'auto': each source's field scan sets the Field step instead
+export type FieldMode = 'manual' | 'auto'
 export interface Template {
   video: VideoSettings
   encoder: EncoderSettings
   mux: MuxSettings
   qpf: boolean
   crop_mode: CropMode
+  field_mode?: FieldMode // missing: 'manual'
   audio: TemplateAudio | null // null: the template leaves each job's audio alone
   subs?: TemplateSubs | null // null (or missing, from before subtitle rules): ... and its subtitles
 }
@@ -817,6 +824,7 @@ export interface QueueState {
   queued: number
   indexing: string | null // the job the index lane is on
   sampling: string | null // the job whose test encode the index lane runs
+  scanning: string | null // the job whose field scan the index lane runs
   index_queued: number
   index_held: number // of index_queued, the ones waiting while an encode reads their disk
 }
@@ -1085,4 +1093,44 @@ export interface StepRun {
 export interface StepOutput extends StepRun {
   lines: string[]
   partial: boolean // only the saved tail is left (after a restart)
+}
+
+// The source's field scan (core/video/fieldscan.py), as the job view sends it (server/views.py field_scan_view):
+// what its fields hold, and what the Video tab's Apply sets (core filters.FieldFix). Helpers: lib/fieldScan.ts
+export type FieldVerdict = 'progressive' | 'telecine' | 'shifted' | 'hybrid' | 'interlaced' | 'unknown'
+
+export interface FieldScanReport {
+  verdict: FieldVerdict
+  order: '' | 'tff' | 'bff' // the content's; "" when there is nothing to match
+  stream_order: '' | 'tff' | 'bff' | 'progressive' // the source's flag ("" when it sets none)
+  frames: number
+  fps_num: number
+  fps_den: number
+  moving: number // frames with motion
+  combed: number // moving frames combed as decoded
+  left_tff: number // moving frames field matching leaves combed, at each order
+  left_bff: number
+  fallback: number // frames (moving or not) left combed at `order`: the hybrid chain deinterlaces them
+  cadence: number | null // the share of combed frames on 2 of every 5 positions (telecine's 3:2)
+  jitter: number | null // Bwdif's frame-to-frame difference BFF over TFF (>1: top field first)
+  strip: string // one character per `chunk` frames: . P T h I (STRIP_KINDS)
+  stretches: [number, number, number][] // first, last, frames left combed
+  seconds: number
+  chunk: number
+  version: number
+}
+
+export interface FieldScanFix {
+  step: FilterStep | null // the only Field step to have (null: none, progressive video)
+  pulldown: boolean
+  source_filter: SourceFilter
+  applied: boolean // the job's settings have it already
+}
+
+export interface FieldScanView {
+  report: FieldScanReport | null // null until the index lane has scanned the source
+  label?: string
+  summary?: string // "Telecined film, top field first"
+  mismatch?: boolean // the stream's field order isn't the content's
+  fix?: FieldScanFix | null // null without a verdict
 }

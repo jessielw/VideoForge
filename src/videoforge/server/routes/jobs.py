@@ -395,7 +395,7 @@ def removal_preview(request: Request, body: dict[str, Any] = Body(...)) -> dict[
         e = _entry(q, job_id)
         error = (  # the jobs queue.remove() keeps
             "Kept with its work folder: the job is queued or running, indexing, or running a test encode or CRF search"
-            if e.busy or e.indexing or e.sampling
+            if e.busy or e.indexing or e.sampling or e.scanning
             else ""
         )
         size = None

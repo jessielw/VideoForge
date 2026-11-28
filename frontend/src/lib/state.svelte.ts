@@ -52,6 +52,7 @@ class AppState {
     queued: 0,
     indexing: null,
     sampling: null,
+    scanning: null,
     index_queued: 0,
     index_held: 0,
   })
@@ -223,8 +224,10 @@ class AppState {
     keepVideoViews(this.jobs.map((j) => j.id))
     for (const j of this.jobs) {
       if (before.get(j.id) === 'running' && j.status !== 'running') this.#finished(j)
-      if (before.get(j.id) === 'indexing' && j.status !== 'indexing' && j.index_error)
-        toast.error(`${j.name}: indexing failed`, { description: j.index_error })
+      const was = before.get(j.id)
+      // the lane's index, then its field scan: an error shows once the job is out of both
+      if ((was === 'indexing' || was === 'scanning') && j.status !== 'indexing' && j.status !== 'scanning')
+        if (j.index_error) toast.error(`${j.name}: indexing failed`, { description: j.index_error })
       if (before.get(j.id) === 'sampling' && j.status !== 'sampling') this.#sampled(j, searched.has(j.id))
     }
   }
@@ -356,7 +359,13 @@ class AppState {
           const { type: _t, id: _i, ...p } = event
           job.progress = p as unknown as JobSummary['progress']
           const status =
-            event.id === this.queue.indexing ? 'indexing' : event.id === this.queue.sampling ? 'sampling' : 'running'
+            event.id === this.queue.indexing
+              ? 'indexing'
+              : event.id === this.queue.scanning
+                ? 'scanning'
+                : event.id === this.queue.sampling
+                  ? 'sampling'
+                  : 'running'
           if (job.status !== status) job.status = status
         }
         break

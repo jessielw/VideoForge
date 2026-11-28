@@ -82,10 +82,22 @@ def _vfr_warning(video: VideoInfo, frames: int, fps: Fraction | None) -> str:
     return f"{dropped}. {_out_of_step(script, source)}"
 
 
-def length_warning(video: VideoInfo | None, frames: int, fps: Fraction | None) -> str:
+def _pulldown_warning(video: VideoInfo, frames: int, fps: Fraction | None) -> str:
+    """Pulldown applied (VideoSettings.pulldown): the source filter gives the fields as a player shows them, at a
+    constant rate, so the stored frames and a VFR source's timestamps don't time the script. It's muxed at its own
+    rate as intended, and only its length is checked against the source's (MediaInfo's duration)."""
+    if not fps or not video.duration_ms:
+        return ""
+    script, source = float(frames / fps), video.duration_ms / 1000
+    return "" if abs(script - source) <= _SLACK_FRAMES / fps else _out_of_step(script, source)
+
+
+def length_warning(video: VideoInfo | None, frames: int, fps: Fraction | None, *, pulldown: bool = False) -> str:
     """Why a script of frames at fps would be out of step with the source's audio, subtitles and chapters:
     its length isn't the source's (beyond a few frames), or (a VFR source) it doesn't keep the source's frames.
-    "" when it does, or when either length isn't known."""
+    "" when it does, or when either length isn't known. pulldown: the job applies the source's pulldown flags."""
+    if video is not None and video.vfr and pulldown and video.pulldown:
+        return _pulldown_warning(video, frames, fps)
     if video is not None and video.vfr:
         return _vfr_warning(video, frames, fps)
     if video is None or not video.frames or not video.default_duration_ns or not fps:
@@ -97,7 +109,7 @@ def length_warning(video: VideoInfo | None, frames: int, fps: Fraction | None) -
     return _out_of_step(script, source)
 
 
-def length_issues(video: VideoInfo | None, info: ScriptInfo | None) -> list[Issue]:
+def length_issues(video: VideoInfo | None, info: ScriptInfo | None, *, pulldown: bool = False) -> list[Issue]:
     """length_warning as an issue on the finished job."""
-    message = length_warning(video, info.frames, info.fps) if info else ""
+    message = length_warning(video, info.frames, info.fps, pulldown=pulldown) if info else ""
     return [Issue(Severity.WARN, "video.length", message)] if message else []

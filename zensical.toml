@@ -20,6 +20,7 @@ nav = [
     { "Using VideoForge" = [
         { "Queue and batch indexing" = "usage/queue.md" },
         { "Video and filters" = "usage/video.md" },
+        { "Interlaced and telecined sources" = "usage/fields.md" },
         { "Encoders and HDR" = "usage/encoders.md" },
         { "Audio and subtitles" = "usage/tracks.md" },
         { "Output and chapters" = "usage/output.md" },

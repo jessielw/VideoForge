@@ -28,6 +28,7 @@ async function fixture(page: Page, posted: Record<string, unknown>[], qpf = true
       resize: null,
       filters: [],
       custom: null,
+      pulldown: false,
     },
     encoder: video,
     mux: {

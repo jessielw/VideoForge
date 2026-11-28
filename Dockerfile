@@ -11,11 +11,11 @@
 ARG PYTHON_IMAGE=python:3.12-slim-trixie
 ARG PLUGINS_IMAGE=ghcr.io/jessielw/videoforge-plugins:latest
 # DeeZy 2 (DEE 6.7 only) and dee_shim, which runs the Linux DEE: scripts/tools.toml's versions for Windows
-ARG DEEZY_VERSION=2.0.2
-ARG DEEZY_SHA256=ba7d295109abb3dfe6274b6407cf9947c0b2b756ff01eaf9eb48a80d2672a6f9
-ARG DEE_SHIM_VERSION=0.3.0
-ARG DEE_SHIM_BUILD=2ae7f95
-ARG DEE_SHIM_SHA256=829fb9c5bd78c54eadaaff9e45d8c042d61c5f1ae687a4c4166c43f9b3e32c63
+ARG DEEZY_VERSION=2.0.4
+ARG DEEZY_SHA256=9353b86c4f1d3bacd3562503ca1a893bc4daf692dd26f388b599bc77b683a935
+ARG DEE_SHIM_VERSION=0.5.0
+ARG DEE_SHIM_BUILD=6a82dad
+ARG DEE_SHIM_SHA256=6f773d3474f279966fbc2fcbc3f73d4622f161a3f3b3bee9ea9a159e6c43b315
 # x265 from source: Patman's mod (the Windows build's, scripts/tools.toml), at its release tag; Debian's is built
 # without HDR10+ (--dhdr10-info)
 ARG X265_VERSION=4.3+22+73

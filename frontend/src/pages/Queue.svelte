@@ -702,12 +702,35 @@
         })
     })
   }
-  const indexing = $derived(!!app.queue.indexing || !!app.queue.sampling || app.queue.index_queued > 0)
+  const indexing = $derived(
+    !!app.queue.indexing || !!app.queue.scanning || !!app.queue.sampling || app.queue.index_queued > 0,
+  )
+  // The index lane's stop: named for the work running now, as its job's row names it (the field scan, a test
+  // encode or CRF search, else indexing); its tooltip adds the jobs it takes out of the lane.
+  const laneWork = $derived.by(() => {
+    const q = app.queue
+    if (q.scanning) return { label: 'Stop field scan', now: 'the field scan' }
+    if (q.sampling) {
+      const search = app.jobs.find((j) => j.id === q.sampling)?.searching
+      return search
+        ? { label: 'Stop CRF search', now: 'the CRF search' }
+        : { label: 'Stop test encode', now: 'the test encode' }
+    }
+    return { label: 'Stop indexing', now: q.indexing ? 'the indexing' : '' }
+  })
+  const laneStop = $derived.by(() => {
+    const n = app.queue.index_queued
+    const waiting = `${n} job${n === 1 ? '' : 's'} waiting`
+    const now = laneWork.now
+    if (now && n) return `Cancels ${now} that's running, and takes the ${waiting} out of the index lane.`
+    if (now) return `Cancels ${now} that's running.`
+    return `Takes the ${waiting} out of the index lane.`
+  })
   // tools running now (the job's, the index lane's, a test encode there): what Pause and the priority menu reach
-  const working = $derived(!!app.queue.current || !!app.queue.indexing || !!app.queue.sampling)
+  const working = $derived(!!app.queue.current || !!app.queue.indexing || !!app.queue.scanning || !!app.queue.sampling)
   const DV7_NOTE =
     "Dolby Vision profile 7. Set dovi_tool in Settings › Tools so VideoForge can read whether its enhancement layer is FEL or MEL, which decides how it's encoded."
-  const LIVE = ['running', 'indexing', 'sampling'] // statuses with progress
+  const LIVE = ['running', 'indexing', 'scanning', 'sampling'] // statuses with progress
   // A rail chip's corner mark, so its status doesn't rest on colour alone.
   const CHIP_MARK: Partial<Record<Status, typeof CheckIcon>> = {
     done: CheckIcon,
@@ -719,6 +742,7 @@
     running: LoaderCircleIcon,
     indexing: LoaderCircleIcon,
     sampling: LoaderCircleIcon,
+    scanning: LoaderCircleIcon,
     queued: LockIcon,
   }
   const paused = (status: string) => app.queue.paused && LIVE.includes(status)
@@ -1149,9 +1173,9 @@
               </DropdownMenu.Root>
             {/if}
             {#if indexing}
-              <Tip text="Cancels the indexing, test encode or CRF search that's running, and the ones waiting.">
+              <Tip text={laneStop}>
                 <Button variant="outline" onclick={() => act(() => app.stopIndexing())}>
-                  <DatabaseXIcon /><span class="max-sm:sr-only">Stop indexing</span>
+                  <DatabaseXIcon /><span class="max-sm:sr-only">{laneWork.label}</span>
                 </Button>
               </Tip>
             {/if}
@@ -1778,7 +1802,9 @@
                   ? '; the crop is detected for each job'
                   : picked?.data.crop_mode === 'fixed'
                     ? `; crop ${picked.data.video.crop.left}/${picked.data.video.crop.top}/${picked.data.video.crop.right}/${picked.data.video.crop.bottom} on every job`
-                    : '; each job keeps its crop'}. Save templates from a job's Template menu.
+                    : '; each job keeps its crop'}{picked?.data.field_mode === 'auto'
+                  ? "; each job's field scan sets its Field step"
+                  : ''}. Save templates from a job's Template menu.
               </p>
             </Card.Root>
             <Card.Root class="gap-2 p-4">

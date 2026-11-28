@@ -39,8 +39,9 @@ from videoforge.core.models import (
     track_key,
 )
 from videoforge.core.tools import tool_issues
-from videoforge.core.video import encoders, filters, hdr, options, target
+from videoforge.core.video import encoders, fieldscan, filters, hdr, options, target
 from videoforge.core.video.qpf import qpf_paths
+from videoforge.core.video.script import SOURCE_PLUGINS
 from videoforge.core.video.settings import EncoderSettings, VideoSettings
 from videoforge.core.workdir import job_dir, work_dir
 
@@ -90,6 +91,8 @@ class JobSpec:
     mux: MuxSettings = field(default_factory=MuxSettings)
     # Detect the crop once the source can be read, then clear (a template's auto crop).
     autocrop: bool = False
+    # Set the Field step from the source's field scan once there is one, then clear (a template's Field: Auto).
+    autofield: bool = False
     # A template's audio, waiting for the source's tracks: then it becomes the job's audio overrides.
     audio_template: TemplateAudio | None = None
     # ... and its subtitle rules, waiting for the source's (and added files') subtitle tracks.
@@ -312,6 +315,52 @@ def replan(spec: JobSpec, probed: ProbedInputs) -> ProbedInputs:
     return replace(probed, inputs=spec_inputs(spec))
 
 
+def field_scan(spec: JobSpec) -> fieldscan.FieldScan | None:
+    """The source's field scan (the index lane's, in its work folder), once there is one."""
+    return fieldscan.read(spec.work_dir / fieldscan.REPORT) if spec.encodes_video else None
+
+
+def auto_field(spec: JobSpec, video: VideoInfo | None) -> str | None:
+    """A template's Field: Auto once the source is probed: the source's field scan's fix on the job's settings
+    (filters.field_fix: its chain as the only Field step, Apply pulldown and a source filter that can for a flagged
+    source), autofield cleared, and what it did for the job's log. A source the scan skips (MediaInfo: progressive,
+    no pulldown flags) keeps no Field step. None when nothing is pending, or the scan is still to come."""
+    if not spec.autofield:
+        return None
+    scan = field_scan(spec) if fieldscan.scans(video) else None
+    if scan is None and fieldscan.scans(video):
+        return None
+    spec.autofield = False
+    if scan is None:
+        return "Field: Auto: no Field step (MediaInfo: progressive, without pulldown flags)"
+    said = fieldscan.summary(scan)
+    fix = filters.field_fix(scan, video, spec.video)
+    if fix is None:
+        return f"Field: Auto: {said}, so no Field step"
+    before, spec.video = spec.video, fix.apply(spec.video)
+    done = [f"the {fix.step.name} step" if fix.step else "no Field step"]
+    if fix.pulldown and not before.pulldown:
+        done.append("Apply pulldown on")
+    if fix.source_filter is not before.source_filter:
+        done.append(f"source filter {SOURCE_PLUGINS[fix.source_filter][1]}")
+    return f"Field: Auto: {said}: " + ", ".join(done)
+
+
+def field_issues(spec: JobSpec, video: VideoInfo | None) -> list[Issue]:
+    """The Field step's issues (filters.field_issues). A template's Field: Auto waiting for the source's scan blocks:
+    the scan decides the step, and a run without it would encode combed or decimated frames the scan would fix."""
+    if spec.autofield and fieldscan.scans(video):
+        return [
+            Issue(
+                Severity.BLOCK,
+                "video.field_auto",
+                "Field: Auto waits for the source's field scan: index the job (Video tab, Scan fields), "
+                "or choose a Field step by hand",
+            )
+        ]
+    return filters.field_issues(video, spec.video, field_scan(spec))
+
+
 def plan_spec(spec: JobSpec, probed: ProbedInputs, rule_set: RuleSet, tools: Tools | None = None) -> Plan:
     """The rule set's plan for the job. With tools, an audio encode whose tools are missing blocks it."""
     plan = plan_job(rule_set, replan(spec, probed), spec.overrides.original_language, spec.overrides)
@@ -325,7 +374,7 @@ def plan_spec(spec: JobSpec, probed: ProbedInputs, rule_set: RuleSet, tools: Too
         plan.issues += encoders.issues(spec.encoder, probed.source.video, spec.makes_qpfile)
         plan.issues += options.option_issues(spec.encoder, tools)
         plan.issues += hdr.issues(probed.source.video, spec.encoder, tools, spec.video)
-        plan.issues += filters.field_issues(probed.source.video, spec.video)
+        plan.issues += field_issues(spec, probed.source.video)
         plan.issues += target.issues(spec.encoder, plan, spec.container(rule_set))
     return plan
 

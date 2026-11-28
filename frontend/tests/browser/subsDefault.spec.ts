@@ -12,6 +12,7 @@ test('Settings: default subtitle rules save as they change, naming included, and
       resize: null,
       filters: [],
       custom: null,
+      pulldown: false,
     },
     encoder: {
       encoder: 'x264',

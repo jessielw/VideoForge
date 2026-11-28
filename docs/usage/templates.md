@@ -1,6 +1,6 @@
 # Templates
 
-A template saves a job setup without its source file. It can include video processing, encoder settings, container, AutoQPF, crop policy, and optional audio and subtitle selections.
+A template saves a job setup without its source file. It can include video processing, encoder settings, container, AutoQPF, crop and field policy, and optional audio and subtitle selections.
 
 ![The Templates page](../assets/screenshots/templates.png#only-light) ![The Templates page](../assets/screenshots/templates-dark.png#only-dark)
 
@@ -37,7 +37,7 @@ Choose **Select** at the top of the template list, tick the templates to delete 
 
 A template with the same name (folder included) replaces yours, so importing an updated pack again adds nothing new; one that's already the same is left alone. The preview marks each one (**replaces yours**, **already the same**) and counts them. Tick **Keep both** to add a numbered copy instead, such as `Group setup (2)`. A replaced template keeps its name, so a starred default still points to it; current editor drafts and default selections stay as they are. Files are checked in full before any templates are saved. Unsupported versions or settings are rejected rather than silently dropped. A file can contain up to 500 templates and be up to 5 MiB.
 
-The file includes video processing and scripts, crop policy, encoder settings, audio and subtitle rules, container settings, and AutoQPF. Encoder and audio settings are embedded, so recipients do not need the sender's saved presets. Source media, external files, installed tools/plugins, rule set packages, and application settings are not bundled. Paths typed into scripts or extra arguments remain as typed and may need adjusting on the recipient's computer.
+The file includes video processing and scripts, crop and field policy, encoder settings, audio and subtitle rules, container settings, and AutoQPF. Encoder and audio settings are embedded, so recipients do not need the sender's saved presets. Source media, external files, installed tools/plugins, rule set packages, and application settings are not bundled. Paths typed into scripts or extra arguments remain as typed and may need adjusting on the recipient's computer.
 
 Review scripts from shared templates before using them: they contain Python that runs during video processing. The import preview displays custom bodies and filter scripts, including disabled filters. Import itself does not execute them. Recipients still need compatible tools, plugins, and rule sets.
 
@@ -52,6 +52,19 @@ Exports use a versioned JSON envelope with `format: "videoforge.templates"`, `ve
 | Auto   | Detect crop separately for each source after it can be read |
 
 Choose Auto for sources whose borders vary. Fixed crop assumes the same border dimensions on every source. A job using an existing encode has no video to crop.
+
+## Field policy
+
+| Policy | Behavior |
+| --- | --- |
+| As in the filters | Every job gets the template's Field filters (IVTC, a deinterlacer), if any |
+| Scan per job | Each source's [field scan](fields.md#field-scan) sets the job's Field filter |
+
+Choose **Scan per job** for a batch whose sources differ: a season with telecined and interlaced episodes, or a DVD set with soft and hard telecine. Each job gets the chain its own scan suggests, the same as the scan's **Apply**: IVTC, VFM alone, IVTC with QTGMC on the frames left combed, Bwdif, or no Field filter. A source with pulldown flags also gets **Apply pulldown**, and moves from FFMS2 to BestSource. The template's own Field filters are left out.
+
+A source that MediaInfo reports as interlaced or with pulldown flags goes into the index lane when it's added, even with auto index off, because the scan needs the index. The job is blocked until the scan is done ("Field: Auto waits for the source's field scan"), then the scan's chain goes in and the job's log says what was set. A source scanned before gets its chain at once. A progressive source isn't scanned and gets no Field filter. When the scan can't decide (too little motion), the job gets no Field filter, and the usual interlaced warning stays.
+
+Choosing a Field filter by hand while the job waits wins over the scan. If the scan fails, the job stays blocked: **Scan fields** in the Video tab's Scan section runs it again, or choose a Field filter by hand. A job using an existing encode isn't scanned. The [job record](../job-record.md) keeps the scan's report and whether the job ran with its chain.
 
 ## Audio by position
 

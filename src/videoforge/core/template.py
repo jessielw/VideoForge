@@ -1,7 +1,9 @@
 """Templates: settings for a job's whole run (video, encoder, audio, container, chapters), the way
 StaxRip's templates hold a project's settings. Applied when jobs are added, or to a batch.
 
-The crop is per source, so a template says what to do with it instead (CropMode). Its audio is by
+The crop is per source, so a template says what to do with it instead (CropMode), and the same for the
+Field step (FieldMode: with Auto each source's field scan sets it, so a season of mixed episodes gets the
+right chain per episode). Its audio is by
 position (TemplateAudio.slots: settings for the source's 1st, 2nd, ... audio track) or by rules
 (TemplateAudio.rules: each track takes the first rule matching its language, codec, channels and
 traits), and becomes the job's track overrides once the source's tracks are known (apply_audio),
@@ -41,13 +43,18 @@ from videoforge.core.models import (
     track_key,
 )
 from videoforge.core.rule_set import RuleSet
-from videoforge.core.video.settings import EncoderSettings, VideoSettings
+from videoforge.core.video.settings import EncoderSettings, FilterCategory, VideoSettings
 
 
 class CropMode(StrEnum):
     KEEP = "keep"  # each job's own crop
     FIXED = "fixed"  # the template's crop (video.crop) on every job
     AUTO = "auto"  # detect each job's crop once its source can be read
+
+
+class FieldMode(StrEnum):
+    MANUAL = "manual"  # the template's own Field steps (none: none) on every job
+    AUTO = "auto"  # each source's field scan sets the Field step (filters.field_fix), in place of the template's
 
 
 @dataclass(slots=True)
@@ -57,6 +64,7 @@ class Template:
     mux: MuxSettings = field(default_factory=MuxSettings)
     qpf: bool = True
     crop_mode: CropMode = CropMode.KEEP
+    field_mode: FieldMode = FieldMode.MANUAL
     audio: TemplateAudio | None = None  # None: the template leaves each job's audio alone
     subs: TemplateSubs | None = None  # None: ... and its subtitles
 
@@ -67,13 +75,17 @@ class Template:
         return cls(video, encoder, rule_set.mux_defaults())
 
     def apply(self, spec: JobSpec) -> None:
-        """Set the job's settings from the template. A job reusing an encode has nothing to crop."""
+        """Set the job's settings from the template. A job reusing an encode has nothing to crop or field-match.
+        With Field: Auto the template's Field steps are left out: the source's field scan sets the job's."""
         crop = self.video.crop if self.crop_mode is CropMode.FIXED else spec.video.crop
         spec.video = replace(copy.deepcopy(self.video), crop=copy.copy(crop))
         spec.encoder = copy.deepcopy(self.encoder)
         spec.mux = copy.copy(self.mux)
         spec.qpf = self.qpf
         spec.autocrop = self.crop_mode is CropMode.AUTO and spec.encodes_video
+        spec.autofield = self.field_mode is FieldMode.AUTO and spec.encodes_video
+        if spec.autofield:
+            spec.video.filters = [s for s in spec.video.filters if s.category is not FilterCategory.FIELD]
         if self.audio is not None:
             spec.audio_template = copy.deepcopy(self.audio)
         if self.subs is not None:

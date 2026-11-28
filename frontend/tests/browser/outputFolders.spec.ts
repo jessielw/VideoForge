@@ -28,6 +28,7 @@ async function fixture(page: Page, folders: { path: string; pinned: boolean }[])
       resize: null,
       filters: [],
       custom: null,
+      pulldown: false,
     },
     encoder: video,
     mux: {

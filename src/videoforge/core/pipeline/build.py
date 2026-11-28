@@ -55,7 +55,7 @@ from videoforge.core.models import (
 )
 from videoforge.core.pipeline.steps import Step
 from videoforge.core.tools import locate
-from videoforge.core.video import burn as burn_in, hdr, info, remux, target, vfr
+from videoforge.core.video import burn as burn_in, fieldscan, hdr, info, remux, target, vfr
 from videoforge.core.video.color import ContainerColor, effective_container_color
 from videoforge.core.video.encoders import (
     TOOLS,
@@ -69,7 +69,7 @@ from videoforge.core.video.encoders import (
 )
 from videoforge.core.video.qpf import given_chapters_path, make_qpf, qpf_from_chapters, qpf_paths
 from videoforge.core.video.script import build_script, ffms2_index, index_exists
-from videoforge.core.video.settings import Crop, EncoderSettings, SourceFilter
+from videoforge.core.video.settings import Crop, EncoderSettings, SourceFilter, VideoSettings
 from videoforge.core.workdir import finished_files
 
 if TYPE_CHECKING:
@@ -394,6 +394,56 @@ def index_steps(
             )
         )
     return steps
+
+
+def scan_filter(spec: JobSpec, video: VideoInfo | None) -> SourceFilter:
+    """The source filter the field scan decodes with: the job's, unless the source has pulldown flags and the job's
+    filter can't apply them (FFMS2): BestSource then, which the scan's Apply switches the job to."""
+    f = spec.video.source_filter
+    return SourceFilter.BESTSOURCE if video is not None and video.pulldown and not f.applies_pulldown else f
+
+
+def field_scan_steps(spec: JobSpec, video: VideoInfo | None) -> list[Step]:
+    """The source's field scan (core/video/fieldscan.py), after its index, for a source MediaInfo says is stored as
+    fields or has pulldown flags (fieldscan.scans): its frames as the job's source filter decodes them, with the
+    flags applied (scan_filter). One report per source, in its work folder: a new source filter doesn't scan
+    again (the frames are the same). The index lane runs it after the index, with the source unlocked
+    (JobQueue._scan); a job's run doesn't wait for it."""
+    if not spec.encodes_video or video is None or not fieldscan.scans(video):
+        return []
+    work, source = spec.work_dir, spec.inputs.source
+    source_filter = scan_filter(spec, video)
+    text = build_script(
+        VideoSettings(source_filter=source_filter, pulldown=video.pulldown), source, work, stage="source"
+    )
+    script, report = work / fieldscan.SCRIPT, work / fieldscan.REPORT
+
+    def write_script(_log: LogFn) -> None:
+        script.write_text(text, encoding="utf-8")
+
+    index = index_key(source, source_filter)
+    own = source_filter is not spec.video.source_filter  # BestSource for an FFMS2 job: the scan makes its index
+    return [
+        Step(
+            "fieldscan.script",
+            "Write the field scan's script",
+            call=write_script,
+            outputs=(script,),
+            key=text,
+            weight=0.01,
+        ),
+        Step(
+            "fieldscan",
+            "Field scan",
+            argvs=((sys.executable, "-m", "videoforge.core.video.fieldscan", str(script), str(report)),),
+            outputs=(report,),
+            inputs=(source,),
+            reads=() if own else (index,),
+            owns=(index,) if own else (),
+            key=f"{fieldscan.VERSION} pulldown={video.pulldown}",
+            weight=2,
+        ),
+    ]
 
 
 def script_fps(spec: JobSpec) -> Fraction | None:

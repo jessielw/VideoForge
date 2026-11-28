@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-27
+
+### Added
+
+- **Field scan**: indexing a source that MediaInfo calls interlaced, or that has pulldown flags, now reads every frame and says what its fields hold: progressive, telecined film, progressive with shifted fields, telecined film with combed parts, or interlaced video, with the field order. The Video tab's **Scan** section shows the verdict, a strip of the source, and the times of any parts that stay combed after field matching. **Apply** sets the matching Field filter (IVTC, VFM alone, IVTC with QTGMC on the frames that stay combed, or Bwdif) with the order it found, and turns on **Apply pulldown** where the source needs it. It takes about 20 seconds for a DVD episode and 2 to 3 minutes for 1080i. The job shows **Scanning fields** meanwhile, with the preview open and the job editable. The index lane's stop button on the Queue toolbar is now named for what's running (**Stop field scan**, **Stop test encode**, **Stop CRF search**, or **Stop indexing**), and its tooltip says how many waiting jobs it takes out of the lane. **Scan fields** scans a job indexed before this version.
+- With a field scan, the field warnings follow it instead of MediaInfo: progressive video stored as fields no longer warns, and a Field filter of the wrong kind (deinterlacing telecined film, IVTC on interlaced video), at the wrong field order, or on progressive video warns.
+- Templates have a **Field** policy. **Scan per job** sets each job's Field filter from its own field scan, so one template fits a season that mixes telecined and interlaced episodes: IVTC, a deinterlacer, IVTC with QTGMC on the frames left combed, or none, with **Apply pulldown** where the scan needs it. A job waits, blocked, until its scan is done, and a Field filter chosen by hand meanwhile wins. A source MediaInfo calls progressive isn't scanned and gets no Field filter. **As in the filters** keeps the template's own Field filters, as before.
+- The job record has the source's field scan: the verdict, the field order, the counts, the strip, the frames left combed, and whether the job ran with the scan's chain.
+- **Apply pulldown** under the Video tab's **Advanced** (and in templates) repeats fields by the source's pulldown flags, as a player does. NTSC DVDs that mix soft telecine with hard-telecined parts then come out telecined throughout, so **IVTC** returns all of it to 23.976 fps film at the source's length. It needs BestSource or L-SMASH Works and reuses their existing index. A job with it on and FFMS2 selected is blocked, because FFMS2 can't apply the flags. The Video tab notes a source with pulldown flags.
+- New warnings for sources with pulldown flags. With **Apply pulldown** on and no Field filter, the job warns that the frames will comb until IVTC matches them. With it off and an IVTC that decimates, the job warns that VDecimate can drop real frames from the soft-telecined parts.
+
+### Changed
+
+- Updated DeeZy to 2.0.4 in the Windows tools bundle and Docker image.
+- Updated dee_shim to 0.5.0 in the Windows tools bundle and Docker image.
+
+### Fixed
+
+- The **QTGMC** filter presets no longer force top field first. Like **IVTC** and **Bwdif**, they now follow the source's field order, so bottom-field-first sources are deinterlaced correctly. QTGMC steps already in a chain keep their old lines.
+- The **IVTC**, **QTGMC** and **Bwdif** presets' field order comments were wrong: changing `order=`, `field=` or `TFF=` had no effect when the source gives a field order. Each preset now has a commented-out `SetFieldBased` line that overrides the source's field order when its flag is wrong.
+
 ## [0.1.18] - 2026-11-24
 
 ### Added

@@ -18,7 +18,7 @@ import time
 
 from fastapi.testclient import TestClient
 import pytest
-from test_server import APP, add, fake_probe, make_client, make_files, wait_for
+from test_server import APP, FakeScanner, add, fake_probe, interlaced_probe, make_client, make_files, wait_for
 
 from videoforge.core.config import AppConfig, load_app_config
 from videoforge.core.execute.process import Cancelled
@@ -304,6 +304,31 @@ def test_test_encode_runs_in_the_index_lane(tmp_path):
         client.post("/api/queue/index/stop", json={"ids": [job]})
         stopped = wait_for(client, job, "ready", "warn")
         assert not stopped["sample_error"] and runner.calls[-1] == "encode"
+
+
+def test_a_test_encode_asked_for_during_the_field_scan_follows_it(tmp_path):
+    """The job can be edited during its field scan (scanning), so Test encode is offered: it's taken, and the
+    lane encodes the sample once the scan is done, without indexing again."""
+    make_files(tmp_path)
+    scanner, sampler = FakeScanner(), FakeSampler()
+    calls: list[str] = []
+
+    def runner(argvs, log, cancel=None):
+        scans = "videoforge.core.video.fieldscan" in [str(a) for a in argvs[-1]]
+        (scanner if scans else sampler)(argvs, log, cancel)
+        calls.append((scanner if scans else sampler).calls[-1])
+
+    with make_client(tmp_path, runner=runner, probe=interlaced_probe) as client:
+        (job,) = add(client, tmp_path, auto_index=True)
+        wait_for(client, job, "scanning")
+        assert client.post("/api/queue/sample", json={"id": job, "percent": 5}).json()["taken"]
+        assert client.get(f"/api/jobs/{job}").json()["status"] == "scanning"
+        scanner.gate.set()
+        wait_for(client, job, "sampling")
+        sampler.gate.set()
+        done = wait_for(client, job, "ready", "warn")
+        assert calls == ["index", "scan", "info", "encode", "mux"]
+        assert done["sample"]["percent"] == 5 and done["field_scan"]["report"]["verdict"] == "telecine"
 
 
 def test_quality_score_is_opt_in(tmp_path):

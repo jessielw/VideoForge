@@ -56,6 +56,7 @@ from videoforge.core.job import (
     StepRecord,
     StepRun,
     StepStatus,
+    auto_field,
     clean_label,
     clean_output_name,
     plan_spec,
@@ -77,7 +78,14 @@ from videoforge.core.models import (
 from videoforge.core.naming import NamePolicy
 from videoforge.core.notify import Sender, send as notify_send
 from videoforge.core.pipeline import claims, crfsearch
-from videoforge.core.pipeline.build import auto_crop, index_steps, job_output, script_reads, source_rpu
+from videoforge.core.pipeline.build import (
+    auto_crop,
+    field_scan_steps,
+    index_steps,
+    job_output,
+    script_reads,
+    source_rpu,
+)
 from videoforge.core.pipeline.reuse import ReuseOffer, reuse_offers
 from videoforge.core.pipeline.run import OutputTarget, missing_inputs, run_job
 from videoforge.core.pipeline.sample import PERCENTS, finish, prepare_steps, sample_steps
@@ -89,7 +97,7 @@ from videoforge.core.rule_set import RuleSet
 from videoforge.core.template import CropMode, Template, apply_audio, apply_subs, template_choice
 from videoforge.core.tools import versions as tool_versions
 from videoforge.core.video.script import ffms2_index
-from videoforge.core.video.settings import Crop, EncoderSettings, VideoSettings
+from videoforge.core.video.settings import Crop, EncoderSettings, FilterCategory, VideoSettings
 from videoforge.core.workdir import clean_work_dir, work_dir
 from videoforge.server.concurrency import Concurrency, RunPaths, encoder_type
 from videoforge.server.events import EventHub
@@ -151,6 +159,7 @@ class JobView(StrEnum):
     CROPPING = "cropping"  # detecting the crop (a template's auto crop)
     INDEXING = "indexing"  # the index lane is on it
     SAMPLING = "sampling"  # the index lane runs its test encode (core/pipeline/sample.py)
+    SCANNING = "scanning"  # the index lane runs its field scan (core/video/fieldscan.py)
     INDEX_QUEUED = "index-queued"  # waiting in the index lane
     READY = "ready"
     WARN = "warn"
@@ -194,6 +203,9 @@ class Entry:
     index_wait_reason: str = ""
     sample_percent: int | None = None  # in the lane for a test encode of this much of the video
     sampling: bool = False  # the lane runs its test encode (indexed by now: the preview opens)
+    # The lane runs its field scan (indexed by now: the preview opens, and it can be edited, since the scan
+    # doesn't read its settings; not runnable until it's done, as for a test encode)
+    scanning: bool = False
     sample_error: str = ""
     search: crfsearch.Target | None = None  # the lane's sample is a CRF search for it (core/pipeline/crfsearch.py)
     search_error: str = ""
@@ -239,6 +251,7 @@ class Entry:
             and not self.cropping
             and not self.indexing
             and not self.sampling
+            and not self.scanning
             and not self.crop_pending
         )
 
@@ -252,6 +265,8 @@ class Entry:
             return JobView.INDEXING
         if self.sampling:
             return JobView.SAMPLING
+        if self.scanning:
+            return JobView.SCANNING
         if self.index_queued:
             return JobView.INDEX_QUEUED
         if self.state.status is not None:
@@ -376,6 +391,7 @@ class JobQueue:
                 "queued": sum(e.queued for e in self.entries()),
                 "indexing": next((e.id for e in self.entries() if e.indexing), None),
                 "sampling": next((e.id for e in self.entries() if e.sampling), None),
+                "scanning": next((e.id for e in self.entries() if e.scanning), None),
                 "index_queued": sum(e.index_queued for e in self.entries()),
                 "index_held": sum(
                     e.index_queued and e.index_held for e in self.entries()
@@ -486,7 +502,7 @@ class JobQueue:
             for inputs in found:
                 existing = self._find_source(inputs.source)
                 if existing is not None:
-                    if existing.id not in replacements or existing.busy or existing.indexing:
+                    if existing.id not in replacements or existing.busy or existing.indexing or existing.scanning:
                         skipped.append(existing.spec.name)
                         continue
                     if not self.remove([existing.id]):
@@ -516,6 +532,7 @@ class JobQueue:
                     spec.subs_template = _copy(subs_default)
                 if video:
                     spec.video = _copy(video)
+                    spec.autofield = False  # its Field steps are the given settings'
                 if encoder:
                     spec.encoder = _copy(encoder)
                 e = Entry(spec, JobState(), index_on_probe=index_new and not video and spec.encodes_video)
@@ -615,7 +632,7 @@ class JobQueue:
                 self._entries[c.id] = c
                 self._order.insert(self._order.index(e.id) + 1, c.id)
                 self._replan(c)
-                if self._claim_crop(c):
+                if self._claim_lane(c):
                     self.index([c.id])
                 self._save(c)
                 copies.append(c)
@@ -668,7 +685,7 @@ class JobQueue:
                 if e.queued and e.plan is None:
                     e.queued = False
                     self._save(e)
-                if self._claim_crop(e):
+                if self._claim_lane(e):
                     self.index([e.id])  # under the lock: the job never shows ready in between
                 elif e.index_on_probe:
                     self.index([e.id])
@@ -696,6 +713,32 @@ class JobQueue:
                 s.overrides = apply_subs(s.overrides, s.subs_template, subs)
                 s.subs_from_template = template_choice(s.overrides, [track_key(t) for t in subs])
         s.audio_template = s.subs_template = None
+        return True
+
+    def _claim_lane(self, e: Entry) -> bool:
+        """Under the lock: whether a probed job has a template's auto crop or Field: Auto for the index lane. The
+        caller then puts the job in the lane."""
+        crop = self._claim_crop(e)
+        field = self._claim_field(e)
+        return crop or field
+
+    def _claim_field(self, e: Entry) -> bool:
+        """Under the lock: a template's Field: Auto once the job is probed. A source with a field scan already, or
+        none to have, gets its Field step now (_auto_field); True when the lane's scan comes first. The job blocks
+        meanwhile (job.field_issues), and _scanned sets its step."""
+        if not e.spec.autofield or e.probed is None or e.busy or self._auto_field(e):
+            return False
+        return not e.scanning  # (a scan under way: _scanned)
+
+    def _auto_field(self, e: Entry) -> bool:
+        """Under the lock: job.auto_field on the job; when it set the Field step (or found none was needed), the job
+        is planned again, saved, and the job's log says what it did."""
+        line = auto_field(e.spec, e.source_video)
+        if line is None:
+            return False
+        self._replan(e)
+        self._save(e)
+        self._log(e, line)
         return True
 
     def _claim_crop(self, e: Entry) -> bool:
@@ -746,6 +789,18 @@ class JobQueue:
             self._log(e, f"Auto-crop: {sides}, from {origin}")
         self._changed(e)
         self._index_wake.set()
+
+    def _scanned(self, e: Entry) -> None:
+        """After the lane's steps: the jobs on the source (its variants share the work folder and its field scan)
+        planned again, so their field issues follow the scan, and a template's Field: Auto on them set from it."""
+        if not field_scan_steps(e.spec, e.source_video):
+            return
+        with self._lock:
+            for other in self._entries.values():
+                if other.spec.work_dir == e.spec.work_dir and other.plan is not None and not other.busy:
+                    if not self._auto_field(other):
+                        self._replan(other)
+                    self._changed(other)
 
     def _replan(self, e: Entry) -> None:
         if e.probed is None:
@@ -882,6 +937,8 @@ class JobQueue:
             if video is not None:
                 if video.crop != s.video.crop:
                     s.autocrop = False  # a crop set by hand wins over a pending detection
+                if _field_steps(video) != _field_steps(s.video):
+                    s.autofield = False  # ... and a Field step over a pending Field: Auto
                 s.video = video
             if encoder is not None:
                 s.encoder = encoder
@@ -908,7 +965,7 @@ class JobQueue:
                 self._apply_tracks(e)
             self._replan(e)
             self._save(e)
-            if not reprobe and self._claim_crop(e):
+            if not reprobe and self._claim_lane(e):
                 self.index([e.id])
         self._changed(e)
         if reprobe:
@@ -920,7 +977,7 @@ class JobQueue:
         with self._lock:
             for job_id in ids:
                 e = self._entries.get(job_id)
-                if e is None or e.busy or e.indexing or e.sampling:
+                if e is None or e.busy or e.indexing or e.sampling or e.scanning:
                     continue
                 self._removed[job_id] = (e, self._order.index(job_id))
                 while len(self._removed) > 100:
@@ -1662,7 +1719,7 @@ class JobQueue:
         taken = []
         with self._lock:
             for e in self.entries():
-                if e.id not in wanted or not e.spec.encodes_video or e.busy or e.indexing or e.sampling:
+                if e.id not in wanted or not e.spec.encodes_video or e.busy or e.indexing or e.sampling or e.scanning:
                     continue
                 if not e.index_queued or first:
                     e.index_queued, e.index_error = True, ""
@@ -1686,7 +1743,8 @@ class JobQueue:
         has to, then encodes percent of the video. The job is locked meanwhile, but its preview opens once it's
         indexed (one waiting in the lane moves up). With search, a CRF search for that target instead
         (core/pipeline/crfsearch.py; ValueError for a job that doesn't encode at a CRF). False for a job that
-        reuses an encode, has no plan yet, or is queued, running or being indexed."""
+        reuses an encode, has no plan yet, or is queued, running or being indexed. During its field scan it follows
+        the scan."""
         if percent not in PERCENTS:
             raise ValueError(f"percent: one of {', '.join(map(str, PERCENTS))}")
         with self._lock:
@@ -1700,6 +1758,8 @@ class JobQueue:
                 e.sample_error = ""
             else:
                 e.search_error = ""
+            if e.scanning:  # the lane is on the job: _index reads it when the scan ends
+                return True
             if self.index([job_id], first=True):
                 return True
             e.sample_percent = e.search = None
@@ -1722,7 +1782,7 @@ class JobQueue:
             for e in dropped:
                 e.index_queued = e.index_now = e.index_held = False
                 e.sample_percent = e.search = None
-            current = next((e for e in self.entries() if e.indexing or e.sampling or e.cropping), None)
+            current = next((e for e in self.entries() if e.indexing or e.sampling or e.scanning or e.cropping), None)
             if self._index_cancel is not None and (wanted is None or current is not None and current.id in wanted):
                 self._index_cancel.cancel()
             self._save_lane()
@@ -1736,7 +1796,7 @@ class JobQueue:
         down: stopping the lane then keeps it for the next start."""
         if self._closing:
             return
-        ids = [e.id for e in self.entries() if e.indexing] + [
+        ids = [e.id for e in self.entries() if e.indexing or e.scanning] + [
             i for i in self._index_order if i in self._entries and self._entries[i].index_queued
         ]
         self.store.set_global(LANE_SETTING, ids)
@@ -1822,7 +1882,7 @@ class JobQueue:
                     e.index_error = str(ex)
                 finally:
                     with self._lock:
-                        e.indexing = e.sampling = e.crop_pending = False
+                        e.indexing = e.sampling = e.scanning = e.crop_pending = False
                         e.progress = e.sample_percent = e.search = None
                         self._index_cancel = None
                         self._sample_kind = self._lane_paths = None
@@ -1858,6 +1918,7 @@ class JobQueue:
                 raise ToolError("Missing input: " + ", ".join(str(p) for p in missing))
             with self._lock:
                 steps = index_steps(e.spec, self.app, e.source_video, e.burn)
+                scan = field_scan_steps(e.spec, e.source_video)
                 cancel = self._index_cancel
                 sharing = [o.id for o in self._entries.values() if o.spec.work_dir == e.spec.work_dir]
             if self.services.release_preview is not None:
@@ -1887,6 +1948,8 @@ class JobQueue:
                     self._detect_crop(e)
             finally:
                 e.source_lock.release()
+            if scan:
+                self._scan(e, scan, cancel, log)
         except Cancelled:
             error = "Cancelled"
         except (ToolError, OSError, ValueError) as ex:
@@ -1902,9 +1965,13 @@ class JobQueue:
         self._queue_event("index.finished", e, error=error or None)
         if not self._closing:
             self.bus.emit(IndexFinished(_copy(e.spec), error or None))
-        if (percent := e.sample_percent) is not None and not error:
-            with self._lock:
-                e.indexing, e.sampling, e.progress = False, True, None
+        with self._lock:  # a test encode asked for during the scan (sample) is read with the scan's end
+            percent = None if error else e.sample_percent
+            if percent is not None:
+                e.indexing, e.scanning, e.sampling, e.progress = False, False, True, None
+            else:
+                e.scanning = False  # one asked for from here goes in the lane again
+        if percent is not None:
             self._changed(e)
             self._queue_changed()
             if e.search is not None:
@@ -1914,6 +1981,33 @@ class JobQueue:
         if log_file is not None:
             log_file.close()
         e.index_error = "" if error == "Cancelled" else error
+
+    def _scan(self, e: Entry, steps: list[Step], cancel: CancelToken, log: Callable[[str], None]) -> None:
+        """The lane's field scan of an indexed job (build.field_scan_steps), with the source unlocked: the preview
+        opens and the job can be edited meanwhile (JobView.SCANNING). An edit saves the job, so the steps' records
+        go to their own dict and into the job's under the lock. Then the jobs on the source are planned again."""
+        with self._lock:
+            e.indexing, e.scanning, e.progress = False, True, None
+            records = {s.id: r for s in steps if (r := e.state.steps.get(s.id)) is not None}
+        self._changed(e)
+        self._queue_changed()
+
+        def on_record(r: StepRecord) -> None:
+            with self._lock:
+                e.state.steps[r.id] = r
+                self._save(e)
+
+        run_steps(
+            steps,
+            records,
+            log=log,
+            cancel=cancel,
+            progress=self._progress(e, cancel),
+            on_record=on_record,
+            runner=self.services.runner,
+            share=Sharing(e.spec.work_dir, e.spec.job_dir),
+        )
+        self._scanned(e)
 
     def _sample(
         self, e: Entry, percent: int, log: Callable[[str], None], progress: ProgressFn, on_record: Callable
@@ -2101,6 +2195,11 @@ def _made(e: Entry, output: Path, seconds: float) -> RunMade | None:
 def _variant(e: Entry) -> str:
     """A job as told apart from the others on its source."""
     return f"{e.spec.name} ({e.spec.label})" if e.spec.label else e.spec.name
+
+
+def _field_steps(video: VideoSettings) -> list[tuple[str, bool]]:
+    """A job's Field steps, as a hand edit changes them."""
+    return [(f.script, f.enabled) for f in video.filters if f.category is FilterCategory.FIELD]
 
 
 def _copy(obj):

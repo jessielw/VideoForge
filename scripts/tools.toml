@@ -188,21 +188,21 @@ sha256 = "7866ee98760fc1f0156b4fe6bf530257e02be487ab3fd94e2b63799dd32d6b2c"
 
 [[tool]]
 name = "deezy"
-version = "2.0.2"
+version = "2.0.4"
 license = "MIT"
-source = "https://github.com/jessielw/DeeZy/tree/2.0.2"
+source = "https://github.com/jessielw/DeeZy/tree/2.0.4"
 purpose = "DEE 6.7 frontend; DEE and its license remain user supplied"
 [tool.windows]
 # The bundle, deezy.exe beside its bundle/ folder: the one-file exe unpacks itself on every run.
-url = "https://github.com/jessielw/DeeZy/releases/download/2.0.2/bundle-deezy-windows-x64.exe.zip"
-sha256 = "9b218fd90847c58ca0a3f9a74b7996e05eb23bd66149f04f5fd1b84b17157ca5"
+url = "https://github.com/jessielw/DeeZy/releases/download/2.0.4/bundle-deezy-windows-x64.exe.zip"
+sha256 = "9872bd923455b8c6293ea887ddffa0315251c2393e7c028d11fe9e628215a981"
 directory = "DeeZy"
 prefix = ""
 include = ["deezy.exe", "bundle/*"]
 executables = { deezy = "deezy.exe" }
 [[tool.notice]]
 file = "LICENSE"
-url = "https://raw.githubusercontent.com/jessielw/DeeZy/2.0.2/LICENSE"
+url = "https://raw.githubusercontent.com/jessielw/DeeZy/2.0.4/LICENSE"
 sha256 = "4f4f2823a6b2644d049561528371bea1dca2022e5611069b5a60e254c954e4ce"
 
 [[tool]]
@@ -229,15 +229,15 @@ sha256 = "890e1719d44d434c6433f2dcf0ab8affe5e028552095fc65a7b560f432710f98"
 
 [[tool]]
 name = "dee_shim"
-version = "0.3.0"
+version = "0.5.0"
 license = "Apache-2.0; see LICENSE, NOTICE and THIRD_PARTY_LICENSES.txt"
-source = "https://github.com/truehdd/dee-shim/tree/v0.3.0"
+source = "https://github.com/truehdd/dee-shim/tree/v0.5.0"
 purpose = "Runs the DEE 6.7 tools for DeeZy: DDP 7.1, the 7.1 Atmos modes and faster Atmos encodes"
 [tool.windows]
-url = "https://github.com/truehdd/dee-shim/releases/download/v0.3.0/dee-shim-0.3.0-2ae7f95-windows-x86_64.zip"
-sha256 = "58412bc915ad9de430f04db70a77df04a29923f0d4cf7537734ec44fa1f98c95"
+url = "https://github.com/truehdd/dee-shim/releases/download/v0.5.0/dee-shim-0.5.0-6a82dad-windows-x86_64.zip"
+sha256 = "92483e1617822eb08c4d95b002fb829267ba07dc4f7843d823caa7b3b6b818e1"
 directory = "dee_shim"
-prefix = "dee-shim-0.3.0-2ae7f95-windows-x86_64"
+prefix = "dee-shim-0.5.0-6a82dad-windows-x86_64"
 include = ["dee_shim.exe", "LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.txt"]
 executables = { dee_shim = "dee_shim.exe" }
 

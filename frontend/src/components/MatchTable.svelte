@@ -167,7 +167,7 @@
           {#if j.existing_id}
             <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <button class="underline" onclick={() => router.go('queue', j.existing_id)}>Open existing job</button>
-              {#if ['queued', 'running', 'indexing'].includes(j.existing_status ?? '')}
+              {#if ['queued', 'running', 'indexing', 'scanning'].includes(j.existing_status ?? '')}
                 <span>Kept because it's {j.existing_status}</span>
               {:else}
                 <label class="flex items-center gap-1"

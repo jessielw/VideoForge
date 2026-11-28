@@ -66,6 +66,7 @@ async function fixture(page: Page) {
           { category: 'resize', name: 'Resize', script: '', enabled: true },
         ],
         custom: null,
+        pulldown: false,
       },
       encoder: {
         encoder: 'x265',

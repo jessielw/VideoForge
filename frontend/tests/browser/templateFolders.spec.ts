@@ -28,6 +28,7 @@ async function fixture(page: Page) {
       resize: null,
       filters: [],
       custom: null,
+      pulldown: false,
     },
     encoder: video,
     mux: {
@@ -99,12 +100,14 @@ async function fixture(page: Page) {
     plugins: { folder: 'plugins', loaded: [], disabled: [], failures: [] },
   }
   const calls: string[] = []
+  const bodies: unknown[] = []
   await page.routeWebSocket('**/api/events', () => {})
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url())
     const path = decodeURIComponent(url.pathname)
     if (route.request().method() !== 'GET') {
       calls.push(`${route.request().method()} ${path}`)
+      bodies.push(route.request().postDataJSON())
       if (path.startsWith('/api/presets/template/') && path.endsWith('/rename')) {
         const from = path.slice('/api/presets/template/'.length, -'/rename'.length)
         const to = (route.request().postDataJSON() as { to: string }).to
@@ -130,7 +133,7 @@ async function fixture(page: Page) {
     await route.fulfill({ json: responses[path] })
   })
   await page.goto('/#/templates')
-  return { errors, calls }
+  return { errors, calls, bodies }
 }
 
 test('templates show as a folder tree; the folder box moves one', async ({ page }, testInfo) => {
@@ -154,5 +157,19 @@ test('templates show as a folder tree; the folder box moves one', async ({ page 
   await expect.poll(() => calls).toContain('POST /api/presets/template/Group / 1080p / Film/rename')
   await expect(page.getByRole('textbox', { name: 'Template folder' })).toHaveValue('Group / Archive')
   await expect(list.getByRole('button', { name: /^Archive\s*1$/ })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test("a template's Field: Auto is saved with it", async ({ page }, testInfo) => {
+  const { errors, calls, bodies } = await fixture(page)
+  await expect(page.getByText('Every job gets the Field steps in the filters below, if any.')).toBeVisible()
+  await page.getByRole('radio', { name: 'Scan per job' }).click()
+  await expect(page.getByText('Each interlaced or pulldown-flagged source gets a field scan')).toBeVisible()
+  await expect(page.getByText('Unsaved changes')).toBeVisible()
+  await page.getByText('Each interlaced or pulldown-flagged source').scrollIntoViewIfNeeded()
+  await page.screenshot({ path: testInfo.outputPath('template-field.png'), animations: 'disabled' })
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect.poll(() => calls).toContain('PUT /api/presets/template/Group / 1080p / Film')
+  expect((bodies.at(-1) as Template).field_mode).toBe('auto')
   expect(errors).toEqual([])
 })

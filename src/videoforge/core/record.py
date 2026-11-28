@@ -33,11 +33,11 @@ import uuid
 from videoforge import version
 from videoforge.core.execute.audio import ENCODES
 from videoforge.core.execute.mux import MUXERS
-from videoforge.core.job import JobResult, JobSpec, JobState, StepRun, StepStatus, planned_encode
+from videoforge.core.job import JobResult, JobSpec, JobState, StepRun, StepStatus, field_scan, planned_encode
 from videoforge.core.models import AudioAction, Issue, Plan, VideoHdr, VideoInfo
 from videoforge.core.pairing import episode_token
 from videoforge.core.plan_io import to_json
-from videoforge.core.video import hdr
+from videoforge.core.video import fieldscan, filters, hdr
 from videoforge.core.video.encoders import TOOLS
 from videoforge.core.video.qpf import qpf_paths
 from videoforge.core.video.settings import EncoderSettings
@@ -223,10 +223,12 @@ def _video(spec: JobSpec, plan: Plan, commands: dict[str, str], summary: list[st
         "language": _video_language(plan),
         "script": {"path": str(script), "text": text},
         "source_filter": v.source_filter.value,
+        "pulldown": v.pulldown,
         "crop": to_json(v.crop),
         "resize": to_json(v.resize) if v.resize else None,
         "filters": [to_json(s) for s in v.filters if s.enabled],
         "custom_script": v.custom is not None,
+        "field_scan": _field_scan(spec, plan),
         "encoder": {
             "name": enc.encoder.value,
             "rate_control": enc.rate_control.value,
@@ -242,6 +244,21 @@ def _video(spec: JobSpec, plan: Plan, commands: dict[str, str], summary: list[st
         "commands": [c for sid, c in commands.items() if sid == "video" or sid.startswith("video.")],
         "encoder_summary": summary,
         "hdr": _hdr(plan.source.video, enc),
+    }
+
+
+def _field_scan(spec: JobSpec, plan: Plan) -> dict[str, Any] | None:
+    """The source's field scan (core/video/fieldscan.py), when it had one: the report, what it says, and whether the
+    job ran with its fix (the scan's Apply or a template's Field: Auto; None without a verdict)."""
+    scan = field_scan(spec)
+    if scan is None:
+        return None
+    fix = filters.field_fix(scan, plan.source.video, spec.video)
+    return to_json(scan) | {
+        "summary": fieldscan.summary(scan),
+        "mismatch": scan.mismatch,
+        "chain": scan.chain,
+        "applied": fix.applied(spec.video) if fix else None,
     }
 
 
