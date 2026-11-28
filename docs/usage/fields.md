@@ -48,10 +48,11 @@ clip = core.vivtc.VDecimate(clip)
 
 # Telecined film with combed parts: QTGMC only on the frames VFM leaves combed
 import havsfunc
+
 clip = core.std.SetFieldBased(clip, 2)
-fallback = havsfunc.QTGMC(clip, TFF=True, Preset='Fast', FPSDivisor=2)
+fallback = havsfunc.QTGMC(clip, TFF=True, Preset="Fast", FPSDivisor=2)
 clip = core.vivtc.VFM(clip, order=1)
-clip = core.std.FrameEval(clip, lambda n, f, matched=clip: fallback if f.props['_Combed'] else matched, prop_src=clip)
+clip = core.std.FrameEval(clip, lambda n, f, matched=clip: fallback if f.props["_Combed"] else matched, prop_src=clip)
 clip = core.vivtc.VDecimate(clip)
 
 # Interlaced video
